@@ -1,0 +1,45 @@
+name: architecture-evaluation
+version: 0.1.0
+description: Prepare an architecture decision from declared scenarios and a validated review.
+initialPhase: capture
+phases:
+  - { name: capture }
+  - { name: scenarios_ready }
+  - { name: decision_ready }
+  - { name: accepted, terminal: true }
+  - { name: rejected, terminal: true }
+transitions:
+  - from: capture
+    to: scenarios_ready
+    invariants: ["interview.complete:architecture"]
+    defaultGate: auto
+  - from: scenarios_ready
+    to: decision_ready
+    invariants:
+      - "architecture.scenarios_ready"
+      - "architecture.review_ready"
+      - "shared.observation_ready"
+      - "shared.terminal_gates"
+    defaultGate: auto
+  - { from: decision_ready, to: accepted, invariants: [], defaultGate: hitl }
+  - { from: decision_ready, to: rejected, invariants: [], defaultGate: hitl }
+itemSchemas:
+  architecture_request: {}
+  artifact_validation:
+    required: [id, artifact_type, path, valid]
+  architecture_scenario:
+    required: [id, concern, stimulus, environment, response, measure]
+  review_validation:
+    required: [id, artifact_type, analysis, path, subject_path, valid]
+  operator_observation:
+    required: [id, elapsed_minutes, command_count]
+linkSchemas: {}
+interviews:
+  architecture:
+    itemType: architecture_request
+    completenessRule: all_required
+    questions:
+      - { key: scope, prompt: "What architecture boundary is evaluated?", type: text, required: true }
+      - { key: description_path, prompt: "Where is the validated description?", type: text, required: true }
+      - { key: concerns, prompt: "Which concerns are evaluated?", type: "list<text>", minItems: 1, required: true }
+      - { key: owner, prompt: "Who owns the architecture decision?", type: text, required: true }

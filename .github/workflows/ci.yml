@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require private repository
+        env:
+          REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+        run: test "$REPOSITORY_PRIVATE" = "true"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: agent-ix/spec-artifacts-iso
+          ref: 3d871962b66db99a1854f40466e94ebabc7a6115
+          path: .deps/spec-artifacts-iso
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: agent-ix/ix-flow
+          ref: 046376fea1aa9de8748bb3d11b55763d3c1a0a34
+          path: .deps/ix-flow
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "22"
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+        with:
+          version: "10.33.4"
+      - run: python -m pip install -e '.[dev]'
+      - run: npm install --global '@agent-ix/quire-cli@0.30.2'
+      - run: pnpm --dir .deps/ix-flow install --frozen-lockfile
+      - run: pnpm --dir .deps/ix-flow build
+      - run: make lint
+      - run: make test
+        env:
+          REQUIRE_QUIRE: "1"
+          REQUIRE_IX_FLOW: "1"
+          IX_FLOW_BIN: ${{ github.workspace }}/.deps/ix-flow/bin/ix-flow.js
+          MODULE_MANIFEST_SCHEMA: ${{ github.workspace }}/.deps/spec-artifacts-iso/spec_artifacts_iso/module-manifest.schema.json
+      - run: make package-audit

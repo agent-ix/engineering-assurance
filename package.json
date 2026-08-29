@@ -1,0 +1,21 @@
+{
+  "name": "@agent-ix/engineering-assurance",
+  "version": "0.2.0",
+  "description": "Private configuration-only engineering assurance module",
+  "license": "AGPL-3.0-or-later",
+  "private": true,
+  "type": "module",
+  "files": [
+    "manifest.yaml",
+    "schemas/",
+    "skeletons/",
+    "README.md",
+    "LICENSE",
+    "CONTENT_RIGHTS.md"
+  ],
+  "scripts": {
+    "prepack": "node scripts/stage-npm.mjs",
+    "postpack": "node scripts/stage-npm.mjs --clean",
+    "prepublishOnly": "node scripts/refuse-publication.mjs"
+  }
+}

@@ -1,0 +1,110 @@
+manifest_version: 1.0.0
+name: engineering-assurance
+version: 0.2.0
+description: Original decision-boundary and evidence-authoring contracts
+nav:
+  category:
+    slug: assurance
+    label: Assurance
+    icon: ShieldCheck
+    order: 60
+archetypes:
+  - kind: assurance-profile
+    name: Assurance Profile
+    doc_backed: true
+    supports_membership: false
+  - kind: measurement-plan
+    name: Measurement Plan
+    doc_backed: true
+    supports_membership: false
+  - kind: architecture-description
+    name: Architecture Description
+    doc_backed: true
+    supports_membership: false
+  - kind: component-assurance-contract
+    name: Component Assurance Contract
+    doc_backed: true
+    supports_membership: false
+  - kind: assurance-argument
+    name: Assurance Argument
+    doc_backed: true
+    supports_membership: false
+grammars:
+  - name: engineering-assurance
+    version: 0.2.0
+    description: Grammar for explicit engineering decisions and their evidence
+    doc_kinds:
+      - assurance-profile
+      - measurement-plan
+      - architecture-description
+      - component-assurance-contract
+      - assurance-argument
+artifact_types:
+  - name: AssuranceProfile
+    grammar_ref: engineering-assurance
+    frontmatter_schema_ref: schemas/assurance-profile-frontmatter.schema.json
+    defaults:
+      id_pattern: AP-{next:03d}
+    allowed_links: [governs, references]
+    body_extraction:
+      yield_pattern:
+        match:
+          boundary: { from: section_body, after_heading: Decision Boundary, required: true }
+          impacts: { from: section_body, after_heading: Impact Scenarios, required: true }
+          evidence: { from: section_body, after_heading: Evidence Policy, required: true }
+          exceptions: { from: section_body, after_heading: Exceptions, required: true }
+  - name: MeasurementPlan
+    grammar_ref: engineering-assurance
+    frontmatter_schema_ref: schemas/measurement-plan-frontmatter.schema.json
+    defaults:
+      id_pattern: MP-{next:03d}
+    allowed_links: [measures, references]
+    body_extraction:
+      yield_pattern:
+        match:
+          decision: { from: section_body, after_heading: Decision Use, required: true }
+          population: { from: section_body, after_heading: Population, required: true }
+          procedure: { from: section_body, after_heading: Collection Procedure, required: true }
+          interpretation: { from: section_body, after_heading: Interpretation, required: true }
+  - name: ArchitectureDescription
+    grammar_ref: engineering-assurance
+    frontmatter_schema_ref: schemas/architecture-description-frontmatter.schema.json
+    defaults:
+      id_pattern: AD-{next:03d}
+    allowed_links: [realizes, references]
+    body_extraction:
+      yield_pattern:
+        match:
+          boundary: { from: section_body, after_heading: System Boundary, required: true }
+          views: { from: section_body, after_heading: Views, required: true }
+          decisions: { from: section_body, after_heading: Decisions, required: true }
+          risks: { from: section_body, after_heading: Risks, required: true }
+  - name: ComponentAssuranceContract
+    grammar_ref: engineering-assurance
+    frontmatter_schema_ref: schemas/component-assurance-contract-frontmatter.schema.json
+    defaults:
+      id_pattern: CAC-{next:03d}
+    allowed_links: [references]
+    body_extraction:
+      yield_pattern:
+        match:
+          boundary: { from: section_body, after_heading: Component Boundary, required: true }
+          behavior: { from: section_body, after_heading: Required Behavior, required: true }
+          failure: { from: section_body, after_heading: Failure Handling, required: true }
+          controls: { from: section_body, after_heading: Controls, required: true }
+          replacement: { from: section_body, after_heading: Replacement, required: true }
+  - name: AssuranceArgument
+    grammar_ref: engineering-assurance
+    frontmatter_schema_ref: schemas/assurance-argument-frontmatter.schema.json
+    defaults:
+      id_pattern: AA-{next:03d}
+    allowed_links: [supports, references]
+    body_extraction:
+      yield_pattern:
+        match:
+          claim: { from: section_body, after_heading: Claim, required: true }
+          reasoning: { from: section_body, after_heading: Reasoning, required: true }
+          sufficiency: { from: section_body, after_heading: Sufficiency Decision, required: true }
+          challenges: { from: section_body, after_heading: Challenges, required: true }
+lint_rules: []
+object_types: []

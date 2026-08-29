@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "type", "status", "owner", "stage", "relationships"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^MP-[0-9]+$" },
+    "title": { "type": "string", "minLength": 1 },
+    "type": { "const": "MeasurementPlan" },
+    "status": { "enum": ["proposed", "active", "retired"] },
+    "owner": { "type": "string", "minLength": 1 },
+    "stage": {
+      "enum": [
+        "observe",
+        "baseline",
+        "branch-comparison",
+        "trend",
+        "ratchet",
+        "target",
+        "gate"
+      ]
+    },
+    "statistical_design": { "$ref": "#/$defs/statistical_design" },
+    "relationships": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/relationship" }
+    }
+  },
+  "$defs": {
+    "relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "type"],
+      "properties": {
+        "target": { "type": "string", "pattern": "^ix://" },
+        "type": { "enum": ["measures", "references"] }
+      }
+    },
+    "statistical_design": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "population",
+        "sampling",
+        "repetitions",
+        "estimator",
+        "error_model",
+        "uncertainty",
+        "decision_rule"
+      ],
+      "properties": {
+        "population": { "type": "string", "minLength": 1 },
+        "sampling": { "type": "string", "minLength": 1 },
+        "repetitions": { "type": "integer", "minimum": 1 },
+        "estimator": { "type": "string", "minLength": 1 },
+        "error_model": { "type": "string", "minLength": 1 },
+        "uncertainty": { "type": "string", "minLength": 1 },
+        "decision_rule": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

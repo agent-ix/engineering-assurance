@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "type", "status", "owner", "system", "relationships"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^AD-[0-9]+$" },
+    "title": { "type": "string", "minLength": 1 },
+    "type": { "const": "ArchitectureDescription" },
+    "status": { "enum": ["proposed", "accepted", "superseded", "retired"] },
+    "owner": { "type": "string", "minLength": 1 },
+    "system": { "type": "string", "minLength": 1 },
+    "relationships": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/relationship" }
+    }
+  },
+  "$defs": {
+    "relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "type"],
+      "properties": {
+        "target": { "type": "string", "pattern": "^ix://" },
+        "type": { "enum": ["realizes", "references"] }
+      }
+    }
+  }
+}

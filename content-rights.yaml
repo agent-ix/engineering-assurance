@@ -1,0 +1,25 @@
+schema: agent-ix-content-rights/v1
+repository:
+  visibility: private
+  license: AGPL-3.0-or-later
+allowed:
+  - original-source
+  - original-configuration
+  - fictional-fixture
+  - dependency-metadata
+  - project-license
+prohibited:
+  - external-prose
+  - rule-inventory
+  - applicability-matrix
+  - crosswalk
+  - legal-review-material
+  - research-file
+  - operational-evidence
+  - workstation-location
+  - encoded-excluded-material
+review:
+  full_tree: true
+  packages: true
+  semantic_review: true
+  fail_closed: true

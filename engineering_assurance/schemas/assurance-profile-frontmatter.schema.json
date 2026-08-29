@@ -1,0 +1,84 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "type", "status", "owner", "relationships"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^AP-[0-9]+$" },
+    "title": { "type": "string", "minLength": 1 },
+    "type": { "const": "AssuranceProfile" },
+    "status": { "enum": ["proposed", "active", "retired"] },
+    "owner": { "type": "string", "minLength": 1 },
+    "profile_version": { "const": 0.2 },
+    "profile_kind": { "enum": ["general", "production-ai"] },
+    "scope": { "type": "string", "minLength": 1 },
+    "impact_assessments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/impact" }
+    },
+    "review_policy": { "$ref": "#/$defs/review_policy" },
+    "relationships": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/relationship" }
+    }
+  },
+  "$defs": {
+    "relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "type"],
+      "properties": {
+        "target": { "type": "string", "pattern": "^ix://" },
+        "type": { "enum": ["governs", "references"] }
+      }
+    },
+    "impact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "scenario", "severity"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "scenario": { "type": "string", "minLength": 1 },
+        "severity": { "enum": ["low", "moderate", "material", "critical"] },
+        "verifiability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["class", "stochastic_dependency"],
+          "properties": {
+            "class": {
+              "enum": ["cheap-conclusive", "probabilistic", "proxy-only"]
+            },
+            "stochastic_dependency": {
+              "enum": ["none", "subject", "verifier", "both"]
+            }
+          }
+        },
+        "detect_before_harm": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["expected", "control_ref"],
+          "properties": {
+            "expected": { "type": "boolean" },
+            "control_ref": { "type": "string", "pattern": "^ix://" }
+          }
+        }
+      }
+    },
+    "review_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "operations"],
+      "properties": {
+        "mode": { "enum": ["recommend", "require"] },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["spec-review", "code-review", "gap-analysis"]
+          }
+        }
+      }
+    }
+  }
+}
