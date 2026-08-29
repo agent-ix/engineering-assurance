@@ -143,8 +143,8 @@ def text_findings(relative: str, text: str) -> list[Finding]:
     return findings
 
 
-def inspect(path: Path) -> list[Finding]:
-    relative = path.relative_to(ROOT).as_posix()
+def inspect(path: Path, *, root: Path = ROOT) -> list[Finding]:
+    relative = path.relative_to(root).as_posix()
     if path.is_symlink():
         return [Finding(relative, 0, "symbolic link")]
     suffix = path.suffix.casefold()
