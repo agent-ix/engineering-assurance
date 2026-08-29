@@ -82,15 +82,27 @@ def main() -> int:
             metadata_root = "engineering_assurance-0.2.0.dist-info"
             expected_metadata = {
                 f"{metadata_root}/{name}"
-                for name in ("LICENSE", "METADATA", "RECORD", "WHEEL", "top_level.txt")
+                for name in ("METADATA", "RECORD", "WHEEL", "top_level.txt")
             }
-            expected_wheel = expected_package | expected_metadata
+            license_candidates = {
+                f"{metadata_root}/LICENSE",
+                f"{metadata_root}/licenses/LICENSE",
+            }
+            emitted_licenses = names & license_candidates
+            if len(emitted_licenses) != 1:
+                raise SystemExit(
+                    f"wheel license member mismatch: {sorted(emitted_licenses)}"
+                )
+            expected_wheel = expected_package | expected_metadata | emitted_licenses
             if names != expected_wheel:
                 extra = sorted(names - expected_wheel)
                 missing = sorted(expected_wheel - names)
                 raise SystemExit(
                     f"wheel member mismatch: extra={extra}, missing={missing}"
                 )
+            wheel_license = archive.read(next(iter(emitted_licenses)))
+            if wheel_license != (ROOT / "LICENSE").read_bytes():
+                raise SystemExit("wheel license does not match the canonical file")
             metadata = archive.read(f"{metadata_root}/METADATA").decode("utf-8")
             if "Classifier: Private :: Do Not Upload\n" not in metadata:
                 raise SystemExit("wheel lacks the private-package refusal classifier")
