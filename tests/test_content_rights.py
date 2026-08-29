@@ -79,15 +79,12 @@ def test_file_type_policy_rejects_research_containers() -> None:
     assert ".py" in CHECKER.TEXT_SUFFIXES
 
 
-def test_binary_control_payload_is_rejected() -> None:
-    candidate = ROOT / ".pytest_cache" / "temporary-binary-check"
+def test_binary_control_payload_is_rejected(tmp_path: Path) -> None:
+    candidate = tmp_path / "temporary-binary-check"
     candidate.write_bytes(b"text\x00payload")
-    try:
-        assert {item.category for item in CHECKER.inspect(candidate)} == {
-            "binary control payload"
-        }
-    finally:
-        candidate.unlink()
+    assert {item.category for item in CHECKER.inspect(candidate, root=tmp_path)} == {
+        "binary control payload"
+    }
 
 
 def test_protected_token_environment_fails_closed(monkeypatch) -> None:
