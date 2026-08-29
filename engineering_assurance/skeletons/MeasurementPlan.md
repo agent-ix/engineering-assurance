@@ -4,6 +4,8 @@ title: Juniper request-retention measurement
 type: MeasurementPlan
 status: proposed
 owner: juniper-observability-owner
+metric: request_retention_rate
+definition_version: juniper.request-retention-v1
 stage: baseline
 statistical_design:
   population: fictional valid requests accepted by the candidate service

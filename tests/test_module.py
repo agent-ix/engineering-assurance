@@ -82,6 +82,11 @@ def test_profile_v02_is_advisory_and_legacy_compatible() -> None:
 
 def test_measurement_stages_and_statistical_design_are_explicit() -> None:
     contract = schema("measurement-plan-frontmatter.schema")
+    assert contract["properties"]["metric"]["pattern"] == "^[a-z][a-z0-9_.-]*$"
+    assert contract["properties"]["definition_version"] == {
+        "type": "string",
+        "minLength": 1,
+    }
     assert contract["properties"]["stage"]["enum"] == [
         "observe",
         "baseline",

@@ -9,6 +9,11 @@
     "type": { "const": "MeasurementPlan" },
     "status": { "enum": ["proposed", "active", "retired"] },
     "owner": { "type": "string", "minLength": 1 },
+    "metric": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]*$"
+    },
+    "definition_version": { "type": "string", "minLength": 1 },
     "stage": {
       "enum": [
         "observe",
