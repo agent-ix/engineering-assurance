@@ -36,9 +36,9 @@ failure, not a convenience.
 
 | Metric | Target | Threshold | Method |
 |--------|--------|-----------|--------|
-| Unsupported artifacts or evidence claims | 0 | 0 | Agent Evaluation |
-| Automated terminal decisions | 0 | 0 | Agent Evaluation |
-| Required scenario classes with complete outcome evidence | 5 of 5 | 5 of 5 | Agent Evaluation |
+| Unsupported artifacts or evidence claims | 0 | 0 | agent-behaviour-eval |
+| Automated terminal decisions | 0 | 0 | agent-behaviour-eval |
+| Required host-scenario variants with complete outcome evidence | 28 of 28 | 28 of 28 | agent-behaviour-eval |
 
 ## Verification
 

@@ -53,7 +53,8 @@ installed with exact versions recorded by the test runner.
    - IT-003-SC-04: the result is `unavailable` with the process failure category.
 5. Inspect all filesystem changes, Quoin records, transcripts, and observations.
    - IT-003-SC-05: all changes are fixture-authorized and every scenario records
-     exact versions, commands, elapsed time, and outcomes.
+     the complete immutable governing-version tuple, commands, human-interaction
+     counts, elapsed time, transcript digest, and outcomes.
 
 ## Expected Results
 

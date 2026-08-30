@@ -43,3 +43,9 @@ not create four independently evolving implementations.
 
 Discovery depends on the host's supported manifest convention and the installed
 package retaining the canonical skill and workflow directories.
+
+## Priority and Risk (Informative)
+
+- **Priority:** P0.
+- **Primary risk:** host-specific copies or escaping references can expose stale or
+  unowned behavior while appearing canonical.

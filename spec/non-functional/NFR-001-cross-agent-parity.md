@@ -33,9 +33,9 @@ maintenance in the owning module.
 
 | Metric | Target | Threshold | Method |
 |--------|--------|-----------|--------|
-| Supported discovery surfaces resolving the canonical skill | 4 of 4 | 4 of 4 | Integration Test |
-| Promoted workflows with identical canonical digests across hosts | 4 of 4 | 4 of 4 | Static Test |
-| Agent-specific behavioral copies | 0 | 0 | Static Test |
+| Supported discovery surfaces resolving the canonical skill | 4 of 4 | 4 of 4 | integration-testing |
+| Promoted workflows with identical canonical digests across hosts | 4 of 4 | 4 of 4 | property-based-testing |
+| Agent-specific behavioral copies | 0 | 0 | architecture-conformance |
 
 ## Verification
 

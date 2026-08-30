@@ -41,3 +41,9 @@ use that behavior rather than create a second lifecycle.
 
 The run identifier and state directory must remain available to ix-flow. A named
 human owns each terminal transition.
+
+## Priority and Risk (Informative)
+
+- **Priority:** P0.
+- **Primary risk:** a reused run identity or automated gate action can repeat work,
+  cross repository boundaries, or synthesize a human decision.

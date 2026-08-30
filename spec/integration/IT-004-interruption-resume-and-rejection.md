@@ -1,6 +1,6 @@
 ---
 id: IT-004
-title: "Interrupted workflow resumes and retains human rejection"
+title: "Interrupted workflow resumes and retains human terminal decisions"
 type: IT
 relationships:
   - target: "ix://agent-ix/engineering-assurance/FR-005"
@@ -11,13 +11,13 @@ relationships:
     type: "verifies"
 ---
 
-# IT-004: Interrupted workflow resumes and retains human rejection
+# IT-004: Interrupted workflow resumes and retains human terminal decisions
 
 ## Objective
 
 Verify that a real ix-flow assurance run interrupted before its terminal gate
-resumes from retained state and records an explicit human rejection without an
-automated success transition.
+resumes from retained state and records explicit human acceptance and rejection
+on equivalent runs without an automated terminal transition.
 
 ## Target Integration
 
@@ -36,7 +36,8 @@ without deleting process-independent run state.
 - A fictional repository fixture with sufficient validated items to reach the
   decision gate.
 - A stable run identifier.
-- A named fictional decision owner and an explicit rejection action.
+- A named fictional decision owner and explicit acceptance and rejection actions
+  applied to separate equivalent runs.
 
 ## Test Procedure
 
@@ -49,15 +50,19 @@ without deleting process-independent run state.
      repeating completed work.
 3. Advance the run to its human terminal decision gate.
    - IT-004-SC-03: the run remains non-terminal until a human action is supplied.
-4. Supply the named owner's explicit rejection action.
-   - IT-004-SC-04: the workflow records its rejection terminal state and no success
-     terminal state.
+4. Fork two equivalent decision-ready fixture runs with distinct run identifiers.
+   - IT-004-SC-04: neither run has a terminal event before a human action.
+5. Supply the named owner's explicit rejection to one run and explicit acceptance
+   to the other.
+   - IT-004-SC-05: each workflow records exactly one attributed terminal event,
+     with opposite choices and no synthesized or duplicate terminal state.
 
 ## Expected Results
 
-The resumed run retains its prior state, waits at the human gate, and records the
-explicit rejection exactly once. The onboarding layer does not own or override
-the lifecycle decision.
+The resumed run retains its prior state and waits at the human gate. Equivalent
+runs record explicit acceptance and rejection exactly once with owner, workflow
+version, run id, and timestamp. The onboarding layer does not own or override the
+lifecycle decision.
 
 ## Metadata
 

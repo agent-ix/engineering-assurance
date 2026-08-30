@@ -28,18 +28,28 @@ rejection scenarios.
 ## Outputs
 
 - Per-scenario transcript, exact tool versions, command count, elapsed time,
-  observed outcome, and pass or fail result.
+  human-prompt count, manual-translation count, repeated-prompt count, observed
+  outcome, terminal decision event when applicable, and pass or fail result.
+- A machine-readable evaluation envelope retaining suite and fixture revisions,
+  host identity/version, the complete FR-004 governing-version tuple, transcript
+  path and digest, and every operator-effort observation.
 - Aggregate result that remains failed while any required scenario fails or lacks
   evidence.
 
 ## Behavior
 
-- The suite SHALL evaluate an existing repository with an applicable valid
-  profile.
-- The suite SHALL evaluate a repository for which no profile is justified.
-- The suite SHALL evaluate malformed and unavailable producer outcomes.
-- The suite SHALL evaluate interruption followed by resume.
-- The suite SHALL evaluate explicit human rejection.
+- For each of the four supported agent hosts, the suite SHALL evaluate an existing
+  repository with an applicable valid profile.
+- For each supported host, the suite SHALL evaluate a repository for which no
+  profile is justified.
+- For each supported host, the suite SHALL evaluate both malformed and unavailable
+  producer outcomes.
+- For each supported host, the suite SHALL evaluate interruption followed by
+  resume.
+- For each supported host, the suite SHALL evaluate explicit human acceptance and
+  explicit human rejection from equivalent decision-ready runs.
+- Every transcript and result SHALL use fictional fixtures owned by this repository
+  and SHALL pass the repository content-rights check before retention.
 - If a required executable is unavailable, then the suite SHALL report the
   affected scenario as not executed and fail the release gate.
 
@@ -47,10 +57,11 @@ rejection scenarios.
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-006-AC-1 | The suite contains and executes all five required scenario classes. | Test (TC-031) |
-| FR-006-AC-2 | Every executed scenario records exact agent and tool versions, command count, elapsed time, transcript reference, and observed outcome. | Test (TC-032) |
+| FR-006-AC-1 | The suite executes all five required scenario classes across each of the four supported hosts, including both malformed/unavailable producer variants and both terminal choices. | Test (TC-031) |
+| FR-006-AC-2 | Every executed scenario records the immutable governing-version tuple, command and human-interaction counts, elapsed time, transcript path/digest, fixture revision, observed outcome, and terminal event when applicable. | Test (TC-032) |
 | FR-006-AC-3 | A missing executable leaves the scenario not executed and the aggregate gate failed. | Test (TC-033) |
 | FR-006-AC-4 | The aggregate gate passes only when all required scenarios pass and have complete observations. | Test (TC-034) |
+| FR-006-AC-5 | Equivalent decision-ready fixtures retain one explicit acceptance and one explicit rejection per supported host, with no inferred terminal event. | Test (TC-049) |
 
 ## Dependencies
 

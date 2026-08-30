@@ -28,21 +28,22 @@ requirement, and declared constraint in this specification.
 6. Existing valid artifacts, absent justification, malformed output, unavailable
    producers, missing targets, and unexpected package members are explicit edge
    cases.
+7. Agent evaluations cover seven concrete scenario variants on each of four hosts:
+   existing profile, no profile, malformed producer, unavailable producer,
+   interruption/resume, explicit acceptance, and explicit rejection.
 
 ## Requirements Traceability
 
 ### Stakeholder Requirement Coverage
 
-| Stakeholder Req | Validation Criterion | Test Cases | Coverage Status |
-|-----------------|----------------------|------------|-----------------|
-| StR-001 | StR-001-VC-1 | TC-001 | 🚧 Pending |
-| StR-001 | StR-001-VC-2 | TC-002 | 🚧 Pending |
-| StR-001 | StR-001-VC-3 | TC-003 | 🚧 Pending |
+| Stakeholder Req | Trace to US/FR | Test/Validation | Coverage Status |
+|-----------------|----------------|-----------------|-----------------|
+| StR-001 | FR-001, FR-004, FR-005 | StR-001-VC-1..VC-3 → TC-001..TC-003 | 🚧 Pending |
 
 ### User Story Coverage
 
-| User Story | Illustrative Example | Test Cases | Coverage Status |
-|------------|----------------------|------------|-----------------|
+| User Story | Acceptance Criteria | Test Cases | Coverage Status |
+|------------|---------------------|------------|-----------------|
 | US-001 | US-001-EX-1 | TC-004 | 🚧 Pending |
 | US-001 | US-001-EX-2 | TC-005 | 🚧 Pending |
 | US-002 | US-002-EX-1 | TC-010 | 🚧 Pending |
@@ -61,6 +62,8 @@ requirement, and declared constraint in this specification.
 | FR-001 | FR-001-AC-3 | TC-006 | 🚧 Pending |
 | FR-001 | FR-001-AC-4 | TC-007 | 🚧 Pending |
 | FR-001 | FR-001-AC-5 | TC-008 | 🚧 Pending |
+| FR-001 | FR-001-AC-6 | TC-044 | 🚧 Pending |
+| FR-001 | FR-001-AC-7 | TC-045 | 🚧 Pending |
 | FR-002 | FR-002-AC-1 | TC-009 | 🚧 Pending |
 | FR-002 | FR-002-AC-2 | TC-010 | 🚧 Pending |
 | FR-002 | FR-002-AC-3 | TC-011 | 🚧 Pending |
@@ -78,15 +81,19 @@ requirement, and declared constraint in this specification.
 | FR-004 | FR-004-AC-4 | TC-023 | 🚧 Pending |
 | FR-004 | FR-004-AC-5 | TC-024 | 🚧 Pending |
 | FR-004 | FR-004-AC-6 | TC-025 | 🚧 Pending |
+| FR-004 | FR-004-AC-7 | TC-046 | 🚧 Pending |
 | FR-005 | FR-005-AC-1 | TC-026 | 🚧 Pending |
 | FR-005 | FR-005-AC-2 | TC-027 | 🚧 Pending |
 | FR-005 | FR-005-AC-3 | TC-028 | 🚧 Pending |
 | FR-005 | FR-005-AC-4 | TC-029 | 🚧 Pending |
 | FR-005 | FR-005-AC-5 | TC-030 | 🚧 Pending |
+| FR-005 | FR-005-AC-6 | TC-047 | 🚧 Pending |
+| FR-005 | FR-005-AC-7 | TC-048 | 🚧 Pending |
 | FR-006 | FR-006-AC-1 | TC-031 | 🚧 Pending |
 | FR-006 | FR-006-AC-2 | TC-032 | 🚧 Pending |
 | FR-006 | FR-006-AC-3 | TC-033 | 🚧 Pending |
 | FR-006 | FR-006-AC-4 | TC-034 | 🚧 Pending |
+| FR-006 | FR-006-AC-5 | TC-049 | 🚧 Pending |
 | FR-007 | FR-007-AC-1 | TC-035 | 🚧 Pending |
 | FR-007 | FR-007-AC-2 | TC-036 | 🚧 Pending |
 | FR-007 | FR-007-AC-3 | TC-037 | 🚧 Pending |
@@ -128,21 +135,21 @@ requirement, and declared constraint in this specification.
 | TC-015 | Npm archive includes explicit module and onboarding members | Integration | P0 | FR-003-AC-2 | 🚧 |
 | TC-016 | Local-source installation preserves discovery | Integration | P0 | FR-003-AC-3 | 🚧 |
 | TC-017 | Repository-source installation preserves discovery | Integration | P0 | FR-003-AC-4 | 🚧 |
-| TC-018 | Unexpected or missing package member fails audit | Unit | P0 | FR-003-AC-5 | 🚧 |
-| TC-019 | Install source procedures are distinct | Static | P1 | FR-003-AC-6 | 🚧 |
-| TC-020 | Observed producer retains exact provenance | E2E | P0 | FR-004-AC-1, US-004-EX-2 | 🚧 |
+| TC-018 | Unexpected, missing, or escaping package content fails audit | Unit | P0 | FR-003-AC-5 | 🚧 |
+| TC-019 | Module/plugin and local/repository install procedures are distinct | Static | P1 | FR-003-AC-6 | 🚧 |
+| TC-020 | Observed producer retains the complete immutable governing-version tuple | E2E | P0 | FR-004-AC-1, US-004-EX-2 | 🚧 |
 | TC-021 | Invocation failure remains unavailable | E2E | P0 | FR-004-AC-2, US-004-EX-1 | 🚧 |
 | TC-022 | Deferred producer remains not computed | Unit | P1 | FR-004-AC-3 | 🚧 |
 | TC-023 | Excluded producer remains not applicable | Unit | P1 | FR-004-AC-4 | 🚧 |
-| TC-024 | Malformed producer output fails validation | E2E | P0 | FR-004-AC-5 | 🚧 |
+| TC-024 | Malformed output or missing/mutable provenance fails validation | E2E | P0 | FR-004-AC-5 | 🚧 |
 | TC-025 | Persisted evidence delegates to Quoin | Integration | P0 | FR-004-AC-6 | 🚧 |
 | TC-026 | Interrupted ix-flow run resumes without repetition | Integration | P0 | FR-005-AC-1, US-003-EX-1 | 🚧 |
 | TC-027 | All terminal transitions remain human gated | Static | P0 | FR-005-AC-2 | 🚧 |
-| TC-028 | Explicit rejection records no success state | Integration | P0 | FR-005-AC-3, US-003-EX-2 | 🚧 |
+| TC-028 | Explicit rejection records one attributed event and no success state | Integration | P0 | FR-005-AC-3, US-003-EX-2 | 🚧 |
 | TC-029 | Missing human choice leaves run non-terminal | Integration | P0 | FR-005-AC-4 | 🚧 |
 | TC-030 | Automatic terminal-gate override fails closed | Unit | P0 | FR-005-AC-5 | 🚧 |
-| TC-031 | Evaluation suite executes five required classes | E2E | P0 | FR-006-AC-1 | 🚧 |
-| TC-032 | Evaluation observations are complete | Property | P0 | FR-006-AC-2 | 🚧 |
+| TC-031 | Evaluation suite executes all five classes and seven variants on four hosts | E2E | P0 | FR-006-AC-1 | 🚧 |
+| TC-032 | Evaluation envelopes retain versions, transcript digests, effort, and outcomes | Property | P0 | FR-006-AC-2 | 🚧 |
 | TC-033 | Missing executable fails aggregate gate | E2E | P0 | FR-006-AC-3 | 🚧 |
 | TC-034 | Aggregate passes only for complete passing scenarios | Property | P0 | FR-006-AC-4 | 🚧 |
 | TC-035 | Four pilot workflow invocations still load | Integration | P0 | FR-007-AC-1 | 🚧 |
@@ -154,6 +161,12 @@ requirement, and declared constraint in this specification.
 | TC-041 | Supported-agent set rejects missing, extra, or duplicate hosts | Property | P1 | FR-002-CON-1 | 🚧 |
 | TC-042 | Thin manifests reject behavioral sections and copied workflows | Property | P1 | FR-002-CON-2 | 🚧 |
 | TC-043 | Compatibility inventory is exactly the four promoted pilots | Property | P1 | FR-007-CON-1 | 🚧 |
+| TC-044 | Malformed or conflicting existing artifacts remain unchanged and require human resolution | E2E | P0 | FR-001-AC-6 | 🚧 |
+| TC-045 | Artifact publication is staged, Quire-validated, atomic, and confined to the selected root | Integration | P0 | FR-001-AC-7 | 🚧 |
+| TC-046 | Exactly one availability state exists for every considered producer | Property | P0 | FR-004-AC-7 | 🚧 |
+| TC-047 | Explicit acceptance records one attributed event and no prior acceptance state | Integration | P0 | FR-005-AC-6 | 🚧 |
+| TC-048 | A run-id binding mismatch is refused without changing either run | Property | P0 | FR-005-AC-7 | 🚧 |
+| TC-049 | Equivalent runs retain explicit acceptance and rejection on every host | E2E | P0 | FR-006-AC-5 | 🚧 |
 
 ## Option Permutation Matrix
 
@@ -167,6 +180,19 @@ requirement, and declared constraint in this specification.
 | TC-010 | repository | Codex | Resolves canonical onboarding skill |
 | TC-010 | repository | opencode | Resolves canonical onboarding skill |
 | TC-010 | repository | GitHub Copilot | Resolves canonical onboarding skill |
+
+## Agent Evaluation Permutation Matrix
+
+| Scenario Class | Required Variants | Hosts | Required Cells |
+|----------------|-------------------|-------|----------------|
+| Existing repository | applicable valid profile | 4 | 4 |
+| No applicable profile | bounded no-profile decision | 4 | 4 |
+| Producer failure | malformed output; unavailable executable | 4 | 8 |
+| Interruption | interrupt then resume | 4 | 4 |
+| Human terminal decision | explicit acceptance; explicit rejection | 4 | 8 |
+
+The aggregate gate therefore requires 28 of 28 host-scenario cells with complete
+evaluation envelopes.
 
 ## Constraint Boundary Tests
 
@@ -203,6 +229,10 @@ requirement, and declared constraint in this specification.
 | EC-006 | Selected producer executable is missing | FR-004 | TC-021 | Tooling failure becomes missing evidence |
 | EC-007 | Agent stops after a persisted phase | FR-005 | TC-026 | Repeated work or lost decision context |
 | EC-008 | Required evaluation executable is absent | FR-006 | TC-033 | Incomplete evaluation appears passing |
+| EC-009 | Existing applicable artifacts conflict or are malformed | FR-001 | TC-044 | Onboarding silently selects or overwrites an artifact |
+| EC-010 | Artifact target or manifest reference escapes its selected root | FR-001, FR-003 | TC-018, TC-045 | Installation or onboarding writes/loads unowned content |
+| EC-011 | Run id is reused for a different repository or workflow | FR-005 | TC-048 | One run contaminates another decision boundary |
+| EC-012 | Valid output lacks an immutable governing version | FR-004 | TC-024 | Unreproducible evidence is admitted as observed |
 
 ## Integration Test Matrix
 
@@ -210,9 +240,9 @@ requirement, and declared constraint in this specification.
 
 | Integration ID | Purpose | Target Project | Type | Test Cases | Status |
 |----------------|---------|----------------|------|------------|--------|
-| INT-001 | Validate justified assurance artifacts | quire-rs | service | TC-006, TC-017 | 🚧 |
-| INT-002 | Persist and render evidence without redefining policy | quoin | service | TC-025 | 🚧 |
-| INT-003 | Load workflows, persist runs, resume, and gate decisions | ix-flow | service | TC-026, TC-028, TC-029, TC-030, TC-035 | 🚧 |
+| INT-001 | Validate justified assurance artifacts | quire-rs | service | TC-006, TC-017, TC-045 | 🚧 |
+| INT-002 | Persist and render evidence without redefining policy | quoin | service | TC-025, TC-046 | 🚧 |
+| INT-003 | Load workflows, persist runs, resume, and gate decisions | ix-flow | service | TC-026, TC-028, TC-029, TC-030, TC-035, TC-047, TC-048 | 🚧 |
 | INT-004 | Discover canonical onboarding through supported hosts | agent discovery adapters | service | TC-010, TC-011, TC-038 | 🚧 |
 
 ### Integration Test Details
@@ -227,6 +257,10 @@ requirement, and declared constraint in this specification.
 | TC-029 | INT-003 | Missing terminal choice | Decision-ready run | Remains non-terminal | P0 |
 | TC-030 | INT-003 | Invalid gate override | Automatic terminal gate request | Fails closed | P0 |
 | TC-035 | INT-003 | Compatibility discovery | Four pilot names | Every pilot loads | P0 |
+| TC-045 | INT-001 | Validated publication | Staged valid/invalid artifacts and escaping target | Only valid in-root artifact is atomically published | P0 |
+| TC-046 | INT-002 | Evidence-state exclusivity | Generated producer-state combinations | Exactly one catalogued state per producer | P0 |
+| TC-047 | INT-003 | Human acceptance | Named owner acceptance action | One attributed acceptance terminal event | P0 |
+| TC-048 | INT-003 | Run identity mismatch | Existing id with changed binding | Refused with both runs unchanged | P0 |
 | TC-010 | INT-004 | Host discovery permutations | Two sources by four hosts | Same canonical skill | P0 |
 | TC-011 | INT-004 | Workflow discovery | Canonical skill | Exactly four workflow definitions | P0 |
 
@@ -242,7 +276,7 @@ requirement, and declared constraint in this specification.
 | Category | Total | Passed | Failed | Blocked | Coverage |
 |----------|-------|--------|--------|---------|----------|
 | Unit | 6 | 0 | 0 | 6 | 0% |
-| Integration | 15 | 0 | 0 | 15 | 0% |
-| E2E | 11 | 0 | 0 | 11 | 0% |
-| Property | 6 | 0 | 0 | 6 | 0% |
+| Integration | 17 | 0 | 0 | 17 | 0% |
+| E2E | 13 | 0 | 0 | 13 | 0% |
+| Property | 8 | 0 | 0 | 8 | 0% |
 | Static | 5 | 0 | 0 | 5 | 0% |
