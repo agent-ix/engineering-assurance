@@ -8,6 +8,7 @@ dist/
 node_modules/
 *.tgz
 /evals/reports/
+/.agent-evals/
 /manifest.yaml
 /schemas/
 /skeletons/
