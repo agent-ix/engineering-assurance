@@ -1,0 +1,52 @@
+name: change-assurance
+version: 0.2.0
+description: Prepare a bounded change decision from impact, review, and assurance records.
+initialPhase: capture
+phases:
+  - { name: capture }
+  - { name: evidence_ready }
+  - { name: decision_ready }
+  - { name: approved, terminal: true }
+  - { name: rejected, terminal: true }
+transitions:
+  - from: capture
+    to: evidence_ready
+    invariants: ["interview.complete:change"]
+    defaultGate: auto
+  - from: evidence_ready
+    to: decision_ready
+    invariants:
+      - "change.impact_ready"
+      - "change.snapshot_ready"
+      - "change.review_ready"
+      - "shared.exceptions_ready"
+      - "shared.observation_ready"
+      - "shared.terminal_gates"
+    defaultGate: auto
+  - { from: decision_ready, to: approved, invariants: [], defaultGate: hitl }
+  - { from: decision_ready, to: rejected, invariants: [], defaultGate: hitl }
+itemSchemas:
+  change_request: {}
+  impact_snapshot:
+    required: [id, source_revision, profile_path, baseline_id, changed_nodes, impacted_nodes, missing_edges, stale_evidence, suspect_evidence, unknowns]
+  assurance_snapshot:
+    required: [id, source_revision, discharge_schema, discharge_digest, binding_open, applicability_unresolved, argument_schema, argument_id, argument_digest, top_claim_status, evidence_record_ids, verified_at]
+  review_validation:
+    required: [id, artifact_type, analysis, path, source_revision, valid]
+  exception:
+    required: [id, owner, expires_at, rationale, impact]
+  operator_observation:
+    required: [id, elapsed_minutes, command_count]
+linkSchemas: {}
+interviews:
+  change:
+    itemType: change_request
+    completenessRule: all_required
+    questions:
+      - { key: change_ref, prompt: "Which change is being decided?", type: text, required: true }
+      - { key: scope, prompt: "What is the exact change boundary?", type: text, required: true }
+      - { key: profile_path, prompt: "Where is the applicable profile?", type: text, required: true }
+      - { key: baseline_id, prompt: "Which evidence baseline applies?", type: text, required: true }
+      - { key: source_revision, prompt: "Which exact source revision is reviewed?", type: text, required: true }
+      - { key: owner, prompt: "Who owns the terminal decision?", type: text, required: true }
+      - { key: exceptions_expected, prompt: "Are exceptions expected?", type: bool, required: true }

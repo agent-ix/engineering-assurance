@@ -13,6 +13,17 @@ choices.
 
 ```bash
 quire validate --scope . 'spec/**/*.md'
+ix-flow run change-assurance --path engineering_assurance/skills/assurance-onboarding
+```
+
+The canonical onboarding skill is
+`engineering_assurance/skills/assurance-onboarding/SKILL.md`. Claude Code,
+Codex, opencode, and GitHub Copilot discovery surfaces all resolve that same
+tree.
+
+The former pilot path remains compatible for this release:
+
+```bash
 ix-flow run change-assurance --path pilots/assurance-workflows
 ```
 
