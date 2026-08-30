@@ -101,7 +101,9 @@ def test_suite_matrix_is_seven_variants_across_four_hosts() -> None:
 def test_suite_config_loads_without_a_project_local_runner_package() -> None:
     """Trace: FR-006-AC-1, TC-031."""
     config = Path(__file__).parents[1] / "evals/cli-agent-evals.config.mjs"
-    script = "import(process.argv[1]).then(m => console.log(m.default.scenarios.length))"
+    script = (
+        "import(process.argv[1]).then(m => console.log(m.default.scenarios.length))"
+    )
     completed = subprocess.run(
         ["node", "-e", script, config.as_uri()],
         check=False,
@@ -165,6 +167,7 @@ def test_live_suite_publishes_the_exact_result_contract() -> None:
     observed = json.loads(completed.stdout)
     result = observed["result"]
     assert result["observed_outcome"] == "reused"
+    assert result["terminal_event_contract"] == {"required": False, "value": None}
     assert result["governing_identities"] == [
         "module",
         "plugin",
@@ -178,6 +181,81 @@ def test_live_suite_publishes_the_exact_result_contract() -> None:
     ]
     assert observed["valid"] == []
     assert observed["drifted"] == ["result field mismatch: source_revision"]
+
+
+def test_live_suite_requires_the_complete_terminal_event_shape() -> None:
+    """Trace: FR-006-AC-2, FR-006-AC-5, TC-032, TC-049."""
+    contract = Path(__file__).parents[1] / "evals/result-contract.mjs"
+    script = """
+      import(process.argv[1]).then(m => {
+        const identity = { name: 'fixed', version: '1.0.0', digest: 'a'.repeat(64) };
+        const governing = Object.fromEntries(
+          m.governingIdentities.map(name => [name, { ...identity, name }]),
+        );
+        governing.workflow = { ...identity, name: 'architecture-evaluation' };
+        const expectation = {
+          expected: 'accepted',
+          choice: 'accept',
+          input: { decision_owner: 'juniper-architecture-owner' },
+        };
+        const contract = m.resultContract(expectation, {
+          host: 'copilot',
+          host_version: 'copilot 1.0.0',
+          source_revision: 'b'.repeat(40),
+          suite_revision: 'suite-v1',
+          fixture_revision: 'fixtures-v1',
+          governing,
+        });
+        const terminal = {
+          run_id: 'accept-run',
+          workflow: 'architecture-evaluation',
+          workflow_version: '1.0.0',
+          owner: 'juniper-architecture-owner',
+          choice: 'accept',
+          outcome: 'accepted',
+          timestamp: '2026-08-30T22:00:00Z',
+        };
+        const envelope = {
+          host: contract.host,
+          host_version: contract.host_version,
+          source_revision: contract.source_revision,
+          suite_revision: contract.suite_revision,
+          fixture_revision: contract.fixture_revision,
+          governing: contract.governing,
+          command_count: 1,
+          elapsed_ms: 2,
+          human_prompt_count: 0,
+          manual_translation_count: 0,
+          repeated_prompt_count: 0,
+          observed_outcome: contract.observed_outcome,
+          terminal_event: terminal,
+          unsupported_additions: [],
+        };
+        console.log(JSON.stringify({
+          contract,
+          valid: m.validateResult(envelope, contract, 'complete'),
+          missing: m.validateResult(
+            { ...envelope, terminal_event: 'decision_ready->accepted' },
+            contract,
+            'complete',
+          ),
+        }));
+      })
+    """
+    completed = subprocess.run(
+        ["node", "-e", script, contract.as_uri()],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+    observed = json.loads(completed.stdout)
+    terminal = observed["contract"]["terminal_event_contract"]
+    assert terminal["required"] is True
+    assert terminal["choice"] == "accept"
+    assert terminal["owner"] == "juniper-architecture-owner"
+    assert observed["valid"] == []
+    assert observed["missing"] == ["explicit terminal event missing"]
 
 
 def test_complete_envelope_retains_versions_transcript_effort_and_outcome() -> None:
@@ -202,9 +280,9 @@ def test_complete_envelope_retains_versions_transcript_effort_and_outcome() -> N
 )
 def test_incomplete_envelope_fails_validation(changes: dict, expected: str) -> None:
     """Trace: FR-006-AC-2, TC-032."""
-    assert expected in replace(
-        envelope("claude", "existing-profile"), **changes
-    ).errors()
+    assert (
+        expected in replace(envelope("claude", "existing-profile"), **changes).errors()
+    )
 
 
 def test_missing_executable_is_not_executed_and_fails_gate(tmp_path: Path) -> None:
