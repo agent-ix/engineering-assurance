@@ -9,6 +9,13 @@
     "manifest.yaml",
     "schemas/",
     "skeletons/",
+    "engineering_assurance/INSTALL.md",
+    "engineering_assurance/skills/",
+    ".claude-plugin/plugin.json",
+    ".codex-plugin/plugin.json",
+    ".github/plugin/plugin.json",
+    "opencode.json",
+    "pilots/assurance-workflows/",
     "README.md",
     "LICENSE",
     "CONTENT_RIGHTS.md"
