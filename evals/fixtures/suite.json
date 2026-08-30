@@ -2,12 +2,59 @@
   "suite_revision": "suite-v1",
   "fixture_revision": "fixtures-v1",
   "scenarios": {
-    "existing-profile": {"expected": "reused"},
-    "no-profile": {"expected": "no-applicable-work"},
-    "malformed-producer": {"expected": "validation-failure"},
-    "unavailable-producer": {"expected": "unavailable"},
-    "interruption-resume": {"expected": "resumed"},
-    "human-acceptance": {"expected": "accepted", "choice": "accept"},
-    "human-rejection": {"expected": "rejected", "choice": "reject"}
+    "existing-profile": {
+      "expected": "reused",
+      "input": {
+        "decision_boundary": "one candidate revision of the fictional Juniper service",
+        "decision_owner": "juniper-release-owner"
+      }
+    },
+    "no-profile": {
+      "expected": "no-applicable-work",
+      "input": {
+        "decision_boundary": "a wording-only README correction with no production or assurance decision",
+        "decision_owner": "juniper-docs-owner"
+      }
+    },
+    "malformed-producer": {
+      "expected": "validation-failure",
+      "input": {
+        "decision_boundary": "the fictional Juniper release evidence intake",
+        "decision_owner": "juniper-release-owner"
+      }
+    },
+    "unavailable-producer": {
+      "expected": "unavailable",
+      "input": {
+        "decision_boundary": "the fictional Juniper release evidence intake",
+        "decision_owner": "juniper-release-owner"
+      }
+    },
+    "interruption-resume": {
+      "expected": "resumed",
+      "input": {
+        "decision_boundary": "the interrupted fictional Juniper architecture evaluation",
+        "decision_owner": "juniper-architecture-owner",
+        "run_id": "juniper-architecture-evaluation"
+      }
+    },
+    "human-acceptance": {
+      "expected": "accepted",
+      "choice": "accept",
+      "input": {
+        "decision_boundary": "the fictional Juniper architecture recommendation",
+        "decision_owner": "juniper-architecture-owner",
+        "owner_decision": "accept"
+      }
+    },
+    "human-rejection": {
+      "expected": "rejected",
+      "choice": "reject",
+      "input": {
+        "decision_boundary": "the fictional Juniper architecture recommendation",
+        "decision_owner": "juniper-architecture-owner",
+        "owner_decision": "reject"
+      }
+    }
   }
 }
