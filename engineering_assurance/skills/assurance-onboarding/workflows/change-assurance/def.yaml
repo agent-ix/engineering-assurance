@@ -26,6 +26,8 @@ transitions:
   - { from: decision_ready, to: approved, invariants: [], defaultGate: hitl }
   - { from: decision_ready, to: rejected, invariants: [], defaultGate: hitl }
 itemSchemas:
+  run_binding:
+    required: [id, repository_id, workflow, workflow_version, decision_boundary, decision_owner]
   change_request: {}
   impact_snapshot:
     required: [id, source_revision, profile_path, baseline_id, changed_nodes, impacted_nodes, missing_edges, stale_evidence, suspect_evidence, unknowns]

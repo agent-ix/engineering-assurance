@@ -24,6 +24,8 @@ transitions:
   - { from: decision_ready, to: promoted, invariants: [], defaultGate: hitl }
   - { from: decision_ready, to: not_promoted, invariants: [], defaultGate: hitl }
 itemSchemas:
+  run_binding:
+    required: [id, repository_id, workflow, workflow_version, decision_boundary, decision_owner]
   promotion_request: {}
   promotion_evidence:
     required: [id, plan_path, definition_version, prior_stage, proposed_stage, stability, decision_yield, limitations, owner]

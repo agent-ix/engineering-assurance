@@ -24,6 +24,8 @@ transitions:
   - { from: decision_ready, to: accepted, invariants: [], defaultGate: hitl }
   - { from: decision_ready, to: rejected, invariants: [], defaultGate: hitl }
 itemSchemas:
+  run_binding:
+    required: [id, repository_id, workflow, workflow_version, decision_boundary, decision_owner]
   intake_request: {}
   artifact_validation:
     required: [id, artifact_type, path, valid]
