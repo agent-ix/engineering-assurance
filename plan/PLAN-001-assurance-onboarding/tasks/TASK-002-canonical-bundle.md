@@ -2,7 +2,7 @@
 id: TASK-002
 title: "Promote the canonical onboarding bundle"
 type: Task
-status: todo
+status: done
 track: B
 priority: P0
 relationships:
@@ -39,4 +39,3 @@ all four supported hosts, and retain the exact pilot compatibility surface.
 - Every supported host resolves the same skill and exactly four workflows.
 - Missing, extra, duplicate, or escaping host/workflow entries fail closed.
 - Compatibility invocations still load while documentation leads with canonical use.
-

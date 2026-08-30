@@ -2,7 +2,7 @@
 id: TASK-006
 title: "Build the four-host onboarding evaluation suite"
 type: Task
-status: todo
+status: in_progress
 track: F
 priority: P0
 relationships:
@@ -46,4 +46,3 @@ agent hosts, plus version-bound envelopes and a complete-only aggregate gate.
 - All 28 cells execute through their real installed host binary.
 - Equivalent runs retain explicit acceptance and rejection on every host.
 - The aggregate passes only with 28 complete passing, non-inventing envelopes.
-

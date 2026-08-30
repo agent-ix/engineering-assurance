@@ -2,7 +2,7 @@
 id: TASK-001
 title: "Implement bounded repository onboarding"
 type: Task
-status: todo
+status: done
 track: A
 priority: P0
 relationships:
@@ -39,4 +39,3 @@ work or explicitly proposing none.
 - Inventory always precedes proposal and an absent justification writes nothing.
 - Missing boundary input pauses without a write.
 - No target or manifest reference can escape the selected repository root.
-

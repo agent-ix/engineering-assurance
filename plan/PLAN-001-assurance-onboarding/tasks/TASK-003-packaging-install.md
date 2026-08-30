@@ -2,7 +2,7 @@
 id: TASK-003
 title: "Package and install the onboarding bundle"
 type: Task
-status: todo
+status: done
 track: C
 priority: P0
 relationships:
@@ -41,4 +41,3 @@ module root.
 - Wheel and npm archives contain the exact declared payload and remain private.
 - Quire and host discovery work after both installation sources.
 - Module/plugin installation instructions are distinct from source-mode instructions.
-

@@ -252,6 +252,7 @@ def test_change_review_must_match_source_revision(tmp_path: Path) -> None:
 
 
 def test_ix_flow_can_load_every_definition(tmp_path: Path) -> None:
+    """Trace: FR-007-AC-1, TC-035."""
     executable = os.environ.get("IX_FLOW_BIN") or shutil.which("ix-flow")
     if executable is None:
         if os.environ.get("REQUIRE_IX_FLOW") == "1":
@@ -281,7 +282,7 @@ def test_ix_flow_can_load_every_definition(tmp_path: Path) -> None:
 
 
 def test_pilot_and_canonical_workflows_are_equivalent() -> None:
-    """Trace: FR-007-AC-2, TC-036; FR-007-CON-1, TC-043."""
+    """Trace: FR-007-AC-2, TC-036."""
     pilot = definitions()
     canonical = {
         path.parent.name: yaml.safe_load(path.read_text())
@@ -294,6 +295,16 @@ def test_pilot_and_canonical_workflows_are_equivalent() -> None:
         "change-assurance",
     }
     assert canonical == pilot
+
+
+def test_compatible_pilot_inventory_is_exact() -> None:
+    """Trace: FR-007-CON-1, TC-043."""
+    assert set(definitions()) == {
+        "assurance-intake",
+        "architecture-evaluation",
+        "measurement-promotion",
+        "change-assurance",
+    }
 
 
 def test_pilot_invariant_surface_delegates_to_canonical() -> None:
