@@ -23,8 +23,15 @@ def frontmatter(path: Path) -> dict:
 
 def shared_manifest_schema() -> Path | None:
     configured = os.environ.get("MODULE_MANIFEST_SCHEMA")
+    installed_modules = Path(
+        os.environ.get(
+            "IX_FILAMENT_MODULES_PATH",
+            Path.home() / ".ix" / "filament" / "modules",
+        )
+    )
     candidates = [
         Path(configured) if configured else None,
+        installed_modules / "spec-artifacts-iso" / "module-manifest.schema.json",
         ROOT.parent
         / "spec-artifacts-iso"
         / "spec_artifacts_iso"
