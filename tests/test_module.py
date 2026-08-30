@@ -11,8 +11,21 @@ import yaml
 from jsonschema import Draft7Validator, FormatChecker
 
 import engineering_assurance as package
+from scripts import validate_manifest
 
 ROOT = Path(__file__).parents[1]
+
+
+def test_manifest_schema_resolves_from_installed_module_root(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """Trace: FR-003-AC-3, TC-016 — installed modules are authoritative."""
+    schema_path = tmp_path / "spec-artifacts-iso" / "module-manifest.schema.json"
+    schema_path.parent.mkdir(parents=True)
+    schema_path.write_text("{}")
+    monkeypatch.delenv("MODULE_MANIFEST_SCHEMA", raising=False)
+    monkeypatch.setenv("IX_FILAMENT_MODULES_PATH", str(tmp_path))
+    assert validate_manifest.shared_manifest_schema() == schema_path
 
 
 def manifest() -> dict:
@@ -133,11 +146,13 @@ def test_argument_has_authored_claims_and_no_score() -> None:
     assert "score" not in json.dumps(contract).casefold()
 
 
-def test_repository_has_no_prior_evidence_corpus() -> None:
+def test_repository_has_no_prior_evidence_corpus_outside_governed_plan() -> None:
     assert not (ROOT / "examples").exists()
     assert not (ROOT / "reviews").exists()
-    assert not (ROOT / "plan").exists()
     assert not (ROOT / "research").exists()
+    assert {path.name for path in (ROOT / "plan").iterdir()} == {
+        "PLAN-001-assurance-onboarding"
+    }
     assert {path.name for path in (ROOT / "docs").iterdir()} == {
         "structural-coverage.md"
     }
