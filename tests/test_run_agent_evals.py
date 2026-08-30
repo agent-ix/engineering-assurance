@@ -8,6 +8,7 @@ from scripts.run_agent_evals import (
     build_command,
     file_identity,
     manifest_version,
+    runtime_package_identity,
     search_path,
 )
 
@@ -61,3 +62,20 @@ def test_runner_snapshots_immutable_file_identity(tmp_path: Path) -> None:
         "version": "1.2.3",
         "digest": hashlib.sha256(artifact.read_bytes()).hexdigest(),
     }
+
+
+def test_runner_identity_covers_the_producer_runtime_bundle(tmp_path: Path) -> None:
+    """Trace: FR-006-AC-2, TC-032."""
+    executable = tmp_path / "bin" / "cli-evals.js"
+    runtime = tmp_path / "dist" / "runner.js"
+    executable.parent.mkdir()
+    runtime.parent.mkdir()
+    (tmp_path / "package.json").write_text('{"name":"cli-evals"}\n')
+    executable.write_text("import '../dist/runner.js';\n")
+    runtime.write_text("export const result = 'before';\n")
+
+    before = runtime_package_identity("cli-evals", "0.1.0", executable)
+    runtime.write_text("export const result = 'after';\n")
+    after = runtime_package_identity("cli-evals", "0.1.0", executable)
+
+    assert before["digest"] != after["digest"]

@@ -51,6 +51,47 @@ def command_identity(command: str, *, search_path_value: str) -> dict[str, str]:
     return file_identity(command, lines[0], Path(executable))
 
 
+def runtime_package_identity(
+    name: str, version: str, executable: Path
+) -> dict[str, str]:
+    """Bind a Node CLI identity to every file that can affect its runtime."""
+    resolved_executable = executable.resolve()
+    package_root = resolved_executable.parent.parent
+    manifest = package_root / "package.json"
+    dist = package_root / "dist"
+    if not manifest.is_file() or not dist.is_dir():
+        raise SystemExit(
+            f"unable to locate the runtime package for {resolved_executable}"
+        )
+
+    runtime_files = [manifest, resolved_executable]
+    runtime_files.extend(path for path in dist.rglob("*") if path.is_file())
+    digest = hashlib.sha256()
+    for path in sorted(set(runtime_files)):
+        digest.update(path.relative_to(package_root).as_posix().encode())
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return {"name": name, "version": version, "digest": digest.hexdigest()}
+
+
+def producer_identity(command: str, *, search_path_value: str) -> dict[str, str]:
+    executable = shutil.which(command, path=search_path_value)
+    if executable is None:
+        raise SystemExit(f"{command} is not available for the governing snapshot")
+    completed = subprocess.run(
+        [executable, "--version"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    lines = (completed.stdout or completed.stderr).strip().splitlines()
+    if completed.returncode != 0 or not lines:
+        raise SystemExit(f"{command} version probe failed: {completed.returncode}")
+    return runtime_package_identity(command, lines[0], Path(executable))
+
+
 def manifest_version(path: Path) -> str:
     match = VERSION_PATTERN.search(path.read_text())
     if match is None:
@@ -77,11 +118,7 @@ def governing_snapshot(agent: str, *, search_path_value: str) -> dict[str, objec
     manifest = ROOT / "engineering_assurance" / "manifest.yaml"
     plugin = ROOT / ".codex-plugin" / "plugin.json"
     skill = (
-        ROOT
-        / "engineering_assurance"
-        / "skills"
-        / "assurance-onboarding"
-        / "SKILL.md"
+        ROOT / "engineering_assurance" / "skills" / "assurance-onboarding" / "SKILL.md"
     )
     contract = ROOT / "evals" / "result-contract.mjs"
     module_version = manifest_version(manifest)
@@ -118,7 +155,7 @@ def governing_snapshot(agent: str, *, search_path_value: str) -> dict[str, objec
             "schema": file_identity(
                 "evaluation-result-contract", "evaluation-result-v1", contract
             ),
-            "producer": command_identity(
+            "producer": producer_identity(
                 "cli-evals", search_path_value=search_path_value
             ),
         },
