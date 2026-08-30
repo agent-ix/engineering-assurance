@@ -35,7 +35,8 @@
       "input": {
         "decision_boundary": "the interrupted fictional Juniper architecture evaluation",
         "decision_owner": "juniper-architecture-owner",
-        "run_id": "juniper-architecture-evaluation"
+        "run_id": "juniper-architecture-evaluation",
+        "workflow_state_dir": "workflow-state"
       }
     },
     "human-acceptance": {
@@ -44,7 +45,9 @@
       "input": {
         "decision_boundary": "the fictional Juniper architecture recommendation",
         "decision_owner": "juniper-architecture-owner",
-        "owner_decision": "accept"
+        "owner_decision": "accept",
+        "run_id": "juniper-architecture-acceptance",
+        "workflow_state_dir": "workflow-state"
       }
     },
     "human-rejection": {
@@ -53,7 +56,9 @@
       "input": {
         "decision_boundary": "the fictional Juniper architecture recommendation",
         "decision_owner": "juniper-architecture-owner",
-        "owner_decision": "reject"
+        "owner_decision": "reject",
+        "run_id": "juniper-architecture-rejection",
+        "workflow_state_dir": "workflow-state"
       }
     }
   }

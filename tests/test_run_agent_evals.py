@@ -51,6 +51,36 @@ def test_runner_prefers_ignored_repository_tool_shims(tmp_path: Path) -> None:
     ]
 
 
+def test_runner_can_select_one_live_scenario(tmp_path: Path) -> None:
+    """Trace: FR-006-AC-1, TC-031."""
+    command = build_command(
+        "/tools/cli-evals",
+        agent="claude",
+        run="all",
+        filter_id="EA-006",
+        model="claude-sonnet-4-6",
+        keep=True,
+        report=tmp_path / "acceptance.json",
+        suite=Path("evals/suite.mjs"),
+    )
+
+    assert command == [
+        "/tools/cli-evals",
+        "run",
+        "--suite",
+        "evals/suite.mjs",
+        "--filter",
+        "EA-006",
+        "--agent",
+        "claude",
+        "--model",
+        "claude-sonnet-4-6",
+        "--keep",
+        "--report",
+        str(tmp_path / "acceptance.json"),
+    ]
+
+
 def test_runner_snapshots_immutable_file_identity(tmp_path: Path) -> None:
     """Trace: FR-006-AC-2, TC-032."""
     artifact = tmp_path / "artifact.yaml"

@@ -3,6 +3,7 @@
 EVAL_AGENT ?= codex
 EVAL_RUN ?= canary
 EVAL_MODEL ?=
+EVAL_FILTER ?=
 EVAL_KEEP ?= 1
 EVAL_REPORT ?= evals/reports/$(EVAL_AGENT)-$(EVAL_RUN).json
 PYTHON ?= python
@@ -25,6 +26,7 @@ agent-evals:
 	PATH="$(CURDIR)/.agent-evals/bin:$(PATH)" $(PYTHON) scripts/run_agent_evals.py \
 		--agent "$(EVAL_AGENT)" \
 		--run "$(EVAL_RUN)" \
+		$(if $(strip $(EVAL_FILTER)),--filter "$(EVAL_FILTER)") \
 		$(if $(strip $(EVAL_MODEL)),--model "$(EVAL_MODEL)") \
 		$(if $(filter 1 true yes,$(EVAL_KEEP)),--keep) \
 		--report "$(EVAL_REPORT)"

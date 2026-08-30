@@ -197,7 +197,11 @@ def test_live_suite_requires_the_complete_terminal_event_shape() -> None:
         const expectation = {
           expected: 'accepted',
           choice: 'accept',
-          input: { decision_owner: 'juniper-architecture-owner' },
+          input: {
+            decision_owner: 'juniper-architecture-owner',
+            run_id: 'accept-run',
+            workflow_state_dir: 'workflow-state',
+          },
         };
         const contract = m.resultContract(expectation, {
           host: 'copilot',
@@ -232,6 +236,31 @@ def test_live_suite_requires_the_complete_terminal_event_shape() -> None:
           terminal_event: terminal,
           unsupported_additions: [],
         };
+        const history = {
+          ok: true,
+          instance_id: 'accept-run',
+          current_phase: 'accepted',
+          summary: {
+            id: 'accept-run',
+            defName: 'architecture-evaluation',
+            defVersion: '1.0.0',
+            phase: 'accepted',
+          },
+          data: [
+            {
+              kind: 'gate.acknowledged',
+              payload: {
+                transitionKey: 'decision_ready->accepted',
+                approver: 'juniper-architecture-owner',
+              },
+            },
+            {
+              kind: 'phase.advanced',
+              ts: '2026-08-30T22:00:00Z',
+              payload: { from: 'decision_ready', to: 'accepted' },
+            },
+          ],
+        };
         console.log(JSON.stringify({
           contract,
           valid: m.validateResult(envelope, contract, 'complete'),
@@ -239,6 +268,18 @@ def test_live_suite_requires_the_complete_terminal_event_shape() -> None:
             { ...envelope, terminal_event: 'decision_ready->accepted' },
             contract,
             'complete',
+          ),
+          workflowValid: m.validateTerminalWorkflow(
+            envelope,
+            contract,
+            history,
+            { ok: true },
+          ),
+          workflowInvented: m.validateTerminalWorkflow(
+            envelope,
+            contract,
+            { ...history, data: [] },
+            { ok: true },
           ),
         }));
       })
@@ -255,8 +296,15 @@ def test_live_suite_requires_the_complete_terminal_event_shape() -> None:
     assert terminal["required"] is True
     assert terminal["choice"] == "accept"
     assert terminal["owner"] == "juniper-architecture-owner"
+    assert terminal["run_id"] == "accept-run"
+    assert terminal["workflow_state_dir"] == "workflow-state"
     assert observed["valid"] == []
     assert observed["missing"] == ["explicit terminal event missing"]
+    assert observed["workflowValid"] == []
+    assert observed["workflowInvented"] == [
+        "ix-flow terminal owner acknowledgement missing",
+        "ix-flow terminal timestamp mismatch",
+    ]
 
 
 def test_complete_envelope_retains_versions_transcript_effort_and_outcome() -> None:
