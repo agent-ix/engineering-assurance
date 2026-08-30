@@ -79,6 +79,13 @@ def run(
     return completed
 
 
+def member_mismatch(
+    actual: set[str], expected: set[str]
+) -> tuple[list[str], list[str]]:
+    """Return deterministic extra and missing package members."""
+    return sorted(actual - expected), sorted(expected - actual)
+
+
 def npm_allowlist() -> set[str]:
     """Return the explicit npm archive contract (TC-015, TC-018, TC-040)."""
     module_members = {
@@ -197,8 +204,7 @@ def main() -> int:
                 | emitted_licenses
             )
             if names != expected_wheel:
-                extra = sorted(names - expected_wheel)
-                missing = sorted(expected_wheel - names)
+                extra, missing = member_mismatch(names, expected_wheel)
                 raise SystemExit(
                     f"wheel member mismatch: extra={extra}, missing={missing}"
                 )
@@ -249,8 +255,7 @@ def main() -> int:
         files = {item["path"] for item in report[0]["files"]}
         allowed = npm_allowlist()
         if files != allowed:
-            extra = sorted(files - allowed)
-            missing = sorted(allowed - files)
+            extra, missing = member_mismatch(files, allowed)
             raise SystemExit(f"npm member mismatch: extra={extra}, missing={missing}")
         archives = list(output.glob("*.tgz"))
         if len(archives) != 1:
@@ -262,8 +267,7 @@ def main() -> int:
                 if member.isfile()
             }
             if archived_files != allowed:
-                extra = sorted(archived_files - allowed)
-                missing = sorted(allowed - archived_files)
+                extra, missing = member_mismatch(archived_files, allowed)
                 raise SystemExit(
                     f"npm archive mismatch: extra={extra}, missing={missing}"
                 )

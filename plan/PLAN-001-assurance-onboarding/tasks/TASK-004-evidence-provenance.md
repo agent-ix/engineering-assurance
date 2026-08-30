@@ -2,7 +2,7 @@
 id: TASK-004
 title: "Preserve evidence availability and provenance"
 type: Task
-status: todo
+status: done
 track: D
 priority: P0
 relationships:
@@ -39,4 +39,3 @@ tuple, producer validation, operator observations, and explicit Quoin handoff.
 - Every considered producer has exactly one explicit availability state.
 - Observed evidence carries the complete immutable tuple and raw observation detail.
 - No unavailable/deferred/excluded producer is represented as successful evidence.
-

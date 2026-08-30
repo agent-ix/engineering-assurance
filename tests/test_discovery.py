@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from dataclasses import replace
 from pathlib import Path
 
@@ -84,3 +85,14 @@ def test_host_manifests_are_metadata_and_one_target_only() -> None:
             assert len(target) == 1
         else:
             assert isinstance(target, str)
+
+
+def test_cross_agent_canonical_parity_meets_all_thresholds() -> None:
+    """Trace: NFR-001, TC-038."""
+    resolved = validate_discovery(ROOT)
+    assert len(resolved) == 4
+    skill_digests = {
+        hashlib.sha256(path.read_bytes()).hexdigest() for path in resolved.values()
+    }
+    assert len(skill_digests) == 1
+    assert all(path == next(iter(resolved.values())) for path in resolved.values())

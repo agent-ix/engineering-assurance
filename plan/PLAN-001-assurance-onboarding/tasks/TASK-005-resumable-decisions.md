@@ -2,7 +2,7 @@
 id: TASK-005
 title: "Integrate resumable human decisions"
 type: Task
-status: todo
+status: done
 track: E
 priority: P0
 relationships:
@@ -41,4 +41,3 @@ explicit human acceptance/rejection without duplicating ix-flow state mechanics.
 - Missing choice remains non-terminal and automatic gate override fails closed.
 - Acceptance and rejection are distinct, attributed, idempotent terminal paths.
 - Resume continues from persisted state under the original binding.
-

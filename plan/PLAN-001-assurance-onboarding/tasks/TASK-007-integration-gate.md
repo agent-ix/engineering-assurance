@@ -2,7 +2,7 @@
 id: TASK-007
 title: "Close the onboarding integration gate"
 type: Task
-status: todo
+status: not_started
 track: Gate
 priority: P0
 relationships:
@@ -51,4 +51,3 @@ evidence, workflow, resume, and decision boundaries; then close traceability for
   human owns every terminal outcome.
 - Cross-agent canonical parity meets every declared threshold.
 - Gap analysis reports TC-001..TC-049 backed and every plan task complete.
-
