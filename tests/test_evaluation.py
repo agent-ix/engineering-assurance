@@ -112,14 +112,47 @@ def test_suite_config_loads_without_a_project_local_runner_package() -> None:
     assert completed.stdout.strip() == "7"
 
 
-def test_live_suite_publishes_the_exact_result_contract(tmp_path: Path) -> None:
+def test_live_suite_publishes_the_exact_result_contract() -> None:
     """Trace: FR-006-AC-2, TC-032."""
     contract = Path(__file__).parents[1] / "evals/result-contract.mjs"
     script = """
       import(process.argv[1]).then(m => {
         const expectation = { expected: 'reused' };
-        const result = m.resultContract(expectation);
-        console.log(JSON.stringify(result));
+        const identity = { name: 'fixed', version: '1.0.0', digest: 'a'.repeat(64) };
+        const governing = Object.fromEntries(
+          m.governingIdentities.map(name => [name, { ...identity, name }]),
+        );
+        const result = m.resultContract(expectation, {
+          host: 'codex',
+          host_version: 'codex-cli 1.0.0',
+          source_revision: 'b'.repeat(40),
+          suite_revision: 'suite-v1',
+          fixture_revision: 'fixtures-v1',
+          governing,
+        });
+        const envelope = {
+          host: result.host,
+          host_version: result.host_version,
+          source_revision: result.source_revision,
+          suite_revision: result.suite_revision,
+          fixture_revision: result.fixture_revision,
+          governing: result.governing,
+          command_count: 1,
+          elapsed_ms: 2,
+          human_prompt_count: 0,
+          manual_translation_count: 0,
+          repeated_prompt_count: 0,
+          observed_outcome: result.observed_outcome,
+          terminal_event: null,
+          unsupported_additions: [],
+        };
+        const valid = m.validateResult(envelope, result, 'complete');
+        const drifted = m.validateResult(
+          { ...envelope, source_revision: 'c'.repeat(40) },
+          result,
+          'complete',
+        );
+        console.log(JSON.stringify({ result, valid, drifted }));
       })
     """
     completed = subprocess.run(
@@ -129,7 +162,8 @@ def test_live_suite_publishes_the_exact_result_contract(tmp_path: Path) -> None:
         text=True,
     )
     assert completed.returncode == 0, completed.stderr
-    result = json.loads(completed.stdout)
+    observed = json.loads(completed.stdout)
+    result = observed["result"]
     assert result["observed_outcome"] == "reused"
     assert result["governing_identities"] == [
         "module",
@@ -142,6 +176,8 @@ def test_live_suite_publishes_the_exact_result_contract(tmp_path: Path) -> None:
         "schema",
         "producer",
     ]
+    assert observed["valid"] == []
+    assert observed["drifted"] == ["result field mismatch: source_revision"]
 
 
 def test_complete_envelope_retains_versions_transcript_effort_and_outcome() -> None:

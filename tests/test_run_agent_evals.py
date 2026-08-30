@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 
-from scripts.run_agent_evals import build_command, search_path
+from scripts.run_agent_evals import (
+    build_command,
+    file_identity,
+    manifest_version,
+    search_path,
+)
 
 
 def test_runner_builds_one_explicit_live_host_command(tmp_path: Path) -> None:
@@ -42,3 +48,16 @@ def test_runner_prefers_ignored_repository_tool_shims(tmp_path: Path) -> None:
         str(tmp_path),
         "/usr/bin",
     ]
+
+
+def test_runner_snapshots_immutable_file_identity(tmp_path: Path) -> None:
+    """Trace: FR-006-AC-2, TC-032."""
+    artifact = tmp_path / "artifact.yaml"
+    artifact.write_text("name: fixed\nversion: 1.2.3\n")
+
+    assert manifest_version(artifact) == "1.2.3"
+    assert file_identity("fixed", "1.2.3", artifact) == {
+        "name": "fixed",
+        "version": "1.2.3",
+        "digest": hashlib.sha256(artifact.read_bytes()).hexdigest(),
+    }
