@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -13,6 +16,7 @@ from typing import Sequence
 ROOT = Path(__file__).resolve().parents[1]
 LOCAL_BIN = ROOT / ".agent-evals" / "bin"
 SUITE = ROOT / "evals" / "cli-agent-evals.config.mjs"
+VERSION_PATTERN = re.compile(r"^version:\s*[\"']?([^\"'\s]+)", re.MULTILINE)
 
 
 def search_path(base_path: str | None, *, local_bin: Path = LOCAL_BIN) -> str:
@@ -20,6 +24,106 @@ def search_path(base_path: str | None, *, local_bin: Path = LOCAL_BIN) -> str:
     if base_path:
         entries.append(base_path)
     return os.pathsep.join(entries)
+
+
+def file_identity(name: str, version: str, path: Path) -> dict[str, str]:
+    return {
+        "name": name,
+        "version": version,
+        "digest": hashlib.sha256(path.resolve().read_bytes()).hexdigest(),
+    }
+
+
+def command_identity(command: str, *, search_path_value: str) -> dict[str, str]:
+    executable = shutil.which(command, path=search_path_value)
+    if executable is None:
+        raise SystemExit(f"{command} is not available for the governing snapshot")
+    completed = subprocess.run(
+        [executable, "--version"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    lines = (completed.stdout or completed.stderr).strip().splitlines()
+    if completed.returncode != 0 or not lines:
+        raise SystemExit(f"{command} version probe failed: {completed.returncode}")
+    return file_identity(command, lines[0], Path(executable))
+
+
+def manifest_version(path: Path) -> str:
+    match = VERSION_PATTERN.search(path.read_text())
+    if match is None:
+        raise SystemExit(f"version missing from {path.relative_to(ROOT)}")
+    return match.group(1)
+
+
+def source_revision() -> str:
+    completed = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    revision = completed.stdout.strip()
+    if completed.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise SystemExit("unable to resolve immutable source revision")
+    return revision
+
+
+def governing_snapshot(agent: str, *, search_path_value: str) -> dict[str, object]:
+    manifest = ROOT / "engineering_assurance" / "manifest.yaml"
+    plugin = ROOT / ".codex-plugin" / "plugin.json"
+    skill = (
+        ROOT
+        / "engineering_assurance"
+        / "skills"
+        / "assurance-onboarding"
+        / "SKILL.md"
+    )
+    contract = ROOT / "evals" / "result-contract.mjs"
+    module_version = manifest_version(manifest)
+    plugin_version = json.loads(plugin.read_text())["version"]
+    workflows: dict[str, dict[str, str]] = {}
+    for name in ("assurance-intake", "architecture-evaluation"):
+        definition = (
+            ROOT
+            / "engineering_assurance"
+            / "skills"
+            / "assurance-onboarding"
+            / "workflows"
+            / name
+            / "def.yaml"
+        )
+        workflows[name] = file_identity(
+            name,
+            manifest_version(definition),
+            definition,
+        )
+
+    return {
+        "source_revision": source_revision(),
+        "host": command_identity(agent, search_path_value=search_path_value),
+        "governing": {
+            "module": file_identity("engineering-assurance", module_version, manifest),
+            "plugin": file_identity(
+                "engineering-assurance-plugin", plugin_version, plugin
+            ),
+            "skill": file_identity("assurance-onboarding", plugin_version, skill),
+            "quire": command_identity("quire", search_path_value=search_path_value),
+            "quoin": command_identity("quoin", search_path_value=search_path_value),
+            "ix_flow": command_identity("ix-flow", search_path_value=search_path_value),
+            "schema": file_identity(
+                "evaluation-result-contract", "evaluation-result-v1", contract
+            ),
+            "producer": command_identity(
+                "cli-evals", search_path_value=search_path_value
+            ),
+        },
+        "workflows": workflows,
+    }
 
 
 def build_command(
@@ -75,6 +179,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit(
             f"{args.agent} is not available on PATH or in .agent-evals/bin"
         )
+
+    snapshot = governing_snapshot(args.agent, search_path_value=env["PATH"])
+    snapshot_path = ROOT / ".agent-evals" / f"governing-{args.agent}.json"
+    snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+    snapshot_path.write_text(f"{json.dumps(snapshot, indent=2, sort_keys=True)}\n")
+    env["EA_EVAL_GOVERNING_PATH"] = str(snapshot_path)
 
     report = args.report if args.report.is_absolute() else ROOT / args.report
     report.parent.mkdir(parents=True, exist_ok=True)

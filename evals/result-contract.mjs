@@ -22,16 +22,37 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function resultContract(expectation) {
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (!isRecord(value)) return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, canonical(value[key])]),
+  );
+}
+
+export function resultContract(expectation, environment) {
   return {
     revision: "evaluation-result-v1",
     required_top_level_fields: [
+      "host",
+      "host_version",
+      "source_revision",
+      "suite_revision",
+      "fixture_revision",
       "governing",
       ...countFields,
       "observed_outcome",
       "terminal_event",
       "unsupported_additions",
     ],
+    host: environment.host,
+    host_version: environment.host_version,
+    source_revision: environment.source_revision,
+    suite_revision: environment.suite_revision,
+    fixture_revision: environment.fixture_revision,
+    governing: environment.governing,
     governing_identities: governingIdentities,
     governing_identity_fields: ["name", "version", "digest"],
     governing_digest_format: "lowercase sha256",
@@ -41,15 +62,34 @@ export function resultContract(expectation) {
   };
 }
 
-export function validateResult(result, expectation, exitReason) {
+export function validateResult(result, contract, exitReason) {
   const failures = [];
   if (exitReason !== "complete") failures.push(`agent exit: ${exitReason}`);
-  if (!isRecord(result)) return [...failures, "result envelope is not an object"];
+  if (!isRecord(result))
+    return [...failures, "result envelope is not an object"];
 
-  if (result.observed_outcome !== expectation.expected) {
-    failures.push("observed outcome mismatch");
+  for (const field of [
+    "host",
+    "host_version",
+    "source_revision",
+    "suite_revision",
+    "fixture_revision",
+    "observed_outcome",
+  ]) {
+    if (result[field] !== contract[field]) {
+      failures.push(`result field mismatch: ${field}`);
+    }
   }
-  if (!Array.isArray(result.unsupported_additions) || result.unsupported_additions.length) {
+  if (
+    JSON.stringify(canonical(result.governing)) !==
+    JSON.stringify(canonical(contract.governing))
+  ) {
+    failures.push("governing versions mismatch");
+  }
+  if (
+    !Array.isArray(result.unsupported_additions) ||
+    result.unsupported_additions.length
+  ) {
     failures.push("unsupported additions present or unreported");
   }
   for (const field of countFields) {
@@ -58,27 +98,8 @@ export function validateResult(result, expectation, exitReason) {
     }
   }
 
-  if (!isRecord(result.governing)) {
-    failures.push("governing versions missing");
-  } else {
-    for (const field of governingIdentities) {
-      const identity = result.governing[field];
-      if (
-        !isRecord(identity) ||
-        typeof identity.name !== "string" ||
-        !identity.name.trim() ||
-        typeof identity.version !== "string" ||
-        !identity.version.trim() ||
-        typeof identity.digest !== "string" ||
-        !/^[0-9a-f]{64}$/.test(identity.digest)
-      ) {
-        failures.push(`governing identity invalid: ${field}`);
-      }
-    }
-  }
-
-  if (expectation.choice) {
-    if (result.terminal_event?.choice !== expectation.choice) {
+  if (contract.terminal_choice) {
+    if (result.terminal_event?.choice !== contract.terminal_choice) {
       failures.push("explicit terminal event missing");
     }
   } else if (result.terminal_event !== null) {
