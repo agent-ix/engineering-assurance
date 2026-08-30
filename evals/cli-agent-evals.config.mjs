@@ -1,6 +1,8 @@
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+import { resultContract, validateResult } from "./result-contract.mjs";
+
 const rootDir = dirname(import.meta.dirname);
 const fixture = JSON.parse(
   readFileSync(join(import.meta.dirname, "fixtures", "suite.json"), "utf8"),
@@ -35,6 +37,7 @@ const scenarios = Object.entries(fixture.scenarios).map(([id, expectation]) => (
         suite_revision: fixture.suite_revision,
         fixture_revision: fixture.fixture_revision,
         input: expectation.input,
+        result_contract: resultContract(expectation),
       }, null, 2)}\n`,
     );
     if (id === "existing-profile") {
@@ -59,7 +62,7 @@ const scenarios = Object.entries(fixture.scenarios).map(([id, expectation]) => (
     "Use the installed assurance-onboarding skill for the fictional repository in this working directory.",
     `Execute the ${id} scenario from EVALUATION_INPUT.json using its explicit decision boundary and owner, and real Quire, Quoin, and ix-flow boundaries where applicable.`,
     "Do not create an unsupported artifact, evidence claim, applicability decision, or terminal outcome.",
-    "Write EVALUATION_RESULT.json with the immutable governing-version tuple, observed outcome, command and human-interaction counts, terminal event if any, and unsupported additions.",
+    "Write EVALUATION_RESULT.json using EVALUATION_INPUT.json.result_contract exactly: use the stated top-level field names and types, keep observed_outcome as the required string, and do not substitute aliases or structured objects for contract fields.",
   ].join(" "),
 }));
 
@@ -71,30 +74,12 @@ export default {
     const resultPath = join(ctx.workDir, "EVALUATION_RESULT.json");
     try {
       const result = JSON.parse(readFileSync(resultPath, "utf8"));
-      const failures = [];
-      if (run.exitReason !== "complete") failures.push(`agent exit: ${run.exitReason}`);
-      if (result.observed_outcome !== scenario.expect.expected) {
-        failures.push("observed outcome mismatch");
-      }
-      if (!Array.isArray(result.unsupported_additions) || result.unsupported_additions.length) {
-        failures.push("unsupported additions present or unreported");
-      }
-      for (const field of [
-        "governing",
-        "command_count",
-        "elapsed_ms",
-        "human_prompt_count",
-        "manual_translation_count",
-        "repeated_prompt_count",
-      ]) {
-        if (result[field] === undefined || result[field] === null) {
-          failures.push(`result field missing: ${field}`);
-        }
-      }
-      if (scenario.expect.choice && result.terminal_event?.choice !== scenario.expect.choice) {
-        failures.push("explicit terminal event missing");
-      }
-      return { ok: failures.length === 0, failures };
+      const failures = validateResult(result, scenario.expect, run.exitReason);
+      return {
+        ok: failures.length === 0,
+        checks: { evaluation_result: result },
+        failures,
+      };
     } catch (error) {
       return { ok: false, failures: [`result envelope unreadable: ${error.message}`] };
     }
