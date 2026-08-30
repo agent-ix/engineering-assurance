@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
@@ -95,6 +96,20 @@ def test_suite_matrix_is_seven_variants_across_four_hosts() -> None:
         (Path(__file__).parents[1] / "evals/fixtures/suite.json").read_text()
     )
     assert set(fixture["scenarios"]) == set(SCENARIO_VARIANTS)
+
+
+def test_suite_config_loads_without_a_project_local_runner_package() -> None:
+    """Trace: FR-006-AC-1, TC-031."""
+    config = Path(__file__).parents[1] / "evals/cli-agent-evals.config.mjs"
+    script = "import(process.argv[1]).then(m => console.log(m.default.scenarios.length))"
+    completed = subprocess.run(
+        ["node", "-e", script, config.as_uri()],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == "7"
 
 
 def test_complete_envelope_retains_versions_transcript_effort_and_outcome() -> None:

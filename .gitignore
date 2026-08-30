@@ -7,6 +7,7 @@ dist/
 *.egg-info/
 node_modules/
 *.tgz
+/evals/reports/
 /manifest.yaml
 /schemas/
 /skeletons/
