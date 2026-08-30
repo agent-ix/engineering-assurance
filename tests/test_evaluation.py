@@ -1,0 +1,199 @@
+from __future__ import annotations
+
+import json
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+
+from engineering_assurance.evaluation import (
+    SCENARIO_VARIANTS,
+    SUPPORTED_HOSTS,
+    EvaluationEnvelope,
+    aggregate_evaluations,
+    probe_host,
+    required_matrix,
+)
+from engineering_assurance.evidence import GoverningVersions, VersionIdentity
+from engineering_assurance.workflow import DecisionEvent
+
+DIGEST = "a" * 64
+
+
+def governing() -> GoverningVersions:
+    def identity(name: str) -> VersionIdentity:
+        return VersionIdentity(name, "1.2.3", DIGEST)
+
+    return GoverningVersions(
+        module=identity("engineering-assurance"),
+        plugin=identity("engineering-assurance-plugin"),
+        skill=identity("assurance-onboarding"),
+        workflow=identity("architecture-evaluation"),
+        quire=identity("quire"),
+        quoin=identity("quoin"),
+        ix_flow=identity("ix-flow"),
+        schema=identity("evaluation-envelope"),
+        producer=identity("cli-agent-evals"),
+    )
+
+
+def envelope(host: str, scenario: str) -> EvaluationEnvelope:
+    terminal = None
+    if scenario in {"human-acceptance", "human-rejection"}:
+        choice = "accept" if scenario == "human-acceptance" else "reject"
+        terminal = DecisionEvent(
+            run_id=f"{host}-{choice}-run",
+            workflow="architecture-evaluation",
+            workflow_version="0.1.0",
+            owner="architecture-owner",
+            choice=choice,
+            outcome="accepted" if choice == "accept" else "rejected",
+            timestamp="2026-08-30T00:00:00.000Z",
+        )
+    outcomes = {
+        "existing-profile": "reused",
+        "no-profile": "no-applicable-work",
+        "malformed-producer": "validation-failure",
+        "unavailable-producer": "unavailable",
+        "interruption-resume": "resumed",
+        "human-acceptance": "accepted",
+        "human-rejection": "rejected",
+    }
+    return EvaluationEnvelope(
+        host=host,
+        scenario=scenario,
+        execution_status="executed",
+        passed=True,
+        suite_revision="suite-v1",
+        fixture_revision="fixtures-v1",
+        source_revision="a" * 40,
+        host_version="1.2.3",
+        governing=governing(),
+        transcript_path=f"transcripts/{host}-{scenario}.jsonl",
+        transcript_digest=DIGEST,
+        command_count=4,
+        elapsed_ms=1200,
+        human_prompt_count=1 if terminal else 0,
+        manual_translation_count=0,
+        repeated_prompt_count=0,
+        observed_outcome=outcomes[scenario],
+        terminal_event=terminal,
+    )
+
+
+def complete_matrix() -> list[EvaluationEnvelope]:
+    return [envelope(cell.host, cell.scenario) for cell in required_matrix()]
+
+
+def test_suite_matrix_is_seven_variants_across_four_hosts() -> None:
+    """Trace: FR-006-AC-1, TC-031."""
+    matrix = required_matrix()
+    assert len(matrix) == 28
+    assert {cell.host for cell in matrix} == set(SUPPORTED_HOSTS)
+    assert {cell.scenario for cell in matrix} == set(SCENARIO_VARIANTS)
+    fixture = json.loads(
+        (Path(__file__).parents[1] / "evals/fixtures/suite.json").read_text()
+    )
+    assert set(fixture["scenarios"]) == set(SCENARIO_VARIANTS)
+
+
+def test_complete_envelope_retains_versions_transcript_effort_and_outcome() -> None:
+    """Trace: FR-006-AC-2, TC-032."""
+    result = envelope("claude", "existing-profile")
+    assert result.errors() == ()
+    assert result.governing == governing()
+    assert result.transcript_digest == DIGEST
+    assert result.command_count == 4
+    assert result.elapsed_ms == 1200
+    assert result.observed_outcome == "reused"
+
+
+@pytest.mark.parametrize(
+    "changes, expected",
+    [
+        ({"governing": None}, "governing-versions-missing"),
+        ({"transcript_digest": None}, "transcript-digest-invalid"),
+        ({"command_count": None}, "command-count-invalid"),
+        ({"observed_outcome": "invented"}, "observed-outcome-mismatch"),
+    ],
+)
+def test_incomplete_envelope_fails_validation(changes: dict, expected: str) -> None:
+    """Trace: FR-006-AC-2, TC-032."""
+    assert expected in replace(
+        envelope("claude", "existing-profile"), **changes
+    ).errors()
+
+
+def test_missing_executable_is_not_executed_and_fails_gate(tmp_path: Path) -> None:
+    """Trace: FR-006-AC-3, TC-033."""
+    probe = probe_host("opencode", search_path=str(tmp_path))
+    assert probe.available is False
+    missing = replace(
+        envelope("opencode", "existing-profile"),
+        execution_status="not_executed",
+        passed=False,
+        host_version=None,
+        governing=None,
+        transcript_path=None,
+        transcript_digest=None,
+        command_count=None,
+        elapsed_ms=None,
+        human_prompt_count=None,
+        manual_translation_count=None,
+        repeated_prompt_count=None,
+        observed_outcome=None,
+        diagnostic=probe.diagnostic,
+    )
+    matrix = complete_matrix()
+    index = next(
+        index
+        for index, item in enumerate(matrix)
+        if item.host == "opencode" and item.scenario == "existing-profile"
+    )
+    matrix[index] = missing
+    result = aggregate_evaluations(matrix)
+    assert result.ok is False
+    assert any("scenario-not-executed" in item for item in result.failures)
+
+
+def test_aggregate_passes_only_for_28_complete_unique_cells() -> None:
+    """Trace: FR-006-AC-4, TC-034."""
+    complete = complete_matrix()
+    result = aggregate_evaluations(complete)
+    assert result.ok
+    assert result.complete_cells == result.required_cells == 28
+    assert not aggregate_evaluations(complete[:-1]).ok
+    assert not aggregate_evaluations(complete + [complete[0]]).ok
+    assert not aggregate_evaluations(
+        [replace(complete[0], passed=False), *complete[1:]]
+    ).ok
+
+
+def test_unsupported_assurance_outcome_fails_aggregate() -> None:
+    """Trace: NFR-002, TC-039."""
+    complete = complete_matrix()
+    changed = replace(
+        complete[0],
+        unsupported_additions=("unrequested AssuranceProfile",),
+    )
+    result = aggregate_evaluations([changed, *complete[1:]])
+    assert not result.ok
+    assert any("unsupported-assurance-addition" in item for item in result.failures)
+
+
+def test_every_host_retains_distinct_acceptance_and_rejection_events() -> None:
+    """Trace: FR-006-AC-5, TC-049."""
+    complete = complete_matrix()
+    result = aggregate_evaluations(complete)
+    assert result.ok
+    for host in SUPPORTED_HOSTS:
+        selected = [
+            item
+            for item in complete
+            if item.host == host and item.terminal_event is not None
+        ]
+        assert {item.terminal_event.choice for item in selected} == {
+            "accept",
+            "reject",
+        }
+        assert len({item.terminal_event.run_id for item in selected}) == 2
