@@ -1,0 +1,13 @@
+{
+  "suite_revision": "suite-v1",
+  "fixture_revision": "fixtures-v1",
+  "scenarios": {
+    "existing-profile": {"expected": "reused"},
+    "no-profile": {"expected": "no-applicable-work"},
+    "malformed-producer": {"expected": "validation-failure"},
+    "unavailable-producer": {"expected": "unavailable"},
+    "interruption-resume": {"expected": "resumed"},
+    "human-acceptance": {"expected": "accepted", "choice": "accept"},
+    "human-rejection": {"expected": "rejected", "choice": "reject"}
+  }
+}
