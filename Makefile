@@ -22,7 +22,7 @@ eval-readiness:
 	PATH="$(CURDIR)/.agent-evals/bin:$(PATH)" $(PYTHON) scripts/check_eval_readiness.py
 
 agent-evals:
-	$(PYTHON) scripts/run_agent_evals.py \
+	PATH="$(CURDIR)/.agent-evals/bin:$(PATH)" $(PYTHON) scripts/run_agent_evals.py \
 		--agent "$(EVAL_AGENT)" \
 		--run "$(EVAL_RUN)" \
 		$(if $(strip $(EVAL_MODEL)),--model "$(EVAL_MODEL)") \
