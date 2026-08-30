@@ -168,6 +168,7 @@ def build_command(
     *,
     agent: str,
     run: str,
+    filter_id: str | None = None,
     model: str | None,
     keep: bool,
     report: Path,
@@ -178,10 +179,12 @@ def build_command(
         "run",
         "--suite",
         str(suite),
-        f"--{run}",
-        "--agent",
-        agent,
     ]
+    if filter_id:
+        command.extend(["--filter", filter_id])
+    else:
+        command.append(f"--{run}")
+    command.extend(["--agent", agent])
     if model:
         command.extend(["--model", model])
     if keep:
@@ -198,6 +201,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         choices=("claude", "codex", "opencode", "copilot"),
     )
     parser.add_argument("--run", choices=("canary", "all"), default="canary")
+    parser.add_argument("--filter")
     parser.add_argument("--model")
     parser.add_argument("--keep", action="store_true")
     parser.add_argument("--report", type=Path, required=True)
@@ -229,6 +233,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         cli_evals,
         agent=args.agent,
         run=args.run,
+        filter_id=args.filter,
         model=args.model,
         keep=args.keep,
         report=report,

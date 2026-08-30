@@ -50,7 +50,8 @@ export function resultContract(expectation, environment) {
         owner: expectation.input.decision_owner,
         choice: expectation.choice,
         outcome: expectation.expected,
-        run_id: "copy from the real ix-flow terminal event",
+        run_id: expectation.input.run_id,
+        workflow_state_dir: expectation.input.workflow_state_dir,
         timestamp: "copy from the real ix-flow terminal event",
       }
     : { required: false, value: null };
@@ -146,6 +147,8 @@ export function validateResult(result, contract, exitReason) {
         !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(result.terminal_event.run_id)
       ) {
         failures.push("terminal event run id invalid");
+      } else if (result.terminal_event.run_id !== terminal.run_id) {
+        failures.push("terminal event field mismatch: run_id");
       }
       if (
         typeof result.terminal_event.timestamp !== "string" ||
@@ -156,6 +159,66 @@ export function validateResult(result, contract, exitReason) {
     }
   } else if (result.terminal_event !== null) {
     failures.push("unexpected terminal event");
+  }
+  return failures;
+}
+
+export function validateTerminalWorkflow(
+  result,
+  contract,
+  history,
+  verification,
+) {
+  const terminal = contract.terminal_event_contract;
+  if (!terminal.required) return [];
+  const failures = [];
+  if (!isRecord(verification) || verification.ok !== true) {
+    failures.push("ix-flow verification failed");
+  }
+  if (
+    !isRecord(history) ||
+    history.ok !== true ||
+    !Array.isArray(history.data)
+  ) {
+    return [...failures, "ix-flow terminal history missing"];
+  }
+
+  if (
+    history.instance_id !== terminal.run_id ||
+    history.summary?.id !== terminal.run_id
+  ) {
+    failures.push("ix-flow run binding mismatch");
+  }
+  if (
+    history.current_phase !== terminal.outcome ||
+    history.summary?.phase !== terminal.outcome
+  ) {
+    failures.push("ix-flow terminal phase mismatch");
+  }
+  if (
+    history.summary?.defName !== terminal.workflow ||
+    history.summary?.defVersion !== terminal.workflow_version
+  ) {
+    failures.push("ix-flow workflow identity mismatch");
+  }
+
+  const transition = `decision_ready->${terminal.outcome}`;
+  const acknowledgement = history.data.findLast(
+    (event) =>
+      event?.kind === "gate.acknowledged" &&
+      event.payload?.transitionKey === transition,
+  );
+  if (acknowledgement?.payload?.approver !== terminal.owner) {
+    failures.push("ix-flow terminal owner acknowledgement missing");
+  }
+  const terminalEvent = history.data.findLast(
+    (event) =>
+      event?.kind === "phase.advanced" &&
+      event.payload?.from === "decision_ready" &&
+      event.payload?.to === terminal.outcome,
+  );
+  if (!terminalEvent || terminalEvent.ts !== result.terminal_event?.timestamp) {
+    failures.push("ix-flow terminal timestamp mismatch");
   }
   return failures;
 }
