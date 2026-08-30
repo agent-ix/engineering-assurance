@@ -12,6 +12,8 @@ import yaml
 ROOT = Path(__file__).parents[1]
 PILOT = ROOT / "pilots" / "assurance-workflows"
 DEFINITIONS = PILOT / "workflows"
+CANONICAL = ROOT / "engineering_assurance" / "skills" / "assurance-onboarding"
+CANONICAL_DEFINITIONS = CANONICAL / "workflows"
 
 
 def definitions() -> dict[str, dict]:
@@ -276,3 +278,54 @@ def test_ix_flow_can_load_every_definition(tmp_path: Path) -> None:
         assert completed.returncode == 0, completed.stderr
         payload = json.loads(completed.stdout)
         assert payload["data"]["defName"] == name
+
+
+def test_pilot_and_canonical_workflows_are_equivalent() -> None:
+    """Trace: FR-007-AC-2, TC-036; FR-007-CON-1, TC-043."""
+    pilot = definitions()
+    canonical = {
+        path.parent.name: yaml.safe_load(path.read_text())
+        for path in sorted(CANONICAL_DEFINITIONS.glob("*/def.yaml"))
+    }
+    assert set(pilot) == {
+        "assurance-intake",
+        "architecture-evaluation",
+        "measurement-promotion",
+        "change-assurance",
+    }
+    assert canonical == pilot
+
+
+def test_pilot_invariant_surface_delegates_to_canonical() -> None:
+    """Trace: FR-007-AC-2, TC-036."""
+    compatibility = (PILOT / "scripts" / "invariants.js").read_text()
+    assert "engineering_assurance/skills/assurance-onboarding" in compatibility
+
+
+def test_ix_flow_can_load_every_canonical_definition(tmp_path: Path) -> None:
+    """Trace: FR-002-AC-3, TC-011; FR-007-AC-1, TC-035."""
+    executable = os.environ.get("IX_FLOW_BIN") or shutil.which("ix-flow")
+    if executable is None:
+        if os.environ.get("REQUIRE_IX_FLOW") == "1":
+            pytest.fail("ix-flow is required")
+        pytest.skip("ix-flow is unavailable")
+    for name in definitions():
+        completed = subprocess.run(
+            [
+                executable,
+                "run",
+                name,
+                "--path",
+                str(CANONICAL),
+                "--id",
+                f"canonical-{name}",
+                "--state-dir",
+                str(tmp_path / name),
+                "--json",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        assert completed.returncode == 0, completed.stderr
+        assert json.loads(completed.stdout)["data"]["defName"] == name

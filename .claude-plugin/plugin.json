@@ -1,0 +1,6 @@
+{
+  "name": "engineering-assurance",
+  "version": "0.2.0",
+  "description": "Inventory assurance context and enter governed decision workflows.",
+  "skills": "./engineering_assurance/skills/"
+}

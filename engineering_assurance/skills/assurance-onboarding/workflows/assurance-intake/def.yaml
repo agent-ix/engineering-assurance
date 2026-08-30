@@ -1,0 +1,45 @@
+name: assurance-intake
+version: 0.1.0
+description: Prepare a bounded profile decision from validated selected artifacts.
+initialPhase: capture
+phases:
+  - { name: capture }
+  - { name: assembled }
+  - { name: decision_ready }
+  - { name: accepted, terminal: true }
+  - { name: rejected, terminal: true }
+transitions:
+  - from: capture
+    to: assembled
+    invariants: ["interview.complete:intake", "intake.scope_ready"]
+    defaultGate: auto
+  - from: assembled
+    to: decision_ready
+    invariants:
+      - "intake.artifacts_ready"
+      - "shared.exceptions_ready"
+      - "shared.observation_ready"
+      - "shared.terminal_gates"
+    defaultGate: auto
+  - { from: decision_ready, to: accepted, invariants: [], defaultGate: hitl }
+  - { from: decision_ready, to: rejected, invariants: [], defaultGate: hitl }
+itemSchemas:
+  intake_request: {}
+  artifact_validation:
+    required: [id, artifact_type, path, valid]
+  exception:
+    required: [id, owner, expires_at, rationale, impact]
+  operator_observation:
+    required: [id, elapsed_minutes, command_count]
+linkSchemas: {}
+interviews:
+  intake:
+    itemType: intake_request
+    completenessRule: all_required
+    questions:
+      - { key: scope, prompt: "What exact subject is in scope?", type: text, required: true }
+      - { key: boundary, prompt: "What is explicitly included and excluded?", type: text, required: true }
+      - { key: impact_scenario, prompt: "What adverse outcome drives this decision?", type: text, required: true }
+      - { key: owner, prompt: "Who owns the profile decision?", type: text, required: true }
+      - { key: requested_artifacts, prompt: "Which artifact types are required?", type: "list<text>", minItems: 1, required: true }
+      - { key: exceptions_expected, prompt: "Are exceptions expected?", type: bool, required: true }

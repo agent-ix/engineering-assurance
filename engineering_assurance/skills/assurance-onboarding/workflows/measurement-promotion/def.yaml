@@ -1,0 +1,46 @@
+name: measurement-promotion
+version: 0.1.0
+description: Prepare a one-step measurement-stage decision from recorded evidence.
+initialPhase: capture
+phases:
+  - { name: capture }
+  - { name: evidence_ready }
+  - { name: decision_ready }
+  - { name: promoted, terminal: true }
+  - { name: not_promoted, terminal: true }
+transitions:
+  - from: capture
+    to: evidence_ready
+    invariants: ["interview.complete:promotion"]
+    defaultGate: auto
+  - from: evidence_ready
+    to: decision_ready
+    invariants:
+      - "measurement.promotion_ready"
+      - "shared.exceptions_ready"
+      - "shared.observation_ready"
+      - "shared.terminal_gates"
+    defaultGate: auto
+  - { from: decision_ready, to: promoted, invariants: [], defaultGate: hitl }
+  - { from: decision_ready, to: not_promoted, invariants: [], defaultGate: hitl }
+itemSchemas:
+  promotion_request: {}
+  promotion_evidence:
+    required: [id, plan_path, definition_version, prior_stage, proposed_stage, stability, decision_yield, limitations, owner]
+  exception:
+    required: [id, owner, expires_at, rationale, impact]
+  operator_observation:
+    required: [id, elapsed_minutes, command_count]
+linkSchemas: {}
+interviews:
+  promotion:
+    itemType: promotion_request
+    completenessRule: all_required
+    questions:
+      - { key: plan_path, prompt: "Where is the validated measurement plan?", type: text, required: true }
+      - { key: definition_version, prompt: "Which measure definition is evaluated?", type: text, required: true }
+      - { key: prior_stage, prompt: "What is the current stage?", type: enum, options: [observe, baseline, branch-comparison, trend, ratchet, target, gate], required: true }
+      - { key: proposed_stage, prompt: "What is the proposed stage?", type: enum, options: [observe, baseline, branch-comparison, trend, ratchet, target, gate], required: true }
+      - { key: decision_use, prompt: "Which decision will use the measure?", type: text, required: true }
+      - { key: owner, prompt: "Who owns the promotion decision?", type: text, required: true }
+      - { key: exceptions_expected, prompt: "Are exceptions expected?", type: bool, required: true }
