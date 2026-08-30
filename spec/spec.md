@@ -156,8 +156,10 @@ Static contract tests verify canonical ownership, manifest thinness, package
 membership, and compatibility paths. Integration tests install from real local
 and package sources, invoke real filesystem discovery, validate with Quire, and
 run real ix-flow definitions. Agent evaluations exercise the five required
-repository and interruption scenarios and record exact tool versions, commands,
-elapsed time, outcomes, and human decisions.
+scenario classes across all supported hosts and record immutable module, plugin,
+skill, workflow, executable, schema, and producer versions; transcript digests;
+commands; elapsed time; human-interaction counts; outcomes; and explicit positive
+and negative human decisions.
 
 ## Change Management
 

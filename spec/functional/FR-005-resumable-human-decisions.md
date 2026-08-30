@@ -27,6 +27,8 @@ decision gates.
 - ix-flow run state and next valid actions.
 - Resumed execution from the last completed phase after interruption.
 - A terminal outcome selected through a human gate.
+- A retained terminal gate event containing the run id, workflow identity and
+  version, decision-owner identity, explicit choice, and decision timestamp.
 
 ## Behavior
 
@@ -34,10 +36,15 @@ decision gates.
   resumes a workflow.
 - When a recorded run exists, the onboarding skill SHALL resume that run without
   replacing completed items or phases.
+- If a run identifier is already bound to a different repository identity,
+  workflow identity/version, or decision boundary, then onboarding SHALL refuse
+  resume without changing either run.
 - The onboarding skill SHALL leave every transition into a terminal phase at the
   `hitl` gate type declared by the canonical workflow.
 - When the named owner rejects a run, the onboarding skill SHALL retain the
   workflow's rejection outcome.
+- When the named owner accepts a run, the onboarding skill SHALL retain the
+  workflow's acceptance outcome without synthesizing it from prior evidence.
 - If no named owner supplies a terminal choice, then the onboarding skill SHALL
   leave the run at the decision gate.
 
@@ -50,6 +57,8 @@ decision gates.
 | FR-005-AC-3 | An explicit human rejection produces the workflow's rejection terminal state and no success state. | Test (TC-028) |
 | FR-005-AC-4 | With no human terminal choice, the run remains non-terminal at the decision gate. | Test (TC-029) |
 | FR-005-AC-5 | A requested automatic terminal-gate override fails closed. | Test (TC-030) |
+| FR-005-AC-6 | Explicit human acceptance records one acceptance event with owner, choice, workflow version, run id, and timestamp; no acceptance exists before that event. | Test (TC-047) |
+| FR-005-AC-7 | Reusing a run id with a different repository, workflow/version, or decision boundary is refused without changing either run state. | Test (TC-048) |
 
 ## Dependencies
 

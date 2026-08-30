@@ -50,7 +50,7 @@ compatibility period.
 |----|----------|--------------|
 | FR-007-AC-1 | Each of the four existing pilot workflow invocations remains loadable by ix-flow. | Test (TC-035) |
 | FR-007-AC-2 | Pilot and canonical discovery yield equivalent workflow names, versions, phases, transitions, interviews, and item schemas. | Test (TC-036) |
-| FR-007-AC-3 | Installation documentation presents the canonical invocation first and labels the pilot path as compatible. | Inspection (TC-037) |
+| FR-007-AC-3 | Installation documentation presents the canonical invocation first and labels the pilot path as compatible. | Test (TC-037) |
 
 ## Dependencies
 

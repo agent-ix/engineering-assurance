@@ -35,12 +35,15 @@ existing engineering-assurance module root.
   repository-owned allowlist.
 - A local-source installation SHALL preserve canonical discovery paths.
 - A repository-source installation SHALL preserve canonical discovery paths.
-- Installation documentation SHALL distinguish local-source commands from
-  repository-source commands.
+- Installation documentation SHALL distinguish module installation from agent-
+  plugin installation and SHALL give separate local-source and repository-source
+  procedures for each applicable surface.
 - The installed module root SHALL continue to expose `manifest.yaml`, `schemas/`,
   and `skeletons/` at the paths consumed by Quire.
 - If either package contains an unallowlisted member, then the package audit SHALL
   fail.
+- If a packaged manifest or link resolves outside its installed bundle, then the
+  package audit SHALL fail.
 
 ## Acceptance Criteria
 
@@ -50,8 +53,8 @@ existing engineering-assurance module root.
 | FR-003-AC-2 | The npm archive member set contains the existing module root plus the canonical skill, workflows, supported manifests, and installation documentation. | Test (TC-015) |
 | FR-003-AC-3 | Local-source installation resolves module and onboarding discovery from the installed tree. | Test (TC-016) |
 | FR-003-AC-4 | Repository-source installation resolves module and onboarding discovery from the installed tree. | Test (TC-017) |
-| FR-003-AC-5 | An unexpected package member or a missing required member fails the package audit. | Test (TC-018) |
-| FR-003-AC-6 | Install documentation presents local-source and repository-source procedures in distinct sections. | Inspection (TC-019) |
+| FR-003-AC-5 | An unexpected or missing package member, or any installed manifest/link that escapes its bundle, fails the package audit. | Test (TC-018) |
+| FR-003-AC-6 | Install documentation separates module installation from agent-plugin installation and presents local-source and repository-source procedures in distinct sections. | Test (TC-019) |
 
 ## Dependencies
 

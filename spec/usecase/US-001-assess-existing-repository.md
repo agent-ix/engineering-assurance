@@ -41,3 +41,9 @@ bounded recommendation, not a fixed set of generated files.
 
 The assessment depends on repository-readable files and on the operator defining
 the decision boundary. Quire may validate discovered artifacts after inventory.
+
+## Priority and Risk (Informative)
+
+- **Priority:** P0.
+- **Primary risk:** generic or conflicting artifacts can manufacture an assurance
+  posture that the repository and decision owner never declared.

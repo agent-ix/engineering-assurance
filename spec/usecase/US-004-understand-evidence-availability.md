@@ -42,3 +42,9 @@ execution observations.
 
 Quoin owns persisted evidence records and policy-facing reporting. Quire owns
 validation of artifact structure. Onboarding preserves their results.
+
+## Priority and Risk (Informative)
+
+- **Priority:** P0.
+- **Primary risk:** missing provenance or collapsed availability states can turn a
+  tooling failure or deferred observation into apparent evidence.

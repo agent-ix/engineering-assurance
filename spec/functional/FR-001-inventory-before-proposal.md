@@ -41,6 +41,15 @@ MeasurementPlan, or governed workflow.
   onboarding skill SHALL create no generic MeasurementPlan.
 - When an artifact is justified, the onboarding skill SHALL delegate its
   validation to Quire.
+- When a justified artifact is authored, the onboarding skill SHALL stage it
+  within the repository, validate the staged artifact with Quire, and publish it
+  by atomic same-directory rename only after validation succeeds.
+- If existing applicable artifacts are malformed or conflict, then the onboarding
+  skill SHALL preserve them unchanged, report each path and validation result, and
+  request a human selection or correction rather than choosing or replacing one.
+- The onboarding skill SHALL confine reads and writes to paths that resolve within
+  the operator-selected repository root and SHALL refuse an absolute, parent-
+  traversing, or symlink-escaping target.
 - If the selected decision boundary is incomplete, then the onboarding skill SHALL
   request the missing human input without creating an artifact.
 
@@ -53,6 +62,8 @@ MeasurementPlan, or governed workflow.
 | FR-001-AC-3 | A justified new artifact is rendered from the installed module skeleton and accepted by Quire before it is reported as valid. | Test (TC-006) |
 | FR-001-AC-4 | An incomplete decision boundary produces a request for the missing human input and no generated assurance artifact. | Test (TC-007) |
 | FR-001-AC-5 | The inventory lists discovered decisions, measurements, artifacts, producer configurations, and unresolved inputs as separate collections. | Test (TC-008) |
+| FR-001-AC-6 | Malformed or conflicting applicable artifacts remain byte-unchanged, every path and validation result is reported, and no replacement is selected without human input. | Test (TC-044) |
+| FR-001-AC-7 | A justified artifact becomes visible only after staged Quire validation and atomic rename; validation failure or an escaping target leaves the intended path absent. | Test (TC-045) |
 
 ## Dependencies
 

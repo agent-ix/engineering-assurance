@@ -34,9 +34,9 @@ silently remove the existing module contract.
 
 | Metric | Target | Threshold | Method |
 |--------|--------|-----------|--------|
-| Previously allowlisted module-root members missing from either package | 0 | 0 | Package Audit |
-| Emitted members absent from the explicit package allowlist | 0 | 0 | Package Audit |
-| Existing pilot workflows loadable after promotion | 4 of 4 | 4 of 4 | Integration Test |
+| Previously allowlisted module-root members missing from either package | 0 | 0 | contract-testing |
+| Emitted members absent from the explicit package allowlist | 0 | 0 | contract-testing |
+| Existing pilot workflows loadable after promotion | 4 of 4 | 4 of 4 | integration-testing |
 
 ## Verification
 

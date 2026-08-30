@@ -18,7 +18,8 @@ onboarding.
 ## Inputs
 
 - Selected evidence producer identity and invocation result.
-- Exact producer version when available.
+- Exact immutable module, plugin, skill, workflow, Quire, Quoin, ix-flow, schema,
+  and producer versions or content digests that govern the observation.
 - Operator-observed command, elapsed time, exit outcome, and diagnostic category.
 - Applicability decision for the selected assurance boundary.
 
@@ -27,12 +28,15 @@ onboarding.
 - Producer result classified as `observed`, `unavailable`, `not_computed`, or
   `not_applicable`.
 - Provenance and operator observation fields appropriate to that state.
+- One governing-version tuple that retains every applicable module, plugin, skill,
+  workflow, executable, schema, and producer identity.
 - Evidence references delegated to Quoin when evidence is persisted or reported.
 
 ## Behavior
 
 - When a producer returns valid output, the onboarding skill SHALL record the
-  state as `observed` with its exact version and operator observations.
+  state as `observed` with the complete immutable governing-version tuple and
+  operator observations.
 - When a selected producer cannot be invoked, the onboarding skill SHALL record
   the state as `unavailable` with the observed failure category.
 - When a selected producer has not been invoked, the onboarding skill SHALL
@@ -41,6 +45,11 @@ onboarding.
   record the state as `not_applicable` with the boundary rationale.
 - When producer output is malformed, the onboarding skill SHALL retain a
   validation failure without relabeling it as any successful evidence state.
+- If an applicable governing or producer version is missing, mutable, or cannot be
+  resolved exactly, then the onboarding skill SHALL retain a validation failure
+  and SHALL NOT label the result `observed`.
+- Every considered producer SHALL have exactly one availability state; conflicting
+  or additional state labels SHALL fail validation.
 - When evidence is retained or rendered, the onboarding skill SHALL delegate the
   evidence record and policy interpretation to Quoin.
 
@@ -48,12 +57,13 @@ onboarding.
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
-| FR-004-AC-1 | Valid producer output is `observed` and includes an exact producer version, command observation, elapsed time, and exit outcome. | Test (TC-020) |
+| FR-004-AC-1 | Valid producer output is `observed` and includes the exact immutable module, plugin, skill, workflow, executable, schema, and producer tuple plus command observation, elapsed time, and exit outcome. | Test (TC-020) |
 | FR-004-AC-2 | An invocation failure is `unavailable` and retains the observed failure category. | Test (TC-021) |
 | FR-004-AC-3 | A deferred producer is `not_computed` and names a next action or owner. | Test (TC-022) |
 | FR-004-AC-4 | An excluded producer is `not_applicable` and includes the decision-boundary rationale. | Test (TC-023) |
-| FR-004-AC-5 | Malformed producer output remains a validation failure and is not counted as observed evidence. | Test (TC-024) |
+| FR-004-AC-5 | Malformed output or a missing, mutable, or unresolved applicable version remains a validation failure and is not counted as observed evidence. | Test (TC-024) |
 | FR-004-AC-6 | Persisted or reported evidence uses Quoin's evidence and policy surface rather than a module-local substitute. | Test (TC-025) |
+| FR-004-AC-7 | Every considered producer has exactly one of `observed`, `unavailable`, `not_computed`, or `not_applicable`; zero, duplicate, and conflicting states fail validation. | Test (TC-046) |
 
 ## Dependencies
 
