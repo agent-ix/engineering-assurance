@@ -109,6 +109,7 @@ const scenarios = Object.entries(fixture.scenarios).map(
       `Execute the ${id} scenario from EVALUATION_INPUT.json using its explicit decision boundary and owner, and real Quire, Quoin, and ix-flow boundaries where applicable.`,
       "Do not create an unsupported artifact, evidence claim, applicability decision, or terminal outcome.",
       "Write EVALUATION_RESULT.json using EVALUATION_INPUT.json.result_contract exactly: copy its host, version, revision, and governing values verbatim; use the stated top-level field names and types; keep observed_outcome as the required string; and do not substitute aliases or structured objects for contract fields.",
+      "Follow result_contract.terminal_event_contract exactly: write null when required is false; when required is true, copy its fixed workflow, version, owner, choice, and outcome fields, then copy run_id and timestamp from the real ix-flow terminal event without inventing either value.",
     ].join(" "),
   }),
 );
