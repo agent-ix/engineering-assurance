@@ -168,6 +168,7 @@ def test_live_suite_publishes_the_exact_result_contract() -> None:
     result = observed["result"]
     assert result["observed_outcome"] == "reused"
     assert result["terminal_event_contract"] == {"required": False, "value": None}
+    assert result["unsupported_additions"] == []
     assert result["governing_identities"] == [
         "module",
         "plugin",

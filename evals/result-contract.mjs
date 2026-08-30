@@ -79,6 +79,7 @@ export function resultContract(expectation, environment) {
     governing_digest_format: "lowercase sha256",
     observed_outcome: expectation.expected,
     terminal_event_contract: terminalEventContract,
+    unsupported_additions: [],
     count_type: "non-negative integer",
   };
 }
