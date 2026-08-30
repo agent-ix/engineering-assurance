@@ -112,6 +112,38 @@ def test_suite_config_loads_without_a_project_local_runner_package() -> None:
     assert completed.stdout.strip() == "7"
 
 
+def test_live_suite_publishes_the_exact_result_contract(tmp_path: Path) -> None:
+    """Trace: FR-006-AC-2, TC-032."""
+    contract = Path(__file__).parents[1] / "evals/result-contract.mjs"
+    script = """
+      import(process.argv[1]).then(m => {
+        const expectation = { expected: 'reused' };
+        const result = m.resultContract(expectation);
+        console.log(JSON.stringify(result));
+      })
+    """
+    completed = subprocess.run(
+        ["node", "-e", script, contract.as_uri()],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["observed_outcome"] == "reused"
+    assert result["governing_identities"] == [
+        "module",
+        "plugin",
+        "skill",
+        "workflow",
+        "quire",
+        "quoin",
+        "ix_flow",
+        "schema",
+        "producer",
+    ]
+
+
 def test_complete_envelope_retains_versions_transcript_effort_and_outcome() -> None:
     """Trace: FR-006-AC-2, TC-032."""
     result = envelope("claude", "existing-profile")
