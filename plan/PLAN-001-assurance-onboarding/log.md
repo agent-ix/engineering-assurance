@@ -53,6 +53,6 @@ description: "Chronological log for the PLAN-001 bundle."
   and post-run comparison now hash the manifest, resolved launcher, and `dist/`
   tree; dist-only drift is covered at both boundaries. Release verification now
   also rejects an aggregate whose source revision differs from repository `HEAD`,
-  and CI consumes ix-flow at `102d3b618b352a86ec992d842d71adf209d3ee58`.
+  and CI consumes ix-flow at `4befa70deff1cd38bf3a61624ca9835affd3d24b`.
   A fresh 28-cell aggregate at the resulting source revision remains required
   before the release gate.
