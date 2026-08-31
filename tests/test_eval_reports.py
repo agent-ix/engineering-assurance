@@ -114,7 +114,7 @@ def _failed_run(root: Path, host: str, scenario: str) -> dict[str, object]:
 def _write_report(
     path: Path,
     host: str,
-    model: str,
+    model: str | None,
     rows: list[tuple[str, dict[str, object]]],
 ) -> Path:
     payload = {
@@ -133,6 +133,8 @@ def _write_report(
             for index, (scenario, run) in enumerate(rows, start=1)
         ],
     }
+    if model is None:
+        payload.pop("model")
     path.write_text(json.dumps(payload))
     return path
 
@@ -208,6 +210,27 @@ class TestCliEvaluationReportLoading:
         collection = load_cli_eval_reports([first, second], SOURCE_REVISION)
 
         assert "opencode:model-mismatch:model-a,model-b" in collection.errors
+
+    def test_omitted_model_records_runner_default_selection(
+        self, tmp_path: Path
+    ) -> None:
+        """A host-default model is explicit configuration state, not missing evidence."""
+        report = _write_report(
+            tmp_path / "default-model.json",
+            "codex",
+            None,
+            [
+                (
+                    "existing-profile",
+                    _successful_run(tmp_path, "codex", "existing-profile"),
+                )
+            ],
+        )
+
+        collection = load_cli_eval_reports([report], SOURCE_REVISION)
+
+        assert not collection.errors
+        assert collection.models == (("codex", "runner-default"),)
 
     def test_source_and_transcript_drift_are_rejected(self, tmp_path: Path) -> None:
         """A stale source or changed retained transcript cannot enter the aggregate."""

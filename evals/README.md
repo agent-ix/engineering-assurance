@@ -28,3 +28,7 @@ Failed attempts remain in the aggregate diagnostics. A targeted passing retry
 may fill its missing cell, but the gate rejects two passing results for one cell,
 mixed models for one host, source or governing-version drift, changed transcript
 bytes, malformed envelopes, and every incomplete matrix.
+
+When `cli-evals` omits the optional model field, the aggregate records
+`runner-default` as the selection mode. Mixing that mode with an explicitly
+selected model for the same host remains a model mismatch.
