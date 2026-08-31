@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -78,7 +79,7 @@ class DecisionEvent:
 
 
 def _executable(explicit: str | None) -> str:
-    executable = explicit or shutil.which("ix-flow")
+    executable = explicit or os.environ.get("IX_FLOW_BIN") or shutil.which("ix-flow")
     if executable is None:
         raise WorkflowError("ix-flow is unavailable")
     return executable

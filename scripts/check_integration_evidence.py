@@ -107,10 +107,10 @@ def coverage_failures(payload: Any, root: Path = ROOT) -> tuple[str, ...]:
     )
     if test_cases is None:
         failures.append("test-case traceability group is missing")
-    elif test_cases.get("backed") != 49 or test_cases.get("total") != 49:
+    elif test_cases.get("backed") != 50 or test_cases.get("total") != 50:
         failures.append(
             "test-case traceability is "
-            f"{test_cases.get('backed')}/{test_cases.get('total')}, expected 49/49"
+            f"{test_cases.get('backed')}/{test_cases.get('total')}, expected 50/50"
         )
 
     for item in _sequence(document.get("diagnostics")):

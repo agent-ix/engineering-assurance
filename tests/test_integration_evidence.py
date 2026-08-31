@@ -28,7 +28,7 @@ class TestTraceabilityEvidence:
             - Quire inspected the repository matrix and source symbols.
 
         Criteria:
-            - All 49 test-case rows are backed.
+            - All 50 test-case rows are backed.
             - Informational module diagnostics do not become repository gaps.
         """
         payload = {
@@ -49,8 +49,8 @@ class TestTraceabilityEvidence:
                 {
                     "document": "spec/tests.md",
                     "target": "test-case",
-                    "backed": 49,
-                    "total": 49,
+                    "backed": 50,
+                    "total": 50,
                 }
             ],
             "totals": {"backed": 92, "total": 92},
@@ -119,8 +119,8 @@ class TestTraceabilityEvidence:
                 {
                     "document": "spec/tests.md",
                     "target": "test-case",
-                    "backed": 49,
-                    "total": 49,
+                    "backed": 50,
+                    "total": 50,
                 }
             ],
             "totals": {"backed": 101, "total": 101},

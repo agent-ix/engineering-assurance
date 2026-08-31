@@ -52,6 +52,9 @@ rejection scenarios.
   and SHALL pass the repository content-rights check before retention.
 - If a required executable is unavailable, then the suite SHALL report the
   affected scenario as not executed and fail the release gate.
+- The suite SHALL bind the exact snapshotted ix-flow executable into each agent
+  environment and into post-run verification so PATH normalization cannot select
+  a different implementation.
 
 ## Acceptance Criteria
 
@@ -62,6 +65,7 @@ rejection scenarios.
 | FR-006-AC-3 | A missing executable leaves the scenario not executed and the aggregate gate failed. | Test (TC-033) |
 | FR-006-AC-4 | The aggregate gate passes only when all required scenarios pass and have complete observations. | Test (TC-034) |
 | FR-006-AC-5 | Equivalent decision-ready fixtures retain one explicit acceptance and one explicit rejection per supported host, with no inferred terminal event. | Test (TC-049) |
+| FR-006-AC-6 | Every agent and post-run verifier executes the same pinned ix-flow binary named by the governing snapshot. | Test (TC-050) |
 
 ## Dependencies
 
