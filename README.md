@@ -39,19 +39,25 @@ fresh authorization of both content rights and release posture.
 make lint
 make test
 make package-audit
+make integration-gate
 ```
 
-After producing the retained four-host aggregate, run the complete release gate
-through one stable target:
+`integration-gate` is reproducible from tracked repository content. It runs
+rights, Ruff, pytest, manifest, package, Quire document, and traceability checks.
+
+Real-agent reports are operational evidence and remain ignored under
+`evals/reports/`; do not commit workstation paths, session output, or transcripts.
+After producing and retaining a four-host aggregate in that directory, run the
+complete release gate through one stable target:
 
 ```bash
-make integration-gate \
+make release-gate \
   EVAL_AGGREGATE_REPORT=evals/reports/aggregate-<revision>.json
 ```
 
-The gate runs rights, Ruff, pytest, manifest, package, Quire document, and
-traceability checks; then it revalidates every retained report and transcript,
-the 28/28 complete-only aggregate, current governing files, and current Quire,
-Quoin, ix-flow, and cli-evals executable identities.
+The release gate additionally revalidates every supplied retained report and
+transcript, the 28/28 complete-only aggregate, current governing files, and
+current Quire, Quoin, ix-flow, and cli-evals executable identities. It fails
+closed when `EVAL_AGGREGATE_REPORT` is omitted.
 
 Read [CONTENT_RIGHTS.md](CONTENT_RIGHTS.md) before adding content.

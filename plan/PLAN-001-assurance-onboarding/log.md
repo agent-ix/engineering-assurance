@@ -39,3 +39,11 @@ description: "Chronological log for the PLAN-001 bundle."
   done, 101/101 target rows and TC-001..TC-049 backed, no unowned implementation
   or stub, and the retained four-host aggregate still 28/28 with current
   governing identities. The optional semantic expansion was not selected.
+- **2026-08-31** — Corrected the reproducibility record after finding that the
+  previously named aggregate and reports were ignored operational files, not
+  tracked repository content. `make integration-gate` now verifies all
+  tracked-content checks without reading those files; `make release-gate`
+  requires `EVAL_AGGREGATE_REPORT` explicitly and remains the fail-closed 28-cell
+  evidence check. Operational reports, transcripts, session output, and
+  workstation paths remain outside source history. SR-011 and SR-012 were
+  corrected to distinguish these two evidence boundaries.

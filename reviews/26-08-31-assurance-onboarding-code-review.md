@@ -24,22 +24,27 @@ gates, package boundaries, real-agent report retention, and the integration
 verifier. No unresolved correctness, safety, test-quality, or spec-alignment
 defect was found.
 
-One reproducibility defect was fixed during this rerun: the canonical Make target
-defaulted to an absent generic aggregate even though PLAN-001's revision-pinned
-aggregate is retained in the repository. The default now names that retained
-aggregate, while callers can still override it for later evaluated revisions.
+A follow-up reproducibility audit found that the canonical Make target defaulted
+to an aggregate under the intentionally ignored `evals/reports/` directory. The
+report was available only in the review worktree and contained operational
+workstation data; it was never retained in tracked repository content. The fix
+separates the tracked-content `integration-gate` from the real-agent
+`release-gate`, requires an explicit aggregate for the latter, and uses the
+portable `python3` command by default.
 
 ## Verdict
 
-**PASS** — no unresolved blocking finding remains. The full gate passes through
-one stable command with real tools and retained evidence; it does not execute an
-opencode session during this review.
+**PASS for tracked-content delivery** — no unresolved implementation blocker
+remains. The reproducible integration gate passes from tracked content. Release
+evidence remains fail-closed and must be supplied explicitly from the authorized
+operational evidence store; no agent session is executed by either verification
+target.
 
 ## Findings
 
 | ID | Severity | Summary | Refs | Escape Cause |
 | --- | --- | --- | --- | --- |
-| FND-001 | medium | Fixed: `make integration-gate` defaulted to absent `evals/reports/aggregate.json` instead of the retained aggregate required by PLAN-001. | `Makefile`; TASK-007; TC-034; TC-039 | implementation-bug-despite-evidence |
+| FND-001 | high | Fixed: `make integration-gate` defaulted to an ignored, workstation-local aggregate and the review incorrectly called it repository-retained. Tracked-content and operational release gates are now distinct, and release evidence requires an explicit path. | `Makefile`; `README.md`; TASK-007; TC-034; TC-038; TC-039 | implementation-bug-despite-evidence |
 | FND-002 | low | The installed TestMatrix contract still emits the known `Status` versus `Coverage Status` diagnostic; the fail-closed verifier independently requires all 101 rows and rejects non-passing states. | TM-001; `scripts/check_integration_evidence.py` | wrong-requirement |
 
 ## Review Method
@@ -57,10 +62,13 @@ opencode session during this review.
 ## Validation Evidence
 
 `make integration-gate` with the repository's pinned Python and Quire environments
-passed Ruff, content-rights checks, 120/120 pytest cases, manifest validation,
-real wheel/npm package auditing, Quire document validation, 101/101 traceability,
-and the retained 28/28 four-host aggregate. No test skip, internal-logic mock,
-placeholder body, TODO/FIXME/XXX, or assertion-free target test was found.
+passed Ruff, content-rights checks, pytest, manifest validation, real wheel/npm
+package auditing, Quire document validation, and 101/101 traceability without
+reading `evals/reports/`. A separate `make release-gate
+EVAL_AGGREGATE_REPORT=...` run revalidated the available 28/28 operational
+aggregate, but that workstation-local evidence is intentionally not claimed as
+tracked repository content. No test skip, internal-logic mock, placeholder body,
+TODO/FIXME/XXX, or assertion-free target test was found.
 
 ## Semantic Review
 

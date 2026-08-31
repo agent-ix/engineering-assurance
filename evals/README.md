@@ -15,6 +15,12 @@ A missing host or `cli-evals` executable is a not-executed result and keeps the
 aggregate release gate failed. Do not replace a missing live run with a fixture
 or deterministic command result.
 
+Reports, transcripts, session output, and workstation paths under
+`evals/reports/` are operational evidence and are intentionally ignored. Keep
+them outside public source history. `make integration-gate` validates tracked
+repository content without claiming those runs; `make release-gate` requires an
+explicit `EVAL_AGGREGATE_REPORT` and revalidates the operational evidence.
+
 Retain a targeted rerun when one cell times out instead of discarding the other
 passing cells. Assemble explicit report paths with the complete-only gate:
 

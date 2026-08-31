@@ -360,24 +360,30 @@ def verify_coverage(quire: str, root: Path = ROOT) -> tuple[str, ...]:
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--aggregate", type=Path, required=True)
+    evidence = parser.add_mutually_exclusive_group(required=True)
+    evidence.add_argument("--aggregate", type=Path)
+    evidence.add_argument("--traceability-only", action="store_true")
     parser.add_argument("--quire", default="quire")
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
-    aggregate = args.aggregate if args.aggregate.is_absolute() else ROOT / args.aggregate
-    failures = [
-        *verify_coverage(args.quire),
-        *verify_aggregate(aggregate),
-    ]
+    failures = list(verify_coverage(args.quire))
+    if args.aggregate is not None:
+        aggregate = (
+            args.aggregate if args.aggregate.is_absolute() else ROOT / args.aggregate
+        )
+        failures.extend(verify_aggregate(aggregate))
     if failures:
         print("integration evidence failed")
         for failure in dict.fromkeys(failures):
             print(f"- {failure}")
         return 1
-    print("integration evidence passed: traceability complete; evaluations 28/28")
+    if args.aggregate is None:
+        print("integration evidence passed: traceability complete")
+    else:
+        print("integration evidence passed: traceability complete; evaluations 28/28")
     return 0
 
 
