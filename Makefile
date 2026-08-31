@@ -7,7 +7,7 @@ EVAL_FILTER ?=
 EVAL_KEEP ?= 1
 EVAL_REPORT ?= evals/reports/$(EVAL_AGENT)-$(EVAL_RUN).json
 EVAL_REPORTS ?=
-EVAL_AGGREGATE_REPORT ?= evals/reports/aggregate.json
+EVAL_AGGREGATE_REPORT ?= evals/reports/aggregate-ea1ed8a.json
 PYTHON ?= python
 QUIRE ?= quire
 
