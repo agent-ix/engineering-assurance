@@ -32,9 +32,20 @@ def test_current_tree_passes_rights_check() -> None:
 
 
 def test_public_repository_rights_are_declared_consistently() -> None:
+    """
+    Description:
+        Keep governing repository instructions aligned with public rights metadata.
+
+    Assumptions:
+        - Registry publication remains separately controlled.
+
+    Criteria:
+        - Every repository-visibility declaration says public.
+    """
     policy = yaml.safe_load((ROOT / "content-rights.yaml").read_text())
     assert policy["repository"]["visibility"] == "public"
     assert "This public repository" in (ROOT / "CONTENT_RIGHTS.md").read_text()
+    assert "Keep the repository public" in (ROOT / "AGENTS.md").read_text()
 
 
 def test_workstation_locations_are_detected_without_storing_one() -> None:

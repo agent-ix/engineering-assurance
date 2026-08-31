@@ -10,7 +10,8 @@ make package-audit
 
 ## Publication boundary
 
-- Keep the repository private.
+- Keep the repository public; registry publication remains a separate,
+  explicitly controlled distribution decision.
 - Author content in this repository; do not copy or closely paraphrase external
   publications, private research, prior repository prose, or review evidence.
 - Use fictional fixtures. Do not commit operational data, legal-review
