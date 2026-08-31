@@ -6,7 +6,12 @@ import sys
 from pathlib import Path
 
 from engineering_assurance.discovery import validate_discovery
-from scripts.audit_packages import ROOT_DATA_FILES, member_mismatch, npm_allowlist
+from scripts.audit_packages import (
+    ROOT_DATA_FILES,
+    main as package_audit_main,
+    member_mismatch,
+    npm_allowlist,
+)
 
 ROOT = Path(__file__).parents[1]
 
@@ -85,6 +90,25 @@ def test_package_contract_retains_prior_module_root_members() -> None:
     assert {"manifest.yaml", "engineering_assurance/manifest.yaml"} <= allowed
     assert any(name.startswith("schemas/") for name in allowed)
     assert any(name.startswith("skeletons/") for name in allowed)
+
+
+class TestPackageAuditIntegration:
+    """Verifies the real wheel and npm package boundary."""
+
+    def test_real_package_audit_meets_contract_thresholds(self) -> None:
+        """
+        Description:
+            Audit real isolated wheel and npm archive installations. TC-040.
+            Trace: NFR-003-AC-1, NFR-003-AC-2, TC-040.
+
+        Assumptions:
+            - Package builders and offline installers are locally available.
+
+        Criteria:
+            - NFR-003-AC-1: no prior module member is missing.
+            - NFR-003-AC-2: no emitted member is outside its allowlist.
+        """
+        assert package_audit_main() == 0
 
 
 def test_canonical_docs_precede_compatible_pilot_path() -> None:

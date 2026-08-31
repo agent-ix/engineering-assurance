@@ -41,4 +41,17 @@ make test
 make package-audit
 ```
 
+After producing the retained four-host aggregate, run the complete release gate
+through one stable target:
+
+```bash
+make integration-gate \
+  EVAL_AGGREGATE_REPORT=evals/reports/aggregate-<revision>.json
+```
+
+The gate runs rights, Ruff, pytest, manifest, package, Quire document, and
+traceability checks; then it revalidates every retained report and transcript,
+the 28/28 complete-only aggregate, current governing files, and current Quire,
+Quoin, ix-flow, and cli-evals executable identities.
+
 Read [CONTENT_RIGHTS.md](CONTENT_RIGHTS.md) before adding content.

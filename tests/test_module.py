@@ -146,10 +146,17 @@ def test_argument_has_authored_claims_and_no_score() -> None:
     assert "score" not in json.dumps(contract).casefold()
 
 
-def test_repository_has_no_prior_evidence_corpus_outside_governed_plan() -> None:
+def test_repository_has_only_governed_review_evidence() -> None:
+    """Trace: StR-001-VC-1, TC-001."""
     assert not (ROOT / "examples").exists()
-    assert not (ROOT / "reviews").exists()
     assert not (ROOT / "research").exists()
+    review_files = sorted((ROOT / "reviews").glob("*.md"))
+    assert review_files
+    assert not [path for path in (ROOT / "reviews").rglob("*") if path.is_dir()]
+    for path in review_files:
+        metadata = frontmatter(path)
+        assert metadata["type"] == "SpecReview"
+        assert metadata["analysis"] in {"code-review", "gap-analysis"}
     assert {path.name for path in (ROOT / "plan").iterdir()} == {
         "PLAN-001-assurance-onboarding"
     }

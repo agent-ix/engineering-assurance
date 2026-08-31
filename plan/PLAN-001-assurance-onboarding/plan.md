@@ -2,7 +2,7 @@
 id: PLAN-001
 title: "Assurance onboarding implementation"
 type: Plan
-status: active
+status: complete
 relationships:
   - target: "ix://agent-ix/engineering-assurance/StR-001"
     type: references
@@ -94,4 +94,3 @@ in parallel; TASK-005 joins the onboarding and workflow contracts before eval wo
 - Content-rights, Ruff, pytest, manifest validation, package audit, and any declared
   evaluation commands pass from a clean installable tree.
 - Gap analysis reports every task complete and no unowned requirement or code path.
-

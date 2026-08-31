@@ -8,11 +8,11 @@ type: TestMatrix
 
 ## Overview
 
-This matrix defines pending verification for the canonical assurance-onboarding
-bundle. Test cases remain `🚧` until implementation supplies executable tracking
-tags and passing evidence. The matrix covers every stakeholder validation
-criterion, user-story example, functional acceptance criterion, non-functional
-requirement, and declared constraint in this specification.
+This matrix records completed verification for the canonical assurance-onboarding
+bundle. Every test case has an executable tracking tag and passing repository or
+retained real-agent evidence. The matrix covers every stakeholder validation
+criterion, user-story example, functional and non-functional acceptance criterion,
+and declared constraint in this specification.
 
 ## Test Matrix Rules
 
@@ -38,135 +38,135 @@ requirement, and declared constraint in this specification.
 
 | Stakeholder Req | Trace to US/FR | Test/Validation | Coverage Status |
 |-----------------|----------------|-----------------|-----------------|
-| StR-001 | FR-001, FR-004, FR-005 | StR-001-VC-1..VC-3 → TC-001..TC-003 | 🚧 Pending |
+| StR-001 | FR-001, FR-004, FR-005 | StR-001-VC-1..VC-3 → TC-001..TC-003 | ✅ Passing |
 
 ### User Story Coverage
 
 | User Story | Acceptance Criteria | Test Cases | Coverage Status |
 |------------|---------------------|------------|-----------------|
-| US-001 | US-001-EX-1 | TC-004 | 🚧 Pending |
-| US-001 | US-001-EX-2 | TC-005 | 🚧 Pending |
-| US-002 | US-002-EX-1 | TC-010 | 🚧 Pending |
-| US-002 | US-002-EX-2 | TC-011 | 🚧 Pending |
-| US-003 | US-003-EX-1 | TC-026 | 🚧 Pending |
-| US-003 | US-003-EX-2 | TC-028 | 🚧 Pending |
-| US-004 | US-004-EX-1 | TC-021 | 🚧 Pending |
-| US-004 | US-004-EX-2 | TC-020 | 🚧 Pending |
+| US-001 | US-001-EX-1 | TC-004 | ✅ Passing |
+| US-001 | US-001-EX-2 | TC-005 | ✅ Passing |
+| US-002 | US-002-EX-1 | TC-010 | ✅ Passing |
+| US-002 | US-002-EX-2 | TC-011 | ✅ Passing |
+| US-003 | US-003-EX-1 | TC-026 | ✅ Passing |
+| US-003 | US-003-EX-2 | TC-028 | ✅ Passing |
+| US-004 | US-004-EX-1 | TC-021 | ✅ Passing |
+| US-004 | US-004-EX-2 | TC-020 | ✅ Passing |
 
 ### Functional Requirement Coverage
 
 | Functional Req | Acceptance Criteria | Test Cases | Coverage Status |
 |----------------|---------------------|------------|-----------------|
-| FR-001 | FR-001-AC-1 | TC-004 | 🚧 Pending |
-| FR-001 | FR-001-AC-2 | TC-005 | 🚧 Pending |
-| FR-001 | FR-001-AC-3 | TC-006 | 🚧 Pending |
-| FR-001 | FR-001-AC-4 | TC-007 | 🚧 Pending |
-| FR-001 | FR-001-AC-5 | TC-008 | 🚧 Pending |
-| FR-001 | FR-001-AC-6 | TC-044 | 🚧 Pending |
-| FR-001 | FR-001-AC-7 | TC-045 | 🚧 Pending |
-| FR-002 | FR-002-AC-1 | TC-009 | 🚧 Pending |
-| FR-002 | FR-002-AC-2 | TC-010 | 🚧 Pending |
-| FR-002 | FR-002-AC-3 | TC-011 | 🚧 Pending |
-| FR-002 | FR-002-AC-4 | TC-012 | 🚧 Pending |
-| FR-002 | FR-002-AC-5 | TC-013 | 🚧 Pending |
-| FR-003 | FR-003-AC-1 | TC-014 | 🚧 Pending |
-| FR-003 | FR-003-AC-2 | TC-015 | 🚧 Pending |
-| FR-003 | FR-003-AC-3 | TC-016 | 🚧 Pending |
-| FR-003 | FR-003-AC-4 | TC-017 | 🚧 Pending |
-| FR-003 | FR-003-AC-5 | TC-018 | 🚧 Pending |
-| FR-003 | FR-003-AC-6 | TC-019 | 🚧 Pending |
-| FR-004 | FR-004-AC-1 | TC-020 | 🚧 Pending |
-| FR-004 | FR-004-AC-2 | TC-021 | 🚧 Pending |
-| FR-004 | FR-004-AC-3 | TC-022 | 🚧 Pending |
-| FR-004 | FR-004-AC-4 | TC-023 | 🚧 Pending |
-| FR-004 | FR-004-AC-5 | TC-024 | 🚧 Pending |
-| FR-004 | FR-004-AC-6 | TC-025 | 🚧 Pending |
-| FR-004 | FR-004-AC-7 | TC-046 | 🚧 Pending |
-| FR-005 | FR-005-AC-1 | TC-026 | 🚧 Pending |
-| FR-005 | FR-005-AC-2 | TC-027 | 🚧 Pending |
-| FR-005 | FR-005-AC-3 | TC-028 | 🚧 Pending |
-| FR-005 | FR-005-AC-4 | TC-029 | 🚧 Pending |
-| FR-005 | FR-005-AC-5 | TC-030 | 🚧 Pending |
-| FR-005 | FR-005-AC-6 | TC-047 | 🚧 Pending |
-| FR-005 | FR-005-AC-7 | TC-048 | 🚧 Pending |
-| FR-006 | FR-006-AC-1 | TC-031 | 🚧 Pending |
-| FR-006 | FR-006-AC-2 | TC-032 | 🚧 Pending |
-| FR-006 | FR-006-AC-3 | TC-033 | 🚧 Pending |
-| FR-006 | FR-006-AC-4 | TC-034 | 🚧 Pending |
-| FR-006 | FR-006-AC-5 | TC-049 | 🚧 Pending |
-| FR-007 | FR-007-AC-1 | TC-035 | 🚧 Pending |
-| FR-007 | FR-007-AC-2 | TC-036 | 🚧 Pending |
-| FR-007 | FR-007-AC-3 | TC-037 | 🚧 Pending |
+| FR-001 | FR-001-AC-1 | TC-004 | ✅ Passing |
+| FR-001 | FR-001-AC-2 | TC-005 | ✅ Passing |
+| FR-001 | FR-001-AC-3 | TC-006 | ✅ Passing |
+| FR-001 | FR-001-AC-4 | TC-007 | ✅ Passing |
+| FR-001 | FR-001-AC-5 | TC-008 | ✅ Passing |
+| FR-001 | FR-001-AC-6 | TC-044 | ✅ Passing |
+| FR-001 | FR-001-AC-7 | TC-045 | ✅ Passing |
+| FR-002 | FR-002-AC-1 | TC-009 | ✅ Passing |
+| FR-002 | FR-002-AC-2 | TC-010 | ✅ Passing |
+| FR-002 | FR-002-AC-3 | TC-011 | ✅ Passing |
+| FR-002 | FR-002-AC-4 | TC-012 | ✅ Passing |
+| FR-002 | FR-002-AC-5 | TC-013 | ✅ Passing |
+| FR-003 | FR-003-AC-1 | TC-014 | ✅ Passing |
+| FR-003 | FR-003-AC-2 | TC-015 | ✅ Passing |
+| FR-003 | FR-003-AC-3 | TC-016 | ✅ Passing |
+| FR-003 | FR-003-AC-4 | TC-017 | ✅ Passing |
+| FR-003 | FR-003-AC-5 | TC-018 | ✅ Passing |
+| FR-003 | FR-003-AC-6 | TC-019 | ✅ Passing |
+| FR-004 | FR-004-AC-1 | TC-020 | ✅ Passing |
+| FR-004 | FR-004-AC-2 | TC-021 | ✅ Passing |
+| FR-004 | FR-004-AC-3 | TC-022 | ✅ Passing |
+| FR-004 | FR-004-AC-4 | TC-023 | ✅ Passing |
+| FR-004 | FR-004-AC-5 | TC-024 | ✅ Passing |
+| FR-004 | FR-004-AC-6 | TC-025 | ✅ Passing |
+| FR-004 | FR-004-AC-7 | TC-046 | ✅ Passing |
+| FR-005 | FR-005-AC-1 | TC-026 | ✅ Passing |
+| FR-005 | FR-005-AC-2 | TC-027 | ✅ Passing |
+| FR-005 | FR-005-AC-3 | TC-028 | ✅ Passing |
+| FR-005 | FR-005-AC-4 | TC-029 | ✅ Passing |
+| FR-005 | FR-005-AC-5 | TC-030 | ✅ Passing |
+| FR-005 | FR-005-AC-6 | TC-047 | ✅ Passing |
+| FR-005 | FR-005-AC-7 | TC-048 | ✅ Passing |
+| FR-006 | FR-006-AC-1 | TC-031 | ✅ Passing |
+| FR-006 | FR-006-AC-2 | TC-032 | ✅ Passing |
+| FR-006 | FR-006-AC-3 | TC-033 | ✅ Passing |
+| FR-006 | FR-006-AC-4 | TC-034 | ✅ Passing |
+| FR-006 | FR-006-AC-5 | TC-049 | ✅ Passing |
+| FR-007 | FR-007-AC-1 | TC-035 | ✅ Passing |
+| FR-007 | FR-007-AC-2 | TC-036 | ✅ Passing |
+| FR-007 | FR-007-AC-3 | TC-037 | ✅ Passing |
 
 ### Non-Functional Requirement Coverage
 
 | Non-Functional Req | Verification Method | Evidence/Test Cases | Status |
 |--------------------|---------------------|---------------------|--------|
-| NFR-001 | Install, discovery, digest comparison, and static scan | TC-038 | 🚧 Pending |
-| NFR-002 | Agent evaluation against fixture-authorized outcomes | TC-039 | 🚧 Pending |
-| NFR-003 | Wheel/npm member audit plus compatibility invocation | TC-040 | 🚧 Pending |
+| NFR-001 | Install, discovery, digest comparison, and static scan | TC-038 | ✅ Passing |
+| NFR-002 | Agent evaluation against fixture-authorized outcomes | TC-039 | ✅ Passing |
+| NFR-003 | Wheel/npm member audit plus compatibility invocation | TC-040 | ✅ Passing |
 
 ### Constraint Coverage
 
-| Constraint | Test Cases | Coverage Status |
+| Constraint | Test Cases | Status |
 |------------|------------|-----------------|
-| FR-002-CON-1 | TC-041 | 🚧 Pending |
-| FR-002-CON-2 | TC-042 | 🚧 Pending |
-| FR-007-CON-1 | TC-043 | 🚧 Pending |
+| FR-002-CON-1 | TC-041 | ✅ Passing |
+| FR-002-CON-2 | TC-042 | ✅ Passing |
+| FR-007-CON-1 | TC-043 | ✅ Passing |
 
 ## Test Case Summary
 
 | Test ID | Title | Type | Priority | Traces To | Status |
 |---------|-------|------|----------|-----------|--------|
-| TC-001 | Inventory precedes every onboarding proposal | E2E | P0 | StR-001-VC-1 | 🚧 |
-| TC-002 | Unjustified profile is not scaffolded | E2E | P0 | StR-001-VC-2 | 🚧 |
-| TC-003 | Named human owns every terminal outcome | Integration | P0 | StR-001-VC-3 | 🚧 |
-| TC-004 | Existing valid profile is inventoried and reused | E2E | P0 | FR-001-AC-1, US-001-EX-1 | 🚧 |
-| TC-005 | No-profile repository creates no generic profile | E2E | P0 | FR-001-AC-2, US-001-EX-2 | 🚧 |
-| TC-006 | Justified artifact uses installed skeleton and Quire | Integration | P0 | FR-001-AC-3 | 🚧 |
-| TC-007 | Incomplete boundary requests input without writing | E2E | P0 | FR-001-AC-4 | 🚧 |
-| TC-008 | Inventory separates all required collections | Unit | P1 | FR-001-AC-5 | 🚧 |
-| TC-009 | Exactly one canonical onboarding skill exists | Static | P0 | FR-002-AC-1 | 🚧 |
-| TC-010 | Four host surfaces resolve one canonical skill | Integration | P0 | FR-002-AC-2, US-002-EX-1 | 🚧 |
-| TC-011 | Canonical skill exposes exactly four workflows | Integration | P0 | FR-002-AC-3, US-002-EX-2 | 🚧 |
-| TC-012 | Behavioral text in a host manifest is rejected | Static | P1 | FR-002-AC-4 | 🚧 |
-| TC-013 | Missing or escaping canonical target is rejected | Unit | P0 | FR-002-AC-5 | 🚧 |
-| TC-014 | Wheel includes explicit module and onboarding members | Integration | P0 | FR-003-AC-1 | 🚧 |
-| TC-015 | Npm archive includes explicit module and onboarding members | Integration | P0 | FR-003-AC-2 | 🚧 |
-| TC-016 | Local-source installation preserves discovery | Integration | P0 | FR-003-AC-3 | 🚧 |
-| TC-017 | Repository-source installation preserves discovery | Integration | P0 | FR-003-AC-4 | 🚧 |
-| TC-018 | Unexpected, missing, or escaping package content fails audit | Unit | P0 | FR-003-AC-5 | 🚧 |
-| TC-019 | Module/plugin and local/repository install procedures are distinct | Static | P1 | FR-003-AC-6 | 🚧 |
-| TC-020 | Observed producer retains the complete immutable governing-version tuple | E2E | P0 | FR-004-AC-1, US-004-EX-2 | 🚧 |
-| TC-021 | Invocation failure remains unavailable | E2E | P0 | FR-004-AC-2, US-004-EX-1 | 🚧 |
-| TC-022 | Deferred producer remains not computed | Unit | P1 | FR-004-AC-3 | 🚧 |
-| TC-023 | Excluded producer remains not applicable | Unit | P1 | FR-004-AC-4 | 🚧 |
-| TC-024 | Malformed output or missing/mutable provenance fails validation | E2E | P0 | FR-004-AC-5 | 🚧 |
-| TC-025 | Persisted evidence delegates to Quoin | Integration | P0 | FR-004-AC-6 | 🚧 |
-| TC-026 | Interrupted ix-flow run resumes without repetition | Integration | P0 | FR-005-AC-1, US-003-EX-1 | 🚧 |
-| TC-027 | All terminal transitions remain human gated | Static | P0 | FR-005-AC-2 | 🚧 |
-| TC-028 | Explicit rejection records one attributed event and no success state | Integration | P0 | FR-005-AC-3, US-003-EX-2 | 🚧 |
-| TC-029 | Missing human choice leaves run non-terminal | Integration | P0 | FR-005-AC-4 | 🚧 |
-| TC-030 | Automatic terminal-gate override fails closed | Unit | P0 | FR-005-AC-5 | 🚧 |
-| TC-031 | Evaluation suite executes all five classes and seven variants on four hosts | E2E | P0 | FR-006-AC-1 | 🚧 |
-| TC-032 | Evaluation envelopes retain versions, transcript digests, effort, and outcomes | Property | P0 | FR-006-AC-2 | 🚧 |
-| TC-033 | Missing executable fails aggregate gate | E2E | P0 | FR-006-AC-3 | 🚧 |
-| TC-034 | Aggregate passes only for complete passing scenarios | Property | P0 | FR-006-AC-4 | 🚧 |
-| TC-035 | Four pilot workflow invocations still load | Integration | P0 | FR-007-AC-1 | 🚧 |
-| TC-036 | Pilot and canonical workflows are equivalent | Property | P0 | FR-007-AC-2 | 🚧 |
-| TC-037 | Canonical install docs precede compatibility path | Static | P1 | FR-007-AC-3 | 🚧 |
-| TC-038 | Cross-agent canonical parity reaches all thresholds | Integration | P0 | NFR-001 | 🚧 |
-| TC-039 | Evaluation produces zero unsupported outcomes | E2E | P0 | NFR-002 | 🚧 |
-| TC-040 | Package contract stability reaches all thresholds | Integration | P0 | NFR-003 | 🚧 |
-| TC-041 | Supported-agent set rejects missing, extra, or duplicate hosts | Property | P1 | FR-002-CON-1 | 🚧 |
-| TC-042 | Thin manifests reject behavioral sections and copied workflows | Property | P1 | FR-002-CON-2 | 🚧 |
-| TC-043 | Compatibility inventory is exactly the four promoted pilots | Property | P1 | FR-007-CON-1 | 🚧 |
-| TC-044 | Malformed or conflicting existing artifacts remain unchanged and require human resolution | E2E | P0 | FR-001-AC-6 | 🚧 |
-| TC-045 | Artifact publication is staged, Quire-validated, atomic, and confined to the selected root | Integration | P0 | FR-001-AC-7 | 🚧 |
-| TC-046 | Exactly one availability state exists for every considered producer | Property | P0 | FR-004-AC-7 | 🚧 |
-| TC-047 | Explicit acceptance records one attributed event and no prior acceptance state | Integration | P0 | FR-005-AC-6 | 🚧 |
-| TC-048 | A run-id binding mismatch is refused without changing either run | Property | P0 | FR-005-AC-7 | 🚧 |
-| TC-049 | Equivalent runs retain explicit acceptance and rejection on every host | E2E | P0 | FR-006-AC-5 | 🚧 |
+| TC-001 | Inventory precedes every onboarding proposal | E2E | P0 | StR-001-VC-1 | ✅ |
+| TC-002 | Unjustified profile is not scaffolded | E2E | P0 | StR-001-VC-2 | ✅ |
+| TC-003 | Named human owns every terminal outcome | Integration | P0 | StR-001-VC-3 | ✅ |
+| TC-004 | Existing valid profile is inventoried and reused | E2E | P0 | FR-001-AC-1, US-001-EX-1 | ✅ |
+| TC-005 | No-profile repository creates no generic profile | E2E | P0 | FR-001-AC-2, US-001-EX-2 | ✅ |
+| TC-006 | Justified artifact uses installed skeleton and Quire | Integration | P0 | FR-001-AC-3 | ✅ |
+| TC-007 | Incomplete boundary requests input without writing | E2E | P0 | FR-001-AC-4 | ✅ |
+| TC-008 | Inventory separates all required collections | Unit | P1 | FR-001-AC-5 | ✅ |
+| TC-009 | Exactly one canonical onboarding skill exists | Static | P0 | FR-002-AC-1 | ✅ |
+| TC-010 | Four host surfaces resolve one canonical skill | Integration | P0 | FR-002-AC-2, US-002-EX-1 | ✅ |
+| TC-011 | Canonical skill exposes exactly four workflows | Integration | P0 | FR-002-AC-3, US-002-EX-2 | ✅ |
+| TC-012 | Behavioral text in a host manifest is rejected | Static | P1 | FR-002-AC-4 | ✅ |
+| TC-013 | Missing or escaping canonical target is rejected | Unit | P0 | FR-002-AC-5 | ✅ |
+| TC-014 | Wheel includes explicit module and onboarding members | Integration | P0 | FR-003-AC-1 | ✅ |
+| TC-015 | Npm archive includes explicit module and onboarding members | Integration | P0 | FR-003-AC-2 | ✅ |
+| TC-016 | Local-source installation preserves discovery | Integration | P0 | FR-003-AC-3 | ✅ |
+| TC-017 | Repository-source installation preserves discovery | Integration | P0 | FR-003-AC-4 | ✅ |
+| TC-018 | Unexpected, missing, or escaping package content fails audit | Unit | P0 | FR-003-AC-5 | ✅ |
+| TC-019 | Module/plugin and local/repository install procedures are distinct | Static | P1 | FR-003-AC-6 | ✅ |
+| TC-020 | Observed producer retains the complete immutable governing-version tuple | E2E | P0 | FR-004-AC-1, US-004-EX-2 | ✅ |
+| TC-021 | Invocation failure remains unavailable | E2E | P0 | FR-004-AC-2, US-004-EX-1 | ✅ |
+| TC-022 | Deferred producer remains not computed | Unit | P1 | FR-004-AC-3 | ✅ |
+| TC-023 | Excluded producer remains not applicable | Unit | P1 | FR-004-AC-4 | ✅ |
+| TC-024 | Malformed output or missing/mutable provenance fails validation | E2E | P0 | FR-004-AC-5 | ✅ |
+| TC-025 | Persisted evidence delegates to Quoin | Integration | P0 | FR-004-AC-6 | ✅ |
+| TC-026 | Interrupted ix-flow run resumes without repetition | Integration | P0 | FR-005-AC-1, US-003-EX-1 | ✅ |
+| TC-027 | All terminal transitions remain human gated | Static | P0 | FR-005-AC-2 | ✅ |
+| TC-028 | Explicit rejection records one attributed event and no success state | Integration | P0 | FR-005-AC-3, US-003-EX-2 | ✅ |
+| TC-029 | Missing human choice leaves run non-terminal | Integration | P0 | FR-005-AC-4 | ✅ |
+| TC-030 | Automatic terminal-gate override fails closed | Unit | P0 | FR-005-AC-5 | ✅ |
+| TC-031 | Evaluation suite executes all five classes and seven variants on four hosts | E2E | P0 | FR-006-AC-1 | ✅ |
+| TC-032 | Evaluation envelopes retain versions, transcript digests, effort, and outcomes | Property | P0 | FR-006-AC-2 | ✅ |
+| TC-033 | Missing executable fails aggregate gate | E2E | P0 | FR-006-AC-3 | ✅ |
+| TC-034 | Aggregate passes only for complete passing scenarios | Property | P0 | FR-006-AC-4 | ✅ |
+| TC-035 | Four pilot workflow invocations still load | Integration | P0 | FR-007-AC-1 | ✅ |
+| TC-036 | Pilot and canonical workflows are equivalent | Property | P0 | FR-007-AC-2 | ✅ |
+| TC-037 | Canonical install docs precede compatibility path | Static | P1 | FR-007-AC-3 | ✅ |
+| TC-038 | Cross-agent canonical parity reaches all thresholds | Integration | P0 | NFR-001 | ✅ |
+| TC-039 | Evaluation produces zero unsupported outcomes | E2E | P0 | NFR-002 | ✅ |
+| TC-040 | Package contract stability reaches all thresholds | Integration | P0 | NFR-003 | ✅ |
+| TC-041 | Supported-agent set rejects missing, extra, or duplicate hosts | Property | P1 | FR-002-CON-1 | ✅ |
+| TC-042 | Thin manifests reject behavioral sections and copied workflows | Property | P1 | FR-002-CON-2 | ✅ |
+| TC-043 | Compatibility inventory is exactly the four promoted pilots | Property | P1 | FR-007-CON-1 | ✅ |
+| TC-044 | Malformed or conflicting existing artifacts remain unchanged and require human resolution | E2E | P0 | FR-001-AC-6 | ✅ |
+| TC-045 | Artifact publication is staged, Quire-validated, atomic, and confined to the selected root | Integration | P0 | FR-001-AC-7 | ✅ |
+| TC-046 | Exactly one availability state exists for every considered producer | Property | P0 | FR-004-AC-7 | ✅ |
+| TC-047 | Explicit acceptance records one attributed event and no prior acceptance state | Integration | P0 | FR-005-AC-6 | ✅ |
+| TC-048 | A run-id binding mismatch is refused without changing either run | Property | P0 | FR-005-AC-7 | ✅ |
+| TC-049 | Equivalent runs retain explicit acceptance and rejection on every host | E2E | P0 | FR-006-AC-5 | ✅ |
 
 ## Option Permutation Matrix
 
@@ -240,10 +240,10 @@ evaluation envelopes.
 
 | Integration ID | Purpose | Target Project | Type | Test Cases | Status |
 |----------------|---------|----------------|------|------------|--------|
-| INT-001 | Validate justified assurance artifacts | quire-rs | service | TC-006, TC-017, TC-045 | 🚧 |
-| INT-002 | Persist and render evidence without redefining policy | quoin | service | TC-025, TC-046 | 🚧 |
-| INT-003 | Load workflows, persist runs, resume, and gate decisions | ix-flow | service | TC-026, TC-028, TC-029, TC-030, TC-035, TC-047, TC-048 | 🚧 |
-| INT-004 | Discover canonical onboarding through supported hosts | agent discovery adapters | service | TC-010, TC-011, TC-038 | 🚧 |
+| INT-001 | Validate justified assurance artifacts | quire-rs | service | TC-006, TC-017, TC-045 | ✅ |
+| INT-002 | Persist and render evidence without redefining policy | quoin | service | TC-025, TC-046 | ✅ |
+| INT-003 | Load workflows, persist runs, resume, and gate decisions | ix-flow | service | TC-026, TC-028, TC-029, TC-030, TC-035, TC-047, TC-048 | ✅ |
+| INT-004 | Discover canonical onboarding through supported hosts | agent discovery adapters | service | TC-010, TC-011, TC-038 | ✅ |
 
 ### Integration Test Details
 
@@ -266,17 +266,16 @@ evaluation envelopes.
 
 ## Coverage Gaps
 
-| Gap ID | Description | Risk Level | Mitigation |
-|--------|-------------|------------|------------|
-| GAP-001 | All mapped tests are pending implementation. | High | Implement tracking-tagged tests and retain `🚧` status until each passes. |
-| GAP-002 | Exact supported-agent harness commands and versions are not selected by this requirements stage. | Medium | Resolve them in the implementation plan and record exact versions in evaluation evidence. |
+No open coverage gap remains. Quire reconciles all 49 test-case rows to real
+tracking-tagged symbols, and the retained 28-cell aggregate records the selected
+host commands, models, governing versions, transcripts, and outcomes.
 
 ## Test Execution Summary
 
 | Category | Total | Passed | Failed | Blocked | Coverage |
 |----------|-------|--------|--------|---------|----------|
-| Unit | 6 | 0 | 0 | 6 | 0% |
-| Integration | 17 | 0 | 0 | 17 | 0% |
-| E2E | 13 | 0 | 0 | 13 | 0% |
-| Property | 8 | 0 | 0 | 8 | 0% |
-| Static | 5 | 0 | 0 | 5 | 0% |
+| Unit | 6 | 6 | 0 | 0 | 100% |
+| Integration | 17 | 17 | 0 | 0 | 100% |
+| E2E | 13 | 13 | 0 | 0 | 100% |
+| Property | 8 | 8 | 0 | 0 | 100% |
+| Static | 5 | 5 | 0 | 0 | 100% |

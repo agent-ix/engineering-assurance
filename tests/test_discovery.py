@@ -88,7 +88,7 @@ def test_host_manifests_are_metadata_and_one_target_only() -> None:
 
 
 def test_cross_agent_canonical_parity_meets_all_thresholds() -> None:
-    """Trace: NFR-001, TC-038."""
+    """Trace: NFR-001, NFR-001-AC-1, NFR-001-AC-2, NFR-001-AC-3, TC-038."""
     resolved = validate_discovery(ROOT)
     assert len(resolved) == 4
     skill_digests = {
