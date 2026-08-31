@@ -105,9 +105,7 @@ class EvaluationEnvelope:
             or ".." in Path(self.transcript_path).parts
         ):
             errors.append("transcript-path-invalid")
-        if not self.transcript_digest or not SHA256.fullmatch(
-            self.transcript_digest
-        ):
+        if not self.transcript_digest or not SHA256.fullmatch(self.transcript_digest):
             errors.append("transcript-digest-invalid")
         for name, value in (
             ("command", self.command_count),
@@ -163,6 +161,23 @@ def required_matrix() -> tuple[EvaluationCell, ...]:
     )
 
 
+def _shared_governing_versions(
+    governing: GoverningVersions | None,
+) -> tuple[object, ...] | None:
+    if governing is None:
+        return None
+    return (
+        governing.module,
+        governing.plugin,
+        governing.skill,
+        governing.quire,
+        governing.quoin,
+        governing.ix_flow,
+        governing.schema,
+        governing.producer,
+    )
+
+
 def probe_host(host: str, *, search_path: str | None = None) -> HostProbe:
     if host not in SUPPORTED_HOSTS:
         raise ValueError(f"unsupported host: {host}")
@@ -196,25 +211,52 @@ def aggregate_evaluations(
     grouped: dict[EvaluationCell, list[EvaluationEnvelope]] = {}
     for envelope in envelopes:
         grouped.setdefault(envelope.cell, []).append(envelope)
-    missing = sorted(required - set(grouped), key=lambda item: (item.host, item.scenario))
+    missing = sorted(
+        required - set(grouped), key=lambda item: (item.host, item.scenario)
+    )
     extra = sorted(set(grouped) - required, key=lambda item: (item.host, item.scenario))
     for cell in missing:
         failures.append(f"missing:{cell.host}:{cell.scenario}")
     for cell in extra:
         failures.append(f"extra:{cell.host}:{cell.scenario}")
     complete = 0
-    for cell in sorted(required & set(grouped), key=lambda item: (item.host, item.scenario)):
+    for cell in sorted(
+        required & set(grouped), key=lambda item: (item.host, item.scenario)
+    ):
         selected = grouped[cell]
         if len(selected) != 1:
             failures.append(f"duplicate:{cell.host}:{cell.scenario}")
             continue
         errors = selected[0].errors()
         if errors:
-            failures.extend(
-                f"{cell.host}:{cell.scenario}:{error}" for error in errors
-            )
+            failures.extend(f"{cell.host}:{cell.scenario}:{error}" for error in errors)
         else:
             complete += 1
+
+    for label, values in (
+        ("source", {item.source_revision for item in envelopes}),
+        ("suite", {item.suite_revision for item in envelopes}),
+        ("fixture", {item.fixture_revision for item in envelopes}),
+        (
+            "governing",
+            {_shared_governing_versions(item.governing) for item in envelopes},
+        ),
+    ):
+        if len(values) > 1:
+            failures.append(
+                f"matrix-{label}-revision-mismatch"
+                if label != "governing"
+                else "matrix-governing-versions-mismatch"
+            )
+
+    for scenario in SCENARIO_VARIANTS:
+        workflows = {
+            item.governing.workflow if item.governing is not None else None
+            for item in envelopes
+            if item.scenario == scenario
+        }
+        if len(workflows) > 1:
+            failures.append(f"{scenario}:workflow-version-mismatch")
 
     for host in SUPPORTED_HOSTS:
         decisions = {

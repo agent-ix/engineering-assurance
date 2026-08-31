@@ -1,4 +1,4 @@
-.PHONY: lint test package-audit eval-readiness agent-evals
+.PHONY: lint test package-audit eval-readiness agent-evals agent-evals-aggregate
 
 EVAL_AGENT ?= codex
 EVAL_RUN ?= canary
@@ -6,6 +6,8 @@ EVAL_MODEL ?=
 EVAL_FILTER ?=
 EVAL_KEEP ?= 1
 EVAL_REPORT ?= evals/reports/$(EVAL_AGENT)-$(EVAL_RUN).json
+EVAL_REPORTS ?=
+EVAL_AGGREGATE_REPORT ?= evals/reports/aggregate.json
 PYTHON ?= python
 
 lint:
@@ -30,3 +32,8 @@ agent-evals:
 		$(if $(strip $(EVAL_MODEL)),--model "$(EVAL_MODEL)") \
 		$(if $(filter 1 true yes,$(EVAL_KEEP)),--keep) \
 		--report "$(EVAL_REPORT)"
+
+agent-evals-aggregate:
+	$(PYTHON) scripts/aggregate_agent_eval_reports.py \
+		$(foreach report,$(EVAL_REPORTS),--report "$(report)") \
+		--output "$(EVAL_AGGREGATE_REPORT)"
