@@ -16,4 +16,3 @@ description: "Contents of the PLAN-001 bundle."
 - [TASK-005](./tasks/TASK-005-resumable-decisions.md) — Resume and human gates.
 - [TASK-006](./tasks/TASK-006-agent-evals.md) — Four-host evaluation matrix.
 - [TASK-007](./tasks/TASK-007-integration-gate.md) — E2E and completion gates.
-
