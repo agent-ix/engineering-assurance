@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: agent-ix/ix-flow
-          ref: 0814c05b9005f87ac880dc02d75ef554ea454de3
+          ref: 102d3b618b352a86ec992d842d71adf209d3ee58
           path: .deps/ix-flow
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
