@@ -18,5 +18,5 @@ volatility once its envelope and fixture rights are fixed.
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
-| FND-001 | high | Mitigated: no-write paths, immutable provenance, state exclusivity, and explicit terminal-event tests protect the primary epistemic boundary. | TC-002; TC-007; TC-024; TC-046..TC-049 |
+| FND-001 | high | Mitigated: no-write paths, immutable provenance, pinned executable selection, state exclusivity, and explicit terminal-event tests protect the primary epistemic boundary. | TC-002; TC-007; TC-024; TC-046..TC-050 |
 | FND-002 | medium | Mitigated: canonical digests, allowlisted packages, escaping-target refusal, and compatibility equivalence constrain host/package drift. | TC-010; TC-018; TC-036; TC-038; TC-040..TC-043 |

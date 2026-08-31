@@ -15,6 +15,7 @@ from engineering_assurance.workflow import (
     DecisionEvent,
     WorkflowBinding,
     WorkflowError,
+    _executable,
     decide,
     start_or_resume,
 )
@@ -25,6 +26,15 @@ def ix_flow() -> str:
     if executable is None:
         pytest.fail("ix-flow is required by the integration contract")
     return executable
+
+
+def test_ix_flow_resolution_prefers_explicit_then_pinned_environment(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("IX_FLOW_BIN", "/pinned/ix-flow")
+    monkeypatch.setattr(shutil, "which", lambda _command: "/global/ix-flow")
+    assert _executable("/explicit/ix-flow") == "/explicit/ix-flow"
+    assert _executable(None) == "/pinned/ix-flow"
 
 
 def binding(run_id: str = "architecture-run") -> WorkflowBinding:

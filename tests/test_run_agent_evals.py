@@ -8,6 +8,7 @@ from scripts.run_agent_evals import (
     build_command,
     file_identity,
     manifest_version,
+    pinned_ix_flow,
     runtime_package_identity,
     search_path,
 )
@@ -49,6 +50,14 @@ def test_runner_prefers_ignored_repository_tool_shims(tmp_path: Path) -> None:
         str(tmp_path),
         "/usr/bin",
     ]
+
+
+def test_runner_pins_ix_flow_from_the_governing_search_path(tmp_path: Path) -> None:
+    """Trace: FR-006-AC-6, TC-050."""
+    executable = tmp_path / "ix-flow"
+    executable.write_text("#!/bin/sh\n")
+    executable.chmod(0o755)
+    assert pinned_ix_flow(str(tmp_path)) == str(executable)
 
 
 def test_runner_can_select_one_live_scenario(tmp_path: Path) -> None:

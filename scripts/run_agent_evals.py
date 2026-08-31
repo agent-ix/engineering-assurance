@@ -26,6 +26,14 @@ def search_path(base_path: str | None, *, local_bin: Path = LOCAL_BIN) -> str:
     return os.pathsep.join(entries)
 
 
+def pinned_ix_flow(search_path_value: str) -> str:
+    """Resolve the exact ix-flow executable shared by the snapshot and agents."""
+    executable = shutil.which("ix-flow", path=search_path_value)
+    if executable is None:
+        raise SystemExit("ix-flow is not available for the governing snapshot")
+    return executable
+
+
 def file_identity(name: str, version: str, path: Path) -> dict[str, str]:
     return {
         "name": name,
@@ -212,6 +220,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     env = os.environ.copy()
     env["PATH"] = search_path(env.get("PATH"))
+    env["IX_FLOW_BIN"] = pinned_ix_flow(env["PATH"])
     cli_evals = shutil.which("cli-evals", path=env["PATH"])
     host = shutil.which(args.agent, path=env["PATH"])
     if cli_evals is None:
