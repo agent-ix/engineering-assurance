@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).parents[1]
 CHECKER_PATH = ROOT / "scripts" / "check_content_rights.py"
 SPEC = importlib.util.spec_from_file_location("content_rights", CHECKER_PATH)
@@ -27,6 +29,12 @@ def test_current_tree_passes_rights_check() -> None:
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_public_repository_rights_are_declared_consistently() -> None:
+    policy = yaml.safe_load((ROOT / "content-rights.yaml").read_text())
+    assert policy["repository"]["visibility"] == "public"
+    assert "This public repository" in (ROOT / "CONTENT_RIGHTS.md").read_text()
 
 
 def test_workstation_locations_are_detected_without_storing_one() -> None:

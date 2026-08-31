@@ -1,6 +1,6 @@
 # Content rights
 
-This private repository contains original Agent IX implementation,
+This public repository contains original Agent IX implementation,
 configuration, and fictional test material. The project license applies only to
 content Agent IX is entitled to license.
 
