@@ -20,6 +20,8 @@ from engineering_assurance.evidence import (
 )
 from engineering_assurance.workflow import DecisionEvent
 
+RUNNER_DEFAULT_MODEL = "runner-default"
+
 
 @dataclass(frozen=True)
 class EvaluationReportCollection:
@@ -185,9 +187,9 @@ def load_cli_eval_reports(
             errors.append(f"{report_path}:report-not-object")
             continue
         host = _text(payload.get("agent"))
-        model = _text(payload.get("model"))
-        if not host or not model:
-            errors.append(f"{report_path}:host-or-model-missing")
+        model = _text(payload.get("model")) or RUNNER_DEFAULT_MODEL
+        if not host:
+            errors.append(f"{report_path}:host-missing")
             continue
         models.setdefault(host, set()).add(model)
         if payload.get("repeats") != 1:
