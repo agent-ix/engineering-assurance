@@ -52,7 +52,8 @@ export function resultContract(expectation, environment) {
         outcome: expectation.expected,
         run_id: expectation.input.run_id,
         workflow_state_dir: expectation.input.workflow_state_dir,
-        timestamp: "copy from the real ix-flow terminal event",
+        timestamp:
+          "copy from the ix-flow phase.advanced event whose payload moves from decision_ready to the required terminal outcome; never use the gate.acknowledged timestamp",
       }
     : { required: false, value: null };
   return {
