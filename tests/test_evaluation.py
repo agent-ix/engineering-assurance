@@ -21,15 +21,20 @@ from engineering_assurance.workflow import DecisionEvent
 DIGEST = "a" * 64
 
 
-def governing() -> GoverningVersions:
+def governing(scenario: str | None = None) -> GoverningVersions:
     def identity(name: str) -> VersionIdentity:
         return VersionIdentity(name, "1.2.3", DIGEST)
 
+    workflow_name = (
+        "architecture-evaluation"
+        if scenario in {"interruption-resume", "human-acceptance", "human-rejection"}
+        else "assurance-intake"
+    )
     return GoverningVersions(
         module=identity("engineering-assurance"),
         plugin=identity("engineering-assurance-plugin"),
         skill=identity("assurance-onboarding"),
-        workflow=identity("architecture-evaluation"),
+        workflow=identity(workflow_name),
         quire=identity("quire"),
         quoin=identity("quoin"),
         ix_flow=identity("ix-flow"),
@@ -69,7 +74,7 @@ def envelope(host: str, scenario: str) -> EvaluationEnvelope:
         fixture_revision="fixtures-v1",
         source_revision="a" * 40,
         host_version="1.2.3",
-        governing=governing(),
+        governing=governing(scenario),
         transcript_path=f"transcripts/{host}-{scenario}.jsonl",
         transcript_digest=DIGEST,
         command_count=4,
@@ -377,6 +382,33 @@ def test_aggregate_passes_only_for_28_complete_unique_cells() -> None:
     assert not aggregate_evaluations(
         [replace(complete[0], passed=False), *complete[1:]]
     ).ok
+    assert {item.governing.workflow.name for item in complete if item.governing} == {
+        "assurance-intake",
+        "architecture-evaluation",
+    }
+
+
+def test_aggregate_rejects_matrix_identity_drift() -> None:
+    """Trace: FR-006-AC-2, FR-006-AC-4, TC-032, TC-034."""
+    complete = complete_matrix()
+    drifted = replace(
+        complete[0],
+        source_revision="b" * 40,
+        suite_revision="suite-v2",
+        fixture_revision="fixtures-v2",
+        governing=replace(
+            governing(),
+            module=VersionIdentity("engineering-assurance", "1.2.4", DIGEST),
+        ),
+    )
+
+    result = aggregate_evaluations([drifted, *complete[1:]])
+
+    assert not result.ok
+    assert "matrix-source-revision-mismatch" in result.failures
+    assert "matrix-suite-revision-mismatch" in result.failures
+    assert "matrix-fixture-revision-mismatch" in result.failures
+    assert "matrix-governing-versions-mismatch" in result.failures
 
 
 def test_unsupported_assurance_outcome_fails_aggregate() -> None:
