@@ -1,6 +1,6 @@
 schema: agent-ix-content-rights/v1
 repository:
-  visibility: private
+  visibility: public
   license: AGPL-3.0-or-later
 allowed:
   - original-source

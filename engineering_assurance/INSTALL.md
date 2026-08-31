@@ -12,7 +12,7 @@ From a trusted working copy, install the Python module into an isolated target:
 python -m pip install --no-deps --target <module-root> .
 ```
 
-For the private npm package, install the local archive or working copy into the
+For the npm package, install the local archive or working copy into the
 selected project without publishing it:
 
 ```bash
@@ -25,16 +25,17 @@ and `skeletons/`.
 
 ## Repository-source module installation
 
-Obtain an authorized private repository checkout, pin its revision, and install
-that checkout into an isolated target:
+Obtain a checkout of the public repository, pin its revision, and install that
+checkout into an isolated target:
 
 ```bash
 python -m pip install --no-deps --target <module-root> <repository-source>
 npm install --ignore-scripts <repository-source>
 ```
 
-Record the selected revision with the consuming repository. Do not substitute a
-public package registry for either command.
+Record the selected revision with the consuming repository. A registry package
+is a distinct distribution source and must not be substituted unless its
+published identity is explicitly selected and pinned.
 
 ## Local-source agent-plugin installation
 
@@ -54,8 +55,8 @@ the bundle intact; do not copy `SKILL.md` into four host-specific trees.
 
 ## Repository-source agent-plugin installation
 
-Check out the authorized private repository at a pinned revision, then register
-the checkout root with each host's repository or local-path plugin mechanism.
+Check out the public repository at a pinned revision, then register the checkout
+root with each host's repository or local-path plugin mechanism.
 The four host manifests must remain beside the canonical
 `engineering_assurance/skills` directory they reference.
 
