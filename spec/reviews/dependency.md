@@ -11,8 +11,10 @@ review_set: all
 
 Engineering Assurance owns the canonical domain skill and configuration artifacts;
 Quire validates, Quoin stores/interprets evidence, and ix-flow owns lifecycle and
-human gates. Agent manifests and agent-skills delegation are downstream adapters,
-not alternative implementations, and the graph is acyclic.
+human gates. Agent manifests and any thin downstream internal `agent-skills`
+delegator are adapters, not alternative implementations; the canonical skill
+remains owned by this public Engineering Assurance repository, and the graph is
+acyclic.
 
 ## Findings
 

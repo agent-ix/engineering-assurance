@@ -25,11 +25,11 @@ explicit release-gate input, not repository-retained evidence.
 
 ## Verdict
 
-**PASS for tracked deliverables** — 7/7 tasks are done, 101/101 obligations are
-backed, TC-001..TC-049 are passing, and reverse code-to-spec tracing found no
-behavior outside PLAN-001's owners. A release invocation additionally requires
-an explicitly supplied 28/28 real-agent aggregate; a fresh checkout neither has
-nor claims that operational evidence.
+**PASS for tracked deliverables** — 7/7 tasks are done, all 105/105 traceability
+rows are backed (54 criteria plus 51 test cases), TC-001..TC-051 are passing, and
+reverse code-to-spec tracing found no behavior outside PLAN-001's owners. A
+release invocation additionally requires an explicitly supplied 28/28 real-agent
+aggregate; a fresh checkout neither has nor claims that operational evidence.
 
 ## Findings
 
@@ -55,7 +55,8 @@ no contradictory completion checkbox.
 
 ## Matrix and Reverse Trace
 
-- Requirement obligations backed: 101/101; target matrix cases: 49/49.
+- Traceability rows backed: 105/105, comprising 54/54 criteria and 51/51 target
+  matrix cases.
 - Target unbacked rows: 0; target status lies: 0. The available operational
   aggregate revalidated at 28/28 but is not present in a fresh checkout.
 - `onboarding.py` owns FR-001; discovery and canonical bundle surfaces own
@@ -68,7 +69,7 @@ no contradictory completion checkbox.
 ## Validation Evidence
 
 The default `make integration-gate` now uses `python3` and passes pytest, Ruff,
-content-rights, manifest, package, document, and 101/101 traceability checks from
+content-rights, manifest, package, document, and 105/105 traceability checks from
 tracked content without reading `evals/reports/`. `make release-gate` fails
 closed unless `EVAL_AGGREGATE_REPORT` is explicit. With the authorized local
 aggregate supplied, it separately revalidated all 28/28 cells and their
