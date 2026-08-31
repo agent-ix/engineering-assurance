@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from dataclasses import replace
@@ -20,7 +21,7 @@ from engineering_assurance.workflow import (
 
 
 def ix_flow() -> str:
-    executable = shutil.which("ix-flow")
+    executable = os.environ.get("IX_FLOW_BIN") or shutil.which("ix-flow")
     if executable is None:
         pytest.fail("ix-flow is required by the integration contract")
     return executable
