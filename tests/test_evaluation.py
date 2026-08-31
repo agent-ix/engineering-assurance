@@ -373,8 +373,8 @@ def test_missing_executable_is_not_executed_and_fails_gate(tmp_path: Path) -> No
     assert any("scenario-not-executed" in item for item in result.failures)
 
 
-def test_aggregate_passes_only_for_28_complete_unique_cells() -> None:
-    """Trace: FR-006-AC-4, TC-034."""
+def test_aggregate_passes_only_for_every_required_unique_cell() -> None:
+    """Trace: FR-006-AC-4, NFR-002-AC-1, NFR-002-AC-2, NFR-002-AC-3, TC-034, TC-039."""
     complete = complete_matrix()
     result = aggregate_evaluations(complete)
     assert result.ok

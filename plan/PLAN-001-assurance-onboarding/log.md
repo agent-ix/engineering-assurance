@@ -19,3 +19,23 @@ description: "Chronological log for the PLAN-001 bundle."
 - **2026-08-30** — Implemented the TASK-006 seven-variant/four-host harness and
   complete-only aggregate. Live execution remains open because `cli-evals`,
   `opencode`, and `copilot` are unavailable; no evaluation cell was fabricated.
+- **2026-08-30** — Completed TASK-006 with 28/28 real-host scenario cells at
+  source revision `ea1ed8a8ad3de2f8d6b5b36fd8131947970857ac`. The verified
+  aggregate is `evals/reports/aggregate-ea1ed8a.json` with SHA-256
+  `401e4353078820a58e689414b1f120302b55a599d91b620ef98f32adc8bd0b9e`.
+  It retains the failed opencode EA-005 and Copilot EA-006 attempts alongside
+  same-source, same-model passing retries rather than discarding or fabricating
+  either cell.
+- **2026-08-30** — Started TASK-007 after the complete evaluation aggregate made
+  the cross-source integration, parity, repository-validation, review, and gap
+  gates executable.
+- **2026-08-30** — Completed the TASK-007 implementation and code-review gates.
+  `make integration-gate` now provides one stable command for rights, Ruff,
+  pytest, manifest, real package-install, Quire document, traceability, current
+  governing-identity, retained-report/transcript, and 28-cell aggregate checks.
+  The pre-gap run passed 120 tests, 101/101 traceability rows including
+  TC-001..TC-049, 28/28 agent cells, and the validated SR-009 code review.
+- **2026-08-30** — Closed PLAN-001 after SR-010 gap analysis passed: 7/7 tasks
+  done, 101/101 target rows and TC-001..TC-049 backed, no unowned implementation
+  or stub, and the retained four-host aggregate still 28/28 with current
+  governing identities. The optional semantic expansion was not selected.

@@ -38,6 +38,14 @@ silently remove the existing module contract.
 | Emitted members absent from the explicit package allowlist | 0 | 0 | contract-testing |
 | Existing pilot workflows loadable after promotion | 4 of 4 | 4 of 4 | integration-testing |
 
+## Acceptance Criteria
+
+| ID | Criteria | Verification |
+|----|----------|--------------|
+| NFR-003-AC-1 | Neither audited package omits a previously allowlisted module-root member. | Test (TC-040) |
+| NFR-003-AC-2 | Neither audited package emits a member outside its explicit allowlist. | Test (TC-040) |
+| NFR-003-AC-3 | All four existing pilot workflows remain loadable after package installation. | Test (TC-035, TC-040) |
+
 ## Verification
 
 Build both package formats into an isolated directory, enumerate every member,

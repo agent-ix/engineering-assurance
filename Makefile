@@ -1,4 +1,4 @@
-.PHONY: lint test package-audit eval-readiness agent-evals agent-evals-aggregate
+.PHONY: lint test package-audit validate-docs eval-readiness agent-evals agent-evals-aggregate integration-evidence integration-gate
 
 EVAL_AGENT ?= codex
 EVAL_RUN ?= canary
@@ -9,6 +9,7 @@ EVAL_REPORT ?= evals/reports/$(EVAL_AGENT)-$(EVAL_RUN).json
 EVAL_REPORTS ?=
 EVAL_AGGREGATE_REPORT ?= evals/reports/aggregate.json
 PYTHON ?= python
+QUIRE ?= quire
 
 lint:
 	$(PYTHON) -m ruff check .
@@ -20,6 +21,9 @@ test:
 
 package-audit:
 	$(PYTHON) scripts/audit_packages.py
+
+validate-docs:
+	$(QUIRE) validate --scope "$(CURDIR)" "spec/**/*.md" "plan/**/*.md" "reviews/**/*.md"
 
 eval-readiness:
 	PATH="$(CURDIR)/.agent-evals/bin:$(PATH)" $(PYTHON) scripts/check_eval_readiness.py
@@ -37,3 +41,10 @@ agent-evals-aggregate:
 	$(PYTHON) scripts/aggregate_agent_eval_reports.py \
 		$(foreach report,$(EVAL_REPORTS),--report "$(report)") \
 		--output "$(EVAL_AGGREGATE_REPORT)"
+
+integration-evidence:
+	$(PYTHON) scripts/check_integration_evidence.py \
+		--quire "$(QUIRE)" \
+		--aggregate "$(EVAL_AGGREGATE_REPORT)"
+
+integration-gate: lint test package-audit validate-docs integration-evidence

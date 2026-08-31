@@ -26,7 +26,7 @@ def copy_skeleton(root: Path, artifact_type: str, target: str) -> Path:
 def quire() -> str:
     executable = shutil.which("quire")
     if executable is None:
-        pytest.skip("quire is unavailable")
+        pytest.fail("quire is required by the integration contract")
     return executable
 
 

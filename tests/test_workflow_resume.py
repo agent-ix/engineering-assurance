@@ -22,7 +22,7 @@ from engineering_assurance.workflow import (
 def ix_flow() -> str:
     executable = shutil.which("ix-flow")
     if executable is None:
-        pytest.skip("ix-flow is unavailable")
+        pytest.fail("ix-flow is required by the integration contract")
     return executable
 
 

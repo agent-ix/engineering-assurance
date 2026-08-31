@@ -37,6 +37,14 @@ maintenance in the owning module.
 | Promoted workflows with identical canonical digests across hosts | 4 of 4 | 4 of 4 | property-based-testing |
 | Agent-specific behavioral copies | 0 | 0 | architecture-conformance |
 
+## Acceptance Criteria
+
+| ID | Criteria | Verification |
+|----|----------|--------------|
+| NFR-001-AC-1 | All four supported host surfaces resolve the canonical skill from both supported installation sources. | Test (TC-038) |
+| NFR-001-AC-2 | All four promoted workflows have identical canonical bytes across hosts and installation sources. | Test (TC-038) |
+| NFR-001-AC-3 | No host manifest contains an agent-specific copy of behavioral onboarding content. | Test (TC-038) |
+
 ## Verification
 
 Install the bundle from each supported source, resolve each host surface, and

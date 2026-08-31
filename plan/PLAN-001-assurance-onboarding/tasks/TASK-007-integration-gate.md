@@ -2,7 +2,7 @@
 id: TASK-007
 title: "Close the onboarding integration gate"
 type: Task
-status: not_started
+status: done
 track: Gate
 priority: P0
 relationships:

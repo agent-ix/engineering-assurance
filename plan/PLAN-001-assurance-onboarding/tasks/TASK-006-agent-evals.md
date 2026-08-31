@@ -2,7 +2,7 @@
 id: TASK-006
 title: "Build the four-host onboarding evaluation suite"
 type: Task
-status: in_progress
+status: done
 track: F
 priority: P0
 relationships:

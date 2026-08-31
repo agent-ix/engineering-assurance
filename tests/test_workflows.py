@@ -252,12 +252,10 @@ def test_change_review_must_match_source_revision(tmp_path: Path) -> None:
 
 
 def test_ix_flow_can_load_every_definition(tmp_path: Path) -> None:
-    """Trace: FR-007-AC-1, TC-035."""
+    """Trace: FR-007-AC-1, NFR-003-AC-3, TC-035, TC-040."""
     executable = os.environ.get("IX_FLOW_BIN") or shutil.which("ix-flow")
     if executable is None:
-        if os.environ.get("REQUIRE_IX_FLOW") == "1":
-            pytest.fail("ix-flow is required")
-        pytest.skip("ix-flow is unavailable")
+        pytest.fail("ix-flow is required by the integration contract")
     for name in definitions():
         completed = subprocess.run(
             [
@@ -317,9 +315,7 @@ def test_ix_flow_can_load_every_canonical_definition(tmp_path: Path) -> None:
     """Trace: FR-002-AC-3, TC-011; FR-007-AC-1, TC-035."""
     executable = os.environ.get("IX_FLOW_BIN") or shutil.which("ix-flow")
     if executable is None:
-        if os.environ.get("REQUIRE_IX_FLOW") == "1":
-            pytest.fail("ix-flow is required")
-        pytest.skip("ix-flow is unavailable")
+        pytest.fail("ix-flow is required by the integration contract")
     for name in definitions():
         completed = subprocess.run(
             [
