@@ -54,7 +54,12 @@ rejection scenarios.
   affected scenario as not executed and fail the release gate.
 - The suite SHALL bind the exact snapshotted ix-flow executable into each agent
   environment and into post-run verification so PATH normalization cannot select
-  a different implementation.
+  a different implementation. The ix-flow governing identity SHALL cover its
+  package manifest, resolved launcher, and every runtime file under `dist/`, so a
+  runtime change cannot retain the identity of a byte-identical launcher.
+- The release gate SHALL compare the aggregate's immutable source revision with
+  the current repository `HEAD` and reject evidence retained for any other
+  revision.
 
 ## Acceptance Criteria
 
@@ -65,7 +70,8 @@ rejection scenarios.
 | FR-006-AC-3 | A missing executable leaves the scenario not executed and the aggregate gate failed. | Test (TC-033) |
 | FR-006-AC-4 | The aggregate gate passes only when all required scenarios pass and have complete observations. | Test (TC-034) |
 | FR-006-AC-5 | Equivalent decision-ready fixtures retain one explicit acceptance and one explicit rejection per supported host, with no inferred terminal event. | Test (TC-049) |
-| FR-006-AC-6 | Every agent and post-run verifier executes the same pinned ix-flow binary named by the governing snapshot. | Test (TC-050) |
+| FR-006-AC-6 | Every agent and post-run verifier executes the same pinned ix-flow runtime package named by the governing snapshot, whose digest changes when its manifest, launcher, or `dist/` runtime changes. | Test (TC-050) |
+| FR-006-AC-7 | The release gate rejects an otherwise well-formed evaluation aggregate when its source revision differs from the current repository `HEAD`. | Test (TC-051) |
 
 ## Dependencies
 

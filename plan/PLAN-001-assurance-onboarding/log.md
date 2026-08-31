@@ -47,3 +47,12 @@ description: "Chronological log for the PLAN-001 bundle."
   evidence check. Operational reports, transcripts, session output, and
   workstation paths remain outside source history. SR-011 and SR-012 were
   corrected to distinguish these two evidence boundaries.
+- **2026-08-31** — Reconciled the repository's governing instructions with its
+  declared public visibility and strengthened TC-050 so ix-flow provenance covers
+  the complete runtime package rather than only its launcher. Snapshot creation
+  and post-run comparison now hash the manifest, resolved launcher, and `dist/`
+  tree; dist-only drift is covered at both boundaries. Release verification now
+  also rejects an aggregate whose source revision differs from repository `HEAD`,
+  and CI consumes ix-flow at `0814c05b9005f87ac880dc02d75ef554ea454de3`.
+  A fresh 28-cell aggregate at the resulting source revision remains required
+  before the release gate.

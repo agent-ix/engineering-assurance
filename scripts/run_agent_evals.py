@@ -83,7 +83,8 @@ def runtime_package_identity(
     return {"name": name, "version": version, "digest": digest.hexdigest()}
 
 
-def producer_identity(command: str, *, search_path_value: str) -> dict[str, str]:
+def runtime_command_identity(command: str, *, search_path_value: str) -> dict[str, str]:
+    """Bind a selected Node command to its complete runtime package."""
     executable = shutil.which(command, path=search_path_value)
     if executable is None:
         raise SystemExit(f"{command} is not available for the governing snapshot")
@@ -159,11 +160,13 @@ def governing_snapshot(agent: str, *, search_path_value: str) -> dict[str, objec
             "skill": file_identity("assurance-onboarding", plugin_version, skill),
             "quire": command_identity("quire", search_path_value=search_path_value),
             "quoin": command_identity("quoin", search_path_value=search_path_value),
-            "ix_flow": command_identity("ix-flow", search_path_value=search_path_value),
+            "ix_flow": runtime_command_identity(
+                "ix-flow", search_path_value=search_path_value
+            ),
             "schema": file_identity(
                 "evaluation-result-contract", "evaluation-result-v1", contract
             ),
-            "producer": producer_identity(
+            "producer": runtime_command_identity(
                 "cli-evals", search_path_value=search_path_value
             ),
         },

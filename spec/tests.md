@@ -95,6 +95,7 @@ and declared constraint in this specification.
 | FR-006 | FR-006-AC-4 | TC-034 | ✅ Passing |
 | FR-006 | FR-006-AC-5 | TC-049 | ✅ Passing |
 | FR-006 | FR-006-AC-6 | TC-050 | ✅ Passing |
+| FR-006 | FR-006-AC-7 | TC-051 | ✅ Passing |
 | FR-007 | FR-007-AC-1 | TC-035 | ✅ Passing |
 | FR-007 | FR-007-AC-2 | TC-036 | ✅ Passing |
 | FR-007 | FR-007-AC-3 | TC-037 | ✅ Passing |
@@ -168,7 +169,8 @@ and declared constraint in this specification.
 | TC-047 | Explicit acceptance records one attributed event and no prior acceptance state | Integration | P0 | FR-005-AC-6 | ✅ |
 | TC-048 | A run-id binding mismatch is refused without changing either run | Property | P0 | FR-005-AC-7 | ✅ |
 | TC-049 | Equivalent runs retain explicit acceptance and rejection on every host | E2E | P0 | FR-006-AC-5 | ✅ |
-| TC-050 | Evaluation agents and post-run verification use the snapshotted ix-flow executable | Unit | P0 | FR-006-AC-6 | ✅ |
+| TC-050 | Evaluation agents and post-run verification use the snapshotted full ix-flow runtime package | Unit | P0 | FR-006-AC-6 | ✅ |
+| TC-051 | Release verification rejects an aggregate retained for a different repository revision | Unit | P0 | FR-006-AC-7 | ✅ |
 
 ## Option Permutation Matrix
 
@@ -268,7 +270,7 @@ evaluation envelopes.
 
 ## Coverage Gaps
 
-No open coverage gap remains. Quire reconciles all 50 test-case rows to real
+No open coverage gap remains. Quire reconciles all 51 test-case rows to real
 tracking-tagged symbols, and the retained 28-cell aggregate records the selected
 host commands, models, governing versions, transcripts, and outcomes.
 

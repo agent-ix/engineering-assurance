@@ -19,5 +19,5 @@ the review were corrected.
 | ID | Severity | Summary | Refs | Escape Cause |
 | --- | --- | --- | --- | --- |
 | FND-001 | medium | Resolved: all four user stories now state priority and their primary assurance failure risk. | US-001..US-004 | missing-requirement |
-| FND-002 | high | Resolved: six missing acceptance obligations now cover conflicting artifacts, validated publication, state exclusivity, acceptance, run binding, and opposite terminal outcomes. | FR-001-AC-6..AC-7; FR-004-AC-7; FR-005-AC-6..AC-7; FR-006-AC-5 | missing-requirement |
+| FND-002 | high | Resolved: eight missing acceptance obligations now cover conflicting artifacts, validated publication, state exclusivity, acceptance, run binding, opposite terminal outcomes, full-runtime executable identity, and current-revision evidence binding. | FR-001-AC-6..AC-7; FR-004-AC-7; FR-005-AC-6..AC-7; FR-006-AC-5..AC-7 | missing-requirement |
 | FND-003 | medium | Resolved: TM-001's stakeholder and user-story tables now conform to the active TestMatrix column contract. | TM-001 | wrong-requirement |
