@@ -1,4 +1,4 @@
-.PHONY: lint test package-audit validate-docs eval-readiness agent-evals agent-evals-aggregate integration-evidence integration-gate
+.PHONY: lint test package-audit validate-docs eval-readiness agent-evals agent-evals-aggregate integration-traceability integration-evidence integration-gate release-gate
 
 EVAL_AGENT ?= codex
 EVAL_RUN ?= canary
@@ -7,8 +7,8 @@ EVAL_FILTER ?=
 EVAL_KEEP ?= 1
 EVAL_REPORT ?= evals/reports/$(EVAL_AGENT)-$(EVAL_RUN).json
 EVAL_REPORTS ?=
-EVAL_AGGREGATE_REPORT ?= evals/reports/aggregate-ea1ed8a.json
-PYTHON ?= python
+EVAL_AGGREGATE_REPORT ?=
+PYTHON ?= python3
 QUIRE ?= quire
 
 lint:
@@ -42,9 +42,20 @@ agent-evals-aggregate:
 		$(foreach report,$(EVAL_REPORTS),--report "$(report)") \
 		--output "$(EVAL_AGGREGATE_REPORT)"
 
+integration-traceability:
+	$(PYTHON) scripts/check_integration_evidence.py \
+		--quire "$(QUIRE)" \
+		--traceability-only
+
 integration-evidence:
+	@test -n "$(strip $(EVAL_AGGREGATE_REPORT))" || { \
+		echo "EVAL_AGGREGATE_REPORT is required for real-agent release evidence" >&2; \
+		exit 2; \
+	}
 	$(PYTHON) scripts/check_integration_evidence.py \
 		--quire "$(QUIRE)" \
 		--aggregate "$(EVAL_AGGREGATE_REPORT)"
 
-integration-gate: lint test package-audit validate-docs integration-evidence
+integration-gate: lint test package-audit validate-docs integration-traceability
+
+release-gate: integration-gate integration-evidence

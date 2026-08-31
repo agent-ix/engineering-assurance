@@ -5,10 +5,13 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+import pytest
+
 from scripts.check_integration_evidence import (
     aggregate_metadata_failures,
     coverage_failures,
     governing_file_failures,
+    parse_args,
     retained_report_paths,
 )
 
@@ -249,3 +252,31 @@ class TestEvaluationAggregateEvidence:
         assert failures == (
             "retained report path escapes the repository: reports/retained.json",
         )
+
+
+class TestIntegrationEvidenceCommand:
+    """Verifies explicit selection of tracked and operational evidence modes."""
+
+    def test_requires_an_explicit_evidence_mode(self) -> None:
+        """
+        Description:
+            Keep real-agent release evidence distinct from repository traceability.
+
+        Assumptions:
+            - Operational reports are intentionally not tracked in the repository.
+
+        Criteria:
+            - TC-038: omitting the evidence mode fails closed.
+            - Traceability-only mode does not invent an aggregate path.
+            - Release mode retains the caller-supplied aggregate path.
+        """
+        with pytest.raises(SystemExit):
+            parse_args([])
+
+        traceability = parse_args(["--traceability-only"])
+        release = parse_args(["--aggregate", "evals/reports/aggregate.json"])
+
+        assert traceability.traceability_only is True
+        assert traceability.aggregate is None
+        assert release.traceability_only is False
+        assert release.aggregate == Path("evals/reports/aggregate.json")
