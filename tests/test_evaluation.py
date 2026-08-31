@@ -303,6 +303,8 @@ def test_live_suite_requires_the_complete_terminal_event_shape() -> None:
     assert terminal["owner"] == "juniper-architecture-owner"
     assert terminal["run_id"] == "accept-run"
     assert terminal["workflow_state_dir"] == "workflow-state"
+    assert "phase.advanced" in terminal["timestamp"]
+    assert "never use the gate.acknowledged timestamp" in terminal["timestamp"]
     assert observed["valid"] == []
     assert observed["missing"] == ["explicit terminal event missing"]
     assert observed["workflowValid"] == []
