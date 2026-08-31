@@ -45,14 +45,14 @@ target.
 | ID | Severity | Summary | Refs | Escape Cause |
 | --- | --- | --- | --- | --- |
 | FND-001 | high | Fixed: `make integration-gate` defaulted to an ignored, workstation-local aggregate and the review incorrectly called it repository-retained. Tracked-content and operational release gates are now distinct, and release evidence requires an explicit path. | `Makefile`; `README.md`; TASK-007; TC-034; TC-038; TC-039 | implementation-bug-despite-evidence |
-| FND-002 | low | The installed TestMatrix contract still emits the known `Status` versus `Coverage Status` diagnostic; the fail-closed verifier independently requires all 101 rows and rejects non-passing states. | TM-001; `scripts/check_integration_evidence.py` | wrong-requirement |
+| FND-002 | low | The installed TestMatrix contract still emits the known `Status` versus `Coverage Status` diagnostic; the fail-closed verifier independently requires all 105 traceability rows and rejects non-passing states. | TM-001; `scripts/check_integration_evidence.py` | wrong-requirement |
 
 ## Review Method
 
 - Inspected every changed production, gate, packaging, workflow, evaluation, and
   test surface for stubs, skips, internal mocks, weak assertions, unsafe paths,
   subprocess fail-open behavior, non-atomic writes, and unowned behavior.
-- Traced FR-001..FR-007, NFR-001..NFR-003, StR-001, and TC-001..TC-049 through
+- Traced FR-001..FR-007, NFR-001..NFR-003, StR-001, and TC-001..TC-051 through
   concrete tests and the final evidence verifier.
 - Confirmed staged artifact publication uses a confined same-directory temporary
   file, validates before `os.replace`, and removes failed staging files.
@@ -63,7 +63,7 @@ target.
 
 `make integration-gate` with the repository's pinned Python and Quire environments
 passed Ruff, content-rights checks, pytest, manifest validation, real wheel/npm
-package auditing, Quire document validation, and 101/101 traceability without
+package auditing, Quire document validation, and 105/105 traceability without
 reading `evals/reports/`. A separate `make release-gate
 EVAL_AGGREGATE_REPORT=...` run revalidated the available 28/28 operational
 aggregate, but that workstation-local evidence is intentionally not claimed as

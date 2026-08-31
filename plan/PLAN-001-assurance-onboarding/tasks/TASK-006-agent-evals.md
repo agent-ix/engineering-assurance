@@ -22,6 +22,10 @@ relationships:
     type: verifies
   - target: "ix://agent-ix/engineering-assurance/TC-049"
     type: verifies
+  - target: "ix://agent-ix/engineering-assurance/TC-050"
+    type: verifies
+  - target: "ix://agent-ix/engineering-assurance/TC-051"
+    type: verifies
 ---
 
 # TASK-006: Build the four-host onboarding evaluation suite
@@ -33,8 +37,9 @@ agent hosts, plus version-bound envelopes and a complete-only aggregate gate.
 
 ## TDD Work
 
-- Write TC-031..TC-034, TC-039, and TC-049 around harness selection, envelope
-  validation, and aggregation before live execution.
+- Write TC-031..TC-034, TC-039, and TC-049..TC-051 around harness selection,
+  envelope validation, runtime identity, revision binding, and aggregation before
+  live execution.
 - Record immutable module/plugin/skill/workflow/executable/schema/producer versions,
   source revision, configuration, transcript digest, commands, elapsed time, human
   interaction counts, outcome, and explicit terminal choice.
@@ -45,4 +50,6 @@ agent hosts, plus version-bound envelopes and a complete-only aggregate gate.
 
 - All 28 cells execute through their real installed host binary.
 - Equivalent runs retain explicit acceptance and rejection on every host.
+- Snapshot and post-run verification bind the complete ix-flow runtime package.
+- Release evidence is rejected when its revision differs from repository `HEAD`.
 - The aggregate passes only with 28 complete passing, non-inventing envelopes.
