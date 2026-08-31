@@ -18,7 +18,7 @@ relationships:
 
 Reviewed the complete Engineering Assurance #3 delivery from base
 `4e6522fc32f82cac82a3489a4192e17a94f539c3` through
-`42677b852096929b09386301b78c449a017dbf79`, including onboarding confinement,
+`4711d85cb94fb75c773bc4ce018e1ca16b556821`, including onboarding confinement,
 atomic publication, evidence-state classification, workflow resume and human
 gates, package boundaries, real-agent report retention, and the integration
 verifier. No unresolved correctness, safety, test-quality, or spec-alignment
