@@ -9,6 +9,7 @@ from scripts.run_agent_evals import (
     file_identity,
     manifest_version,
     pinned_ix_flow,
+    runtime_command_identity,
     runtime_package_identity,
     search_path,
 )
@@ -117,4 +118,43 @@ def test_runner_identity_covers_the_producer_runtime_bundle(tmp_path: Path) -> N
     runtime.write_text("export const result = 'after';\n")
     after = runtime_package_identity("cli-evals", "0.1.0", executable)
 
+    assert before["digest"] != after["digest"]
+
+
+def test_ix_flow_identity_changes_when_only_dist_runtime_changes(
+    tmp_path: Path,
+) -> None:
+    """
+    Description:
+        Bind ix-flow identity to the complete runtime package. TC-050.
+
+    Assumptions:
+        - The launcher and package version remain byte-identical.
+        - Only executable code under dist changes.
+
+    Criteria:
+        - FR-006-AC-6: the governing ix-flow digest changes with its runtime.
+    """
+    executable = tmp_path / "bin" / "ix-flow"
+    runtime = tmp_path / "dist" / "cli.js"
+    executable.parent.mkdir()
+    runtime.parent.mkdir()
+    (tmp_path / "package.json").write_text(
+        '{"name":"@agent-ix/ix-flow","version":"0.1.1"}\n'
+    )
+    executable.write_text("#!/bin/sh\nprintf '%s\\n' 'ix-flow/0.1.1'\n")
+    executable.chmod(0o755)
+    runtime.write_text("export const behavior = 'before';\n")
+    launcher = executable.read_bytes()
+
+    before = runtime_command_identity(
+        "ix-flow", search_path_value=str(executable.parent)
+    )
+    runtime.write_text("export const behavior = 'after';\n")
+    after = runtime_command_identity(
+        "ix-flow", search_path_value=str(executable.parent)
+    )
+
+    assert executable.read_bytes() == launcher
+    assert before["version"] == after["version"]
     assert before["digest"] != after["digest"]

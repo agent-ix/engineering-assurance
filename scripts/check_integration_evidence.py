@@ -24,7 +24,7 @@ from engineering_assurance.eval_reports import (  # noqa: E402
 from engineering_assurance.evaluation import SUPPORTED_HOSTS  # noqa: E402
 from scripts.run_agent_evals import (  # noqa: E402
     command_identity,
-    producer_identity,
+    runtime_command_identity,
     search_path,
 )
 
@@ -71,9 +71,7 @@ def coverage_failures(payload: Any, root: Path = ROOT) -> tuple[str, ...]:
     if not isinstance(backed, int) or not isinstance(total, int) or total <= 0:
         failures.append("traceability totals are missing or have no population")
     elif backed != total:
-        failures.append(
-            f"traceability is {backed}/{total}, expected complete backing"
-        )
+        failures.append(f"traceability is {backed}/{total}, expected complete backing")
 
     for field, label in (
         ("unbacked_rows", "unbacked rows"),
@@ -107,18 +105,16 @@ def coverage_failures(payload: Any, root: Path = ROOT) -> tuple[str, ...]:
     )
     if test_cases is None:
         failures.append("test-case traceability group is missing")
-    elif test_cases.get("backed") != 50 or test_cases.get("total") != 50:
+    elif test_cases.get("backed") != 51 or test_cases.get("total") != 51:
         failures.append(
             "test-case traceability is "
-            f"{test_cases.get('backed')}/{test_cases.get('total')}, expected 50/50"
+            f"{test_cases.get('backed')}/{test_cases.get('total')}, expected 51/51"
         )
 
     for item in _sequence(document.get("diagnostics")):
         diagnostic = _mapping(item)
         reason = diagnostic.get("reason")
-        if reason in PARTIAL_CENSUS_REASONS and _local_diagnostic(
-            diagnostic, root
-        ):
+        if reason in PARTIAL_CENSUS_REASONS and _local_diagnostic(diagnostic, root):
             failures.append(
                 f"repository traceability census is partial: {reason}: "
                 f"{diagnostic.get('path', 'unknown')}"
@@ -151,6 +147,22 @@ def aggregate_metadata_failures(payload: Any) -> tuple[str, ...]:
     if not _sequence(document.get("reports")):
         failures.append("evaluation aggregate names no retained reports")
     return tuple(failures)
+
+
+def repository_revision(root: Path = ROOT) -> str:
+    """Resolve the immutable revision that release evidence must describe."""
+    completed = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    revision = completed.stdout.strip()
+    if completed.returncode != 0 or SHA.fullmatch(revision) is None:
+        raise RuntimeError("unable to resolve current source revision")
+    return revision
 
 
 def governing_file_failures(
@@ -250,10 +262,7 @@ def _retained_governing(
             workflow = _mapping(governing.get("workflow"))
             workflow_name = workflow.get("name")
             if isinstance(workflow_name, str) and workflow_name:
-                if (
-                    workflow_name in workflows
-                    and workflows[workflow_name] != workflow
-                ):
+                if workflow_name in workflows and workflows[workflow_name] != workflow:
                     failures.append(
                         f"retained workflow identity drift: {workflow_name}"
                     )
@@ -265,8 +274,10 @@ def _current_tool_failures(
     identities: Mapping[str, Mapping[str, Any]], root: Path
 ) -> tuple[str, ...]:
     failures: list[str] = []
-    selected_path = search_path(os.environ.get("PATH"), local_bin=root / ".agent-evals/bin")
-    commands = {"quire": "quire", "quoin": "quoin", "ix_flow": "ix-flow"}
+    selected_path = search_path(
+        os.environ.get("PATH"), local_bin=root / ".agent-evals/bin"
+    )
+    commands = {"quire": "quire", "quoin": "quoin"}
     for name, command in commands.items():
         try:
             current = command_identity(command, search_path_value=selected_path)
@@ -275,15 +286,14 @@ def _current_tool_failures(
             continue
         if current != _mapping(identities.get(name)):
             failures.append(f"governing executable identity changed: {name}")
-    try:
-        current_producer = producer_identity(
-            "cli-evals", search_path_value=selected_path
-        )
-    except SystemExit as error:
-        failures.append(str(error))
-    else:
-        if current_producer != _mapping(identities.get("producer")):
-            failures.append("governing executable identity changed: producer")
+    for name, command in {"ix_flow": "ix-flow", "producer": "cli-evals"}.items():
+        try:
+            current = runtime_command_identity(command, search_path_value=selected_path)
+        except SystemExit as error:
+            failures.append(str(error))
+            continue
+        if current != _mapping(identities.get(name)):
+            failures.append(f"governing executable identity changed: {name}")
     return tuple(failures)
 
 
@@ -291,9 +301,19 @@ def verify_aggregate(path: Path, root: Path = ROOT) -> tuple[str, ...]:
     """Reconcile aggregate metadata, report bytes, envelopes, and current inputs."""
     aggregate, read_failures = _read_json(path, "evaluation aggregate")
     failures = [*read_failures, *aggregate_metadata_failures(aggregate)]
+    source = aggregate.get("source_revision")
+    if isinstance(source, str) and SHA.fullmatch(source) is not None:
+        try:
+            current_revision = repository_revision(root)
+        except RuntimeError as error:
+            failures.append(str(error))
+        else:
+            if source != current_revision:
+                failures.append(
+                    "evaluation source revision differs from current repository HEAD"
+                )
     report_paths, report_failures = retained_report_paths(aggregate, root)
     failures.extend(report_failures)
-    source = aggregate.get("source_revision")
     if report_paths and isinstance(source, str) and SHA.fullmatch(source):
         collection = load_cli_eval_reports(report_paths, source)
         recomputed = aggregate_report_collection(collection)

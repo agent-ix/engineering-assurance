@@ -8,11 +8,18 @@ from pathlib import Path
 import pytest
 
 from scripts.check_integration_evidence import (
+    _current_tool_failures,
     aggregate_metadata_failures,
     coverage_failures,
     governing_file_failures,
     parse_args,
     retained_report_paths,
+    verify_aggregate,
+)
+from scripts.run_agent_evals import (
+    command_identity,
+    runtime_command_identity,
+    search_path,
 )
 
 
@@ -28,7 +35,7 @@ class TestTraceabilityEvidence:
             - Quire inspected the repository matrix and source symbols.
 
         Criteria:
-            - All 50 test-case rows are backed.
+            - All 51 test-case rows are backed.
             - Informational module diagnostics do not become repository gaps.
         """
         payload = {
@@ -49,8 +56,8 @@ class TestTraceabilityEvidence:
                 {
                     "document": "spec/tests.md",
                     "target": "test-case",
-                    "backed": 50,
-                    "total": 50,
+                    "backed": 51,
+                    "total": 51,
                 }
             ],
             "totals": {"backed": 92, "total": 92},
@@ -119,8 +126,8 @@ class TestTraceabilityEvidence:
                 {
                     "document": "spec/tests.md",
                     "target": "test-case",
-                    "backed": 50,
-                    "total": 50,
+                    "backed": 51,
+                    "total": 51,
                 }
             ],
             "totals": {"backed": 101, "total": 101},
@@ -193,6 +200,40 @@ class TestEvaluationAggregateEvidence:
         assert "evaluation model selection does not name the four hosts" in failures
         assert "evaluation aggregate names no retained reports" in failures
 
+    def test_release_verifier_rejects_stale_source_revision(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Trace: FR-006-AC-7, TC-051.
+
+        Description:
+            Reject release evidence retained for a different checkout. TC-051.
+
+        Assumptions:
+            - The aggregate contains a well-formed immutable source revision.
+            - The current repository HEAD is a different immutable revision.
+
+        Criteria:
+            - FR-006-AC-7: post-run verification reports source-revision drift.
+        """
+        aggregate = tmp_path / "aggregate.json"
+        aggregate.write_text(
+            '{"revision":"evaluation-aggregate-v1",'
+            '"source_revision":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",'
+            '"required_cells":28,"complete_cells":28,"ok":true,'
+            '"failures":[],"models":{},"reports":[],"failed_attempts":[]}\n'
+        )
+        monkeypatch.setattr(
+            "scripts.check_integration_evidence.repository_revision",
+            lambda _root: "b" * 40,
+        )
+
+        failures = verify_aggregate(aggregate, tmp_path)
+
+        assert (
+            "evaluation source revision differs from current repository HEAD"
+            in failures
+        )
+
     def test_governing_file_digest_drift_fails(self, tmp_path: Path) -> None:
         """
         Description:
@@ -217,9 +258,68 @@ class TestEvaluationAggregateEvidence:
 
         artifact.write_text("drifted content\n")
 
-        assert governing_file_failures(
-            {"skill": identity}, {"skill": artifact}
-        ) == ("governing file digest changed: skill",)
+        assert governing_file_failures({"skill": identity}, {"skill": artifact}) == (
+            "governing file digest changed: skill",
+        )
+
+    def test_post_run_verifier_detects_ix_flow_dist_runtime_drift(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        Description:
+            Reconcile retained ix-flow identity against the full current runtime. TC-050.
+
+        Assumptions:
+            - Every command resolves through the repository-local evaluation bin.
+            - The ix-flow launcher and reported version remain unchanged.
+
+        Criteria:
+            - FR-006-AC-6: unchanged governing tools pass reconciliation.
+            - A dist-only ix-flow change produces the named ix_flow failure.
+        """
+        local_bin = tmp_path / ".agent-evals" / "bin"
+        local_bin.mkdir(parents=True)
+
+        for command in ("quire", "quoin"):
+            executable = local_bin / command
+            executable.write_text(f"#!/bin/sh\nprintf '%s\\n' '{command}/1.0.0'\n")
+            executable.chmod(0o755)
+
+        runtime_files: dict[str, Path] = {}
+        for command in ("ix-flow", "cli-evals"):
+            package = tmp_path / "tools" / command
+            executable = package / "bin" / command
+            runtime = package / "dist" / "runtime.js"
+            executable.parent.mkdir(parents=True)
+            runtime.parent.mkdir()
+            (package / "package.json").write_text(
+                f'{{"name":"{command}","version":"1.0.0"}}\n'
+            )
+            executable.write_text(f"#!/bin/sh\nprintf '%s\\n' '{command}/1.0.0'\n")
+            executable.chmod(0o755)
+            runtime.write_text("export const behavior = 'before';\n")
+            (local_bin / command).symlink_to(executable)
+            runtime_files[command] = runtime
+
+        selected_path = search_path("", local_bin=local_bin)
+        identities = {
+            "quire": command_identity("quire", search_path_value=selected_path),
+            "quoin": command_identity("quoin", search_path_value=selected_path),
+            "ix_flow": runtime_command_identity(
+                "ix-flow", search_path_value=selected_path
+            ),
+            "producer": runtime_command_identity(
+                "cli-evals", search_path_value=selected_path
+            ),
+        }
+
+        assert _current_tool_failures(identities, tmp_path) == ()
+
+        runtime_files["ix-flow"].write_text("export const behavior = 'after';\n")
+
+        assert _current_tool_failures(identities, tmp_path) == (
+            "governing executable identity changed: ix_flow",
+        )
 
     def test_retained_report_symlink_escape_fails(self, tmp_path: Path) -> None:
         """
