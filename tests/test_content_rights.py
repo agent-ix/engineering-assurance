@@ -43,9 +43,12 @@ def test_public_repository_rights_are_declared_consistently() -> None:
         - Every repository-visibility declaration says public.
     """
     policy = yaml.safe_load((ROOT / "content-rights.yaml").read_text())
+    readme = (ROOT / "README.md").read_text()
     assert policy["repository"]["visibility"] == "public"
     assert "This public repository" in (ROOT / "CONTENT_RIGHTS.md").read_text()
     assert "Keep the repository public" in (ROOT / "AGENTS.md").read_text()
+    assert "The repository is public" in readme
+    assert "Registry packages remain private and unpublished" in readme
 
 
 def test_workstation_locations_are_detected_without_storing_one() -> None:

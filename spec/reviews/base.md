@@ -11,7 +11,7 @@ review_set: all
 
 The onboarding specification now traces the P0 stakeholder need through four user
 stories, seven functional requirements, three quality requirements, four real-
-boundary integrations, and 50 obligations. Structural and priority gaps found by
+boundary integrations, and 51 obligations. Structural and priority gaps found by
 the review were corrected.
 
 ## Findings
