@@ -30,8 +30,9 @@ ix-flow run change-assurance --path pilots/assurance-workflows
 The scoped Quire installation must include this module and the ecosystem's
 shared relation registry.
 
-The repository and packages are private. Opening distribution requires a
-fresh authorization of both content rights and release posture.
+The repository is public. Registry packages remain private and unpublished;
+changing their release posture requires fresh authorization of both content
+rights and distribution controls.
 
 ## Development
 
