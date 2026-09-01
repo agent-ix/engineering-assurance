@@ -80,6 +80,8 @@ same canonical bundle and do not redefine these responsibilities.
 
 - [StR-001](./stakeholder/StR-001-bounded-existing-repository-onboarding.md) —
   onboard an existing repository without invented assurance claims.
+- [StR-002](./stakeholder/StR-002-review-verification-evidence-without-semantic-collapse.md) —
+  review linked verification evidence without collapsing semantic boundaries.
 
 ### User Stories
 
@@ -91,6 +93,8 @@ same canonical bundle and do not redefine these responsibilities.
   work and retain explicit human decisions.
 - [US-004](./usecase/US-004-understand-evidence-availability.md) — distinguish
   evidence states and inspect producer provenance.
+- [US-005](./usecase/US-005-correlate-definition-result-evidence.md) — correlate
+  definitions, executions, results, evidence, reports, and decisions.
 
 ### Functional Requirements
 
@@ -108,6 +112,12 @@ same canonical bundle and do not redefine these responsibilities.
   onboarding and failure scenarios with real agent evaluations.
 - [FR-007](./functional/FR-007-pilot-compatibility.md) — retain compatibility for
   the existing pilot invocation while promoting canonical paths.
+- [FR-008](./functional/FR-008-distinguish-verification-semantics.md) — distinguish
+  verification concepts and map each to its authoritative owner.
+- [FR-009](./functional/FR-009-preserve-provenance-and-states.md) — preserve the
+  producer tuple, definition version, and every non-success state.
+- [FR-010](./functional/FR-010-read-only-compatibility-and-reporting.md) — map
+  historical PGM-01 records read-only and define bounded reports.
 
 ### Non-Functional Requirements
 
@@ -117,6 +127,8 @@ same canonical bundle and do not redefine these responsibilities.
   introduce no unsupported assurance artifacts or conclusions.
 - [NFR-003](./non-functional/NFR-003-package-contract-stability.md) — package audits
   preserve the module payload and canonical onboarding bundle.
+- [NFR-004](./non-functional/NFR-004-no-parallel-assurance-framework.md) — prevent
+  a parallel executor, evidence framework, generic scraper, or trust score.
 
 ### Integration Tests
 
@@ -128,6 +140,8 @@ same canonical bundle and do not redefine these responsibilities.
   existing, absent, malformed, and unavailable inputs.
 - [IT-004](./integration/IT-004-interruption-resume-and-rejection.md) — resume a real
   workflow and retain an explicit rejection.
+- [IT-005](./integration/IT-005-verification-semantics-compatibility.md) — validate
+  current and historical semantic fixtures without running producers.
 
 ## Ownership Boundaries
 
@@ -138,6 +152,8 @@ same canonical bundle and do not redefine these responsibilities.
 | Workflow lifecycle | ix-flow | Supply canonical definitions and use its run, resume, transition, and human-gate behavior. |
 | Agent discovery | engineering-assurance | Expose one canonical bundle through thin host manifests. |
 | Onboarding judgment | engineering-assurance plus named human | Inventory, propose bounded work, and leave terminal choices to the human owner. |
+| Shared verification vocabulary | engineering-assurance | Define semantic distinctions and type-fit mappings without owning a second persisted record family. |
+| Native verification execution and domain result | campaign repository/domain tool | Execute checks and preserve the domain result schema, oracle, and failure behavior. |
 
 ## Error and Failure Model
 

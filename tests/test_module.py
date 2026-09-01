@@ -158,10 +158,12 @@ def test_repository_has_only_governed_review_evidence() -> None:
         assert metadata["type"] == "SpecReview"
         assert metadata["analysis"] in {"code-review", "gap-analysis"}
     assert {path.name for path in (ROOT / "plan").iterdir()} == {
-        "PLAN-001-assurance-onboarding"
+        "PLAN-001-assurance-onboarding",
+        "PLAN-002-verification-semantics",
     }
     assert {path.name for path in (ROOT / "docs").iterdir()} == {
-        "structural-coverage.md"
+        "structural-coverage.md",
+        "verification-semantics",
     }
 
 
