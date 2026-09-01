@@ -205,6 +205,15 @@ def test_packages_are_private_and_have_no_release_configuration() -> None:
     assert "upload-artifact" not in workflow_text.casefold()
 
 
+def test_hosted_ci_is_manual_only() -> None:
+    """Program invariant: opening or updating a PR must not dispatch hosted CI."""
+    workflow = yaml.load(
+        (ROOT / ".github" / "workflows" / "ci.yml").read_text(),
+        Loader=yaml.BaseLoader,
+    )
+    assert set(workflow["on"]) == {"workflow_dispatch"}
+
+
 def test_structural_coverage_never_collapses_unknowns_into_success() -> None:
     text = (ROOT / "docs" / "structural-coverage.md").read_text().casefold()
     assert "exactly once" in text
