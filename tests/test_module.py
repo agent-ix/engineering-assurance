@@ -158,10 +158,12 @@ def test_repository_has_only_governed_review_evidence() -> None:
         assert metadata["type"] == "SpecReview"
         assert metadata["analysis"] in {"code-review", "gap-analysis"}
     assert {path.name for path in (ROOT / "plan").iterdir()} == {
-        "PLAN-001-assurance-onboarding"
+        "PLAN-001-assurance-onboarding",
+        "PLAN-002-verification-semantics",
     }
     assert {path.name for path in (ROOT / "docs").iterdir()} == {
-        "structural-coverage.md"
+        "structural-coverage.md",
+        "verification-semantics",
     }
 
 
@@ -201,6 +203,15 @@ def test_packages_are_private_and_have_no_release_configuration() -> None:
     )
     assert "publish" not in workflow_text.casefold()
     assert "upload-artifact" not in workflow_text.casefold()
+
+
+def test_hosted_ci_is_manual_only() -> None:
+    """Program invariant: opening or updating a PR must not dispatch hosted CI."""
+    workflow = yaml.load(
+        (ROOT / ".github" / "workflows" / "ci.yml").read_text(),
+        Loader=yaml.BaseLoader,
+    )
+    assert set(workflow["on"]) == {"workflow_dispatch"}
 
 
 def test_structural_coverage_never_collapses_unknowns_into_success() -> None:
