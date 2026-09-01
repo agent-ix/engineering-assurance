@@ -22,10 +22,13 @@ relationships:
 
 ## Purpose
 
-This specification defines the repository-owned onboarding capability that helps
-an agent inspect an existing software repository, identify justified assurance
-work, and enter one of the module's governed workflows without inventing policy,
-evidence, or terminal decisions.
+This specification defines the repository-owned onboarding capability and the
+shared verification vocabulary/type-fit contract. Onboarding helps an agent
+inspect an existing repository and enter a governed workflow without inventing
+policy, evidence, or terminal decisions. The verification contract keeps
+definitions, executions, results, evidence, measurements, diagnostics, reports,
+and human decisions distinct while reusing their authoritative Quire, Quoin,
+native-producer, and ix-flow representations.
 
 It is the top-level requirements artifact for the engineering-assurance module.
 The discrete requirement files under `spec/` are authoritative; this document
@@ -47,6 +50,9 @@ defines their shared scope and indexes them.
 - Explicit evidence availability, producer provenance, operator observations,
   resumable workflow state, and named human terminal decisions.
 - Smoke tests and agent evaluations for supported discovery and onboarding paths.
+- Semantic ownership and link-direction definitions for verification concepts.
+- Versioned reference and report projection contracts, deterministic
+  cross-language fixtures, and read-only historical PGM-01 compatibility.
 
 ### Out of Scope
 
@@ -59,15 +65,19 @@ defines their shared scope and indexes them.
   decisions.
 - Publishing this private module to a public package registry.
 - Adding agent-specific copies of canonical skill or workflow content.
+- Executing native verification producers, scraping arbitrary stdout for a
+  verdict, persisting a parallel evidence store, or inferring human decisions.
+- Replacing Quire static facts, Quoin evidence/audit/report records, native
+  domain result formats, or ix-flow decision history.
 
 ## System Overview
 
 Engineering-assurance is a private configuration module containing artifact
-schemas and skeletons. The onboarding capability adds one repository-owned entry
-point that an agent can invoke directly in an existing repository. It first
-inventories declared decisions, measurements, relevant artifacts, and producer
-availability. It then proposes only the smallest justified assurance work and
-delegates execution to the appropriate canonical workflow.
+schemas, skeletons, and shared semantic contracts. The onboarding capability
+adds one repository-owned entry point that inventories declared decisions,
+measurements, artifacts, and producer availability before proposing the smallest
+justified work. The verification-semantics capability publishes only definitions,
+reference validation, read-only compatibility, and bounded projections.
 
 Quire remains the validator for authored assurance artifacts. Quoin remains the
 owner of evidence records and policy-facing reports. ix-flow remains the owner of

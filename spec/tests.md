@@ -314,9 +314,11 @@ evaluation envelopes.
 
 ## Coverage Gaps
 
-No open coverage gap remains. Quire reconciles all 51 test-case rows to real
-tracking-tagged symbols, and the retained 28-cell aggregate records the selected
-host commands, models, governing versions, transcripts, and outcomes.
+The completed onboarding scope has no open gap: Quire reconciles TC-001..TC-051
+to real tracking-tagged symbols, and the retained 28-cell aggregate records the
+selected host commands, models, governing versions, transcripts, and outcomes.
+TC-052..TC-068 are deliberately planned and unimplemented at the specification
+gate; PLAN-002 forbids representing them as passing before implementation.
 
 ## Test Execution Summary
 
@@ -327,3 +329,7 @@ host commands, models, governing versions, transcripts, and outcomes.
 | E2E | 13 | 13 | 0 | 0 | 100% |
 | Property | 8 | 8 | 0 | 0 | 100% |
 | Static | 5 | 5 | 0 | 0 | 100% |
+
+The table above reports the completed TC-001..TC-051 onboarding baseline only.
+The 17 planned issue #5 rows are excluded from passed totals until their real
+tracking-tagged implementations land.
