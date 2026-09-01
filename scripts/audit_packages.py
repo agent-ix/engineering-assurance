@@ -90,6 +90,10 @@ def npm_allowlist() -> set[str]:
     """Return the explicit npm archive contract (TC-015, TC-018, TC-040)."""
     module_members = {
         "manifest.yaml",
+        # Named, not globbed: the compatibility matrix is module payload the
+        # same way the manifest is, and a glob over the package root would
+        # start shipping whatever anyone drops beside it (FR-012).
+        "compatibility-matrix.json",
         *{
             path.relative_to(ROOT / "engineering_assurance").as_posix()
             for directory in ("contracts", "fixtures", "schemas", "skeletons")
@@ -110,7 +114,13 @@ def npm_allowlist() -> set[str]:
         "README.md",
         "package.json",
         "engineering_assurance/INSTALL.md",
+        # npm treats a bare name in `files` as a pattern that matches at any
+        # depth, so the staged root copy and the real one under the package
+        # directory are both packed. `manifest.yaml` has always behaved this
+        # way; the matrix is listed the same way rather than given a special
+        # anchored form nobody else uses.
         "engineering_assurance/manifest.yaml",
+        "engineering_assurance/compatibility-matrix.json",
         *(path.as_posix() for path in ROOT_DATA_FILES),
         *module_members,
         *onboarding_members,

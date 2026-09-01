@@ -162,6 +162,7 @@ def test_repository_has_only_governed_review_evidence() -> None:
         "PLAN-002-verification-semantics",
     }
     assert {path.name for path in (ROOT / "docs").iterdir()} == {
+        "compatibility-matrix.md",
         "structural-coverage.md",
         "verification-semantics",
     }

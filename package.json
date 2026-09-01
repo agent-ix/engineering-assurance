@@ -7,6 +7,7 @@
   "type": "module",
   "files": [
     "manifest.yaml",
+    "compatibility-matrix.json",
     "contracts/",
     "fixtures/",
     "schemas/",
