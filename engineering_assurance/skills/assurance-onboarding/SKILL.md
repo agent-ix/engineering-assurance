@@ -2,8 +2,8 @@
 name: assurance-onboarding
 description: Inventory an existing repository's assurance context and route only justified, human-owned assurance work.
 license: AGPL-3.0-or-later
-metadata:
-  ix-flow-workflows: ./workflows
+contributes:
+  workflows: ./workflows
 ---
 
 # Assurance onboarding
