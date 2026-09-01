@@ -92,8 +92,9 @@ def npm_allowlist() -> set[str]:
         "manifest.yaml",
         *{
             path.relative_to(ROOT / "engineering_assurance").as_posix()
-            for directory in ("schemas", "skeletons")
-            for path in (ROOT / "engineering_assurance" / directory).glob("*")
+            for directory in ("contracts", "fixtures", "schemas", "skeletons")
+            for path in (ROOT / "engineering_assurance" / directory).rglob("*")
+            if path.is_file()
         },
     }
     onboarding_members = {
@@ -117,7 +118,7 @@ def npm_allowlist() -> set[str]:
 
 
 def assert_module_root(module_root: Path) -> None:
-    expected = {"manifest.yaml", "schemas", "skeletons"}
+    expected = {"contracts", "fixtures", "manifest.yaml", "schemas", "skeletons"}
     missing = sorted(name for name in expected if not (module_root / name).exists())
     if missing:
         raise SystemExit(f"installed module root is incomplete: {missing}")

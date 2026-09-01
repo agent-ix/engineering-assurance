@@ -2,7 +2,7 @@
 id: TASK-011
 title: "Seal compatibility fixtures and the issue #5 gate"
 type: Task
-status: pending
+status: done
 relationships:
   - target: "ix://agent-ix/engineering-assurance/PLAN-002"
     type: part_of

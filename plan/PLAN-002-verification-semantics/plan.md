@@ -2,7 +2,7 @@
 id: PLAN-002
 title: "Verification semantics and compatibility implementation"
 type: Plan
-status: active
+status: complete
 relationships:
   - target: "ix://agent-ix/engineering-assurance/StR-002"
     type: references
@@ -73,4 +73,3 @@ TASK-008 ownership registry
 - GitHub review feedback is read and resolved before merge.
 - The issue remains non-enforcing until Engineering Assurance #9 accepts real
   producer compatibility fixtures.
-

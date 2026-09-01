@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const source = join(root, "engineering_assurance");
-const staged = ["manifest.yaml", "schemas", "skeletons"];
+const staged = ["manifest.yaml", "contracts", "fixtures", "schemas", "skeletons"];
 
 if (process.argv.includes("--clean")) {
   for (const name of staged) {
