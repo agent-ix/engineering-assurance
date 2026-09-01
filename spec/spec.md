@@ -130,6 +130,8 @@ same canonical bundle and do not redefine these responsibilities.
   historical PGM-01 records read-only and define bounded reports.
 - [FR-011](./functional/FR-011-accepted-compatibility-corpus.md) — retain the
   accepted real-record corpus and enforce it as the migration gate.
+- [FR-012](./functional/FR-012-pinned-compatibility-matrix.md) — pin the exact
+  released shared-assurance versions and classify an observed toolchain.
 
 ### Non-Functional Requirements
 

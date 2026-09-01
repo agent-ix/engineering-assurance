@@ -198,6 +198,14 @@ and declared constraint in this specification.
 | TC-076 | Reading and mapping the corpus changes no byte, no artifact is executable, and the reader reaches for no subprocess, socket, or write | Static | P0 | FR-011-AC-8, FR-011-CON-1, FR-011-CON-4 | ✅ |
 | TC-077 | The committed corpus reproduces from its recorded sources, and states plainly when it is skipped | Integration | P0 | FR-011-AC-9 | ✅ |
 | TC-078 | The corpus is a gitlink whose checked-out commit equals the recorded pin, and an uninitialized corpus fails rather than passing quietly | Integration | P0 | FR-011-AC-10, FR-011-CON-5 | ✅ |
+| TC-079 | Every matrix component pins a released version and names its release; no pin is a branch, latest, or HEAD | Static | P0 | FR-012-AC-1 | ✅ |
+| TC-080 | Compatible, incompatible, and unknown are distinct with reasons, and neither incompatible nor unknown satisfies the gate | Unit | P0 | FR-012-AC-2 | ✅ |
+| TC-081 | The gate requires every pinned component; one unobserved component withholds it | Property | P0 | FR-012-AC-3 | ✅ |
+| TC-082 | Matrix acceptance is pending, unattributed, and documented as a human act | Static | P0 | FR-012-AC-4, FR-012-CON-2 | ✅ |
+| TC-083 | Every recorded artifact digest matches this tree over at least the ten schema assets | Integration | P0 | FR-012-AC-5 | ✅ |
+| TC-084 | Upgrade order and per-component rollback notes exist, no rollback is irreversible, and publication changes no CI posture | Static | P0 | FR-012-AC-6 | ✅ |
+| TC-085 | An unknown matrix version and an unknown component name are refused | Unit | P0 | FR-012-AC-7 | ✅ |
+| TC-086 | The classifier reaches for no subprocess, socket, or write, and the observing program is a separate file | Static | P0 | FR-012-AC-8, FR-012-CON-1 | ✅ |
 
 ## Option Permutation Matrix
 
@@ -326,6 +334,14 @@ evaluation envelopes.
 | FR-011 | FR-011-AC-8 | TC-076 | ✅ Passing |
 | FR-011 | FR-011-AC-9 | TC-077 | ✅ Passing |
 | FR-011 | FR-011-AC-10 | TC-078 | ✅ Passing |
+| FR-012 | FR-012-AC-1 | TC-079 | ✅ Passing |
+| FR-012 | FR-012-AC-2 | TC-080 | ✅ Passing |
+| FR-012 | FR-012-AC-3 | TC-081 | ✅ Passing |
+| FR-012 | FR-012-AC-4 | TC-082 | ✅ Passing |
+| FR-012 | FR-012-AC-5 | TC-083 | ✅ Passing |
+| FR-012 | FR-012-AC-6 | TC-084 | ✅ Passing |
+| FR-012 | FR-012-AC-7 | TC-085 | ✅ Passing |
+| FR-012 | FR-012-AC-8 | TC-086 | ✅ Passing |
 | NFR-004 | NFR-004-AC-1 | TC-068 | ✅ Passing |
 | NFR-004 | NFR-004-AC-2 | TC-059 | ✅ Passing |
 
@@ -335,9 +351,10 @@ The completed onboarding scope has no open gap: Quire reconciles TC-001..TC-051
 to real tracking-tagged symbols, and the retained 28-cell aggregate records the
 selected host commands, models, governing versions, transcripts, and outcomes.
 TC-052..TC-068 now have tracking-tagged implementations in
-`tests/test_verification_semantics.py`, and TC-069..TC-078 in
-`tests/test_compatibility_corpus.py`, which enforces the accepted compatibility
-corpus that FR-010 previously deferred; SR-022 and SR-023 retain the completed
+`tests/test_verification_semantics.py`, and TC-069..TC-086 in
+`tests/test_compatibility_corpus.py` and `tests/test_compatibility_matrix.py`,
+which enforce the accepted compatibility corpus that FR-010 previously deferred
+and the pinned release matrix that gates the migrations; SR-022 and SR-023 retain the completed
 code-review and gap-analysis closure gates.
 
 ## Test Execution Summary

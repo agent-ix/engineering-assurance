@@ -1,0 +1,144 @@
+{
+  "matrix_version": "engineering-assurance.compatibility-matrix/v1",
+  "purpose": "One reviewed set of shared-assurance component versions known to work together, with the digests that identify what those versions ship. Answers agent-ix/engineering-assurance#8.",
+  "accepted": {
+    "state": "pending_human_acceptance",
+    "accepted_by": null,
+    "accepted_at": null,
+    "note": "No enforcing repository migration begins until a human records acceptance here. An agent may prepare this matrix and may not accept it."
+  },
+  "gate": {
+    "rule": "Every component must classify as compatible before an enforcing migration begins.",
+    "unknown_is_not_pass": "A version this matrix has never seen is unknown, not compatible and not incompatible. Unknown never satisfies the gate.",
+    "absent_is_not_pass": "A component that could not be observed is unknown for the same reason."
+  },
+  "components": [
+    {
+      "name": "quire-cli",
+      "version": "0.31.0",
+      "released": true,
+      "release": "npm @agent-ix/quire-cli@0.31.0 (public registry)",
+      "source_revision": "4f6ed024cf27298b2dc49c7051941571197fddff",
+      "engine": {
+        "name": "quire-rs",
+        "version": "0.46.0",
+        "source_revision": "ca7362d4dacecb96f01d74d1d971327118c25917"
+      },
+      "provides": "Static assurance export consumed by Quoin intake (quire-cli#74).",
+      "observe": "quire provenance",
+      "incompatible": [],
+      "incompatible_reasons": {},
+      "artifacts": []
+    },
+    {
+      "name": "quoin",
+      "version": "0.23.1",
+      "released": true,
+      "release": "npm @agent-ix/quoin@0.23.1 (public registry)",
+      "provides": "Evidence transcription and retention, measurements, change-assurance records, proof attestations, intake, audit, and verification receipts (FR-068, FR-069).",
+      "observe": "quoin --version",
+      "incompatible": [
+        "0.22.5",
+        "0.23.0"
+      ],
+      "incompatible_reasons": {
+        "0.22.5": "predates the `quoin change-assurance` surface; seal, intake, and receipt commands do not exist",
+        "0.23.0": "tagged but never published; its release run failed at the test leg on quoin#329, where an adapter accepted an inherited property name as a declared status"
+      },
+      "artifacts": [
+        {
+          "path": "corpus/compatibility/chain/quoin-verification-receipt-v1.schema.json",
+          "sha256": "3df283fd66266ed9257a0f50dc915ea8e3787a8f992a8d40d0cdffbd7e12b6eb",
+          "note": "Quoin's packaged receipt schema, retained beside the receipt it validates."
+        }
+      ]
+    },
+    {
+      "name": "ix-flow",
+      "version": "0.0.4",
+      "released": true,
+      "release": "npm ix-flow@0.0.4 (public registry)",
+      "provides": "Human decision events retained as an integrity-verified chain.",
+      "observe": "ix-flow --version",
+      "incompatible": [],
+      "incompatible_reasons": {},
+      "artifacts": []
+    },
+    {
+      "name": "engineering-assurance",
+      "version": "0.2.0",
+      "released": true,
+      "release": "git tag v0.2.0 \u2014 source distribution only; npm publication is refused by design",
+      "provides": "Shared verification semantics, the PGM-01 read-only compatibility mapping, and the accepted compatibility corpus gate (FR-008..FR-012).",
+      "observe": "git describe --tags",
+      "incompatible": [],
+      "incompatible_reasons": {},
+      "artifacts": [
+        {
+          "path": "engineering_assurance/schemas/architecture-description-frontmatter.schema.json",
+          "sha256": "2221c25c835f000b154f1894e7902acb1a2df371ae1885a63ce13742f8b5f42e"
+        },
+        {
+          "path": "engineering_assurance/schemas/assurance-argument-frontmatter.schema.json",
+          "sha256": "341316377a75f2a23111552b9ef969296a2afca7939a1a89d4192ab24c31ff89"
+        },
+        {
+          "path": "engineering_assurance/schemas/assurance-profile-frontmatter.schema.json",
+          "sha256": "070f8802e62b8c38701b03445f86a008f77191baa8c0c4358147fb5126cf3535"
+        },
+        {
+          "path": "engineering_assurance/schemas/assurance-report-projection-v1.schema.json",
+          "sha256": "34ea5a24d2672a42ac6e3734f89e1e5c010f4a7e328c4fda6fe7cf02e64a515e"
+        },
+        {
+          "path": "engineering_assurance/schemas/component-assurance-contract-frontmatter.schema.json",
+          "sha256": "0d081f2ee3942513ed46bedfa174b9cfd3e8c3c1ef89198448a4c263231172d4"
+        },
+        {
+          "path": "engineering_assurance/schemas/measurement-plan-frontmatter.schema.json",
+          "sha256": "aae266f2cefd706548dd25d7c232f0cf5d1ac04fe99ad540244be5f72bcfd05a"
+        },
+        {
+          "path": "engineering_assurance/schemas/pgm01-compatibility-view-v1.schema.json",
+          "sha256": "317294d04e430f26612a6c7cbde937e06d9e655585a59de1f1e4a0dd66855ca6"
+        },
+        {
+          "path": "engineering_assurance/schemas/semantic-reference-v1.schema.json",
+          "sha256": "c72e7b8e4fe2dd9b845cdc90e210fb47bc36653c3bb96aee23bf24058e08e927"
+        },
+        {
+          "path": "engineering_assurance/schemas/verification-semantics-fixture-v1.schema.json",
+          "sha256": "a8f469ceb0185b29f25fc226a72cc80dfbe7f1d65c8c197ce9cadf82b520898c"
+        },
+        {
+          "path": "engineering_assurance/schemas/verification-semantics-ownership-v1.schema.json",
+          "sha256": "a1674b7be43ee4e00a51a84bc384f5090ee71ed58a807429dd1023667c4dd3a5"
+        }
+      ]
+    }
+  ],
+  "fixtures": {
+    "corpus": "agent-ix/qa-corpus",
+    "note": "The accepted compatibility corpus is pinned as the `corpus` submodule and enforced by FR-011. Its chain artifacts are the cross-component fixtures this matrix claims pass.",
+    "gitlink_is_the_pin": "The corpus revision is whatever gitlink this repository records; FR-011 TC-078 asserts the checked-out commit equals it."
+  },
+  "rollback": {
+    "principle": "Every pin here is a released artifact, so rolling back is installing the previous release. Nothing in this matrix requires a rebuild from source to undo.",
+    "quoin": "Reinstall @agent-ix/quoin@0.22.5. The `change-assurance` commands disappear; retained records, attestations, and receipts are unaffected, because 0.23.x added a surface over existing contracts rather than changing the stored layout.",
+    "quire-cli": "Reinstall @agent-ix/quire-cli@0.30.2. Exports produced by 0.31.0 remain readable; the provenance command is not present.",
+    "engineering-assurance": "Check out the previous tag. There is none before v0.2.0, so rollback for this component means removing the dependency rather than downgrading it.",
+    "corpus": "Move the `corpus` gitlink to the earlier commit and re-run the FR-011 gate. The corpus is content-addressed, so an earlier pin is a complete, self-verifying set.",
+    "irreversible": "None of the above. No pin here migrates data, rewrites evidence, or changes a stored schema."
+  },
+  "upgrade": {
+    "order": "quire-cli, then quoin, then this repository's tag, then the corpus gitlink. Each step is independently verifiable, and only the last one moves the gate.",
+    "verification": "After each step run `python3 scripts/check_compatibility_matrix.py`, which classifies what is installed against these pins and exits non-zero unless every component is compatible.",
+    "what_does_not_change": "No campaign repository is touched by an upgrade of these components. Migrations are agent-ix/engineering-assurance#10 and begin only after this matrix is accepted."
+  },
+  "hosted_ci": "Publication does not enable automatic hosted CI in any campaign repository. Every workflow in this campaign remains manual-dispatch only.",
+  "registry": {
+    "release_channel": "public npm registry (registry.npmjs.org)",
+    "rule": "Every npm pin in this matrix resolves from the public npm registry. The internal npm.ix mirror MUST NOT appear in any requirement, pin, lockfile, or .npmrc: it is unreachable from CI, and a pin that names it cannot be published or installed by anyone outside the network.",
+    "mirror_is_not_an_oracle": "npm.ix lags the public registry. Reading a version from it and concluding a release did not publish is a mistake that was made while preparing this matrix \u2014 quoin 0.23.1 was live on registry.npmjs.org while the mirror still reported 0.22.5. Verify a publish against the public registry."
+  }
+}

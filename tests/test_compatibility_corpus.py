@@ -195,10 +195,16 @@ def test_current_model_receipt_validates_against_the_packaged_schema() -> None:
 
     # The chain is pinned to exact tools, and says plainly that the Quoin side
     # is a source revision rather than a released artifact.
+    # Both sides of the chain are released artifacts, named by their release
+    # and pinned to the source revision that produced them. Engineering
+    # Assurance #8 turned the Quoin side from a source build into a release,
+    # and the chain reproduced byte for byte across that change.
     tools = CORPUS["chain"]["tools"]
     assert tools["quire"]["version"] == "0.31.0"
+    assert tools["quoin"]["version"] == "0.23.1"
+    assert tools["quoin"]["release"] == "npm @agent-ix/quoin@0.23.1"
     assert len(tools["quoin"]["source_revision"]) == 40
-    assert "NOT a released artifact" in tools["quoin"]["note"]
+    assert "released artifact" in tools["quoin"]["note"]
 
 
 def test_producer_cases_name_a_real_producer_and_a_target_concept() -> None:
