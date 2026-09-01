@@ -8,7 +8,7 @@ import hashlib
 import json
 import subprocess
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Sequence
 
@@ -53,7 +53,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     aggregate = aggregate_report_collection(collection)
     payload = {
         "revision": "evaluation-aggregate-v1",
-        "generated_at": datetime.now(UTC).isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "source_revision": source_revision,
         "reports": [
             {"path": str(path.relative_to(ROOT)), "digest": _digest(path)}
