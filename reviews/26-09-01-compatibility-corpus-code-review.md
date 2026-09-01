@@ -21,17 +21,17 @@ replaces the deferral FR-010 carried.
 
 ## Verdict
 
-**CONDITIONAL** — no high findings in the change. One high finding is recorded
-against the environment; one medium finding records a design correction made
-during the work.
+**CONDITIONAL** — no high findings in the change itself. One high finding
+against the repository was found and fixed here; one medium finding records a
+design correction made during the work.
 
 ## Gates
 
 - `make lint` (ruff) — clean, with the submodule excluded (see Notes).
 - `make validate-docs` — clean; FR-011 raises no EARS or quality warning.
 - `scripts/check_content_rights.py --tree` — passes, **unmodified**.
-- `python3 -m pytest tests/` — 20 new tests pass. The 11 pre-existing failures
-  (FND-001) are unchanged.
+- `python3 -m pytest` — 166 pass, 0 fail. Ten of those were failing on `main`
+  before this change; FND-001 records the cause and the fix.
 - `build_compatibility_corpus.py --check`, run inside the submodule — the
   corpus reproduces byte-for-byte from its recorded sources.
 
@@ -39,27 +39,37 @@ during the work.
 
 | ID      | Severity | Summary                                                                      | Refs                        |
 | ------- | -------- | ---------------------------------------------------------------------------- | --------------------------- |
-| FND-001 | high     | Eleven ix-flow workflow tests fail against the installed CLI, on a clean tree | tests/test_workflows.py:338 |
+| FND-001 | high     | The onboarding skill declared a workflow key ix-flow no longer reads       | engineering_assurance/skills/assurance-onboarding/SKILL.md:5 |
 | FND-002 | medium   | The corpus was first built inside this public repository, against its own policy | AGENTS.md:18                |
 
 ## Finding detail
 
-### FND-001 — installed ix-flow emits a payload the tests do not recognise
+### FND-001 — the onboarding skill was unreadable by the installed ix-flow
 
-`tests/test_workflows.py::test_ix_flow_can_load_every_canonical_definition`
-fails with `KeyError: 'data'`: the installed ix-flow CLI returns a payload with
-no `data` key, and ten `test_workflow_resume.py` cases fail with it.
+Ten tests failed on a clean `main`: `test_ix_flow_can_load_every_canonical_definition`
+with `KeyError: 'data'`, and nine `test_workflow_resume.py` cases with it.
 
-Failure scenario: every canonical workflow definition this repository owns is
-unverified against the CLI that would run it, and the human-decision half of
-the shared contract — the half FR-011's chain depends on for its decision
-history — has no passing test on this machine.
+The cause is not the tests and not a drifted assertion. `SKILL.md` declared its
+workflow directory as `metadata.ix-flow-workflows`, and ix-flow 0.0.4 requires
+`contributes.workflows`. Run directly, the CLI says so exactly:
 
-Not caused here and not fixed here: all eleven reproduce with this change
-stashed. Filed as `agent-ix/engineering-assurance#15`. Same class as
-`agent-ix/quoin#326`, filed during #322: a pinned contract and an installed CLI
-drifted apart, and the direction has to be established by reading both rather
-than by relaxing the assertion.
+```json
+{"ok": false, "error": {"code": "skill_format_invalid",
+ "message": "SKILL.md frontmatter must declare 'contributes.workflows: <relative-dir>'"}}
+```
+
+Failure scenario: **none of this repository's four canonical workflows could be
+loaded by the runner that executes them.** Not a test problem — an unusable
+skill, and the human-decision half of the shared verification contract that
+FR-011's chain depends on for its decision history.
+
+Fixed here, under `agent-ix/engineering-assurance#15`, by adopting the current
+key. All 166 tests now pass. The old key is removed rather than kept alongside
+the new one.
+
+Worth noting for whoever owns ix-flow: the CLI exits `0` while returning
+`ok: false`, which is why this surfaced as a `KeyError` in a consumer instead
+of a non-zero status. That is not fixed here.
 
 ### FND-002 — the corpus was built in the wrong repository first
 

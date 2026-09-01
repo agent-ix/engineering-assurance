@@ -11,3 +11,13 @@ target-version = "py312"
 # on that repository's house style and on its fixtures being valid Python,
 # which they are not allowed to be.
 extend-exclude = ["corpus"]
+
+[tool.pytest.ini_options]
+# Collect only this repository's tests. `corpus/` is the pinned qa-corpus
+# submodule: mini-repositories that are DATA, run by quire and quoin, never by
+# pytest. Its Python fixtures are named `test_*.py` because that is what a
+# Python evidence file is called and a fixture has to look like the thing it
+# stands for — so pytest imported them and failed on the undefined names that
+# are the very defects those cases bank.
+testpaths = ["tests"]
+norecursedirs = ["corpus", ".git", "build", "dist"]
