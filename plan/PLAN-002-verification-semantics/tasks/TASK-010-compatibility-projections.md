@@ -2,7 +2,7 @@
 id: TASK-010
 title: "Implement read-only PGM-01 compatibility projections"
 type: Task
-status: pending
+status: done
 relationships:
   - target: "ix://agent-ix/engineering-assurance/PLAN-002"
     type: part_of

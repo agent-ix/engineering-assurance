@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "quire.pgm01-evidence/v1",
+  "schemaIdentity": {"path": "schemas/pgm01-evidence-v1.schema.json", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+  "recordId": "pgm-01-abcdef0",
+  "subjectRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "repository": "ix://fictional/contract-ir",
+  "collectedAt": "2030-01-01T00:00:00Z",
+  "collector": {"method": "fictional local verification", "implementation": "fictional collector", "implementationRevision": "cccccccccccccccccccccccccccccccccccccccc"},
+  "environment": {
+    "platform": "fictional-linux",
+    "rustc": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "cargo": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "cargoDeny": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "python": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "jsonschema": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "rfc3339Validator": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    "rfc3986Validator": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "quire": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    "codeReviewSessions": "fictional-review"
+  },
+  "commands": ["fictional-check --structured-output result.json"],
+  "inputs": ["spec/fictional.md"],
+  "inputChecksums": {"spec/fictional.md": "6666666666666666666666666666666666666666666666666666666666666666"},
+  "outputs": ["result.json", "validation-summary.md"],
+  "checks": [
+    {"name": "fictional-check", "status": "pass", "detail": "structured result passed"},
+    {"name": "second-platform", "status": "skipped", "detail": "not computed"}
+  ],
+  "limitations": ["This is a fictional compatibility fixture."],
+  "decision": "ready-for-operator-authorized-admin-squash-merge"
+}

@@ -1,0 +1,29 @@
+{
+  "projection_type": "engineering-assurance.assurance-report-projection/v1",
+  "report_id": "report-001",
+  "subject": "fictional candidate revision 4444444",
+  "claims": [
+    {
+      "claim_id": "claim-001",
+      "statement": "The fictional contract check conforms to its declared definition.",
+      "status": "challenged"
+    }
+  ],
+  "evidence": [
+    {"semantic_ref": "sem:evidence-001", "relation": "supports"}
+  ],
+  "counterevidence": [
+    {"semantic_ref": "sem:diagnostic-001", "relation": "challenges"}
+  ],
+  "gaps": [
+    {
+      "gap_id": "gap-001",
+      "summary": "A second fictional platform was not computed.",
+      "owner": "fictional-assurance-owner",
+      "action": "Run the declared producer on the second fictional platform."
+    }
+  ],
+  "owner": "fictional-assurance-owner",
+  "actions": ["Resolve gap-001 before a human decision."],
+  "decision_ref": "sem:decision-001"
+}

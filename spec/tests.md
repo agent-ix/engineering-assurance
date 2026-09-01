@@ -171,6 +171,23 @@ and declared constraint in this specification.
 | TC-049 | Equivalent runs retain explicit acceptance and rejection on every host | E2E | P0 | FR-006-AC-5 | ✅ |
 | TC-050 | Evaluation agents and post-run verification use the snapshotted full ix-flow runtime package | Unit | P0 | FR-006-AC-6 | ✅ |
 | TC-051 | Release verification rejects an aggregate retained for a different repository revision | Unit | P0 | FR-006-AC-7 | ✅ |
+| TC-052 | Complete cross-component semantic fixture | Integration | P0 | StR-002-VC-1, IT-005 | ✅ |
+| TC-053 | Ownership/type-fit registry is complete | Static | P0 | US-005-AC-1 | ✅ |
+| TC-054 | Bounded report contains required sections and no trust score | Unit | P0 | US-005-AC-2 | ✅ |
+| TC-055 | Legacy mapping is explicit and read-only | Integration | P0 | US-005-AC-3 | ✅ |
+| TC-056 | Every concept has exactly one authority and link direction | Property | P0 | FR-008-AC-1 | ✅ |
+| TC-057 | Definition, execution, result, evidence, and report ids stay distinct | Property | P0 | FR-008-AC-2 | ✅ |
+| TC-058 | Missing semantic references fail validation | Property | P0 | FR-008-AC-3 | ✅ |
+| TC-059 | Package has no execution, scraping, persistence, or decision path | Static | P0 | FR-008-AC-4, NFR-004-AC-2 | ✅ |
+| TC-060 | Complete producer tuple and definition version survive projection | Unit | P0 | FR-009-AC-1 | ✅ |
+| TC-061 | Non-success states survive every language projection | Property | P0 | FR-009-AC-2 | ✅ |
+| TC-062 | Unknown versions and missing provenance fail explicitly | Property | P0 | FR-009-AC-3 | ✅ |
+| TC-063 | Every projected value cites its source record and field path | Property | P0 | FR-009-AC-4 | ✅ |
+| TC-064 | PGM-01 source bytes are unchanged after mapping | Integration | P0 | FR-010-AC-1 | ✅ |
+| TC-065 | Legacy identity and limitations are preserved | Unit | P0 | FR-010-AC-2 | ✅ |
+| TC-066 | Ambiguous, unreadable, malformed, stale, and tampered stay non-successful | Property | P0 | FR-010-AC-3 | ✅ |
+| TC-067 | JSON and Markdown projections preserve bounded report semantics | Unit | P0 | FR-010-AC-4 | ✅ |
+| TC-068 | Schema/ownership audit finds no duplicate record family | Static | P0 | NFR-004-AC-1 | ✅ |
 
 ## Option Permutation Matrix
 
@@ -248,7 +265,7 @@ evaluation envelopes.
 | INT-002 | Persist and render evidence without redefining policy | quoin | service | TC-025, TC-046 | ✅ |
 | INT-003 | Load workflows, persist runs, resume, and gate decisions | ix-flow | service | TC-026, TC-028, TC-029, TC-030, TC-035, TC-047, TC-048 | ✅ |
 | INT-004 | Discover canonical onboarding through supported hosts | agent discovery adapters | service | TC-010, TC-011, TC-038 | ✅ |
-| INT-005 | Validate shared semantic references and historical compatibility | Quire, Quoin, ix-flow, native producer fixtures | library | TC-052..TC-068 | Planned |
+| INT-005 | Validate shared semantic references and historical compatibility | Quire, Quoin, ix-flow, native producer fixtures | library | TC-052..TC-068 | ✅ |
 
 ### Integration Test Details
 
@@ -269,67 +286,47 @@ evaluation envelopes.
 | TC-010 | INT-004 | Host discovery permutations | Two sources by four hosts | Same canonical skill | P0 |
 | TC-011 | INT-004 | Workflow discovery | Canonical skill | Exactly four workflow definitions | P0 |
 
-## Engineering Assurance #5 Planned Coverage
+## Engineering Assurance #5 Coverage
 
 | Requirement | Criterion | Test Case | Status |
 | --- | --- | --- | --- |
-| StR-002 | StR-002-VC-1 | TC-052 | Planned |
-| US-005 | US-005-AC-1 | TC-053 | Planned |
-| US-005 | US-005-AC-2 | TC-054 | Planned |
-| US-005 | US-005-AC-3 | TC-055 | Planned |
-| FR-008 | FR-008-AC-1 | TC-056 | Planned |
-| FR-008 | FR-008-AC-2 | TC-057 | Planned |
-| FR-008 | FR-008-AC-3 | TC-058 | Planned |
-| FR-008 | FR-008-AC-4 | TC-059 | Planned |
-| FR-009 | FR-009-AC-1 | TC-060 | Planned |
-| FR-009 | FR-009-AC-2 | TC-061 | Planned |
-| FR-009 | FR-009-AC-3 | TC-062 | Planned |
-| FR-009 | FR-009-AC-4 | TC-063 | Planned |
-| FR-010 | FR-010-AC-1 | TC-064 | Planned |
-| FR-010 | FR-010-AC-2 | TC-065 | Planned |
-| FR-010 | FR-010-AC-3 | TC-066 | Planned |
-| FR-010 | FR-010-AC-4 | TC-067 | Planned |
-| NFR-004 | NFR-004-AC-1 | TC-068 | Planned |
-| NFR-004 | NFR-004-AC-2 | TC-059 | Planned |
-
-| Test ID | Title | Type | Priority | Traces To | Status |
-| --- | --- | --- | --- | --- | --- |
-| TC-052 | Complete cross-component semantic fixture | Integration | P0 | StR-002-VC-1, IT-005 | Planned |
-| TC-053 | Ownership/type-fit registry is complete | Static | P0 | US-005-AC-1 | Planned |
-| TC-054 | Bounded report contains required sections and no trust score | Unit | P0 | US-005-AC-2 | Planned |
-| TC-055 | Legacy mapping is explicit and read-only | Integration | P0 | US-005-AC-3 | Planned |
-| TC-056 | Every concept has exactly one authority and link direction | Property | P0 | FR-008-AC-1 | Planned |
-| TC-057 | Definition, execution, result, evidence, and report ids stay distinct | Property | P0 | FR-008-AC-2 | Planned |
-| TC-058 | Missing semantic references fail validation | Property | P0 | FR-008-AC-3 | Planned |
-| TC-059 | Package has no execution, scraping, persistence, or decision path | Static | P0 | FR-008-AC-4, NFR-004-AC-2 | Planned |
-| TC-060 | Complete producer tuple and definition version survive projection | Unit | P0 | FR-009-AC-1 | Planned |
-| TC-061 | Non-success states survive every language projection | Property | P0 | FR-009-AC-2 | Planned |
-| TC-062 | Unknown versions and missing provenance fail explicitly | Property | P0 | FR-009-AC-3 | Planned |
-| TC-063 | Every projected value cites its source record and field path | Property | P0 | FR-009-AC-4 | Planned |
-| TC-064 | PGM-01 source bytes are unchanged after mapping | Integration | P0 | FR-010-AC-1 | Planned |
-| TC-065 | Legacy identity and limitations are preserved | Unit | P0 | FR-010-AC-2 | Planned |
-| TC-066 | Ambiguous, unreadable, malformed, stale, and tampered stay non-successful | Property | P0 | FR-010-AC-3 | Planned |
-| TC-067 | JSON and Markdown projections preserve bounded report semantics | Unit | P0 | FR-010-AC-4 | Planned |
-| TC-068 | Schema/ownership audit finds no duplicate record family | Static | P0 | NFR-004-AC-1 | Planned |
+| StR-002 | StR-002-VC-1 | TC-052 | ✅ Passing |
+| US-005 | US-005-AC-1 | TC-053 | ✅ Passing |
+| US-005 | US-005-AC-2 | TC-054 | ✅ Passing |
+| US-005 | US-005-AC-3 | TC-055 | ✅ Passing |
+| FR-008 | FR-008-AC-1 | TC-056 | ✅ Passing |
+| FR-008 | FR-008-AC-2 | TC-057 | ✅ Passing |
+| FR-008 | FR-008-AC-3 | TC-058 | ✅ Passing |
+| FR-008 | FR-008-AC-4 | TC-059 | ✅ Passing |
+| FR-009 | FR-009-AC-1 | TC-060 | ✅ Passing |
+| FR-009 | FR-009-AC-2 | TC-061 | ✅ Passing |
+| FR-009 | FR-009-AC-3 | TC-062 | ✅ Passing |
+| FR-009 | FR-009-AC-4 | TC-063 | ✅ Passing |
+| FR-010 | FR-010-AC-1 | TC-064 | ✅ Passing |
+| FR-010 | FR-010-AC-2 | TC-065 | ✅ Passing |
+| FR-010 | FR-010-AC-3 | TC-066 | ✅ Passing |
+| FR-010 | FR-010-AC-4 | TC-067 | ✅ Passing |
+| NFR-004 | NFR-004-AC-1 | TC-068 | ✅ Passing |
+| NFR-004 | NFR-004-AC-2 | TC-059 | ✅ Passing |
 
 ## Coverage Gaps
 
 The completed onboarding scope has no open gap: Quire reconciles TC-001..TC-051
 to real tracking-tagged symbols, and the retained 28-cell aggregate records the
 selected host commands, models, governing versions, transcripts, and outcomes.
-TC-052..TC-068 are deliberately planned and unimplemented at the specification
-gate; PLAN-002 forbids representing them as passing before implementation.
+TC-052..TC-068 now have tracking-tagged implementations in
+`tests/test_verification_semantics.py`; SR-022 and SR-023 retain the completed
+code-review and gap-analysis closure gates.
 
 ## Test Execution Summary
 
 | Category | Total | Passed | Failed | Blocked | Coverage |
 |----------|-------|--------|--------|---------|----------|
-| Unit | 6 | 6 | 0 | 0 | 100% |
-| Integration | 17 | 17 | 0 | 0 | 100% |
+| Unit | 12 | 12 | 0 | 0 | 100% |
+| Integration | 20 | 20 | 0 | 0 | 100% |
 | E2E | 13 | 13 | 0 | 0 | 100% |
-| Property | 8 | 8 | 0 | 0 | 100% |
-| Static | 5 | 5 | 0 | 0 | 100% |
+| Property | 15 | 15 | 0 | 0 | 100% |
+| Static | 8 | 8 | 0 | 0 | 100% |
 
-The table above reports the completed TC-001..TC-051 onboarding baseline only.
-The 17 planned issue #5 rows are excluded from passed totals until their real
-tracking-tagged implementations land.
+The table combines the completed onboarding baseline with the 17 implemented
+Engineering Assurance #5 rows.

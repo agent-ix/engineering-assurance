@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "quire.pgm01-evidence/v2",
+  "recordId": "pgm-02-abcdefabcdef-123456789abc",
+  "subjectRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "repository": "ix://fictional/contract-ir",
+  "collectedAt": "2030-01-01T00:00:00Z",
+  "schemaDigests": {
+    "profile": "1111111111111111111111111111111111111111111111111111111111111111",
+    "record": "2222222222222222222222222222222222222222222222222222222222222222",
+    "authority": "3333333333333333333333333333333333333333333333333333333333333333"
+  },
+  "profile": {"path": "profile.json", "sha256": "4444444444444444444444444444444444444444444444444444444444444444", "bytes": 128},
+  "collector": {
+    "id": "fictional-collector",
+    "configuredCommand": "fictional-collector",
+    "resolvedPath": "/fictional/bin/collector",
+    "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+    "version": "1.0.0"
+  },
+  "tools": [
+    {
+      "id": "fictional-checker",
+      "configuredCommand": "fictional-checker",
+      "resolvedPath": "/fictional/bin/checker",
+      "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+      "version": "2.0.0"
+    }
+  ],
+  "parameters": {"roots": ["."], "paths": ["spec/fictional.md"], "sha256": "7777777777777777777777777777777777777777777777777777777777777777"},
+  "commands": [
+    {
+      "id": "fictional-check",
+      "argv": ["fictional-checker", "--json"],
+      "tools": ["fictional-checker"],
+      "exitCode": 1,
+      "status": "failed",
+      "elapsedMs": 12,
+      "stdout": {"path": "stdout.json", "sha256": "8888888888888888888888888888888888888888888888888888888888888888", "bytes": 64},
+      "stderr": {"path": "stderr.txt", "sha256": "9999999999999999999999999999999999999999999999999999999999999999", "bytes": 32},
+      "corroboration": {"requiredPatterns": ["passed"], "matchedPatterns": [], "observedTestCount": 0, "minimumTestCount": 1, "silentSuccess": false, "passed": false}
+    }
+  ],
+  "overallStatus": "failed",
+  "historicalDisposition": "active",
+  "quoin": {"version": "0.22.5", "status": "recorded", "detail": "fictional intake"},
+  "limitations": ["This is a fictional compatibility fixture."]
+}

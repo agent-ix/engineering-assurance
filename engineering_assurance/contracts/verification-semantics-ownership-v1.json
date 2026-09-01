@@ -1,0 +1,85 @@
+{
+  "schema_version": "engineering-assurance.verification-semantics-ownership/v1",
+  "purpose": "semantic_ownership_registry",
+  "non_executing": true,
+  "concepts": [
+    {
+      "concept": "verification_definition",
+      "authority": "quire",
+      "authoritative_types": ["assurance-v1.obligation", "assurance-v1.symbol", "assurance-v1.relation"],
+      "link_direction": "definition_to_execution",
+      "responsibility": "Parse and export static definitions, obligations, symbols, relations, and locators."
+    },
+    {
+      "concept": "verification_execution",
+      "authority": "native_producer",
+      "authoritative_types": ["native structured execution result"],
+      "link_direction": "execution_to_definition",
+      "responsibility": "Execute the declared verification command and emit a structured domain result."
+    },
+    {
+      "concept": "check_result",
+      "authority": "native_producer",
+      "authoritative_types": ["native structured check result"],
+      "link_direction": "result_to_execution_and_definition",
+      "responsibility": "Preserve the producer-native result and every non-success state."
+    },
+    {
+      "concept": "evidence",
+      "authority": "quoin",
+      "authoritative_types": ["RunRecord", "FindingRecord", "ProofAttestation", "retained output", "AuditReport"],
+      "link_direction": "evidence_to_result",
+      "responsibility": "Validate, transcribe, retain, integrity-check, and audit explicit inputs."
+    },
+    {
+      "concept": "measurement",
+      "authority": "quoin",
+      "authoritative_types": ["MeasurementCollection", "MeasurementObservation"],
+      "link_direction": "measurement_to_measurement_plan_and_evidence",
+      "responsibility": "Retain observations under an Engineering Assurance MeasurementPlan definition."
+    },
+    {
+      "concept": "diagnostic",
+      "authority": "originating_producer",
+      "authoritative_types": ["Quire diagnostic", "native producer diagnostic"],
+      "link_direction": "diagnostic_to_execution_or_result",
+      "responsibility": "Explain a finding, malformed input, or inability without counting as success."
+    },
+    {
+      "concept": "report",
+      "authority": "quoin",
+      "authoritative_types": ["MeasurementReport", "OperationalReport", "InterventionReport", "VerificationReceipt"],
+      "link_direction": "report_to_authoritative_records",
+      "responsibility": "Present claims, evidence, counterevidence, gaps, owner, and action without a trust score."
+    },
+    {
+      "concept": "human_decision",
+      "authority": "ix_flow",
+      "authoritative_types": ["retained decision event"],
+      "link_direction": "decision_to_exact_subject",
+      "responsibility": "Retain an attributed human approval, rejection, or revision event."
+    }
+  ],
+  "result_states": [
+    "defined",
+    "observed",
+    "passed",
+    "failed",
+    "error",
+    "skipped",
+    "unavailable",
+    "not_computed",
+    "not_applicable",
+    "inconclusive",
+    "unsupported",
+    "rejected",
+    "timed_out",
+    "pending",
+    "malformed",
+    "stale",
+    "suspect",
+    "vacuous",
+    "tampered",
+    "unreadable"
+  ]
+}

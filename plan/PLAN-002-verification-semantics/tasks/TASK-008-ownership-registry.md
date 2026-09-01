@@ -2,7 +2,7 @@
 id: TASK-008
 title: "Publish the semantic ownership registry"
 type: Task
-status: pending
+status: done
 relationships:
   - target: "ix://agent-ix/engineering-assurance/PLAN-002"
     type: part_of

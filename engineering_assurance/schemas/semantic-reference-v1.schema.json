@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Read-only verification semantic reference v1",
+  "description": "A non-persisted reference to an authoritative record; not an evidence envelope or store record.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["projection_type", "concept", "semantic_id", "authority", "source", "state", "links"],
+  "properties": {
+    "projection_type": {"const": "engineering-assurance.semantic-reference/v1"},
+    "concept": {
+      "enum": ["verification_definition", "verification_execution", "check_result", "evidence", "measurement", "diagnostic", "report", "human_decision"]
+    },
+    "semantic_id": {"$ref": "#/definitions/identity"},
+    "authority": {
+      "enum": ["quire", "native_producer", "quoin", "originating_producer", "ix_flow"]
+    },
+    "source": {"$ref": "#/definitions/source"},
+    "state": {"$ref": "#/definitions/state"},
+    "producer": {"$ref": "#/definitions/producer"},
+    "links": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "definition": {"$ref": "#/definitions/identity"},
+        "execution": {"$ref": "#/definitions/identity"},
+        "result": {"$ref": "#/definitions/identity"},
+        "evidence": {"$ref": "#/definitions/identity"},
+        "measurement_plan": {"$ref": "#/definitions/identity"},
+        "report": {"$ref": "#/definitions/identity"},
+        "decision_subject": {"$ref": "#/definitions/identity"}
+      }
+    }
+  },
+  "definitions": {
+    "identity": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"},
+    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_identity", "schema_version", "record_id", "field_path"],
+      "properties": {
+        "schema_identity": {"type": "string", "minLength": 1},
+        "schema_version": {"type": "string", "minLength": 1},
+        "record_id": {"$ref": "#/definitions/identity"},
+        "record_digest": {"$ref": "#/definitions/digest"},
+        "field_path": {"type": "string", "pattern": "^/"}
+      }
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "version", "configuration_digest", "source_revision", "environment", "definition_version"],
+      "properties": {
+        "identity": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "configuration_digest": {"$ref": "#/definitions/digest"},
+        "source_revision": {"type": "string", "minLength": 1},
+        "environment": {"type": "object", "minProperties": 1},
+        "definition_version": {"type": "string", "minLength": 1}
+      }
+    },
+    "state": {
+      "enum": ["defined", "observed", "passed", "failed", "error", "skipped", "unavailable", "not_computed", "not_applicable", "inconclusive", "unsupported", "rejected", "timed_out", "pending", "malformed", "stale", "suspect", "vacuous", "tampered", "unreadable"]
+    }
+  }
+}

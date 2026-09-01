@@ -1,0 +1,175 @@
+{
+  "fixture_version": "engineering-assurance.verification-semantics-fixture/v1",
+  "source_version_premises": [
+    {"concept": "verification_definition", "schema_identity": "quire.assurance-v1", "schema_version": "1"},
+    {"concept": "verification_execution", "schema_identity": "fictional.native-result/v1", "schema_version": "1"},
+    {"concept": "check_result", "schema_identity": "fictional.native-result/v1", "schema_version": "1"},
+    {"concept": "evidence", "schema_identity": "quoin.proof-attestation/v1", "schema_version": "1"},
+    {"concept": "measurement", "schema_identity": "quoin.measurement-collection/v2", "schema_version": "2"},
+    {"concept": "diagnostic", "schema_identity": "fictional.native-result/v1", "schema_version": "1"},
+    {"concept": "report", "schema_identity": "quoin.verification-receipt/v1", "schema_version": "1"},
+    {"concept": "human_decision", "schema_identity": "ix-flow.retained-decision-event/v1", "schema_version": "1"}
+  ],
+  "references": [
+    {
+      "projection_type": "engineering-assurance.semantic-reference/v1",
+      "concept": "verification_definition",
+      "semantic_id": "sem:def-001",
+      "authority": "quire",
+      "source": {
+        "schema_identity": "quire.assurance-v1",
+        "schema_version": "1",
+        "record_id": "quire-export-001",
+        "record_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+        "field_path": "/obligations/0"
+      },
+      "state": "defined",
+      "links": {}
+    },
+    {
+      "projection_type": "engineering-assurance.semantic-reference/v1",
+      "concept": "verification_execution",
+      "semantic_id": "sem:execution-001",
+      "authority": "native_producer",
+      "source": {
+        "schema_identity": "fictional.native-result/v1",
+        "schema_version": "1",
+        "record_id": "native-run-001",
+        "record_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+        "field_path": "/execution"
+      },
+      "state": "observed",
+      "producer": {
+        "identity": "fictional-contract-checker",
+        "version": "1.2.3",
+        "configuration_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+        "source_revision": "4444444444444444444444444444444444444444",
+        "environment": {"platform": "fictional-linux"},
+        "definition_version": "quire-export-001"
+      },
+      "links": {"definition": "sem:def-001"}
+    },
+    {
+      "projection_type": "engineering-assurance.semantic-reference/v1",
+      "concept": "check_result",
+      "semantic_id": "sem:result-001",
+      "authority": "native_producer",
+      "source": {
+        "schema_identity": "fictional.native-result/v1",
+        "schema_version": "1",
+        "record_id": "native-run-001",
+        "record_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+        "field_path": "/checks/0"
+      },
+      "state": "passed",
+      "producer": {
+        "identity": "fictional-contract-checker",
+        "version": "1.2.3",
+        "configuration_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+        "source_revision": "4444444444444444444444444444444444444444",
+        "environment": {"platform": "fictional-linux"},
+        "definition_version": "quire-export-001"
+      },
+      "links": {"definition": "sem:def-001", "execution": "sem:execution-001"}
+    },
+    {
+      "projection_type": "engineering-assurance.semantic-reference/v1",
+      "concept": "evidence",
+      "semantic_id": "sem:evidence-001",
+      "authority": "quoin",
+      "source": {
+        "schema_identity": "quoin.proof-attestation/v1",
+        "schema_version": "1",
+        "record_id": "attestation-001",
+        "record_digest": "5555555555555555555555555555555555555555555555555555555555555555",
+        "field_path": "/retained_output"
+      },
+      "state": "passed",
+      "producer": {
+        "identity": "fictional-contract-checker",
+        "version": "1.2.3",
+        "configuration_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+        "source_revision": "4444444444444444444444444444444444444444",
+        "environment": {"platform": "fictional-linux"},
+        "definition_version": "quire-export-001"
+      },
+      "links": {"result": "sem:result-001"}
+    },
+    {
+      "projection_type": "engineering-assurance.semantic-reference/v1",
+      "concept": "measurement",
+      "semantic_id": "sem:measurement-001",
+      "authority": "quoin",
+      "source": {
+        "schema_identity": "quoin.measurement-collection/v2",
+        "schema_version": "2",
+        "record_id": "collection-001",
+        "record_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+        "field_path": "/observations/0"
+      },
+      "state": "observed",
+      "producer": {
+        "identity": "fictional-contract-checker",
+        "version": "1.2.3",
+        "configuration_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+        "source_revision": "4444444444444444444444444444444444444444",
+        "environment": {"platform": "fictional-linux"},
+        "definition_version": "fictional.measurement-plan/v1"
+      },
+      "links": {"measurement_plan": "MP-001", "evidence": "sem:evidence-001"}
+    },
+    {
+      "projection_type": "engineering-assurance.semantic-reference/v1",
+      "concept": "diagnostic",
+      "semantic_id": "sem:diagnostic-001",
+      "authority": "originating_producer",
+      "source": {
+        "schema_identity": "fictional.native-result/v1",
+        "schema_version": "1",
+        "record_id": "native-run-001",
+        "record_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+        "field_path": "/diagnostics/0"
+      },
+      "state": "error",
+      "producer": {
+        "identity": "fictional-contract-checker",
+        "version": "1.2.3",
+        "configuration_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+        "source_revision": "4444444444444444444444444444444444444444",
+        "environment": {"platform": "fictional-linux"},
+        "definition_version": "quire-export-001"
+      },
+      "links": {"execution": "sem:execution-001"}
+    },
+    {
+      "projection_type": "engineering-assurance.semantic-reference/v1",
+      "concept": "report",
+      "semantic_id": "sem:report-001",
+      "authority": "quoin",
+      "source": {
+        "schema_identity": "quoin.verification-receipt/v1",
+        "schema_version": "1",
+        "record_id": "receipt-001",
+        "record_digest": "7777777777777777777777777777777777777777777777777777777777777777",
+        "field_path": "/"
+      },
+      "state": "pending",
+      "links": {"evidence": "sem:evidence-001"}
+    },
+    {
+      "projection_type": "engineering-assurance.semantic-reference/v1",
+      "concept": "human_decision",
+      "semantic_id": "sem:decision-001",
+      "authority": "ix_flow",
+      "source": {
+        "schema_identity": "ix-flow.retained-decision-event/v1",
+        "schema_version": "1",
+        "record_id": "decision-event-001",
+        "record_digest": "8888888888888888888888888888888888888888888888888888888888888888",
+        "field_path": "/"
+      },
+      "state": "pending",
+      "links": {"decision_subject": "sem:report-001"}
+    }
+  ]
+}

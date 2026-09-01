@@ -7,6 +7,8 @@
   "type": "module",
   "files": [
     "manifest.yaml",
+    "contracts/",
+    "fixtures/",
     "schemas/",
     "skeletons/",
     "engineering_assurance/INSTALL.md",

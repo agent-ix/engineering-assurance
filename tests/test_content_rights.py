@@ -98,7 +98,7 @@ def test_failure_rendering_never_needs_matched_text() -> None:
 
 def test_file_type_policy_rejects_research_containers() -> None:
     assert {".pdf", ".docx", ".xlsx"} <= CHECKER.FORBIDDEN_SUFFIXES
-    assert ".py" in CHECKER.TEXT_SUFFIXES
+    assert {".py", ".rs", ".ts"} <= CHECKER.TEXT_SUFFIXES
 
 
 def test_binary_control_payload_is_rejected(tmp_path: Path) -> None:

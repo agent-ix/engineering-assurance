@@ -29,6 +29,8 @@ def test_npm_contract_declares_canonical_and_host_payloads() -> None:
     """Trace: FR-003-AC-2, TC-015."""
     npm = json.loads((ROOT / "package.json").read_text())
     assert "engineering_assurance/skills/" in npm["files"]
+    assert "contracts/" in npm["files"]
+    assert "fixtures/" in npm["files"]
     assert "pilots/assurance-workflows/" in npm["files"]
     assert "engineering_assurance/INSTALL.md" in npm_allowlist()
 
@@ -90,6 +92,8 @@ def test_package_contract_retains_prior_module_root_members() -> None:
     assert {"manifest.yaml", "engineering_assurance/manifest.yaml"} <= allowed
     assert any(name.startswith("schemas/") for name in allowed)
     assert any(name.startswith("skeletons/") for name in allowed)
+    assert any(name.startswith("contracts/") for name in allowed)
+    assert any(name.startswith("fixtures/") for name in allowed)
 
 
 class TestPackageAuditIntegration:

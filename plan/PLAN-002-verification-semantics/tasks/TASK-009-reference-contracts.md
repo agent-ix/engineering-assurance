@@ -2,7 +2,7 @@
 id: TASK-009
 title: "Add reference and bounded-report contracts"
 type: Task
-status: pending
+status: done
 relationships:
   - target: "ix://agent-ix/engineering-assurance/PLAN-002"
     type: part_of
@@ -21,7 +21,7 @@ views without adding a persisted evidence record family.
 
 ## Deliverables
 
-- Draft 2020-12 schemas with explicit purpose and non-authoritative projection
+- Draft-07 schemas with explicit purpose and non-authoritative projection
   discriminators.
 - Complete producer tuple, definition version, state, record identity, and
   source-field path validation.
