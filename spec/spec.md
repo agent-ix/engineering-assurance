@@ -132,6 +132,8 @@ same canonical bundle and do not redefine these responsibilities.
   accepted real-record corpus and enforce it as the migration gate.
 - [FR-012](./functional/FR-012-pinned-compatibility-matrix.md) — pin the exact
   released shared-assurance versions and classify an observed toolchain.
+- [FR-013](./functional/FR-013-migration-contract.md) — publish the reviewed
+  migration contract the eight repositories are migrated against.
 
 ### Non-Functional Requirements
 
