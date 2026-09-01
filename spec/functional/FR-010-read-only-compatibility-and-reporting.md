@@ -52,5 +52,7 @@ rewriting history or creating a parallel evidence schema.
 
 ## Dependencies
 
-FR-008 and FR-009. The representative compatibility fixture gate remains
-non-enforcing until Engineering Assurance #9 is accepted.
+FR-008 and FR-009. The representative compatibility fixture gate is
+[FR-011](./FR-011-accepted-compatibility-corpus.md) and is enforcing: the
+accepted corpus of real legacy records, real producer output, and one exact
+Quire-to-Quoin receipt chain is retained and checked on every run.

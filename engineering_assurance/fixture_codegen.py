@@ -84,10 +84,70 @@ def render_generated_canonical_fixtures() -> dict[str, str]:
     }
 
 
+def load_compatibility_cases() -> list[dict[str, object]]:
+    """The corpus case index, reduced to what a cross-language consumer needs.
+
+    Read from the pinned `qa-corpus` submodule; the projection is committed
+    here so a Rust or TypeScript consumer can read the accepted set without
+    checking out the corpus or depending on Python.
+    """
+    from engineering_assurance.compatibility_corpus import load_corpus
+
+    return [
+        {
+            "id": case["id"],
+            "kind": case["kind"],
+            "family": case["family"],
+            "retained_path": case["retained_path"],
+            "retained_sha256": case["retained_sha256"],
+            "expected_outcome": case["expected"]["outcome"],
+            "constructed": case["derivation"] is not None,
+        }
+        for case in load_corpus()["cases"]
+    ]
+
+
+def render_generated_compatibility_fixtures() -> dict[str, str]:
+    """Project the corpus index into each consuming language.
+
+    A Rust or TypeScript consumer has to be able to read the accepted set
+    without a Python dependency, and has to see `constructed` on the cases that
+    were built rather than found — the distinction is the honest part.
+    """
+    cases_json = json.dumps(
+        load_compatibility_cases(), sort_keys=True, separators=(",", ":")
+    )
+    quoted = json.dumps(cases_json)
+    return {
+        "compatibility_cases.py": "\n".join(
+            [
+                '"""Generated fixture; semantic source is compatibility-corpus/corpus.json."""',
+                f"COMPATIBILITY_CASES_JSON = {quoted}",
+                "",
+            ]
+        ),
+        "compatibility_cases.ts": "\n".join(
+            [
+                "// Generated fixture; semantic source is compatibility-corpus/corpus.json.",
+                f"export const COMPATIBILITY_CASES_JSON = {quoted};",
+                "",
+            ]
+        ),
+        "compatibility_cases.rs": "\n".join(
+            [
+                "// Generated fixture; semantic source is compatibility-corpus/corpus.json.",
+                f'pub const COMPATIBILITY_CASES_JSON: &str = r#"{cases_json}"#;',
+                "",
+            ]
+        ),
+    }
+
+
 def render_generated_fixtures() -> dict[str, str]:
     return {
         **render_generated_state_fixtures(),
         **render_generated_canonical_fixtures(),
+        **render_generated_compatibility_fixtures(),
     }
 
 
@@ -103,8 +163,10 @@ __all__ = [
     "SEMANTIC_FIXTURE_ROOT",
     "committed_generated_fixtures",
     "load_canonical_fixture",
+    "load_compatibility_cases",
     "load_non_success_states",
     "render_generated_canonical_fixtures",
+    "render_generated_compatibility_fixtures",
     "render_generated_fixtures",
     "render_generated_state_fixtures",
 ]

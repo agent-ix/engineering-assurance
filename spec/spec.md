@@ -128,6 +128,8 @@ same canonical bundle and do not redefine these responsibilities.
   producer tuple, definition version, and every non-success state.
 - [FR-010](./functional/FR-010-read-only-compatibility-and-reporting.md) — map
   historical PGM-01 records read-only and define bounded reports.
+- [FR-011](./functional/FR-011-accepted-compatibility-corpus.md) — retain the
+  accepted real-record corpus and enforce it as the migration gate.
 
 ### Non-Functional Requirements
 

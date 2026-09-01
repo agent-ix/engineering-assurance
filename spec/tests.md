@@ -188,6 +188,16 @@ and declared constraint in this specification.
 | TC-066 | Ambiguous, unreadable, malformed, stale, and tampered stay non-successful | Property | P0 | FR-010-AC-3 | ✅ |
 | TC-067 | JSON and Markdown projections preserve bounded report semantics | Unit | P0 | FR-010-AC-4 | ✅ |
 | TC-068 | Schema/ownership audit finds no duplicate record family | Static | P0 | NFR-004-AC-1 | ✅ |
+| TC-069 | Every retained corpus artifact matches its recorded digest, and every real legacy case matches the digest its source repository recorded | Integration | P0 | FR-011-AC-1, FR-011-CON-2 | ✅ |
+| TC-070 | The corpus covers all eight required states and every constructed case records its edit and reason | Static | P0 | FR-011-AC-2 | ✅ |
+| TC-071 | Each legacy case maps to its recorded outcome with required mappings preserved and a stated limitation | Property | P0 | FR-011-AC-3 | ✅ |
+| TC-072 | No failed, unavailable, not-computed, malformed, or tampered case reads as clean or reports a passed check | Property | P0 | FR-011-AC-4 | ✅ |
+| TC-073 | A real legacy record preserves revision, repository, producer identity, and environment, keeps inconclusive distinct, and names what it could not carry | Unit | P0 | FR-011-AC-5 | ✅ |
+| TC-074 | The retained receipt validates against Quoin's packaged schema and binds the exact chain digests under pinned tools | Integration | P0 | FR-011-AC-6 | ✅ |
+| TC-075 | Every producer case names a real producer, source path, and shared-model concept across languages | Unit | P0 | FR-011-AC-7 | ✅ |
+| TC-076 | Reading and mapping the corpus changes no byte, no artifact is executable, and the reader reaches for no subprocess, socket, or write | Static | P0 | FR-011-AC-8, FR-011-CON-1, FR-011-CON-4 | ✅ |
+| TC-077 | The committed corpus reproduces from its recorded sources, and states plainly when it is skipped | Integration | P0 | FR-011-AC-9 | ✅ |
+| TC-078 | The corpus is a gitlink whose checked-out commit equals the recorded pin, and an uninitialized corpus fails rather than passing quietly | Integration | P0 | FR-011-AC-10, FR-011-CON-5 | ✅ |
 
 ## Option Permutation Matrix
 
@@ -306,6 +316,16 @@ evaluation envelopes.
 | FR-010 | FR-010-AC-2 | TC-065 | ✅ Passing |
 | FR-010 | FR-010-AC-3 | TC-066 | ✅ Passing |
 | FR-010 | FR-010-AC-4 | TC-067 | ✅ Passing |
+| FR-011 | FR-011-AC-1 | TC-069 | ✅ Passing |
+| FR-011 | FR-011-AC-2 | TC-070 | ✅ Passing |
+| FR-011 | FR-011-AC-3 | TC-071 | ✅ Passing |
+| FR-011 | FR-011-AC-4 | TC-072 | ✅ Passing |
+| FR-011 | FR-011-AC-5 | TC-073 | ✅ Passing |
+| FR-011 | FR-011-AC-6 | TC-074 | ✅ Passing |
+| FR-011 | FR-011-AC-7 | TC-075 | ✅ Passing |
+| FR-011 | FR-011-AC-8 | TC-076 | ✅ Passing |
+| FR-011 | FR-011-AC-9 | TC-077 | ✅ Passing |
+| FR-011 | FR-011-AC-10 | TC-078 | ✅ Passing |
 | NFR-004 | NFR-004-AC-1 | TC-068 | ✅ Passing |
 | NFR-004 | NFR-004-AC-2 | TC-059 | ✅ Passing |
 
@@ -315,7 +335,9 @@ The completed onboarding scope has no open gap: Quire reconciles TC-001..TC-051
 to real tracking-tagged symbols, and the retained 28-cell aggregate records the
 selected host commands, models, governing versions, transcripts, and outcomes.
 TC-052..TC-068 now have tracking-tagged implementations in
-`tests/test_verification_semantics.py`; SR-022 and SR-023 retain the completed
+`tests/test_verification_semantics.py`, and TC-069..TC-078 in
+`tests/test_compatibility_corpus.py`, which enforces the accepted compatibility
+corpus that FR-010 previously deferred; SR-022 and SR-023 retain the completed
 code-review and gap-analysis closure gates.
 
 ## Test Execution Summary
