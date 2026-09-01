@@ -163,6 +163,7 @@ def test_repository_has_only_governed_review_evidence() -> None:
     }
     assert {path.name for path in (ROOT / "docs").iterdir()} == {
         "compatibility-matrix.md",
+        "migration-contract.md",
         "structural-coverage.md",
         "verification-semantics",
     }

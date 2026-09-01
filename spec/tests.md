@@ -206,6 +206,14 @@ and declared constraint in this specification.
 | TC-084 | Upgrade order and per-component rollback notes exist, no rollback is irreversible, and publication changes no CI posture | Static | P0 | FR-012-AC-6 | ✅ |
 | TC-085 | An unknown matrix version and an unknown component name are refused | Unit | P0 | FR-012-AC-7 | ✅ |
 | TC-086 | The classifier reaches for no subprocess, socket, or write, and the observing program is a separate file | Static | P0 | FR-012-AC-8, FR-012-CON-1 | ✅ |
+| TC-087 | Every family in the decision table carries exactly one of keep, delete, or replace | Static | P0 | FR-013-AC-1 | ✅ |
+| TC-088 | The decision table accounts for every recurring script family present in the eight repositories, and states when the sources cannot be read | Integration | P0 | FR-013-AC-2 | ✅ |
+| TC-089 | Repository-local generic evidence schemas and stdout-derived verdicts are forbidden by name, and a domain-output schema is permitted | Static | P0 | FR-013-AC-3 | ✅ |
+| TC-090 | Domain output validation, evidence intake, audit, and human decision each name a distinct owner | Static | P0 | FR-013-AC-4 | ✅ |
+| TC-091 | Rollback is defined per failure mode, legacy history is never rewritten, and deletion is last | Static | P0 | FR-013-AC-5 | ✅ |
+| TC-092 | The review checklist covers inventory, both prohibitions, byte-identical legacy evidence, every non-success state, and manual dispatch | Static | P0 | FR-013-AC-6 | ✅ |
+| TC-093 | All eight repositories appear exactly once in the Agent A/B/C allocation | Static | P0 | FR-013-AC-7 | ✅ |
+| TC-094 | The contract waits on matrix acceptance, changes no trigger, and makes no qualification claim | Unit | P0 | FR-013-AC-8, FR-013-CON-1, FR-013-CON-2, FR-013-CON-3 | ✅ |
 
 ## Option Permutation Matrix
 
@@ -342,6 +350,14 @@ evaluation envelopes.
 | FR-012 | FR-012-AC-6 | TC-084 | ✅ Passing |
 | FR-012 | FR-012-AC-7 | TC-085 | ✅ Passing |
 | FR-012 | FR-012-AC-8 | TC-086 | ✅ Passing |
+| FR-013 | FR-013-AC-1 | TC-087 | ✅ Passing |
+| FR-013 | FR-013-AC-2 | TC-088 | ✅ Passing |
+| FR-013 | FR-013-AC-3 | TC-089 | ✅ Passing |
+| FR-013 | FR-013-AC-4 | TC-090 | ✅ Passing |
+| FR-013 | FR-013-AC-5 | TC-091 | ✅ Passing |
+| FR-013 | FR-013-AC-6 | TC-092 | ✅ Passing |
+| FR-013 | FR-013-AC-7 | TC-093 | ✅ Passing |
+| FR-013 | FR-013-AC-8 | TC-094 | ✅ Passing |
 | NFR-004 | NFR-004-AC-1 | TC-068 | ✅ Passing |
 | NFR-004 | NFR-004-AC-2 | TC-059 | ✅ Passing |
 
@@ -351,7 +367,7 @@ The completed onboarding scope has no open gap: Quire reconciles TC-001..TC-051
 to real tracking-tagged symbols, and the retained 28-cell aggregate records the
 selected host commands, models, governing versions, transcripts, and outcomes.
 TC-052..TC-068 now have tracking-tagged implementations in
-`tests/test_verification_semantics.py`, and TC-069..TC-086 in
+`tests/test_verification_semantics.py`, and TC-069..TC-094 in
 `tests/test_compatibility_corpus.py` and `tests/test_compatibility_matrix.py`,
 which enforce the accepted compatibility corpus that FR-010 previously deferred
 and the pinned release matrix that gates the migrations; SR-022 and SR-023 retain the completed
