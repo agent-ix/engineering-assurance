@@ -5,10 +5,15 @@ repositories once the shared interfaces are released. Answers
 `agent-ix/engineering-assurance#10`.
 
 **Nothing in this playbook may begin until the compatibility matrix records
-human acceptance.** `accepted_by` and `accepted_at` in
-`engineering_assurance/compatibility-matrix.json` are null, and
-`python3 scripts/check_compatibility_matrix.py` reports the gate. An agent
-cannot grant that acceptance; TC-082 fails if one tries.
+human acceptance.** That acceptance lives in `accepted_by` and `accepted_at` in
+`engineering_assurance/compatibility-matrix.json`. Do not read their current
+values from this document — read them from the file, or run
+`python3 scripts/check_compatibility_matrix.py`, which exits non-zero while the
+matrix records no acceptance and prints the state either way.
+
+An agent cannot grant that acceptance. It may transcribe one a named human has
+explicitly directed it to record, and the attribution must name that human;
+TC-082 fails if the record names an agent instead.
 
 ## The repositories, and who holds them
 

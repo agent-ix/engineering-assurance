@@ -13,7 +13,7 @@ source; this document is what a human reads before accepting it.
 | quire-cli | 0.31.0 | npm `@agent-ix/quire-cli@0.31.0` | Static assurance export consumed by Quoin intake |
 | quire-rs (engine) | 0.46.0 | inside quire-cli 0.31.0 | The export the CLI delegates to |
 | quoin | 0.23.1 | npm `@agent-ix/quoin@0.23.1` | Evidence, measurements, change-assurance records, attestations, intake, audit, receipts |
-| ix-flow | 0.0.4 | npm `ix-flow@0.0.4` | Human decision events as an integrity-verified chain |
+| ix-flow | 0.0.4 | npm `@agent-ix/ix-flow@0.0.4` | Human decision events as an integrity-verified chain |
 | engineering-assurance | 0.2.0 | git tag `v0.2.0` | Shared semantics, PGM-01 compatibility mapping, the accepted corpus gate |
 
 Every one is a released artifact. No pin is a branch head, a bare revision, or
@@ -78,7 +78,10 @@ After each step:
 python3 scripts/check_compatibility_matrix.py
 ```
 
-It exits non-zero unless every component is `compatible`.
+It exits non-zero unless every component is `compatible` **and** the matrix
+records human acceptance. Those are two independent conditions: a perfectly
+pinned toolchain on an unaccepted matrix still exits non-zero, because exit 0
+answers "may migration begin", not "are the versions right".
 
 No campaign repository is touched by an upgrade of these components. Migrations
 are `agent-ix/engineering-assurance#10`, and they begin only after this matrix
@@ -108,10 +111,21 @@ workflow that published quoin 0.23.1.
 ## Acceptance
 
 ```json
-"accepted": { "state": "pending_human_acceptance", "accepted_by": null, "accepted_at": null }
+"accepted": {
+  "state": "accepted",
+  "accepted_by": "Peter Krenesky",
+  "accepted_at": "2026-09-01"
+}
 ```
 
-**An agent prepared this matrix and cannot accept it.** TC-082 asserts that the
-acceptance fields are unset, so an agent that filled them in would fail its own
-gate. Recording acceptance — a name and a date in `compatibility-matrix.json` —
-is what unblocks `#10`.
+**Accepted 2026-09-01.** An agent prepared this matrix and did not decide to
+accept it; the named human did, and directed an agent to transcribe that
+decision here. That distinction is the whole point of the field, so it is worth
+stating rather than leaving to the commit log.
+
+TC-082 no longer asserts the fields are unset — it now asserts acceptance is in
+one of its two honest shapes: pending with nothing filled in, or accepted with
+both a named human and a date. The shape it rejects is a `state` that reads as
+accepted while nobody is on record as having accepted it.
+
+This unblocks `#10`.

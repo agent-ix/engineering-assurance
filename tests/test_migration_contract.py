@@ -170,8 +170,15 @@ def test_migration_waits_on_acceptance_and_claims_no_qualification() -> None:
     flat = " ".join(CONTRACT.split())
     assert "An agent cannot grant that acceptance" in flat
 
-    # The gate the contract points at is genuinely still closed.
-    assert load_matrix()["accepted"]["state"] == "pending_human_acceptance"
+    # The gate the contract points at is real, and it only ever opens with a
+    # human on record. Asserting it is still *closed* would freeze this test at
+    # the moment it was written; asserting it cannot open anonymously is the
+    # property the contract actually depends on.
+    acceptance = load_matrix()["accepted"]
+    assert acceptance["state"] in {"pending_human_acceptance", "accepted"}
+    if acceptance["state"] == "accepted":
+        assert acceptance["accepted_by"], "the gate opened with nobody on record"
+        assert acceptance["accepted_at"], "the gate opened with no date on record"
 
     assert "makes no certification, accreditation, authorization, identity, or" in CONTRACT
     assert "does not qualify any repository for" in CONTRACT

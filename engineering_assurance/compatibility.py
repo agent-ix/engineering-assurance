@@ -136,6 +136,31 @@ def accepted(classifications: list[Classification]) -> bool:
     return all(item.verdict == "compatible" for item in classifications)
 
 
+def human_acceptance_recorded(matrix: dict[str, Any]) -> bool:
+    """Whether a human is on record as having accepted this matrix.
+
+    Deliberately separate from `accepted`. Pinned versions are a fact about a
+    machine; acceptance is a decision somebody made. A gate needs both, and
+    answering only the first is how a correctly pinned toolchain comes to report
+    an approval nobody gave.
+
+    Any state but `accepted` withholds — including a state this module has never
+    seen, on the same reasoning that makes an unrecognised version `unknown`
+    rather than a pass.
+
+    A `state` of `accepted` with no name or no date against it is not a record;
+    it is a claim with nobody behind it, and it withholds too. The test suite
+    rejects that shape, and a gate that shelled out to this predicate instead of
+    running the tests would otherwise sail past it.
+    """
+    acceptance = matrix["accepted"]
+    if acceptance.get("state") != "accepted":
+        return False
+    who = acceptance.get("accepted_by")
+    when = acceptance.get("accepted_at")
+    return bool(isinstance(who, str) and who.strip() and isinstance(when, str) and when.strip())
+
+
 def digest_of(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
