@@ -2,10 +2,10 @@
   "matrix_version": "engineering-assurance.compatibility-matrix/v1",
   "purpose": "One reviewed set of shared-assurance component versions known to work together, with the digests that identify what those versions ship. Answers agent-ix/engineering-assurance#8.",
   "accepted": {
-    "state": "pending_human_acceptance",
-    "accepted_by": null,
-    "accepted_at": null,
-    "note": "No enforcing repository migration begins until a human records acceptance here. An agent may prepare this matrix and may not accept it."
+    "state": "accepted",
+    "accepted_by": "Peter Krenesky",
+    "accepted_at": "2026-09-01",
+    "note": "Accepted by the named human, who directed an agent to transcribe the decision into this file. The agent did not make the decision. An agent may prepare this matrix and may not accept it."
   },
   "gate": {
     "rule": "Every component must classify as compatible before an enforcing migration begins.",
@@ -57,7 +57,7 @@
       "name": "ix-flow",
       "version": "0.0.4",
       "released": true,
-      "release": "npm ix-flow@0.0.4 (public registry)",
+      "release": "npm @agent-ix/ix-flow@0.0.4 (public registry)",
       "provides": "Human decision events retained as an integrity-verified chain.",
       "observe": "ix-flow --version",
       "incompatible": [],

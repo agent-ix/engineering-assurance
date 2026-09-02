@@ -201,7 +201,7 @@ and declared constraint in this specification.
 | TC-079 | Every matrix component pins a released version and names its release; no pin is a branch, latest, or HEAD | Static | P0 | FR-012-AC-1 | ✅ |
 | TC-080 | Compatible, incompatible, and unknown are distinct with reasons, and neither incompatible nor unknown satisfies the gate | Unit | P0 | FR-012-AC-2 | ✅ |
 | TC-081 | The gate requires every pinned component; one unobserved component withholds it | Property | P0 | FR-012-AC-3 | ✅ |
-| TC-082 | Matrix acceptance is pending, unattributed, and documented as a human act | Static | P0 | FR-012-AC-4, FR-012-CON-2 | ✅ |
+| TC-082 | Matrix acceptance is pending-and-unattributed or accepted-with-name-and-date, never half-recorded, and documented as a human act | Static | P0 | FR-012-AC-4, FR-012-CON-2 | ✅ |
 | TC-083 | Every recorded artifact digest matches this tree over at least the ten schema assets | Integration | P0 | FR-012-AC-5 | ✅ |
 | TC-084 | Upgrade order and per-component rollback notes exist, no rollback is irreversible, and publication changes no CI posture | Static | P0 | FR-012-AC-6 | ✅ |
 | TC-085 | An unknown matrix version and an unknown component name are refused | Unit | P0 | FR-012-AC-7 | ✅ |

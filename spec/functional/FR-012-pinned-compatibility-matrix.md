@@ -67,7 +67,7 @@ tree does not contain is skipped rather than reported as drift.
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
 | FR-012-CON-1 | The classifier SHALL execute no subprocess and write no file. | Architecture | Test |
-| FR-012-CON-2 | An agent SHALL NOT record human acceptance of the matrix. | Responsibility | Test |
+| FR-012-CON-2 | An agent SHALL NOT decide acceptance of the matrix. It MAY transcribe an acceptance a named human has explicitly directed it to record, and the recorded attribution SHALL name that human rather than the agent. | Responsibility | Test |
 | FR-012-CON-3 | No pin SHALL require a rebuild from source to roll back. | Compatibility | Inspection |
 
 ## Acceptance Criteria
@@ -77,7 +77,7 @@ tree does not contain is skipped rather than reported as drift.
 | FR-012-AC-1 | Every component pins a released version and names its release; no pin is a branch, `latest`, or `HEAD`. | Test (TC-079) |
 | FR-012-AC-2 | Compatible, incompatible, and unknown are distinct, each carries its reason, and neither incompatible nor unknown satisfies the gate. | Test (TC-080) |
 | FR-012-AC-3 | The gate requires every pinned component; one unobserved component withholds it. | Property (TC-081) |
-| FR-012-AC-4 | Acceptance is pending, unattributed, and documented as a human act (CON-2). | Test (TC-082) |
+| FR-012-AC-4 | Acceptance is either pending and wholly unattributed, or accepted with both a named human and a date; it is never half-recorded, and it is documented as a human act (CON-2). | Test (TC-082) |
 | FR-012-AC-5 | Every artifact digest the matrix records matches this tree, over at least the ten schema assets. | Test (TC-083) |
 | FR-012-AC-6 | Upgrade order and a rollback note exist per component, no rollback is irreversible, and publication changes no repository's CI posture. | Test (TC-084) |
 | FR-012-AC-7 | An unknown matrix version and an unknown component name are refused. | Test (TC-085) |

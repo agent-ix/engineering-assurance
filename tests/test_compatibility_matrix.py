@@ -7,6 +7,7 @@ possible to test the answer for a version nobody has installed.
 
 from __future__ import annotations
 
+import datetime
 import json
 
 import pytest
@@ -100,14 +101,27 @@ def test_the_gate_requires_every_component_and_says_so() -> None:
     assert "compatible" in gate["rule"]
 
 
-def test_human_acceptance_is_pending_and_an_agent_cannot_grant_it() -> None:
-    """Trace: FR-012-AC-4, TC-082."""
+def test_human_acceptance_is_attributed_or_pending_never_half_recorded() -> None:
+    """Trace: FR-012-AC-4, TC-082.
+
+    Acceptance has exactly two honest shapes: pending with nothing filled in,
+    or accepted with a named human and a date. The shape this rejects is the
+    dangerous one — a state that reads as accepted while nobody is on record as
+    having accepted it.
+    """
     acceptance = MATRIX["accepted"]
-    assert acceptance["state"] == "pending_human_acceptance"
-    assert acceptance["accepted_by"] is None
-    assert acceptance["accepted_at"] is None
+    assert acceptance["state"] in {"pending_human_acceptance", "accepted"}
     assert "human" in acceptance["note"].lower()
     assert "agent may prepare" in acceptance["note"]
+
+    if acceptance["state"] == "pending_human_acceptance":
+        assert acceptance["accepted_by"] is None
+        assert acceptance["accepted_at"] is None
+        return
+
+    assert isinstance(acceptance["accepted_by"], str)
+    assert acceptance["accepted_by"].strip()
+    assert datetime.date.fromisoformat(acceptance["accepted_at"])
 
 
 def test_pinned_artifact_digests_match_this_tree() -> None:
