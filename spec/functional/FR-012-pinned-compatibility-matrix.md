@@ -82,6 +82,7 @@ tree does not contain is skipped rather than reported as drift.
 | FR-012-AC-6 | Upgrade order and a rollback note exist per component, no rollback is irreversible, and publication changes no repository's CI posture. | Test (TC-084) |
 | FR-012-AC-7 | An unknown matrix version and an unknown component name are refused. | Test (TC-085) |
 | FR-012-AC-8 | The classifier reaches for no subprocess, socket, or write, and the observing program is a separate file (CON-1). | Inspection (TC-086) |
+| FR-012-AC-9 | Compatible versions and recorded human acceptance are independent gate conditions; a fully pinned toolchain does not satisfy the gate while acceptance is unrecorded, any state but `accepted` withholds, and an `accepted` state lacking a name or a date withholds as a half-record. | Test (TC-095) |
 
 ## Dependencies
 

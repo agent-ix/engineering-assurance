@@ -214,6 +214,7 @@ and declared constraint in this specification.
 | TC-092 | The review checklist covers inventory, both prohibitions, byte-identical legacy evidence, every non-success state, and manual dispatch | Static | P0 | FR-013-AC-6 | ✅ |
 | TC-093 | All eight repositories appear exactly once in the Agent A/B/C allocation | Static | P0 | FR-013-AC-7 | ✅ |
 | TC-094 | The contract waits on matrix acceptance, changes no trigger, and makes no qualification claim | Unit | P0 | FR-013-AC-8, FR-013-CON-1, FR-013-CON-2, FR-013-CON-3 | ✅ |
+| TC-095 | A fully pinned toolchain does not open an unaccepted gate; any state but `accepted`, and any half-record missing a name or date, withholds | Unit | P0 | FR-012-AC-9 | ✅ |
 
 ## Option Permutation Matrix
 
@@ -350,6 +351,7 @@ evaluation envelopes.
 | FR-012 | FR-012-AC-6 | TC-084 | ✅ Passing |
 | FR-012 | FR-012-AC-7 | TC-085 | ✅ Passing |
 | FR-012 | FR-012-AC-8 | TC-086 | ✅ Passing |
+| FR-012 | FR-012-AC-9 | TC-095 | ✅ Passing |
 | FR-013 | FR-013-AC-1 | TC-087 | ✅ Passing |
 | FR-013 | FR-013-AC-2 | TC-088 | ✅ Passing |
 | FR-013 | FR-013-AC-3 | TC-089 | ✅ Passing |

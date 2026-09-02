@@ -9,9 +9,11 @@ version this script failed to read becomes `unknown` rather than absent.
     python3 scripts/check_compatibility_matrix.py
     python3 scripts/check_compatibility_matrix.py --json
 
-Exit status is 0 only when every pinned component is compatible. Unknown is not
-a pass: a toolchain nobody has tested against this matrix is a fact about the
-matrix, and it must never read as approval.
+Exit status is 0 only when every pinned component is compatible *and* the matrix
+records human acceptance. Unknown is not a pass: a toolchain nobody has tested
+against this matrix is a fact about the matrix, and it must never read as
+approval. Neither is a correctly pinned toolchain on an unaccepted matrix —
+exit 0 answers "may migration begin", not "are the versions right".
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from engineering_assurance.compatibility import (  # noqa: E402
     accepted,
     classify_all,
+    human_acceptance_recorded,
     load_matrix,
     verify_artifact_digests,
 )
@@ -108,14 +111,21 @@ def main() -> int:
     }
     classifications = classify_all(matrix, observed)
     mismatches = verify_artifact_digests(matrix, REPO_ROOT)
-    ok = accepted(classifications) and not mismatches
+    acceptance_state = matrix["accepted"]["state"]
+
+    # Two independent conditions, kept apart on purpose. Pinned versions are a
+    # fact about this machine; acceptance is a decision a human made. Collapsing
+    # them would let a correct toolchain report a gate nobody opened.
+    versions_ok = accepted(classifications) and not mismatches
+    ok = versions_ok and human_acceptance_recorded(matrix)
 
     if args.json:
         print(
             json.dumps(
                 {
                     "accepted": ok,
-                    "acceptance_state": matrix["accepted"]["state"],
+                    "versions_compatible": versions_ok,
+                    "acceptance_state": acceptance_state,
                     "components": [
                         {
                             "component": item.component,
@@ -138,10 +148,13 @@ def main() -> int:
             print(f"{'mismatch':<12} {mismatch}")
         print()
         print(
-            "gate: "
-            + ("every component is the pinned version" if ok else "NOT satisfied")
+            "versions: "
+            + ("every component is the pinned version" if versions_ok else "NOT satisfied")
         )
-        print(f"human acceptance: {matrix['accepted']['state']}")
+        print(f"human acceptance: {acceptance_state}")
+        print("gate: " + ("satisfied" if ok else "NOT satisfied"))
+        if versions_ok and not ok:
+            print("  withheld: the matrix records no human acceptance")
 
     return 0 if ok else 1
 

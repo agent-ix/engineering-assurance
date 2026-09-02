@@ -19,6 +19,7 @@ from engineering_assurance.compatibility import (
     classify,
     classify_all,
     component,
+    human_acceptance_recorded,
     load_matrix,
     verify_artifact_digests,
 )
@@ -101,6 +102,38 @@ def test_the_gate_requires_every_component_and_says_so() -> None:
     assert "compatible" in gate["rule"]
 
 
+def test_a_correctly_pinned_toolchain_does_not_open_an_unaccepted_gate() -> None:
+    """Trace: FR-012-AC-9, TC-095.
+
+    Compatible versions and a human decision are separate conditions, and the
+    dangerous failure is reporting the gate open on the strength of the first
+    alone. Every version being right says nothing about whether anybody agreed
+    to migrate.
+    """
+    assert human_acceptance_recorded(MATRIX)
+
+    for state in ("pending_human_acceptance", "withdrawn", "", "ACCEPTED"):
+        withheld = dict(MATRIX) | {"accepted": dict(MATRIX["accepted"]) | {"state": state}}
+        assert not human_acceptance_recorded(withheld), state
+
+    # A state of `accepted` with nobody or no date behind it is a claim, not a
+    # record, and withholds the gate exactly as a pending state does. Without
+    # this, anything shelling out to the gate rather than running the suite
+    # would accept the half-recorded shape TC-082 exists to reject.
+    for hole in ({"accepted_by": None}, {"accepted_by": "   "}, {"accepted_at": None}):
+        half = dict(MATRIX) | {"accepted": dict(MATRIX["accepted"]) | hole}
+        assert not human_acceptance_recorded(half), hole
+
+    # And the two conditions are genuinely independent: a fully pinned toolchain
+    # still fails to open a pending matrix.
+    everything = {entry["name"]: entry["version"] for entry in MATRIX["components"]}
+    pending = dict(MATRIX) | {
+        "accepted": dict(MATRIX["accepted"]) | {"state": "pending_human_acceptance"}
+    }
+    assert accepted(classify_all(MATRIX, everything))
+    assert not human_acceptance_recorded(pending)
+
+
 def test_human_acceptance_is_attributed_or_pending_never_half_recorded() -> None:
     """Trace: FR-012-AC-4, TC-082.
 
@@ -121,7 +154,19 @@ def test_human_acceptance_is_attributed_or_pending_never_half_recorded() -> None
 
     assert isinstance(acceptance["accepted_by"], str)
     assert acceptance["accepted_by"].strip()
-    assert datetime.date.fromisoformat(acceptance["accepted_at"])
+
+    # CON-2: the attribution names the human who decided, not the agent that
+    # typed it. An agent may transcribe an acceptance; it may not be the one on
+    # record for it. Without this, "Agent IX" satisfies every other assertion
+    # here and the constraint is decorative.
+    who = acceptance["accepted_by"].casefold()
+    assert "agent" not in who, f"attribution names an agent: {acceptance['accepted_by']!r}"
+    assert "claude" not in who
+    assert "bot" not in who
+
+    # Raises ValueError on anything that is not an ISO date. Asserting the
+    # parsed value would assert nothing — a date object is never falsy.
+    datetime.date.fromisoformat(acceptance["accepted_at"])
 
 
 def test_pinned_artifact_digests_match_this_tree() -> None:

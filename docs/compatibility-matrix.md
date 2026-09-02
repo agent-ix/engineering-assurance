@@ -78,7 +78,10 @@ After each step:
 python3 scripts/check_compatibility_matrix.py
 ```
 
-It exits non-zero unless every component is `compatible`.
+It exits non-zero unless every component is `compatible` **and** the matrix
+records human acceptance. Those are two independent conditions: a perfectly
+pinned toolchain on an unaccepted matrix still exits non-zero, because exit 0
+answers "may migration begin", not "are the versions right".
 
 No campaign repository is touched by an upgrade of these components. Migrations
 are `agent-ix/engineering-assurance#10`, and they begin only after this matrix
