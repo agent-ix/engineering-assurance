@@ -9,6 +9,8 @@
 
 #![forbid(unsafe_code)]
 
+pub mod compatibility;
+
 /// The Cargo package name shared by the library and CLI targets.
 pub const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME");
 

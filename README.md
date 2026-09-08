@@ -40,10 +40,21 @@ The repository owns one unpublished Cargo package with the
 `engineering_assurance` library and `engineering-assurance` CLI. The exact
 Rust 1.98.1 toolchain is selected by `rust-toolchain.toml`.
 
-The initial additive boundary exposes the library/package identity and a native
-`--version` command. Versioned machine-facing capability commands arrive in
-reviewed migration slices; the presence of the package does not claim that the
-legacy Python or JavaScript paths have already been replaced.
+The additive boundary exposes package identity plus a pure compatibility
+classifier. Callers observe component versions outside the library and submit
+one strict, bounded request on stdin:
+
+```bash
+printf '%s\n' '{"protocol":"engineering-assurance.compatibility-request/v1","observed":[]}' \
+  | cargo run --quiet -- compatibility
+```
+
+Request, result, and error schemas live under
+`engineering_assurance/schemas/`. A compatible result exits 0, a valid but
+withheld result exits 1, and malformed or unsupported input exits 2. This slice
+does not yet replace the legacy environment observation, artifact-digest, or
+consumer repository checks, and it does not claim that all Python or JavaScript
+paths have been removed.
 
 ```bash
 make rust-foundation-gate
