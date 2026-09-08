@@ -87,6 +87,13 @@ def test_unapproved_urls_and_long_encoded_payloads_are_detected() -> None:
     assert "encoded payload" in categories(encoded)
 
 
+def test_cargo_registry_url_is_allowed_only_in_dependency_policy() -> None:
+    registry = "https:" + "//github.com/rust-lang/crates.io-index"
+    assert categories(registry, path="Cargo.lock") == set()
+    assert categories(registry, path="deny.toml") == set()
+    assert "unapproved external URL" in categories(registry)
+
+
 def test_failure_rendering_never_needs_matched_text() -> None:
     secret = "/" + "home" + "/person/private-value"
     findings = CHECKER.text_findings("candidate.md", secret)
@@ -98,7 +105,7 @@ def test_failure_rendering_never_needs_matched_text() -> None:
 
 def test_file_type_policy_rejects_research_containers() -> None:
     assert {".pdf", ".docx", ".xlsx"} <= CHECKER.FORBIDDEN_SUFFIXES
-    assert {".py", ".rs", ".ts"} <= CHECKER.TEXT_SUFFIXES
+    assert {".lock", ".py", ".rs", ".ts"} <= CHECKER.TEXT_SUFFIXES
 
 
 def test_binary_control_payload_is_rejected(tmp_path: Path) -> None:

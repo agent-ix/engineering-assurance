@@ -20,6 +20,7 @@ TEXT_SUFFIXES = {
     ".html",
     ".js",
     ".json",
+    ".lock",
     ".md",
     ".mjs",
     ".py",
@@ -57,6 +58,14 @@ SEMANTIC_POLICY_FILES = {
 }
 ALLOWED_URL_PREFIXES = {
     "http://json-schema.org/draft-07/schema#",
+}
+ALLOWED_URLS_BY_PATH = {
+    "Cargo.lock": {
+        "https:" + "//github.com/rust-lang/crates.io-index",
+    },
+    "deny.toml": {
+        "https:" + "//github.com/rust-lang/crates.io-index",
+    },
 }
 URL_POLICY_FILES = {"LICENSE"}
 
@@ -133,7 +142,10 @@ def text_findings(relative: str, text: str) -> list[Finding]:
                     findings.append(Finding(relative, number, category))
         if relative not in URL_POLICY_FILES:
             for url in URL_PATTERN.findall(line):
-                if not any(url.startswith(prefix) for prefix in ALLOWED_URL_PREFIXES):
+                allowed_exact = ALLOWED_URLS_BY_PATH.get(relative, set())
+                if url not in allowed_exact and not any(
+                    url.startswith(prefix) for prefix in ALLOWED_URL_PREFIXES
+                ):
                     findings.append(
                         Finding(relative, number, "unapproved external URL")
                     )
