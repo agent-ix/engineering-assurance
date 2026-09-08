@@ -31,7 +31,7 @@ implementations.
 | Supported Rust version | 1.75 | build succeeds | pinned toolchain build |
 | Requirement-verifying Rust tests with canonical ix-trace-rs markers | 100% | 100% | Quire coverage plus static macro-form audit |
 | Same-runner Rust parity-path p95 latency and peak RSS regression | none | no more than 10% above the retained path over 30 runs | versioned benchmark record |
-| Required pull-request gates | all | format, Clippy with warnings denied, locked MSRV build, tests, Quire reconciliation, package/rights/static audits | hosted CI status checks |
+| Required pull-request gates | all | `ea-rust-format`, `ea-rust-clippy`, `ea-rust-msrv`, `ea-rust-tests`, `ea-quire-trace`, `ea-package-rights-static` at the current head | hosted CI status checks |
 
 ## Rationale
 
@@ -48,14 +48,16 @@ so passing tests bind to reviewed acceptance criteria.
 | NFR-005-AC-3 | Quire reconciles every Rust criterion marker to the test matrix with no missing, orphaned, or duplicate TC binding. | Integration (TC-118) |
 | NFR-005-AC-4 | The final executable-path and inline-CI audit reports zero unapproved non-Rust semantic or assertion paths. | Static (TC-115) |
 | NFR-005-AC-5 | Same-runner benchmarks over compatibility classification, onboarding, invariant evaluation, result aggregation, and repository qualification record at least 30 old/new observations per capability; no Rust-path p95 latency or peak RSS exceeds the retained path by more than 10%. | Benchmark (TC-126) |
-| NFR-005-AC-6 | Pull requests that claim a Rust-migration criterion run required hosted status checks for formatting, Clippy with warnings denied, the locked Rust 1.75 build, tests, Quire trace reconciliation, and package/rights/static audits. | Integration (TC-127) |
+| NFR-005-AC-6 | A pull request that claims a Rust-migration criterion has successful `ea-rust-format`, `ea-rust-clippy`, `ea-rust-msrv`, `ea-rust-tests`, `ea-quire-trace`, and `ea-package-rights-static` statuses bound to its current head revision; a missing, failed, stale-revision, or manually substituted status withholds the gate, and none of these jobs invokes a real-agent evaluation or release operation. | Integration (TC-127) |
 
 ## Verification
 
 Build and test with the reviewed minimum toolchain, run formatting and Clippy
 with warnings denied, run Quire coverage from the repository root, and inspect
 all tracked executable, generated, package-script, Make, and hosted-workflow
-paths against ADR-002's matrix.
+paths against ADR-002's matrix. Repository settings require the six named
+statuses on Rust-migration pull requests; workflow configuration alone is not
+evidence that the branch gate enforces them.
 
 ## Dependencies
 

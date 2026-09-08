@@ -281,7 +281,7 @@ the reviewed implementation exists.
 | TC-109 | Rust evaluation completes the 28-cell matrix without inferred decisions | E2E | P0 | FR-017-AC-1, FR-017-CON-1 | 🚧 pending host interface |
 | TC-110 | Every incomplete or invalid evaluation input withholds the aggregate gate | Property | P0 | FR-017-AC-2 | 🚧 pending implementation |
 | TC-111 | Each package, rights, manifest, integration, and publication-refusal capability has independent positive and negative subcases matching the retained gate | Property | P0 | FR-017-AC-3 | 🚧 pending implementation |
-| TC-112 | Package and CI files contain declarative dispatch only and triggers remain unchanged | Static | P0 | FR-017-AC-4, FR-017-CON-2, FR-017-CON-3 | 🚧 pending implementation |
+| TC-112 | Package and CI files contain declarative dispatch only; deterministic qualification runs on pull requests while real-agent evaluation, release evaluation, publication, and release operations remain manual-only | Static | P0 | FR-017-AC-4, FR-017-CON-2, FR-017-CON-3 | 🚧 pending implementation |
 | TC-113 | Removal refuses mismatched revisions, incomplete parity, and unmigrated consumers | Property | P0 | FR-018-AC-2, FR-018-CON-1 | 🚧 pending implementation |
 | TC-114 | Every migration failure rolls back without changing historical bytes | Property | P0 | FR-018-AC-3, FR-018-CON-2 | 🚧 pending implementation |
 | TC-115 | Final audit finds no unapproved non-Rust semantic or assertion logic | Static | P0 | StR-003-VC-4, FR-016-CON-2, FR-018-AC-4, FR-018-CON-3, NFR-005-AC-4 | 🚧 pending implementation |
@@ -296,7 +296,7 @@ the reviewed implementation exists.
 | TC-124 | cli-agent-evals host loading refuses any suite interface whose accepted artifact identity, version, revision, or digest is absent or mismatched | Integration | P0 | FR-017-AC-5, FR-017-CON-4 | 🚧 pending accepted host interface |
 | TC-125 | Legacy removal refuses a changed registry digest or external interface identity at the candidate revision | Property | P0 | FR-018-AC-5 | 🚧 pending implementation |
 | TC-126 | Thirty-run same-runner old/new benchmarks stay within 10% for p95 latency and peak RSS in every named capability | Benchmark | P0 | NFR-005-AC-5 | 🚧 pending implementation |
-| TC-127 | Rust-migration pull requests require hosted format, Clippy, locked MSRV, test, Quire trace, package, rights, and static-audit statuses | Integration | P0 | NFR-005-AC-6 | 🚧 pending implementation |
+| TC-127 | Rust-migration pull requests require six named current-head hosted statuses, reject missing/failed/stale/manual substitutes, and run no real-agent or release operation | Integration | P0 | NFR-005-AC-6 | 🚧 pending implementation |
 
 ## Option Permutation Matrix
 
@@ -358,6 +358,9 @@ evaluation envelopes.
 | FR-015 registry identity | Duplicate | repeated repository or artifact path | TC-122 | Refuse even when classifications match |
 | NFR-005 regression | Boundary | exactly 10% above retained p95/RSS | TC-126 | Pass |
 | NFR-005 regression | Above | more than 10% above retained p95 or RSS | TC-126 | Fail |
+| NFR-005 PR status | Exact | six named successful statuses bound to current pull-request head | TC-127 | Pass without real-agent or release execution |
+| NFR-005 PR status | Missing/failed/stale/manual | any required status absent, unsuccessful, bound to another revision, or replaced by an unbound manual claim | TC-127 | Withhold migration gate |
+| FR-017 hosted action | Automatic PR event | real-agent evaluation, evidence-bearing release evaluation, publication, or release operation selected | TC-112, TC-127 | Refuse; those actions remain manual-only |
 
 ## State Transition Coverage
 

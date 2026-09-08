@@ -48,7 +48,12 @@ library and CLI.
 - Content-rights qualification SHALL inspect the complete tracked tree and every
   staged package member.
 - Registry publication SHALL remain refused.
-- Hosted workflow dispatch posture SHALL remain unchanged.
+- Pull-request qualification SHALL run automatically for a Rust-migration
+  candidate and SHALL bind every required result to the current pull-request
+  head revision.
+- Automatic pull-request qualification SHALL run only deterministic repository
+  checks; real-agent evaluation, evidence-bearing release evaluation, registry
+  publication, and release operations SHALL remain explicit manual actions.
 
 ## Error Conditions
 
@@ -62,7 +67,7 @@ rights denial, and attempted publication each fail the corresponding gate.
 | --- | --- | --- | --- |
 | FR-017-CON-1 | The Rust evaluator SHALL NOT infer a human terminal decision. | Responsibility | Test |
 | FR-017-CON-2 | Package-manager and CI configuration SHALL contain no first-party semantic assertion. | Architecture | Test |
-| FR-017-CON-3 | The migration SHALL NOT dispatch hosted CI. | Operational | Inspection |
+| FR-017-CON-3 | An automatic pull-request workflow SHALL NOT invoke real-agent evaluation, evidence-bearing release evaluation, registry publication, or a release operation. | Operational | Test |
 | FR-017-CON-4 | Host-bound implementation SHALL NOT begin until the cli-agent-evals owner accepts an exact structured-suite artifact identity, version, revision, and compatibility gate. | Dependency | Review |
 
 ## Acceptance Criteria
@@ -72,7 +77,7 @@ rights denial, and attempted publication each fail the corresponding gate.
 | FR-017-AC-1 | The Rust evaluation path completes all 28 required host-scenario cells and produces results equivalent to the retained reference for success and every declared failure. | E2E (TC-109) |
 | FR-017-AC-2 | Missing, malformed, unavailable, stale-revision, changed-governing-file, and incomplete evaluation inputs each withhold the aggregate gate. | Property (TC-110) |
 | FR-017-AC-3 | Rust package, rights, manifest, integration, and publication-refusal gates match the retained pass/fail corpus and reject extra, missing, or escaping package members. | Property (TC-111) |
-| FR-017-AC-4 | Static inspection finds only declarative dispatch in package-manager and CI configuration and confirms that workflow triggers are unchanged (CON-2, CON-3). | Test (TC-112) |
+| FR-017-AC-4 | Static inspection finds only declarative dispatch in package-manager and CI configuration, confirms that deterministic qualification runs on pull requests, and proves that real-agent evaluation, evidence-bearing release evaluation, publication, and release operations remain manual-only (CON-2, CON-3). | Test (TC-112) |
 | FR-017-AC-5 | The configured cli-agent-evals suite interface matches the accepted artifact identity, version, revision, and digest; an absent, stale, foreign, or unaccepted interface blocks host-bound work. | Integration (TC-124) |
 
 ## Dependencies
