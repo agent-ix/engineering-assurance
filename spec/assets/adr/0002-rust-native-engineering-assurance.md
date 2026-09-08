@@ -215,5 +215,7 @@ will implement no unapproved shim to evade those gates.
 
 Reopen this decision if a required host cannot accept a structured external
 provider, an accepted portable contract cannot be consumed without copying its
-ownership, Rust parity changes an existing digest domain, or a required
-dependency cannot support the repository's reviewed MSRV and rights boundary.
+ownership, Rust parity changes an existing digest domain, or a required tool
+demonstrably cannot run on the current stable Rust compiler under the
+repository's rights boundary. Formatting changes and repairable lint findings
+do not constitute tool incompatibility.
