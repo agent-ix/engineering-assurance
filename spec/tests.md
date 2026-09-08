@@ -11,7 +11,7 @@ type: TestMatrix
 This matrix records completed verification for the canonical assurance-onboarding
 and verification-semantics baseline and planned verification for the proposed
 Rust migration. TC-001..TC-095 have passing repository or retained real-agent
-evidence. TC-096..TC-118 remain pending until the specification is accepted and
+evidence. TC-096..TC-120 remain pending until the specification is accepted and
 the reviewed implementation exists.
 
 ## Test Matrix Rules
@@ -110,6 +110,8 @@ the reviewed implementation exists.
 | FR-015 | FR-015-AC-2 | TC-102 | 🚧 Pending implementation |
 | FR-015 | FR-015-AC-3 | TC-103 | 🚧 Pending implementation |
 | FR-015 | FR-015-AC-4 | TC-104 | 🚧 Pending implementation |
+| FR-015 | FR-015-AC-5 | TC-119 | 🚧 Pending implementation |
+| FR-015 | FR-015-AC-6 | TC-120 | 🚧 Pending implementation |
 | FR-016 | FR-016-AC-1 | TC-105 | 🚧 Pending implementation |
 | FR-016 | FR-016-AC-2 | TC-106 | 🚧 Pending implementation |
 | FR-016 | FR-016-AC-3 | TC-107 | 🚧 Pending implementation |
@@ -279,6 +281,8 @@ the reviewed implementation exists.
 | TC-116 | Rust 1.75 builds every target with unsafe code forbidden | Compile | P0 | NFR-005-AC-1 | 🚧 pending implementation |
 | TC-117 | Rust requirement tests use the canonical bare ix-trace-rs macro form | Static | P0 | NFR-005-AC-2 | 🚧 pending implementation |
 | TC-118 | Quire reconciles every Rust test marker without missing, orphaned, or duplicate bindings | Integration | P0 | NFR-005-AC-3 | 🚧 pending implementation |
+| TC-119 | Installed module validates every active AP/MP in the pinned package corpus and recorded Quire consumer set, with no unapproved valid-to-invalid transition | Integration | P0 | FR-015-AC-5 | 🚧 pending implementation |
+| TC-120 | Legacy, current, malformed, and unsupported assurance artifacts classify distinctly, preserve source bytes, and invalid profiles cannot select review policy | Property | P0 | FR-015-AC-6 | 🚧 pending implementation |
 
 ## Option Permutation Matrix
 
@@ -349,6 +353,7 @@ evaluation envelopes.
 | EC-014 | ix-flow or cli-agent-evals cannot load a structured external provider | FR-016, FR-017 | TC-108, TC-109 | JavaScript remains an undeclared permanent dependency |
 | EC-015 | A legacy path is deleted before its last consumer migrates | FR-018 | TC-113 | Qualification or onboarding becomes unavailable |
 | EC-016 | Path-qualified ix-trace-rs macro compiles but Quire cannot bind it | NFR-005 | TC-117, TC-118 | Passing Rust tests provide no requirement evidence |
+| EC-017 | Installed assurance schema rejects an active artifact from its own corpus or a recorded Quire consumer | FR-015, FR-018 | TC-119, TC-120 | A governance profile silently stops validating or still influences review despite being invalid |
 
 ## Integration Test Matrix
 
@@ -363,6 +368,7 @@ evaluation envelopes.
 | INT-005 | Validate shared semantic references and historical compatibility | Quire, Quoin, ix-flow, native producer fixtures | library | TC-052..TC-068 | ✅ |
 | INT-006 | Load Rust workflow invariants through a structured host interface | ix-flow | service | TC-107, TC-108 | 🚧 |
 | INT-007 | Load Rust-owned scenarios and assertions through a structured host interface | cli-agent-evals | service | TC-109, TC-110 | 🚧 |
+| INT-008 | Validate versioned assurance-artifact contracts against active real consumers | quire-rs and pinned assurance corpus | service | TC-119, TC-120 | 🚧 |
 
 ### Integration Test Details
 
@@ -449,7 +455,7 @@ which enforce the accepted compatibility corpus that FR-010 previously deferred
 and the pinned release matrix that gates the migrations; SR-022 and SR-023 retain
 the completed code-review and gap-analysis closure gates.
 
-The proposed Rust migration has an intentional open gap: TC-096..TC-118 are
+The proposed Rust migration has an intentional open gap: TC-096..TC-120 are
 fully mapped but pending. TC-108 depends on a reviewed ix-flow structured
 external-provider interface. TC-109 depends on a reviewed cli-agent-evals
 structured external-suite interface. No implementation or removal may be

@@ -59,6 +59,7 @@ still own domain execution.
 | Capability | Current paths and consumers | Classification | Rust disposition or gate |
 | --- | --- | --- | --- |
 | Compatibility classification and accepted corpus access | `engineering_assurance/compatibility.py`, `compatibility_corpus.py`; compatibility and campaign gates | Missing reusable implementation | Implement in the library; preserve read-only corpus and matrix behavior. |
+| AssuranceProfile and MeasurementPlan module contracts | `engineering_assurance/schemas/`, `skeletons/`, and `manifest.yaml`; Quire validates the repository corpus and external consumers including `quire-rs` | Published cross-repository contract with an observed compatibility defect: the 0.2 schemas reject active AP/MP documents in the package corpus and quire-rs | Version the accepted legacy/current shapes, add real consumer fixtures, and complete owner-approved consumer migration before replacing a schema. An invalid profile cannot govern review selection. |
 | Verification vocabulary, reference validation, projection, and fixture generation | `verification_semantics.py`, `evidence.py`, `fixture_codegen.py`; repository tests, generated fixture consumers, and historical PGM-01 views | Existing shared contracts plus missing Rust implementation | Consume accepted portable contract versions; implement Engineering Assurance mapping and validation without copying their ownership or creating persisted records. |
 | Discovery, onboarding, and run coordination | `discovery.py`, `onboarding.py`, `workflow.py`; canonical skill, supported agent manifests, ix-flow | Engineering Assurance domain logic | Implement in the library and CLI; keep Quire and ix-flow as authoritative external services. |
 | Workflow invariants | `engineering_assurance/skills/assurance-onboarding/scripts/invariants.js`; ix-flow | Engineering Assurance domain logic | Implement in Rust. Removal waits for an ix-flow external structured-provider interface. |
@@ -116,6 +117,10 @@ will implement no unapproved shim to evade those gates.
   owners before this migration can remove the current modules.
 - The accepted corpus and historical evidence remain byte-identical and
   read-only throughout the migration.
+- Assurance artifact schemas remain versioned public contracts. A Rust rewrite
+  cannot preserve compatibility merely by reproducing the current validator if
+  that validator rejects the active artifacts shipped by its own corpus or a
+  recorded Quire consumer.
 
 ## Revisit triggers
 

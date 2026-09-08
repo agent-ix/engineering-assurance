@@ -24,6 +24,8 @@ executable path.
 - The executable-path and consumer matrix in ADR-002.
 - The reviewed Rust library, CLI, and external-host interfaces.
 - Same-revision differential, package, rights, and integration evidence.
+- The assurance-artifact schema consumer inventory and its versioned migration
+  dispositions.
 
 ## Outputs
 
@@ -43,6 +45,8 @@ executable path.
 - Historical corpus and evidence bytes SHALL remain unchanged.
 - A changed interface or compatibility promise SHALL return to specification
   and review before implementation continues.
+- An assurance-artifact schema replacement SHALL wait until every recorded
+  active consumer validates or completes its owner-approved migration.
 
 ## Error Conditions
 
