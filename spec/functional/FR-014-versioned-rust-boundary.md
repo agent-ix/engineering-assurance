@@ -37,14 +37,23 @@ the `engineering-assurance` native CLI.
   invoking a downstream action.
 - The CLI SHALL write machine results only to stdout.
 - The CLI SHALL write human-readable diagnostics only to stderr.
+- The CLI SHALL buffer the machine result and write no stdout bytes until one
+  complete result is available; interruption cannot leave a partial JSON value.
+- Each protocol schema SHALL declare a request and result limit no greater than
+  64 MiB and a non-zero downstream deadline no greater than 30 minutes. A
+  command that needs no downstream host still enforces the byte limits.
+- When timeout, cancellation, or a termination signal occurs, the CLI SHALL
+  terminate any child it started, perform no later write or downstream action,
+  and return a distinguishable non-success status.
 - The library SHALL keep reusable validation and transformation behavior free
   of filesystem, subprocess, socket, and environment access.
 - The CLI SHALL preserve the selected repository root as an explicit boundary.
 
 ## Error Conditions
 
-Malformed JSON, an unknown protocol version, an escaping path, an unavailable
-required host, and a structurally invalid host response each return a
+Malformed JSON, an unknown protocol version, an escaping path, an over-limit
+request or result, an invalid or expired deadline, timeout, cancellation,
+termination signal, an unavailable required host, and a structurally invalid host response each return a
 distinguishable non-success result. No such result is reported as successful or
 partially accepted.
 
@@ -64,6 +73,7 @@ partially accepted.
 | FR-014-AC-2 | Every machine-facing command emits exactly one declared-version JSON result on stdout and sends diagnostics only to stderr. | Property (TC-098) |
 | FR-014-AC-3 | Unknown versions, malformed inputs, escaping roots, unavailable hosts, and invalid host responses fail before any write or downstream action. | Property (TC-099) |
 | FR-014-AC-4 | A complete call-surface audit finds no evidence persistence, arbitrary stdout verdict recovery, or reusable I/O behavior in the library (CON-1, CON-2). | Test (TC-101) |
+| FR-014-AC-5 | Boundary tests prove the declared byte/deadline limits, buffer-before-stdout rule, child termination, and no-side-effect behavior for timeout, cancellation, and termination signals. | Property (TC-121) |
 
 ## Dependencies
 

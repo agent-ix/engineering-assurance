@@ -59,7 +59,7 @@ still own domain execution.
 | Capability | Current paths and consumers | Classification | Rust disposition or gate |
 | --- | --- | --- | --- |
 | Compatibility classification and accepted corpus access | `engineering_assurance/compatibility.py`, `compatibility_corpus.py`; compatibility and campaign gates | Missing reusable implementation | Implement in the library; preserve read-only corpus and matrix behavior. |
-| AssuranceProfile and MeasurementPlan module contracts | `engineering_assurance/schemas/`, `skeletons/`, and `manifest.yaml`; Quire validates the pinned package corpus and registered consumer revisions | Published cross-repository contract with an observed compatibility defect: the 0.2 schemas reject active AP/MP documents in the package corpus and `quire-rs`, while newer consumer shapes are accepted | Version the accepted legacy/current shapes, commit an owner-reviewed consumer registry and revision-bound compatibility snapshot, add real consumer fixtures, and complete owner-approved consumer migration before replacing a schema. An invalid profile cannot govern review selection. |
+| AssuranceProfile and MeasurementPlan module contracts | `engineering_assurance/schemas/`, `skeletons/`, and `manifest.yaml`; Quire validates the pinned package corpus and registered consumer revisions | Published cross-repository contract with an observed compatibility defect: the installed 0.2 module rejects legacy AssuranceProfile frontmatter and legacy MeasurementPlan body sections in the package corpus and `quire-rs`, while newer consumer shapes are accepted | Version the accepted legacy/current shapes, commit an owner-reviewed consumer registry and revision-bound compatibility snapshot, add real consumer fixtures, and complete owner-approved consumer migration before replacing a schema. An invalid profile cannot govern review selection. |
 | Verification vocabulary, reference validation, projection, and fixture generation | `verification_semantics.py`, `evidence.py`, `fixture_codegen.py`; repository tests, generated fixture consumers, and historical PGM-01 views | Existing shared contracts plus missing Rust implementation | Consume accepted portable contract versions; implement Engineering Assurance mapping and validation without copying their ownership or creating persisted records. |
 | Discovery, onboarding, and run coordination | `discovery.py`, `onboarding.py`, `workflow.py`; canonical skill, supported agent manifests, ix-flow | Engineering Assurance domain logic | Implement in the library and CLI; keep Quire and ix-flow as authoritative external services. |
 | Workflow invariants | `engineering_assurance/skills/assurance-onboarding/scripts/invariants.js`; ix-flow | Engineering Assurance domain logic | Implement in Rust. Removal waits for an ix-flow external structured-provider interface. |
@@ -89,7 +89,11 @@ The point-in-time census established two live contract generations:
 
 - The package-pinned `qa-corpus` revision `ea4ac7a227bd` and the `quire-rs`
   specification at `8b8020e665c6` with corpus revision `7442f2770880` use the
-  legacy AP/MP shape and fail the installed 0.2 structural contract.
+  legacy AP/MP generation and fail different layers of the installed 0.2
+  structural contract. The legacy AssuranceProfile frontmatter fails the
+  closed frontmatter schema. The MeasurementPlan frontmatter passes its schema,
+  but the documents fail the module's required `Decision Use`, `Population`,
+  `Collection Procedure`, and `Interpretation` body-section contract.
 - Current AP/MP frontmatter in Quoin, `quire-analyze`,
   `quire-contract-codegen`, `quire-contract-ir`, `quire-contract-runtime`,
   `quire-verification`, and the observed `tl-mltl`, `tl-parse`, `tl-rewrite`,
@@ -102,6 +106,20 @@ migration SHALL replace it with a committed owner-reviewed registry of canonical
 consumer repositories and a candidate-revision snapshot. Workstation directory
 discovery, stale clones, skeletons, quarantined evidence, and duplicated
 submodule checkouts cannot silently add or remove a release consumer.
+
+The structural result above was reproduced with Quire 0.31.0 against immutable
+consumer revisions. From the `qa-corpus` root at
+`ea4ac7a227bd2a393c29f722f9b331e1f97aa999`,
+`quire validate --scope . "assurance/*.md" --summary` reports the AP
+frontmatter/body failures and four missing required sections on each of
+MP-201 and MP-202. From the `quire-rs` root at
+`967eafe468c3b234a20856aaa761c71f55207735`,
+`quire validate --scope . "spec/assurance/*.md" --summary` reports the same AP
+failure classes and the same four missing sections on each of MP-201 through
+MP-208. Both runs report every selected document grammar-clean. This evidence
+must not be restated as a symmetric frontmatter-schema failure: MP frontmatter
+passes the installed schema, and only its body-section contract rejects these
+documents.
 
 ## Decision
 

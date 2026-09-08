@@ -30,6 +30,8 @@ implementations.
 | Unsafe Rust blocks | 0 | 0 | `#![forbid(unsafe_code)]` plus source audit |
 | Supported Rust version | 1.75 | build succeeds | pinned toolchain build |
 | Requirement-verifying Rust tests with canonical ix-trace-rs markers | 100% | 100% | Quire coverage plus static macro-form audit |
+| Same-runner Rust parity-path p95 latency and peak RSS regression | none | no more than 10% above the retained path over 30 runs | versioned benchmark record |
+| Required pull-request gates | all | format, Clippy with warnings denied, locked MSRV build, tests, Quire reconciliation, package/rights/static audits | hosted CI status checks |
 
 ## Rationale
 
@@ -45,6 +47,8 @@ so passing tests bind to reviewed acceptance criteria.
 | NFR-005-AC-2 | Every Rust test that verifies a specification criterion imports `ix_trace_rs::trace` and uses bare `#[trace("TC-...", "...-AC-...")]`; no path-qualified trace macro is accepted. | Static (TC-117) |
 | NFR-005-AC-3 | Quire reconciles every Rust criterion marker to the test matrix with no missing, orphaned, or duplicate TC binding. | Integration (TC-118) |
 | NFR-005-AC-4 | The final executable-path and inline-CI audit reports zero unapproved non-Rust semantic or assertion paths. | Static (TC-115) |
+| NFR-005-AC-5 | Same-runner benchmarks over compatibility classification, onboarding, invariant evaluation, result aggregation, and repository qualification record at least 30 old/new observations per capability; no Rust-path p95 latency or peak RSS exceeds the retained path by more than 10%. | Benchmark (TC-126) |
+| NFR-005-AC-6 | Pull requests that claim a Rust-migration criterion run required hosted status checks for formatting, Clippy with warnings denied, the locked Rust 1.75 build, tests, Quire trace reconciliation, and package/rights/static audits. | Integration (TC-127) |
 
 ## Verification
 

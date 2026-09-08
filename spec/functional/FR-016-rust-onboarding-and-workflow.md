@@ -9,6 +9,10 @@ relationships:
     type: "requires"
   - target: "ix://agent-ix/engineering-assurance/FR-005"
     type: "requires"
+  - target: "ix://agent-ix/engineering-assurance/FR-014"
+    type: "requires"
+  - target: "ix://agent-ix/engineering-assurance/FR-015"
+    type: "requires"
 ---
 
 # FR-016: Run onboarding and workflow invariants through Rust
@@ -56,6 +60,7 @@ target each fail closed without overwriting source artifacts or run history.
 | --- | --- | --- | --- |
 | FR-016-CON-1 | Engineering Assurance SHALL NOT reimplement ix-flow run state or human-gate mechanics. | Responsibility | Test |
 | FR-016-CON-2 | A foreign-language host bridge SHALL require an explicit owner disposition before inclusion. | Architecture | Review |
+| FR-016-CON-3 | Host-bound implementation SHALL NOT begin until the ix-flow owner accepts an exact structured-provider artifact identity, version, revision, and compatibility gate. | Dependency | Review |
 
 ## Acceptance Criteria
 
@@ -65,6 +70,7 @@ target each fail closed without overwriting source artifacts or run history.
 | FR-016-AC-2 | Every canonical workflow-invariant fixture produces the same complete ordered failure set through the Rust provider and the retained JavaScript reference. | Property (TC-106) |
 | FR-016-AC-3 | Interruption, resume, acceptance, rejection, missing choice, invalid transition, and run-binding mismatch preserve ix-flow state and human-gate behavior. | Integration (TC-107) |
 | FR-016-AC-4 | The canonical and pilot workflow invocations pass through the Rust provider before either legacy JavaScript path is removed. | Integration (TC-108) |
+| FR-016-AC-5 | The configured ix-flow host interface matches the accepted artifact identity, version, revision, and digest; an absent, stale, foreign, or unaccepted interface blocks host-bound work. | Integration (TC-123) |
 
 ## Dependencies
 

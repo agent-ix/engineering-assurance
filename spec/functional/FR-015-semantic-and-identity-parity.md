@@ -11,6 +11,8 @@ relationships:
     type: "requires"
   - target: "ix://agent-ix/engineering-assurance/FR-011"
     type: "requires"
+  - target: "ix://agent-ix/engineering-assurance/FR-014"
+    type: "requires"
 ---
 
 # FR-015: Preserve semantic, identity, and compatibility behavior in Rust
@@ -60,6 +62,14 @@ observable identities or ownership.
 - Engineering Assurance SHALL resolve the assurance-contract consumer set from
   the committed owner registry, package metadata, and exact pinned gitlinks;
   it SHALL NOT infer release scope from arbitrary workstation directories.
+- The consumer registry SHALL carry the
+  `engineering-assurance.consumer-registry/v1` discriminator, a digest over its
+  canonical bytes, and one unique canonical `ix://<org>/<repo>`
+  identity per repository. A second row for the same repository or artifact path
+  is rejected even when its classification matches.
+- Each registry row SHALL classify the artifact as exactly one of `active`,
+  `inactive`, `skeleton`, `template`, or `quarantined`.
+- Each non-active registry row SHALL name its owner and exclusion reason.
 - The compatibility snapshot SHALL record the canonical repository identity,
   clean candidate commit, artifact path and blob digest, provider/module
   version and schema digests, validation outcome, and owner disposition.
@@ -72,15 +82,22 @@ observable identities or ownership.
 - Engineering Assurance SHALL NOT replace an accepted schema with an
   incompatible shape until every recorded active consumer has an owner-approved
   migration disposition and the prior shape remains explicitly addressable.
-- Quire SHALL NOT apply review selection or another governance effect from an
-  AssuranceProfile that fails its installed versioned schema.
+- Engineering Assurance SHALL reject a Quire host result that applies review
+  selection or another governance effect from an AssuranceProfile that failed
+  its installed versioned schema.
+- Engineering Assurance SHALL report that host-contract violation without
+  treating the profile as governing input. Any change to Quire's own behavior
+  requires a separately accepted Quire specification.
 
 ## Error Conditions
 
 An unknown contract version, missing provenance, ambiguous legacy mapping,
 digest mismatch, malformed fixture, unsupported canonicalization version,
 unresolved registry entry, dirty candidate revision, and unclassified artifact
-each fail explicitly and preserve the original input bytes. An installed module
+each fail explicitly and preserve the original input bytes. A registry digest
+change during a run, duplicate repository identity, duplicate artifact path, or
+unknown classification also fails the snapshot without an owner disposition.
+An installed module
 schema that rejects an active artifact in the accepted compatibility corpus is
 a release-blocking incompatibility, not an ordinary malformed-input case.
 
@@ -102,6 +119,7 @@ a release-blocking incompatibility, not an ordinary malformed-input case.
 | FR-015-AC-4 | Static ownership and execution audits find no copied portable contract family, persisted evidence family, or executable foreign-language fixture (CON-2, CON-3). | Test (TC-104) |
 | FR-015-AC-5 | A registry-derived, revision-bound snapshot accounts for every active AssuranceProfile and MeasurementPlan in the pinned package corpus and registered consumer set; the candidate installed module validates each artifact, or its owner has completed an explicit versioned migration before module replacement. | Test (TC-119) |
 | FR-015-AC-6 | Legacy, current, malformed, and unsupported assurance-artifact shapes receive distinct versioned outcomes without changing source bytes, and an invalid AssuranceProfile contributes no review-selection decision. | Property (TC-120) |
+| FR-015-AC-7 | The versioned registry rejects an unknown discriminator/classification, non-canonical or duplicate repository identity, duplicate artifact path, digest mismatch, and any registry-byte change during a snapshot; every accepted exclusion has a named owner and reason. | Property (TC-122) |
 
 ## Dependencies
 

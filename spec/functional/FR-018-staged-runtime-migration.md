@@ -9,6 +9,10 @@ relationships:
     type: "requires"
   - target: "ix://agent-ix/engineering-assurance/FR-017"
     type: "requires"
+  - target: "ix://agent-ix/engineering-assurance/FR-015"
+    type: "requires"
+  - target: "ix://agent-ix/engineering-assurance/FR-016"
+    type: "requires"
 ---
 
 # FR-018: Migrate consumers before retiring legacy executable paths
@@ -76,6 +80,7 @@ changed historical byte, and an unresolved owner disposition each block removal.
 | FR-018-AC-2 | A removal attempt is refused unless old and new paths passed at the same candidate revision and all recorded consumers use the new versioned interface. | Property (TC-113) |
 | FR-018-AC-3 | Each failure mode has a rollback that restores the old invocation without rewriting historical evidence or corpus bytes. | Test (TC-114) |
 | FR-018-AC-4 | Final inventory and static scans find no unapproved first-party non-Rust semantic or assertion logic and do not count inert fixture samples as executable remediation debt. | Test (TC-115) |
+| FR-018-AC-5 | Removal is refused when the consumer registry digest differs from the snapshot binding or when any accepted external host interface identity differs from the one qualified at the candidate revision. | Property (TC-125) |
 
 ## Dependencies
 
