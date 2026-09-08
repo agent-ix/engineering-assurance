@@ -9,10 +9,10 @@ type: TestMatrix
 ## Overview
 
 This matrix records completed verification for the canonical assurance-onboarding
-bundle. Every test case has an executable tracking tag and passing repository or
-retained real-agent evidence. The matrix covers every stakeholder validation
-criterion, user-story example, functional and non-functional acceptance criterion,
-and declared constraint in this specification.
+and verification-semantics baseline and planned verification for the proposed
+Rust migration. TC-001..TC-095 have passing repository or retained real-agent
+evidence. TC-096..TC-127 remain pending until the specification is accepted and
+the reviewed implementation exists.
 
 ## Test Matrix Rules
 
@@ -31,6 +31,8 @@ and declared constraint in this specification.
 7. Agent evaluations cover seven concrete scenario variants on each of four hosts:
    existing profile, no profile, malformed producer, unavailable producer,
    interruption/resume, explicit acceptance, and explicit rejection.
+8. Every requirement-verifying Rust test uses the canonical ix-trace-rs import
+   and bare trace attribute form that Quire reconciles.
 
 ## Requirements Traceability
 
@@ -39,6 +41,7 @@ and declared constraint in this specification.
 | Stakeholder Req | Trace to US/FR | Test/Validation | Coverage Status |
 |-----------------|----------------|-----------------|-----------------|
 | StR-001 | FR-001, FR-004, FR-005 | StR-001-VC-1..VC-3 → TC-001..TC-003 | ✅ Passing |
+| StR-003 | FR-014..FR-018, NFR-005 | StR-003-VC-1..VC-4 → TC-096, TC-097, TC-100, TC-115 | 🚧 Pending implementation |
 
 ### User Story Coverage
 
@@ -99,6 +102,33 @@ and declared constraint in this specification.
 | FR-007 | FR-007-AC-1 | TC-035 | ✅ Passing |
 | FR-007 | FR-007-AC-2 | TC-036 | ✅ Passing |
 | FR-007 | FR-007-AC-3 | TC-037 | ✅ Passing |
+| FR-014 | FR-014-AC-1 | TC-096 | 🚧 Pending implementation |
+| FR-014 | FR-014-AC-2 | TC-098 | 🚧 Pending implementation |
+| FR-014 | FR-014-AC-3 | TC-099 | 🚧 Pending implementation |
+| FR-014 | FR-014-AC-4 | TC-101 | 🚧 Pending implementation |
+| FR-014 | FR-014-AC-5 | TC-121 | 🚧 Pending implementation |
+| FR-015 | FR-015-AC-1 | TC-100 | 🚧 Pending implementation |
+| FR-015 | FR-015-AC-2 | TC-102 | 🚧 Pending implementation |
+| FR-015 | FR-015-AC-3 | TC-103 | 🚧 Pending implementation |
+| FR-015 | FR-015-AC-4 | TC-104 | 🚧 Pending implementation |
+| FR-015 | FR-015-AC-5 | TC-119 | 🚧 Pending implementation |
+| FR-015 | FR-015-AC-6 | TC-120 | 🚧 Pending implementation |
+| FR-015 | FR-015-AC-7 | TC-122 | 🚧 Pending implementation |
+| FR-016 | FR-016-AC-1 | TC-105 | 🚧 Pending implementation |
+| FR-016 | FR-016-AC-2 | TC-106 | 🚧 Pending implementation |
+| FR-016 | FR-016-AC-3 | TC-107 | 🚧 Pending implementation |
+| FR-016 | FR-016-AC-4 | TC-108 | 🚧 Pending implementation |
+| FR-016 | FR-016-AC-5 | TC-123 | 🚧 Pending accepted host interface |
+| FR-017 | FR-017-AC-1 | TC-109 | 🚧 Pending implementation |
+| FR-017 | FR-017-AC-2 | TC-110 | 🚧 Pending implementation |
+| FR-017 | FR-017-AC-3 | TC-111 | 🚧 Pending implementation |
+| FR-017 | FR-017-AC-4 | TC-112 | 🚧 Pending implementation |
+| FR-017 | FR-017-AC-5 | TC-124 | 🚧 Pending accepted host interface |
+| FR-018 | FR-018-AC-1 | TC-097 | 🚧 Pending implementation |
+| FR-018 | FR-018-AC-2 | TC-113 | 🚧 Pending implementation |
+| FR-018 | FR-018-AC-3 | TC-114 | 🚧 Pending implementation |
+| FR-018 | FR-018-AC-4 | TC-115 | 🚧 Pending implementation |
+| FR-018 | FR-018-AC-5 | TC-125 | 🚧 Pending implementation |
 
 ### Non-Functional Requirement Coverage
 
@@ -107,6 +137,7 @@ and declared constraint in this specification.
 | NFR-001 | Install, discovery, digest comparison, and static scan | TC-038 | ✅ Passing |
 | NFR-002 | Agent evaluation against fixture-authorized outcomes | TC-039 | ✅ Passing |
 | NFR-003 | Wheel/npm member audit plus compatibility invocation | TC-040 | ✅ Passing |
+| NFR-005 | Toolchain build, unsafe audit, executable-path audit, Quire reconciliation, performance, and hosted gates | TC-115..TC-118, TC-126, TC-127 | 🚧 Pending implementation |
 
 ### Constraint Coverage
 
@@ -115,6 +146,25 @@ and declared constraint in this specification.
 | FR-002-CON-1 | TC-041 | ✅ Passing |
 | FR-002-CON-2 | TC-042 | ✅ Passing |
 | FR-007-CON-1 | TC-043 | ✅ Passing |
+| FR-012-CON-2 | TC-082 | ✅ Passing |
+| FR-012-CON-4 | TC-082 | ✅ Passing |
+| FR-012-CON-5 | TC-082 | ✅ Passing |
+| FR-014-CON-1 | TC-101 | 🚧 Pending implementation |
+| FR-014-CON-2 | TC-101 | 🚧 Pending implementation |
+| FR-014-CON-3 | TC-096 | 🚧 Pending implementation |
+| FR-015-CON-1 | TC-103 | 🚧 Pending implementation |
+| FR-015-CON-2 | TC-104 | 🚧 Pending implementation |
+| FR-015-CON-3 | TC-104 | 🚧 Pending implementation |
+| FR-016-CON-1 | TC-107 | 🚧 Pending implementation |
+| FR-016-CON-2 | TC-115 | 🚧 Pending owner disposition |
+| FR-016-CON-3 | TC-123 | 🚧 Pending accepted host interface |
+| FR-017-CON-1 | TC-109 | 🚧 Pending implementation |
+| FR-017-CON-2 | TC-112 | 🚧 Pending implementation |
+| FR-017-CON-3 | TC-112 | 🚧 Pending implementation |
+| FR-017-CON-4 | TC-124 | 🚧 Pending accepted host interface |
+| FR-018-CON-1 | TC-113 | 🚧 Pending implementation |
+| FR-018-CON-2 | TC-114 | 🚧 Pending implementation |
+| FR-018-CON-3 | TC-115 | 🚧 Pending implementation |
 
 ## Test Case Summary
 
@@ -201,7 +251,7 @@ and declared constraint in this specification.
 | TC-079 | Every matrix component pins a released version and names its release; no pin is a branch, latest, or HEAD | Static | P0 | FR-012-AC-1 | ✅ |
 | TC-080 | Compatible, incompatible, and unknown are distinct with reasons, and neither incompatible nor unknown satisfies the gate | Unit | P0 | FR-012-AC-2 | ✅ |
 | TC-081 | The gate requires every pinned component; one unobserved component withholds it | Property | P0 | FR-012-AC-3 | ✅ |
-| TC-082 | Matrix acceptance is pending-and-unattributed or accepted-with-name-and-date, never half-recorded, and documented as a human act | Static | P0 | FR-012-AC-4, FR-012-CON-2 | ✅ |
+| TC-082 | Matrix acceptance is pending-and-unattributed or accepted-with-name-and-date, never half-recorded, and documented as a human act | Static | P0 | FR-012-AC-4, FR-012-CON-2, FR-012-CON-4, FR-012-CON-5 | ✅ |
 | TC-083 | Every recorded artifact digest matches this tree over at least the ten schema assets | Integration | P0 | FR-012-AC-5 | ✅ |
 | TC-084 | Upgrade order and per-component rollback notes exist, no rollback is irreversible, and publication changes no CI posture | Static | P0 | FR-012-AC-6 | ✅ |
 | TC-085 | An unknown matrix version and an unknown component name are refused | Unit | P0 | FR-012-AC-7 | ✅ |
@@ -215,6 +265,38 @@ and declared constraint in this specification.
 | TC-093 | All eight repositories appear exactly once in the Agent A/B/C allocation | Static | P0 | FR-013-AC-7 | ✅ |
 | TC-094 | The contract waits on matrix acceptance, changes no trigger, and makes no qualification claim | Unit | P0 | FR-013-AC-8, FR-013-CON-1, FR-013-CON-2, FR-013-CON-3 | ✅ |
 | TC-095 | A fully pinned toolchain does not open an unaccepted gate; any state but `accepted`, and any half-record missing a name or date, withholds | Unit | P0 | FR-012-AC-9 | ✅ |
+| TC-096 | Existing repository builds the named Rust library and CLI | Compile | P0 | StR-003-VC-1, FR-014-AC-1, FR-014-CON-3 | 🚧 pending implementation |
+| TC-097 | Every executable path and consumer has one current state and final disposition | Static | P0 | StR-003-VC-2, FR-018-AC-1 | 🚧 pending implementation |
+| TC-098 | Machine CLI output obeys the versioned stdout/stderr contract | Property | P0 | FR-014-AC-2 | 🚧 pending implementation |
+| TC-099 | Invalid protocol, input, root, host, and host response fail before side effects | Property | P0 | FR-014-AC-3 | 🚧 pending implementation |
+| TC-100 | For each ADR-002 compatibility/semantic/projection/fixture capability row, Rust agrees byte-for-byte with the accepted identity and report reference over the named corpus and focused adverse cases | Property | P0 | StR-003-VC-3, FR-015-AC-1 | 🚧 pending implementation |
+| TC-101 | Rust call surface owns no evidence persistence, stdout verdict parser, or reusable library I/O | Static | P0 | FR-014-AC-4, FR-014-CON-1, FR-014-CON-2 | 🚧 pending implementation |
+| TC-102 | Every successful and non-successful semantic state remains distinct | Property | P0 | FR-015-AC-2 | 🚧 pending implementation |
+| TC-103 | Invalid semantic inputs fail read-only and preserve original bytes | Property | P0 | FR-015-AC-3, FR-015-CON-1 | 🚧 pending implementation |
+| TC-104 | Contract ownership and inert foreign-language fixtures remain bounded | Static | P0 | FR-015-AC-4, FR-015-CON-2, FR-015-CON-3 | 🚧 pending implementation |
+| TC-105 | Rust onboarding matches retained boundary and adverse-case behavior | Property | P0 | FR-016-AC-1 | 🚧 pending implementation |
+| TC-106 | Rust and retained invariant providers return the same ordered failure set | Property | P0 | FR-016-AC-2 | 🚧 pending implementation |
+| TC-107 | Rust coordination preserves ix-flow lifecycle and human gates | Integration | P0 | FR-016-AC-3, FR-016-CON-1 | 🚧 pending implementation |
+| TC-108 | Canonical and pilot workflows pass through the Rust invariant provider before removal | Integration | P0 | FR-016-AC-4 | 🚧 pending host interface |
+| TC-109 | Rust evaluation completes the 28-cell matrix without inferred decisions | E2E | P0 | FR-017-AC-1, FR-017-CON-1 | 🚧 pending host interface |
+| TC-110 | Every incomplete or invalid evaluation input withholds the aggregate gate | Property | P0 | FR-017-AC-2 | 🚧 pending implementation |
+| TC-111 | Each package, rights, manifest, integration, and publication-refusal capability has independent positive and negative subcases matching the retained gate | Property | P0 | FR-017-AC-3 | 🚧 pending implementation |
+| TC-112 | Package and CI files contain declarative dispatch only and triggers remain unchanged | Static | P0 | FR-017-AC-4, FR-017-CON-2, FR-017-CON-3 | 🚧 pending implementation |
+| TC-113 | Removal refuses mismatched revisions, incomplete parity, and unmigrated consumers | Property | P0 | FR-018-AC-2, FR-018-CON-1 | 🚧 pending implementation |
+| TC-114 | Every migration failure rolls back without changing historical bytes | Property | P0 | FR-018-AC-3, FR-018-CON-2 | 🚧 pending implementation |
+| TC-115 | Final audit finds no unapproved non-Rust semantic or assertion logic | Static | P0 | StR-003-VC-4, FR-016-CON-2, FR-018-AC-4, FR-018-CON-3, NFR-005-AC-4 | 🚧 pending implementation |
+| TC-116 | Rust 1.75 builds every target with unsafe code forbidden | Compile | P0 | NFR-005-AC-1 | 🚧 pending implementation |
+| TC-117 | Rust requirement tests use the canonical bare ix-trace-rs macro form | Static | P0 | NFR-005-AC-2 | 🚧 pending implementation |
+| TC-118 | Quire reconciles every Rust test marker without missing, orphaned, or duplicate bindings | Integration | P0 | NFR-005-AC-3 | 🚧 pending implementation |
+| TC-119 | Registry-derived snapshot binds every active AP/MP to canonical repository, clean candidate commit, path, blob digest, provider/schema digests, validation outcome, and owner disposition; duplicated submodule checkouts are deduplicated and no unapproved valid-to-invalid transition occurs | Integration | P0 | FR-015-AC-5 | 🚧 pending implementation |
+| TC-120 | Legacy, current, malformed, and unsupported assurance artifacts classify distinctly, preserve source bytes, and invalid profiles cannot select review policy | Property | P0 | FR-015-AC-6 | 🚧 pending implementation |
+| TC-121 | Protocol byte/deadline limits, buffered stdout, timeout/cancellation/signal handling, child termination, and no-side-effect guarantees hold at every boundary | Property | P0 | FR-014-AC-5 | 🚧 pending implementation |
+| TC-122 | Consumer registry accepts one canonical versioned population and rejects unknown versions/classes, duplicate identities/paths, digest mismatches, byte changes, and unattributed exclusions | Property | P0 | FR-015-AC-7 | 🚧 pending implementation |
+| TC-123 | ix-flow host loading refuses any interface whose accepted artifact identity, version, revision, or digest is absent or mismatched | Integration | P0 | FR-016-AC-5, FR-016-CON-3 | 🚧 pending accepted host interface |
+| TC-124 | cli-agent-evals host loading refuses any suite interface whose accepted artifact identity, version, revision, or digest is absent or mismatched | Integration | P0 | FR-017-AC-5, FR-017-CON-4 | 🚧 pending accepted host interface |
+| TC-125 | Legacy removal refuses a changed registry digest or external interface identity at the candidate revision | Property | P0 | FR-018-AC-5 | 🚧 pending implementation |
+| TC-126 | Thirty-run same-runner old/new benchmarks stay within 10% for p95 latency and peak RSS in every named capability | Benchmark | P0 | NFR-005-AC-5 | 🚧 pending implementation |
+| TC-127 | Rust-migration pull requests require hosted format, Clippy, locked MSRV, test, Quire trace, package, rights, and static-audit statuses | Integration | P0 | NFR-005-AC-6 | 🚧 pending implementation |
 
 ## Option Permutation Matrix
 
@@ -242,6 +324,18 @@ and declared constraint in this specification.
 The aggregate gate therefore requires 28 of 28 host-scenario cells with complete
 evaluation envelopes.
 
+## Rust Migration Permutation Matrix
+
+| Test Case | Axis | Variants | Expected |
+|---|---|---|---|
+| TC-098, TC-121 | Protocol/result | supported v1; unknown version; malformed; at/beyond byte limit; live/expired deadline; completed/timeout/cancelled/signalled | exactly one complete versioned result for completion; every adverse case fails before a later side effect and never emits partial JSON |
+| TC-100, TC-102, TC-103 | Semantic state | success; unavailable; not-computed; not-applicable; failed; inconclusive; malformed; stale; tampered; lossy; unreadable | byte-identical success or one distinct preserved non-success outcome |
+| TC-119, TC-122 | Registry | active/inactive/skeleton/template/quarantined; unique/duplicate repo and path; matching/mismatched/changing digest | one canonical population or explicit refusal; exclusions require owner and reason |
+| TC-123, TC-124 | Host interface | exact; absent; stale; foreign; version mismatch; revision mismatch; digest mismatch; unaccepted | only the exact accepted interface enters host-bound work |
+| TC-113, TC-125 | Migration | old only; additive parity; consumers migrating; all migrated; registry/interface changed | deletion only from all-migrated with unchanged bindings |
+| TC-100 | Pure capability | compatibility classification; semantic validation; bounded projection; fixture generation; canonical identity | each ADR-002 row has an independently reported old/new corpus and adverse-case result |
+| TC-111 | Qualification capability | package members; rights; manifest; integration; publication refusal | each gate has one retained passing case and every named refusal case |
+
 ## Constraint Boundary Tests
 
 | Constraint | Boundary Type | Test Value | Test Case | Expected |
@@ -255,6 +349,15 @@ evaluation envelopes.
 | FR-007-CON-1 | Min | Four compatible pilot names | TC-043 | Pass |
 | FR-007-CON-1 | Below Min | One promoted pilot name missing | TC-043 | Fail |
 | FR-007-CON-1 | Above Max | Undeclared compatibility alias added | TC-043 | Fail |
+| FR-014 byte limit | Min | empty declared request/result | TC-121 | Pass if schema permits empty payload |
+| FR-014 byte limit | Max | exactly 64 MiB | TC-121 | Pass |
+| FR-014 byte limit | Above Max | 64 MiB plus one byte | TC-121 | Refuse before host/write |
+| FR-014 deadline | Min | smallest positive duration | TC-121 | Pass |
+| FR-014 deadline | Invalid | zero, negative, absent where host is required, or above 30 minutes | TC-121 | Refuse before host/write |
+| FR-015 registry identity | Min | one canonical repository and artifact | TC-122 | Pass |
+| FR-015 registry identity | Duplicate | repeated repository or artifact path | TC-122 | Refuse even when classifications match |
+| NFR-005 regression | Boundary | exactly 10% above retained p95/RSS | TC-126 | Pass |
+| NFR-005 regression | Above | more than 10% above retained p95 or RSS | TC-126 | Fail |
 
 ## State Transition Coverage
 
@@ -264,6 +367,10 @@ evaluation envelopes.
 | Decision-ready run without choice | Remains decision-ready | TC-029 | Non-terminal |
 | Decision-ready run with rejection | Decision-ready to rejection terminal | TC-028 | Rejected exactly once |
 | Terminal transition configured automatic | Gate override attempt | TC-030 | Fails closed |
+| Legacy path only | Additive Rust path enabled | TC-113 | Both remain available; no completion claim |
+| Additive paths at same revision | Consumers migrate one by one | TC-097, TC-113 | Current state and rollback retained for each |
+| Last consumer migrated with all gates passing | Legacy path removed | TC-113, TC-125 | Removal allowed once |
+| Registry/interface changes during parity | Removal attempted | TC-125 | Removal refused; return to specification/review |
 
 ## Edge Cases
 
@@ -281,6 +388,15 @@ evaluation envelopes.
 | EC-010 | Artifact target or manifest reference escapes its selected root | FR-001, FR-003 | TC-018, TC-045 | Installation or onboarding writes/loads unowned content |
 | EC-011 | Run id is reused for a different repository or workflow | FR-005 | TC-048 | One run contaminates another decision boundary |
 | EC-012 | Valid output lacks an immutable governing version | FR-004 | TC-024 | Unreproducible evidence is admitted as observed |
+| EC-013 | Existing digest domain is silently changed to another canonicalization | FR-015 | TC-100, TC-103 | Historical identities change without a version boundary |
+| EC-014 | ix-flow or cli-agent-evals cannot load a structured external provider | FR-016, FR-017 | TC-108, TC-109 | JavaScript remains an undeclared permanent dependency |
+| EC-015 | A legacy path is deleted before its last consumer migrates | FR-018 | TC-113 | Qualification or onboarding becomes unavailable |
+| EC-016 | Path-qualified ix-trace-rs macro compiles but Quire cannot bind it | NFR-005 | TC-117, TC-118 | Passing Rust tests provide no requirement evidence |
+| EC-017 | Installed assurance schema rejects an active artifact from its own corpus or a recorded Quire consumer | FR-015, FR-018 | TC-119, TC-120 | A governance profile silently stops validating or still influences review despite being invalid |
+| EC-018 | Host hangs or emits a result beyond the declared limit | FR-014 | TC-121 | Agent blocks indefinitely or buffers without bound |
+| EC-019 | Consumer registry repeats one repository/path with conflicting or matching classifications | FR-015 | TC-122 | Population and owner disposition are double-counted or order-dependent |
+| EC-020 | Signal arrives after child start but before machine result completion | FR-014 | TC-121 | Partial JSON or orphan child survives |
+| EC-021 | Registry or accepted host-interface digest changes between parity and deletion | FR-018 | TC-125 | Evidence from different bytes authorizes removal |
 
 ## Integration Test Matrix
 
@@ -293,6 +409,9 @@ evaluation envelopes.
 | INT-003 | Load workflows, persist runs, resume, and gate decisions | ix-flow | service | TC-026, TC-028, TC-029, TC-030, TC-035, TC-047, TC-048 | ✅ |
 | INT-004 | Discover canonical onboarding through supported hosts | agent discovery adapters | service | TC-010, TC-011, TC-038 | ✅ |
 | INT-005 | Validate shared semantic references and historical compatibility | Quire, Quoin, ix-flow, native producer fixtures | library | TC-052..TC-068 | ✅ |
+| INT-006 | Load Rust workflow invariants through a structured host interface | ix-flow | service | TC-107, TC-108 | 🚧 |
+| INT-007 | Load Rust-owned scenarios and assertions through a structured host interface | cli-agent-evals | service | TC-109, TC-110 | 🚧 |
+| INT-008 | Validate versioned assurance-artifact contracts against the registry-derived candidate snapshot | Registered Quire/TL consumers and pinned assurance corpus | service | TC-119, TC-120 | 🚧 |
 
 ### Integration Test Details
 
@@ -312,6 +431,12 @@ evaluation envelopes.
 | TC-048 | INT-003 | Run identity mismatch | Existing id with changed binding | Refused with both runs unchanged | P0 |
 | TC-010 | INT-004 | Host discovery permutations | Two sources by four hosts | Same canonical skill | P0 |
 | TC-011 | INT-004 | Workflow discovery | Canonical skill | Exactly four workflow definitions | P0 |
+| TC-107 | INT-006 | Run lifecycle and human gates | Versioned Rust provider and fictional runs | Existing ix-flow state behavior is preserved | P0 |
+| TC-108 | INT-006 | Canonical and pilot invariant loading | Canonical and compatibility workflows | Both resolve the same Rust invariant provider | P0 |
+| TC-109 | INT-007 | Complete supported-host evaluation | Seven scenarios on four hosts | 28 valid result cells with explicit decisions | P0 |
+| TC-110 | INT-007 | Invalid or incomplete evaluation | Missing and malformed host results | Aggregate gate remains withheld | P0 |
+| TC-123 | INT-006 | Exact host-interface binding | Accepted identity/version/revision/digest and mismatched variants | Only the exact accepted ix-flow interface loads | P0 |
+| TC-124 | INT-007 | Exact suite-interface binding | Accepted identity/version/revision/digest and mismatched variants | Only the exact accepted cli-agent-evals interface loads | P0 |
 
 ## Engineering Assurance #5 Coverage
 
@@ -365,15 +490,21 @@ evaluation envelopes.
 
 ## Coverage Gaps
 
-The completed onboarding scope has no open gap: Quire reconciles TC-001..TC-051
+The completed baseline has no open gap: Quire reconciles TC-001..TC-051
 to real tracking-tagged symbols, and the retained 28-cell aggregate records the
 selected host commands, models, governing versions, transcripts, and outcomes.
 TC-052..TC-068 now have tracking-tagged implementations in
 `tests/test_verification_semantics.py`, and TC-069..TC-094 in
 `tests/test_compatibility_corpus.py` and `tests/test_compatibility_matrix.py`,
 which enforce the accepted compatibility corpus that FR-010 previously deferred
-and the pinned release matrix that gates the migrations; SR-022 and SR-023 retain the completed
-code-review and gap-analysis closure gates.
+and the pinned release matrix that gates the migrations; SR-022 and SR-023 retain
+the completed code-review and gap-analysis closure gates.
+
+The proposed Rust migration has an intentional open gap: TC-096..TC-127 are
+fully mapped but pending. TC-108 and TC-123 depend on a reviewed ix-flow structured
+external-provider interface. TC-109 depends on a reviewed cli-agent-evals
+structured external-suite interface, as does TC-124. No implementation or removal may be
+reported complete while either dependency or any pending row remains open.
 
 ## Test Execution Summary
 
@@ -385,5 +516,5 @@ code-review and gap-analysis closure gates.
 | Property | 15 | 15 | 0 | 0 | 100% |
 | Static | 8 | 8 | 0 | 0 | 100% |
 
-The table combines the completed onboarding baseline with the 17 implemented
-Engineering Assurance #5 rows.
+The table reports only the completed baseline and does not count the 32 pending
+Rust-migration rows.

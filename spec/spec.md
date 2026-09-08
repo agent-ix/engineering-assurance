@@ -2,8 +2,8 @@
 type: master-requirements
 name: engineering-assurance
 org: agent-ix
-component_type: configuration-module
-implementation_language: python
+component_type: rust-lib
+implementation_language: rust
 title: "engineering-assurance Master Requirements Specification"
 depends_on:
   - quire
@@ -53,6 +53,11 @@ defines their shared scope and indexes them.
 - Semantic ownership and link-direction definitions for verification concepts.
 - Versioned reference and report projection contracts, deterministic
   cross-language fixtures, and read-only historical PGM-01 compatibility.
+- A Rust library crate and native CLI that own this repository's production,
+  validation, generation, evaluation, and qualification behavior.
+- Versioned structured host interfaces for ix-flow and agent evaluations.
+- A staged, parity-gated migration from the repository's current Python and
+  JavaScript executable paths.
 
 ### Out of Scope
 
@@ -69,10 +74,14 @@ defines their shared scope and indexes them.
   verdict, persisting a parallel evidence store, or inferring human decisions.
 - Replacing Quire static facts, Quoin evidence/audit/report records, native
   domain result formats, or ix-flow decision history.
+- Moving Engineering Assurance behavior into another repository or creating a
+  new repository for the Rust migration.
+- Treating a Rust wrapper around non-Rust semantic or assertion logic as a
+  completed migration.
 
 ## System Overview
 
-Engineering-assurance is a private configuration module containing artifact
+Engineering-assurance is a Rust library and native CLI accompanied by artifact
 schemas, skeletons, and shared semantic contracts. The onboarding capability
 adds one repository-owned entry point that inventories declared decisions,
 measurements, artifacts, and producer availability before proposing the smallest
@@ -92,6 +101,9 @@ same canonical bundle and do not redefine these responsibilities.
   onboard an existing repository without invented assurance claims.
 - [StR-002](./stakeholder/StR-002-review-verification-evidence-without-semantic-collapse.md) —
   review linked verification evidence without collapsing semantic boundaries.
+- [StR-003](./stakeholder/StR-003-rust-native-engineering-assurance.md) — keep
+  first-party Engineering Assurance production and qualification behavior in a
+  centralized Rust boundary.
 
 ### User Stories
 
@@ -134,6 +146,16 @@ same canonical bundle and do not redefine these responsibilities.
   released shared-assurance versions and classify an observed toolchain.
 - [FR-013](./functional/FR-013-migration-contract.md) — publish the reviewed
   migration contract the eight repositories are migrated against.
+- [FR-014](./functional/FR-014-versioned-rust-boundary.md) — expose the shared
+  library and CLI through versioned structured interfaces.
+- [FR-015](./functional/FR-015-semantic-and-identity-parity.md) — preserve
+  verification semantics, identity, canonicalization, and compatibility in Rust.
+- [FR-016](./functional/FR-016-rust-onboarding-and-workflow.md) — move onboarding,
+  workflow coordination, and invariants behind the Rust boundary.
+- [FR-017](./functional/FR-017-rust-evaluation-and-qualification.md) — move agent
+  evaluation and repository qualification behavior behind the Rust boundary.
+- [FR-018](./functional/FR-018-staged-runtime-migration.md) — migrate consumers
+  before retiring the legacy executable paths.
 
 ### Non-Functional Requirements
 
@@ -145,6 +167,8 @@ same canonical bundle and do not redefine these responsibilities.
   preserve the module payload and canonical onboarding bundle.
 - [NFR-004](./non-functional/NFR-004-no-parallel-assurance-framework.md) — prevent
   a parallel executor, evidence framework, generic scraper, or trust score.
+- [NFR-005](./non-functional/NFR-005-rust-containment-and-traceability.md) — enforce
+  Rust containment, MSRV, unsafe-code, and canonical ix-trace-rs test tracing.
 
 ### Integration Tests
 
@@ -170,6 +194,8 @@ same canonical bundle and do not redefine these responsibilities.
 | Onboarding judgment | engineering-assurance plus named human | Inventory, propose bounded work, and leave terminal choices to the human owner. |
 | Shared verification vocabulary | engineering-assurance | Define semantic distinctions and type-fit mappings without owning a second persisted record family. |
 | Native verification execution and domain result | campaign repository/domain tool | Execute checks and preserve the domain result schema, oracle, and failure behavior. |
+| Engineering Assurance executable behavior | engineering-assurance Rust crate | Implement repository-owned validation, generation, orchestration, evaluation, and qualification behavior. |
+| Portable verification contracts | quire-verification | Publish versioned shared contract types; this module consumes rather than copies accepted definitions. |
 
 ## Error and Failure Model
 
