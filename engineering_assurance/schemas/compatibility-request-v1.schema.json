@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Engineering Assurance compatibility request v1",
+  "description": "Pure caller observations for classification against the embedded reviewed matrix. This capability invokes no downstream host.",
+  "x-engineering-assurance-max-encoded-bytes": 67108864,
+  "x-engineering-assurance-downstream-deadline-required": false,
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "observed"],
+  "properties": {
+    "protocol": {"const": "engineering-assurance.compatibility-request/v1"},
+    "observed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["component", "version"],
+        "properties": {
+          "component": {"type": "string", "minLength": 1},
+          "version": {"type": ["string", "null"], "minLength": 1}
+        }
+      }
+    }
+  }
+}

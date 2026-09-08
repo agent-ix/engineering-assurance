@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Engineering Assurance compatibility result v1",
+  "description": "A bounded deterministic classification. Human acceptance is reported separately from observed-version compatibility.",
+  "x-engineering-assurance-max-encoded-bytes": 67108864,
+  "x-engineering-assurance-downstream-deadline-required": false,
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "matrix_version", "outcome", "versions_compatible", "human_acceptance_recorded", "gate_satisfied", "components"],
+  "properties": {
+    "protocol": {"const": "engineering-assurance.compatibility-result/v1"},
+    "matrix_version": {"const": "engineering-assurance.compatibility-matrix/v1"},
+    "outcome": {"enum": ["compatible", "withheld"]},
+    "versions_compatible": {"type": "boolean"},
+    "human_acceptance_recorded": {"type": "boolean"},
+    "gate_satisfied": {"type": "boolean"},
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["component", "observed", "expected", "verdict", "reason"],
+        "properties": {
+          "component": {"type": "string", "minLength": 1},
+          "observed": {"type": ["string", "null"]},
+          "expected": {"type": "string", "minLength": 1},
+          "verdict": {"enum": ["compatible", "incompatible", "unknown"]},
+          "reason": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  }
+}
