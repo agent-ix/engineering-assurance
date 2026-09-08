@@ -168,7 +168,8 @@ same canonical bundle and do not redefine these responsibilities.
 - [NFR-004](./non-functional/NFR-004-no-parallel-assurance-framework.md) — prevent
   a parallel executor, evidence framework, generic scraper, or trust score.
 - [NFR-005](./non-functional/NFR-005-rust-containment-and-traceability.md) — enforce
-  Rust containment, MSRV, unsafe-code, and canonical ix-trace-rs test tracing.
+  Rust containment, current-stable qualification, unsafe-code, and canonical
+  ix-trace-rs test tracing.
 
 ### Integration Tests
 

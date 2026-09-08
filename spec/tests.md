@@ -285,7 +285,7 @@ the reviewed implementation exists.
 | TC-113 | Removal refuses mismatched revisions, incomplete parity, and unmigrated consumers | Property | P0 | FR-018-AC-2, FR-018-CON-1 | 🚧 pending implementation |
 | TC-114 | Every migration failure rolls back without changing historical bytes | Property | P0 | FR-018-AC-3, FR-018-CON-2 | 🚧 pending implementation |
 | TC-115 | Final audit finds no unapproved non-Rust semantic or assertion logic | Static | P0 | StR-003-VC-4, FR-016-CON-2, FR-018-AC-4, FR-018-CON-3, NFR-005-AC-4 | 🚧 pending implementation |
-| TC-116 | Rust 1.75 builds every target with unsafe code forbidden | Compile | P0 | NFR-005-AC-1 | 🚧 pending implementation |
+| TC-116 | Exact Rust 1.98.1 builds and tests every target with unsafe code forbidden | Compile | P0 | NFR-005-AC-1 | 🚧 pending implementation |
 | TC-117 | Rust requirement tests use the canonical bare ix-trace-rs macro form | Static | P0 | NFR-005-AC-2 | 🚧 pending implementation |
 | TC-118 | Quire reconciles every Rust test marker without missing, orphaned, or duplicate bindings | Integration | P0 | NFR-005-AC-3 | 🚧 pending implementation |
 | TC-119 | Registry-derived snapshot binds every active AP/MP to canonical repository, clean candidate commit, path, blob digest, provider/schema digests, validation outcome, and owner disposition; duplicated submodule checkouts are deduplicated and no unapproved valid-to-invalid transition occurs | Integration | P0 | FR-015-AC-5 | 🚧 pending implementation |
@@ -297,6 +297,7 @@ the reviewed implementation exists.
 | TC-125 | Legacy removal refuses a changed registry digest or external interface identity at the candidate revision | Property | P0 | FR-018-AC-5 | 🚧 pending implementation |
 | TC-126 | Thirty-run same-runner old/new benchmarks stay within 10% for p95 latency and peak RSS in every named capability | Benchmark | P0 | NFR-005-AC-5 | 🚧 pending implementation |
 | TC-127 | Rust-migration pull requests require six named current-head hosted statuses, reject missing/failed/stale/manual substitutes, and run no real-agent or release operation | Integration | P0 | NFR-005-AC-6 | 🚧 pending implementation |
+| TC-128 | A new stable Rust release triggers the real compatibility matrix; only a reproduced required-tool incompatibility permits a bounded older-version hold | Integration | P0 | NFR-005-AC-7 | 🚧 pending implementation |
 
 ## Option Permutation Matrix
 
