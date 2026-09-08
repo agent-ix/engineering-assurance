@@ -13,7 +13,10 @@ relationships:
 ## Summary
 
 The selected repository and the Quoin/ix-flow/portable-contract boundaries are
-well chosen. One sentence allocates behavior directly to Quire, an external
+well chosen. Human owner clarification confirms that Engineering Assurance owns
+its domain-specific tools while intentionally isolating stricter qualification
+policy from generic services, contracts, and native producers. One sentence in
+the initial candidate allocated behavior directly to Quire, an external
 component, instead of specifying Engineering Assurance's response at its own
 integration boundary.
 
@@ -29,6 +32,10 @@ integration boundary.
   assertions, compatibility census, and repository qualification.
 - Quire owns authored-fact validation; Quoin owns evidence; ix-flow owns run and
   human-gate state; portable verification contracts remain externally owned.
+- Differing qualification priorities are enforced at versioned integration
+  boundaries; they do not justify moving generic implementations into this
+  repository or applying Engineering Assurance's complete internal regime to
+  their owners.
 - Foreign-language fixtures may remain inert data, never executable assurance
   logic.
 
@@ -37,3 +44,8 @@ integration boundary.
 | ID | Disposition |
 | --- | --- |
 | FND-061 | Fixed: FR-015 now allocates refusal/reporting to Engineering Assurance at its Quire host boundary and explicitly routes any Quire behavior change through a separate accepted Quire specification. |
+
+The clarified boundary was accepted by Peter Krenesky, repository owner, on
+2026-09-08. That acceptance governs the architecture; implementation evidence,
+consumer dispositions, and external-host interface acceptances remain separate
+gates.

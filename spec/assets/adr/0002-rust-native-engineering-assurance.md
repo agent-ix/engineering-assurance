@@ -11,9 +11,9 @@ relationships:
 
 # ADR 002: Rust-native Engineering Assurance boundary
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-09-07
-**Decision authority**: repository owner (acceptance pending)
+**Decision authority**: Peter Krenesky, repository owner (accepted 2026-09-08)
 
 ## Context
 
@@ -33,6 +33,15 @@ still retains and audits evidence, ix-flow still owns run and decision state,
 portable verification contracts remain externally owned, and native producers
 still own domain execution.
 
+“Engineering Assurance ownership” means ownership of the domain-specific tools
+and policy already allocated to this repository. It does not mean ownership of
+every service, contract, or producer used during assurance. Those boundaries are
+deliberate: qualification priorities differ, and placing unrelated code under
+the strictest Engineering Assurance regime would enlarge both the trusted
+computing base and the evidence population without transferring domain
+ownership. Engineering Assurance consumes those components through versioned,
+qualified interfaces and applies its stricter policy at its own boundary.
+
 ## Decision drivers
 
 1. Put all first-party production and qualification semantics in Rust.
@@ -43,6 +52,9 @@ still own domain execution.
    verdict adapter.
 5. Migrate consumers without deleting a working path before parity is proven at
    the same candidate revision.
+6. Isolate Engineering Assurance's strict qualification policy so it governs
+   this repository's domain tools and integration boundary rather than
+   transitively absorbing generic services, contracts, or native producers.
 
 ## Options considered
 
@@ -123,13 +135,34 @@ documents.
 
 ## Decision
 
-The existing repository will contain one Cargo package named
-`engineering-assurance`, exporting the `engineering_assurance` library crate and
-the `engineering-assurance` CLI binary. The library owns reusable types and pure
-behavior. The CLI owns filesystem, process, and host boundaries and exposes
-versioned JSON input and output for automation. Initial source consumption may
-use a pinned repository revision; this decision does not authorize registry
-publication.
+The existing `engineering-assurance` repository remains the owner of the
+Engineering Assurance-specific tools and policy enumerated in the capability
+matrix. Their executable implementations will converge on one Cargo package
+named `engineering-assurance`. That package exports the
+`engineering_assurance` Rust library crate and the `engineering-assurance` CLI
+binary. The underscore is Rust's import-name normalization; these are library
+and binary targets of one package, not two independently governed products.
+
+The library owns reusable types and deterministic Engineering Assurance domain
+behavior. The CLI owns filesystem, process, and external-host boundaries and
+exposes versioned JSON input and output for automation. “One Cargo package” is
+an implementation and release boundary; it does not require every repository
+artifact to become Rust or collapse all behavior into one monolithic binary.
+Initial source consumption may use a pinned repository revision; this decision
+does not authorize registry publication.
+
+Schemas, module manifests, skeletons, skills, Markdown specifications,
+controlled corpora, and generated cross-language fixtures remain declarative
+content or inert data in their appropriate formats. Makefiles, package
+manifests, and workflow YAML may remain as thin host dispatch. They cannot own
+semantic branches or assertions that duplicate the Rust implementation.
+
+Quire validation, Quoin evidence retention/audit, ix-flow run and decision
+state, portable verification contracts, cli-agent-evals host mechanics, and
+native producer execution remain outside this package and under their current
+owners. Engineering Assurance qualifies the versions and observable interfaces
+it consumes, but does not thereby take ownership of their implementations or
+impose its complete internal qualification process on those repositories.
 
 Host protocols use an `engineering-assurance.<capability>/v1` discriminator,
 read one declared input, write one structured result to stdout, and write only
@@ -161,6 +194,10 @@ will implement no unapproved shim to evade those gates.
   coexistence is migration state, not an approved final architecture.
 - ix-flow and cli-agent-evals host work must be separately reviewed by their
   owners before this migration can remove the current modules.
+- Engineering Assurance's strictest qualification obligations remain focused on
+  its Rust domain package, CLI, and integration adapters. External dependencies
+  provide separately governed contracts and evidence rather than being absorbed
+  into the Engineering Assurance implementation or evidence population.
 - The accepted corpus and historical evidence remain byte-identical and
   read-only throughout the migration.
 - Assurance artifact schemas remain versioned public contracts. A Rust rewrite
