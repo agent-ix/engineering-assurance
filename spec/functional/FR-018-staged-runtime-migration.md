@@ -26,6 +26,8 @@ executable path.
 - Same-revision differential, package, rights, and integration evidence.
 - The assurance-artifact schema consumer inventory and its versioned migration
   dispositions.
+- The committed consumer registry and candidate-revision compatibility snapshot
+  required by FR-015.
 
 ## Outputs
 
@@ -38,6 +40,10 @@ executable path.
 - Migration SHALL follow the order recorded in ADR-002.
 - Each consumer SHALL identify its old path, new path, interface version,
   candidate revision, parity evidence, and rollback action.
+- Engineering Assurance SHALL resolve a recorded assurance-contract consumer
+  from the committed registry and bind it to an exact repository commit,
+  artifact path, and blob digest; an ad hoc workstation scan is not a migration
+  record.
 - A legacy path SHALL remain available until its replacement passes at the same
   candidate revision.
 - Engineering Assurance SHALL remove a legacy path only after every recorded
@@ -50,9 +56,9 @@ executable path.
 
 ## Error Conditions
 
-Missing parity evidence, a mismatched candidate revision, an unrecorded consumer,
-an unavailable replacement host, a changed historical byte, and an unresolved
-owner disposition each block removal.
+Missing parity evidence, a mismatched or dirty candidate revision, an unrecorded
+consumer, an unresolved registry entry, an unavailable replacement host, a
+changed historical byte, and an unresolved owner disposition each block removal.
 
 ## Constraints
 

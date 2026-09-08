@@ -59,7 +59,7 @@ still own domain execution.
 | Capability | Current paths and consumers | Classification | Rust disposition or gate |
 | --- | --- | --- | --- |
 | Compatibility classification and accepted corpus access | `engineering_assurance/compatibility.py`, `compatibility_corpus.py`; compatibility and campaign gates | Missing reusable implementation | Implement in the library; preserve read-only corpus and matrix behavior. |
-| AssuranceProfile and MeasurementPlan module contracts | `engineering_assurance/schemas/`, `skeletons/`, and `manifest.yaml`; Quire validates the repository corpus and external consumers including `quire-rs` | Published cross-repository contract with an observed compatibility defect: the 0.2 schemas reject active AP/MP documents in the package corpus and quire-rs | Version the accepted legacy/current shapes, add real consumer fixtures, and complete owner-approved consumer migration before replacing a schema. An invalid profile cannot govern review selection. |
+| AssuranceProfile and MeasurementPlan module contracts | `engineering_assurance/schemas/`, `skeletons/`, and `manifest.yaml`; Quire validates the pinned package corpus and registered consumer revisions | Published cross-repository contract with an observed compatibility defect: the 0.2 schemas reject active AP/MP documents in the package corpus and `quire-rs`, while newer consumer shapes are accepted | Version the accepted legacy/current shapes, commit an owner-reviewed consumer registry and revision-bound compatibility snapshot, add real consumer fixtures, and complete owner-approved consumer migration before replacing a schema. An invalid profile cannot govern review selection. |
 | Verification vocabulary, reference validation, projection, and fixture generation | `verification_semantics.py`, `evidence.py`, `fixture_codegen.py`; repository tests, generated fixture consumers, and historical PGM-01 views | Existing shared contracts plus missing Rust implementation | Consume accepted portable contract versions; implement Engineering Assurance mapping and validation without copying their ownership or creating persisted records. |
 | Discovery, onboarding, and run coordination | `discovery.py`, `onboarding.py`, `workflow.py`; canonical skill, supported agent manifests, ix-flow | Engineering Assurance domain logic | Implement in the library and CLI; keep Quire and ix-flow as authoritative external services. |
 | Workflow invariants | `engineering_assurance/skills/assurance-onboarding/scripts/invariants.js`; ix-flow | Engineering Assurance domain logic | Implement in Rust. Removal waits for an ix-flow external structured-provider interface. |
@@ -74,6 +74,34 @@ still own domain execution.
 No row grants approval for residual Python, JavaScript, MJS, or inline CI
 semantic logic. A host bridge that cannot be removed requires a separate,
 explicit owner disposition for its exact file and behavior.
+
+## Assurance-contract census baseline
+
+The specification investigation used Quire 0.31.0 with the installed
+`engineering-assurance` module at 0.2.0. The installed manifest, AssuranceProfile
+schema, and MeasurementPlan schema SHA-256 digests were respectively
+`80e4f2c8753bf541c5049272eada8d5b4792888bc128193b383a903c5fc31f72`,
+`070f8802e62b8c38701b03445f86a008f77191baa8c0c4358147fb5126cf3535`,
+and `aae266f2cefd706548dd25d7c232f0cf5d1ac04fe99ad540244be5f72bcfd05a`.
+Those bytes match the package at revision `ae50e13154f9`.
+
+The point-in-time census established two live contract generations:
+
+- The package-pinned `qa-corpus` revision `ea4ac7a227bd` and the `quire-rs`
+  specification at `8b8020e665c6` with corpus revision `7442f2770880` use the
+  legacy AP/MP shape and fail the installed 0.2 structural contract.
+- Current AP/MP frontmatter in Quoin, `quire-analyze`,
+  `quire-contract-codegen`, `quire-contract-ir`, `quire-contract-runtime`,
+  `quire-verification`, and the observed `tl-mltl`, `tl-parse`, `tl-rewrite`,
+  and `tl-syntax` qualification revisions is accepted by the installed 0.2
+  schemas. Quoin still has a separate duplicate-heading structural finding,
+  which is not evidence of schema incompatibility.
+
+This local census is diagnostic evidence, not the release inventory. The Rust
+migration SHALL replace it with a committed owner-reviewed registry of canonical
+consumer repositories and a candidate-revision snapshot. Workstation directory
+discovery, stale clones, skeletons, quarantined evidence, and duplicated
+submodule checkouts cannot silently add or remove a release consumer.
 
 ## Decision
 

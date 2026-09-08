@@ -30,10 +30,13 @@ observable identities or ownership.
 - Accepted portable verification-contract versions when available.
 - Packaged AssuranceProfile and MeasurementPlan schemas/skeletons plus active
   artifacts from the pinned package corpus and recorded Quire consumers.
+- An owner-reviewed, versioned registry of canonical assurance-contract
+  consumers and a candidate-revision snapshot of their active AP/MP artifacts.
 
 ## Outputs
 
 - Versioned classifications, mappings, projections, and generated fixture bytes.
+- A revision-bound assurance-contract compatibility report.
 - Explicit errors for unknown, malformed, ambiguous, stale, or tampered inputs.
 
 ## Behavior
@@ -54,6 +57,18 @@ observable identities or ownership.
   copied into a second Engineering Assurance contract family.
 - Engineering Assurance SHALL treat each published assurance-artifact schema
   as a versioned cross-repository contract.
+- Engineering Assurance SHALL resolve the assurance-contract consumer set from
+  the committed owner registry, package metadata, and exact pinned gitlinks;
+  it SHALL NOT infer release scope from arbitrary workstation directories.
+- The compatibility snapshot SHALL record the canonical repository identity,
+  clean candidate commit, artifact path and blob digest, provider/module
+  version and schema digests, validation outcome, and owner disposition.
+- Engineering Assurance SHALL report repeated submodule checkouts of the same
+  repository commit and artifact blob as references to one contract input
+  rather than independent consumers.
+- Engineering Assurance SHALL exclude skeletons, templates, quarantined
+  evidence, and inactive branches only through an explicit recorded
+  classification.
 - Engineering Assurance SHALL NOT replace an accepted schema with an
   incompatible shape until every recorded active consumer has an owner-approved
   migration disposition and the prior shape remains explicitly addressable.
@@ -63,7 +78,8 @@ observable identities or ownership.
 ## Error Conditions
 
 An unknown contract version, missing provenance, ambiguous legacy mapping,
-digest mismatch, malformed fixture, and unsupported canonicalization version
+digest mismatch, malformed fixture, unsupported canonicalization version,
+unresolved registry entry, dirty candidate revision, and unclassified artifact
 each fail explicitly and preserve the original input bytes. An installed module
 schema that rejects an active artifact in the accepted compatibility corpus is
 a release-blocking incompatibility, not an ordinary malformed-input case.
@@ -84,7 +100,7 @@ a release-blocking incompatibility, not an ordinary malformed-input case.
 | FR-015-AC-2 | Every success, unavailable, not-computed, not-applicable, failed, inconclusive, malformed, stale, tampered, lossy, and unreadable case remains distinguishable after migration. | Property (TC-102) |
 | FR-015-AC-3 | Unknown versions, missing provenance, ambiguous mappings, malformed fixtures, and digest mismatches fail explicitly while source and corpus bytes remain unchanged. | Property (TC-103) |
 | FR-015-AC-4 | Static ownership and execution audits find no copied portable contract family, persisted evidence family, or executable foreign-language fixture (CON-2, CON-3). | Test (TC-104) |
-| FR-015-AC-5 | The candidate installed module validates every active AssuranceProfile and MeasurementPlan in the pinned package corpus and recorded Quire consumer set, or the artifact owner has completed an explicit versioned migration before the module replacement. | Test (TC-119) |
+| FR-015-AC-5 | A registry-derived, revision-bound snapshot accounts for every active AssuranceProfile and MeasurementPlan in the pinned package corpus and registered consumer set; the candidate installed module validates each artifact, or its owner has completed an explicit versioned migration before module replacement. | Test (TC-119) |
 | FR-015-AC-6 | Legacy, current, malformed, and unsupported assurance-artifact shapes receive distinct versioned outcomes without changing source bytes, and an invalid AssuranceProfile contributes no review-selection decision. | Property (TC-120) |
 
 ## Dependencies

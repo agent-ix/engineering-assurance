@@ -281,7 +281,7 @@ the reviewed implementation exists.
 | TC-116 | Rust 1.75 builds every target with unsafe code forbidden | Compile | P0 | NFR-005-AC-1 | 🚧 pending implementation |
 | TC-117 | Rust requirement tests use the canonical bare ix-trace-rs macro form | Static | P0 | NFR-005-AC-2 | 🚧 pending implementation |
 | TC-118 | Quire reconciles every Rust test marker without missing, orphaned, or duplicate bindings | Integration | P0 | NFR-005-AC-3 | 🚧 pending implementation |
-| TC-119 | Installed module validates every active AP/MP in the pinned package corpus and recorded Quire consumer set, with no unapproved valid-to-invalid transition | Integration | P0 | FR-015-AC-5 | 🚧 pending implementation |
+| TC-119 | Registry-derived snapshot binds every active AP/MP to canonical repository, clean candidate commit, path, blob digest, provider/schema digests, validation outcome, and owner disposition; duplicated submodule checkouts are deduplicated and no unapproved valid-to-invalid transition occurs | Integration | P0 | FR-015-AC-5 | 🚧 pending implementation |
 | TC-120 | Legacy, current, malformed, and unsupported assurance artifacts classify distinctly, preserve source bytes, and invalid profiles cannot select review policy | Property | P0 | FR-015-AC-6 | 🚧 pending implementation |
 
 ## Option Permutation Matrix
@@ -368,7 +368,7 @@ evaluation envelopes.
 | INT-005 | Validate shared semantic references and historical compatibility | Quire, Quoin, ix-flow, native producer fixtures | library | TC-052..TC-068 | ✅ |
 | INT-006 | Load Rust workflow invariants through a structured host interface | ix-flow | service | TC-107, TC-108 | 🚧 |
 | INT-007 | Load Rust-owned scenarios and assertions through a structured host interface | cli-agent-evals | service | TC-109, TC-110 | 🚧 |
-| INT-008 | Validate versioned assurance-artifact contracts against active real consumers | quire-rs and pinned assurance corpus | service | TC-119, TC-120 | 🚧 |
+| INT-008 | Validate versioned assurance-artifact contracts against the registry-derived candidate snapshot | Registered Quire/TL consumers and pinned assurance corpus | service | TC-119, TC-120 | 🚧 |
 
 ### Integration Test Details
 
