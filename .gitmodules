@@ -2,3 +2,6 @@
 	path = corpus
 	url = ../qa-corpus.git
 	branch = main
+[submodule "vendor/ix-trace-rs"]
+	path = vendor/ix-trace-rs
+	url = ../ix-trace-rs.git

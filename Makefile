@@ -1,4 +1,4 @@
-.PHONY: lint test package-audit validate-docs eval-readiness agent-evals agent-evals-aggregate integration-traceability integration-evidence integration-gate release-gate
+.PHONY: lint test package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-foundation-gate eval-readiness agent-evals agent-evals-aggregate integration-traceability integration-evidence integration-gate release-gate
 
 EVAL_AGENT ?= codex
 EVAL_RUN ?= canary
@@ -10,6 +10,7 @@ EVAL_REPORTS ?=
 EVAL_AGGREGATE_REPORT ?=
 PYTHON ?= python3
 QUIRE ?= quire
+CARGO ?= cargo
 
 lint:
 	$(PYTHON) -m ruff check .
@@ -24,6 +25,26 @@ package-audit:
 
 validate-docs:
 	$(QUIRE) validate --scope "$(CURDIR)" "spec/**/*.md" "plan/**/*.md" "reviews/**/*.md"
+
+rust-format:
+	$(CARGO) fmt -- --check
+
+rust-clippy:
+	$(CARGO) clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+rust-toolchain:
+	$(CARGO) check --workspace --all-targets --all-features --locked
+
+rust-tests:
+	$(CARGO) test --workspace --all-targets --all-features --locked
+
+rust-docs:
+	RUSTDOCFLAGS="-D warnings" $(CARGO) doc --workspace --all-features --no-deps --locked
+
+rust-deps:
+	$(CARGO) deny check
+
+rust-foundation-gate: rust-format rust-clippy rust-toolchain rust-tests rust-docs
 
 eval-readiness:
 	PATH="$(CURDIR)/.agent-evals/bin:$(PATH)" $(PYTHON) scripts/check_eval_readiness.py
@@ -56,6 +77,6 @@ integration-evidence:
 		--quire "$(QUIRE)" \
 		--aggregate "$(EVAL_AGGREGATE_REPORT)"
 
-integration-gate: lint test package-audit validate-docs integration-traceability
+integration-gate: lint test package-audit validate-docs rust-foundation-gate integration-traceability
 
 release-gate: integration-gate integration-evidence
