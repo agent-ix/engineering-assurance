@@ -153,9 +153,15 @@ does not authorize registry publication.
 
 Schemas, module manifests, skeletons, skills, Markdown specifications,
 controlled corpora, and generated cross-language fixtures remain declarative
-content or inert data in their appropriate formats. Makefiles, package
-manifests, and workflow YAML may remain as thin host dispatch. They cannot own
-semantic branches or assertions that duplicate the Rust implementation.
+content or inert test data in suitable standardized formats such as JSON, YAML,
+Markdown, or a fixture consumer's source representation. A `.py`, `.ts`, or
+`.rs` fixture is retained only as data to parse or compare; its file extension
+does not authorize executable assurance behavior in that language. Makefiles,
+package manifests, and workflow YAML may remain as thin host dispatch. They
+cannot own semantic branches or assertions that duplicate the Rust
+implementation. No executable Engineering Assurance policy may remain
+implemented in Python, JavaScript, or MJS after its governed removal gate
+passes.
 
 Quire validation, Quoin evidence retention/audit, ix-flow run and decision
 state, portable verification contracts, cli-agent-evals host mechanics, and

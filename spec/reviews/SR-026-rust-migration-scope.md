@@ -36,8 +36,10 @@ integration boundary.
   boundaries; they do not justify moving generic implementations into this
   repository or applying Engineering Assurance's complete internal regime to
   their owners.
-- Foreign-language fixtures may remain inert data, never executable assurance
-  logic.
+- Foreign-language fixtures may remain inert parse/compare data in a consumer's
+  source representation. Their extension does not permit executable assurance
+  policy; governed Python, JavaScript, and MJS implementations are removed after
+  parity and host gates pass.
 
 ## Repeat-review disposition
 
