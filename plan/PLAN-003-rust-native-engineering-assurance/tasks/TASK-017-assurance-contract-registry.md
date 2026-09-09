@@ -38,6 +38,9 @@ Implement the committed owner-reviewed consumer registry and revision-bound arti
 - One unique repository entry containing one or more independently classified
   artifact entries; no duplicate repository row is needed for a multi-artifact
   consumer.
+- A separately bound provider candidate; the registry refuses the Engineering
+  Assurance repository that contains it and therefore cannot self-reference its
+  own commit.
 - Fail-closed owner-review states that distinguish a prepared registry from the
   canonical population digest explicitly accepted by the named human, plus a
   separate snapshot digest over the exact registry input bytes.
