@@ -9,6 +9,12 @@ relationships:
     type: "requires"
   - target: "ix://agent-ix/engineering-assurance/FR-015"
     type: "requires"
+  - target: "ix://agent-ix/qa-corpus/FR-201"
+    type: "requires"
+  - target: "ix://agent-ix/quoin/FR-064"
+    type: "requires"
+  - target: "ix://agent-ix/quoin/FR-068"
+    type: "requires"
 ---
 
 # FR-019: Orchestrate Quoin change assurance through Rust
@@ -33,6 +39,9 @@ attestation, intake, audit, receipt, and verification schemas and storage.
   them.
 - The accepted Quoin component version and packaged contract digests from the
   Engineering Assurance compatibility boundary.
+- The reviewed qa-corpus FR-201 baseline: exactly eight immutable repository,
+  revision, driver-digest, review-source-digest, observation, and witness
+  records captured before any consumer migration.
 
 ## Outputs
 
@@ -72,6 +81,20 @@ attestation, intake, audit, receipt, and verification schemas and storage.
 - The capability SHALL NOT claim atomic rollback of a write Quoin completed
   prior to the failure.
 - The capability SHALL restrict Quoin writes to the explicit store root.
+- The accepted Quoin version SHALL qualify same-store concurrent record and
+  attestation publication, staging recovery, exact-input retry, collision, and
+  busy/stale-lock behavior. Engineering Assurance SHALL delegate those meanings
+  to Quoin and SHALL NOT add a second evidence-store lock or recovery protocol.
+- Two chain runs MAY name the same store root only under that accepted Quoin
+  contract. The capability SHALL preserve a busy outcome as a refusal unless
+  the request declares a bounded retry count and delay; exhaustion SHALL name
+  the attempted operation and the unchanged Quoin outcome.
+- A retry after a busy result, caller cancellation, timeout, signal, or missing
+  response SHALL repeat only the same Quoin operation with byte-identical input
+  identities. No later operation may run until Quoin returns the already-retained
+  or newly-retained identity expected for that operation.
+- The capability SHALL NOT delete a Quoin lock or staging directory, infer that
+  an ambiguous write completed, or convert a collision into a retry.
 - The capability SHALL leave historical repository evidence and corpus bytes
   read-only.
 
@@ -87,7 +110,9 @@ attestation, intake, audit, receipt, and verification schemas and storage.
 
 The capability SHALL reject a skipped prerequisite, an undeclared proof,
 selection, or input, an extra operation, and any repetition outside the
-per-proof attestation/intake rows.
+per-proof attestation/intake rows. Multiplicity counts accepted operation
+completions. A bounded attempt that repeats the same operation after a busy or
+ambiguous result is not a second completion, and it may not change any input.
 
 ## Error Conditions
 
@@ -95,8 +120,9 @@ An unknown protocol, an escaping or aliased path, a dirty or mismatched
 candidate revision, an absent or changed input, an unaccepted Quoin version or
 contract digest, an unsupported/reordered/repeated operation, arbitrary
 arguments or executables, a malformed response, a response bound to another
-candidate or digest, timeout, cancellation, signal, and a changed historical
-byte each produce a distinguishable refusal.
+candidate or digest, timeout, cancellation, signal, Quoin store busy or stale
+lock, exhausted retry, and a changed historical byte each produce a
+distinguishable refusal.
 
 ## Constraints
 
@@ -112,16 +138,20 @@ byte each produce a distinguishable refusal.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-019-AC-1 | A valid declarative request over already-produced inputs invokes the fixed Quoin operation sequence, validates every structured response, and emits one bounded result carrying the exact Quoin outcomes and completed-operation order. | Integration (TC-130) |
-| FR-019-AC-2 | Unknown protocols, escaping or aliased paths, mismatched candidate revisions, missing or changed input bytes, unaccepted Quoin identities, arbitrary executables/arguments, and unsupported operation graphs fail before the first invocation or write. | Property (TC-131) |
-| FR-019-AC-3 | Operation failure, timeout, cancellation, signal, malformed response, and response-binding mismatch terminate the child, emit no success result, invoke no later operation, and emit one bounded refusal identifying every operation Quoin completed before refusal. | Property (TC-132) |
-| FR-019-AC-4 | The Rust capability matches the retained success and adverse-case observations of all eight current `assurance_chain.py` consumers at pinned revisions, preserving pass, fail, unavailable, not-computed, malformed, stale, tampered, and incomplete without rewriting historical bytes. | Integration (TC-133) |
+| FR-019-AC-2 | Unknown protocols, escaping or aliased paths, mismatched candidate revisions, missing or changed input bytes, unaccepted Quoin identities, arbitrary executables/arguments, and unsupported operation graphs fail before the first invocation or write. | Integration (TC-131) |
+| FR-019-AC-3 | Operation failure, timeout, cancellation, signal, malformed response, and response-binding mismatch terminate the child, emit no success result, invoke no later operation, and emit one bounded refusal identifying every operation Quoin completed before refusal. | Integration (TC-132) |
+| FR-019-AC-4 | Against the reviewed qa-corpus FR-201 records, the Rust capability matches the retained success and adverse-case observations of exactly eight `assurance_chain.py` consumers at their pinned revisions and digests, preserving pass, fail, unavailable, not-computed, malformed, stale, tampered, and incomplete without rewriting historical bytes. | Integration (TC-133) |
 | FR-019-AC-5 | Static ownership and call-surface audits find only the accepted Quoin executable and the five declared change-assurance subcommands, no audit-report producer invocation, no other producer invocation or stdout verdict recovery, no copied Quoin schema/store/canonicalization, and no human-decision inference (CON-1..CON-4). | Test (TC-134) |
+| FR-019-AC-6 | Independently launched chains sharing one store root rely only on the accepted Quoin concurrency contract: identical publication/retry resolves to one retained identity, differing bytes cannot replace retained evidence, recovery cannot race an active writer, busy/exhaustion stays distinguishable, and no later chain operation follows an ambiguous completion. | Integration (TC-135) |
 
 ## Dependencies
 
 - **Upstream**: FR-014 supplies the bounded CLI protocol and child lifecycle;
   FR-015 supplies identity, compatibility, state, and canonical-byte behavior;
-  the accepted compatibility matrix identifies Quoin and its contract bytes.
+  qa-corpus FR-201 supplies the reviewed immutable eight-consumer baseline; the
+  accepted compatibility matrix identifies a Quoin revision and contract bytes
+  whose FR-064/FR-068 qualification includes same-store concurrency, exact-input
+  retry, collision preservation, busy/stale-lock refusal, and safe recovery.
 - **External authority**: Quoin owns all change-assurance schemas, persistence,
   audit, receipt construction, verification, and outcome semantics.
 - **Downstream**: FR-018 and quire-research #60 may migrate the eight consumer

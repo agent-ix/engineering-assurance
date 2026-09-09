@@ -11,7 +11,7 @@ type: TestMatrix
 This matrix records completed verification for the canonical assurance-onboarding
 and verification-semantics baseline and planned verification for the proposed
 Rust migration. TC-001..TC-095 have passing repository or retained real-agent
-evidence. TC-096..TC-134 are staged: completed slices are identified explicitly,
+evidence. TC-096..TC-135 are staged: completed slices are identified explicitly,
 while aggregate migration cases remain pending until every named capability is
 implemented and reviewed.
 
@@ -140,6 +140,7 @@ implemented and reviewed.
 | FR-019 | FR-019-AC-3 | TC-132 | 🚧 Pending implementation |
 | FR-019 | FR-019-AC-4 | TC-133 | 🚧 Pending implementation |
 | FR-019 | FR-019-AC-5 | TC-134 | 🚧 Pending implementation |
+| FR-019 | FR-019-AC-6 | TC-135 | 🚧 Pending implementation |
 
 ### Non-Functional Requirement Coverage
 
@@ -315,10 +316,11 @@ implemented and reviewed.
 | TC-128 | A new stable Rust release triggers the real compatibility matrix; only a reproduced required-tool incompatibility permits a bounded older-version hold | Integration | P0 | NFR-005-AC-7 | 🚧 pending implementation |
 | TC-129 | An index-derived, digest-bound Rust trace manifest classifies every tracked Rust blob, excludes gitlinks without traversal, and rejects unclassified roots/blobs or any population change before Quire reconciliation | Integration | P0 | NFR-005-AC-8 | 🚧 pending implementation |
 | TC-130 | A valid declarative chain over pre-produced inputs invokes only the ordered Quoin change-assurance operations and returns one bounded result with exact structured response identities, outcomes, and completed-operation order | Integration | P0 | FR-019-AC-1 | 🚧 pending implementation |
-| TC-131 | Preflight refuses unknown protocols, escaping/aliased paths, dirty or mismatched revisions, absent/changed inputs, unaccepted Quoin identities, arbitrary executables/arguments, and unsupported operation graphs before invocation or write | Property | P0 | FR-019-AC-2 | 🚧 pending implementation |
-| TC-132 | Step failure, timeout, cancellation, signal, malformed response, and response-binding mismatch terminate the Quoin child, emit no success result, invoke no later step, and emit one bounded refusal with the exact completed-step list without claiming rollback | Property | P0 | FR-019-AC-3 | 🚧 pending implementation |
-| TC-133 | All eight pinned consumer fixtures preserve success plus pass, fail, unavailable, not-computed, malformed, stale, tampered, and incomplete observations while historical repository bytes remain unchanged | Integration | P0 | FR-019-AC-4 | 🚧 pending implementation |
+| TC-131 | A table-driven integration corpus makes preflight refuse unknown protocols, escaping/aliased paths, dirty or mismatched revisions, absent/changed inputs, unaccepted Quoin identities, arbitrary executables/arguments, and unsupported operation graphs before invocation or write | Integration | P0 | FR-019-AC-2 | 🚧 pending implementation |
+| TC-132 | A table-driven integration corpus makes step failure, timeout, cancellation, signal, malformed response, and response-binding mismatch terminate the Quoin child, emit no success result, invoke no later step, and emit one bounded refusal with the exact completed-step list without claiming rollback | Integration | P0 | FR-019-AC-3 | 🚧 pending implementation |
+| TC-133 | The reviewed qa-corpus FR-201 baseline reproduces exactly eight pinned consumer revisions and driver/review-source digests; every retained success and adverse observation is matched while historical bytes remain unchanged | Integration | P0 | FR-019-AC-4 | 🚧 pending implementation |
 | TC-134 | Static audit permits only the accepted Quoin executable and the five declared change-assurance subcommands and finds no audit-report producer, other producer execution, arbitrary-output verdict parsing, copied Quoin schema/store/canonicalization, or human-decision inference | Static | P0 | FR-019-AC-5, FR-019-CON-1, FR-019-CON-2, FR-019-CON-3, FR-019-CON-4 | 🚧 pending implementation |
+| TC-135 | Two independent chains target one store root across identical publication, destination collision, active-writer recovery, bounded busy retry, and ambiguous completion; Quoin alone serializes the store, one identity survives, collisions never replace bytes, and EA invokes no later operation until completion is established | Integration | P0 | FR-019-AC-6 | 🚧 pending implementation |
 
 ## Option Permutation Matrix
 
@@ -428,6 +430,7 @@ evaluation envelopes.
 | EC-023 | A Quoin write completes and a later chain operation fails | FR-019 | TC-132 | A wrapper claims atomic rollback or hides the write that actually occurred |
 | EC-024 | A local chain declaration selects an arbitrary executable, subcommand, or reordered operation graph | FR-019 | TC-131, TC-134 | Generic command execution and local assurance semantics re-enter through configuration |
 | EC-025 | A producer output changes after preflight or a Quoin response names another candidate/digest | FR-019 | TC-131, TC-132 | Evidence from different bytes or revisions is attached to the candidate |
+| EC-026 | Two chains share one store root or a response is lost after a possible write | FR-019 | TC-132, TC-135 | EA invents store semantics, replaces evidence, or advances after an ambiguous completion |
 
 ## Integration Test Matrix
 
@@ -443,7 +446,7 @@ evaluation envelopes.
 | INT-006 | Load Rust workflow invariants through a structured host interface | ix-flow | service | TC-107, TC-108 | 🚧 |
 | INT-007 | Load Rust-owned scenarios and assertions through a structured host interface | cli-agent-evals | service | TC-109, TC-110 | 🚧 |
 | INT-008 | Validate versioned assurance-artifact contracts against the registry-derived candidate snapshot | Registered Quire/TL consumers and pinned assurance corpus | service | TC-119, TC-120 | 🚧 |
-| INT-009 | Orchestrate the fixed change-assurance sequence without absorbing Quoin ownership | Quoin | service | TC-130..TC-134 | 🚧 |
+| INT-009 | Orchestrate the fixed change-assurance sequence without absorbing Quoin ownership | Quoin | service | TC-130..TC-135 | 🚧 |
 
 ### Integration Test Details
 

@@ -94,7 +94,7 @@ Pure behavior lives in `src/` behind typed APIs. Filesystem, subprocess, environ
 - [ ] **TC-105, TC-106**: Onboarding and ordered invariant results match retained behavior.
 - [ ] **TC-107, TC-108, TC-123**: ix-flow lifecycle and host loading pass only against the exact accepted structured-provider artifact.
 - [ ] **TC-109..TC-112, TC-124**: Evaluation, qualification, packaging, rights, hosted dispatch, and external-suite behavior pass against their retained cases and accepted host artifact.
-- [ ] **TC-130..TC-134**: The fixed Quoin chain runs from declarative,
+- [ ] **TC-130..TC-135**: The fixed Quoin chain runs from declarative,
   pre-produced inputs; every preflight/child/response failure stops later
   actions; Quoin ownership and all eight consumer behaviors remain intact.
 
