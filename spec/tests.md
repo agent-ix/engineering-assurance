@@ -11,8 +11,9 @@ type: TestMatrix
 This matrix records completed verification for the canonical assurance-onboarding
 and verification-semantics baseline and planned verification for the proposed
 Rust migration. TC-001..TC-095 have passing repository or retained real-agent
-evidence. TC-096..TC-127 remain pending until the specification is accepted and
-the reviewed implementation exists.
+evidence. TC-096..TC-128 are staged: completed slices are identified explicitly,
+while aggregate migration cases remain pending until every named capability is
+implemented and reviewed.
 
 ## Test Matrix Rules
 
@@ -103,13 +104,13 @@ the reviewed implementation exists.
 | FR-007 | FR-007-AC-2 | TC-036 | ✅ Passing |
 | FR-007 | FR-007-AC-3 | TC-037 | ✅ Passing |
 | FR-014 | FR-014-AC-1 | TC-096 | 🚧 Pending implementation |
-| FR-014 | FR-014-AC-2 | TC-098 | 🚧 Pending implementation |
-| FR-014 | FR-014-AC-3 | TC-099 | 🚧 Pending implementation |
+| FR-014 | FR-014-AC-2 | TC-098 | 🚧 Compatibility-command slice backed; aggregate pending |
+| FR-014 | FR-014-AC-3 | TC-099 | 🚧 Compatibility-command slice backed; aggregate pending |
 | FR-014 | FR-014-AC-4 | TC-101 | 🚧 Pending implementation |
-| FR-014 | FR-014-AC-5 | TC-121 | 🚧 Pending implementation |
-| FR-015 | FR-015-AC-1 | TC-100 | 🚧 Pending implementation |
-| FR-015 | FR-015-AC-2 | TC-102 | 🚧 Pending implementation |
-| FR-015 | FR-015-AC-3 | TC-103 | 🚧 Pending implementation |
+| FR-014 | FR-014-AC-5 | TC-121 | 🚧 Compatibility size-limit slice backed; lifecycle cases pending |
+| FR-015 | FR-015-AC-1 | TC-100 | 🚧 Compatibility and evidence-classification slices backed; aggregate pending |
+| FR-015 | FR-015-AC-2 | TC-102 | 🚧 Evidence-availability slice backed; aggregate state families pending |
+| FR-015 | FR-015-AC-3 | TC-103 | 🚧 Evidence-validation slice backed; aggregate refusal families pending |
 | FR-015 | FR-015-AC-4 | TC-104 | 🚧 Pending implementation |
 | FR-015 | FR-015-AC-5 | TC-119 | 🚧 Pending implementation |
 | FR-015 | FR-015-AC-6 | TC-120 | 🚧 Pending implementation |
@@ -267,12 +268,12 @@ the reviewed implementation exists.
 | TC-095 | A fully pinned toolchain does not open an unaccepted gate; any state but `accepted`, and any half-record missing a name or date, withholds | Unit | P0 | FR-012-AC-9 | ✅ |
 | TC-096 | Existing repository builds the named Rust library and CLI | Compile | P0 | StR-003-VC-1, FR-014-AC-1, FR-014-CON-3 | 🚧 pending implementation |
 | TC-097 | Every executable path and consumer has one current state and final disposition | Static | P0 | StR-003-VC-2, FR-018-AC-1 | 🚧 pending implementation |
-| TC-098 | Machine CLI output obeys the versioned stdout/stderr contract | Property | P0 | FR-014-AC-2 | 🚧 pending implementation |
-| TC-099 | Invalid protocol, input, root, host, and host response fail before side effects | Property | P0 | FR-014-AC-3 | 🚧 pending implementation |
-| TC-100 | For each ADR-002 compatibility/semantic/projection/fixture capability row, Rust agrees byte-for-byte with the accepted identity and report reference over the named corpus and focused adverse cases | Property | P0 | StR-003-VC-3, FR-015-AC-1 | 🚧 pending implementation |
+| TC-098 | Machine CLI output obeys the versioned stdout/stderr contract | Property | P0 | FR-014-AC-2 | 🚧 compatibility-command slice backed; aggregate pending |
+| TC-099 | Invalid protocol, input, root, host, and host response fail before side effects | Property | P0 | FR-014-AC-3 | 🚧 compatibility-command slice backed; aggregate pending |
+| TC-100 | For each ADR-002 compatibility/semantic/projection/fixture capability row, Rust agrees byte-for-byte with the accepted identity and report reference over the named corpus and focused adverse cases, including generated arbitrary-precision integer boundaries | Property | P0 | StR-003-VC-3, FR-015-AC-1 | 🚧 compatibility and evidence-classification slices backed; aggregate pending |
 | TC-101 | Rust call surface owns no evidence persistence, stdout verdict parser, or reusable library I/O | Static | P0 | FR-014-AC-4, FR-014-CON-1, FR-014-CON-2 | 🚧 pending implementation |
-| TC-102 | Every successful and non-successful semantic state remains distinct | Property | P0 | FR-015-AC-2 | 🚧 pending implementation |
-| TC-103 | Invalid semantic inputs fail read-only and preserve original bytes | Property | P0 | FR-015-AC-3, FR-015-CON-1 | 🚧 pending implementation |
+| TC-102 | Every successful and non-successful semantic state remains distinct; typed state spellings and exact-one untyped-label validation remain callable without string parsing | Property | P0 | FR-015-AC-2 | 🚧 evidence-availability slice backed; aggregate pending |
+| TC-103 | Invalid semantic inputs, including non-finite/retained-domain-overflow numbers and invalid/mutable version tokens, fail read-only without an identity digest and preserve original bytes; immutable metadata containing `x` remains accepted, and validity/error messages remain directly inspectable | Property | P0 | FR-015-AC-3, FR-015-CON-1 | 🚧 evidence-validation slice backed; aggregate pending |
 | TC-104 | Contract ownership and inert foreign-language fixtures remain bounded | Static | P0 | FR-015-AC-4, FR-015-CON-2, FR-015-CON-3 | 🚧 pending implementation |
 | TC-105 | Rust onboarding matches retained boundary and adverse-case behavior | Property | P0 | FR-016-AC-1 | 🚧 pending implementation |
 | TC-106 | Rust and retained invariant providers return the same ordered failure set | Property | P0 | FR-016-AC-2 | 🚧 pending implementation |
@@ -290,7 +291,7 @@ the reviewed implementation exists.
 | TC-118 | Quire reconciles every Rust test marker without missing, orphaned, or duplicate bindings | Integration | P0 | NFR-005-AC-3 | 🚧 pending implementation |
 | TC-119 | Registry-derived snapshot binds every active AP/MP to canonical repository, clean candidate commit, path, blob digest, provider/schema digests, validation outcome, and owner disposition; duplicated submodule checkouts are deduplicated and no unapproved valid-to-invalid transition occurs | Integration | P0 | FR-015-AC-5 | 🚧 pending implementation |
 | TC-120 | Legacy, current, malformed, and unsupported assurance artifacts classify distinctly, preserve source bytes, and invalid profiles cannot select review policy | Property | P0 | FR-015-AC-6 | 🚧 pending implementation |
-| TC-121 | Protocol byte/deadline limits, buffered stdout, timeout/cancellation/signal handling, child termination, and no-side-effect guarantees hold at every boundary | Property | P0 | FR-014-AC-5 | 🚧 pending implementation |
+| TC-121 | Protocol byte/deadline limits, buffered stdout, timeout/cancellation/signal handling, child termination, and no-side-effect guarantees hold at every boundary | Property | P0 | FR-014-AC-5 | 🚧 compatibility size-limit slice backed; lifecycle cases pending |
 | TC-122 | Consumer registry accepts one canonical versioned population and rejects unknown versions/classes, duplicate identities/paths, digest mismatches, byte changes, and unattributed exclusions | Property | P0 | FR-015-AC-7 | 🚧 pending implementation |
 | TC-123 | ix-flow host loading refuses any interface whose accepted artifact identity, version, revision, or digest is absent or mismatched | Integration | P0 | FR-016-AC-5, FR-016-CON-3 | 🚧 pending accepted host interface |
 | TC-124 | cli-agent-evals host loading refuses any suite interface whose accepted artifact identity, version, revision, or digest is absent or mismatched | Integration | P0 | FR-017-AC-5, FR-017-CON-4 | 🚧 pending accepted host interface |
@@ -330,7 +331,7 @@ evaluation envelopes.
 | Test Case | Axis | Variants | Expected |
 |---|---|---|---|
 | TC-098, TC-121 | Protocol/result | supported v1; unknown version; malformed; at/beyond byte limit; live/expired deadline; completed/timeout/cancelled/signalled | exactly one complete versioned result for completion; every adverse case fails before a later side effect and never emits partial JSON |
-| TC-100, TC-102, TC-103 | Semantic state | success; unavailable; not-computed; not-applicable; failed; inconclusive; malformed; stale; tampered; lossy; unreadable | byte-identical success or one distinct preserved non-success outcome |
+| TC-100, TC-102, TC-103 | Semantic state | success; unavailable; not-computed; not-applicable; failed; inconclusive; malformed; stale; tampered; lossy; unreadable; arbitrary-precision integer; NaN/infinity/overflow-to-non-finite; exact metadata containing `x`; wildcard/range/invalid-character version | byte-identical success or one distinct preserved non-success outcome; invalid numeric/version inputs mint no digest |
 | TC-119, TC-122 | Registry | active/inactive/skeleton/template/quarantined; unique/duplicate repo and path; matching/mismatched/changing digest | one canonical population or explicit refusal; exclusions require owner and reason |
 | TC-123, TC-124 | Host interface | exact; absent; stale; foreign; version mismatch; revision mismatch; digest mismatch; unaccepted | only the exact accepted interface enters host-bound work |
 | TC-113, TC-125 | Migration | old only; additive parity; consumers migrating; all migrated; registry/interface changed | deletion only from all-migrated with unchanged bindings |

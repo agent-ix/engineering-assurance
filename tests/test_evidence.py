@@ -182,3 +182,23 @@ def test_every_declared_state_is_individually_valid() -> None:
     """Trace: FR-004-AC-7, TC-046."""
     for state in AVAILABILITY_STATES:
         assert validate_state_labels((state,)) == state
+
+
+def test_version_identity_distinguishes_wildcards_from_immutable_metadata() -> None:
+    """Trace: FR-015-AC-3, TC-103."""
+    assert identity("producer", "1.2.3+linux-x86_64").errors() == ()
+    assert identity("producer", "1.x").errors() == ("identity-version-mutable",)
+    assert identity("producer", "1.*").errors() == ("identity-version-mutable",)
+    assert identity("producer", "Straße").errors() == (
+        "identity-version-invalid-character",
+    )
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_output_is_refused_before_identity(value: float) -> None:
+    """Trace: FR-015-AC-3, TC-103."""
+    attempt = replace(observed_attempt(), output={"value": value})
+    result = classify_producer(attempt)
+    assert not result.valid
+    assert result.output_digest is None
+    assert result.validation_errors == ("producer-output-number-non-finite",)

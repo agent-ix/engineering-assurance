@@ -49,6 +49,14 @@ pub struct EvidenceValidationError {
     message: String,
 }
 
+impl EvidenceValidationError {
+    /// Return the stable validation message without parsing [`std::fmt::Display`].
+    #[must_use]
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+}
+
 /// Return the one valid availability state or reject an ambiguous selection.
 ///
 /// # Errors
@@ -116,14 +124,12 @@ impl VersionIdentity {
         if self.name.trim().is_empty() {
             errors.push("identity-name-missing".to_owned());
         }
-        let version = self.version.trim().to_lowercase();
-        if version.is_empty() {
+        let version = self.version.as_str();
+        if version.trim().is_empty() {
             errors.push("identity-version-missing".to_owned());
-        } else if MUTABLE_VERSIONS.contains(&version.as_str())
-            || ['>', '<', '^', '~', 'x']
-                .into_iter()
-                .any(|marker| version.contains(marker))
-        {
+        } else if !version.bytes().all(|byte| byte.is_ascii_graphic()) {
+            errors.push("identity-version-invalid-character".to_owned());
+        } else if is_mutable_version(version) {
             errors.push("identity-version-mutable".to_owned());
         }
         if !is_lower_sha256(&self.digest) {
@@ -131,6 +137,20 @@ impl VersionIdentity {
         }
         errors
     }
+}
+
+fn is_mutable_version(version: &str) -> bool {
+    MUTABLE_VERSIONS
+        .into_iter()
+        .any(|candidate| version.eq_ignore_ascii_case(candidate))
+        || ['>', '<', '^', '~', '*']
+            .into_iter()
+            .any(|marker| version.contains(marker))
+        || version
+            .split_once('+')
+            .map_or(version, |(core, _)| core)
+            .split(['.', '-'])
+            .any(|component| component.eq_ignore_ascii_case("x"))
 }
 
 fn is_lower_sha256(value: &str) -> bool {
@@ -197,6 +217,28 @@ fn legacy_canonical_json(output: &Value) -> Vec<u8> {
 }
 
 fn python_number_token(token: &[u8]) -> Vec<u8> {
+    if !token.iter().any(|byte| matches!(byte, b'.' | b'e' | b'E')) {
+        return if token == b"-0" {
+            b"0".to_vec()
+        } else {
+            token.to_vec()
+        };
+    }
+
+    let Some(value) = std::str::from_utf8(token)
+        .ok()
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite())
+    else {
+        return token.to_vec();
+    };
+    let Some(number) = serde_json::Number::from_f64(value) else {
+        return token.to_vec();
+    };
+    normalize_python_float_token(number.to_string().as_bytes())
+}
+
+fn normalize_python_float_token(token: &[u8]) -> Vec<u8> {
     if let Some(exponent) = token.iter().position(|byte| matches!(byte, b'e' | b'E')) {
         let mut normalized = Vec::with_capacity(token.len() + 2);
         normalized.extend_from_slice(&token[..exponent]);
@@ -244,6 +286,28 @@ fn python_number_token(token: &[u8]) -> Vec<u8> {
     }
     normalized.extend_from_slice(exponent.to_string().as_bytes());
     normalized
+}
+
+fn has_non_finite_numeric_identity(value: &Value) -> bool {
+    let mut pending = vec![value];
+    while let Some(candidate) = pending.pop() {
+        match candidate {
+            Value::Array(values) => pending.extend(values),
+            Value::Object(values) => pending.extend(values.values()),
+            Value::Number(number) => {
+                let token = number.to_string();
+                if token.bytes().any(|byte| matches!(byte, b'.' | b'e' | b'E'))
+                    && token
+                        .parse::<f64>()
+                        .map_or(true, |value| !value.is_finite())
+                {
+                    return true;
+                }
+            }
+            Value::Bool(_) | Value::Null | Value::String(_) => {}
+        }
+    }
+    false
 }
 
 /// Complete set of component identities governing one observed result.
@@ -490,6 +554,12 @@ pub fn classify_producer(attempt: &ProducerAttempt) -> EvidenceEnvelope {
     };
     if !attempt.output_valid {
         return invalid(attempt, vec!["producer-output-malformed".to_owned()]);
+    }
+    if has_non_finite_numeric_identity(output) {
+        return invalid(
+            attempt,
+            vec!["producer-output-number-non-finite".to_owned()],
+        );
     }
     let Some(governing) = attempt.governing.as_ref() else {
         return invalid(attempt, vec!["governing-versions-missing".to_owned()]);

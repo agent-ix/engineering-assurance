@@ -3,7 +3,10 @@
 
 //! Additive-migration parity with the retained Python evidence classifier.
 
-use std::process::Command;
+use std::{
+    io::Write,
+    process::{Command, Stdio},
+};
 
 use engineering_assurance::evidence::{
     AvailabilityState, GoverningVersions, OperatorObservation, ProducerAttempt, VersionIdentity,
@@ -13,6 +16,22 @@ use ix_trace_rs::trace;
 use serde_json::{Value, json};
 
 const DIGEST: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+const PYTHON_DIGEST_REFERENCE: &str = r#"
+import hashlib
+import json
+import sys
+
+raw_values = json.load(sys.stdin)
+digests = []
+for raw in raw_values:
+    value = json.loads(raw)
+    canonical = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    digests.append(hashlib.sha256(canonical).hexdigest())
+print(json.dumps(digests, separators=(",", ":")))
+"#;
 
 const PYTHON_REFERENCE: &str = r#"
 import json
@@ -73,6 +92,10 @@ cases = [
     replace(base, governing=None),
     replace(base, governing=replace(governing(), producer=VersionIdentity(" ", " ", "bad"))),
     replace(base, quoin_reference="ix://agent-ix/not-quoin/EvidenceRecord-001"),
+    replace(base, governing=replace(governing(), producer=identity("fictional-producer", "1.2.3+linux-x86_64"))),
+    replace(base, governing=replace(governing(), producer=identity("fictional-producer", "1.x"))),
+    replace(base, governing=replace(governing(), producer=identity("fictional-producer", "Straße"))),
+    replace(base, output={"v": float("inf")}),
 ]
 print(json.dumps([asdict(classify_producer(case)) for case in cases], sort_keys=True, separators=(",", ":"), ensure_ascii=False))
 "#;
@@ -145,6 +168,76 @@ fn changed(source: &ProducerAttempt, change: impl FnOnce(&mut ProducerAttempt)) 
     result
 }
 
+fn with_producer_version(source: &ProducerAttempt, version: &str) -> ProducerAttempt {
+    changed(source, |case| {
+        version.clone_into(
+            &mut case
+                .governing
+                .as_mut()
+                .expect("fixture has governing versions")
+                .producer
+                .version,
+        );
+    })
+}
+
+fn retained_identity_digests(raw_values: &[String]) -> Vec<String> {
+    let payload = serde_json::to_string(raw_values).expect("identity corpus must serialize");
+    let mut child = Command::new("python3")
+        .args(["-c", PYTHON_DIGEST_REFERENCE])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("retained Python identity reference must execute during additive migration");
+    child
+        .stdin
+        .take()
+        .expect("Python reference stdin must be piped")
+        .write_all(payload.as_bytes())
+        .expect("identity corpus must reach the retained Python reference");
+    let python = child
+        .wait_with_output()
+        .expect("retained Python identity reference must complete");
+    assert!(
+        python.status.success(),
+        "{}",
+        String::from_utf8_lossy(&python.stderr)
+    );
+    serde_json::from_slice(&python.stdout).expect("retained identity digests must be JSON")
+}
+
+fn generated_identity_corpus() -> Vec<String> {
+    let mut raw_values = vec![
+        include_str!("../corpus/compatibility/producers/producer-code-graph.json").to_owned(),
+        include_str!("../corpus/compatibility/producers/producer-measurement.json").to_owned(),
+        include_str!("../corpus/compatibility/producers/producer-contract-conformance.json")
+            .to_owned(),
+        r#"{"v":18446744073709551615}"#.to_owned(),
+        r#"{"v":18446744073709551616}"#.to_owned(),
+        r#"{"v":-9223372036854775808}"#.to_owned(),
+        r#"{"v":-9223372036854775809}"#.to_owned(),
+        r#"{"v":1234567890123456789012345}"#.to_owned(),
+        r#"{"v":-1234567890123456789012345}"#.to_owned(),
+        r#"{"v":-0}"#.to_owned(),
+        r#"{"v":1.2300}"#.to_owned(),
+        r#"{"v":1E+09}"#.to_owned(),
+        r#"{"v":-0.0}"#.to_owned(),
+        r#"{"nested":[{"v":99999999999999999999999999999999999999}]}"#.to_owned(),
+    ];
+    for width in 20..=80 {
+        let digits = (0..width)
+            .map(|index| {
+                char::from(b'1' + u8::try_from(index % 9).expect("digit index is bounded"))
+            })
+            .collect::<String>();
+        raw_values.push(format!(r#"{{"v":{digits}}}"#));
+        raw_values.push(format!(r#"{{"v":-{digits}}}"#));
+    }
+    raw_values
+}
+
 fn parity_cases() -> Vec<ProducerAttempt> {
     let base = observed();
     let not_computed = changed(&base, |case| {
@@ -174,16 +267,7 @@ fn parity_cases() -> Vec<ProducerAttempt> {
         not_computed.clone(),
         not_applicable.clone(),
         changed(&base, |case| case.output_valid = false),
-        changed(&base, |case| {
-            "latest".clone_into(
-                &mut case
-                    .governing
-                    .as_mut()
-                    .expect("fixture has governing versions")
-                    .producer
-                    .version,
-            );
-        }),
+        with_producer_version(&base, "latest"),
         changed(&base, |case| case.quoin_reference = None),
         changed(&base, |case| " ".clone_into(&mut case.producer_id)),
         changed(&base, |case| case.observation.command = Vec::new()),
@@ -220,6 +304,15 @@ fn parity_cases() -> Vec<ProducerAttempt> {
         }),
         changed(&base, |case| {
             case.quoin_reference = Some("ix://agent-ix/not-quoin/EvidenceRecord-001".to_owned());
+        }),
+        with_producer_version(&base, "1.2.3+linux-x86_64"),
+        with_producer_version(&base, "1.x"),
+        with_producer_version(&base, "Straße"),
+        changed(&base, |case| {
+            case.output = Some(
+                serde_json::from_str(r#"{"v":1e309}"#)
+                    .expect("overflowing finite-number syntax must remain inspectable"),
+            );
         }),
     ]
 }
@@ -267,12 +360,29 @@ fn tc_102_evidence_availability_states_remain_distinct() {
             AvailabilityState::NotApplicable,
         ]
     );
+    for labels in [
+        vec![],
+        vec!["observed", "observed"],
+        vec!["observed", "unavailable"],
+        vec!["unknown"],
+    ] {
+        let error = validate_state_labels(labels).expect_err("invalid labels must be refused");
+        assert!(!error.message().is_empty());
+    }
+    for state in ["observed", "unavailable", "not_computed", "not_applicable"] {
+        assert_eq!(
+            validate_state_labels([state])
+                .expect("one known state")
+                .as_str(),
+            state
+        );
+    }
 }
 
 #[trace("TC-103", "FR-015-AC-3")]
 #[test]
 fn tc_103_evidence_malformed_and_missing_provenance_fail_explicitly() {
-    let results = parity_cases()[4..]
+    let results = parity_cases()[4..22]
         .iter()
         .map(classify_producer)
         .collect::<Vec<_>>();
@@ -290,30 +400,76 @@ fn tc_103_evidence_malformed_and_missing_provenance_fail_explicitly() {
     );
 }
 
-#[trace("TC-102", "FR-015-AC-2")]
+#[trace("TC-100", "FR-015-AC-1")]
 #[test]
-fn tc_102_state_label_selection_rejects_zero_duplicate_conflicting_and_unknown() {
-    for labels in [
-        vec![],
-        vec!["observed", "observed"],
-        vec!["observed", "unavailable"],
-        vec!["unknown"],
-    ] {
-        assert!(validate_state_labels(labels).is_err());
-    }
-    for state in ["observed", "unavailable", "not_computed", "not_applicable"] {
+fn tc_100_accepted_and_generated_json_values_match_retained_identity_digests() {
+    let raw_values = generated_identity_corpus();
+    let retained = retained_identity_digests(&raw_values);
+    assert_eq!(retained.len(), raw_values.len());
+
+    for (raw, expected_digest) in raw_values.iter().zip(retained) {
+        let output: Value = serde_json::from_str(raw).expect("identity fixture must be valid JSON");
+        let attempt = changed(&observed(), |case| case.output = Some(output));
+        let result = classify_producer(&attempt);
         assert_eq!(
-            validate_state_labels([state])
-                .expect("one known state")
-                .as_str(),
-            state
+            result.output_digest.as_deref(),
+            Some(expected_digest.as_str()),
+            "identity divergence for {raw}"
+        );
+        assert!(result.is_valid(), "valid identity input was refused: {raw}");
+    }
+}
+
+#[trace("TC-103", "FR-015-AC-3")]
+#[test]
+fn tc_103_non_finite_and_overflowing_numeric_identity_inputs_are_refused() {
+    for token in ["NaN", "Infinity", "-Infinity"] {
+        let raw = format!(r#"{{"v":{token}}}"#);
+        assert!(
+            serde_json::from_str::<Value>(&raw).is_err(),
+            "non-RFC 8259 token must fail at the JSON boundary: {token}"
         );
     }
+
+    for raw in [r#"{"v":1e309}"#, r#"{"v":-1e309}"#] {
+        let output: Value = serde_json::from_str(raw)
+            .expect("arbitrary-precision parsing must retain finite JSON number syntax");
+        let retained_output = output.clone();
+        let attempt = changed(&observed(), |case| case.output = Some(output));
+        let result = classify_producer(&attempt);
+        assert_eq!(
+            result.validation_errors,
+            ["producer-output-number-non-finite"]
+        );
+        assert_eq!(result.output_digest, None);
+        assert!(!result.is_valid());
+        assert_eq!(attempt.output, Some(retained_output));
+    }
+}
+
+#[trace("TC-103", "FR-015-AC-3")]
+#[test]
+fn tc_103_version_identity_rejects_actual_mutability_without_rejecting_metadata() {
+    assert!(
+        identity("producer", "1.2.3+linux-x86_64")
+            .errors()
+            .is_empty()
+    );
+    for version in ["1.x", "1.*", "^1.2.3", "latest", "Straße", "1.2.3 beta"] {
+        assert!(
+            !identity("producer", version).errors().is_empty(),
+            "invalid or mutable version was accepted: {version}"
+        );
+    }
+    assert_eq!(
+        identity("producer", "Straße").errors(),
+        ["identity-version-invalid-character"]
+    );
 }
 
 #[trace("TC-100", "FR-015-AC-1")]
 #[test]
-fn canonical_json_digest_fixture_is_stable() {
+fn tc_100_canonical_json_digest_fixture_is_stable() {
     let result = classify_producer(&observed());
     assert_eq!(
         result.output_digest.as_deref(),
