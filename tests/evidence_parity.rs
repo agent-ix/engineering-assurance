@@ -450,16 +450,46 @@ fn tc_103_non_finite_and_overflowing_numeric_identity_inputs_are_refused() {
 #[trace("TC-103", "FR-015-AC-3")]
 #[test]
 fn tc_103_version_identity_rejects_actual_mutability_without_rejecting_metadata() {
-    assert!(
-        identity("producer", "1.2.3+linux-x86_64")
-            .errors()
-            .is_empty()
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../engineering_assurance/fixtures/evidence-version-policy.json"
+    ))
+    .expect("version-policy fixture must be valid JSON");
+    assert_eq!(
+        fixture["schema_version"],
+        "engineering-assurance.evidence-version-policy/v1"
     );
-    for version in ["1.x", "1.*", "^1.2.3", "latest", "Straße", "1.2.3 beta"] {
-        assert!(
-            !identity("producer", version).errors().is_empty(),
-            "invalid or mutable version was accepted: {version}"
+    for case in fixture["cases"]
+        .as_array()
+        .expect("version-policy cases must be an array")
+    {
+        let version = case["version"]
+            .as_str()
+            .expect("fixture version must be a string");
+        let accepted_errors = case["accepted_errors"]
+            .as_array()
+            .expect("accepted errors must be an array")
+            .iter()
+            .map(|error| error.as_str().expect("fixture error must be a string"))
+            .collect::<Vec<_>>();
+        let prior_errors = case["prior_errors"]
+            .as_array()
+            .expect("prior errors must be an array");
+        assert_ne!(
+            prior_errors,
+            case["accepted_errors"]
+                .as_array()
+                .expect("accepted errors must be an array"),
+            "fixture must record an actual policy correction for {version}"
         );
+        assert_eq!(
+            identity("producer", version).errors(),
+            accepted_errors,
+            "accepted version policy drifted for {version}"
+        );
+    }
+
+    for version in ["1.x", "^1.2.3", "latest", "Straße", "1.2.3 beta"] {
+        assert!(!identity("producer", version).errors().is_empty());
     }
     assert_eq!(
         identity("producer", "Straße").errors(),

@@ -295,6 +295,9 @@ fn has_non_finite_numeric_identity(value: &Value) -> bool {
             Value::Array(values) => pending.extend(values),
             Value::Object(values) => pending.extend(values.values()),
             Value::Number(number) => {
+                // With serde_json/arbitrary_precision, exponent-free tokens are
+                // exact integer values. Only decimal/exponent tokens entered
+                // Python's float domain and can overflow it to non-finite.
                 let token = number.to_string();
                 if token.bytes().any(|byte| matches!(byte, b'.' | b'e' | b'E'))
                     && token
@@ -411,7 +414,7 @@ impl OperatorObservation {
 }
 
 /// Inputs observed for one producer-classification decision.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProducerAttempt {
     /// Stable producer identity.
@@ -425,6 +428,9 @@ pub struct ProducerAttempt {
     /// Immutable governing identities, required for observed evidence.
     pub governing: Option<GoverningVersions>,
     /// Parsed producer output, required to be a JSON object for observed evidence.
+    ///
+    /// Its structural representation is not evidence identity; classification
+    /// derives identity from the canonical output digest.
     pub output: Option<Value>,
     /// Whether the producer output passed its owned contract.
     pub output_valid: bool,
