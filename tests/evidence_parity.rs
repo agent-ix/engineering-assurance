@@ -4,6 +4,7 @@
 //! Additive-migration parity with the retained Python evidence classifier.
 
 use std::{
+    collections::BTreeSet,
     io::Write,
     process::{Command, Stdio},
 };
@@ -458,10 +459,27 @@ fn tc_103_version_identity_rejects_actual_mutability_without_rejecting_metadata(
         fixture["schema_version"],
         "engineering-assurance.evidence-version-policy/v1"
     );
-    for case in fixture["cases"]
+    let cases = fixture["cases"]
         .as_array()
-        .expect("version-policy cases must be an array")
-    {
+        .expect("version-policy cases must be an array");
+    let observed_classes = cases
+        .iter()
+        .map(|case| {
+            case["class"]
+                .as_str()
+                .expect("fixture correction class must be a string")
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        observed_classes,
+        BTreeSet::from([
+            "ascii-whitespace",
+            "immutable-x-metadata",
+            "wildcard-component",
+        ]),
+        "fixture must cover exactly the FR-015-AC-3 correction classes"
+    );
+    for case in cases {
         let version = case["version"]
             .as_str()
             .expect("fixture version must be a string");

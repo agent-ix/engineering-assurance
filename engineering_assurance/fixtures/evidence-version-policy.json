@@ -2,46 +2,55 @@
   "schema_version": "engineering-assurance.evidence-version-policy/v1",
   "cases": [
     {
+      "class": "immutable-x-metadata",
       "version": "1.2.3+linux-x86_64",
       "prior_errors": ["identity-version-mutable"],
       "accepted_errors": []
     },
     {
+      "class": "immutable-x-metadata",
       "version": "1.2.3+x86_64",
       "prior_errors": ["identity-version-mutable"],
       "accepted_errors": []
     },
     {
+      "class": "immutable-x-metadata",
       "version": "2.0.0-beta+exp.sha.5114f85",
       "prior_errors": ["identity-version-mutable"],
       "accepted_errors": []
     },
     {
+      "class": "immutable-x-metadata",
       "version": "1.2.3+X86",
       "prior_errors": ["identity-version-mutable"],
       "accepted_errors": []
     },
     {
+      "class": "wildcard-component",
       "version": "1.*",
       "prior_errors": [],
       "accepted_errors": ["identity-version-mutable"]
     },
     {
+      "class": "ascii-whitespace",
       "version": " 1.2.3",
       "prior_errors": [],
       "accepted_errors": ["identity-version-invalid-character"]
     },
     {
+      "class": "ascii-whitespace",
       "version": "1.2.3 ",
       "prior_errors": [],
       "accepted_errors": ["identity-version-invalid-character"]
     },
     {
+      "class": "ascii-whitespace",
       "version": "1.2.3\n",
       "prior_errors": [],
       "accepted_errors": ["identity-version-invalid-character"]
     },
     {
+      "class": "ascii-whitespace",
       "version": "1.2.3 rc",
       "prior_errors": [],
       "accepted_errors": ["identity-version-invalid-character"]

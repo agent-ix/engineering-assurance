@@ -196,6 +196,11 @@ def test_version_identity_distinguishes_wildcards_from_immutable_metadata() -> N
     )
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
     assert fixture["schema_version"] == "engineering-assurance.evidence-version-policy/v1"
+    assert {case["class"] for case in fixture["cases"]} == {
+        "ascii-whitespace",
+        "immutable-x-metadata",
+        "wildcard-component",
+    }
     for case in fixture["cases"]:
         assert case["prior_errors"] != case["accepted_errors"]
         assert identity("producer", case["version"]).errors() == tuple(
