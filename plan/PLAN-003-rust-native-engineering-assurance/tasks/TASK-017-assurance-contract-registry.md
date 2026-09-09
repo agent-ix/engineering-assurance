@@ -25,13 +25,22 @@ Implement the committed owner-reviewed consumer registry and revision-bound arti
 
 ## Subtasks
 
-- [ ] Validate version, digest, canonical repository identity, uniqueness, classification, owner, and exclusion reason.
+- [x] Reconcile the diagnostic organization-wide census with the specification;
+  record the omitted `quire-code-rs` consumer and the repository/artifact
+  cardinality correction for owner review.
+- [ ] Validate version, digest, human-owner acceptance, canonical repository identity, uniqueness, classification, owner, and exclusion reason.
 - [ ] Bind candidate commits, paths, blobs, provider/schema digests, outcomes, and dispositions.
 - [ ] Refuse registry mutation and prevent an invalid profile from governing review selection.
 
 ## Deliverables
 
 - Registry and snapshot types, CLI operations, schemas, and accepted consumer fixtures.
+- One unique repository entry containing one or more independently classified
+  artifact entries; no duplicate repository row is needed for a multi-artifact
+  consumer.
+- Fail-closed owner-review states that distinguish a prepared registry from the
+  canonical population digest explicitly accepted by the named human, plus a
+  separate snapshot digest over the exact registry input bytes.
 - Duplicate, tamper, mutation, legacy/current/malformed, and invalid-governance tests.
 
 ## Notes

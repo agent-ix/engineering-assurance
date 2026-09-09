@@ -106,7 +106,7 @@ The point-in-time census established two live contract generations:
   closed frontmatter schema. The MeasurementPlan frontmatter passes its schema,
   but the documents fail the module's required `Decision Use`, `Population`,
   `Collection Procedure`, and `Interpretation` body-section contract.
-- Current AP/MP frontmatter in Quoin, `quire-analyze`,
+- Current AP/MP frontmatter in Quoin, `quire-analyze`, `quire-code-rs`,
   `quire-contract-codegen`, `quire-contract-ir`, `quire-contract-runtime`,
   `quire-verification`, and the observed `tl-mltl`, `tl-parse`, `tl-rewrite`,
   and `tl-syntax` qualification revisions is accepted by the installed 0.2

@@ -36,8 +36,9 @@ observable identities or ownership.
 - Accepted portable verification-contract versions when available.
 - Packaged AssuranceProfile and MeasurementPlan schemas/skeletons plus active
   artifacts from the pinned package corpus and recorded Quire consumers.
-- An owner-reviewed, versioned registry of canonical assurance-contract
-  consumers and a candidate-revision snapshot of their active AP/MP artifacts.
+- An owner-reviewed, versioned registry whose unique canonical repository
+  entries each contain the AP/MP artifact entries governed for that repository,
+  and a candidate-revision snapshot of those artifacts.
 
 ## Outputs
 
@@ -91,15 +92,37 @@ observable identities or ownership.
 - Engineering Assurance SHALL resolve the assurance-contract consumer set from
   the committed owner registry, package metadata, and exact pinned gitlinks;
   it SHALL NOT infer release scope from arbitrary workstation directories.
-- The consumer registry SHALL carry the
-  `engineering-assurance.consumer-registry/v1` discriminator, a digest over its
-  canonical bytes, and one unique canonical `ix://<org>/<repo>`
-  identity per repository. A second row for the same repository or artifact path
-  is rejected even when its classification matches.
-- Each registry row SHALL classify the artifact as exactly one of `active`,
+- The consumer-registry envelope SHALL carry the
+  `engineering-assurance.consumer-registry/v1` discriminator, a `population`
+  array, and `population_sha256`. Registry/v1 canonical population bytes SHALL
+  be the UTF-8 compact JSON encoding of `population` with object keys sorted
+  lexicographically, repository entries sorted by canonical identity, artifact
+  entries sorted by repository-relative path, and no trailing newline.
+  `population_sha256` SHALL be lowercase SHA-256 over exactly those bytes.
+- Each population member SHALL be one unique repository entry for a canonical
+  `ix://<org>/<repo>` identity. Each repository entry SHALL bind one candidate
+  commit. Each repository entry SHALL contain one or more artifact entries.
+  Engineering Assurance SHALL reject a second repository entry for the same
+  identity even when its contents match.
+- Engineering Assurance SHALL record registry owner review as either `pending`
+  with no reviewer attribution or `accepted` with reviewer kind `human`, a
+  named reviewer, an acceptance date, and the exact accepted
+  `population_sha256`.
+- When registry owner review is pending, half-attributed, agent-attributed, or
+  bound to another population digest, Engineering Assurance SHALL NOT use the
+  registry to govern a compatibility snapshot.
+- When the named human explicitly accepts the exact population digest,
+  Engineering Assurance MAY transcribe that acceptance.
+- Each artifact entry SHALL have a path unique within its repository entry.
+- Each artifact entry SHALL classify the artifact as exactly one of `active`,
   `inactive`, `skeleton`, `template`, or `quarantined`.
-- Each non-active registry row SHALL name its owner and exclusion reason.
-- The compatibility snapshot SHALL record the canonical repository identity,
+- Engineering Assurance SHALL reject a second artifact entry for the same
+  repository-relative path even when its classification matches.
+- Each non-active artifact entry SHALL name its owner and exclusion reason.
+- The compatibility snapshot SHALL record the SHA-256 of the exact registry
+  input bytes in addition to `population_sha256`, so any formatting or metadata
+  mutation during one run is observable.
+- The compatibility snapshot SHALL also record the canonical repository identity,
   clean candidate commit, artifact path and blob digest, provider/module
   version and schema digests, validation outcome, and owner disposition.
 - Engineering Assurance SHALL report repeated submodule checkouts of the same
@@ -138,6 +161,8 @@ a release-blocking incompatibility, not an ordinary malformed-input case.
 | FR-015-CON-1 | Compatibility access SHALL be read-only. | Data Integrity | Test |
 | FR-015-CON-2 | Generated foreign-language fixtures SHALL NOT be executed by qualification. | Security | Test |
 | FR-015-CON-3 | The implementation SHALL NOT define a second persisted verification or evidence record family. | Responsibility | Test |
+| FR-015-CON-4 | An agent SHALL NOT accept a consumer registry. | Responsibility | Test |
+| FR-015-CON-5 | Engineering Assurance MAY prepare a pending consumer registry for human review. | Responsibility | Test |
 
 ## Acceptance Criteria
 
@@ -149,7 +174,7 @@ a release-blocking incompatibility, not an ordinary malformed-input case.
 | FR-015-AC-4 | Static ownership and execution audits find no copied portable contract family, persisted evidence family, or executable foreign-language fixture (CON-2, CON-3). | Test (TC-104) |
 | FR-015-AC-5 | A registry-derived, revision-bound snapshot accounts for every active AssuranceProfile and MeasurementPlan in the pinned package corpus and registered consumer set; the candidate installed module validates each artifact, or its owner has completed an explicit versioned migration before module replacement. | Test (TC-119) |
 | FR-015-AC-6 | Legacy, current, malformed, and unsupported assurance-artifact shapes receive distinct versioned outcomes without changing source bytes, and an invalid AssuranceProfile contributes no review-selection decision. | Property (TC-120) |
-| FR-015-AC-7 | The versioned registry rejects an unknown discriminator/classification, non-canonical or duplicate repository identity, duplicate artifact path, digest mismatch, and any registry-byte change during a snapshot; every accepted exclusion has a named owner and reason. | Property (TC-122) |
+| FR-015-AC-7 | The versioned registry represents multiple artifact entries under one unique repository entry and rejects an unknown discriminator/classification, empty artifact list, non-canonical ordering, non-canonical or duplicate repository identity, duplicate repository-relative artifact path, population-digest mismatch, any exact registry-byte change during a snapshot, and pending, half-attributed, agent-attributed, or wrong-population owner review; every accepted exclusion has a named owner and reason, and accepted review names the human and date (CON-4, CON-5). | Property (TC-122) |
 
 ## Dependencies
 
