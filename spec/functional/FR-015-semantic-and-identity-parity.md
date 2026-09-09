@@ -106,8 +106,9 @@ observable identities or ownership.
   entries sorted by repository-relative path, and no trailing newline.
   `population_sha256` SHALL be lowercase SHA-256 over exactly those bytes.
 - Each population member SHALL be one unique repository entry for a canonical
-  `ix://<org>/<repo>` identity. Each repository entry SHALL bind one candidate
-  commit. Each repository entry SHALL contain one or more artifact entries.
+  `ix://<org>/<repo>` identity. Each repository entry SHALL contain one or more
+  artifact entries. The stable registry SHALL NOT bind a repository commit or
+  artifact-content digest.
   Engineering Assurance SHALL reject a second repository entry for the same
   identity even when its contents match.
 - Engineering Assurance SHALL record registry owner review as either `pending`
@@ -128,9 +129,11 @@ observable identities or ownership.
 - The compatibility snapshot SHALL record the SHA-256 of the exact registry
   input bytes in addition to `population_sha256`, so any formatting or metadata
   mutation during one run is observable.
-- The compatibility snapshot SHALL also record the canonical repository identity,
-  clean candidate commit, artifact path and blob digest, provider/module
-  version and schema digests, validation outcome, and owner disposition.
+- For each registry repository entry, the compatibility snapshot SHALL record
+  one clean candidate commit and the canonical repository identity.
+- For each registry artifact entry, the compatibility snapshot SHALL record the
+  artifact path and content digest, provider/module version and schema digests,
+  validation outcome, and owner disposition.
 - Engineering Assurance SHALL report repeated submodule checkouts of the same
   repository commit and artifact blob as references to one contract input
   rather than independent consumers.

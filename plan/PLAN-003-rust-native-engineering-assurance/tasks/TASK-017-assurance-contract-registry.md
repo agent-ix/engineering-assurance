@@ -38,6 +38,9 @@ Implement the committed owner-reviewed consumer registry and revision-bound arti
 - One unique repository entry containing one or more independently classified
   artifact entries; no duplicate repository row is needed for a multi-artifact
   consumer.
+- A stable owner-reviewed population that does not pin ordinary code revisions;
+  candidate commits and artifact-content digests belong to each generated
+  compatibility snapshot.
 - A separately bound provider candidate; the registry refuses the Engineering
   Assurance repository that contains it and therefore cannot self-reference its
   own commit.

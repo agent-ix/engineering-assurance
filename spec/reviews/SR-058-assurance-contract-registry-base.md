@@ -33,7 +33,8 @@ population, classifications, and candidate revisions.
 | FND-120 | high | Closed in the specification: “owner-reviewed” had no encoded acceptance state or attribution rule, allowing an agent-prepared or half-attributed registry to govern by assertion. FR-015 now permits only unattributed `pending` or human-attributed `accepted`, binds acceptance to the exact canonical population digest, and withholds snapshots for every other state. | FR-015 behavior, CON-4, CON-5, and AC-7; TC-122; TASK-017 | missing-requirement |
 | FND-121 | high | Closed in the specification: a registry “digest over its canonical bytes” was self-referential once the digest and acceptance were fields in those bytes. Registry/v1 now defines a canonical `population` digest, owner acceptance references that digest, and each snapshot separately binds the exact registry input-byte digest to detect any within-run mutation. | FR-015 behavior and AC-7; TC-122 | wrong-requirement |
 | FND-122 | high | Closed in the specification: the initial review draft proposed classifying Engineering Assurance's own skeletons in a registry stored in that repository, which would require the registry to name the not-yet-existing commit that contains itself. FR-015 and TC-119 now keep the provider candidate, schemas, and skeletons in a separate snapshot binding and prohibit the provider repository from the external consumer registry. | FR-015 behavior and AC-5; TC-119; TASK-017 | wrong-requirement |
-| FND-123 | medium | Closed in this review: repository counts and candidate commits alone did not identify the exact bytes submitted for owner acceptance. The proposed population now enumerates all 53 paths with full Git blob provenance and SHA-256 content digests. | Proposed owner registry population; exact active artifact bindings | correct-requirement-no-evidence |
+| FND-123 | medium | Closed in this review: repository counts alone did not identify the exact population submitted for owner acceptance. The proposed population now enumerates all 53 repository-relative paths and their proposed `active` classification. Exact commit/blob/content-digest observations are retained separately as reproducible census evidence. | Proposed owner registry population; exact active artifact observations | correct-requirement-no-evidence |
+| FND-124 | high | Closed in the specification: the initial cardinality correction put each candidate commit into the stable owner registry, which would invalidate human population acceptance after every ordinary repository change and duplicate the revision snapshot's responsibility. The registry now binds stable repository/path/classification membership only; each compatibility snapshot binds clean candidate commits and artifact content digests. | FR-015 behavior and AC-5 through AC-7; TC-119, TC-122; TASK-017 | wrong-requirement |
 
 ## Proposed owner registry population
 
@@ -42,7 +43,7 @@ artifact entries, not repository rows. Unless the owner records another
 classification, the proposed classification is `active` for these 53
 instances.
 
-| Canonical repository | Candidate commit | AP | MP |
+| Canonical repository | Observed default-branch commit | AP | MP |
 | --- | --- | ---: | ---: |
 | `ix://agent-ix/qa-corpus` | `820c0e76ff3b4395c6b52ccf863de51446fd5e37` | 1 | 2 |
 | `ix://agent-ix/quire-analyze` | `5f37678928aea451447d1ee6d42deefb95cb2f5a` | 1 | 1 |
@@ -58,9 +59,11 @@ instances.
 | `ix://agent-ix/tl-rewrite` | `1ccab45dc64d5a344740256c5a91c2e10555decc` | 1 | 1 |
 | `ix://agent-ix/tl-syntax` | `26b801d4a68ebfe720062cfdb3c66b070ab60e92` | 1 | 1 |
 
-### Exact active artifact bindings
+### Exact active artifact observations
 
-Every proposed active entry below is bound by its repository commit in the table above, its repository-relative path, its Git blob provenance, and its SHA-256 content digest.
+Every proposed active path below was observed at the default-branch commit in
+the table above. Git blob provenance and SHA-256 make the census reproducible;
+they are candidate snapshot evidence, not stable owner-registry fields.
 
 #### `ix://agent-ix/qa-corpus`
 
@@ -193,7 +196,7 @@ contract inputs; it must not collapse different revisions.
 
 ## Review disposition
 
-**CONDITIONAL.** FND-118 through FND-123 are closed by the specification changes and exact-byte evidence.
+**CONDITIONAL.** FND-118 through FND-124 are closed by the specification changes and exact-byte evidence.
 The proposed population and classifications still require explicit human-owner
 acceptance, and TASK-017 implementation remains blocked on the independent
 TASK-016 review. This review does not authorize #60 consumer migration.
