@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from dataclasses import dataclass
 from typing import Any, Iterable
@@ -42,16 +43,26 @@ class VersionIdentity:
         errors: list[str] = []
         if not self.name.strip():
             errors.append("identity-name-missing")
-        version = self.version.strip().casefold()
-        if not version:
+        version = self.version
+        if not version.strip():
             errors.append("identity-version-missing")
-        elif version in MUTABLE_VERSIONS or any(
-            marker in version for marker in (">", "<", "^", "~", "x")
-        ):
+        elif not all("!" <= character <= "~" for character in version):
+            errors.append("identity-version-invalid-character")
+        elif _is_mutable_version(version):
             errors.append("identity-version-mutable")
         if not SHA256.fullmatch(self.digest):
             errors.append("identity-digest-not-sha256")
         return tuple(errors)
+
+
+def _is_mutable_version(version: str) -> bool:
+    normalized = version.lower()
+    core = normalized.split("+", 1)[0]
+    return (
+        normalized in MUTABLE_VERSIONS
+        or any(marker in normalized for marker in (">", "<", "^", "~", "*"))
+        or any(component == "x" for component in re.split(r"[.-]", core))
+    )
 
 
 @dataclass(frozen=True)
@@ -154,8 +165,22 @@ def _output_digest(output: dict[str, Any]) -> str:
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
+        allow_nan=False,
     ).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _has_non_finite_numeric_identity(output: dict[str, Any]) -> bool:
+    pending: list[Any] = [output]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            pending.extend(value.values())
+        elif isinstance(value, (list, tuple)):
+            pending.extend(value)
+        elif isinstance(value, float) and not math.isfinite(value):
+            return True
+    return False
 
 
 def _invalid(attempt: ProducerAttempt, *errors: str) -> EvidenceEnvelope:
@@ -212,6 +237,8 @@ def classify_producer(attempt: ProducerAttempt) -> EvidenceEnvelope:
         return _invalid(attempt, "invoked-producer-has-invalid-outcome")
     if not attempt.output_valid or not isinstance(attempt.output, dict):
         return _invalid(attempt, "producer-output-malformed")
+    if _has_non_finite_numeric_identity(attempt.output):
+        return _invalid(attempt, "producer-output-number-non-finite")
     if attempt.governing is None:
         return _invalid(attempt, "governing-versions-missing")
     governing_errors = attempt.governing.errors()

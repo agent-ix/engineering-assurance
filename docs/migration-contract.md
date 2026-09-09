@@ -47,6 +47,17 @@ read at `origin/main`.
 | `validate_json_schema.py` | runtime, tl-mltl | **REPLACE** | Generic schema validation. Spec artifacts are validated by `quire validate`; retained records by Quoin's packaged schemas. |
 | `validate_governance.py`, `validate_matrix_status.py` | contract-ir | **KEEP** | Governance-specific to that repository's own PGM-01 obligations, not a generic evidence family. |
 | `schemas/*-evidence-*.schema.json`, `schemas/pgm01-*` | runtime, tl-mltl, contract-ir | **DELETE, read-only-preserved** | Repository-local generic evidence schemas. Historical records stay readable through the FR-010 compatibility view; the schemas stop being written against. |
+| `assurance_chain.py` | all eight | **REPLACE** | Duplicated Python orchestration around Quoin's native sealing, retention, receipt, and audit operations. Consumer migration under `agent-ix/quire-research#59` and `#60` replaces executable logic with the shared Rust CLI and declarative local inputs; Quoin remains the evidence-schema and store owner. |
+| `check_shared_pins.py` | all eight | **REPLACE** | Duplicated local observation of the Engineering Assurance compatibility contract. Replace with the shared Rust compatibility API/CLI; each repository retains only its declared component and artifact pins. |
+| `rust_test_census.py` | tl-parse, tl-mltl | **REPLACE** | Generic qualification that compares requirement-tagged Rust tests with Cargo's compiled census. Replace with one Engineering Assurance Rust qualification command; Quire remains authoritative for static trace relationships. |
+| `check_kani_harnesses.py`, `check_kani_mutations.py`, `run_kani_gate.py` | runtime | **KEEP** | Runtime-owned proof census, mutation oracle, and structured Kani producer. These qualify runtime semantics and do not move into a generic evidence store. |
+| `measure_footprint.py` | runtime | **KEEP** | Runtime-owned producer for its governed footprint and panic-relocation measurement. |
+| `run_feature_matrix.py` | runtime | **KEEP** | Runtime-owned feature and compilation matrix over its public crate surface. |
+| `check_upstream_pins.py` | codegen | **KEEP** | Codegen-owned check that its declared IR/runtime revisions match the dependencies and generated manifests it ships. |
+| `check_default_dependencies.py` | tl-syntax | **KEEP** | Syntax-owned no-std dependency and feature-boundary qualification. |
+| `test_corpus_gate.py`, `validate_corpus.py` | tl-syntax | **KEEP** | Syntax-owned corpus schema, horizon, semantic-oracle, and mutation checks. |
+| `check_checksum_manifest.py`, `run_fuzz_smoke.sh` | tl-parse | **KEEP** | Parser-owned fuzz-corpus integrity and native fuzz execution. |
+| `check_provenance.py` | tl-rewrite | **KEEP** | Rewrite-owned corpus and compiled-dependency provenance producer. |
 
 A family not in this table is domain logic until somebody argues otherwise, in
 writing, on the migration issue.

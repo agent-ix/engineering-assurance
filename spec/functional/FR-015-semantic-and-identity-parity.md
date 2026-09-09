@@ -28,6 +28,10 @@ observable identities or ownership.
 
 - The accepted compatibility matrix and pinned corpus.
 - Canonical semantic-reference and report fixtures.
+- Producer outputs encoded as finite RFC 8259 JSON objects. Integer values may
+  exceed the `i64` and `u64` ranges and remain exact; non-finite values and
+  finite-number syntax that overflows the retained Python numeric domain are
+  not accepted identity inputs.
 - Historical PGM-01 v1/v2 records.
 - Accepted portable verification-contract versions when available.
 - Packaged AssuranceProfile and MeasurementPlan schemas/skeletons plus active
@@ -49,6 +53,27 @@ observable identities or ownership.
   lossy or unmapped limitations in historical views.
 - The Rust implementation SHALL preserve the legacy canonical JSON bytes and
   digests for every identity domain that already depends on them.
+- When Engineering Assurance prepares to mint an identity digest, the Rust
+  implementation SHALL preserve the exact integer value and retained Python
+  canonical spelling without conversion through a binary floating-point
+  representation.
+- If a producer output contains `NaN`, positive or negative infinity, or a
+  numeric token whose retained Python interpretation is non-finite, then
+  Engineering Assurance SHALL reject the output.
+- When Engineering Assurance rejects a numeric identity input, the evidence
+  result SHALL contain no identity digest.
+- Parsed producer output MAY preserve numeric token distinctions for validation
+  and diagnostics. Structural equality of parsed JSON values SHALL NOT define
+  evidence identity; canonical output bytes and their digest define it.
+- The Rust evidence API SHALL expose the stable wire spelling of each typed
+  availability state, exact-one validation for state labels received through
+  an untyped boundary, a direct result-validity predicate, and a validation
+  error message accessor that does not require parsing formatted output.
+- Each governing version identity SHALL use a non-empty token composed only of
+  printable ASCII characters without whitespace.
+- Engineering Assurance SHALL reject a mutable version alias, range operator,
+  or `x` wildcard component while accepting an incidental `x` inside immutable
+  version metadata such as `1.2.3+linux-x86_64`.
 - Engineering Assurance SHALL assign a new explicit version to a different
   canonicalization algorithm.
 - Engineering Assurance SHALL NOT use a different canonicalization algorithm
@@ -92,7 +117,8 @@ observable identities or ownership.
 ## Error Conditions
 
 An unknown contract version, missing provenance, ambiguous legacy mapping,
-digest mismatch, malformed fixture, unsupported canonicalization version,
+digest mismatch, malformed fixture, invalid or mutable governing-version token,
+non-finite or numeric-overflow producer output, unsupported canonicalization version,
 unresolved registry entry, dirty candidate revision, and unclassified artifact
 each fail explicitly and preserve the original input bytes. A registry digest
 change during a run, duplicate repository identity, duplicate artifact path, or
@@ -113,9 +139,9 @@ a release-blocking incompatibility, not an ordinary malformed-input case.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-015-AC-1 | The Rust and retained reference implementations produce byte-identical canonical fixtures, identity digests, compatibility classifications, and bounded reports over the accepted corpus and focused fictional cases. | Property (TC-100) |
-| FR-015-AC-2 | Every success, unavailable, not-computed, not-applicable, failed, inconclusive, malformed, stale, tampered, lossy, and unreadable case remains distinguishable after migration. | Property (TC-102) |
-| FR-015-AC-3 | Unknown versions, missing provenance, ambiguous mappings, malformed fixtures, and digest mismatches fail explicitly while source and corpus bytes remain unchanged. | Property (TC-103) |
+| FR-015-AC-1 | The Rust and retained reference implementations produce byte-identical canonical fixtures, identity digests, compatibility classifications, and bounded reports over the accepted corpus and focused fictional cases, including a deterministic generated JSON-value corpus with signed and unsigned integers beyond `i64` and `u64`. | Test (TC-100) |
+| FR-015-AC-2 | Every success, unavailable, not-computed, not-applicable, failed, inconclusive, malformed, stale, tampered, lossy, and unreadable case remains distinguishable after migration; the Rust API exposes stable wire spellings and rejects zero, duplicate, conflicting, or unknown untyped state labels. | Test (TC-102) |
+| FR-015-AC-3 | Unknown versions, missing provenance, ambiguous mappings, malformed fixtures, digest mismatches, ASCII whitespace, non-printable or non-ASCII version tokens, true wildcard/range versions, non-finite numeric tokens, and finite-number syntax that overflows the retained numeric domain fail explicitly without an identity digest while source and corpus bytes remain unchanged; immutable metadata containing `x` remains accepted, and callers can inspect validity and the validation error message without parsing formatted output. | Test (TC-103) |
 | FR-015-AC-4 | Static ownership and execution audits find no copied portable contract family, persisted evidence family, or executable foreign-language fixture (CON-2, CON-3). | Test (TC-104) |
 | FR-015-AC-5 | A registry-derived, revision-bound snapshot accounts for every active AssuranceProfile and MeasurementPlan in the pinned package corpus and registered consumer set; the candidate installed module validates each artifact, or its owner has completed an explicit versioned migration before module replacement. | Test (TC-119) |
 | FR-015-AC-6 | Legacy, current, malformed, and unsupported assurance-artifact shapes receive distinct versioned outcomes without changing source bytes, and an invalid AssuranceProfile contributes no review-selection decision. | Property (TC-120) |

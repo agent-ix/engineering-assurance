@@ -147,7 +147,7 @@ def test_argument_has_authored_claims_and_no_score() -> None:
 
 
 def test_repository_has_only_governed_review_evidence() -> None:
-    """Trace: StR-001-VC-1, TC-001."""
+    """Trace: StR-001-VC-1, TC-001; StR-003-VC-2, TC-097."""
     assert not (ROOT / "examples").exists()
     assert not (ROOT / "research").exists()
     review_files = sorted((ROOT / "reviews").glob("*.md"))
@@ -160,6 +160,7 @@ def test_repository_has_only_governed_review_evidence() -> None:
     assert {path.name for path in (ROOT / "plan").iterdir()} == {
         "PLAN-001-assurance-onboarding",
         "PLAN-002-verification-semantics",
+        "PLAN-003-rust-native-engineering-assurance",
     }
     assert {path.name for path in (ROOT / "docs").iterdir()} == {
         "compatibility-matrix.md",

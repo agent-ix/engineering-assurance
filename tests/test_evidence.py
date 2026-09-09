@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -182,3 +184,35 @@ def test_every_declared_state_is_individually_valid() -> None:
     """Trace: FR-004-AC-7, TC-046."""
     for state in AVAILABILITY_STATES:
         assert validate_state_labels((state,)) == state
+
+
+def test_version_identity_distinguishes_wildcards_from_immutable_metadata() -> None:
+    """Trace: FR-015-AC-3, TC-103."""
+    fixture_path = (
+        Path(__file__).parents[1]
+        / "engineering_assurance"
+        / "fixtures"
+        / "evidence-version-policy.json"
+    )
+    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    assert fixture["schema_version"] == "engineering-assurance.evidence-version-policy/v1"
+    for case in fixture["cases"]:
+        assert case["prior_errors"] != case["accepted_errors"]
+        assert identity("producer", case["version"]).errors() == tuple(
+            case["accepted_errors"]
+        )
+
+    assert identity("producer", "1.x").errors() == ("identity-version-mutable",)
+    assert identity("producer", "Straße").errors() == (
+        "identity-version-invalid-character",
+    )
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_output_is_refused_before_identity(value: float) -> None:
+    """Trace: FR-015-AC-3, TC-103."""
+    attempt = replace(observed_attempt(), output={"value": value})
+    result = classify_producer(attempt)
+    assert not result.valid
+    assert result.output_digest is None
+    assert result.validation_errors == ("producer-output-number-non-finite",)
