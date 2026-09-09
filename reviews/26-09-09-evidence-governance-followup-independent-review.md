@@ -72,7 +72,7 @@ command:
 
 | Working copy | Result |
 | --- | --- |
-| `/home/peter/dev/engineering-assurance` (campaign repos are siblings) | 188 passed |
+| primary checkout under the source root (campaign repos are siblings) | 188 passed |
 | a git worktree under a scratch directory | 186 passed, **2 skipped** |
 
 That is the whole difference. Both gates read real content in the first case and
@@ -81,7 +81,7 @@ message.
 
 This is not hypothetical drift. PR #30's verification line reads "make test
 (186 passed, 2 skipped)", and PR #30 is authored in
-`/home/peter/dev/worktrees/engineering-assurance-agent-c-chain-spec` — a
+an Engineering Assurance worktree under the separate worktree root — a
 worktree whose parent directory holds other worktrees, not the campaign
 repositories. Its evidence therefore records the two gates standing down, in a
 PR whose own summary says nothing about it. Every agent worktree in this

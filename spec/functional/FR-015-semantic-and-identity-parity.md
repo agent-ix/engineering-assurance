@@ -72,8 +72,12 @@ observable identities or ownership.
 - Each governing version identity SHALL use a non-empty token composed only of
   printable ASCII characters without whitespace.
 - Engineering Assurance SHALL reject a mutable version alias, range operator,
-  or `x` wildcard component while accepting an incidental `x` inside immutable
-  version metadata such as `1.2.3+linux-x86_64`.
+  or `x` wildcard component while accepting an incidental lowercase or
+  uppercase `x` inside immutable version metadata such as
+  `1.2.3+linux-x86_64` or `1.2.3+X86`.
+- The version-policy corpus SHALL retain distinct governed classes for leading
+  or trailing ASCII space, interior ASCII space, lowercase `x` metadata, and
+  uppercase `X` metadata so removal of any boundary fails qualification.
 - Engineering Assurance SHALL assign a new explicit version to a different
   canonicalization algorithm.
 - Engineering Assurance SHALL NOT use a different canonicalization algorithm
@@ -141,7 +145,7 @@ a release-blocking incompatibility, not an ordinary malformed-input case.
 | --- | --- | --- |
 | FR-015-AC-1 | The Rust and retained reference implementations produce byte-identical canonical fixtures, identity digests, compatibility classifications, and bounded reports over the accepted corpus and focused fictional cases, including a deterministic generated JSON-value corpus with signed and unsigned integers beyond `i64` and `u64`. | Test (TC-100) |
 | FR-015-AC-2 | Every success, unavailable, not-computed, not-applicable, failed, inconclusive, malformed, stale, tampered, lossy, and unreadable case remains distinguishable after migration; the Rust API exposes stable wire spellings and rejects zero, duplicate, conflicting, or unknown untyped state labels. | Test (TC-102) |
-| FR-015-AC-3 | Unknown versions, missing provenance, ambiguous mappings, malformed fixtures, digest mismatches, ASCII whitespace, non-printable or non-ASCII version tokens, true wildcard/range versions, non-finite numeric tokens, and finite-number syntax that overflows the retained numeric domain fail explicitly without an identity digest while source and corpus bytes remain unchanged; immutable metadata containing `x` remains accepted, and callers can inspect validity and the validation error message without parsing formatted output. | Test (TC-103) |
+| FR-015-AC-3 | Unknown versions, missing provenance, ambiguous mappings, malformed fixtures, digest mismatches, leading, trailing, or interior ASCII whitespace, non-printable or non-ASCII version tokens, true wildcard/range versions, non-finite numeric tokens, and finite-number syntax that overflows the retained numeric domain fail explicitly without an identity digest while source and corpus bytes remain unchanged; immutable metadata containing lowercase `x` or uppercase `X` remains accepted, every named version-policy boundary is independently represented in the corpus, and callers can inspect validity and the validation error message without parsing formatted output. | Test (TC-103) |
 | FR-015-AC-4 | Static ownership and execution audits find no copied portable contract family, persisted evidence family, or executable foreign-language fixture (CON-2, CON-3). | Test (TC-104) |
 | FR-015-AC-5 | A registry-derived, revision-bound snapshot accounts for every active AssuranceProfile and MeasurementPlan in the pinned package corpus and registered consumer set; the candidate installed module validates each artifact, or its owner has completed an explicit versioned migration before module replacement. | Test (TC-119) |
 | FR-015-AC-6 | Legacy, current, malformed, and unsupported assurance-artifact shapes receive distinct versioned outcomes without changing source bytes, and an invalid AssuranceProfile contributes no review-selection decision. | Property (TC-120) |

@@ -252,7 +252,7 @@ implemented and reviewed.
 | TC-074 | The retained receipt validates against Quoin's packaged schema and binds the exact chain digests under pinned tools | Integration | P0 | FR-011-AC-6 | ✅ |
 | TC-075 | Every producer case names a real producer, source path, and shared-model concept across languages | Unit | P0 | FR-011-AC-7 | ✅ |
 | TC-076 | Reading and mapping the corpus changes no byte, no artifact is executable, and the reader reaches for no subprocess, socket, or write | Static | P0 | FR-011-AC-8, FR-011-CON-1, FR-011-CON-4 | ✅ |
-| TC-077 | The committed corpus reproduces from its recorded sources, and states plainly when it is skipped | Integration | P0 | FR-011-AC-9 | ✅ |
+| TC-077 | The committed corpus reproduces from its recorded immutable sources under the explicit source root; a missing declaration, checkout, or recorded revision fails instead of skipping | Integration | P0 | FR-011-AC-9 | ✅ |
 | TC-078 | The corpus is a gitlink whose checked-out commit equals the recorded pin, and an uninitialized corpus fails rather than passing quietly | Integration | P0 | FR-011-AC-10, FR-011-CON-5 | ✅ |
 | TC-079 | Every matrix component pins a released version and names its release; no pin is a branch, latest, or HEAD | Static | P0 | FR-012-AC-1 | ✅ |
 | TC-080 | Compatible, incompatible, and unknown are distinct with reasons, and neither incompatible nor unknown satisfies the gate | Unit | P0 | FR-012-AC-2 | ✅ |
@@ -263,7 +263,7 @@ implemented and reviewed.
 | TC-085 | An unknown matrix version and an unknown component name are refused | Unit | P0 | FR-012-AC-7 | ✅ |
 | TC-086 | The classifier reaches for no subprocess, socket, or write, and the observing program is a separate file | Static | P0 | FR-012-AC-8, FR-012-CON-1 | ✅ |
 | TC-087 | Every family in the decision table carries exactly one of keep, delete, or replace | Static | P0 | FR-013-AC-1 | ✅ |
-| TC-088 | The decision table accounts for every recurring script family present in the eight repositories, and states when the sources cannot be read | Integration | P0 | FR-013-AC-2 | ✅ |
+| TC-088 | The decision table accounts for every recurring script family at the caller-supplied candidate revisions; missing source declaration or unreadable repositories fail instead of skipping | Integration | P0 | FR-013-AC-2 | ✅ |
 | TC-089 | Repository-local generic evidence schemas and stdout-derived verdicts are forbidden by name, and a domain-output schema is permitted | Static | P0 | FR-013-AC-3 | ✅ |
 | TC-090 | Domain output validation, evidence intake, audit, and human decision each name a distinct owner | Static | P0 | FR-013-AC-4 | ✅ |
 | TC-091 | Rollback is defined per failure mode, legacy history is never rewritten, and deletion is last | Static | P0 | FR-013-AC-5 | ✅ |
@@ -278,7 +278,7 @@ implemented and reviewed.
 | TC-100 | For each ADR-002 compatibility/semantic/projection/fixture capability row, Rust agrees byte-for-byte with the accepted identity and report reference over the named corpus and focused adverse cases, including generated arbitrary-precision integer boundaries | Integration | P0 | StR-003-VC-3, FR-015-AC-1 | 🚧 compatibility and evidence-classification slices backed; aggregate pending |
 | TC-101 | Rust call surface owns no evidence persistence, stdout verdict parser, or reusable library I/O | Static | P0 | FR-014-AC-4, FR-014-CON-1, FR-014-CON-2 | 🚧 pending implementation |
 | TC-102 | Every successful and non-successful semantic state remains distinct; typed state spellings and exact-one untyped-label validation remain callable without string parsing | Integration | P0 | FR-015-AC-2 | 🚧 evidence-availability slice backed; aggregate pending |
-| TC-103 | Invalid semantic inputs, including non-finite/retained-domain-overflow numbers and invalid/mutable version tokens, fail read-only without an identity digest and preserve original bytes; immutable metadata containing `x` remains accepted, and validity/error messages remain directly inspectable | Integration | P0 | FR-015-AC-3, FR-015-CON-1 | 🚧 evidence-validation slice backed; aggregate pending |
+| TC-103 | Invalid semantic inputs, including non-finite/retained-domain-overflow numbers and invalid/mutable version tokens, fail read-only without an identity digest and preserve original bytes; independent fixture classes retain leading/trailing and interior ASCII space plus lowercase/uppercase immutable `x` metadata boundaries, and validity/error messages remain directly inspectable | Integration | P0 | FR-015-AC-3, FR-015-CON-1 | 🚧 evidence-validation slice backed; aggregate pending |
 | TC-104 | Contract ownership and inert foreign-language fixtures remain bounded | Static | P0 | FR-015-AC-4, FR-015-CON-2, FR-015-CON-3 | 🚧 pending implementation |
 | TC-105 | Rust onboarding matches retained boundary and adverse-case behavior | Property | P0 | FR-016-AC-1 | 🚧 pending implementation |
 | TC-106 | Rust and retained invariant providers return the same ordered failure set | Property | P0 | FR-016-AC-2 | 🚧 pending implementation |

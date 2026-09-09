@@ -501,9 +501,11 @@ fn tc_103_version_identity_rejects_actual_mutability_without_rejecting_metadata(
         BTreeSet::from([
             "ascii-control",
             "ascii-space",
+            "ascii-space-interior",
             "empty-token",
             "immutable-exact",
             "immutable-x-metadata",
+            "immutable-x-metadata-uppercase",
             "mutable-alias",
             "non-ascii",
             "range-operator",

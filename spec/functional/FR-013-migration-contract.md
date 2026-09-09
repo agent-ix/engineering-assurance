@@ -24,7 +24,7 @@ acceptance.
 ## Inputs
 
 - The `scripts/` and `schemas/` trees of the eight campaign repositories, read
-  at `origin/main`.
+  at the exact candidate revisions in the caller-supplied source population.
 - The accepted compatibility matrix (FR-012) and its acceptance state.
 - The read-only compatibility view (FR-010) for legacy history.
 - Quoin's adapter inventory for the formats those repositories emit.
@@ -59,7 +59,8 @@ acceptance.
 A script family with no decision, a decision outside keep/delete/replace, a
 repository missing from the allocation, and a checklist item with no
 corresponding prohibition in the contract are each defects in the contract and
-fail its gate.
+fail its gate. A missing source-root declaration or unreadable campaign
+repository also fails the census; it SHALL NOT turn the gate into a skip.
 
 ## Constraints
 
@@ -74,7 +75,7 @@ fail its gate.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-013-AC-1 | Every family in the decision table carries exactly one of keep, delete, or replace, with a reason. | Test (TC-087) |
-| FR-013-AC-2 | The table accounts for every recurring script family present in the eight repositories, and says so when the sources cannot be read. | Integration (TC-088) |
+| FR-013-AC-2 | The table accounts for every recurring script family present at the eight exact candidate revisions supplied through `ASSURANCE_SOURCE_ROOT`; a missing declaration or unreadable repository fails the gate rather than skipping it. | Integration (TC-088) |
 | FR-013-AC-3 | Repository-local generic evidence schemas and stdout-derived verdicts are both forbidden by name, and a domain-output schema is explicitly permitted. | Test (TC-089) |
 | FR-013-AC-4 | Domain output validation, evidence intake, audit, and human decision each name a distinct owner. | Test (TC-090) |
 | FR-013-AC-5 | Rollback is defined per failure mode, legacy history is never rewritten in any of them, and deletion is last. | Test (TC-091) |

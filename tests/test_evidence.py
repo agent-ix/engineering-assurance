@@ -208,9 +208,11 @@ def test_version_identity_distinguishes_wildcards_from_immutable_metadata() -> N
     assert classes == {
         "ascii-control",
         "ascii-space",
+        "ascii-space-interior",
         "empty-token",
         "immutable-exact",
         "immutable-x-metadata",
+        "immutable-x-metadata-uppercase",
         "mutable-alias",
         "non-ascii",
         "range-operator",

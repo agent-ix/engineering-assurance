@@ -37,7 +37,7 @@
       "policy_changed": true
     },
     {
-      "class": "immutable-x-metadata",
+      "class": "immutable-x-metadata-uppercase",
       "version": "1.2.3+X86",
       "prior_errors": ["identity-version-mutable"],
       "accepted_errors": [],
@@ -79,7 +79,7 @@
       "policy_changed": true
     },
     {
-      "class": "ascii-space",
+      "class": "ascii-space-interior",
       "version": "1.2.3 rc",
       "prior_errors": [],
       "accepted_errors": ["identity-version-invalid-character"],

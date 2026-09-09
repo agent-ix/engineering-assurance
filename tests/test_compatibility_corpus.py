@@ -12,6 +12,7 @@ import json
 import os
 import stat
 import subprocess
+from pathlib import Path
 
 import jsonschema
 import pytest
@@ -293,15 +294,22 @@ def test_the_corpus_is_read_only_and_executes_nothing() -> None:
 def test_the_corpus_reproduces_from_its_recorded_sources() -> None:
     """Trace: FR-011-AC-9, TC-077.
 
-    The builder lives beside the corpus, in the pinned submodule. Skipped where
-    the source repositories are not checked out: the corpus is self-verifying
-    offline, and this is the stronger check a maintainer runs where the sources
-    exist. Skipping is stated, never silent.
+    The builder lives beside the corpus, in the pinned submodule. The caller
+    supplies the source population explicitly, and an unreadable population
+    fails instead of silently standing down.
     """
-    checkouts = CORPUS_SUBMODULE.parent.parent
-    for repository in ("quire-contract-ir", "quire-code-rs", "quoin"):
-        if not (checkouts / repository / ".git").exists():
-            pytest.skip(f"source repository {repository} is not checked out")
+    source_root = os.environ.get("ASSURANCE_SOURCE_ROOT")
+    assert source_root, "ASSURANCE_SOURCE_ROOT is required for corpus reproduction"
+    checkouts = Path(source_root)
+    missing = [
+        repository
+        for repository in ("quire-contract-ir", "quire-code-rs", "quoin")
+        if not (checkouts / repository / ".git").exists()
+    ]
+    assert missing == [], (
+        "corpus source repositories not checked out under ASSURANCE_SOURCE_ROOT: "
+        f"{', '.join(missing)}"
+    )
     result = subprocess.run(
         ["python3", "scripts/build_compatibility_corpus.py", "--check"],
         cwd=CORPUS_SUBMODULE,

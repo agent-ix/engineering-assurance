@@ -29,8 +29,9 @@ part of this migration.
 ## The decision table
 
 Every recurring script family across the eight repositories, with its
-disposition. This is a census, not a sample — the eight `scripts/` trees were
-read at `origin/main`.
+disposition. This is a census, not a sample — the gate reads the eight
+`scripts/` trees at the exact candidate revisions in its explicitly configured
+source population and fails if any checkout is unreadable.
 
 | Family | Where | Decision | Why |
 | --- | --- | --- | --- |
