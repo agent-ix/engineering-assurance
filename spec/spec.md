@@ -156,6 +156,8 @@ same canonical bundle and do not redefine these responsibilities.
   evaluation and repository qualification behavior behind the Rust boundary.
 - [FR-018](./functional/FR-018-staged-runtime-migration.md) — migrate consumers
   before retiring the legacy executable paths.
+- [FR-019](./functional/FR-019-rust-quoin-chain-orchestration.md) — replace the
+  eight local assurance-chain orchestrators while preserving Quoin ownership.
 
 ### Non-Functional Requirements
 

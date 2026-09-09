@@ -21,3 +21,4 @@ okf_version: "0.1"
 * [TASK-021: Integrate the accepted evaluation host boundary](./tasks/TASK-021-evaluation-host-integration.md) - Blocked cli-agent-evals gate and integration.
 * [TASK-022: Migrate consumers and retire legacy paths](./tasks/TASK-022-consumer-migration-removal.md) - Same-revision consumer migration and removal.
 * [TASK-023: Complete final qualification](./tasks/TASK-023-final-qualification.md) - Containment, traceability, performance, and hosted gates.
+* [TASK-024: Implement Quoin chain orchestration](./tasks/TASK-024-quoin-chain-orchestration.md) - Replace eight local chain drivers without absorbing Quoin ownership.

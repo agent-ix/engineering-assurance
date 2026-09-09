@@ -11,7 +11,7 @@ type: TestMatrix
 This matrix records completed verification for the canonical assurance-onboarding
 and verification-semantics baseline and planned verification for the proposed
 Rust migration. TC-001..TC-095 have passing repository or retained real-agent
-evidence. TC-096..TC-129 are staged: completed slices are identified explicitly,
+evidence. TC-096..TC-134 are staged: completed slices are identified explicitly,
 while aggregate migration cases remain pending until every named capability is
 implemented and reviewed.
 
@@ -47,7 +47,7 @@ implemented and reviewed.
 | Stakeholder Req | Trace to US/FR | Test/Validation | Coverage Status |
 |-----------------|----------------|-----------------|-----------------|
 | StR-001 | FR-001, FR-004, FR-005 | StR-001-VC-1..VC-3 → TC-001..TC-003 | ✅ Passing |
-| StR-003 | FR-014..FR-018, NFR-005 | StR-003-VC-1..VC-4 → TC-096, TC-097, TC-100, TC-115 | 🚧 Pending implementation |
+| StR-003 | FR-014..FR-019, NFR-005 | StR-003-VC-1..VC-4 → TC-096, TC-097, TC-100, TC-115 | 🚧 Pending implementation |
 
 ### User Story Coverage
 
@@ -135,6 +135,11 @@ implemented and reviewed.
 | FR-018 | FR-018-AC-3 | TC-114 | 🚧 Pending implementation |
 | FR-018 | FR-018-AC-4 | TC-115 | 🚧 Pending implementation |
 | FR-018 | FR-018-AC-5 | TC-125 | 🚧 Pending implementation |
+| FR-019 | FR-019-AC-1 | TC-130 | 🚧 Pending implementation |
+| FR-019 | FR-019-AC-2 | TC-131 | 🚧 Pending implementation |
+| FR-019 | FR-019-AC-3 | TC-132 | 🚧 Pending implementation |
+| FR-019 | FR-019-AC-4 | TC-133 | 🚧 Pending implementation |
+| FR-019 | FR-019-AC-5 | TC-134 | 🚧 Pending implementation |
 
 ### Non-Functional Requirement Coverage
 
@@ -171,6 +176,10 @@ implemented and reviewed.
 | FR-018-CON-1 | TC-113 | 🚧 Pending implementation |
 | FR-018-CON-2 | TC-114 | 🚧 Pending implementation |
 | FR-018-CON-3 | TC-115 | 🚧 Pending implementation |
+| FR-019-CON-1 | TC-134 | 🚧 Pending implementation |
+| FR-019-CON-2 | TC-134 | 🚧 Pending implementation |
+| FR-019-CON-3 | TC-134 | 🚧 Pending implementation |
+| FR-019-CON-4 | TC-134 | 🚧 Pending implementation |
 
 ## Test Case Summary
 
@@ -305,6 +314,11 @@ implemented and reviewed.
 | TC-127 | Rust-migration pull requests require six named current-head hosted statuses, reject missing/failed/stale/manual substitutes, and run no real-agent or release operation | Integration | P0 | NFR-005-AC-6 | 🚧 pending implementation |
 | TC-128 | A new stable Rust release triggers the real compatibility matrix; only a reproduced required-tool incompatibility permits a bounded older-version hold | Integration | P0 | NFR-005-AC-7 | 🚧 pending implementation |
 | TC-129 | An index-derived, digest-bound Rust trace manifest classifies every tracked Rust blob, excludes gitlinks without traversal, and rejects unclassified roots/blobs or any population change before Quire reconciliation | Integration | P0 | NFR-005-AC-8 | 🚧 pending implementation |
+| TC-130 | A valid declarative chain over pre-produced inputs invokes only the ordered Quoin change-assurance operations and returns one bounded result with exact structured response identities, outcomes, and completed-operation order | Integration | P0 | FR-019-AC-1 | 🚧 pending implementation |
+| TC-131 | Preflight refuses unknown protocols, escaping/aliased paths, dirty or mismatched revisions, absent/changed inputs, unaccepted Quoin identities, arbitrary executables/arguments, and unsupported operation graphs before invocation or write | Property | P0 | FR-019-AC-2 | 🚧 pending implementation |
+| TC-132 | Step failure, timeout, cancellation, signal, malformed response, and response-binding mismatch terminate the Quoin child, emit no success result, invoke no later step, and emit one bounded refusal with the exact completed-step list without claiming rollback | Property | P0 | FR-019-AC-3 | 🚧 pending implementation |
+| TC-133 | All eight pinned consumer fixtures preserve success plus pass, fail, unavailable, not-computed, malformed, stale, tampered, and incomplete observations while historical repository bytes remain unchanged | Integration | P0 | FR-019-AC-4 | 🚧 pending implementation |
+| TC-134 | Static audit permits only the accepted Quoin executable and the five declared change-assurance subcommands and finds no audit-report producer, other producer execution, arbitrary-output verdict parsing, copied Quoin schema/store/canonicalization, or human-decision inference | Static | P0 | FR-019-AC-5, FR-019-CON-1, FR-019-CON-2, FR-019-CON-3, FR-019-CON-4 | 🚧 pending implementation |
 
 ## Option Permutation Matrix
 
@@ -411,6 +425,9 @@ evaluation envelopes.
 | EC-020 | Signal arrives after child start but before machine result completion | FR-014 | TC-121 | Partial JSON or orphan child survives |
 | EC-021 | Registry or accepted host-interface digest changes between parity and deletion | FR-018 | TC-125 | Evidence from different bytes authorizes removal |
 | EC-022 | A gitlink, vendored fixture, generated file, or newly added Rust root silently changes the traceability denominator | NFR-005 | TC-129 | Foreign or unclassified trace tags make completeness counts environment-dependent |
+| EC-023 | A Quoin write completes and a later chain operation fails | FR-019 | TC-132 | A wrapper claims atomic rollback or hides the write that actually occurred |
+| EC-024 | A local chain declaration selects an arbitrary executable, subcommand, or reordered operation graph | FR-019 | TC-131, TC-134 | Generic command execution and local assurance semantics re-enter through configuration |
+| EC-025 | A producer output changes after preflight or a Quoin response names another candidate/digest | FR-019 | TC-131, TC-132 | Evidence from different bytes or revisions is attached to the candidate |
 
 ## Integration Test Matrix
 
@@ -426,6 +443,7 @@ evaluation envelopes.
 | INT-006 | Load Rust workflow invariants through a structured host interface | ix-flow | service | TC-107, TC-108 | 🚧 |
 | INT-007 | Load Rust-owned scenarios and assertions through a structured host interface | cli-agent-evals | service | TC-109, TC-110 | 🚧 |
 | INT-008 | Validate versioned assurance-artifact contracts against the registry-derived candidate snapshot | Registered Quire/TL consumers and pinned assurance corpus | service | TC-119, TC-120 | 🚧 |
+| INT-009 | Orchestrate the fixed change-assurance sequence without absorbing Quoin ownership | Quoin | service | TC-130..TC-134 | 🚧 |
 
 ### Integration Test Details
 

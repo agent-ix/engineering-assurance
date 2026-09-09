@@ -13,6 +13,8 @@ relationships:
     type: "requires"
   - target: "ix://agent-ix/engineering-assurance/FR-016"
     type: "requires"
+  - target: "ix://agent-ix/engineering-assurance/FR-019"
+    type: "requires"
 ---
 
 # FR-018: Migrate consumers before retiring legacy executable paths
@@ -84,6 +86,7 @@ changed historical byte, and an unresolved owner disposition each block removal.
 
 ## Dependencies
 
-- **Upstream**: accepted ADR-002 and completed FR-014 through FR-017.
+- **Upstream**: accepted ADR-002 and completed FR-014 through FR-017 plus
+  FR-019.
 - **Downstream**: consumer repositories may migrate only against a released or
   revision-pinned interface that satisfies this gate.

@@ -16,6 +16,8 @@ relationships:
     type: references
   - target: "ix://agent-ix/engineering-assurance/FR-018"
     type: references
+  - target: "ix://agent-ix/engineering-assurance/FR-019"
+    type: references
   - target: "ix://agent-ix/engineering-assurance/NFR-005"
     type: references
 ---
@@ -34,6 +36,8 @@ relationships:
 - [ ] **FR-016**: Run onboarding and workflow invariants through Rust.
 - [ ] **FR-017**: Run evaluations and repository qualification through Rust.
 - [ ] **FR-018**: Migrate every recorded consumer before retiring a legacy executable path.
+- [ ] **FR-019**: Replace duplicated assurance-chain orchestration without
+  absorbing Quoin schemas, persistence, outcomes, or producer execution.
 
 ### Non-Functional Requirements
 
@@ -49,8 +53,12 @@ relationships:
   Reason: pure shared types, stable errors, and versioned result contracts precede semantic ports.
 - `FR-015 -> FR-016, FR-017`
   Reason: onboarding, invariants, evaluation, and qualification reuse the shared classifiers, identity behavior, projections, and artifact contracts.
-- `FR-016 + FR-017 -> FR-018`
-  Reason: consumer migration and deletion require both workflow and qualification replacement paths.
+- `FR-014 + FR-015 -> FR-019`
+  Reason: Quoin orchestration consumes the bounded child lifecycle plus exact
+  identity, state, and compatibility behavior.
+- `FR-016 + FR-017 + FR-019 -> FR-018`
+  Reason: consumer migration and deletion require workflow, qualification, and
+  shared assurance-chain replacement paths.
 - `FR-018 -> StR-003 completion`
   Reason: coexistence is a migration state; the stakeholder outcome is not achieved while unapproved legacy semantics remain.
 
@@ -86,6 +94,9 @@ Pure behavior lives in `src/` behind typed APIs. Filesystem, subprocess, environ
 - [ ] **TC-105, TC-106**: Onboarding and ordered invariant results match retained behavior.
 - [ ] **TC-107, TC-108, TC-123**: ix-flow lifecycle and host loading pass only against the exact accepted structured-provider artifact.
 - [ ] **TC-109..TC-112, TC-124**: Evaluation, qualification, packaging, rights, hosted dispatch, and external-suite behavior pass against their retained cases and accepted host artifact.
+- [ ] **TC-130..TC-134**: The fixed Quoin chain runs from declarative,
+  pre-produced inputs; every preflight/child/response failure stops later
+  actions; Quoin ownership and all eight consumer behaviors remain intact.
 
 ### Migration and qualification
 
@@ -102,8 +113,9 @@ Pure behavior lives in `src/` behind typed APIs. Filesystem, subprocess, environ
 - **A2 = TASK-015** Versioned CLI boundary — Hard; exit: protocol, resource, subprocess, and interruption failures are bounded and side-effect-free.
 - **A3 = TASK-016** Semantic validation, projections, and fixtures — Hard; exit: every remaining pure ADR-002 capability matches its accepted corpus independently.
 - **A4 = TASK-017** Assurance-contract registry — Hard; exit: one revision-bound population accounts for every active artifact and rejects ambiguity or mutation.
-- **A5 = TASK-018** Onboarding and invariant core — Hard; exit: host-independent discovery, onboarding, and ordered invariants match retained behavior.
-- **A6 = TASK-020** Evaluation and qualification core — Hard; exit: host-independent evaluation, package, rights, integration, and publication-refusal gates match retained behavior.
+- **A5 = TASK-024** Quoin chain orchestration — Hard; exit: one Rust command replaces the eight local orchestrators without running producers or absorbing Quoin authority.
+- **A6 = TASK-018** Onboarding and invariant core — Hard; exit: host-independent discovery, onboarding, and ordered invariants match retained behavior.
+- **A7 = TASK-020** Evaluation and qualification core — Hard; exit: host-independent evaluation, package, rights, integration, and publication-refusal gates match retained behavior.
 
 ### Track B: External host gates (blocked)
 
@@ -119,7 +131,7 @@ Pure behavior lives in `src/` behind typed APIs. Filesystem, subprocess, environ
 
 ```text
 Completed: TASK-012 -> TASK-013
-Critical:             TASK-014 -> 015 -> 016 -> 017 -> 018 -> 020
+Critical:             TASK-014 -> 015 -> 016 -> 017 -> 024 -> 018 -> 020
 External gates:                                      019 ----\
                                                          021 -+-> 022 -> 023
 ```
@@ -136,6 +148,7 @@ The two host gates may advance in their owning repositories when their prerequis
 | TASK-015 | A | FR-014 | TC-098, TC-099, TC-101, TC-121 | in_progress |
 | TASK-016 | A | FR-015 | TC-100, TC-102, TC-103, TC-104 | not_started |
 | TASK-017 | A | FR-015 | TC-119, TC-120, TC-122 | not_started |
+| TASK-024 | A | FR-019 | TC-130..TC-134 | not_started |
 | TASK-018 | A | FR-016 | TC-105, TC-106 | not_started |
 | TASK-019 | B | FR-016 | TC-107, TC-108, TC-123 | blocked |
 | TASK-020 | A | FR-017 | TC-110, TC-111, TC-112 | not_started |
@@ -147,6 +160,8 @@ The two host gates may advance in their owning repositories when their prerequis
 
 - One writer owns `src/`, `tests/`, the Rust lockfile, and qualification configuration for each Track A slice; the next slice starts only after review disposition is recorded.
 - TASK-019 and TASK-021 do not implement foreign-language shims. They remain blocked until their external owners accept exact artifact identity, version, revision, digest, and compatibility gates.
-- Contract/TL consumers may inventory and plan while #59 is active, but migration and helper removal wait for the usable shared boundary from TASK-016/TASK-017 and follow quire-research #60 ownership.
+- Contract/TL consumers may inventory and plan while #59 is active, but
+  migration and helper removal wait for the usable shared boundary from
+  TASK-016/TASK-017/TASK-024 and follow quire-research #60 ownership.
 - Every semantic change returns through `specify` and base `spec-review`; every Rust slice receives the repository `/rust-review` gate and external pull-request review before merge.
 - Qualification runs one resource-intensive command at a time, begins with focused tests, and caps Cargo parallelism when other agents are active.
