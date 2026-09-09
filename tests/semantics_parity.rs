@@ -347,11 +347,19 @@ fn tc_100_rust_generator_matches_all_committed_inert_fixtures() {
         expected
     );
 
-    let source = fs::read_to_string(root().join("src/semantics.rs"))
-        .expect("production source must be readable");
+    // FR-008-AC-4 / NFR-004-AC-2 are negative capability requirements. Static
+    // inspection is the direct gate: there is no runtime path to exercise for
+    // an execution or persistence capability that must not exist.
+    let semantic_sources = [
+        include_str!("../src/semantics/mod.rs"),
+        include_str!("../src/semantics/fixtures.rs"),
+        include_str!("../src/semantics/pgm01.rs"),
+        include_str!("../src/semantics/report.rs"),
+    ]
+    .concat();
     for forbidden in ["std::fs", "std::process", "std::env", "Command::new"] {
         assert!(
-            !source.contains(forbidden),
+            !semantic_sources.contains(forbidden),
             "pure semantic library contains {forbidden}"
         );
     }
