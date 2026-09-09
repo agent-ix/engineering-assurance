@@ -3,7 +3,7 @@ id: SR-042
 title: "Base review of the evidence identity and public-API boundary"
 type: SpecReview
 analysis: base
-scope: "FR-015, TC-100, TC-102, TC-103, PLAN-003/TASK-014"
+scope: "FR-015, TC-100, TC-102, TC-103"
 review_set: subset
 relationships:
   - target: "ix://agent-ix/engineering-assurance/FR-015"
@@ -12,13 +12,13 @@ relationships:
 
 ## Summary
 
-The amended evidence-classification specification closes the parser-before-encoder gap identified by independent review: arbitrary-size integers remain exact, while non-finite or retained-domain-overflow numeric inputs fail without an identity digest. It also replaces the retained substring/case-fold accident with an explicit printable-ASCII exact-version policy that distinguishes true wildcard components from immutable metadata. The test matrix and PLAN-003 distinguish this backed slice from the still-pending aggregate migration and assign the public Rust inspection surface to FR-015.
+The amended evidence-classification specification closes the parser-before-encoder gap identified by independent review: arbitrary-size integers remain exact, while non-finite or retained-domain-overflow numeric inputs fail without an identity digest. It also replaces the retained substring/case-fold accident with an explicit printable-ASCII exact-version policy that distinguishes true wildcard components from immutable metadata. The test matrix distinguishes this backed slice from the still-pending aggregate port and assigns the public Rust inspection surface to FR-015.
 
 ## Findings
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
-| FND-095 | low | No blocking base-review issue remains in the amended scope: identifiers are unique, the happy/error/edge numeric, version-token, and exact-one state-label boundaries are measurable, each changed criterion retains a TC mapping, and PLAN-003 records the migration DAG and external-host blockers without claiming aggregate completion. | FR-015; TC-100; TC-102; TC-103; PLAN-003; TASK-014 |
+| FND-095 | low | No blocking base-review issue remains in the amended scope: identifiers are unique, the happy/error/edge numeric, version-token, and exact-one state-label boundaries are measurable, and each changed criterion retains a TC mapping without claiming aggregate completion. | FR-015; TC-100; TC-102; TC-103 |
 
 ## Six-rule coverage
 

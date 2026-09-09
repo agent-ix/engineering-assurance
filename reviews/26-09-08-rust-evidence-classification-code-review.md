@@ -20,7 +20,7 @@ closed availability states, retained canonical output digest, and Rust/Python
 differential tests using `agent-skills/rust-review/SKILL.md`. The implementation
 is a pure library capability: it performs no observation, producer execution,
 filesystem access, persistence, Quoin write, or CLI protocol handling. The
-retained Python module remains only as the old side of the migration parity gate.
+retained Python module remains only as the old side of the port parity gate.
 
 ## Verdict
 
@@ -55,7 +55,7 @@ ownership, or test finding remains in this evidence-classification slice.
 - Every requirement-verifying Rust test imports `ix_trace_rs::trace` and uses a
   bare `#[trace("TC-...", "...-AC-...")]` attribute. TC-100, TC-102, and
   TC-103 report this capability as independent subcases, not as completion of
-  the larger aggregate migration criteria.
+  the larger aggregate port criteria.
 - `sha2` 0.11.0 is exact-pinned, requires Rust 1.85, and passes the repository's
   advisory, ban, license, and source policy on the qualified Rust 1.98.1 toolchain.
 
@@ -73,10 +73,10 @@ ownership, or test finding remains in this evidence-classification slice.
 - `make validate-docs` — passed with the existing ambient duplicate-provider warnings.
 - `git diff --check` — passed.
 - `make integration-traceability` — intentionally withheld at 207/262 for the
-  staged migration, up from 203/262; the new evidence subcases are backed while
+  staged port, up from 203/262; the new evidence subcases are backed while
   the remaining FR-014..FR-018 and NFR-005 work stays visibly unimplemented.
 
-This review does not claim FR-015, #59, or the staged language migration is
-complete. Semantic validation, bounded projection, fixture generation,
-consumer registry work, shared observation/digest checks, and assurance-chain
-integration remain separate gated slices.
+This review does not claim FR-015, #59, or the staged language port is complete.
+Semantic validation, bounded projection, fixture generation, shared
+observation/digest checks, and assurance-chain integration remain separate
+implementation slices.

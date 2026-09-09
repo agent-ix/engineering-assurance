@@ -42,7 +42,7 @@ Rust 1.98.1 toolchain is selected by `rust-toolchain.toml`.
 
 The additive boundary exposes package identity plus a pure compatibility
 classifier. Callers observe component versions outside the library and submit
-one strict, bounded request on stdin:
+one strict request on stdin:
 
 ```bash
 printf '%s\n' '{"protocol":"engineering-assurance.compatibility-request/v1","observed":[]}' \
@@ -52,9 +52,9 @@ printf '%s\n' '{"protocol":"engineering-assurance.compatibility-request/v1","obs
 Request, result, and error schemas live under
 `engineering_assurance/schemas/`. A compatible result exits 0, a valid but
 withheld result exits 1, and malformed or unsupported input exits 2. This slice
-does not yet replace the legacy environment observation, artifact-digest, or
-consumer repository checks, and it does not claim that all Python or JavaScript
-paths have been removed.
+does not yet replace the repository's legacy observation and qualification
+paths, and it does not claim that all Python, JavaScript, or MJS paths have been
+removed.
 
 ```bash
 make rust-foundation-gate

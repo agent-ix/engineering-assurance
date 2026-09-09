@@ -2,8 +2,6 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Engineering Assurance machine error v1",
   "description": "A bounded fail-closed machine error emitted only after a complete value is buffered.",
-  "x-engineering-assurance-max-encoded-bytes": 67108864,
-  "x-engineering-assurance-downstream-deadline-required": false,
   "type": "object",
   "additionalProperties": false,
   "required": ["protocol", "capability", "code", "message"],
@@ -11,6 +9,6 @@
     "protocol": {"const": "engineering-assurance.error/v1"},
     "capability": {"type": "string", "minLength": 1},
     "code": {"type": "string", "minLength": 1},
-    "message": {"type": "string", "minLength": 1, "maxLength": 4096}
+    "message": {"type": "string", "minLength": 1}
   }
 }

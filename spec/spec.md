@@ -55,9 +55,9 @@ defines their shared scope and indexes them.
   cross-language fixtures, and read-only historical PGM-01 compatibility.
 - A Rust library crate and native CLI that own this repository's production,
   validation, generation, evaluation, and qualification behavior.
-- Versioned structured host interfaces for ix-flow and agent evaluations.
-- A staged, parity-gated migration from the repository's current Python and
-  JavaScript executable paths.
+- Supported structured host interfaces for ix-flow and agent evaluations.
+- A parity-gated Rust port and cutover of this repository's current Python,
+  JavaScript, and MJS executable paths.
 
 ### Out of Scope
 
@@ -75,9 +75,9 @@ defines their shared scope and indexes them.
 - Replacing Quire static facts, Quoin evidence/audit/report records, native
   domain result formats, or ix-flow decision history.
 - Moving Engineering Assurance behavior into another repository or creating a
-  new repository for the Rust migration.
+  new repository for the Rust port.
 - Treating a Rust wrapper around non-Rust semantic or assertion logic as a
-  completed migration.
+  completed port.
 
 ## System Overview
 
@@ -154,8 +154,8 @@ same canonical bundle and do not redefine these responsibilities.
   workflow coordination, and invariants behind the Rust boundary.
 - [FR-017](./functional/FR-017-rust-evaluation-and-qualification.md) — move agent
   evaluation and repository qualification behavior behind the Rust boundary.
-- [FR-018](./functional/FR-018-staged-runtime-migration.md) — migrate consumers
-  before retiring the legacy executable paths.
+- [FR-018](./functional/FR-018-staged-runtime-migration.md) — retire replaced
+  executable paths after local parity and direct-invocation cutover.
 
 ### Non-Functional Requirements
 

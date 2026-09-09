@@ -1,31 +1,30 @@
 ---
 id: SR-043
-title: "Rust review — evidence identity and planning remediation"
+title: "Rust review — evidence identity remediation"
 type: SpecReview
 analysis: code-review
-scope: "PR #27 remediation; Cargo.toml; src/evidence.rs; engineering_assurance/evidence.py; tests/evidence_parity.rs; tests/test_evidence.py; FR-015; TC-100/102/103; PLAN-003"
+scope: "PR #27 remediation; Cargo.toml; src/evidence.rs; engineering_assurance/evidence.py; tests/evidence_parity.rs; tests/test_evidence.py; FR-015; TC-100/102/103"
 review_set: subset
 relationships:
   - target: "ix://agent-ix/engineering-assurance/FR-015"
     type: reviews
 ---
 
-# SR-043: Rust review — evidence identity and planning remediation
+# SR-043: Rust review — evidence identity remediation
 
 ## Summary
 
-The repaired slice passes the repository Rust conventions and the requested `/rust-review` checklist. Arbitrary-precision integers retain their value instead of crossing `f64`; decimal/exponent inputs are normalized through the finite retained Python float domain; invalid numeric inputs mint no digest; and governing versions now use one reviewed exact-token policy in Rust and the retained Python reference. PLAN-003 makes the broader migration and external-host gates assessable without claiming they are complete.
+The repaired slice passes the repository Rust conventions and the requested `/rust-review` checklist. Arbitrary-precision integers retain their value instead of crossing `f64`; decimal/exponent inputs are normalized through the finite retained Python float domain; invalid numeric inputs mint no digest; and governing versions now use one reviewed exact-token policy in Rust and the retained Python reference.
 
 ## Verdict
 
-**PASS for the PR #27 implementation slice.** Merge remains gated on independent re-review of the current head. The repository-wide migration trace gate correctly remains withheld at 207/262 because PLAN-003 tasks after TASK-014 are not implemented.
+**PASS for the PR #27 implementation slice.** Merge remains gated on independent re-review of the current head. The repository-wide port remains incomplete.
 
 ## Findings
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-096 | low | No unresolved Rust code finding remains in the repaired diff: no production panic/unsafe/allow surface was added, public evidence helpers now have requirement ownership and direct inspection, numeric traversal is iterative and bounded by the already-materialized JSON input, and all changed wire structs retain `deny_unknown_fields`. | `src/evidence.rs`; `tests/evidence_parity.rs`; FR-015 |
-| FND-097 | low | The aggregate traceability command remains non-zero by design because later PLAN-003 capabilities are unimplemented; treating 207/262 as a release pass would be false, while treating it as a TASK-014 regression would also be false. Final completion remains owned by TASK-023. | `spec/tests.md`; `plan/PLAN-003-rust-native-engineering-assurance/`; TASK-023 |
 
 ## Independent finding dispositions
 
@@ -37,11 +36,9 @@ The repaired slice passes the repository Rust conventions and the requested `/ru
 | FND-087 | Fixed as a semantics correction rather than a case-fold imitation: both implementations reject non-printable/non-ASCII version tokens and use ASCII case-insensitive matching only after that boundary. |
 | FND-088 | Fixed in both implementations: `x` is mutable only as a version-core wildcard component; immutable metadata such as `1.2.3+linux-x86_64` is accepted. |
 | FND-089 | Fixed: the digest fixture has the `tc_100_` name and state-label/public-state coverage is one TC-102 test. Multiple TC-100/TC-103 functions are separately named subcases of their aggregate matrix rows. |
-| FND-090 | Fixed: QUOIN `spec-to-plan` produced validated PLAN-003 with task state, dependencies, verification edges, external blockers, and final gate. |
 | FND-091 | Fixed: aggregate rows remain pending but now name the backed compatibility/evidence/CLI subcases explicitly. |
 | FND-092 | Fixed: the evidence identity test consumes the three accepted `corpus/compatibility/producers` fixtures in addition to generated adverse values. |
 | FND-093 | Fixed: FR-015 owns state spellings, exact-one untyped-label validation, result validity, and the error accessor; `EvidenceValidationError::message` is public. The typed classifier constructs one enum state directly and therefore does not route through an untyped-label parser. |
-| FND-094 | Deferred as pre-existing scanner-scope noise to PLAN-003 TASK-023; no new orphaned or malformed Rust trace form was introduced. |
 
 ## Rust review checklist
 
@@ -63,4 +60,4 @@ The repaired slice passes the repository Rust conventions and the requested `/ru
 - `make test` — content rights pass; 186 Python tests pass, 2 skip; manifest validation passes.
 - `make package-audit` — pass.
 - `make validate-docs` — pass with the recorded ambient duplicate-provider diagnostics.
-- `make integration-traceability` — expected staged-migration refusal at 207/262; no completion claim.
+- `make integration-traceability` — expected refusal for the incomplete repository-wide port; no completion claim.
