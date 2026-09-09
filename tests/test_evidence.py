@@ -196,11 +196,26 @@ def test_version_identity_distinguishes_wildcards_from_immutable_metadata() -> N
     )
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
     assert fixture["schema_version"] == "engineering-assurance.evidence-version-policy/v1"
+    classes = set()
     for case in fixture["cases"]:
-        assert case["prior_errors"] != case["accepted_errors"]
+        classes.add(case["class"])
+        assert (case["prior_errors"] != case["accepted_errors"]) is case[
+            "policy_changed"
+        ]
         assert identity("producer", case["version"]).errors() == tuple(
             case["accepted_errors"]
         )
+    assert classes == {
+        "ascii-control",
+        "ascii-space",
+        "empty-token",
+        "immutable-exact",
+        "immutable-x-metadata",
+        "mutable-alias",
+        "non-ascii",
+        "range-operator",
+        "wildcard-component",
+    }
 
     assert identity("producer", "1.x").errors() == ("identity-version-mutable",)
     assert identity("producer", "Straße").errors() == (

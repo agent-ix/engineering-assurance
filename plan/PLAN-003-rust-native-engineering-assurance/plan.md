@@ -91,7 +91,8 @@ Pure behavior lives in `src/` behind typed APIs. Filesystem, subprocess, environ
 
 - [ ] **TC-097, TC-113..TC-115, TC-125**: Every consumer has one state and disposition; deletion refuses incomplete parity, changed bindings, or unmigrated consumers and preserves historical bytes.
 - [ ] **TC-117, TC-118**: Every Rust requirement test uses the canonical bare trace form and reconciles through Quire without missing, orphaned, or duplicate bindings.
-- [ ] **TC-126..TC-128**: Same-runner performance, current-head hosted status, and new-stable-toolchain adoption gates pass.
+- [ ] **TC-126..TC-129**: Same-runner performance, current-head hosted status,
+  new-stable-toolchain adoption, and digest-bound trace-population gates pass.
 
 ## Remaining Work
 
@@ -140,7 +141,7 @@ The two host gates may advance in their owning repositories when their prerequis
 | TASK-020 | A | FR-017 | TC-110, TC-111, TC-112 | not_started |
 | TASK-021 | B | FR-017 | TC-109, TC-124 | blocked |
 | TASK-022 | C | FR-018 | TC-097, TC-113, TC-114, TC-115, TC-125 | blocked |
-| TASK-023 | Gate | StR-003, NFR-005 | TC-115..TC-118, TC-126..TC-128 | blocked |
+| TASK-023 | Gate | StR-003, NFR-005 | TC-115..TC-118, TC-126..TC-129 | blocked |
 
 ## Coordination Rules
 

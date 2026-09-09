@@ -26,6 +26,8 @@ relationships:
     type: verifies
   - target: "ix://agent-ix/engineering-assurance/TC-128"
     type: verifies
+  - target: "ix://agent-ix/engineering-assurance/TC-129"
+    type: verifies
 ---
 # TASK-023: Complete final qualification
 
@@ -36,7 +38,9 @@ Prove the completed migration at one candidate revision through containment, exa
 ## Subtasks
 
 - [ ] Run exact Rust 1.98.1 format, Clippy, test, docs, build, dependency, and unsafe gates.
-- [ ] Reconcile every bare ix-trace-rs marker through Quire and audit executable residue.
+- [ ] Derive and digest-bind the candidate-index Rust population, classify every
+  included/excluded blob, then reconcile every included bare ix-trace-rs marker
+  through Quire without traversing gitlinks.
 - [ ] Record 30-run old/new performance populations and current-head hosted statuses.
 - [ ] Complete Rust review, gap analysis, external review, and release-readiness evidence.
 

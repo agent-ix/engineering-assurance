@@ -2,49 +2,102 @@
   "schema_version": "engineering-assurance.evidence-version-policy/v1",
   "cases": [
     {
+      "class": "empty-token",
+      "version": "",
+      "prior_errors": ["identity-version-missing"],
+      "accepted_errors": ["identity-version-missing"],
+      "policy_changed": false
+    },
+    {
+      "class": "immutable-exact",
+      "version": "1.2.3",
+      "prior_errors": [],
+      "accepted_errors": [],
+      "policy_changed": false
+    },
+    {
+      "class": "immutable-x-metadata",
       "version": "1.2.3+linux-x86_64",
       "prior_errors": ["identity-version-mutable"],
-      "accepted_errors": []
+      "accepted_errors": [],
+      "policy_changed": true
     },
     {
+      "class": "immutable-x-metadata",
       "version": "1.2.3+x86_64",
       "prior_errors": ["identity-version-mutable"],
-      "accepted_errors": []
+      "accepted_errors": [],
+      "policy_changed": true
     },
     {
+      "class": "immutable-x-metadata",
       "version": "2.0.0-beta+exp.sha.5114f85",
       "prior_errors": ["identity-version-mutable"],
-      "accepted_errors": []
+      "accepted_errors": [],
+      "policy_changed": true
     },
     {
+      "class": "immutable-x-metadata",
       "version": "1.2.3+X86",
       "prior_errors": ["identity-version-mutable"],
-      "accepted_errors": []
+      "accepted_errors": [],
+      "policy_changed": true
     },
     {
+      "class": "wildcard-component",
       "version": "1.*",
       "prior_errors": [],
-      "accepted_errors": ["identity-version-mutable"]
+      "accepted_errors": ["identity-version-mutable"],
+      "policy_changed": true
     },
     {
+      "class": "range-operator",
+      "version": "^1.2.3",
+      "prior_errors": ["identity-version-mutable"],
+      "accepted_errors": ["identity-version-mutable"],
+      "policy_changed": false
+    },
+    {
+      "class": "mutable-alias",
+      "version": "latest",
+      "prior_errors": ["identity-version-mutable"],
+      "accepted_errors": ["identity-version-mutable"],
+      "policy_changed": false
+    },
+    {
+      "class": "ascii-space",
       "version": " 1.2.3",
       "prior_errors": [],
-      "accepted_errors": ["identity-version-invalid-character"]
+      "accepted_errors": ["identity-version-invalid-character"],
+      "policy_changed": true
     },
     {
+      "class": "ascii-space",
       "version": "1.2.3 ",
       "prior_errors": [],
-      "accepted_errors": ["identity-version-invalid-character"]
+      "accepted_errors": ["identity-version-invalid-character"],
+      "policy_changed": true
     },
     {
-      "version": "1.2.3\n",
-      "prior_errors": [],
-      "accepted_errors": ["identity-version-invalid-character"]
-    },
-    {
+      "class": "ascii-space",
       "version": "1.2.3 rc",
       "prior_errors": [],
-      "accepted_errors": ["identity-version-invalid-character"]
+      "accepted_errors": ["identity-version-invalid-character"],
+      "policy_changed": true
+    },
+    {
+      "class": "ascii-control",
+      "version": "1.2.3\n",
+      "prior_errors": [],
+      "accepted_errors": ["identity-version-invalid-character"],
+      "policy_changed": true
+    },
+    {
+      "class": "non-ascii",
+      "version": "Straße",
+      "prior_errors": [],
+      "accepted_errors": ["identity-version-invalid-character"],
+      "policy_changed": true
     }
   ]
 }

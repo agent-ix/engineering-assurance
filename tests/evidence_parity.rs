@@ -4,6 +4,7 @@
 //! Additive-migration parity with the retained Python evidence classifier.
 
 use std::{
+    collections::BTreeSet,
     io::Write,
     process::{Command, Stdio},
 };
@@ -458,10 +459,15 @@ fn tc_103_version_identity_rejects_actual_mutability_without_rejecting_metadata(
         fixture["schema_version"],
         "engineering-assurance.evidence-version-policy/v1"
     );
+    let mut classes = BTreeSet::new();
     for case in fixture["cases"]
         .as_array()
         .expect("version-policy cases must be an array")
     {
+        let class = case["class"]
+            .as_str()
+            .expect("fixture class must be a string");
+        classes.insert(class);
         let version = case["version"]
             .as_str()
             .expect("fixture version must be a string");
@@ -473,13 +479,16 @@ fn tc_103_version_identity_rejects_actual_mutability_without_rejecting_metadata(
             .collect::<Vec<_>>();
         let prior_errors = case["prior_errors"]
             .as_array()
-            .expect("prior errors must be an array");
-        assert_ne!(
-            prior_errors,
-            case["accepted_errors"]
-                .as_array()
-                .expect("accepted errors must be an array"),
-            "fixture must record an actual policy correction for {version}"
+            .expect("prior errors must be an array")
+            .iter()
+            .map(|error| error.as_str().expect("fixture error must be a string"))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            prior_errors != accepted_errors,
+            case["policy_changed"]
+                .as_bool()
+                .expect("policy_changed must be a boolean"),
+            "policy-change marker disagrees for {version}"
         );
         assert_eq!(
             identity("producer", version).errors(),
@@ -487,6 +496,21 @@ fn tc_103_version_identity_rejects_actual_mutability_without_rejecting_metadata(
             "accepted version policy drifted for {version}"
         );
     }
+    assert_eq!(
+        classes,
+        BTreeSet::from([
+            "ascii-control",
+            "ascii-space",
+            "empty-token",
+            "immutable-exact",
+            "immutable-x-metadata",
+            "mutable-alias",
+            "non-ascii",
+            "range-operator",
+            "wildcard-component",
+        ]),
+        "version-policy fixture omitted or invented a governed input class"
+    );
 
     for version in ["1.x", "^1.2.3", "latest", "Straße", "1.2.3 beta"] {
         assert!(!identity("producer", version).errors().is_empty());

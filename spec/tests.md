@@ -11,7 +11,7 @@ type: TestMatrix
 This matrix records completed verification for the canonical assurance-onboarding
 and verification-semantics baseline and planned verification for the proposed
 Rust migration. TC-001..TC-095 have passing repository or retained real-agent
-evidence. TC-096..TC-128 are staged: completed slices are identified explicitly,
+evidence. TC-096..TC-129 are staged: completed slices are identified explicitly,
 while aggregate migration cases remain pending until every named capability is
 implemented and reviewed.
 
@@ -34,6 +34,11 @@ implemented and reviewed.
    interruption/resume, explicit acceptance, and explicit rejection.
 8. Every requirement-verifying Rust test uses the canonical ix-trace-rs import
    and bare trace attribute form that Quire reconciles.
+9. Requirement Acceptance Criteria use broad verification-method categories
+   such as `Test`, while this matrix's `Type` column names the concrete test
+   level or evidence form (`Unit`, `Integration`, `Property`, `Static`, and so
+   on). An AC's `Test` may therefore map to an `Integration` TC; the columns are
+   related at different levels of specificity rather than one shared vocabulary.
 
 ## Requirements Traceability
 
@@ -138,7 +143,7 @@ implemented and reviewed.
 | NFR-001 | Install, discovery, digest comparison, and static scan | TC-038 | ✅ Passing |
 | NFR-002 | Agent evaluation against fixture-authorized outcomes | TC-039 | ✅ Passing |
 | NFR-003 | Wheel/npm member audit plus compatibility invocation | TC-040 | ✅ Passing |
-| NFR-005 | Toolchain build, unsafe audit, executable-path audit, Quire reconciliation, performance, and hosted gates | TC-115..TC-118, TC-126, TC-127 | 🚧 Pending implementation |
+| NFR-005 | Toolchain build, unsafe audit, executable-path audit, Quire reconciliation, performance, hosted gates, and trace-population identity | TC-115..TC-118, TC-126..TC-129 | 🚧 Pending implementation |
 
 ### Constraint Coverage
 
@@ -299,6 +304,7 @@ implemented and reviewed.
 | TC-126 | Thirty-run same-runner old/new benchmarks stay within 10% for p95 latency and peak RSS in every named capability | Benchmark | P0 | NFR-005-AC-5 | 🚧 pending implementation |
 | TC-127 | Rust-migration pull requests require six named current-head hosted statuses, reject missing/failed/stale/manual substitutes, and run no real-agent or release operation | Integration | P0 | NFR-005-AC-6 | 🚧 pending implementation |
 | TC-128 | A new stable Rust release triggers the real compatibility matrix; only a reproduced required-tool incompatibility permits a bounded older-version hold | Integration | P0 | NFR-005-AC-7 | 🚧 pending implementation |
+| TC-129 | An index-derived, digest-bound Rust trace manifest classifies every tracked Rust blob, excludes gitlinks without traversal, and rejects unclassified roots/blobs or any population change before Quire reconciliation | Integration | P0 | NFR-005-AC-8 | 🚧 pending implementation |
 
 ## Option Permutation Matrix
 
@@ -362,6 +368,8 @@ evaluation envelopes.
 | NFR-005 regression | Above | more than 10% above retained p95 or RSS | TC-126 | Fail |
 | NFR-005 PR status | Exact | six named successful statuses bound to current pull-request head | TC-127 | Pass without real-agent or release execution |
 | NFR-005 PR status | Missing/failed/stale/manual | any required status absent, unsuccessful, bound to another revision, or replaced by an unbound manual claim | TC-127 | Withhold migration gate |
+| NFR-005 trace population | Exact | every tracked regular-file Rust blob classified; gitlinks not traversed; manifest/index digest unchanged | TC-129 | Reconcile included first-party population |
+| NFR-005 trace population | Drift/unclassified | new root or blob, changed index/manifest, traversed gitlink, or missing owner/reason | TC-129 | Refuse reconciliation |
 | FR-017 hosted action | Automatic PR event | real-agent evaluation, evidence-bearing release evaluation, publication, or release operation selected | TC-112, TC-127 | Refuse; those actions remain manual-only |
 
 ## State Transition Coverage
@@ -402,6 +410,7 @@ evaluation envelopes.
 | EC-019 | Consumer registry repeats one repository/path with conflicting or matching classifications | FR-015 | TC-122 | Population and owner disposition are double-counted or order-dependent |
 | EC-020 | Signal arrives after child start but before machine result completion | FR-014 | TC-121 | Partial JSON or orphan child survives |
 | EC-021 | Registry or accepted host-interface digest changes between parity and deletion | FR-018 | TC-125 | Evidence from different bytes authorizes removal |
+| EC-022 | A gitlink, vendored fixture, generated file, or newly added Rust root silently changes the traceability denominator | NFR-005 | TC-129 | Foreign or unclassified trace tags make completeness counts environment-dependent |
 
 ## Integration Test Matrix
 
