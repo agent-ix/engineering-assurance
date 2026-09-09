@@ -108,15 +108,15 @@ implemented and reviewed.
 | FR-007 | FR-007-AC-1 | TC-035 | ✅ Passing |
 | FR-007 | FR-007-AC-2 | TC-036 | ✅ Passing |
 | FR-007 | FR-007-AC-3 | TC-037 | ✅ Passing |
-| FR-014 | FR-014-AC-1 | TC-096 | 🚧 Pending implementation |
+| FR-014 | FR-014-AC-1 | TC-096 | ✅ Rust package foundation backed |
 | FR-014 | FR-014-AC-2 | TC-098 | 🚧 Compatibility-command slice backed; aggregate pending |
 | FR-014 | FR-014-AC-3 | TC-099 | 🚧 Compatibility-command slice backed; aggregate pending |
 | FR-014 | FR-014-AC-4 | TC-101 | 🚧 Pending implementation |
 | FR-014 | FR-014-AC-5 | TC-121 | 🚧 Compatibility size-limit slice backed; lifecycle cases pending |
-| FR-015 | FR-015-AC-1 | TC-100 | 🚧 Compatibility and evidence-classification slices backed; aggregate pending |
-| FR-015 | FR-015-AC-2 | TC-102 | 🚧 Evidence-availability slice backed; aggregate state families pending |
-| FR-015 | FR-015-AC-3 | TC-103 | 🚧 Evidence-validation slice backed; aggregate refusal families pending |
-| FR-015 | FR-015-AC-4 | TC-104 | 🚧 Pending implementation |
+| FR-015 | FR-015-AC-1 | TC-100 | 🚧 Compatibility, evidence, semantic-validation, report/PGM projection, and fixture-generation slices backed; aggregate pending |
+| FR-015 | FR-015-AC-2 | TC-102 | 🚧 Evidence-availability and semantic-reference state vocabularies backed; aggregate pending |
+| FR-015 | FR-015-AC-3 | TC-103 | 🚧 Evidence, semantic, and PGM refusal families backed; registry refusal families pending |
+| FR-015 | FR-015-AC-4 | TC-104 | 🚧 Semantic ownership and inert-fixture static slice backed; aggregate executable-language audit pending |
 | FR-015 | FR-015-AC-5 | TC-119 | 🚧 Pending implementation |
 | FR-015 | FR-015-AC-6 | TC-120 | 🚧 Pending implementation |
 | FR-015 | FR-015-AC-7 | TC-122 | 🚧 Pending implementation |
@@ -157,10 +157,10 @@ implemented and reviewed.
 | FR-012-CON-5 | TC-082 | ✅ Passing |
 | FR-014-CON-1 | TC-101 | 🚧 Pending implementation |
 | FR-014-CON-2 | TC-101 | 🚧 Pending implementation |
-| FR-014-CON-3 | TC-096 | 🚧 Pending implementation |
-| FR-015-CON-1 | TC-103 | 🚧 Pending implementation |
-| FR-015-CON-2 | TC-104 | 🚧 Pending implementation |
-| FR-015-CON-3 | TC-104 | 🚧 Pending implementation |
+| FR-014-CON-3 | TC-096 | ✅ Rust package foundation backed |
+| FR-015-CON-1 | TC-103 | 🚧 Read-only evidence and semantic/PGM slices backed; aggregate pending |
+| FR-015-CON-2 | TC-104 | 🚧 Inert generated-fixture slice backed; aggregate pending |
+| FR-015-CON-3 | TC-104 | 🚧 Semantic-contract slice backed; aggregate pending |
 | FR-016-CON-1 | TC-107 | 🚧 Pending implementation |
 | FR-016-CON-2 | TC-115 | 🚧 Pending owner disposition |
 | FR-016-CON-3 | TC-123 | 🚧 Pending accepted host interface |
@@ -271,15 +271,15 @@ implemented and reviewed.
 | TC-093 | All eight repositories appear exactly once in the Agent A/B/C allocation | Static | P0 | FR-013-AC-7 | ✅ |
 | TC-094 | The contract waits on matrix acceptance, changes no trigger, and makes no qualification claim | Unit | P0 | FR-013-AC-8, FR-013-CON-1, FR-013-CON-2, FR-013-CON-3 | ✅ |
 | TC-095 | A fully pinned toolchain does not open an unaccepted gate; any state but `accepted`, and any half-record missing a name or date, withholds | Unit | P0 | FR-012-AC-9 | ✅ |
-| TC-096 | Existing repository builds the named Rust library and CLI | Compile | P0 | StR-003-VC-1, FR-014-AC-1, FR-014-CON-3 | 🚧 pending implementation |
+| TC-096 | Existing repository builds the named Rust library and CLI | Compile | P0 | StR-003-VC-1, FR-014-AC-1, FR-014-CON-3 | ✅ Rust package foundation backed |
 | TC-097 | Every executable path and consumer has one current state and final disposition | Static | P0 | StR-003-VC-2, FR-018-AC-1 | 🚧 pending implementation |
 | TC-098 | Machine CLI output obeys the versioned stdout/stderr contract | Property | P0 | FR-014-AC-2 | 🚧 compatibility-command slice backed; aggregate pending |
 | TC-099 | Invalid protocol, input, root, host, and host response fail before side effects | Property | P0 | FR-014-AC-3 | 🚧 compatibility-command slice backed; aggregate pending |
-| TC-100 | For each ADR-002 compatibility/semantic/projection/fixture capability row, Rust agrees byte-for-byte with the accepted identity and report reference over the named corpus and focused adverse cases, including generated arbitrary-precision integer boundaries | Integration | P0 | StR-003-VC-3, FR-015-AC-1 | 🚧 compatibility and evidence-classification slices backed; aggregate pending |
+| TC-100 | For each ADR-002 compatibility/semantic/projection/fixture capability row, Rust agrees byte-for-byte with the accepted identity and report reference over the named corpus and focused adverse cases, including generated arbitrary-precision integer boundaries | Integration | P0 | StR-003-VC-3, FR-015-AC-1 | 🚧 compatibility, evidence, semantic validation, report/PGM projections, and fixture generation backed; aggregate pending |
 | TC-101 | Rust call surface owns no evidence persistence, stdout verdict parser, or reusable library I/O | Static | P0 | FR-014-AC-4, FR-014-CON-1, FR-014-CON-2 | 🚧 pending implementation |
-| TC-102 | Every successful and non-successful semantic state remains distinct; typed state spellings and exact-one untyped-label validation remain callable without string parsing | Integration | P0 | FR-015-AC-2 | 🚧 evidence-availability slice backed; aggregate pending |
-| TC-103 | Invalid semantic inputs, including non-finite/retained-domain-overflow numbers and invalid/mutable version tokens, fail read-only without an identity digest and preserve original bytes; independent fixture classes retain leading/trailing and interior ASCII space plus lowercase/uppercase immutable `x` metadata boundaries, and validity/error messages remain directly inspectable | Integration | P0 | FR-015-AC-3, FR-015-CON-1 | 🚧 evidence-validation slice backed; aggregate pending |
-| TC-104 | Contract ownership and inert foreign-language fixtures remain bounded | Static | P0 | FR-015-AC-4, FR-015-CON-2, FR-015-CON-3 | 🚧 pending implementation |
+| TC-102 | Every successful and non-successful semantic state remains distinct; typed state spellings and exact-one untyped-label validation remain callable without string parsing | Integration | P0 | FR-015-AC-2 | 🚧 evidence-availability and semantic-reference state vocabularies backed; aggregate pending |
+| TC-103 | Invalid semantic inputs, including non-finite/retained-domain-overflow numbers and invalid/mutable version tokens, fail read-only without an identity digest and preserve original bytes; independent fixture classes retain leading/trailing and interior ASCII space plus lowercase/uppercase immutable `x` metadata boundaries, and validity/error messages remain directly inspectable | Integration | P0 | FR-015-AC-3, FR-015-CON-1 | 🚧 evidence, semantic, and PGM refusals backed; registry refusals pending |
+| TC-104 | Contract ownership and inert foreign-language fixtures remain bounded | Static | P0 | FR-015-AC-4, FR-015-CON-2, FR-015-CON-3 | 🚧 semantic ownership and inert-fixture slice backed; aggregate audit pending |
 | TC-105 | Rust onboarding matches retained boundary and adverse-case behavior | Property | P0 | FR-016-AC-1 | 🚧 pending implementation |
 | TC-106 | Rust and retained invariant providers return the same ordered failure set | Property | P0 | FR-016-AC-2 | 🚧 pending implementation |
 | TC-107 | Rust coordination preserves ix-flow lifecycle and human gates | Integration | P0 | FR-016-AC-3, FR-016-CON-1 | 🚧 pending implementation |

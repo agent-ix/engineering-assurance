@@ -57,6 +57,7 @@ relationships:
 ### Shared dependencies
 
 - Canonical identity encoding, stable typed errors, accepted-corpus access, and result-version validation are single library deliverables reused by every later CLI command.
+- TASK-015 is the cross-cutting machine-exposure gate: pure library ports do not wait for future command lifecycle work, but no command is usable until TASK-015 applies the reviewed protocol, limits, and refusal behavior to it.
 - The assurance-contract registry and candidate snapshot are one population authority for Engineering Assurance and downstream contract/TL migrations; consumers must not recreate it locally.
 - ix-flow and cli-agent-evals structured interfaces remain separately owned external gates, not local shims.
 
@@ -99,8 +100,8 @@ Pure behavior lives in `src/` behind typed APIs. Filesystem, subprocess, environ
 ### Track A: Shared implementation (serial)
 
 - **A1 = TASK-014** Evidence availability and identity — Medium; exit: accepted and generated producer outputs preserve exact identity while invalid numeric inputs mint no digest.
-- **A2 = TASK-015** Versioned CLI boundary — Hard; exit: protocol, resource, subprocess, and interruption failures are bounded and side-effect-free.
-- **A3 = TASK-016** Semantic validation, projections, and fixtures — Hard; exit: every remaining pure ADR-002 capability matches its accepted corpus independently.
+- **A2 = TASK-016** Semantic validation, projections, and fixtures — Hard; exit: every remaining pure ADR-002 capability matches its accepted corpus independently.
+- **A3 = TASK-015** Versioned CLI boundary — Cross-cutting; exit: each exposed command's protocol, resource, subprocess, and interruption failures are bounded and side-effect-free.
 - **A4 = TASK-017** Assurance-contract registry — Hard; exit: one revision-bound population accounts for every active artifact and rejects ambiguity or mutation.
 - **A5 = TASK-018** Onboarding and invariant core — Hard; exit: host-independent discovery, onboarding, and ordered invariants match retained behavior.
 - **A6 = TASK-020** Evaluation and qualification core — Hard; exit: host-independent evaluation, package, rights, integration, and publication-refusal gates match retained behavior.
@@ -119,9 +120,10 @@ Pure behavior lives in `src/` behind typed APIs. Filesystem, subprocess, environ
 
 ```text
 Completed: TASK-012 -> TASK-013
-Critical:             TASK-014 -> 015 -> 016 -> 017 -> 018 -> 020
-External gates:                                      019 ----\
-                                                         021 -+-> 022 -> 023
+Critical:             TASK-014 -> 016 -> 017 -> 018 -> 020
+CLI exposure:                    015 ========================>
+External gates:                                019 ----\
+                                                   021 -+-> 022 -> 023
 ```
 
 The two host gates may advance in their owning repositories when their prerequisites exist, but Engineering Assurance modifies its shared package serially. Ecosystem follow-on work remains ordered as quire-research #59, then #61, then #63; this bundle does not authorize simultaneous downstream ports.
@@ -134,7 +136,7 @@ The two host gates may advance in their owning repositories when their prerequis
 | TASK-013 | Done | FR-015 | TC-100, TC-103 | done |
 | TASK-014 | A | FR-015, NFR-005 | TC-100, TC-102, TC-103, TC-117, TC-118 | in_progress |
 | TASK-015 | A | FR-014 | TC-098, TC-099, TC-101, TC-121 | in_progress |
-| TASK-016 | A | FR-015 | TC-100, TC-102, TC-103, TC-104 | not_started |
+| TASK-016 | A | FR-015 | TC-100, TC-102, TC-103, TC-104 | in_progress |
 | TASK-017 | A | FR-015 | TC-119, TC-120, TC-122 | not_started |
 | TASK-018 | A | FR-016 | TC-105, TC-106 | not_started |
 | TASK-019 | B | FR-016 | TC-107, TC-108, TC-123 | blocked |

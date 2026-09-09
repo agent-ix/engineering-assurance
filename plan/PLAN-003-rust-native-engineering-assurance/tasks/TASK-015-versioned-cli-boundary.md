@@ -40,3 +40,4 @@ Implement the machine-facing CLI protocol, filesystem/process boundary, size/dea
 ## Notes
 
 - This task introduces no evidence persistence and no universal producer runner.
+- This is a cross-cutting exposure gate, not a hard predecessor of pure library ports. Each later task may add its I/O-free library behavior after its own predecessor, but no machine-facing command is usable until this task applies and verifies the reviewed protocol for that command.
