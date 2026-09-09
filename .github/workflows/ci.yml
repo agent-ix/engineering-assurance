@@ -11,83 +11,16 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          token: ${{ secrets.CORPUS_TOKEN }}
-          submodules: recursive
-          persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: agent-ix/spec-artifacts-iso
-          token: ${{ secrets.CORPUS_TOKEN }}
           ref: 3d871962b66db99a1854f40466e94ebabc7a6115
           path: .deps/spec-artifacts-iso
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: agent-ix/ix-flow
-          token: ${{ secrets.CORPUS_TOKEN }}
           ref: 4befa70deff1cd38bf3a61624ca9835affd3d24b
           path: .deps/ix-flow
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: agent-ix/quire-contract-ir
-          token: ${{ secrets.CORPUS_TOKEN }}
-          ref: 690bde7f2dc58662cf9ff0595c2c0e3b17107c6f
-          fetch-depth: 0
-          path: .assurance-sources/quire-contract-ir
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: agent-ix/quire-contract-runtime
-          token: ${{ secrets.CORPUS_TOKEN }}
-          ref: 7caefac3b7181d7665caa8f83c6694134fac63ae
-          path: .assurance-sources/quire-contract-runtime
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: agent-ix/quire-contract-codegen
-          token: ${{ secrets.CORPUS_TOKEN }}
-          ref: 240fad84a9565ab723ba9844e18faea4e5d96f66
-          path: .assurance-sources/quire-contract-codegen
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: agent-ix/quire-analyze
-          token: ${{ secrets.CORPUS_TOKEN }}
-          ref: 5f37678928aea451447d1ee6d42deefb95cb2f5a
-          path: .assurance-sources/quire-analyze
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: agent-ix/tl-syntax
-          token: ${{ secrets.CORPUS_TOKEN }}
-          ref: 0105c94f93a1718417c26c169ac24ad6da14e239
-          path: .assurance-sources/tl-syntax
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: agent-ix/tl-parse
-          token: ${{ secrets.CORPUS_TOKEN }}
-          ref: 103e6fd1573fa87534efec206f5d3e3b9c3f9d82
-          path: .assurance-sources/tl-parse
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: agent-ix/tl-mltl
-          token: ${{ secrets.CORPUS_TOKEN }}
-          ref: b7c0dc2f737528a3a45acf66197d84a716549de1
-          path: .assurance-sources/tl-mltl
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: agent-ix/tl-rewrite
-          token: ${{ secrets.CORPUS_TOKEN }}
-          ref: 1ccab45dc64d5a344740256c5a91c2e10555decc
-          path: .assurance-sources/tl-rewrite
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: agent-ix/quire-code-rs
-          token: ${{ secrets.CORPUS_TOKEN }}
-          ref: e1b7fc303f3df3c9e3673358ce990525b7ff321e
-          path: .assurance-sources/quire-code-rs
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: agent-ix/quoin
-          token: ${{ secrets.CORPUS_TOKEN }}
-          ref: 9fb3aa258575d234274dcc7e639c17d7621e1db0
-          path: .assurance-sources/quoin
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: "3.12"
@@ -108,5 +41,4 @@ jobs:
           REQUIRE_IX_FLOW: "1"
           IX_FLOW_BIN: ${{ github.workspace }}/.deps/ix-flow/bin/ix-flow.js
           MODULE_MANIFEST_SCHEMA: ${{ github.workspace }}/.deps/spec-artifacts-iso/spec_artifacts_iso/module-manifest.schema.json
-          ASSURANCE_SOURCE_ROOT: ${{ github.workspace }}/.assurance-sources
       - run: make package-audit

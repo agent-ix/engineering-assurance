@@ -160,7 +160,6 @@ def test_repository_has_only_governed_review_evidence() -> None:
     assert {path.name for path in (ROOT / "plan").iterdir()} == {
         "PLAN-001-assurance-onboarding",
         "PLAN-002-verification-semantics",
-        "PLAN-003-rust-native-engineering-assurance",
     }
     assert {path.name for path in (ROOT / "docs").iterdir()} == {
         "compatibility-matrix.md",

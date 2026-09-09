@@ -19,14 +19,13 @@ relationships:
 
 ## Description
 
-Engineering Assurance SHALL perform agent-evaluation planning, result
+Engineering Assurance SHALL port its agent-evaluation planning, result
 validation, aggregation, package staging, publication refusal, content-rights
-checking, manifest validation, and release-gate assertions through the Rust
-library and CLI.
+checking, manifest validation, and qualification assertions to Rust.
 
 ## Inputs
 
-- The canonical agent-evaluation scenarios and supported-host set.
+- Canonical agent-evaluation scenarios and supported hosts.
 - Versioned cli-agent-evals results and retained transcripts.
 - Package manifests, staged archives, rights policy, and integration evidence.
 
@@ -34,54 +33,45 @@ library and CLI.
 
 - Versioned per-run and aggregate evaluation results.
 - Deterministic qualification diagnostics and exit statuses.
-- Audited wheel/npm contents and an enforced public-registry refusal.
+- Audited package contents and enforced publication refusal.
 
 ## Behavior
 
-- Evaluation results SHALL retain the governing versions, commands, transcript
-  digests, effort, elapsed time, interaction counts, outcomes, and explicit
-  terminal events required by FR-006.
-- The aggregate gate SHALL fail when any required host-scenario cell is absent,
-  invalid, unavailable, or unsuccessful.
-- Package audits SHALL compare the complete staged member set against an
-  explicit allowlist and reject missing, extra, or escaping members.
-- Content-rights qualification SHALL inspect the complete tracked tree and every
-  staged package member.
-- Registry publication SHALL remain refused.
-- Pull-request qualification SHALL run automatically for a Rust-migration
-  candidate and SHALL bind every required result to the current pull-request
-  head revision.
-- Automatic pull-request qualification SHALL run only deterministic repository
-  checks; real-agent evaluation, evidence-bearing release evaluation, registry
-  publication, and release operations SHALL remain explicit manual actions.
+- Preserve the evaluation fields and explicit terminal events required by
+  FR-006.
+- Fail aggregation when a required host-scenario cell is absent, invalid,
+  unavailable, or unsuccessful.
+- Compare complete staged package membership with explicit allowlists and reject
+  missing, extra, or escaping members.
+- Inspect the complete selected tree and staged members for content rights.
+- Keep publication refused.
+- Keep package-manager and host configuration declarative; first-party semantic
+  assertions live in Rust.
 
 ## Error Conditions
 
-A missing host executable, incomplete scenario cell, invalid result contract,
-revision mismatch, changed governing file, unexpected package member, content
-rights denial, and attempted publication each fail the corresponding gate.
+Missing hosts, incomplete scenarios, invalid results, revision mismatches,
+changed governing files, unexpected package members, rights denials, and
+attempted publication fail their corresponding local gate.
 
 ## Constraints
 
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
 | FR-017-CON-1 | The Rust evaluator SHALL NOT infer a human terminal decision. | Responsibility | Test |
-| FR-017-CON-2 | Package-manager and CI configuration SHALL contain no first-party semantic assertion. | Architecture | Test |
-| FR-017-CON-3 | An automatic pull-request workflow SHALL NOT invoke real-agent evaluation, evidence-bearing release evaluation, registry publication, or a release operation. | Operational | Test |
-| FR-017-CON-4 | Host-bound implementation SHALL NOT begin until the cli-agent-evals owner accepts an exact structured-suite artifact identity, version, revision, and compatibility gate. | Dependency | Review |
+| FR-017-CON-2 | Package-manager and host configuration SHALL contain no first-party semantic assertion. | Architecture | Test |
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-017-AC-1 | The Rust evaluation path completes all 28 required host-scenario cells and produces results equivalent to the retained reference for success and every declared failure. | E2E (TC-109) |
-| FR-017-AC-2 | Missing, malformed, unavailable, stale-revision, changed-governing-file, and incomplete evaluation inputs each withhold the aggregate gate. | Property (TC-110) |
-| FR-017-AC-3 | Rust package, rights, manifest, integration, and publication-refusal gates match the retained pass/fail corpus and reject extra, missing, or escaping package members. | Property (TC-111) |
-| FR-017-AC-4 | Static inspection finds only declarative dispatch in package-manager and CI configuration, confirms that deterministic qualification runs on pull requests, and proves that real-agent evaluation, evidence-bearing release evaluation, publication, and release operations remain manual-only (CON-2, CON-3). | Test (TC-112) |
-| FR-017-AC-5 | The configured cli-agent-evals suite interface matches the accepted artifact identity, version, revision, and digest; an absent, stale, foreign, or unaccepted interface blocks host-bound work. | Integration (TC-124) |
+| FR-017-AC-1 | The Rust evaluation path completes all required host-scenario cells and matches retained success and declared failure behavior. | E2E (TC-109) |
+| FR-017-AC-2 | Missing, malformed, unavailable, stale-revision, changed-governing-file, and incomplete evaluation inputs withhold aggregation. | Property (TC-110) |
+| FR-017-AC-3 | Rust package, rights, manifest, integration, and publication-refusal checks match the retained pass/fail corpus and reject extra, missing, or escaping package members. | Property (TC-111) |
+| FR-017-AC-4 | Static inspection finds only declarative dispatch in package-manager and host configuration; qualification is performed locally and real-agent evaluation, publication, and release operations remain explicit manual actions. | Test (TC-112) |
 
 ## Dependencies
 
-- **Upstream**: FR-006, FR-014, FR-015, and a reviewed cli-agent-evals
-  structured external-suite interface.
-- **Downstream**: FR-018 requires these qualification gates before removal.
+- **Upstream**: FR-006, FR-014, FR-015, and a cli-agent-evals interface
+  supported by that host's owner.
+- **Downstream**: FR-018 requires these checks before old implementations are removed.

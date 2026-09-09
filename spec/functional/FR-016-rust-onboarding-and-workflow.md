@@ -38,42 +38,38 @@ Rust library and CLI.
 
 ## Behavior
 
-- Onboarding SHALL retain the inventory-before-proposal behavior in FR-001.
-- Workflow coordination SHALL delegate run state, transitions, and terminal
-  decision history to ix-flow.
-- The invariant provider SHALL return all applicable invariant failures in
-  deterministic order.
-- The provider SHALL reject an unknown workflow, phase, or protocol version.
-- Missing human input SHALL leave a decision-ready run non-terminal.
-- The pilot path SHALL remain a compatibility alias until the canonical Rust
-  path passes at the same candidate revision.
+- Preserve FR-001 inventory-before-proposal behavior.
+- Delegate run state, transitions, and terminal decision history to ix-flow.
+- Return all applicable invariant failures in deterministic order.
+- Reject unknown workflow, phase, or protocol versions.
+- Leave a decision-ready run non-terminal when human input is absent.
+- Retain the pilot path only as a temporary compatibility alias until the
+  canonical Rust path passes locally at the same candidate revision.
 
 ## Error Conditions
 
-An unavailable Quire or ix-flow executable, malformed host response, run-binding
-mismatch, invalid transition, automatic terminal decision, and escaping artifact
-target each fail closed without overwriting source artifacts or run history.
+Unavailable Quire or ix-flow tools, malformed host responses, run-binding
+mismatches, invalid transitions, automatic terminal decisions, and escaping
+artifact targets fail closed without overwriting artifacts or run history.
 
 ## Constraints
 
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
 | FR-016-CON-1 | Engineering Assurance SHALL NOT reimplement ix-flow run state or human-gate mechanics. | Responsibility | Test |
-| FR-016-CON-2 | A foreign-language host bridge SHALL require an explicit owner disposition before inclusion. | Architecture | Review |
-| FR-016-CON-3 | Host-bound implementation SHALL NOT begin until the ix-flow owner accepts an exact structured-provider artifact identity, version, revision, and compatibility gate. | Dependency | Review |
+| FR-016-CON-2 | A foreign-language host bridge requires an explicit owner disposition before inclusion. | Architecture | Review |
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-016-AC-1 | Rust onboarding matches the retained behavior for existing, absent, conflicting, malformed, unavailable, and escaping-boundary inputs. | Property (TC-105) |
-| FR-016-AC-2 | Every canonical workflow-invariant fixture produces the same complete ordered failure set through the Rust provider and the retained JavaScript reference. | Property (TC-106) |
+| FR-016-AC-1 | Rust onboarding matches retained behavior for existing, absent, conflicting, malformed, unavailable, and escaping-boundary inputs. | Property (TC-105) |
+| FR-016-AC-2 | Every canonical workflow-invariant fixture produces the same complete ordered failure set through Rust and the retained reference. | Property (TC-106) |
 | FR-016-AC-3 | Interruption, resume, acceptance, rejection, missing choice, invalid transition, and run-binding mismatch preserve ix-flow state and human-gate behavior. | Integration (TC-107) |
-| FR-016-AC-4 | The canonical and pilot workflow invocations pass through the Rust provider before either legacy JavaScript path is removed. | Integration (TC-108) |
-| FR-016-AC-5 | The configured ix-flow host interface matches the accepted artifact identity, version, revision, and digest; an absent, stale, foreign, or unaccepted interface blocks host-bound work. | Integration (TC-123) |
+| FR-016-AC-4 | Canonical and pilot invocations pass through Rust before either legacy JavaScript path is removed. | Integration (TC-108) |
 
 ## Dependencies
 
-- **Upstream**: FR-001 through FR-005, FR-014, FR-015, and a reviewed ix-flow
-  structured external-invariant-provider interface.
+- **Upstream**: FR-001 through FR-005, FR-014, FR-015, and an ix-flow interface
+  supported by the ix-flow owner.
 - **Downstream**: FR-018 governs removal of the old paths.

@@ -38,7 +38,7 @@ version policy through an immutable fixture with canonical ix-trace-rs tags.
 | `make test` | pass; 188 tests, content rights, and manifest validation |
 | `make package-audit` | pass |
 | `make validate-docs` | pass with inherited duplicate-provider diagnostics |
-| `make integration-traceability` | expected withheld state: 207/262 until later PLAN-003 tasks; no completion claim |
+| `make integration-traceability` | expected withheld state for the incomplete repository-wide port; no completion claim |
 
 ## Review disposition
 

@@ -11,15 +11,13 @@ EVAL_AGGREGATE_REPORT ?=
 PYTHON ?= python3
 QUIRE ?= quire
 CARGO ?= cargo
-GIT_COMMON_DIR := $(shell git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
-ASSURANCE_SOURCE_ROOT ?= $(if $(GIT_COMMON_DIR),$(abspath $(GIT_COMMON_DIR)/../..))
 
 lint:
 	$(PYTHON) -m ruff check .
 
 test:
 	$(PYTHON) scripts/check_content_rights.py --tree
-	ASSURANCE_SOURCE_ROOT="$(ASSURANCE_SOURCE_ROOT)" $(PYTHON) -m pytest
+	$(PYTHON) -m pytest
 	$(PYTHON) scripts/validate_manifest.py
 
 package-audit:

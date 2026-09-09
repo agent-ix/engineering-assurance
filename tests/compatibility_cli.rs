@@ -8,7 +8,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use engineering_assurance::compatibility::{MAX_REQUEST_BYTES, REQUEST_PROTOCOL, RESULT_PROTOCOL};
+use engineering_assurance::compatibility::{REQUEST_PROTOCOL, RESULT_PROTOCOL};
 use ix_trace_rs::trace;
 
 fn run(request: &serde_json::Value) -> std::process::Output {
@@ -108,41 +108,4 @@ fn tc_099_malformed_and_extended_requests_fail_as_structured_errors() {
         assert_eq!(result["protocol"], "engineering-assurance.error/v1");
         assert_eq!(result["code"], "invalid_compatibility_request");
     }
-}
-
-#[trace("TC-121", "FR-014-AC-5")]
-#[test]
-fn tc_121_request_limit_accepts_the_boundary_and_refuses_one_byte_more() {
-    let mut at_limit = serde_json::to_vec(&exact_request()).expect("test request must serialize");
-    at_limit.resize(MAX_REQUEST_BYTES, b' ');
-    let accepted = run_bytes(&at_limit);
-    assert!(accepted.status.success());
-    assert!(accepted.stderr.is_empty());
-    let result: serde_json::Value =
-        serde_json::from_slice(&accepted.stdout).expect("boundary result must be JSON");
-    assert_eq!(result["protocol"], RESULT_PROTOCOL);
-
-    at_limit.push(b' ');
-    let refused = run_bytes(&at_limit);
-    assert_eq!(refused.status.code(), Some(2));
-    assert!(!refused.stderr.is_empty());
-    let error: serde_json::Value =
-        serde_json::from_slice(&refused.stdout).expect("limit error must be JSON");
-    assert_eq!(error["code"], "compatibility_request_too_large");
-}
-
-#[trace("TC-121", "FR-014-AC-5")]
-#[test]
-fn tc_121_large_unknown_protocol_has_a_bounded_complete_error() {
-    let request = serde_json::json!({
-        "protocol": "x".repeat(1_000_000),
-        "observed": []
-    });
-    let output = run(&request);
-    assert_eq!(output.status.code(), Some(2));
-    assert!(output.stdout.len() < 8_192);
-    assert!(output.stderr.len() <= 4_097);
-    assert_eq!(output.stdout.last(), Some(&b'\n'));
-    serde_json::from_slice::<serde_json::Value>(&output.stdout)
-        .expect("bounded error must remain complete JSON");
 }

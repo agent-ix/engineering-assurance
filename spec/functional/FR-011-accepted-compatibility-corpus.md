@@ -73,9 +73,6 @@ Each constructed case SHALL record the exact edit that produced it.
 - Reading the corpus SHALL change no byte of it, execute no producer, and
   contact no repository.
 - The gate SHALL refuse an uninitialized corpus rather than skipping it.
-- Corpus reproduction SHALL require an explicit source population.
-- Corpus reproduction SHALL fail when the declaration or any recorded source
-  checkout is unavailable.
 - The checked-out corpus SHALL equal the gitlink recorded in this repository.
 
 ## Error Conditions
@@ -108,7 +105,7 @@ reports a count in place of the failing case.
 | FR-011-AC-6 | The retained receipt validates against Quoin's packaged schema and binds the exact record, attestation, and retained-output digests of the chain, whose tools are pinned and whose unreleased side is stated. | Test (TC-074) |
 | FR-011-AC-7 | Every producer case names a real producer, a source path, and one shared-model concept, spanning at least two languages and four concepts, including the governed `quire-code-rs` case at a pinned revision. | Test (TC-075) |
 | FR-011-AC-8 | Reading and mapping the whole corpus changes no byte, no artifact is executable, and the reader reaches for no subprocess, socket, or write (CON-1, CON-4). | Test (TC-076) |
-| FR-011-AC-9 | Given the explicit `ASSURANCE_SOURCE_ROOT` population, the committed corpus reproduces from its recorded immutable source revisions; a missing declaration, checkout, or recorded revision fails rather than skipping. | Test (TC-077) |
+| FR-011-AC-9 | The committed corpus reproduces from its recorded sources where those sources are checked out, and states plainly when it is skipped. | Test (TC-077) |
 | FR-011-AC-10 | The corpus is tracked as a gitlink, the checked-out commit equals the recorded pin, and an uninitialized corpus fails rather than passing quietly. | Test (TC-078) |
 
 ## Dependencies

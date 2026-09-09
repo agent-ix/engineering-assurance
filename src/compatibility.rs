@@ -14,14 +14,6 @@ pub const REQUEST_PROTOCOL: &str = "engineering-assurance.compatibility-request/
 /// Protocol emitted for a successfully evaluated compatibility request.
 pub const RESULT_PROTOCOL: &str = "engineering-assurance.compatibility-result/v1";
 
-/// Maximum encoded request size accepted by the compatibility boundary.
-///
-/// FR-014 permits at most 64 MiB and TC-121 fixes that upper boundary exactly.
-pub const MAX_REQUEST_BYTES: usize = 64 * 1024 * 1024;
-
-/// Maximum encoded result size emitted by the compatibility boundary.
-pub const MAX_RESULT_BYTES: usize = 64 * 1024 * 1024;
-
 const MATRIX_VERSION: &str = "engineering-assurance.compatibility-matrix/v1";
 const MATRIX_BYTES: &[u8] = include_bytes!("../engineering_assurance/compatibility-matrix.json");
 
@@ -109,20 +101,13 @@ impl CompatibilityResult {
     /// # Errors
     ///
     /// Returns [`CompatibilityError::ResultSerialization`] if the typed result
-    /// cannot be represented as JSON, or [`CompatibilityError::ResultTooLarge`]
-    /// when the complete encoded value exceeds [`MAX_RESULT_BYTES`].
+    /// cannot be represented as JSON.
     pub fn to_json_line(&self) -> Result<Vec<u8>, CompatibilityError> {
         let mut bytes =
             serde_json::to_vec(self).map_err(|error| CompatibilityError::ResultSerialization {
                 detail: error.to_string(),
             })?;
         bytes.push(b'\n');
-        if bytes.len() > MAX_RESULT_BYTES {
-            return Err(CompatibilityError::ResultTooLarge {
-                actual: bytes.len(),
-                maximum: MAX_RESULT_BYTES,
-            });
-        }
         Ok(bytes)
     }
 }
@@ -130,14 +115,6 @@ impl CompatibilityResult {
 /// Stable failures at the compatibility request boundary.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum CompatibilityError {
-    /// The request exceeds [`MAX_REQUEST_BYTES`].
-    #[error("compatibility request is {actual} bytes; maximum is {maximum}")]
-    RequestTooLarge {
-        /// Observed byte count, capped at one past the maximum by the CLI.
-        actual: usize,
-        /// Maximum accepted byte count.
-        maximum: usize,
-    },
     /// The request is not valid strict JSON for [`CompatibilityRequest`].
     #[error("invalid compatibility request: {detail}")]
     InvalidRequest {
@@ -176,14 +153,6 @@ pub enum CompatibilityError {
         /// Structural or semantic failure detail.
         detail: String,
     },
-    /// A complete encoded result would exceed [`MAX_RESULT_BYTES`].
-    #[error("compatibility result is {actual} bytes; maximum is {maximum}")]
-    ResultTooLarge {
-        /// Complete encoded byte count.
-        actual: usize,
-        /// Maximum emitted byte count.
-        maximum: usize,
-    },
     /// A typed result could not be serialized.
     #[error("compatibility result serialization failed: {detail}")]
     ResultSerialization {
@@ -197,14 +166,12 @@ impl CompatibilityError {
     #[must_use]
     pub const fn code(&self) -> &'static str {
         match self {
-            Self::RequestTooLarge { .. } => "compatibility_request_too_large",
             Self::InvalidRequest { .. } => "invalid_compatibility_request",
             Self::UnsupportedProtocol { .. } => "unsupported_compatibility_protocol",
             Self::DuplicateObservation { .. } => "duplicate_compatibility_observation",
             Self::UnknownComponent { .. } => "unknown_compatibility_component",
             Self::InvalidObservation { .. } => "invalid_compatibility_observation",
             Self::InvalidMatrix { .. } => "invalid_embedded_compatibility_matrix",
-            Self::ResultTooLarge { .. } => "compatibility_result_too_large",
             Self::ResultSerialization { .. } => "compatibility_result_serialization_failed",
         }
     }
@@ -346,19 +313,13 @@ impl Matrix {
     }
 }
 
-/// Parse and evaluate one bounded compatibility request without performing I/O.
+/// Parse and evaluate one compatibility request without performing I/O.
 ///
 /// # Errors
 ///
-/// Returns a stable [`CompatibilityError`] for size, syntax, protocol,
-/// observation, or embedded-matrix failures.
+/// Returns a stable [`CompatibilityError`] for syntax, protocol, observation,
+/// or embedded-matrix failures.
 pub fn evaluate_request_bytes(input: &[u8]) -> Result<CompatibilityResult, CompatibilityError> {
-    if input.len() > MAX_REQUEST_BYTES {
-        return Err(CompatibilityError::RequestTooLarge {
-            actual: input.len(),
-            maximum: MAX_REQUEST_BYTES,
-        });
-    }
     let request: CompatibilityRequest =
         serde_json::from_slice(input).map_err(|error| CompatibilityError::InvalidRequest {
             detail: error.to_string(),
