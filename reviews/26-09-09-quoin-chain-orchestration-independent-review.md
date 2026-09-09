@@ -108,9 +108,9 @@ absence will be resolved by whatever the first implementation happens to do.
 ### FND-003 — two gates stood down in the reported evidence
 
 `make test` on this tree reports 186 passed / 2 skipped from a worktree and 188
-passed / 0 skipped from `/home/peter/dev/engineering-assurance`. The two tests
-locate the campaign repositories at `REPO_ROOT.parent`, and a worktree under
-`/home/peter/dev/worktrees/` has no such siblings.
+passed / 0 skipped from the primary repository checkout. The two tests locate
+the campaign repositories at `REPO_ROOT.parent`, and the linked-worktree parent
+directory has no such siblings.
 
 Nothing here is wrong with #30 — the tree passes when the gates run. The finding
 is that "186 passed, 2 skipped" in the PR body reads as a clean run and is
