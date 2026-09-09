@@ -22,7 +22,7 @@ interior-space fixture classes.
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
-| FND-108 | low | No blocking Rust finding remains. The ordered set is deterministic, every fixture field is validated before comparison, and deleting either newly governed class fails the Rust test as intended. | `tests/evidence_parity.rs`; FR-015-AC-3; TC-103 |
+| FND-111 | low | No blocking Rust finding remains. The ordered set is deterministic, every fixture field is validated before comparison, and deleting either newly governed class fails the Rust test as intended. | `tests/evidence_parity.rs`; FR-015-AC-3; TC-103 |
 
 ## Gate results
 
