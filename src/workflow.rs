@@ -286,7 +286,7 @@ pub struct WorkflowSnapshot {
 }
 
 /// One attributed terminal decision recovered from ix-flow history.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct DecisionEvent {
     /// Stable run identifier.

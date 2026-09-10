@@ -10,6 +10,7 @@
 #![forbid(unsafe_code)]
 
 pub mod compatibility;
+pub mod evaluation;
 pub mod evidence;
 pub mod onboarding;
 pub mod semantics;
