@@ -41,6 +41,14 @@ then update this repository's direct invocation and remove the old path.
   candidate revision.
 - Update direct Engineering Assurance invocations and supported host
   configuration before deleting the replaced path.
+- For the content-rights tree capability, compare the retained Python and Rust
+  gates at one candidate revision over the same Git-selected population and
+  record identical accepted/refused status plus exact path, line, and category
+  tuples before changing the direct `make test` invocation.
+- Keep the content-rights checker and its tests recoverable while proving that
+  reverting the dispatch cutover restores the retained invocation. Remove the
+  checker, its Python tests, and their temporary Rust policy exemptions only
+  after the Rust dispatch passes independently.
 - Preserve historical corpus and evidence bytes.
 - Return changed interfaces or compatibility promises to specification before
   implementation continues.

@@ -30,6 +30,8 @@ checking, manifest validation, and qualification assertions to Rust.
 - Package manifests, staged archives, rights policy, and integration evidence.
 - For the npm package-lifecycle adapter, one explicit repository root and one
   closed operation: `stage`, `clean`, or `refuse-publication`.
+- For the content-rights tree adapter, one explicit repository root and the
+  optional newline-delimited `ASSURANCE_PROTECTED_TOKENS` environment value.
 - For the pure package-membership boundary, one explicit expected-member
   allowlist and one observed file-member sequence supplied by an archive or
   staging adapter.
@@ -53,6 +55,9 @@ checking, manifest validation, and qualification assertions to Rust.
 - Audited package contents and enforced publication refusal.
 - One `engineering-assurance.package-lifecycle-result/v1` result identifying
   the requested operation and its closed outcome.
+- One `engineering-assurance.content-rights-tree-result/v1` result containing
+  the accepted/withheld outcome, inspected regular-file and symbolic-link
+  count, and deterministic typed findings from the pure classifier.
 - The pure aggregation boundary emits one
   `engineering-assurance.evaluation-aggregate-result/v1` value containing the
   pass decision, required-cell count, complete-cell count, and a deterministic
@@ -140,6 +145,47 @@ checking, manifest validation, and qualification assertions to Rust.
   vertical tab, form feed, file/group/record separators, NEL, Unicode line
   separator, and Unicode paragraph separator as line boundaries, matching the
   retained classifier.
+- The content-rights tree adapter SHALL accept only an explicit existing
+  non-symbolic-link repository root whose canonical path equals the Git
+  worktree top level reported for that root.
+- The content-rights tree adapter SHALL invoke `git` directly without a shell
+  and SHALL select exactly the NUL-delimited population returned by `git
+  ls-files -z --cached --others --exclude-standard` at that root.
+- The content-rights tree adapter SHALL ignore selected directories, including
+  gitlink roots, and SHALL inspect every selected regular file and symbolic
+  link; a missing or special entry SHALL fail closed rather than silently
+  reducing the population.
+- The content-rights tree adapter SHALL reject an unavailable, timed-out, or
+  unsuccessful Git process, malformed or non-UTF-8 Git output, duplicate
+  selected paths, more than 65,536 selected entries, a selected path longer
+  than 4,096 bytes, a regular file larger than 8,388,608 bytes, or more than
+  67,108,864 inspected regular-file bytes.
+- The content-rights tree adapter SHALL limit each Git response stream to
+  8,388,608 bytes.
+- The content-rights tree adapter SHALL terminate each Git command within 60
+  seconds.
+- When a resource limit is exceeded, the content-rights tree adapter SHALL
+  return no tree result without reading a path outside the selected root.
+- `ASSURANCE_PROTECTED_TOKENS` SHALL be read only by the binary adapter. The
+  adapter SHALL reject a non-UTF-8 value, more than 65,536 encoded bytes, more
+  than 256 nonblank newline-delimited tokens, or a token longer than 4,096
+  bytes before inspecting repository content.
+- The tree result SHALL sort and deduplicate findings by safe path, line, and
+  closed category; an invalid path finding SHALL carry no path, and no result
+  or diagnostic SHALL contain source text or a protected-token value.
+- A direct content-rights tree invocation SHALL emit exactly one versioned JSON
+  result on stdout, return status zero only for an accepted tree, return status
+  one for a well-formed withheld result, and reserve status two for a typed
+  adapter or rendering failure.
+- The repository test dispatch SHALL invoke the Rust content-rights tree
+  command declaratively. Until the Rust and retained paths agree at the same
+  candidate revision on the complete repository and the governed positive,
+  negative, Git-population, environment, path, file-kind, and resource cases,
+  the repository SHALL retain the Python tree checker and its Python tests.
+- When that correspondence and a reversible dispatch cutover are recorded, the
+  repository SHALL remove the retained Python checker, its Python tests, and
+  their temporary semantic-policy exemptions together without changing the
+  inert corpus or historical evidence bytes.
 - Compare complete staged package membership with explicit allowlists and reject
   missing, extra, or escaping members.
 - The npm staging adapter SHALL copy only `manifest.yaml`,
@@ -269,6 +315,11 @@ non-corresponding npm staging members refuse the package-lifecycle operation.
 A preflight-refused staging or cleanup operation reports no successful outcome
 and deletes no pre-existing destination.
 An npm-hook invocation that writes to stdout fails package-manager integration.
+An invalid repository root, unavailable or invalid Git response, unstable or
+unsupported selected entry, invalid protected-token population, or exceeded
+tree resource ceiling refuses the content-rights tree operation without a
+success result. A classified content-rights finding returns a well-formed
+withheld result rather than an adapter error.
 
 ## Constraints
 
