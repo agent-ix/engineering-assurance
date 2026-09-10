@@ -28,6 +28,9 @@ checking, manifest validation, and qualification assertions to Rust.
 - Canonical agent-evaluation scenarios and supported hosts.
 - Versioned cli-agent-evals results and retained transcripts.
 - Package manifests, staged archives, rights policy, and integration evidence.
+- For the pure package-membership boundary, one explicit expected-member
+  allowlist and one observed file-member sequence supplied by an archive or
+  staging adapter.
 - For the pure aggregation boundary, one
   `engineering-assurance.evaluation-aggregate-request/v1` document containing
   evaluation envelopes for the closed host and scenario populations. Each
@@ -53,6 +56,11 @@ checking, manifest validation, and qualification assertions to Rust.
   finding category. An unsafe path finding carries no path value. A finding
   never returns the rejected unsafe path, matched source text, or a protected
   token.
+- The pure package-membership boundary emits one accepted/withheld result and
+  a deterministic list of typed findings. A finding is one of
+  `actual_path_invalid`, `actual_path_duplicate`, `unexpected_member`, or
+  `missing_member`; only a lexically safe normalized path may appear in a
+  finding. An invalid observed path carries no path value.
 
 ## Behavior
 
@@ -122,6 +130,30 @@ checking, manifest validation, and qualification assertions to Rust.
   retained classifier.
 - Compare complete staged package membership with explicit allowlists and reject
   missing, extra, or escaping members.
+- When package membership is classified, the Rust policy SHALL reject an expected
+  allowlist containing an empty, duplicate, absolute, backslash-delimited,
+  trailing-slash, empty-segment, dot-segment, parent-traversing,
+  control-character, non-normalized, or greater-than-4,096-byte path.
+- The Rust membership classifier SHALL withhold acceptance for every observed
+  invalid path, duplicate safe path, unexpected safe member, or missing
+  expected member.
+- The Rust membership classifier SHALL compare safe member names as exact,
+  case-sensitive strings without decoding archive-specific escaping.
+- The Rust membership classifier SHALL order invalid-path findings first,
+  followed by duplicate, unexpected, and missing findings.
+- The Rust membership classifier SHALL order path-bearing findings lexically
+  within each category.
+- The Rust membership classifier SHALL return an identical result for
+  equivalent input permutations.
+- The pure membership boundary SHALL reject an expected or observed population
+  larger than 65,536 entries before building comparison state.
+- The pure membership boundary SHALL return a typed error and no membership
+  result for an expected-policy or resource-limit refusal.
+- The pure membership boundary SHALL accept caller-supplied member names.
+- The pure membership boundary SHALL NOT select a wheel, npm, Cargo, or other
+  distribution format. Archive decoding,
+  member-kind validation, package construction, installation, and filesystem
+  traversal remain responsibilities of later binary adapters.
 - Inspect the complete selected tree and staged members for content rights.
 - Keep publication refused.
 - Keep package-manager and host configuration declarative; first-party semantic
@@ -132,6 +164,9 @@ checking, manifest validation, and qualification assertions to Rust.
 Missing hosts, incomplete scenarios, invalid results, revision mismatches,
 changed governing files, unexpected package members, rights denials, and
 attempted publication fail their corresponding local gate.
+An invalid or duplicate expected package path and an over-limit member
+population refuse the pure package-membership request. Invalid, duplicate,
+unexpected, and missing observed membership withhold package acceptance.
 
 ## Constraints
 
@@ -150,6 +185,7 @@ attempted publication fail their corresponding local gate.
 | FR-017-AC-3 | Rust package, rights, manifest, integration, and publication-refusal checks match the retained pass/fail corpus and reject extra, missing, or escaping package members. | Property (TC-111) |
 | FR-017-AC-4 | Static inspection finds only declarative dispatch in package-manager and host configuration; qualification is performed locally and real-agent evaluation, publication, and release operations remain explicit manual actions. | Test (TC-112) |
 | FR-017-AC-5 | The pure Rust content-rights classifier matches every retained finding class and exception, rejects unsafe paths without echoing them, preserves Unicode protected-token matching, emits no matched content, and returns deterministic typed findings without filesystem, environment, child-program, network, or clock access. | Property (TC-119) |
+| FR-017-AC-6 | For every caller-supplied expected allowlist and observed file-member sequence within the declared ceilings, the pure Rust membership classifier matches retained extra/missing behavior on the shared safe unique domain, additionally rejects unsafe or duplicate membership without disclosing unsafe paths, remains permutation-invariant, and performs no filesystem, environment, child-program, network, clock, archive-decoding, or package-format selection. | Property (TC-120) |
 
 ## Dependencies
 
@@ -164,3 +200,7 @@ attempted publication fail their corresponding local gate.
   slice. It does not enumerate a repository, replace the tree adapter, select a
   package format, satisfy the combined FR-017-AC-3 gate, or permit removal under
   FR-018.
+- **Sequence**: FR-017-AC-6 is an independently reviewable format-neutral
+  membership slice. It does not parse an archive, validate member kinds, build
+  or install a package, select the Rust CLI distribution format, satisfy the
+  combined FR-017-AC-3 gate, or permit removal under FR-018.

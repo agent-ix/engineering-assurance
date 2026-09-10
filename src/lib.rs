@@ -14,6 +14,7 @@ pub mod content_rights;
 pub mod evaluation;
 pub mod evidence;
 pub mod onboarding;
+pub mod package_membership;
 pub mod semantics;
 pub mod workflow;
 pub mod workflow_invariants;

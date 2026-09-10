@@ -11,7 +11,7 @@ type: TestMatrix
 This matrix records completed verification for the canonical assurance-onboarding
 and verification-semantics baseline and planned verification for the proposed
 Rust port. TC-001..TC-095 have passing repository or retained real-agent
-evidence. TC-096..TC-118 are staged: completed slices are identified explicitly,
+evidence. TC-096..TC-120 are staged: completed slices are identified explicitly,
 while aggregate port cases remain pending until every named capability is
 implemented and reviewed.
 
@@ -122,8 +122,9 @@ implemented and reviewed.
 | FR-016 | FR-016-AC-4 | TC-108 | 🚧 Pending implementation |
 | FR-017 | FR-017-AC-1 | TC-109 | 🚧 Pending implementation |
 | FR-017 | FR-017-AC-2 | TC-110 | 🚧 Pending implementation |
-| FR-017 | FR-017-AC-3 | TC-111 | 🚧 Pending implementation |
+| FR-017 | FR-017-AC-3 | TC-111 | 🚧 Membership and content-rights slices backed; manifest, integration, package-adapter, and publication-refusal work pending |
 | FR-017 | FR-017-AC-4 | TC-112 | 🚧 Pending implementation |
+| FR-017 | FR-017-AC-6 | TC-120 | ✅ Typed Rust policy, retained-Python differential, adverse boundaries, ordering, resource ceilings, and mutation probes passing |
 | FR-018 | FR-018-AC-1 | TC-097 | 🚧 Pending implementation |
 | FR-018 | FR-018-AC-2 | TC-113 | 🚧 Pending implementation |
 | FR-018 | FR-018-AC-3 | TC-114 | 🚧 Pending implementation |
@@ -281,7 +282,7 @@ implemented and reviewed.
 | TC-108 | Canonical and pilot workflows pass through the Rust invariant provider before removal | Integration | P0 | FR-016-AC-4 | 🚧 pending host interface |
 | TC-109 | Rust evaluation completes the 28-cell matrix without inferred decisions | E2E | P0 | FR-017-AC-1, FR-017-CON-1 | 🚧 pending host interface |
 | TC-110 | The pure typed Rust evaluator preserves the exact 28-cell contract and deterministically withholds aggregation for missing, duplicate, malformed, unsupported, unavailable, failed, stale-revision, changed-governing-identity, changed-workflow, unsupported-addition, invalid-transcript-reference, invalid-count, outcome-mismatch, and terminal-pair cases; input permutation cannot change the result, oversized input refuses before decoding, and the reusable boundary performs no I/O | Property | P0 | FR-017-AC-2, FR-017-CON-1, FR-017-CON-3 | ✅ typed Rust aggregation, retained-Python differential cases, adverse cases, portable path/refusal rules, resource ceiling, and mutation probes passing |
-| TC-111 | Each package, rights, manifest, integration, and publication-refusal capability has independent positive and negative subcases matching the retained gate | Property | P0 | FR-017-AC-3 | 🚧 pending implementation |
+| TC-111 | Each package, rights, manifest, integration, and publication-refusal capability has independent positive and negative subcases matching the retained gate | Property | P0 | FR-017-AC-3 | 🚧 membership and content-rights slices backed; aggregate pending |
 | TC-112 | Package-manager and host files contain declarative dispatch only; local qualification, real-agent evaluation, publication, and release operations remain explicit manual actions | Static | P0 | FR-017-AC-4, FR-017-CON-2 | 🚧 pending implementation |
 | TC-113 | Removal refuses mismatched revisions, incomplete parity, and direct invocations that still use the old path | Property | P0 | FR-018-AC-2, FR-018-CON-1 | 🚧 pending implementation |
 | TC-114 | A failed cutover can restore the previous invocation without changing historical bytes | Property | P0 | FR-018-AC-3, FR-018-CON-2 | 🚧 pending implementation |
@@ -290,6 +291,7 @@ implemented and reviewed.
 | TC-117 | Rust requirement tests use the canonical bare ix-trace-rs macro form | Static | P0 | NFR-005-AC-2 | 🚧 pending implementation |
 | TC-118 | Quire reconciles every Rust test marker without missing, orphaned, or duplicate bindings | Integration | P0 | NFR-005-AC-3 | 🚧 pending implementation |
 | TC-119 | The pure Rust content-rights classifier matches retained finding/exception behavior, rejects unsafe paths without echoing them, preserves Unicode protected-token matching, leaks no matched content, and remains deterministic and I/O-free | Property | P0 | FR-017-AC-5, FR-017-CON-3 | ✅ typed Rust classifier, retained-Python differential, exhaustive boundary cases, and mutation probes passing |
+| TC-120 | The pure Rust package-membership classifier matches retained extra/missing behavior for safe unique names; rejects invalid expected policies and population limits; withholds on invalid, duplicate, unexpected, or missing observed members without echoing unsafe paths; remains permutation-invariant and I/O-free; and does not select or decode a package format | Property | P0 | FR-017-AC-6, FR-017-CON-3 | ✅ Typed Rust policy, retained-Python differential, adverse boundaries, ordering, resource ceilings, and mutation probes passing |
 
 ## Option Permutation Matrix
 
@@ -328,6 +330,7 @@ evaluation envelopes.
 | TC-113, TC-114 | Cutover | old only; additive parity; direct invocation updated; parity failure | delete only after local parity and restore the prior invocation on failure |
 | TC-100 | Pure capability | compatibility classification; semantic validation; bounded projection; fixture generation; canonical identity | each ADR-002 row has an independently reported old/new corpus and adverse-case result |
 | TC-111 | Qualification capability | package members; rights; manifest; integration; publication refusal | each gate has one retained passing case and every named refusal case |
+| TC-120 | Package membership | exact match; empty expected/actual; extra; missing; duplicate expected/actual; absolute, backslash, trailing-slash, empty, dot, parent, control, non-normalized, and overlong path; 65,536 and 65,537 entries; permuted inputs | exact safe membership is accepted; invalid policy or resource limits refuse without a result; every observed mismatch withholds with deterministic typed findings and no unsafe-path disclosure |
 | TC-106 | Invariant request | eleven canonical names; ordered multi-name request; unknown name; malformed Rust request; expired/current exception at one explicit instant | exact ordered Rust/reference parity for the valid shared domain or a typed pre-outcome refusal |
 | TC-105 | Onboarding request | retained inventory/status cases; absent Quire; malformed, duplicate-key, or merge-key frontmatter; duplicate artifact; unsupported type; absolute, parent, symlink, and existing targets; valid/invalid staged artifact | exact Rust/reference inventory and decision parity on the supported domain, explicit fail-closed YAML identity handling, equivalent parsed frontmatter plus identical Markdown body for valid publication, or a typed refusal with no published bytes |
 
