@@ -12,10 +12,13 @@ use std::{
 
 use clap::Command;
 use engineering_assurance::compatibility::{CompatibilityOutcome, evaluate_request_bytes};
+use engineering_assurance::workflow_invariants;
 use serde::Serialize;
 
 const ERROR_PROTOCOL: &str = "engineering-assurance.error/v1";
 const COMPATIBILITY_CAPABILITY: &str = "compatibility";
+const WORKFLOW_INVARIANTS_CAPABILITY: &str = "workflow-invariants";
+const MAX_STDIN_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Serialize)]
 struct MachineError<'a> {
@@ -35,25 +38,26 @@ fn command() -> Command {
             Command::new(COMPATIBILITY_CAPABILITY)
                 .about("Classify explicit observations against the reviewed compatibility matrix"),
         )
+        .subcommand(
+            Command::new(WORKFLOW_INVARIANTS_CAPABILITY)
+                .about("Evaluate a closed workflow projection against named invariants"),
+        )
 }
 
 fn main() -> ExitCode {
     let matches = command().get_matches();
     match matches.subcommand_name() {
         Some(COMPATIBILITY_CAPABILITY) => run_compatibility(),
+        Some(WORKFLOW_INVARIANTS_CAPABILITY) => run_workflow_invariants(),
         Some(_) | None => ExitCode::from(2),
     }
 }
 
 fn run_compatibility() -> ExitCode {
-    let mut bytes = Vec::new();
-    let read_result = io::stdin().lock().read_to_end(&mut bytes);
-    if let Err(error) = read_result {
-        return emit_error(
-            "compatibility_input_unreadable",
-            &format!("failed to read compatibility request: {error}"),
-        );
-    }
+    let bytes = match read_stdin(COMPATIBILITY_CAPABILITY, "compatibility_input_unreadable") {
+        Ok(bytes) => bytes,
+        Err(exit_code) => return exit_code,
+    };
     match evaluate_request_bytes(&bytes) {
         Ok(result) => match result.to_json_line() {
             Ok(encoded) => {
@@ -66,16 +70,69 @@ fn run_compatibility() -> ExitCode {
                     CompatibilityOutcome::Withheld => ExitCode::from(1),
                 }
             }
-            Err(error) => emit_error(error.code(), &error.to_string()),
+            Err(error) => emit_error(COMPATIBILITY_CAPABILITY, error.code(), &error.to_string()),
         },
-        Err(error) => emit_error(error.code(), &error.to_string()),
+        Err(error) => emit_error(COMPATIBILITY_CAPABILITY, error.code(), &error.to_string()),
     }
 }
 
-fn emit_error(code: &str, message: &str) -> ExitCode {
+fn run_workflow_invariants() -> ExitCode {
+    let bytes = match read_stdin(
+        WORKFLOW_INVARIANTS_CAPABILITY,
+        "workflow_invariant_request_invalid",
+    ) {
+        Ok(bytes) => bytes,
+        Err(exit_code) => return exit_code,
+    };
+    match workflow_invariants::evaluate_request_bytes(&bytes) {
+        Ok(result) => match result.to_json_line() {
+            Ok(encoded) => match write_stdout(&encoded) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    eprintln!("failed to write workflow-invariant result: {error}");
+                    ExitCode::from(2)
+                }
+            },
+            Err(error) => emit_error(
+                WORKFLOW_INVARIANTS_CAPABILITY,
+                error.code(),
+                &error.to_string(),
+            ),
+        },
+        Err(error) => emit_error(
+            WORKFLOW_INVARIANTS_CAPABILITY,
+            error.code(),
+            &error.to_string(),
+        ),
+    }
+}
+
+fn read_stdin(capability: &'static str, error_code: &str) -> Result<Vec<u8>, ExitCode> {
+    let mut bytes = Vec::new();
+    let limit = u64::try_from(MAX_STDIN_BYTES)
+        .unwrap_or(u64::MAX)
+        .saturating_add(1);
+    if let Err(error) = io::stdin().lock().take(limit).read_to_end(&mut bytes) {
+        return Err(emit_error(
+            capability,
+            error_code,
+            &format!("failed to read {capability} request: {error}"),
+        ));
+    }
+    if bytes.len() > MAX_STDIN_BYTES {
+        return Err(emit_error(
+            capability,
+            error_code,
+            &format!("{capability} request exceeds the {MAX_STDIN_BYTES}-byte input limit"),
+        ));
+    }
+    Ok(bytes)
+}
+
+fn emit_error(capability: &'static str, code: &str, message: &str) -> ExitCode {
     let result = MachineError {
         protocol: ERROR_PROTOCOL,
-        capability: COMPATIBILITY_CAPABILITY,
+        capability,
         code,
         message,
     };
@@ -84,7 +141,10 @@ fn emit_error(code: &str, message: &str) -> ExitCode {
             bytes.push(b'\n');
             bytes
         }
-        Err(_) => b"{\"protocol\":\"engineering-assurance.error/v1\",\"capability\":\"compatibility\",\"code\":\"error_result_serialization_failed\",\"message\":\"error result serialization failed\"}\n".to_vec(),
+        Err(_) => format!(
+            "{{\"protocol\":\"{ERROR_PROTOCOL}\",\"capability\":\"{capability}\",\"code\":\"error_result_serialization_failed\",\"message\":\"error result serialization failed\"}}\n"
+        )
+        .into_bytes(),
     };
     if let Err(error) = write_stdout(&encoded) {
         eprintln!("{message}; failed to write error result: {error}");
