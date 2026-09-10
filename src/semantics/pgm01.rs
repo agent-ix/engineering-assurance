@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
-use super::{PGM01_MAPPING_PROTOCOL, SemanticConcept, SemanticError, validate_digest};
+use super::{
+    PGM01_MAPPING_PROTOCOL, SemanticConcept, SemanticError, SemanticErrorKind, validate_digest,
+};
 
 /// One traceable field mapping from a historical PGM-01 record.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -86,11 +88,13 @@ impl Pgm01View {
     fn validate_contract(self, raw: &[u8]) -> Result<Self, SemanticError> {
         if self.mapping_version != PGM01_MAPPING_PROTOCOL {
             return Err(SemanticError::new(
+                SemanticErrorKind::InvalidMappingVersion,
                 "generated PGM-01 view has an invalid mapping version",
             ));
         }
         if self.source_schema_version.is_empty() || self.source_record_id.is_empty() {
             return Err(SemanticError::new(
+                SemanticErrorKind::EmptySourceIdentity,
                 "generated PGM-01 view has an empty source identity",
             ));
         }
@@ -98,6 +102,7 @@ impl Pgm01View {
             || validate_digest(&self.source_digest, "generated PGM-01 source digest").is_err()
         {
             return Err(SemanticError::new(
+                SemanticErrorKind::ChangedSourceDigest,
                 "generated PGM-01 view changed the source identity",
             ));
         }
@@ -107,6 +112,7 @@ impl Pgm01View {
             .any(|item| !item.source_path.starts_with('/') || item.target_field.is_empty())
         {
             return Err(SemanticError::new(
+                SemanticErrorKind::InvalidFieldMapping,
                 "generated PGM-01 view has an invalid field mapping",
             ));
         }
@@ -116,11 +122,13 @@ impl Pgm01View {
             .any(|item| !item.source_path.starts_with('/') || item.reason.is_empty())
         {
             return Err(SemanticError::new(
+                SemanticErrorKind::InvalidUnmappedField,
                 "generated PGM-01 view has an invalid unmapped field",
             ));
         }
         if self.limitations.iter().any(String::is_empty) {
             return Err(SemanticError::new(
+                SemanticErrorKind::EmptyLimitation,
                 "generated PGM-01 view has an empty limitation",
             ));
         }
@@ -269,9 +277,10 @@ enum HistoricalDisposition {
 
 fn required_legacy_string<'a>(value: &'a str, path: &str) -> Result<&'a str, SemanticError> {
     if value.is_empty() {
-        Err(SemanticError::new(format!(
-            "legacy field {path} must be a string"
-        )))
+        Err(SemanticError::new(
+            SemanticErrorKind::InvalidLegacyField,
+            format!("legacy field {path} must be a string"),
+        ))
     } else {
         Ok(value)
     }
@@ -297,9 +306,10 @@ fn required_non_negative_integer(value: &Value, path: &str) -> Result<Value, Sem
     match token.as_deref() {
         Some("-0") => Ok(Value::from(0)),
         Some(token) if token.bytes().all(|byte| byte.is_ascii_digit()) => Ok(value.clone()),
-        _ => Err(SemanticError::new(format!(
-            "legacy field {path} must be a non-negative integer"
-        ))),
+        _ => Err(SemanticError::new(
+            SemanticErrorKind::InvalidLegacyInteger,
+            format!("legacy field {path} must be a non-negative integer"),
+        )),
     }
 }
 
@@ -594,6 +604,7 @@ pub fn map_pgm01_bytes(
     if let Some(expected) = expected_digest {
         if validate_digest(expected, "expected digest").is_err() {
             return Err(SemanticError::new(
+                SemanticErrorKind::InvalidExpectedDigest,
                 "expected digest must be a SHA-256 digest",
             ));
         }
@@ -630,10 +641,20 @@ pub fn map_pgm01_bytes(
 
     let mapped = match schema_version.as_deref() {
         Some("quire.pgm01-evidence/v1") => serde_json::from_value::<Pgm01V1>(decoded)
-            .map_err(|error| SemanticError::new(format!("invalid PGM-01 v1 record: {error}")))
+            .map_err(|error| {
+                SemanticError::new(
+                    SemanticErrorKind::InvalidLegacyField,
+                    format!("invalid PGM-01 v1 record: {error}"),
+                )
+            })
             .and_then(|record| map_pgm01_v1(raw, record)),
         Some("quire.pgm01-evidence/v2") => serde_json::from_value::<Pgm01V2>(decoded)
-            .map_err(|error| SemanticError::new(format!("invalid PGM-01 v2 record: {error}")))
+            .map_err(|error| {
+                SemanticError::new(
+                    SemanticErrorKind::InvalidLegacyField,
+                    format!("invalid PGM-01 v2 record: {error}"),
+                )
+            })
             .and_then(|record| map_pgm01_v2(raw, record)),
         _ => {
             let mut view = Pgm01View::base(raw, source_schema_version, source_record_id);
@@ -699,12 +720,12 @@ mod tests {
         Pgm01View::base(RAW, "test", "record-1")
     }
 
-    fn assert_contract_error(view: Pgm01View, expected: &str) {
+    fn assert_contract_error(view: Pgm01View, expected: SemanticErrorKind) {
         let error = view
             .validate_contract(RAW)
             .expect_err("invalid generated view must be refused");
         assert_eq!(error.code(), "invalid_semantic_contract");
-        assert_eq!(error.message(), expected);
+        assert_eq!(error.kind(), expected);
     }
 
     #[trace("TC-103", "FR-015-AC-3")]
@@ -716,15 +737,15 @@ mod tests {
 
         let mut view = valid_view();
         view.mapping_version = "wrong".to_owned();
-        assert_contract_error(view, "generated PGM-01 view has an invalid mapping version");
+        assert_contract_error(view, SemanticErrorKind::InvalidMappingVersion);
 
         let mut view = valid_view();
         view.source_record_id.clear();
-        assert_contract_error(view, "generated PGM-01 view has an empty source identity");
+        assert_contract_error(view, SemanticErrorKind::EmptySourceIdentity);
 
         let mut view = valid_view();
         view.source_digest = "0".repeat(64);
-        assert_contract_error(view, "generated PGM-01 view changed the source identity");
+        assert_contract_error(view, SemanticErrorKind::ChangedSourceDigest);
 
         let mut view = valid_view();
         view.mappings.push(Pgm01Mapping {
@@ -733,17 +754,17 @@ mod tests {
             target_field: "result".to_owned(),
             value: Value::Null,
         });
-        assert_contract_error(view, "generated PGM-01 view has an invalid field mapping");
+        assert_contract_error(view, SemanticErrorKind::InvalidFieldMapping);
 
         let mut view = valid_view();
         view.unmapped_fields.push(Pgm01Unmapped {
             source_path: "/opaque".to_owned(),
             reason: String::new(),
         });
-        assert_contract_error(view, "generated PGM-01 view has an invalid unmapped field");
+        assert_contract_error(view, SemanticErrorKind::InvalidUnmappedField);
 
         let mut view = valid_view();
         view.limitations.push(String::new());
-        assert_contract_error(view, "generated PGM-01 view has an empty limitation");
+        assert_contract_error(view, SemanticErrorKind::EmptyLimitation);
     }
 }

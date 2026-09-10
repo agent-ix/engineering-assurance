@@ -6,9 +6,9 @@
 use std::{collections::BTreeMap, fs, path::PathBuf, process::Command};
 
 use engineering_assurance::semantics::{
-    Pgm01Outcome, ReportProjection, SemanticFixture, map_pgm01_bytes, render_generated_fixtures,
-    validate_embedded_ownership_registry, validate_ownership_registry_bytes,
-    validate_semantic_fixture_bytes,
+    Pgm01Outcome, ReportProjection, SemanticErrorKind, SemanticFixture, map_pgm01_bytes,
+    render_generated_fixtures, validate_embedded_ownership_registry,
+    validate_ownership_registry_bytes, validate_semantic_fixture_bytes,
 };
 use ix_trace_rs::trace;
 
@@ -85,28 +85,30 @@ fn tc_100_semantic_fixture_and_non_success_states_are_complete() {
     let encoded = serde_json::to_vec(&wrong).expect("mutant must serialize");
     let error = validate_ownership_registry_bytes(&encoded).unwrap_err();
     assert_eq!(error.code(), "invalid_semantic_contract");
-    assert!(error.message().contains("authority must be"));
+    assert_eq!(error.kind(), SemanticErrorKind::AuthorityMismatch);
 
     let mut non_executing: serde_json::Value =
         serde_json::from_slice(&ownership).expect("ownership registry must parse");
     non_executing["non_executing"] = serde_json::json!(false);
-    assert!(
+    assert_eq!(
         validate_ownership_registry_bytes(
             &serde_json::to_vec(&non_executing).expect("mutant must serialize")
         )
-        .is_err()
+        .unwrap_err()
+        .kind(),
+        SemanticErrorKind::InvalidOwnershipBoundary
     );
 
     let mut duplicate: serde_json::Value =
         serde_json::from_slice(&ownership).expect("ownership registry must parse");
     duplicate["concepts"][1] = duplicate["concepts"][0].clone();
-    assert!(
+    assert_eq!(
         validate_ownership_registry_bytes(
             &serde_json::to_vec(&duplicate).expect("mutant must serialize")
         )
         .unwrap_err()
-        .message()
-        .contains("repeats")
+        .kind(),
+        SemanticErrorKind::DuplicateOwnershipConcept
     );
 }
 
@@ -119,62 +121,44 @@ fn tc_103_semantic_reference_failures_do_not_collapse() {
 
     let mut missing = accepted.clone();
     missing.references.remove(0);
-    assert!(
-        missing
-            .validate()
-            .unwrap_err()
-            .message()
-            .contains("missing reference")
+    assert_eq!(
+        missing.validate().unwrap_err().kind(),
+        SemanticErrorKind::MissingReference
     );
 
     let mut confused = accepted.clone();
     confused.references[3].links.result = Some("sem:report-001".to_owned());
-    assert!(
-        confused
-            .validate()
-            .unwrap_err()
-            .message()
-            .contains("must target check_result")
+    assert_eq!(
+        confused.validate().unwrap_err().kind(),
+        SemanticErrorKind::ReferenceConceptMismatch
     );
 
     let mut wrong_authority = accepted.clone();
     wrong_authority.references[0].authority = engineering_assurance::semantics::Authority::Quoin;
-    assert!(
-        wrong_authority
-            .validate()
-            .unwrap_err()
-            .message()
-            .contains("authority must be quire")
+    assert_eq!(
+        wrong_authority.validate().unwrap_err().kind(),
+        SemanticErrorKind::AuthorityMismatch
     );
 
     let mut missing_producer = accepted.clone();
     missing_producer.references[1].producer = None;
-    assert!(
-        missing_producer
-            .validate()
-            .unwrap_err()
-            .message()
-            .contains("complete producer tuple")
+    assert_eq!(
+        missing_producer.validate().unwrap_err().kind(),
+        SemanticErrorKind::MissingProducer
     );
 
     let mut duplicate_id = accepted.clone();
     duplicate_id.references[5].semantic_id = duplicate_id.references[4].semantic_id.clone();
-    assert!(
-        duplicate_id
-            .validate()
-            .unwrap_err()
-            .message()
-            .contains("distinct")
+    assert_eq!(
+        duplicate_id.validate().unwrap_err().kind(),
+        SemanticErrorKind::DuplicateSemanticIdentity
     );
 
     let mut unknown_version = accepted;
     unknown_version.references[0].source.schema_version = "99".to_owned();
-    assert!(
-        unknown_version
-            .validate()
-            .unwrap_err()
-            .message()
-            .contains("premises differ")
+    assert_eq!(
+        unknown_version.validate().unwrap_err().kind(),
+        SemanticErrorKind::SourcePremiseMismatch
     );
 }
 
@@ -308,7 +292,7 @@ fn tc_103_pgm01_adverse_outcomes_preserve_source_identity() {
 #[trace("TC-100", "FR-015-AC-1")]
 #[trace("TC-103", "FR-015-AC-3")]
 #[test]
-fn tc_100_pgm01_adverse_identity_views_match_retained_python() {
+fn tc_100_pgm01_adverse_scalar_identity_views_match_retained_python() {
     let cases = [
         br#"{"schemaVersion":"","recordId":"legacy-1"}"#.as_slice(),
         br#"{"schemaVersion":"quire.pgm01-evidence/v99","recordId":""}"#.as_slice(),
@@ -348,6 +332,53 @@ print(json.dumps([map_pgm01_bytes(case) for case in cases], sort_keys=True, sepa
     let expected: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("Python reference must emit JSON");
     assert_eq!(serde_json::Value::Array(actual), expected);
+}
+
+#[trace("TC-100", "FR-015-AC-1")]
+#[trace("TC-103", "FR-015-AC-3")]
+#[test]
+fn tc_103_pgm01_structured_identity_divergences_are_explicit() {
+    let object_id = br#"{"schemaVersion":"quire.pgm01-evidence/v99","recordId":{"a":1}}"#;
+    let rust_object = map_pgm01_bytes(object_id, None).expect("Rust must classify object identity");
+    assert_eq!(rust_object.outcome, Pgm01Outcome::Incompatible);
+    assert_eq!(rust_object.source_record_id, "incompatible-source");
+
+    let list_schema = br#"{"schemaVersion":[1,2],"recordId":"legacy-1"}"#;
+    let rust_list = map_pgm01_bytes(list_schema, None).expect("Rust must classify list identity");
+    assert_eq!(rust_list.outcome, Pgm01Outcome::Incompatible);
+    assert_eq!(rust_list.source_schema_version, "unknown");
+
+    let script = r#"
+import json
+from engineering_assurance.verification_semantics import map_pgm01_bytes
+
+cases = [
+    b'{"schemaVersion":"quire.pgm01-evidence/v99","recordId":{"a":1}}',
+    b'{"schemaVersion":[1,2],"recordId":"legacy-1"}',
+]
+observed = []
+for case in cases:
+    try:
+        observed.append({"result": map_pgm01_bytes(case)})
+    except TypeError as error:
+        observed.append({"error_type": type(error).__name__, "message": str(error)})
+print(json.dumps(observed, sort_keys=True, separators=(",", ":")))
+"#;
+    let output = Command::new("python3")
+        .args(["-c", script])
+        .current_dir(root())
+        .output()
+        .expect("retained Python reference must execute during additive parity");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let python: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("Python observation must be JSON");
+    assert_eq!(python[0]["result"]["source_record_id"], "{'a': 1}");
+    assert_eq!(python[1]["error_type"], "TypeError");
+    assert_eq!(python[1]["message"], "unhashable type: 'list'");
 }
 
 #[trace("TC-100", "FR-015-AC-1")]

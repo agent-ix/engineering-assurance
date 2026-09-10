@@ -43,26 +43,101 @@ const CANONICAL_FIXTURE_BYTES: &[u8] = include_bytes!(
     "../../engineering_assurance/fixtures/verification-semantics/canonical-references.json"
 );
 
+/// Stable machine-readable reason for a semantic refusal.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SemanticErrorKind {
+    /// A protocol discriminator is unsupported.
+    UnsupportedProtocol,
+    /// An identifier violates the bounded identifier grammar.
+    InvalidIdentity,
+    /// A concept is assigned to the wrong authority.
+    AuthorityMismatch,
+    /// A producer-owned concept lacks its producer tuple.
+    MissingProducer,
+    /// A required semantic relationship is absent.
+    MissingRequiredLink,
+    /// A semantic reference points to itself.
+    SelfReference,
+    /// A source field path is not an absolute JSON pointer.
+    InvalidSourcePath,
+    /// A producer environment has no declared entries.
+    EmptyProducerEnvironment,
+    /// A required textual field is empty.
+    EmptyRequiredField,
+    /// A digest is not a lowercase SHA-256 value.
+    InvalidDigest,
+    /// Two semantic references declare the same identity.
+    DuplicateSemanticIdentity,
+    /// A semantic relationship names an absent reference.
+    MissingReference,
+    /// A semantic relationship targets the wrong concept.
+    ReferenceConceptMismatch,
+    /// A semantic fixture lacks required content.
+    EmptyFixture,
+    /// A source-version premise is duplicated.
+    DuplicateSourcePremise,
+    /// Observed source versions differ from the declared premises.
+    SourcePremiseMismatch,
+    /// Encoded input cannot be decoded into the declared type.
+    InvalidInputEncoding,
+    /// The ownership registry violates its version or non-executing boundary.
+    InvalidOwnershipBoundary,
+    /// Ownership metadata is incomplete.
+    IncompleteOwnershipMetadata,
+    /// The ownership registry repeats a semantic concept.
+    DuplicateOwnershipConcept,
+    /// The ownership registry omits a required semantic concept.
+    IncompleteOwnershipConceptSet,
+    /// The ownership registry has an invalid result-state vocabulary.
+    InvalidResultStateSet,
+    /// A validated value could not be serialized.
+    Serialization,
+    /// A legacy PGM-01 field violates its declared shape.
+    InvalidLegacyField,
+    /// A legacy PGM-01 numeric field is not a non-negative integer.
+    InvalidLegacyInteger,
+    /// A caller-supplied expected digest is invalid.
+    InvalidExpectedDigest,
+    /// A generated PGM-01 view has the wrong mapping protocol.
+    InvalidMappingVersion,
+    /// A generated PGM-01 view has an empty source identity.
+    EmptySourceIdentity,
+    /// A generated PGM-01 view does not preserve its source digest.
+    ChangedSourceDigest,
+    /// A generated PGM-01 field mapping is invalid.
+    InvalidFieldMapping,
+    /// A generated PGM-01 unmapped-field record is invalid.
+    InvalidUnmappedField,
+    /// A generated PGM-01 limitation is empty.
+    EmptyLimitation,
+}
+
 /// Stable failure at the pure semantic boundary.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 #[error("{message}")]
 pub struct SemanticError {
-    code: &'static str,
+    kind: SemanticErrorKind,
     message: String,
 }
 
 impl SemanticError {
-    fn new(message: impl Into<String>) -> Self {
+    fn new(kind: SemanticErrorKind, message: impl Into<String>) -> Self {
         Self {
-            code: "invalid_semantic_contract",
+            kind,
             message: message.into(),
         }
     }
 
-    /// Return the stable machine-readable error category.
+    /// Return the stable top-level machine-readable error category.
     #[must_use]
     pub const fn code(&self) -> &'static str {
-        self.code
+        "invalid_semantic_contract"
+    }
+
+    /// Return the closed machine-readable refusal reason.
+    #[must_use]
+    pub const fn kind(&self) -> SemanticErrorKind {
+        self.kind
     }
 
     /// Return the stable validation message without parsing formatted output.
@@ -341,27 +416,33 @@ impl SemanticReference {
     /// Returns [`SemanticError`] for any malformed or ownership-confused reference.
     pub fn validate(&self) -> Result<(), SemanticError> {
         if self.projection_type != SEMANTIC_REFERENCE_PROTOCOL {
-            return Err(SemanticError::new(format!(
-                "unsupported semantic-reference protocol {:?}",
-                self.projection_type
-            )));
+            return Err(SemanticError::new(
+                SemanticErrorKind::UnsupportedProtocol,
+                format!(
+                    "unsupported semantic-reference protocol {:?}",
+                    self.projection_type
+                ),
+            ));
         }
         validate_identity(&self.semantic_id, "semantic_id")?;
         if self.authority != self.concept.authority() {
-            return Err(SemanticError::new(format!(
-                "{} authority must be {}, not {}",
-                self.concept,
-                self.concept.authority(),
-                self.authority
-            )));
+            return Err(SemanticError::new(
+                SemanticErrorKind::AuthorityMismatch,
+                format!(
+                    "{} authority must be {}, not {}",
+                    self.concept,
+                    self.concept.authority(),
+                    self.authority
+                ),
+            ));
         }
         validate_source(&self.source)?;
         if self.concept.requires_producer() {
             let producer = self.producer.as_ref().ok_or_else(|| {
-                SemanticError::new(format!(
-                    "{} requires the complete producer tuple",
-                    self.concept
-                ))
+                SemanticError::new(
+                    SemanticErrorKind::MissingProducer,
+                    format!("{} requires the complete producer tuple", self.concept),
+                )
             })?;
             validate_producer(producer)?;
         } else if let Some(producer) = &self.producer {
@@ -369,16 +450,17 @@ impl SemanticReference {
         }
         for required in required_links(self.concept) {
             if self.links.get(required).is_none() {
-                return Err(SemanticError::new(format!(
-                    "{} is missing link {required}",
-                    self.concept
-                )));
+                return Err(SemanticError::new(
+                    SemanticErrorKind::MissingRequiredLink,
+                    format!("{} is missing link {required}", self.concept),
+                ));
             }
         }
         for (name, target) in self.links.entries() {
             validate_identity(target, name)?;
             if target == &self.semantic_id {
                 return Err(SemanticError::new(
+                    SemanticErrorKind::SelfReference,
                     "a semantic reference cannot link to itself",
                 ));
             }
@@ -418,7 +500,10 @@ fn validate_source(source: &SemanticSource) -> Result<(), SemanticError> {
         validate_digest(digest, "source record_digest")?;
     }
     if !source.field_path.starts_with('/') {
-        return Err(SemanticError::new("source field_path must begin with '/'"));
+        return Err(SemanticError::new(
+            SemanticErrorKind::InvalidSourcePath,
+            "source field_path must begin with '/'",
+        ));
     }
     Ok(())
 }
@@ -432,14 +517,20 @@ fn validate_producer(producer: &SemanticProducer) -> Result<(), SemanticError> {
     )?;
     non_empty(&producer.source_revision, "producer source_revision")?;
     if producer.environment.is_empty() {
-        return Err(SemanticError::new("producer environment must not be empty"));
+        return Err(SemanticError::new(
+            SemanticErrorKind::EmptyProducerEnvironment,
+            "producer environment must not be empty",
+        ));
     }
     non_empty(&producer.definition_version, "producer definition_version")
 }
 
 fn non_empty(value: &str, field: &str) -> Result<(), SemanticError> {
     if value.is_empty() {
-        Err(SemanticError::new(format!("{field} must not be empty")))
+        Err(SemanticError::new(
+            SemanticErrorKind::EmptyRequiredField,
+            format!("{field} must not be empty"),
+        ))
     } else {
         Ok(())
     }
@@ -455,9 +546,10 @@ fn validate_identity(value: &str, field: &str) -> Result<(), SemanticError> {
             byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'/' | b'-')
         })
     {
-        return Err(SemanticError::new(format!(
-            "{field} is not a valid identity"
-        )));
+        return Err(SemanticError::new(
+            SemanticErrorKind::InvalidIdentity,
+            format!("{field} is not a valid identity"),
+        ));
     }
     Ok(())
 }
@@ -468,9 +560,10 @@ fn validate_digest(value: &str, field: &str) -> Result<(), SemanticError> {
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     {
-        return Err(SemanticError::new(format!(
-            "{field} must be a SHA-256 digest"
-        )));
+        return Err(SemanticError::new(
+            SemanticErrorKind::InvalidDigest,
+            format!("{field} must be a SHA-256 digest"),
+        ));
     }
     Ok(())
 }
@@ -489,7 +582,10 @@ pub fn validate_semantic_bundle(references: &[SemanticReference]) -> Result<(), 
             .insert(reference.semantic_id.as_str(), reference.concept)
             .is_some()
         {
-            return Err(SemanticError::new("semantic identifiers must be distinct"));
+            return Err(SemanticError::new(
+                SemanticErrorKind::DuplicateSemanticIdentity,
+                "semantic identifiers must be distinct",
+            ));
         }
     }
     for reference in references {
@@ -498,16 +594,19 @@ pub fn validate_semantic_bundle(references: &[SemanticReference]) -> Result<(), 
                 continue;
             };
             let actual = known.get(target.as_str()).ok_or_else(|| {
-                SemanticError::new(format!(
-                    "{} has missing reference {target}",
-                    reference.semantic_id
-                ))
+                SemanticError::new(
+                    SemanticErrorKind::MissingReference,
+                    format!("{} has missing reference {target}", reference.semantic_id),
+                )
             })?;
             if *actual != expected {
-                return Err(SemanticError::new(format!(
-                    "{} link {relationship} must target {expected}, not {actual}",
-                    reference.semantic_id
-                )));
+                return Err(SemanticError::new(
+                    SemanticErrorKind::ReferenceConceptMismatch,
+                    format!(
+                        "{} link {relationship} must target {expected}, not {actual}",
+                        reference.semantic_id
+                    ),
+                ));
             }
         }
     }
@@ -546,13 +645,17 @@ impl SemanticFixture {
     /// Returns [`SemanticError`] if the fixture is incomplete or internally inconsistent.
     pub fn validate(&self) -> Result<(), SemanticError> {
         if self.fixture_version != SEMANTIC_FIXTURE_PROTOCOL {
-            return Err(SemanticError::new(format!(
-                "unsupported semantic fixture protocol {:?}",
-                self.fixture_version
-            )));
+            return Err(SemanticError::new(
+                SemanticErrorKind::UnsupportedProtocol,
+                format!(
+                    "unsupported semantic fixture protocol {:?}",
+                    self.fixture_version
+                ),
+            ));
         }
         if self.source_version_premises.is_empty() || self.references.is_empty() {
             return Err(SemanticError::new(
+                SemanticErrorKind::EmptyFixture,
                 "semantic fixture premises and references must not be empty",
             ));
         }
@@ -560,6 +663,7 @@ impl SemanticFixture {
         let premises: BTreeSet<_> = self.source_version_premises.iter().cloned().collect();
         if premises.len() != self.source_version_premises.len() {
             return Err(SemanticError::new(
+                SemanticErrorKind::DuplicateSourcePremise,
                 "source-version premises must be distinct",
             ));
         }
@@ -573,7 +677,10 @@ impl SemanticFixture {
             })
             .collect();
         if observed != premises {
-            return Err(SemanticError::new("source-version premises differ"));
+            return Err(SemanticError::new(
+                SemanticErrorKind::SourcePremiseMismatch,
+                "source-version premises differ",
+            ));
         }
         Ok(())
     }
@@ -585,8 +692,12 @@ impl SemanticFixture {
 ///
 /// Returns [`SemanticError`] for malformed JSON or any semantic validation failure.
 pub fn validate_semantic_fixture_bytes(raw: &[u8]) -> Result<SemanticFixture, SemanticError> {
-    let fixture: SemanticFixture = serde_json::from_slice(raw)
-        .map_err(|error| SemanticError::new(format!("invalid semantic fixture: {error}")))?;
+    let fixture: SemanticFixture = serde_json::from_slice(raw).map_err(|error| {
+        SemanticError::new(
+            SemanticErrorKind::InvalidInputEncoding,
+            format!("invalid semantic fixture: {error}"),
+        )
+    })?;
     fixture.validate()?;
     Ok(fixture)
 }
@@ -628,25 +739,33 @@ pub fn validate_embedded_ownership_registry() -> Result<(), SemanticError> {
 /// Returns [`SemanticError`] if its version, population, authority allocation,
 /// metadata, or non-executing boundary differs from the reviewed contract.
 pub fn validate_ownership_registry_bytes(raw: &[u8]) -> Result<(), SemanticError> {
-    let registry: OwnershipRegistry = serde_json::from_slice(raw)
-        .map_err(|error| SemanticError::new(format!("invalid ownership registry: {error}")))?;
+    let registry: OwnershipRegistry = serde_json::from_slice(raw).map_err(|error| {
+        SemanticError::new(
+            SemanticErrorKind::InvalidInputEncoding,
+            format!("invalid ownership registry: {error}"),
+        )
+    })?;
     if registry.schema_version != "engineering-assurance.verification-semantics-ownership/v1"
         || registry.purpose != "semantic_ownership_registry"
         || !registry.non_executing
     {
         return Err(SemanticError::new(
+            SemanticErrorKind::InvalidOwnershipBoundary,
             "ownership registry version or non-executing boundary is invalid",
         ));
     }
     let mut concepts = BTreeSet::new();
     for item in &registry.concepts {
         if item.authority != item.concept.authority() {
-            return Err(SemanticError::new(format!(
-                "{} authority must be {}, not {}",
-                item.concept,
-                item.concept.authority(),
-                item.authority
-            )));
+            return Err(SemanticError::new(
+                SemanticErrorKind::AuthorityMismatch,
+                format!(
+                    "{} authority must be {}, not {}",
+                    item.concept,
+                    item.concept.authority(),
+                    item.authority
+                ),
+            ));
         }
         let authoritative_types: BTreeSet<_> = item.authoritative_types.iter().collect();
         if item.authoritative_types.is_empty()
@@ -656,17 +775,20 @@ pub fn validate_ownership_registry_bytes(raw: &[u8]) -> Result<(), SemanticError
             || item.responsibility.is_empty()
         {
             return Err(SemanticError::new(
+                SemanticErrorKind::IncompleteOwnershipMetadata,
                 "ownership registry concept metadata is incomplete",
             ));
         }
         if !concepts.insert(item.concept) {
             return Err(SemanticError::new(
+                SemanticErrorKind::DuplicateOwnershipConcept,
                 "ownership registry repeats a semantic concept",
             ));
         }
     }
     if concepts != SemanticConcept::ALL.into_iter().collect() {
         return Err(SemanticError::new(
+            SemanticErrorKind::IncompleteOwnershipConceptSet,
             "ownership registry has an incomplete concept set",
         ));
     }
@@ -679,6 +801,7 @@ pub fn validate_ownership_registry_bytes(raw: &[u8]) -> Result<(), SemanticError
             .any(|state| !valid_state_name(state))
     {
         return Err(SemanticError::new(
+            SemanticErrorKind::InvalidResultStateSet,
             "ownership registry result states must be non-empty, distinct snake-case names",
         ));
     }

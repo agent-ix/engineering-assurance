@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{
-    CANONICAL_FIXTURE_BYTES, NON_SUCCESS_STATES_BYTES, SemanticError, SemanticFixture,
-    validate_semantic_fixture_bytes,
+    CANONICAL_FIXTURE_BYTES, NON_SUCCESS_STATES_BYTES, SemanticError, SemanticErrorKind,
+    SemanticFixture, validate_semantic_fixture_bytes,
 };
 
 #[derive(Debug, Deserialize)]
@@ -59,26 +59,44 @@ pub fn render_generated_fixtures(
 ) -> Result<BTreeMap<String, String>, SemanticError> {
     let states: Vec<String> =
         serde_json::from_slice(NON_SUCCESS_STATES_BYTES).map_err(|error| {
-            SemanticError::new(format!("invalid non-success-state source: {error}"))
+            SemanticError::new(
+                SemanticErrorKind::InvalidInputEncoding,
+                format!("invalid non-success-state source: {error}"),
+            )
         })?;
     if states.is_empty() || states.iter().any(String::is_empty) {
         return Err(SemanticError::new(
+            SemanticErrorKind::EmptyFixture,
             "non-success-state source must contain non-empty states",
         ));
     }
     let canonical: SemanticFixture = validate_semantic_fixture_bytes(CANONICAL_FIXTURE_BYTES)?;
     let canonical = serde_json::to_value(canonical).map_err(|error| {
-        SemanticError::new(format!("canonical fixture serialization failed: {error}"))
+        SemanticError::new(
+            SemanticErrorKind::Serialization,
+            format!("canonical fixture serialization failed: {error}"),
+        )
     })?;
     let canonical_json = serde_json::to_string(&canonical).map_err(|error| {
-        SemanticError::new(format!("canonical fixture serialization failed: {error}"))
+        SemanticError::new(
+            SemanticErrorKind::Serialization,
+            format!("canonical fixture serialization failed: {error}"),
+        )
     })?;
     let quoted_canonical = serde_json::to_string(&canonical_json).map_err(|error| {
-        SemanticError::new(format!("canonical fixture quoting failed: {error}"))
+        SemanticError::new(
+            SemanticErrorKind::Serialization,
+            format!("canonical fixture quoting failed: {error}"),
+        )
     })?;
 
-    let corpus: CompatibilityCorpus = serde_json::from_slice(compatibility_corpus_bytes)
-        .map_err(|error| SemanticError::new(format!("invalid compatibility corpus: {error}")))?;
+    let corpus: CompatibilityCorpus =
+        serde_json::from_slice(compatibility_corpus_bytes).map_err(|error| {
+            SemanticError::new(
+                SemanticErrorKind::InvalidInputEncoding,
+                format!("invalid compatibility corpus: {error}"),
+            )
+        })?;
     let cases: Vec<GeneratedCompatibilityCase> = corpus
         .cases
         .into_iter()
@@ -93,12 +111,16 @@ pub fn render_generated_fixtures(
         })
         .collect();
     let cases_json = serde_json::to_string(&cases).map_err(|error| {
-        SemanticError::new(format!(
-            "compatibility fixture serialization failed: {error}"
-        ))
+        SemanticError::new(
+            SemanticErrorKind::Serialization,
+            format!("compatibility fixture serialization failed: {error}"),
+        )
     })?;
     let quoted_cases = serde_json::to_string(&cases_json).map_err(|error| {
-        SemanticError::new(format!("compatibility fixture quoting failed: {error}"))
+        SemanticError::new(
+            SemanticErrorKind::Serialization,
+            format!("compatibility fixture quoting failed: {error}"),
+        )
     })?;
 
     let mut generated = BTreeMap::new();

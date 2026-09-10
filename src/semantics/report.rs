@@ -5,7 +5,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{REPORT_PROJECTION_PROTOCOL, SemanticError, non_empty, validate_identity};
+use super::{
+    REPORT_PROJECTION_PROTOCOL, SemanticError, SemanticErrorKind, non_empty, validate_identity,
+};
 
 /// One bounded report claim.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -122,10 +124,13 @@ impl ReportProjection {
     /// Returns [`SemanticError`] for an unsupported protocol or malformed field.
     pub fn validate(&self) -> Result<(), SemanticError> {
         if self.projection_type != REPORT_PROJECTION_PROTOCOL {
-            return Err(SemanticError::new(format!(
-                "unsupported report projection protocol {:?}",
-                self.projection_type
-            )));
+            return Err(SemanticError::new(
+                SemanticErrorKind::UnsupportedProtocol,
+                format!(
+                    "unsupported report projection protocol {:?}",
+                    self.projection_type
+                ),
+            ));
         }
         validate_identity(&self.report_id, "report_id")?;
         non_empty(&self.subject, "report subject")?;
@@ -159,10 +164,18 @@ impl ReportProjection {
     /// Returns [`SemanticError`] for invalid input or serialization failure.
     pub fn render_json(&self) -> Result<String, SemanticError> {
         self.validate()?;
-        let value = serde_json::to_value(self)
-            .map_err(|error| SemanticError::new(format!("report serialization failed: {error}")))?;
-        let mut encoded = serde_json::to_string(&value)
-            .map_err(|error| SemanticError::new(format!("report serialization failed: {error}")))?;
+        let value = serde_json::to_value(self).map_err(|error| {
+            SemanticError::new(
+                SemanticErrorKind::Serialization,
+                format!("report serialization failed: {error}"),
+            )
+        })?;
+        let mut encoded = serde_json::to_string(&value).map_err(|error| {
+            SemanticError::new(
+                SemanticErrorKind::Serialization,
+                format!("report serialization failed: {error}"),
+            )
+        })?;
         encoded.push('\n');
         Ok(encoded)
     }
@@ -264,8 +277,12 @@ impl ReportProjection {
 ///
 /// Returns [`SemanticError`] for malformed JSON or invalid report fields.
 pub fn validate_report_bytes(raw: &[u8]) -> Result<ReportProjection, SemanticError> {
-    let report: ReportProjection = serde_json::from_slice(raw)
-        .map_err(|error| SemanticError::new(format!("invalid report projection: {error}")))?;
+    let report: ReportProjection = serde_json::from_slice(raw).map_err(|error| {
+        SemanticError::new(
+            SemanticErrorKind::InvalidInputEncoding,
+            format!("invalid report projection: {error}"),
+        )
+    })?;
     report.validate()?;
     Ok(report)
 }
