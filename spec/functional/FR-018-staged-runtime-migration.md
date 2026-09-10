@@ -48,7 +48,8 @@ then update this repository's direct invocation and remove the old path.
 - Keep the content-rights checker and its tests recoverable while proving that
   reverting the dispatch cutover restores the retained invocation. Remove the
   checker, its Python tests, and their temporary Rust policy exemptions only
-  after the Rust dispatch passes independently.
+  after the Rust dispatch passes independently and the package/archive audit no
+  longer imports the retained classifier.
 - Preserve historical corpus and evidence bytes.
 - Return changed interfaces or compatibility promises to specification before
   implementation continues.

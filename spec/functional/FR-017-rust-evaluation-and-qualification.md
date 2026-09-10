@@ -183,9 +183,13 @@ checking, manifest validation, and qualification assertions to Rust.
   negative, Git-population, environment, path, file-kind, and resource cases,
   the repository SHALL retain the Python tree checker and its Python tests.
 - When that correspondence and a reversible dispatch cutover are recorded, the
-  repository SHALL remove the retained Python checker, its Python tests, and
-  their temporary semantic-policy exemptions together without changing the
-  inert corpus or historical evidence bytes.
+  repository SHALL move the direct tree gate to Rust while retaining the
+  Python checker and its parity tests until no package/archive audit imports
+  its classification functions.
+- When the final package/archive consumer has moved to Rust, the repository SHALL
+  remove the retained Python checker, its Python tests, and their temporary
+  semantic-policy exemptions together without changing the inert corpus or
+  historical evidence bytes.
 - Compare complete staged package membership with explicit allowlists and reject
   missing, extra, or escaping members.
 - The npm staging adapter SHALL copy only `manifest.yaml`,
