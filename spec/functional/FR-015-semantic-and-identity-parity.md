@@ -51,7 +51,10 @@ identities or ownership.
 - Treat canonical output bytes and their digest, rather than parsed structural
   equality, as evidence identity.
 - Expose stable typed availability spellings, exact-one validation for untyped
-  labels, result validity, and validation errors without formatted-output parsing.
+  labels, result validity, one stable top-level semantic-error category, and an
+  exhaustive typed refusal reason without formatted-output parsing.
+- When a historical PGM-01 identity is a JSON array or object, the Rust mapper SHALL return a schema-valid explicit classification or refusal rather than reproduce a language-specific object representation or interpreter exception.
+- When the retained Python implementation represents or rejects a structured identity differently, the differential qualification SHALL record the deliberate divergence.
 - Reject empty, whitespace-bearing, non-printable, mutable-alias, range, and
   wildcard governing versions while accepting `x` or `X` inside immutable
   version metadata.
@@ -66,7 +69,8 @@ identities or ownership.
 Unknown versions, missing provenance, ambiguous mappings, digest mismatch,
 malformed fixtures, invalid governing versions, unsupported canonicalization,
 and non-finite or overflowing numeric inputs fail explicitly while preserving
-the original input bytes.
+the original input bytes. Each semantic failure exposes a typed refusal reason;
+diagnostic prose is not the discriminator.
 
 ## Constraints
 
@@ -80,9 +84,9 @@ the original input bytes.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-015-AC-1 | Rust and retained reference implementations produce byte-identical canonical fixtures, identity digests, compatibility classifications, and bounded reports over the accepted corpus and focused fictional cases, including exact integers beyond `i64` and `u64`. | Test (TC-100) |
+| FR-015-AC-1 | Over the shared supported input domain, Rust and retained reference implementations produce byte-identical canonical fixtures, identity digests, compatibility classifications, and bounded reports over the accepted corpus and focused fictional cases, including exact integers beyond `i64` and `u64`; focused structured-identity cases record the declared Rust/Python divergence. | Test (TC-100) |
 | FR-015-AC-2 | Success, unavailable, not-computed, not-applicable, failed, inconclusive, malformed, stale, tampered, lossy, and unreadable remain distinguishable; typed state labels retain stable wire spellings and untyped labels require exactly one known state. | Test (TC-102) |
-| FR-015-AC-3 | Invalid versions, provenance, mappings, fixtures, digests, and numeric identity inputs fail without an identity digest or source-byte change; immutable `x`/`X` metadata remains accepted and validation details remain directly inspectable. | Test (TC-103) |
+| FR-015-AC-3 | Invalid versions, provenance, mappings, fixtures, digests, and numeric identity inputs fail without an identity digest or source-byte change; immutable `x`/`X` metadata remains accepted; every exercised semantic and PGM-01 refusal exposes its expected typed reason without inspecting diagnostic prose. | Test (TC-103) |
 | FR-015-AC-4 | Static ownership and execution audits find no copied portable contract family, persisted evidence family, or executable foreign-language fixture. | Test (TC-104) |
 
 ## Dependencies

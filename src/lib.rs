@@ -11,6 +11,7 @@
 
 pub mod compatibility;
 pub mod evidence;
+pub mod semantics;
 
 /// The Cargo package name shared by the library and CLI targets.
 pub const PACKAGE_NAME: &str = env!("CARGO_PKG_NAME");

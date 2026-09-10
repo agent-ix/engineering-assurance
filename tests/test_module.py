@@ -216,6 +216,37 @@ def test_hosted_ci_is_manual_only() -> None:
     assert set(workflow["on"]) == {"workflow_dispatch"}
 
 
+def test_manual_verification_workflow_runs_the_rust_foundation_gate() -> None:
+    workflow = yaml.load(
+        (ROOT / ".github" / "workflows" / "ci.yml").read_text(),
+        Loader=yaml.BaseLoader,
+    )
+    steps = workflow["jobs"]["verify"]["steps"]
+    assert steps[0]["with"]["submodules"] == "recursive"
+    rust_setup = next(
+        step for step in steps if str(step.get("uses", "")).startswith("dtolnay/rust-toolchain@")
+    )
+    assert rust_setup["with"] == {
+        "toolchain": "1.98.1",
+        "components": "rustfmt, clippy",
+    }
+    installed_tools = {
+        step["with"]["tool"]
+        for step in steps
+        if str(step.get("uses", "")).startswith("taiki-e/install-action@")
+    }
+    assert installed_tools == {"cargo-deny@0.19.8", "cargo-audit@0.22.2"}
+    assert any(step.get("run") == "make rust-foundation-gate" for step in steps)
+
+    makefile = (ROOT / "Makefile").read_text()
+    foundation = next(
+        line for line in makefile.splitlines() if line.startswith("rust-foundation-gate:")
+    )
+    assert {"rust-deps", "rust-audit"} <= set(foundation.split()[1:])
+    assert "$(CARGO) deny --locked check" in makefile
+    assert "$(CARGO) audit" in makefile
+
+
 def test_structural_coverage_never_collapses_unknowns_into_success() -> None:
     text = (ROOT / "docs" / "structural-coverage.md").read_text().casefold()
     assert "exactly once" in text
