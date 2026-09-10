@@ -232,6 +232,9 @@ struct MatrixComponent {
     #[serde(rename = "source_revision")]
     _source_revision: Option<String>,
     #[serde(default)]
+    #[serde(rename = "release_integrity")]
+    _release_integrity: Option<String>,
+    #[serde(default)]
     #[serde(rename = "engine")]
     _engine: Option<serde_json::Value>,
     #[serde(rename = "provides")]
@@ -242,6 +245,25 @@ struct MatrixComponent {
     incompatible_reasons: BTreeMap<String, String>,
     #[serde(rename = "artifacts")]
     _artifacts: Vec<serde_json::Value>,
+}
+
+/// Return one exact component pin from the embedded reviewed matrix.
+///
+/// # Errors
+///
+/// Returns [`CompatibilityError::InvalidMatrix`] if the embedded matrix is
+/// malformed, and [`CompatibilityError::UnknownComponent`] if `name` is not a
+/// reviewed component identity.
+pub fn expected_component_version(name: &str) -> Result<String, CompatibilityError> {
+    let matrix = Matrix::parse()?;
+    matrix
+        .components
+        .into_iter()
+        .find(|component| component.name == name)
+        .map(|component| component.version)
+        .ok_or_else(|| CompatibilityError::UnknownComponent {
+            component: name.to_owned(),
+        })
 }
 
 impl Matrix {
@@ -460,7 +482,7 @@ mod tests {
         vec![
             ("quire-cli", Some("0.31.0")),
             ("quoin", Some("0.23.1")),
-            ("ix-flow", Some("0.0.4")),
+            ("ix-flow", Some("0.2.3")),
             ("engineering-assurance", Some("0.2.0")),
         ]
     }
@@ -495,7 +517,7 @@ mod tests {
         let exact = evaluate_request_bytes(&request(&exact_observations()))
             .expect("exact request must evaluate");
         assert!(exact.versions_compatible);
-        assert_eq!(exact.outcome, CompatibilityOutcome::Compatible);
+        assert_eq!(exact.outcome, CompatibilityOutcome::Withheld);
 
         let missing = evaluate_request_bytes(&request(&exact_observations()[..3]))
             .expect("partial request must evaluate");
@@ -509,8 +531,23 @@ mod tests {
         let result =
             evaluate_request_bytes(&request(&exact_observations())).expect("request must evaluate");
         assert!(result.versions_compatible);
-        assert!(result.human_acceptance_recorded);
-        assert!(result.gate_satisfied);
+        assert!(!result.human_acceptance_recorded);
+        assert!(!result.gate_satisfied);
+    }
+
+    #[trace("TC-079", "FR-012-AC-1")]
+    #[test]
+    fn tc_079_exposes_the_exact_embedded_component_pin() {
+        assert_eq!(
+            expected_component_version("ix-flow").expect("ix-flow pin must exist"),
+            "0.2.3"
+        );
+        assert_eq!(
+            expected_component_version("unknown")
+                .expect_err("unknown component must fail")
+                .code(),
+            "unknown_compatibility_component"
+        );
     }
 
     #[trace("TC-085", "FR-012-AC-7")]

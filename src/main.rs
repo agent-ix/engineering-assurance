@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 mod onboarding_host;
+mod workflow_host;
 
 use std::{
     io::{self, Read, Write},
@@ -15,6 +16,7 @@ use std::{
 use clap::Command;
 use engineering_assurance::compatibility::{CompatibilityOutcome, evaluate_request_bytes};
 use engineering_assurance::onboarding;
+use engineering_assurance::workflow;
 use engineering_assurance::workflow_invariants;
 use serde::Serialize;
 
@@ -22,6 +24,7 @@ const ERROR_PROTOCOL: &str = "engineering-assurance.error/v1";
 const COMPATIBILITY_CAPABILITY: &str = "compatibility";
 const ONBOARDING_CAPABILITY: &str = "onboarding";
 const WORKFLOW_INVARIANTS_CAPABILITY: &str = "workflow-invariants";
+const WORKFLOW_HOST_CAPABILITY: &str = "workflow-host";
 const MAX_STDIN_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Serialize)]
@@ -50,6 +53,10 @@ fn command() -> Command {
             Command::new(WORKFLOW_INVARIANTS_CAPABILITY)
                 .about("Evaluate a closed workflow projection against named invariants"),
         )
+        .subcommand(
+            Command::new(WORKFLOW_HOST_CAPABILITY)
+                .about("Coordinate a bound workflow lifecycle through ix-flow"),
+        )
 }
 
 fn main() -> ExitCode {
@@ -58,7 +65,37 @@ fn main() -> ExitCode {
         Some(COMPATIBILITY_CAPABILITY) => run_compatibility(),
         Some(ONBOARDING_CAPABILITY) => run_onboarding(),
         Some(WORKFLOW_INVARIANTS_CAPABILITY) => run_workflow_invariants(),
+        Some(WORKFLOW_HOST_CAPABILITY) => run_workflow_host(),
         Some(_) | None => ExitCode::from(2),
+    }
+}
+
+fn run_workflow_host() -> ExitCode {
+    let bytes = match read_stdin(WORKFLOW_HOST_CAPABILITY, "workflow_host_request_invalid") {
+        Ok(bytes) => bytes,
+        Err(exit_code) => return exit_code,
+    };
+    let request = match workflow::parse_request_bytes(&bytes) {
+        Ok(request) => request,
+        Err(error) => {
+            return emit_error(WORKFLOW_HOST_CAPABILITY, error.code(), &error.to_string());
+        }
+    };
+    let result = match workflow_host::execute(&request) {
+        Ok(result) => result,
+        Err(error) => {
+            return emit_error(WORKFLOW_HOST_CAPABILITY, error.code(), &error.to_string());
+        }
+    };
+    match result.to_json_line() {
+        Ok(encoded) => match write_stdout(&encoded) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("failed to write workflow-host result: {error}");
+                ExitCode::from(2)
+            }
+        },
+        Err(error) => emit_error(WORKFLOW_HOST_CAPABILITY, error.code(), &error.to_string()),
     }
 }
 

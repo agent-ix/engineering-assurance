@@ -13,7 +13,7 @@ source; this document is what a human reads before accepting it.
 | quire-cli | 0.31.0 | npm `@agent-ix/quire-cli@0.31.0` | Static assurance export consumed by Quoin intake |
 | quire-rs (engine) | 0.46.0 | inside quire-cli 0.31.0 | The export the CLI delegates to |
 | quoin | 0.23.1 | npm `@agent-ix/quoin@0.23.1` | Evidence, measurements, change-assurance records, attestations, intake, audit, receipts |
-| ix-flow | 0.0.4 | npm `@agent-ix/ix-flow@0.0.4` | Human decision events as an integrity-verified chain |
+| ix-flow | 0.2.3 | npm `@agent-ix/ix-flow@0.2.3` | Human decision events as an integrity-verified chain |
 | engineering-assurance | 0.2.0 | git tag `v0.2.0` | Shared semantics, PGM-01 compatibility mapping, the accepted corpus gate |
 
 Every one is a released artifact. No pin is a branch head, a bare revision, or
@@ -69,7 +69,7 @@ and every artifact is retained with its digest.
 
 ## Upgrade
 
-Order: **quire-cli → quoin → this repository's tag → the corpus gitlink.** Each
+Order: **quire-cli → quoin → ix-flow → this repository's tag → the corpus gitlink.** Each
 step is independently verifiable, and only the last moves the gate.
 
 After each step:
@@ -96,6 +96,7 @@ release. Nothing here requires a rebuild from source to undo.
 | --- | --- | --- |
 | quoin | install `@agent-ix/quoin@0.22.5` | the `change-assurance` commands; retained records, attestations, and receipts are unaffected, because 0.23.x added a surface over existing contracts rather than changing the stored layout |
 | quire-cli | install `@agent-ix/quire-cli@0.30.2` | the `provenance` command; exports produced by 0.31.0 remain readable |
+| ix-flow | install `@agent-ix/ix-flow@0.0.4` after restoring the prior invocation | the additive Rust lifecycle adapter; ix-flow-owned run state and event history remain intact |
 | engineering-assurance | check out the previous tag | there is none before `v0.2.0`, so rollback means removing the dependency rather than downgrading it |
 | corpus | move the gitlink to the earlier commit and re-run the FR-011 gate | nothing; the corpus is content-addressed, so an earlier pin is a complete self-verifying set |
 
@@ -112,20 +113,22 @@ workflow that published quoin 0.23.1.
 
 ```json
 "accepted": {
-  "state": "accepted",
-  "accepted_by": "Peter Krenesky",
-  "accepted_at": "2026-09-01"
+  "state": "pending_human_acceptance",
+  "accepted_by": null,
+  "accepted_at": null
 }
 ```
 
-**Accepted 2026-09-01.** An agent prepared this matrix and did not decide to
-accept it; the named human did, and directed an agent to transcribe that
-decision here. That distinction is the whole point of the field, so it is worth
-stating rather than leaving to the commit log.
+The previously accepted matrix changed when ix-flow moved from 0.0.4 to the
+current public 0.2.3 release, so that acceptance does not silently carry over.
+Public registry metadata binds the candidate to source revision
+`8b6cf8287db828b4db2df814bc7c1ef10362db24` and its recorded SHA-512 integrity.
+A named human must accept the complete revised matrix after the local TC-107
+compatibility evidence is available.
 
 TC-082 no longer asserts the fields are unset — it now asserts acceptance is in
 one of its two honest shapes: pending with nothing filled in, or accepted with
 both a named human and a date. The shape it rejects is a `state` that reads as
 accepted while nobody is on record as having accepted it.
 
-This unblocks `#10`.
+Until then, the enforcing migration gate remains closed.

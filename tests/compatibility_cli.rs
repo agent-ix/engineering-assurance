@@ -38,7 +38,7 @@ fn exact_request() -> serde_json::Value {
         "observed": [
             {"component": "quire-cli", "version": "0.31.0"},
             {"component": "quoin", "version": "0.23.1"},
-            {"component": "ix-flow", "version": "0.0.4"},
+            {"component": "ix-flow", "version": "0.2.3"},
             {"component": "engineering-assurance", "version": "0.2.0"}
         ]
     })
@@ -48,17 +48,17 @@ fn exact_request() -> serde_json::Value {
 #[test]
 fn tc_098_machine_result_is_one_versioned_json_value() {
     let output = run(&exact_request());
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(1));
     assert!(output.stderr.is_empty());
     assert_eq!(output.stdout.last(), Some(&b'\n'));
     assert!(!output.stdout[..output.stdout.len() - 1].contains(&b'\n'));
     let result: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("stdout must be one JSON value");
     assert_eq!(result["protocol"], RESULT_PROTOCOL);
-    assert_eq!(result["outcome"], "compatible");
+    assert_eq!(result["outcome"], "withheld");
     assert_eq!(result["versions_compatible"], true);
-    assert_eq!(result["human_acceptance_recorded"], true);
-    assert_eq!(result["gate_satisfied"], true);
+    assert_eq!(result["human_acceptance_recorded"], false);
+    assert_eq!(result["gate_satisfied"], false);
     assert_eq!(result["components"].as_array().map(Vec::len), Some(4));
 }
 

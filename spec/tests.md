@@ -118,7 +118,7 @@ implemented and reviewed.
 | FR-015 | FR-015-AC-4 | TC-104 | 🚧 Semantic ownership and inert-fixture static slice backed; aggregate executable-language audit pending |
 | FR-016 | FR-016-AC-1 | TC-105 | ✅ Rust onboarding core, CLI, retained-reference parity, and confined publication backed |
 | FR-016 | FR-016-AC-2 | TC-106 | ✅ Rust evaluator and CLI parity backed |
-| FR-016 | FR-016-AC-3 | TC-107 | 🚧 Pending implementation |
+| FR-016 | FR-016-AC-3 | TC-107 | 🚧 Rust lifecycle host and adverse cases pass against ix-flow 0.2.3; human matrix acceptance pending |
 | FR-016 | FR-016-AC-4 | TC-108 | 🚧 Pending implementation |
 | FR-017 | FR-017-AC-1 | TC-109 | 🚧 Pending implementation |
 | FR-017 | FR-017-AC-2 | TC-110 | 🚧 Pending implementation |
@@ -154,10 +154,13 @@ implemented and reviewed.
 | FR-015-CON-1 | TC-103 | 🚧 Read-only evidence and semantic/PGM slices backed; aggregate pending |
 | FR-015-CON-2 | TC-104 | 🚧 Inert generated-fixture slice backed; aggregate pending |
 | FR-015-CON-3 | TC-104 | 🚧 Semantic-contract slice backed; aggregate pending |
-| FR-016-CON-1 | TC-107 | 🚧 Pending implementation |
+| FR-016-CON-1 | TC-107 | 🚧 Delegated ix-flow state/chain behavior passing; human matrix acceptance pending |
 | FR-016-CON-2 | TC-115 | 🚧 Pending owner disposition |
 | FR-016-CON-3 | TC-106 | ✅ Deterministic I/O-free Rust evaluator backed |
 | FR-016-CON-4 | TC-105 | ✅ Pure library and binary-only host adapter backed |
+| FR-016-CON-5 | TC-107 | 🚧 Supported ix-flow CLI-only lifecycle path passing; human matrix acceptance pending |
+| FR-016-CON-6 | TC-107 | 🚧 State-file isolation and delegated chain verification passing; human matrix acceptance pending |
+| FR-016-CON-7 | TC-107 | 🚧 Direct argv and display-only next-action guards passing; human matrix acceptance pending |
 | FR-017-CON-1 | TC-109 | 🚧 Pending implementation |
 | FR-017-CON-2 | TC-112 | 🚧 Pending implementation |
 | FR-018-CON-1 | TC-113 | 🚧 Pending implementation |
@@ -274,7 +277,7 @@ implemented and reviewed.
 | TC-104 | Contract ownership and inert foreign-language fixtures remain bounded | Static | P0 | FR-015-AC-4, FR-015-CON-2, FR-015-CON-3 | 🚧 semantic ownership and inert-fixture slice backed; aggregate audit pending |
 | TC-105 | Rust onboarding matches the retained complete sorted inventory, status, recommendation, and artifact path for existing, absent, conflicting, malformed, unavailable, unjustified, incomplete-boundary, and valid-authoring cases; duplicate-key and merge-key artifact identities remain malformed; newly authored artifacts retain equivalent parsed frontmatter and an identical Markdown body and pass Quire, while malformed requests, unsupported types, absolute or parent-traversing targets, symlink escapes, existing destinations, and invalid staged artifacts publish nothing | Property | P0 | FR-016-AC-1, FR-016-CON-4 | ✅ Rust core/CLI parity, fail-closed YAML identity, real Quire validation, no-replace publication, and boundary refusals passing |
 | TC-106 | Rust and the retained invariant provider return the same ordered typed outcomes for all eleven canonical invariants and valid boundary fixtures at one explicit evaluation instant; unknown invariant names and malformed Rust requests fail before an outcome | Integration | P0 | FR-016-AC-2, FR-016-CON-3 | ✅ Rust evaluator, retained-reference parity, fail-closed probes, and CLI boundary passing |
-| TC-107 | Rust coordination preserves ix-flow lifecycle and human gates | Integration | P0 | FR-016-AC-3, FR-016-CON-1 | 🚧 pending implementation |
+| TC-107 | Against the exact accepted ix-flow pin, Rust start/resume and explicit decision coordination preserves ix-flow state ownership, recovers only pristine interrupted initialization, remains idempotent across gate interruption windows, requires ix-flow to verify an intact event chain, refuses incompatible hosts and binding/transition/decision conflicts before mutation, reports ambiguous post-mutation host failures as indeterminate for status reconciliation, bounds malformed/oversized/timed-out responses, and never supplies an automatic gate override or executes next-action text | Integration | P0 | FR-016-AC-3, FR-016-CON-1, FR-016-CON-5, FR-016-CON-6, FR-016-CON-7 | 🚧 implementation and adverse cases pass against ix-flow 0.2.3; human matrix acceptance pending |
 | TC-108 | Canonical and pilot workflows pass through the Rust invariant provider before removal | Integration | P0 | FR-016-AC-4 | 🚧 pending host interface |
 | TC-109 | Rust evaluation completes the 28-cell matrix without inferred decisions | E2E | P0 | FR-017-AC-1, FR-017-CON-1 | 🚧 pending host interface |
 | TC-110 | Every incomplete or invalid evaluation input withholds the aggregate gate | Property | P0 | FR-017-AC-2 | 🚧 pending implementation |
@@ -319,7 +322,8 @@ evaluation envelopes.
 |---|---|---|---|
 | TC-098, TC-099 | Protocol/result | supported v1; unknown version; malformed input; escaping root; unavailable or invalid host | one versioned result for success; every adverse case fails before a write or downstream action |
 | TC-100, TC-102, TC-103 | Semantic state | success; unavailable; not-computed; not-applicable; failed; inconclusive; malformed; stale; tampered; lossy; unreadable; arbitrary-precision integer; NaN/infinity/overflow-to-non-finite; scalar and structured PGM-01 identities; exact metadata containing `x`; wildcard/range/invalid-character version | byte-identical success on the shared supported domain or one explicit declared structured-identity divergence; each non-success outcome and typed refusal reason remains distinct; invalid numeric/version inputs mint no digest |
-| TC-107, TC-108, TC-109, TC-110 | Host integration | supported request/result; absent host; malformed response; invalid transition; incomplete scenario | preserve host ownership and fail unsupported inputs explicitly |
+| TC-107 | ix-flow lifecycle host | new run; pristine unbound recovery; interrupted resume; missing/accept/reject/repeated/opposite choice; invalid phase; binding drift; intact/broken chain; absent/wrong-version/malformed/oversized/timed-out host; automatic-gate evidence; hostile next-action text | preserve ix-flow ownership, exact binding, verified event integrity, one attributed decision, bounded typed output, pre-mutation history on refusal, and status-reconciled state after an indeterminate mutation; pass no gate override and execute no returned command text |
+| TC-108, TC-109, TC-110 | Remaining host integration | supported request/result; absent host; malformed response; invalid transition; incomplete scenario | preserve host ownership and fail unsupported inputs explicitly |
 | TC-113, TC-114 | Cutover | old only; additive parity; direct invocation updated; parity failure | delete only after local parity and restore the prior invocation on failure |
 | TC-100 | Pure capability | compatibility classification; semantic validation; bounded projection; fixture generation; canonical identity | each ADR-002 row has an independently reported old/new corpus and adverse-case result |
 | TC-111 | Qualification capability | package members; rights; manifest; integration; publication refusal | each gate has one retained passing case and every named refusal case |
@@ -348,6 +352,9 @@ evaluation envelopes.
 | Decision-ready run without choice | Remains decision-ready | TC-029 | Non-terminal |
 | Decision-ready run with rejection | Decision-ready to rejection terminal | TC-028 | Rejected exactly once |
 | Terminal transition configured automatic | Gate override attempt | TC-030 | Fails closed |
+| New ix-flow run interrupted before binding | Pristine unbound to bound resume | TC-107 | Add exactly one matching binding, then resume |
+| Decision-ready run interrupted after gate defer or acknowledgement | Retry same explicit choice | TC-107 | Complete exactly one attributed terminal decision |
+| Terminal run receives opposite choice | Accepted/rejected conflict | TC-107 | Refuse without changing history |
 | Legacy path only | Additive Rust path enabled | TC-113 | Both remain available; no completion claim |
 | Old and Rust paths pass at the same revision | Direct invocation updated | TC-097, TC-113 | Rust path becomes the repository-owned invocation |
 | Direct invocation and parity checks pass | Legacy path removed | TC-113 | Removal allowed once |
