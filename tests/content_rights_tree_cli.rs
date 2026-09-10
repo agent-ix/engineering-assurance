@@ -325,9 +325,9 @@ fn tc_111_public_repository_rights_metadata_remains_consistent() {
 
 #[test]
 #[trace("TC-112", "FR-017-AC-4", "FR-017-CON-2")]
-fn tc_112_make_dispatch_is_declarative_rust_invocation() {
+fn tc_112_make_dispatch_remains_pending_until_same_revision_parity() {
     let makefile = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Makefile"))
         .expect("Makefile must be readable");
-    assert!(!makefile.contains("scripts/check_content_rights.py --tree"));
-    assert_eq!(makefile.matches("content-rights-tree --root .").count(), 1);
+    assert!(makefile.contains("scripts/check_content_rights.py --tree"));
+    assert!(!makefile.contains("content-rights-tree --root ."));
 }

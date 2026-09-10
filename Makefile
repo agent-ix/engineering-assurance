@@ -16,7 +16,7 @@ lint:
 	$(PYTHON) -m ruff check .
 
 test:
-	CARGO_BUILD_JOBS=2 cargo +1.98.1 run --locked --quiet -- content-rights-tree --root .
+	$(PYTHON) scripts/check_content_rights.py --tree
 	$(PYTHON) -m pytest
 	$(PYTHON) scripts/validate_manifest.py
 
