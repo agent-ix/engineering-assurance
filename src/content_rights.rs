@@ -31,8 +31,6 @@ const SEMANTIC_POLICY_FILES: &[&str] = &[
     "content-rights.yaml",
     "src/content_rights.rs",
     "tests/content_rights_parity.rs",
-    "scripts/check_content_rights.py",
-    "tests/test_content_rights.py",
 ];
 
 /// Whether a candidate tree entry is a regular file or symbolic link.
