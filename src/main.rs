@@ -6,16 +6,19 @@
 #![forbid(unsafe_code)]
 
 mod onboarding_host;
+mod package_host;
 mod workflow_host;
 
 use std::{
     io::{self, Read, Write},
+    path::PathBuf,
     process::ExitCode,
 };
 
-use clap::Command;
+use clap::{Arg, ArgMatches, Command};
 use engineering_assurance::compatibility::{CompatibilityOutcome, evaluate_request_bytes};
 use engineering_assurance::onboarding;
+use engineering_assurance::package_lifecycle::PackageLifecycleResult;
 use engineering_assurance::workflow;
 use engineering_assurance::workflow_invariants;
 use serde::Serialize;
@@ -23,6 +26,7 @@ use serde::Serialize;
 const ERROR_PROTOCOL: &str = "engineering-assurance.error/v1";
 const COMPATIBILITY_CAPABILITY: &str = "compatibility";
 const ONBOARDING_CAPABILITY: &str = "onboarding";
+const PACKAGE_LIFECYCLE_CAPABILITY: &str = "package-lifecycle";
 const WORKFLOW_INVARIANTS_CAPABILITY: &str = "workflow-invariants";
 const WORKFLOW_HOST_CAPABILITY: &str = "workflow-host";
 const MAX_STDIN_BYTES: usize = 8 * 1024 * 1024;
@@ -57,17 +61,130 @@ fn command() -> Command {
             Command::new(WORKFLOW_HOST_CAPABILITY)
                 .about("Coordinate a bound workflow lifecycle through ix-flow"),
         )
+        .subcommand(
+            Command::new(PACKAGE_LIFECYCLE_CAPABILITY)
+                .about("Stage, clean, or refuse publication of the npm artifact bundle")
+                .subcommand_required(true)
+                .subcommand(package_root_command(
+                    "stage",
+                    "Stage the fixed npm module payload",
+                ))
+                .subcommand(package_root_command(
+                    "clean",
+                    "Remove an exactly corresponding staged npm payload",
+                ))
+                .subcommand(
+                    Command::new("refuse-publication")
+                        .about("Unconditionally refuse public npm publication")
+                        .arg(npm_hook_arg()),
+                ),
+        )
+}
+
+fn package_root_command(name: &'static str, about: &'static str) -> Command {
+    Command::new(name)
+        .about(about)
+        .arg(
+            Arg::new("root")
+                .long("root")
+                .value_name("PATH")
+                .value_parser(clap::value_parser!(PathBuf))
+                .required(true),
+        )
+        .arg(npm_hook_arg())
+}
+
+fn npm_hook_arg() -> Arg {
+    Arg::new("npm-hook")
+        .long("npm-hook")
+        .action(clap::ArgAction::SetTrue)
+        .help("Leave stdout to the invoking npm lifecycle command")
 }
 
 fn main() -> ExitCode {
     let matches = command().get_matches();
-    match matches.subcommand_name() {
-        Some(COMPATIBILITY_CAPABILITY) => run_compatibility(),
-        Some(ONBOARDING_CAPABILITY) => run_onboarding(),
-        Some(WORKFLOW_INVARIANTS_CAPABILITY) => run_workflow_invariants(),
-        Some(WORKFLOW_HOST_CAPABILITY) => run_workflow_host(),
+    match matches.subcommand() {
+        Some((COMPATIBILITY_CAPABILITY, _)) => run_compatibility(),
+        Some((ONBOARDING_CAPABILITY, _)) => run_onboarding(),
+        Some((WORKFLOW_INVARIANTS_CAPABILITY, _)) => run_workflow_invariants(),
+        Some((WORKFLOW_HOST_CAPABILITY, _)) => run_workflow_host(),
+        Some((PACKAGE_LIFECYCLE_CAPABILITY, arguments)) => run_package_lifecycle(arguments),
         Some(_) | None => ExitCode::from(2),
     }
+}
+
+fn run_package_lifecycle(arguments: &ArgMatches) -> ExitCode {
+    let (result, npm_hook) = match arguments.subcommand() {
+        Some(("stage", values)) => (
+            package_root(values).and_then(package_host::stage),
+            values.get_flag("npm-hook"),
+        ),
+        Some(("clean", values)) => (
+            package_root(values).and_then(package_host::clean),
+            values.get_flag("npm-hook"),
+        ),
+        Some(("refuse-publication", values)) => (
+            Ok(PackageLifecycleResult::publication_refused()),
+            values.get_flag("npm-hook"),
+        ),
+        Some(_) | None => {
+            return emit_error(
+                PACKAGE_LIFECYCLE_CAPABILITY,
+                "package_operation_invalid",
+                "package-lifecycle operation is invalid",
+            );
+        }
+    };
+    let result = match result {
+        Ok(result) => result,
+        Err(error) if npm_hook => {
+            eprintln!("{error}");
+            return ExitCode::from(2);
+        }
+        Err(error) => {
+            return emit_error(
+                PACKAGE_LIFECYCLE_CAPABILITY,
+                error.code(),
+                &error.to_string(),
+            );
+        }
+    };
+    let refused = result.operation()
+        == engineering_assurance::package_lifecycle::PackageLifecycleOperation::RefusePublication;
+    if npm_hook {
+        if refused {
+            eprintln!("public package publication is disabled for engineering-assurance");
+            return ExitCode::from(1);
+        }
+        return ExitCode::SUCCESS;
+    }
+    match result.to_json_line() {
+        Ok(encoded) => match write_stdout(&encoded) {
+            Ok(()) if refused => {
+                eprintln!("public package publication is disabled for engineering-assurance");
+                ExitCode::from(1)
+            }
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("failed to write package-lifecycle result: {error}");
+                ExitCode::from(2)
+            }
+        },
+        Err(error) => emit_error(
+            PACKAGE_LIFECYCLE_CAPABILITY,
+            error.code(),
+            &error.to_string(),
+        ),
+    }
+}
+
+fn package_root(
+    arguments: &ArgMatches,
+) -> Result<&std::path::Path, package_host::PackageHostError> {
+    arguments
+        .get_one::<PathBuf>("root")
+        .map(PathBuf::as_path)
+        .ok_or(package_host::PackageHostError::RootInvalid)
 }
 
 fn run_workflow_host() -> ExitCode {

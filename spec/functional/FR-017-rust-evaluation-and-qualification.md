@@ -28,6 +28,8 @@ checking, manifest validation, and qualification assertions to Rust.
 - Canonical agent-evaluation scenarios and supported hosts.
 - Versioned cli-agent-evals results and retained transcripts.
 - Package manifests, staged archives, rights policy, and integration evidence.
+- For the npm package-lifecycle adapter, one explicit repository root and one
+  closed operation: `stage`, `clean`, or `refuse-publication`.
 - For the pure package-membership boundary, one explicit expected-member
   allowlist and one observed file-member sequence supplied by an archive or
   staging adapter.
@@ -49,6 +51,8 @@ checking, manifest validation, and qualification assertions to Rust.
 - Versioned per-run and aggregate evaluation results.
 - Deterministic qualification diagnostics and exit statuses.
 - Audited package contents and enforced publication refusal.
+- One `engineering-assurance.package-lifecycle-result/v1` result identifying
+  the requested operation and its closed outcome.
 - The pure aggregation boundary emits one
   `engineering-assurance.evaluation-aggregate-result/v1` value containing the
   pass decision, required-cell count, complete-cell count, and a deterministic
@@ -138,6 +142,45 @@ checking, manifest validation, and qualification assertions to Rust.
   retained classifier.
 - Compare complete staged package membership with explicit allowlists and reject
   missing, extra, or escaping members.
+- The npm staging adapter SHALL copy only `manifest.yaml`,
+  `compatibility-matrix.json`, `contracts/`, `fixtures/`, `schemas/`, and
+  `skeletons/` from the repository-owned `engineering_assurance/` module root
+  to the package root.
+- The npm staging adapter SHALL preflight every selected source as a regular
+  file or directory containing only regular files and directories.
+- The npm staging adapter SHALL reject symbolic links, special files, missing
+  sources, non-portable UTF-8 relative paths, and any pre-existing staged
+  destination before it writes.
+- A portable staged path SHALL contain only non-empty UTF-8 segments without
+  dot, parent, backslash, or control-character segments.
+- The npm staging adapter SHALL reject more than 4,096 filesystem entries, an
+  individual file larger than 8,388,608 bytes, or total staged bytes larger
+  than 16,777,216 bytes before it writes.
+- A staging error after writing begins SHALL remove only destinations that the
+  current invocation proved absent during preflight and created itself.
+- A successful npm staging result SHALL mean every staged byte matches its
+  selected source byte after copying.
+- The npm cleanup adapter SHALL validate every present staged destination as an
+  exact regular-file tree copy of its current selected source before deletion.
+- The npm cleanup adapter SHALL delete no destination when any staged member is
+  missing, extra, changed, symbolic, special, or otherwise unverifiable.
+- The npm cleanup adapter SHALL treat an entirely absent staged population as a
+  successful idempotent cleanup.
+- The publication-refusal operation SHALL always return the closed refused
+  outcome without reading package contents or contacting a registry.
+- Each direct package-lifecycle operation SHALL emit one versioned JSON result
+  on stdout and diagnostics only on stderr.
+- An explicitly selected npm-hook rendering mode SHALL leave stdout empty so
+  npm retains ownership of its own machine-readable output.
+- The npm-hook rendering mode SHALL communicate stage or cleanup success only
+  through exit status.
+- The npm-hook rendering mode SHALL communicate publication refusal through a
+  non-success status and a diagnostic on stderr.
+- The npm lifecycle configuration SHALL invoke the Rust CLI through the pinned
+  local Cargo package without embedding staging or refusal semantics.
+- The npm distribution SHALL remain a configuration and artifact bundle.
+- The npm lifecycle adapter SHALL NOT claim that the npm archive distributes a
+  native Rust executable.
 - When package membership is classified, the Rust policy SHALL reject an expected
   allowlist containing an empty, duplicate, absolute, backslash-delimited,
   trailing-slash, empty-segment, dot-segment, parent-traversing,
@@ -221,6 +264,11 @@ YAML or JSON, invalid schemas, unavailable offline references, manifest-schema
 mismatches, identity drift, duplicate artifact names, unregistered edges,
 resource mismatch, unsafe schema references, invalid skeleton frontmatter, and
 missing required headings withhold module-manifest acceptance.
+Missing, linked, special, oversized, excessive, pre-existing, changed, or
+non-corresponding npm staging members refuse the package-lifecycle operation.
+A preflight-refused staging or cleanup operation reports no successful outcome
+and deletes no pre-existing destination.
+An npm-hook invocation that writes to stdout fails package-manager integration.
 
 ## Constraints
 
