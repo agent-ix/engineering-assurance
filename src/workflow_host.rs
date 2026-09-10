@@ -7,11 +7,8 @@ use std::{
     collections::BTreeMap,
     ffi::{OsStr, OsString},
     fs,
-    io::{self, Read},
     path::{Component, Path, PathBuf},
-    process::{Command, ExitStatus, Stdio},
-    thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use engineering_assurance::{
@@ -24,6 +21,8 @@ use engineering_assurance::{
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Map, Value};
 use thiserror::Error;
+
+use crate::process_host::{self, ProcessError, ProcessLimits};
 
 const IX_FLOW_COMPONENT: &str = "ix-flow";
 const HOST_TIMEOUT: Duration = Duration::from_secs(60);
@@ -705,116 +704,23 @@ fn run_process(
     operation: &str,
     limits: HostLimits,
 ) -> Result<CompletedProcess, WorkflowHostError> {
-    let mut child = Command::new(executable)
-        .args(arguments)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|source| WorkflowHostError::Unavailable {
-            detail: source.to_string(),
-        })?;
-    let Some(stdout) = child.stdout.take() else {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(response_error(
-            mutation_possible,
-            operation,
-            "stdout pipe is unavailable",
-        ));
-    };
-    let Some(stderr) = child.stderr.take() else {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(response_error(
-            mutation_possible,
-            operation,
-            "stderr pipe is unavailable",
-        ));
-    };
-    let stdout_reader = bounded_reader(stdout, limits.max_output_bytes);
-    let stderr_reader = bounded_reader(stderr, limits.max_output_bytes);
-
-    let started = Instant::now();
-    let process_result = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break Ok((status, false)),
-            Ok(None) if started.elapsed() < limits.timeout => {
-                thread::sleep(Duration::from_millis(5));
-            }
-            Ok(None) => {
-                let _ = child.kill();
-                break child
-                    .wait()
-                    .map(|status| (status, true))
-                    .map_err(|source| format!("cannot reap timed-out ix-flow process: {source}"));
-            }
-            Err(source) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                break Err(format!("cannot observe ix-flow process: {source}"));
-            }
-        }
-    };
-    let stdout = join_reader(stdout_reader, mutation_possible, operation, "stdout");
-    let stderr = join_reader(stderr_reader, mutation_possible, operation, "stderr");
-    let stdout = stdout?;
-    let stderr = stderr?;
-    let (status, timed_out) =
-        process_result.map_err(|detail| response_error(mutation_possible, operation, &detail))?;
-    if timed_out {
-        return Err(response_error(
-            mutation_possible,
-            operation,
-            &format!("process exceeded the {:?} host limit", limits.timeout),
-        ));
-    }
-    if stdout.overflow || stderr.overflow {
-        return Err(response_error(
-            mutation_possible,
-            operation,
-            &format!(
-                "process output exceeded the {}-byte per-stream host limit",
-                limits.max_output_bytes
-            ),
-        ));
-    }
-    Ok(CompletedProcess {
-        status,
-        stdout: stdout.bytes,
-        stderr: stderr.bytes,
+    process_host::run(
+        executable,
+        arguments,
+        ProcessLimits {
+            timeout: limits.timeout,
+            max_output_bytes: limits.max_output_bytes,
+        },
+    )
+    .map(|completed| CompletedProcess {
+        status: completed.status,
+        stdout: completed.stdout,
+        stderr: completed.stderr,
     })
-}
-
-fn bounded_reader<R>(reader: R, maximum: usize) -> thread::JoinHandle<io::Result<CapturedBytes>>
-where
-    R: Read + Send + 'static,
-{
-    thread::spawn(move || {
-        let limit = u64::try_from(maximum).unwrap_or(u64::MAX).saturating_add(1);
-        let mut bytes = Vec::new();
-        reader.take(limit).read_to_end(&mut bytes)?;
-        let overflow = bytes.len() > maximum;
-        Ok(CapturedBytes { bytes, overflow })
+    .map_err(|error| match error {
+        ProcessError::Unavailable { detail } => WorkflowHostError::Unavailable { detail },
+        error => response_error(mutation_possible, operation, &error.to_string()),
     })
-}
-
-fn join_reader(
-    handle: thread::JoinHandle<io::Result<CapturedBytes>>,
-    mutation_possible: bool,
-    operation: &str,
-    stream: &str,
-) -> Result<CapturedBytes, WorkflowHostError> {
-    handle
-        .join()
-        .map_err(|_| response_error(mutation_possible, operation, "output reader panicked"))?
-        .map_err(|source| {
-            response_error(
-                mutation_possible,
-                operation,
-                &format!("cannot read ix-flow {stream}: {source}"),
-            )
-        })
 }
 
 fn response_error(mutation_possible: bool, operation: &str, detail: &str) -> WorkflowHostError {
@@ -1129,14 +1035,9 @@ enum RunStatus {
 
 #[derive(Debug)]
 struct CompletedProcess {
-    status: ExitStatus,
+    status: std::process::ExitStatus,
     stdout: Vec<u8>,
     stderr: Vec<u8>,
-}
-
-struct CapturedBytes {
-    bytes: Vec<u8>,
-    overflow: bool,
 }
 
 #[derive(Debug, Deserialize)]

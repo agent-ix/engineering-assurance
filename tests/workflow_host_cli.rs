@@ -553,6 +553,8 @@ fn tc_107_incompatible_unavailable_and_malformed_inputs_fail_before_state() {
         .split("#[cfg(test)]")
         .next()
         .expect("production source must precede its test module");
+    let process_adapter = include_str!("../src/process_host.rs");
+    let host_sources = format!("{production}\n{process_adapter}");
     let forbidden = [
         "Command::new(\"sh\")",
         "Command::new(\"bash\")",
@@ -566,12 +568,13 @@ fn tc_107_incompatible_unavailable_and_malformed_inputs_fail_before_state() {
     assert_eq!(
         forbidden
             .into_iter()
-            .filter(|needle| production.contains(needle))
+            .filter(|needle| host_sources.contains(needle))
             .collect::<BTreeSet<_>>(),
         BTreeSet::new()
     );
-    assert_eq!(production.matches("Command::new(").count(), 1);
-    assert!(production.contains("Command::new(executable)"));
+    assert_eq!(production.matches("process_host::run(").count(), 1);
+    assert_eq!(process_adapter.matches("Command::new(").count(), 1);
+    assert!(process_adapter.contains("Command::new(executable)"));
     assert_eq!(production.matches("next_actions").count(), 4);
     assert_eq!(production.matches("fs::read(").count(), 1);
     assert_eq!(production.matches("fs::canonicalize(").count(), 1);

@@ -137,12 +137,15 @@ pub struct ContentRightsFinding {
     pub category: ContentRightsCategory,
 }
 
-/// Internal policy initialization failure.
+/// Typed failure from the pure content-rights boundary.
 #[derive(Debug, Error)]
 pub enum ContentRightsError {
     /// One repository-owned regular expression failed to compile.
     #[error("content-rights policy pattern is invalid")]
     InvalidPolicyPattern,
+    /// A closed content-rights result could not be serialized.
+    #[error("content-rights result serialization failed: {0}")]
+    Serialization(serde_json::Error),
 }
 
 impl ContentRightsError {
@@ -151,7 +154,86 @@ impl ContentRightsError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::InvalidPolicyPattern => "content_rights_policy_invalid",
+            Self::Serialization(_) => "content_rights_result_serialization_failed",
         }
+    }
+}
+
+/// Protocol discriminator for a complete selected-tree result.
+pub const CONTENT_RIGHTS_TREE_PROTOCOL: &str =
+    "engineering-assurance.content-rights-tree-result/v1";
+
+/// Closed selected-tree content-rights outcome.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ContentRightsTreeOutcome {
+    /// No selected entry produced a finding.
+    Accepted,
+    /// At least one selected entry produced a finding.
+    Withheld,
+}
+
+/// Deterministic result for one complete selected repository tree.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContentRightsTreeResult {
+    protocol: &'static str,
+    outcome: ContentRightsTreeOutcome,
+    inspected_entries: usize,
+    findings: Vec<ContentRightsFinding>,
+}
+
+impl ContentRightsTreeResult {
+    /// Construct a result and canonicalize its finding population.
+    #[must_use]
+    pub fn new(inspected_entries: usize, mut findings: Vec<ContentRightsFinding>) -> Self {
+        sort_findings(&mut findings);
+        let outcome = if findings.is_empty() {
+            ContentRightsTreeOutcome::Accepted
+        } else {
+            ContentRightsTreeOutcome::Withheld
+        };
+        Self {
+            protocol: CONTENT_RIGHTS_TREE_PROTOCOL,
+            outcome,
+            inspected_entries,
+            findings,
+        }
+    }
+
+    /// Return the fixed result protocol discriminator.
+    #[must_use]
+    pub const fn protocol(&self) -> &'static str {
+        self.protocol
+    }
+
+    /// Return the closed accepted or withheld outcome.
+    #[must_use]
+    pub const fn outcome(&self) -> ContentRightsTreeOutcome {
+        self.outcome
+    }
+
+    /// Return the number of regular files and symbolic links inspected.
+    #[must_use]
+    pub const fn inspected_entries(&self) -> usize {
+        self.inspected_entries
+    }
+
+    /// Return the canonical finding population.
+    #[must_use]
+    pub fn findings(&self) -> &[ContentRightsFinding] {
+        &self.findings
+    }
+
+    /// Encode one newline-terminated machine result.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error if serialization unexpectedly fails.
+    pub fn to_json_line(&self) -> Result<Vec<u8>, ContentRightsError> {
+        let mut encoded = serde_json::to_vec(self).map_err(ContentRightsError::Serialization)?;
+        encoded.push(b'\n');
+        Ok(encoded)
     }
 }
 
@@ -248,6 +330,16 @@ pub fn inspect_content(
     Ok(inspect_text_lines(path, text, &folded_tokens, patterns))
 }
 
+/// Split a protected-token environment value with the retained logical-line
+/// boundaries while preserving each nonblank token's exact spelling.
+#[must_use]
+pub fn split_protected_tokens(raw: &str) -> Vec<String> {
+    LogicalLines::new(raw)
+        .filter(|token| !token.trim().is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
 fn whole_file_finding(
     path: &str,
     kind: ContentEntryKind,
@@ -292,6 +384,11 @@ fn inspect_text_lines(
             patterns,
         );
     }
+    sort_findings(&mut findings);
+    findings
+}
+
+fn sort_findings(findings: &mut Vec<ContentRightsFinding>) {
     findings.sort_by(|left, right| {
         (left.path.as_deref(), left.line, left.category.as_str()).cmp(&(
             right.path.as_deref(),
@@ -300,7 +397,6 @@ fn inspect_text_lines(
         ))
     });
     findings.dedup();
-    findings
 }
 
 fn append_location_findings(
