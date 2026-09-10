@@ -12,7 +12,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use thiserror::Error;
-use yaml_serde::Value as YamlValue;
+
+use crate::structured_yaml::parse_unambiguous_yaml_json;
 
 /// Maximum bytes accepted for any one manifest, schema, or skeleton document.
 pub const MAX_MANIFEST_DOCUMENT_BYTES: usize = 1_048_576;
@@ -294,7 +295,7 @@ pub fn qualify_manifest(
     validate_resource_limits(input)?;
 
     let mut findings = Vec::new();
-    let Some(manifest_json) = parse_yaml_json(input.manifest_yaml) else {
+    let Some(manifest_json) = parse_unambiguous_yaml_json(input.manifest_yaml) else {
         findings.push(ManifestFinding::global(
             ManifestFindingCategory::ManifestYamlInvalid,
         ));
@@ -388,7 +389,7 @@ fn parse_edge_registry(
     bytes: &[u8],
     findings: &mut Vec<ManifestFinding>,
 ) -> Option<EdgeRegistryProjection> {
-    let Some(json) = parse_yaml_json(bytes) else {
+    let Some(json) = parse_unambiguous_yaml_json(bytes) else {
         findings.push(ManifestFinding::global(
             ManifestFindingCategory::EdgeRegistryInvalid,
         ));
@@ -527,7 +528,7 @@ fn validate_artifact_resource(
         ));
         return;
     };
-    let Some(frontmatter_json) = parse_yaml_json(frontmatter) else {
+    let Some(frontmatter_json) = parse_unambiguous_yaml_json(frontmatter) else {
         findings.push(ManifestFinding::for_reference(
             ManifestFindingCategory::SkeletonFrontmatterInvalid,
             &artifact.name,
@@ -605,25 +606,6 @@ fn schema_finding(
         || ManifestFinding::global(category),
         |(name, reference)| ManifestFinding::for_reference(category, name, reference),
     )
-}
-
-fn parse_yaml_json(bytes: &[u8]) -> Option<JsonValue> {
-    let yaml = yaml_serde::from_slice::<YamlValue>(bytes).ok()?;
-    if contains_merge_key(&yaml) {
-        return None;
-    }
-    serde_json::to_value(yaml).ok()
-}
-
-fn contains_merge_key(value: &YamlValue) -> bool {
-    match value {
-        YamlValue::Mapping(mapping) => mapping.iter().any(|(key, value)| {
-            key.as_str() == Some("<<") || contains_merge_key(key) || contains_merge_key(value)
-        }),
-        YamlValue::Sequence(sequence) => sequence.iter().any(contains_merge_key),
-        YamlValue::Tagged(tagged) => contains_merge_key(&tagged.value),
-        YamlValue::Null | YamlValue::Bool(_) | YamlValue::Number(_) | YamlValue::String(_) => false,
-    }
 }
 
 fn split_frontmatter(bytes: &[u8]) -> Option<&[u8]> {

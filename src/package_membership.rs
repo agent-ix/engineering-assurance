@@ -138,7 +138,7 @@ impl PackageMembershipPolicy {
 
         let mut normalized = BTreeSet::new();
         for path in expected {
-            if !is_safe_member_path(path) {
+            if !is_safe_package_member_path(path) {
                 return Err(PackageMembershipError::ExpectedPathInvalid);
             }
             if !normalized.insert(path.clone()) {
@@ -167,7 +167,7 @@ impl PackageMembershipPolicy {
         let mut invalid_count = 0_usize;
         let mut safe_counts = BTreeMap::<String, usize>::new();
         for path in observed {
-            if is_safe_member_path(path) {
+            if is_safe_package_member_path(path) {
                 safe_counts
                     .entry(path.clone())
                     .and_modify(|count| *count += 1)
@@ -219,7 +219,12 @@ impl PackageMembershipPolicy {
     }
 }
 
-fn is_safe_member_path(path: &str) -> bool {
+/// Return whether a package member is a safe normalized portable file path.
+///
+/// Archive adapters may use this predicate before retaining a member name;
+/// membership comparison applies the same rule independently.
+#[must_use]
+pub fn is_safe_package_member_path(path: &str) -> bool {
     if path.is_empty()
         || path.len() > MAX_PACKAGE_MEMBER_PATH_BYTES
         || path.starts_with('/')

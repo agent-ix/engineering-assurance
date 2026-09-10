@@ -222,7 +222,7 @@ fn parse_selected_paths(bytes: &[u8]) -> Result<Vec<String>, ContentRightsHostEr
     Ok(selected)
 }
 
-fn protected_tokens() -> Result<Vec<String>, ContentRightsHostError> {
+pub(crate) fn protected_tokens() -> Result<Vec<String>, ContentRightsHostError> {
     parse_protected_tokens(env::var_os("ASSURANCE_PROTECTED_TOKENS"))
 }
 

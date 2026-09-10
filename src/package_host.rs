@@ -197,6 +197,22 @@ pub fn clean(root: &Path) -> Result<PackageLifecycleResult, PackageHostError> {
     Ok(PackageLifecycleResult::cleaned())
 }
 
+/// Require every fixed npm staging destination to be absent.
+///
+/// # Errors
+///
+/// Refuses an invalid root, an unreadable destination state, or any present
+/// staging destination without modifying it.
+pub(crate) fn require_staged_destinations_absent(root: &Path) -> Result<(), PackageHostError> {
+    validate_root(root)?;
+    for name in STAGED_NAMES {
+        if path_exists(&root.join(name))? {
+            return Err(PackageHostError::DestinationExists);
+        }
+    }
+    Ok(())
+}
+
 fn validate_root(root: &Path) -> Result<(), PackageHostError> {
     let metadata = fs::symlink_metadata(root).map_err(|_| PackageHostError::RootInvalid)?;
     if metadata.file_type().is_symlink() || !metadata.is_dir() {
