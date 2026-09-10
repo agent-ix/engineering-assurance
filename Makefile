@@ -21,7 +21,7 @@ test:
 	$(PYTHON) scripts/validate_manifest.py
 
 package-audit:
-	$(PYTHON) scripts/audit_packages.py
+	CARGO_BUILD_JOBS=2 cargo +1.98.1 run --locked --quiet -- package-audit --root .
 
 validate-docs:
 	$(QUIRE) validate --scope "$(CURDIR)" "spec/**/*.md" "plan/**/*.md" "reviews/**/*.md"
