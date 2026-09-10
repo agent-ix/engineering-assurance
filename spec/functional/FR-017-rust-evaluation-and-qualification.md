@@ -31,6 +31,10 @@ checking, manifest validation, and qualification assertions to Rust.
 - For the pure package-membership boundary, one explicit expected-member
   allowlist and one observed file-member sequence supplied by an archive or
   staging adapter.
+- For the pure module-manifest boundary, the expected module name and version,
+  module-manifest YAML bytes, authoritative module-manifest JSON Schema bytes,
+  edge-registry manifest YAML bytes, and one supplied schema/skeleton resource
+  pair for each declared artifact type.
 - For the pure aggregation boundary, one
   `engineering-assurance.evaluation-aggregate-request/v1` document containing
   evaluation envelopes for the closed host and scenario populations. Each
@@ -61,6 +65,10 @@ checking, manifest validation, and qualification assertions to Rust.
   `actual_path_invalid`, `actual_path_duplicate`, `unexpected_member`, or
   `missing_member`; only a lexically safe normalized path may appear in a
   finding. An invalid observed path carries no path value.
+- The pure module-manifest boundary emits one accepted/withheld result and a
+  deterministic list of typed findings. Findings carry a closed category and,
+  only when safe and applicable, an artifact name or normalized schema
+  reference; findings never contain source bytes or an unsafe reference.
 
 ## Behavior
 
@@ -154,6 +162,47 @@ checking, manifest validation, and qualification assertions to Rust.
   distribution format. Archive decoding,
   member-kind validation, package construction, installation, and filesystem
   traversal remain responsibilities of later binary adapters.
+- The Rust manifest classifier SHALL parse both supplied manifests as YAML
+  mappings and SHALL reject duplicate mapping keys or merge keys rather than
+  inheriting language-specific merge behavior.
+- The Rust manifest classifier SHALL validate the module manifest against the
+  caller-supplied authoritative schema using its declared JSON Schema draft,
+  offline reference resolution, and enabled known-format assertions.
+- The Rust manifest classifier SHALL withhold acceptance when the manifest name
+  or version differs from the explicit expected identity.
+- The Rust manifest classifier SHALL require unique artifact-type names.
+- The Rust manifest classifier SHALL require every declared allowed-link verb
+  to exist in the supplied edge registry.
+- The Rust manifest classifier SHALL require exactly one supplied resource for
+  each declared artifact type.
+- The Rust manifest classifier SHALL withhold for missing, duplicate, or
+  undeclared resources.
+- The Rust manifest classifier SHALL require every frontmatter schema reference
+  to be a non-empty normalized forward-slash relative path no longer than 4,096
+  bytes, without an absolute root, Windows drive root, backslash, empty, dot,
+  parent, trailing-slash, or control-character segment.
+- The Rust manifest classifier SHALL validate each supplied artifact schema
+  against its declared JSON Schema meta-schema without network or filesystem
+  retrieval.
+- The Rust manifest classifier SHALL parse each skeleton's exact Markdown YAML
+  frontmatter envelope, reject duplicate or merge keys, and validate the
+  resulting instance against its declared artifact schema with known-format
+  assertions enabled.
+- The Rust manifest classifier SHALL require every declared body-extraction
+  locator to carry `required: true` and SHALL require the skeleton to contain
+  its exact level-two `## <after_heading>` heading.
+- The Rust manifest classifier SHALL sort findings by closed category, safe
+  artifact name, and safe schema reference so input ordering cannot change the
+  result.
+- The pure manifest boundary SHALL refuse any individual manifest, schema, or
+  skeleton input larger than 1,048,576 bytes, more than 256 artifact resources,
+  or more than 33,554,432 combined resource bytes before schema compilation.
+- The pure manifest boundary SHALL return a typed error and no result for a
+  resource-ceiling refusal.
+- The pure manifest boundary SHALL NOT discover schemas, read files or
+  environment variables, invoke Quire or another child program, access a
+  network or clock, or treat an independently authored Rust structure as a
+  replacement for validation against the authoritative manifest schema.
 - Inspect the complete selected tree and staged members for content rights.
 - Keep publication refused.
 - Keep package-manager and host configuration declarative; first-party semantic
@@ -167,6 +216,11 @@ attempted publication fail their corresponding local gate.
 An invalid or duplicate expected package path and an over-limit member
 population refuse the pure package-membership request. Invalid, duplicate,
 unexpected, and missing observed membership withhold package acceptance.
+Oversized manifest inputs refuse the pure module-manifest request. Malformed
+YAML or JSON, invalid schemas, unavailable offline references, manifest-schema
+mismatches, identity drift, duplicate artifact names, unregistered edges,
+resource mismatch, unsafe schema references, invalid skeleton frontmatter, and
+missing required headings withhold module-manifest acceptance.
 
 ## Constraints
 
@@ -186,6 +240,7 @@ unexpected, and missing observed membership withhold package acceptance.
 | FR-017-AC-4 | Static inspection finds only declarative dispatch in package-manager and host configuration; qualification is performed locally and real-agent evaluation, publication, and release operations remain explicit manual actions. | Test (TC-112) |
 | FR-017-AC-5 | The pure Rust content-rights classifier matches every retained finding class and exception, rejects unsafe paths without echoing them, preserves Unicode protected-token matching, emits no matched content, and returns deterministic typed findings without filesystem, environment, child-program, network, or clock access. | Property (TC-119) |
 | FR-017-AC-6 | For every caller-supplied expected allowlist and observed file-member sequence within the declared ceilings, the pure Rust membership classifier matches retained extra/missing behavior on the shared safe unique domain, additionally rejects unsafe or duplicate membership without disclosing unsafe paths, remains permutation-invariant, and performs no filesystem, environment, child-program, network, clock, archive-decoding, or package-format selection. | Property (TC-120) |
+| FR-017-AC-7 | For the retained valid module and every declared malformed-manifest, schema, registry, resource, frontmatter, and heading case within the declared ceilings, the pure Rust manifest classifier matches retained acceptance on the shared supported domain, fails closed through typed deterministic findings, consumes rather than copies authoritative schemas, and performs no filesystem, environment, child-program, network, or clock access. | Property (TC-121) |
 
 ## Dependencies
 
@@ -204,3 +259,7 @@ unexpected, and missing observed membership withhold package acceptance.
   membership slice. It does not parse an archive, validate member kinds, build
   or install a package, select the Rust CLI distribution format, satisfy the
   combined FR-017-AC-3 gate, or permit removal under FR-018.
+- **Sequence**: FR-017-AC-7 is an independently reviewable pure manifest slice.
+  It does not discover the shared schema, traverse a module tree, replace Quire
+  artifact validation, select a distribution format, satisfy the combined
+  FR-017-AC-3 gate, or permit removal under FR-018.
