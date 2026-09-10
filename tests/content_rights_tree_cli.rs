@@ -230,6 +230,12 @@ fn tc_111_same_revision_retained_tree_status_and_findings_match() {
 #[test]
 #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
 fn tc_111_root_identity_and_unsupported_entries_fail_with_typed_errors() {
+    let non_repository = TestRepository::new("not-a-repository");
+    fs::remove_dir_all(non_repository.path().join(".git")).unwrap();
+    let output = run(non_repository.path(), None);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(json(&output)["code"], "content_rights_git_command_failed");
+
     let repository = TestRepository::new("root-and-kind");
     repository.write("nested/ordinary.md", b"ordinary\n");
     let nested = run(&repository.path().join("nested"), None);

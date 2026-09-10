@@ -273,7 +273,9 @@ fn inspect_selected(
             .map_err(|_| ContentRightsHostError::EntryInvalid)?;
         let file_type = metadata.file_type();
         if file_type.is_symlink() {
-            inspected_entries = inspected_entries.saturating_add(1);
+            inspected_entries = inspected_entries
+                .checked_add(1)
+                .ok_or(ContentRightsHostError::EntryPopulationTooLarge)?;
             findings.extend(classify(
                 relative,
                 ContentEntryKind::SymbolicLink,
@@ -295,7 +297,9 @@ fn inspect_selected(
         if total_bytes > MAX_TOTAL_BYTES {
             return Err(ContentRightsHostError::TotalBytesTooLarge);
         }
-        inspected_entries = inspected_entries.saturating_add(1);
+        inspected_entries = inspected_entries
+            .checked_add(1)
+            .ok_or(ContentRightsHostError::EntryPopulationTooLarge)?;
         findings.extend(classify(
             relative,
             ContentEntryKind::File,
@@ -451,5 +455,40 @@ mod tests {
             parse_protected_tokens(Some(OsString::from_vec(vec![0xff]))),
             Err(ContentRightsHostError::ProtectedTokensNotUtf8)
         ));
+    }
+
+    #[test]
+    #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
+    fn tc_111_bounded_process_failures_keep_distinct_tree_codes() {
+        let cases = [
+            (
+                ProcessError::Unavailable {
+                    detail: "fixture".to_owned(),
+                },
+                "content_rights_git_unavailable",
+            ),
+            (
+                ProcessError::TimedOut {
+                    timeout: Duration::from_secs(1),
+                },
+                "content_rights_git_timed_out",
+            ),
+            (
+                ProcessError::OutputTooLarge {
+                    stream: "stdout",
+                    limit: 1,
+                },
+                "content_rights_git_output_too_large",
+            ),
+            (
+                ProcessError::Observation {
+                    detail: "fixture".to_owned(),
+                },
+                "content_rights_git_observation_failed",
+            ),
+        ];
+        for (failure, expected) in cases {
+            assert_eq!(map_process_error(&failure).code(), expected);
+        }
     }
 }
