@@ -111,7 +111,7 @@ implemented and reviewed.
 | FR-014 | FR-014-AC-1 | TC-096 | ✅ Rust package foundation backed |
 | FR-014 | FR-014-AC-2 | TC-098 | 🚧 Compatibility-command slice backed; aggregate pending |
 | FR-014 | FR-014-AC-3 | TC-099 | 🚧 Compatibility-command slice backed; aggregate pending |
-| FR-014 | FR-014-AC-4 | TC-101 | 🚧 Pending implementation |
+| FR-014 | FR-014-AC-4 | TC-101 | ✅ Parsed library-module audit, lexical-alias/comment adverse cases, and mutations passing |
 | FR-015 | FR-015-AC-1 | TC-100 | 🚧 Compatibility, evidence, semantic-validation, report/PGM projection, and fixture-generation slices backed; aggregate pending |
 | FR-015 | FR-015-AC-2 | TC-102 | 🚧 Evidence-availability and semantic-reference state vocabularies backed; aggregate pending |
 | FR-015 | FR-015-AC-3 | TC-103 | 🚧 Evidence, semantic, and PGM refusal families backed; aggregate pending |
@@ -150,8 +150,8 @@ implemented and reviewed.
 | FR-012-CON-2 | TC-082 | ✅ Passing |
 | FR-012-CON-4 | TC-082 | ✅ Passing |
 | FR-012-CON-5 | TC-082 | ✅ Passing |
-| FR-014-CON-1 | TC-101 | 🚧 Pending implementation |
-| FR-014-CON-2 | TC-101 | 🚧 Pending implementation |
+| FR-014-CON-1 | TC-101 | ✅ Parsed library-module containment audit passing |
+| FR-014-CON-2 | TC-101 | ✅ Parsed library-module containment audit passing |
 | FR-014-CON-3 | TC-096 | ✅ Rust package foundation backed |
 | FR-015-CON-1 | TC-103 | 🚧 Read-only evidence and semantic/PGM slices backed; aggregate pending |
 | FR-015-CON-2 | TC-104 | 🚧 Inert generated-fixture slice backed; aggregate pending |
@@ -273,7 +273,7 @@ implemented and reviewed.
 | TC-098 | Machine CLI output obeys the versioned stdout/stderr contract | Property | P0 | FR-014-AC-2 | 🚧 compatibility-command slice backed; aggregate pending |
 | TC-099 | Invalid protocol, input, root, host, and host response fail before side effects | Property | P0 | FR-014-AC-3 | 🚧 compatibility-command slice backed; aggregate pending |
 | TC-100 | For each ADR-002 compatibility/semantic/projection/fixture capability row, Rust agrees byte-for-byte with the accepted identity and report reference over the named corpus and focused adverse cases, including generated arbitrary-precision integer boundaries | Integration | P0 | StR-003-VC-3, FR-015-AC-1 | 🚧 compatibility, evidence, semantic validation, report/PGM projections, and fixture generation backed; aggregate pending |
-| TC-101 | Rust call surface owns no evidence persistence, stdout verdict parser, or reusable library I/O | Static | P0 | FR-014-AC-4, FR-014-CON-1, FR-014-CON-2 | 🚧 pending implementation |
+| TC-101 | Parsed Rust syntax for every reusable-library module rejects filesystem, environment, child-program, network, persistence, and arbitrary-stdout capability paths, including lexical aliases declared in that source, without treating comments or literals as code or claiming cross-document compiler resolution | Static | P0 | FR-014-AC-4, FR-014-CON-1, FR-014-CON-2 | ✅ AST audit, closed findings, adverse scope/alias cases, and mutation evidence passing |
 | TC-102 | Every successful and non-successful semantic state remains distinct; typed state spellings and exact-one untyped-label validation remain callable without string parsing | Integration | P0 | FR-015-AC-2 | 🚧 evidence-availability and semantic-reference state vocabularies backed; aggregate pending |
 | TC-103 | Invalid semantic inputs, including non-finite/retained-domain-overflow numbers, invalid/mutable version tokens, and structured PGM-01 identities, fail or classify read-only without an identity digest or source-byte change; independent fixture classes retain leading/trailing and interior ASCII space plus lowercase/uppercase immutable `x` metadata boundaries; every exercised semantic and PGM-01 refusal exposes a typed reason without diagnostic-prose matching | Integration | P0 | FR-015-AC-3, FR-015-CON-1 | 🚧 evidence, semantic, and PGM refusals backed; aggregate pending |
 | TC-104 | Contract ownership and inert foreign-language fixtures remain bounded | Static | P0 | FR-015-AC-4, FR-015-CON-2, FR-015-CON-3 | 🚧 semantic ownership and inert-fixture slice backed; aggregate audit pending |
@@ -289,7 +289,7 @@ implemented and reviewed.
 | TC-114 | A failed cutover can restore the previous invocation without changing historical bytes | Property | P0 | FR-018-AC-3, FR-018-CON-2 | 🚧 pending implementation |
 | TC-115 | Final audit finds no unapproved non-Rust semantic or assertion logic | Static | P0 | StR-003-VC-4, FR-016-CON-2, FR-018-AC-4, FR-018-CON-3, NFR-005-AC-4 | 🚧 pending implementation |
 | TC-116 | Exact Rust 1.98.1 builds and tests every target with unsafe code forbidden | Compile | P0 | NFR-005-AC-1 | ✅ Rust package foundation; exact all-target gates recorded with implementation review |
-| TC-117 | Rust requirement tests use the canonical bare ix-trace-rs macro form | Static | P0 | NFR-005-AC-2 | 🚧 pending implementation |
+| TC-117 | Parsed first-party Rust tests under `src/` and `tests/` use an exact unaliased `ix_trace_rs::trace` import and bare trace attributes carrying both TC and AC literals; absent, aliased, path-qualified, malformed, invalid-source, and over-limit cases fail closed | Static | P0 | NFR-005-AC-2 | ✅ Parsed repository census, canonical-form adverse cases, and mutation evidence passing |
 | TC-118 | Quire reconciles every Rust test marker without missing, orphaned, or duplicate bindings | Integration | P0 | NFR-005-AC-3 | 🚧 pending implementation |
 | TC-119 | The pure Rust content-rights classifier matches retained finding/exception behavior, rejects unsafe paths without echoing them, preserves Unicode protected-token matching, leaks no matched content, and remains deterministic and I/O-free | Property | P0 | FR-017-AC-5, FR-017-CON-3 | ✅ typed Rust classifier, retained-Python differential, exhaustive boundary cases, and mutation probes passing |
 | TC-120 | The pure Rust package-membership classifier matches retained extra/missing behavior for safe unique names; rejects invalid expected policies and population limits; withholds on invalid, duplicate, unexpected, or missing observed members without echoing unsafe paths; remains permutation-invariant and I/O-free; and does not select or decode a package format | Property | P0 | FR-017-AC-6, FR-017-CON-3 | ✅ Typed Rust policy, retained-Python differential, adverse boundaries, ordering, resource ceilings, and mutation probes passing |

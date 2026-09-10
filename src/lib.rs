@@ -17,6 +17,7 @@ pub mod manifest;
 pub mod onboarding;
 pub mod package_membership;
 pub mod semantics;
+pub mod source_audit;
 pub mod workflow;
 pub mod workflow_invariants;
 
