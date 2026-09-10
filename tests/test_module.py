@@ -216,6 +216,23 @@ def test_hosted_ci_is_manual_only() -> None:
     assert set(workflow["on"]) == {"workflow_dispatch"}
 
 
+def test_manual_verification_workflow_runs_the_rust_foundation_gate() -> None:
+    workflow = yaml.load(
+        (ROOT / ".github" / "workflows" / "ci.yml").read_text(),
+        Loader=yaml.BaseLoader,
+    )
+    steps = workflow["jobs"]["verify"]["steps"]
+    assert steps[0]["with"]["submodules"] == "recursive"
+    rust_setup = next(
+        step for step in steps if str(step.get("uses", "")).startswith("dtolnay/rust-toolchain@")
+    )
+    assert rust_setup["with"] == {
+        "toolchain": "1.98.1",
+        "components": "rustfmt, clippy",
+    }
+    assert any(step.get("run") == "make rust-foundation-gate" for step in steps)
+
+
 def test_structural_coverage_never_collapses_unknowns_into_success() -> None:
     text = (ROOT / "docs" / "structural-coverage.md").read_text().casefold()
     assert "exactly once" in text

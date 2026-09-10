@@ -686,3 +686,64 @@ fn sha256_hex(bytes: &[u8]) -> String {
     }
     encoded
 }
+
+#[cfg(test)]
+mod tests {
+    use ix_trace_rs::trace;
+
+    use super::*;
+
+    const RAW: &[u8] = br#"{"schemaVersion":"test","recordId":"record-1"}"#;
+
+    fn valid_view() -> Pgm01View {
+        Pgm01View::base(RAW, "test", "record-1")
+    }
+
+    fn assert_contract_error(view: Pgm01View, expected: &str) {
+        let error = view
+            .validate_contract(RAW)
+            .expect_err("invalid generated view must be refused");
+        assert_eq!(error.code(), "invalid_semantic_contract");
+        assert_eq!(error.message(), expected);
+    }
+
+    #[trace("TC-103", "FR-015-AC-3")]
+    #[test]
+    fn tc_103_generated_pgm01_view_refuses_each_invalid_field_family() {
+        valid_view()
+            .validate_contract(RAW)
+            .expect("baseline generated view must satisfy its contract");
+
+        let mut view = valid_view();
+        view.mapping_version = "wrong".to_owned();
+        assert_contract_error(view, "generated PGM-01 view has an invalid mapping version");
+
+        let mut view = valid_view();
+        view.source_record_id.clear();
+        assert_contract_error(view, "generated PGM-01 view has an empty source identity");
+
+        let mut view = valid_view();
+        view.source_digest = "0".repeat(64);
+        assert_contract_error(view, "generated PGM-01 view changed the source identity");
+
+        let mut view = valid_view();
+        view.mappings.push(Pgm01Mapping {
+            source_path: "not-a-json-pointer".to_owned(),
+            target_concept: SemanticConcept::CheckResult,
+            target_field: "result".to_owned(),
+            value: Value::Null,
+        });
+        assert_contract_error(view, "generated PGM-01 view has an invalid field mapping");
+
+        let mut view = valid_view();
+        view.unmapped_fields.push(Pgm01Unmapped {
+            source_path: "/opaque".to_owned(),
+            reason: String::new(),
+        });
+        assert_contract_error(view, "generated PGM-01 view has an invalid unmapped field");
+
+        let mut view = valid_view();
+        view.limitations.push(String::new());
+        assert_contract_error(view, "generated PGM-01 view has an empty limitation");
+    }
+}
