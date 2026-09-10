@@ -80,20 +80,6 @@ fn run(root: &Path, protected_tokens: Option<&str>) -> Output {
     command.output().expect("content-rights command must run")
 }
 
-fn run_retained(root: &Path, protected_tokens: Option<&str>) -> Output {
-    let mut command = Command::new("python3");
-    command
-        .arg(root.join("scripts/check_content_rights.py"))
-        .arg("--tree")
-        .current_dir(root);
-    if let Some(tokens) = protected_tokens {
-        command.env("ASSURANCE_PROTECTED_TOKENS", tokens);
-    } else {
-        command.env_remove("ASSURANCE_PROTECTED_TOKENS");
-    }
-    command.output().expect("retained checker must run")
-}
-
 fn json(output: &Output) -> Value {
     serde_json::from_slice(&output.stdout).expect("stdout must contain one JSON value")
 }
@@ -154,28 +140,13 @@ fn tc_111_git_population_inspects_tracked_untracked_and_links_but_not_ignored_fi
 }
 
 #[test]
-#[trace("TC-111", "FR-017-AC-3", "FR-018-AC-2")]
-fn tc_111_same_revision_retained_tree_status_and_findings_match() {
-    let repository = TestRepository::new("retained-parity");
-    repository.write(
-        "scripts/check_content_rights.py",
-        include_bytes!("../scripts/check_content_rights.py"),
-    );
+#[trace("TC-113", "FR-018-AC-2", "FR-018-CON-1")]
+fn tc_113_retained_correspondence_cases_survive_final_removal() {
+    let repository = TestRepository::new("retained-correspondence");
     repository.write("ordinary.md", b"ordinary\n");
-
-    let old = run_retained(repository.path(), None);
-    let new = run(repository.path(), None);
-    assert!(
-        old.status.success(),
-        "{}",
-        String::from_utf8_lossy(&old.stderr)
-    );
-    assert!(
-        new.status.success(),
-        "{}",
-        String::from_utf8_lossy(&new.stderr)
-    );
-    assert_eq!(json(&new)["outcome"], "accepted");
+    let accepted = run(repository.path(), None);
+    assert!(accepted.status.success());
+    assert_eq!(json(&accepted)["outcome"], "accepted");
 
     let protected_and_url = ["STRASSE\n", "https:", "//example.invalid/source\n"].concat();
     repository.write("candidate.md", protected_and_url.as_bytes());
@@ -183,29 +154,8 @@ fn tc_111_same_revision_retained_tree_status_and_findings_match() {
     std::os::unix::fs::symlink("ordinary.md", repository.path().join("linked.md"))
         .expect("fixture link must be creatable");
 
-    let old = run_retained(repository.path(), Some("Straße"));
     let new = run(repository.path(), Some("Straße"));
-    assert_eq!(old.status.code(), Some(1));
     assert_eq!(new.status.code(), Some(1));
-    let stderr = String::from_utf8(old.stderr).expect("retained diagnostics must be UTF-8");
-    let retained = stderr.lines().skip(1).collect::<Vec<_>>();
-    #[cfg(unix)]
-    assert_eq!(
-        retained,
-        vec![
-            "candidate.md:1: protected local token",
-            "candidate.md:2: unapproved external URL",
-            "linked.md:0: symbolic link",
-        ]
-    );
-    #[cfg(not(unix))]
-    assert_eq!(
-        retained,
-        vec![
-            "candidate.md:1: protected local token",
-            "candidate.md:2: unapproved external URL",
-        ]
-    );
     let result = json(&new);
     let findings = result["findings"].as_array().expect("findings array");
     assert!(findings.iter().any(|finding| {
@@ -224,7 +174,10 @@ fn tc_111_same_revision_retained_tree_status_and_findings_match() {
             && finding["line"] == 0
             && finding["category"] == "symbolic-link"
     }));
-    assert_eq!(findings.len(), retained.len());
+    #[cfg(unix)]
+    assert_eq!(findings.len(), 3);
+    #[cfg(not(unix))]
+    assert_eq!(findings.len(), 2);
 }
 
 #[test]

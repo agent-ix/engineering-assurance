@@ -3,77 +3,14 @@
 
 //! Additive-migration parity and adverse coverage for package membership.
 
-use std::{
-    io::Write,
-    process::{Command, Stdio},
-};
-
 use engineering_assurance::package_membership::{
     MAX_PACKAGE_MEMBERS, PackageMembershipCategory, PackageMembershipError,
     PackageMembershipFinding, PackageMembershipOutcome, PackageMembershipPolicy,
 };
 use ix_trace_rs::trace;
-use serde::{Deserialize, Serialize};
-
-const PYTHON_REFERENCE: &str = r#"
-import importlib.util
-import json
-import pathlib
-import sys
-
-root = pathlib.Path.cwd()
-path = root / "scripts" / "audit_packages.py"
-spec = importlib.util.spec_from_file_location("retained_package_audit", path)
-module = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = module
-spec.loader.exec_module(module)
-
-cases = json.load(sys.stdin)
-results = []
-for case in cases:
-    extra, missing = module.member_mismatch(set(case["actual"]), set(case["expected"]))
-    results.append({"extra": extra, "missing": missing})
-print(json.dumps(results, separators=(",", ":")))
-"#;
-
-#[derive(Deserialize, Eq, PartialEq, Debug)]
-struct ReferenceResult {
-    extra: Vec<String>,
-    missing: Vec<String>,
-}
-
-#[derive(Serialize)]
-struct ReferenceCase<'a> {
-    expected: &'a [String],
-    actual: &'a [String],
-}
 
 fn strings(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).to_owned()).collect()
-}
-
-fn reference_results(cases: &[ReferenceCase<'_>]) -> Vec<ReferenceResult> {
-    let mut child = Command::new("python3")
-        .args(["-c", PYTHON_REFERENCE])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("retained Python package audit must start during additive migration");
-    child
-        .stdin
-        .take()
-        .expect("piped stdin must exist")
-        .write_all(&serde_json::to_vec(cases).expect("fixtures must serialize"))
-        .expect("fixtures must be writable");
-    let output = child.wait_with_output().expect("reference must terminate");
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    serde_json::from_slice(&output.stdout).expect("reference results must be JSON")
 }
 
 fn result_paths(
@@ -90,25 +27,46 @@ fn result_paths(
 #[test]
 #[trace("TC-120", "FR-017-AC-6", "FR-017-CON-3")]
 fn safe_unique_membership_matches_retained_extra_and_missing_behavior() {
-    let inputs = [
+    let cases = [
         (
             strings(&["a.txt", "dir/b.json"]),
             strings(&["a.txt", "dir/b.json"]),
+            Vec::new(),
+            Vec::new(),
         ),
-        (Vec::new(), Vec::new()),
-        (strings(&["a.txt"]), Vec::new()),
-        (Vec::new(), strings(&["z.txt"])),
-        (strings(&["a.txt", "b.txt"]), strings(&["a.txt", "c.txt"])),
-        (strings(&["Case.txt"]), strings(&["case.txt"])),
-        (strings(&["dir/file.txt"]), strings(&["dir%2Ffile.txt"])),
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new()),
+        (
+            strings(&["a.txt"]),
+            Vec::new(),
+            Vec::new(),
+            strings(&["a.txt"]),
+        ),
+        (
+            Vec::new(),
+            strings(&["z.txt"]),
+            strings(&["z.txt"]),
+            Vec::new(),
+        ),
+        (
+            strings(&["a.txt", "b.txt"]),
+            strings(&["a.txt", "c.txt"]),
+            strings(&["c.txt"]),
+            strings(&["b.txt"]),
+        ),
+        (
+            strings(&["Case.txt"]),
+            strings(&["case.txt"]),
+            strings(&["case.txt"]),
+            strings(&["Case.txt"]),
+        ),
+        (
+            strings(&["dir/file.txt"]),
+            strings(&["dir%2Ffile.txt"]),
+            strings(&["dir%2Ffile.txt"]),
+            strings(&["dir/file.txt"]),
+        ),
     ];
-    let cases: Vec<_> = inputs
-        .iter()
-        .map(|(expected, actual)| ReferenceCase { expected, actual })
-        .collect();
-    let references = reference_results(&cases);
-
-    for ((expected, actual), reference) in inputs.iter().zip(references) {
+    for (expected, actual, expected_extra, expected_missing) in &cases {
         let result = PackageMembershipPolicy::new(expected)
             .expect("safe unique policy")
             .compare(actual)
@@ -118,11 +76,11 @@ fn safe_unique_membership_matches_retained_extra_and_missing_behavior() {
                 &result.findings,
                 PackageMembershipCategory::UnexpectedMember
             ),
-            reference.extra
+            *expected_extra
         );
         assert_eq!(
             result_paths(&result.findings, PackageMembershipCategory::MissingMember),
-            reference.missing
+            *expected_missing
         );
         assert_eq!(
             result.outcome,

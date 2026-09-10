@@ -3,84 +3,19 @@
 
 //! Additive-migration parity and adverse coverage for content-rights policy.
 
-use std::{
-    io::Write,
-    process::{Command, Stdio},
-};
-
 use engineering_assurance::content_rights::{
     ContentEntryKind, ContentRightsCategory, ContentRightsFinding, inspect_content,
 };
 use ix_trace_rs::trace;
-use serde_json::{Value, json};
-
-const PYTHON_REFERENCE: &str = r#"
-import importlib.util
-import json
-import pathlib
-import sys
-
-root = pathlib.Path.cwd()
-path = root / "scripts" / "check_content_rights.py"
-spec = importlib.util.spec_from_file_location("retained_content_rights", path)
-module = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = module
-spec.loader.exec_module(module)
-
-cases = json.load(sys.stdin)
-results = []
-for case in cases:
-    findings = module.text_findings(case["path"], case["text"])
-    results.append(sorted({(item.path, item.line, item.category) for item in findings}))
-print(json.dumps(results, separators=(",", ":")))
-"#;
 
 fn findings(path: &str, bytes: &[u8], tokens: &[String]) -> Vec<ContentRightsFinding> {
     inspect_content(path, ContentEntryKind::File, bytes, tokens)
         .expect("repository-owned policy patterns must compile")
 }
 
-fn rendered(findings: &[ContentRightsFinding]) -> Vec<(String, usize, String)> {
-    findings
-        .iter()
-        .map(|finding| {
-            (
-                finding.path.clone().expect("valid path finding"),
-                finding.line,
-                finding.category.to_string(),
-            )
-        })
-        .collect()
-}
-
-fn python_findings(cases: &[Value], tokens: &[String]) -> Vec<Vec<(String, usize, String)>> {
-    let mut child = Command::new("python3")
-        .args(["-c", PYTHON_REFERENCE])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .env("ASSURANCE_PROTECTED_TOKENS", tokens.join("\n"))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("retained Python classifier must start during additive migration");
-    child
-        .stdin
-        .take()
-        .expect("piped stdin must exist")
-        .write_all(&serde_json::to_vec(cases).expect("fixtures must serialize"))
-        .expect("fixtures must be writable");
-    let output = child.wait_with_output().expect("classifier must terminate");
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    serde_json::from_slice(&output.stdout).expect("reference findings must be JSON")
-}
-
 #[test]
 #[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
-fn every_retained_text_finding_and_exception_matches_python() {
+fn retained_text_finding_and_exception_correspondence_is_fixed() {
     let private_unix = format!("/{}/person/private/file.txt", "home");
     let private_root = format!("/{}/private/file.txt", "root");
     let private_windows = format!("C:{}Users{}person{}private.txt", '\\', '\\', '\\');
@@ -106,34 +41,59 @@ fn every_retained_text_finding_and_exception_matches_python() {
         "STRASSE".to_owned(),
     ]
     .join("\n");
-    let cases = vec![
-        json!({"path": "candidate.md", "text": ordinary}),
-        json!({"path": "Cargo.lock", "text": registry_url}),
-        json!({"path": "deny.toml", "text": registry_url}),
-        json!({"path": "candidate.json", "text": schema_url}),
-        json!({"path": "LICENSE", "text": license_url}),
-        json!({"path": "src/content_rights.rs", "text": "clause inventory"}),
-        json!({"path": "tests/content_rights_parity.rs", "text": "legal advice"}),
-        json!({"path": "AGENTS.md", "text": "applicability matrix"}),
-        json!({"path": "CONTENT_RIGHTS.md", "text": "standard crosswalk"}),
-        json!({"path": "content-rights.yaml", "text": "clause inventory"}),
-        json!({"path": "scripts/check_content_rights.py", "text": "legal advice"}),
-        json!({"path": "tests/test_content_rights.py", "text": "applicability table"}),
-        json!({"path": "candidate.md", "text": format!("{}\n{}", external_url, external_url)}),
-    ];
     let tokens = vec![protected];
-    let expected = python_findings(&cases, &tokens);
-    let observed = cases
-        .iter()
-        .map(|case| {
-            rendered(&findings(
-                case["path"].as_str().expect("path fixture"),
-                case["text"].as_str().expect("text fixture").as_bytes(),
-                &tokens,
-            ))
-        })
+    let observed = findings("candidate.md", ordinary.as_bytes(), &tokens)
+        .into_iter()
+        .map(|finding| (finding.line, finding.category))
         .collect::<Vec<_>>();
-    assert_eq!(observed, expected);
+    assert_eq!(
+        observed,
+        vec![
+            (1, ContentRightsCategory::UnixWorkstationLocation),
+            (2, ContentRightsCategory::RootWorkstationLocation),
+            (3, ContentRightsCategory::WindowsWorkstationLocation),
+            (4, ContentRightsCategory::TildeWorkstationLocation),
+            (5, ContentRightsCategory::ExternalPublicationIdentifier),
+            (6, ContentRightsCategory::ExternalRuleInventory),
+            (7, ContentRightsCategory::ApplicabilityMatrix),
+            (8, ContentRightsCategory::ExternalCrosswalk),
+            (9, ContentRightsCategory::LegalReviewMaterial),
+            (10, ContentRightsCategory::UnapprovedExternalUrl),
+            (11, ContentRightsCategory::EncodedPayload),
+            (12, ContentRightsCategory::ProtectedLocalToken),
+        ]
+    );
+
+    for (path, text) in [
+        ("Cargo.lock", registry_url.as_str()),
+        ("deny.toml", registry_url.as_str()),
+        ("candidate.json", schema_url.as_str()),
+        ("LICENSE", license_url.as_str()),
+        ("src/content_rights.rs", "clause inventory"),
+        ("tests/content_rights_parity.rs", "legal advice"),
+        ("AGENTS.md", "applicability matrix"),
+        ("CONTENT_RIGHTS.md", "standard crosswalk"),
+        ("content-rights.yaml", "clause inventory"),
+    ] {
+        assert!(
+            findings(path, text.as_bytes(), &tokens).is_empty(),
+            "{path}"
+        );
+    }
+    assert_eq!(
+        findings(
+            "candidate.md",
+            format!("{external_url}\n{external_url}").as_bytes(),
+            &tokens,
+        )
+        .into_iter()
+        .map(|finding| (finding.line, finding.category))
+        .collect::<Vec<_>>(),
+        vec![
+            (1, ContentRightsCategory::UnapprovedExternalUrl),
+            (2, ContentRightsCategory::UnapprovedExternalUrl),
+        ]
+    );
 }
 
 #[test]
