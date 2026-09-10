@@ -1,0 +1,107 @@
+{
+  "defName": "change-assurance",
+  "gateConfig": {
+    "decision_ready->approved": "hitl",
+    "decision_ready->rejected": "hitl"
+  },
+  "items": {
+    "intake_request": [{
+      "interviewId": "intake-1",
+      "scope": "service boundary",
+      "boundary": "repository",
+      "impact_scenario": "release decision",
+      "owner": "assurance-owner",
+      "requested_artifacts": ["ArchitectureDescription"],
+      "exceptions_expected": true
+    }],
+    "architecture_request": [{
+      "interviewId": "architecture-1",
+      "description_path": "spec/architecture.md"
+    }],
+    "promotion_request": [{
+      "interviewId": "promotion-1",
+      "plan_path": "spec/measurement-plan.md",
+      "definition_version": "v1",
+      "prior_stage": "observe",
+      "proposed_stage": "baseline"
+    }],
+    "change_request": [{
+      "interviewId": "change-1",
+      "profile_path": "assurance/profile.yaml",
+      "baseline_id": "baseline-1",
+      "source_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }],
+    "artifact_validation": [{
+      "artifact_type": "ArchitectureDescription",
+      "path": "spec/architecture.md",
+      "valid": true
+    }],
+    "architecture_scenario": [{
+      "concern": "latency",
+      "stimulus": "request",
+      "environment": "normal operation",
+      "response": "serve response",
+      "measure": "under 100ms"
+    }],
+    "review_validation": [
+      {
+        "artifact_type": "SpecReview",
+        "analysis": "architecture-evaluation",
+        "path": "reviews/architecture.md",
+        "subject_path": "spec/architecture.md",
+        "valid": true
+      },
+      {
+        "artifact_type": "SpecReview",
+        "analysis": "code-review",
+        "path": "reviews/code.md",
+        "source_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "valid": true
+      }
+    ],
+    "promotion_evidence": [{
+      "plan_path": "spec/measurement-plan.md",
+      "definition_version": "v1",
+      "prior_stage": "observe",
+      "proposed_stage": "baseline",
+      "stability": "stable",
+      "decision_yield": "sufficient",
+      "limitations": "documented",
+      "owner": "assurance-owner"
+    }],
+    "impact_snapshot": [{
+      "source_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "profile_path": "assurance/profile.yaml",
+      "baseline_id": "baseline-1",
+      "changed_nodes": [],
+      "impacted_nodes": [],
+      "missing_edges": [],
+      "stale_evidence": [],
+      "suspect_evidence": [],
+      "unknowns": []
+    }],
+    "assurance_snapshot": [{
+      "source_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "discharge_schema": "clause-discharge-v1",
+      "discharge_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "binding_open": 0,
+      "applicability_unresolved": 0,
+      "argument_schema": "authored-assurance-view-v1",
+      "argument_id": "argument-1",
+      "argument_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "top_claim_status": "supported",
+      "evidence_record_ids": ["sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+      "verified_at": "2026-09-10T12:00:00Z"
+    }],
+    "exception": [{
+      "owner": "assurance-owner",
+      "expires_at": "2026-09-10T12:00:01Z",
+      "rationale": "bounded exception",
+      "impact": "documented"
+    }],
+    "operator_observation": [{
+      "elapsed_minutes": 0,
+      "command_count": 1
+    }]
+  }
+}
