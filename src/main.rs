@@ -7,7 +7,10 @@
 
 mod content_rights_host;
 mod onboarding_host;
+mod package_archive;
+mod package_audit_host;
 mod package_host;
+mod package_install;
 mod process_host;
 mod workflow_host;
 
@@ -30,6 +33,7 @@ const ERROR_PROTOCOL: &str = "engineering-assurance.error/v1";
 const COMPATIBILITY_CAPABILITY: &str = "compatibility";
 const CONTENT_RIGHTS_TREE_CAPABILITY: &str = "content-rights-tree";
 const ONBOARDING_CAPABILITY: &str = "onboarding";
+const PACKAGE_AUDIT_CAPABILITY: &str = "package-audit";
 const PACKAGE_LIFECYCLE_CAPABILITY: &str = "package-lifecycle";
 const WORKFLOW_INVARIANTS_CAPABILITY: &str = "workflow-invariants";
 const WORKFLOW_HOST_CAPABILITY: &str = "workflow-host";
@@ -67,6 +71,17 @@ fn command() -> Command {
         .subcommand(
             Command::new(ONBOARDING_CAPABILITY)
                 .about("Inventory a selected repository and produce a bounded onboarding result"),
+        )
+        .subcommand(
+            Command::new(PACKAGE_AUDIT_CAPABILITY)
+                .about("Build and audit the private wheel and npm distributions")
+                .arg(
+                    Arg::new("root")
+                        .long("root")
+                        .value_name("PATH")
+                        .value_parser(clap::value_parser!(PathBuf))
+                        .required(true),
+                ),
         )
         .subcommand(
             Command::new(WORKFLOW_INVARIANTS_CAPABILITY)
@@ -122,10 +137,37 @@ fn main() -> ExitCode {
         Some((COMPATIBILITY_CAPABILITY, _)) => run_compatibility(),
         Some((CONTENT_RIGHTS_TREE_CAPABILITY, arguments)) => run_content_rights_tree(arguments),
         Some((ONBOARDING_CAPABILITY, _)) => run_onboarding(),
+        Some((PACKAGE_AUDIT_CAPABILITY, arguments)) => run_package_audit(arguments),
         Some((WORKFLOW_INVARIANTS_CAPABILITY, _)) => run_workflow_invariants(),
         Some((WORKFLOW_HOST_CAPABILITY, _)) => run_workflow_host(),
         Some((PACKAGE_LIFECYCLE_CAPABILITY, arguments)) => run_package_lifecycle(arguments),
         Some(_) | None => ExitCode::from(2),
+    }
+}
+
+fn run_package_audit(arguments: &ArgMatches) -> ExitCode {
+    let Some(root) = arguments.get_one::<PathBuf>("root") else {
+        return emit_error(
+            PACKAGE_AUDIT_CAPABILITY,
+            "package_audit_root_invalid",
+            "package-audit repository root is missing",
+        );
+    };
+    let result = match package_audit_host::execute(root) {
+        Ok(result) => result,
+        Err(error) => {
+            return emit_error(PACKAGE_AUDIT_CAPABILITY, error.code(), &error.to_string());
+        }
+    };
+    match result.to_json_line() {
+        Ok(encoded) => match write_stdout(&encoded) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("failed to write package-audit result: {error}");
+                ExitCode::from(2)
+            }
+        },
+        Err(error) => emit_error(PACKAGE_AUDIT_CAPABILITY, error.code(), &error.to_string()),
     }
 }
 

@@ -10,6 +10,7 @@
 use std::{
     ffi::OsStr,
     io::{self, Read},
+    path::Path,
     process::{Command, ExitStatus, Stdio},
     thread,
     time::{Duration, Instant},
@@ -53,8 +54,23 @@ pub(crate) fn run(
     arguments: &[&OsStr],
     limits: ProcessLimits,
 ) -> Result<CompletedProcess, ProcessError> {
-    let mut child = Command::new(executable)
-        .args(arguments)
+    run_configured(executable, arguments, None, &[], limits)
+}
+
+pub(crate) fn run_configured(
+    executable: &OsStr,
+    arguments: &[&OsStr],
+    current_directory: Option<&Path>,
+    environment: &[(&OsStr, &OsStr)],
+    limits: ProcessLimits,
+) -> Result<CompletedProcess, ProcessError> {
+    let mut command = Command::new(executable);
+    command.args(arguments);
+    if let Some(directory) = current_directory {
+        command.current_dir(directory);
+    }
+    command.envs(environment.iter().copied());
+    let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
