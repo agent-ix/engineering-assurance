@@ -122,8 +122,8 @@ implemented and reviewed.
 | FR-016 | FR-016-AC-4 | TC-108 | 🚧 Pending implementation |
 | FR-017 | FR-017-AC-1 | TC-109 | 🚧 Pending implementation |
 | FR-017 | FR-017-AC-2 | TC-110 | 🚧 Pending implementation |
-| FR-017 | FR-017-AC-3 | TC-111 | 🚧 Membership, content-rights, and manifest slices backed; integration, package-adapter, and publication-refusal work pending |
-| FR-017 | FR-017-AC-4 | TC-112 | 🚧 Pending implementation |
+| FR-017 | FR-017-AC-3 | TC-111 | 🚧 Membership, content-rights, manifest, and npm stage/cleanup/publication-refusal slices backed; archive and installed-bundle integration pending |
+| FR-017 | FR-017-AC-4 | TC-112 | 🚧 npm lifecycle hooks are declarative Rust dispatch; remaining host-configuration census pending |
 | FR-017 | FR-017-AC-6 | TC-120 | ✅ Typed Rust policy, retained-Python differential, adverse boundaries, ordering, resource ceilings, and mutation probes passing |
 | FR-017 | FR-017-AC-7 | TC-121 | ✅ Rust manifest classifier and retained-validator parity backed |
 | FR-018 | FR-018-AC-1 | TC-097 | 🚧 Pending implementation |
@@ -164,7 +164,7 @@ implemented and reviewed.
 | FR-016-CON-6 | TC-107 | 🚧 State-file isolation and delegated chain verification passing; human matrix acceptance pending |
 | FR-016-CON-7 | TC-107 | 🚧 Direct argv and display-only next-action guards passing; human matrix acceptance pending |
 | FR-017-CON-1 | TC-109 | 🚧 Pending implementation |
-| FR-017-CON-2 | TC-112 | 🚧 Pending implementation |
+| FR-017-CON-2 | TC-112 | 🚧 npm lifecycle hooks backed; remaining host-configuration census pending |
 | FR-018-CON-1 | TC-113 | 🚧 Pending implementation |
 | FR-018-CON-2 | TC-114 | 🚧 Pending implementation |
 | FR-018-CON-3 | TC-115 | 🚧 Pending implementation |
@@ -283,8 +283,8 @@ implemented and reviewed.
 | TC-108 | Canonical and pilot workflows pass through the Rust invariant provider before removal | Integration | P0 | FR-016-AC-4 | 🚧 pending host interface |
 | TC-109 | Rust evaluation completes the 28-cell matrix without inferred decisions | E2E | P0 | FR-017-AC-1, FR-017-CON-1 | 🚧 pending host interface |
 | TC-110 | The pure typed Rust evaluator preserves the exact 28-cell contract and deterministically withholds aggregation for missing, duplicate, malformed, unsupported, unavailable, failed, stale-revision, changed-governing-identity, changed-workflow, unsupported-addition, invalid-transcript-reference, invalid-count, outcome-mismatch, and terminal-pair cases; input permutation cannot change the result, oversized input refuses before decoding, and the reusable boundary performs no I/O | Property | P0 | FR-017-AC-2, FR-017-CON-1, FR-017-CON-3 | ✅ typed Rust aggregation, retained-Python differential cases, adverse cases, portable path/refusal rules, resource ceiling, and mutation probes passing |
-| TC-111 | Each package, rights, manifest, integration, and publication-refusal capability has independent positive and negative subcases matching the retained gate | Property | P0 | FR-017-AC-3 | 🚧 membership, content-rights, and manifest slices backed; aggregate pending |
-| TC-112 | Package-manager and host files contain declarative dispatch only; local qualification, real-agent evaluation, publication, and release operations remain explicit manual actions | Static | P0 | FR-017-AC-4, FR-017-CON-2 | 🚧 pending implementation |
+| TC-111 | Each package, rights, manifest, integration, and publication-refusal capability has independent positive and negative subcases matching the retained gate; npm stage/cleanup covers missing, linked, special, non-portable, oversized, excessive, pre-existing, changed, exact-copy, rollback, idempotent-absence, direct-JSON, and hook-empty-stdout states | Property | P0 | FR-017-AC-3 | 🚧 membership, content-rights, manifest, and npm lifecycle slices backed; archive and installed-bundle integration pending |
+| TC-112 | Package-manager and host files contain declarative dispatch only; npm lifecycle hooks invoke the pinned local Rust CLI in explicit hook mode without embedded staging/refusal semantics or contamination of npm output; local qualification, real-agent evaluation, publication, and release operations remain explicit manual actions | Static | P0 | FR-017-AC-4, FR-017-CON-2 | 🚧 npm lifecycle dispatch backed; remaining host-configuration census pending |
 | TC-113 | Removal refuses mismatched revisions, incomplete parity, and direct invocations that still use the old path | Property | P0 | FR-018-AC-2, FR-018-CON-1 | 🚧 pending implementation |
 | TC-114 | A failed cutover can restore the previous invocation without changing historical bytes | Property | P0 | FR-018-AC-3, FR-018-CON-2 | 🚧 pending implementation |
 | TC-115 | Final audit finds no unapproved non-Rust semantic or assertion logic | Static | P0 | StR-003-VC-4, FR-016-CON-2, FR-018-AC-4, FR-018-CON-3, NFR-005-AC-4 | 🚧 pending implementation |
@@ -331,7 +331,7 @@ evaluation envelopes.
 | TC-108, TC-109, TC-110 | Remaining host integration | supported request/result; absent host; malformed response; invalid transition; incomplete scenario | preserve host ownership and fail unsupported inputs explicitly |
 | TC-113, TC-114 | Cutover | old only; additive parity; direct invocation updated; parity failure | delete only after local parity and restore the prior invocation on failure |
 | TC-100 | Pure capability | compatibility classification; semantic validation; bounded projection; fixture generation; canonical identity | each ADR-002 row has an independently reported old/new corpus and adverse-case result |
-| TC-111 | Qualification capability | package members; rights; manifest; integration; publication refusal | each gate has one retained passing case and every named refusal case |
+| TC-111 | Qualification capability | package members; rights; manifest; npm stage/clean; integration; publication refusal | each gate has one retained passing case and every named refusal case; cleanup deletes nothing unless every present staged byte corresponds |
 | TC-120 | Package membership | exact match; empty expected/actual; extra; missing; duplicate expected/actual; absolute, backslash, trailing-slash, empty, dot, parent, control, non-normalized, and overlong path; 65,536 and 65,537 entries; permuted inputs | exact safe membership is accepted; invalid policy or resource limits refuse without a result; every observed mismatch withholds with deterministic typed findings and no unsafe-path disclosure |
 | TC-121 | Module manifest | retained valid bundle; malformed/duplicate/merge-key manifest; invalid or mismatching authoritative schema; identity drift; duplicate artifact; unregistered edge; missing/duplicate/extra resource; unsafe schema reference; malformed/invalid artifact schema; missing/malformed/duplicate/merge-key/schema-invalid skeleton frontmatter; optional or absent required locator heading; exact/over document, artifact-count, and combined-byte ceilings; permuted resources | valid input is accepted; ceiling violations refuse without a result; every semantic/input defect withholds through deterministic typed findings without source-byte or unsafe-reference disclosure |
 | TC-106 | Invariant request | eleven canonical names; ordered multi-name request; unknown name; malformed Rust request; expired/current exception at one explicit instant | exact ordered Rust/reference parity for the valid shared domain or a typed pre-outcome refusal |
