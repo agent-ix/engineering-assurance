@@ -230,7 +230,21 @@ def test_manual_verification_workflow_runs_the_rust_foundation_gate() -> None:
         "toolchain": "1.98.1",
         "components": "rustfmt, clippy",
     }
+    installed_tools = {
+        step["with"]["tool"]
+        for step in steps
+        if str(step.get("uses", "")).startswith("taiki-e/install-action@")
+    }
+    assert installed_tools == {"cargo-deny@0.19.8", "cargo-audit@0.22.2"}
     assert any(step.get("run") == "make rust-foundation-gate" for step in steps)
+
+    makefile = (ROOT / "Makefile").read_text()
+    foundation = next(
+        line for line in makefile.splitlines() if line.startswith("rust-foundation-gate:")
+    )
+    assert {"rust-deps", "rust-audit"} <= set(foundation.split()[1:])
+    assert "$(CARGO) deny --locked check" in makefile
+    assert "$(CARGO) audit" in makefile
 
 
 def test_structural_coverage_never_collapses_unknowns_into_success() -> None:

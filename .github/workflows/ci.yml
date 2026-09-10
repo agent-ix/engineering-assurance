@@ -36,6 +36,12 @@ jobs:
         with:
           toolchain: 1.98.1
           components: rustfmt, clippy
+      - uses: taiki-e/install-action@37f7c5781271959fb65b6b35224e28652ff2b63d
+        with:
+          tool: cargo-deny@0.19.8
+      - uses: taiki-e/install-action@37f7c5781271959fb65b6b35224e28652ff2b63d
+        with:
+          tool: cargo-audit@0.22.2
       - run: python -m pip install -e '.[dev]'
       - run: npm install --global '@agent-ix/quire-cli@0.30.2'
       - run: pnpm --dir .deps/ix-flow install --frozen-lockfile

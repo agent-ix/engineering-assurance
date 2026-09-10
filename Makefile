@@ -1,4 +1,4 @@
-.PHONY: lint test package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-foundation-gate eval-readiness agent-evals agent-evals-aggregate integration-traceability integration-evidence integration-gate release-gate
+.PHONY: lint test package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate eval-readiness agent-evals agent-evals-aggregate integration-traceability integration-evidence integration-gate release-gate
 
 EVAL_AGENT ?= codex
 EVAL_RUN ?= canary
@@ -42,9 +42,12 @@ rust-docs:
 	RUSTDOCFLAGS="-D warnings" $(CARGO) doc --workspace --all-features --no-deps --locked
 
 rust-deps:
-	$(CARGO) deny check
+	$(CARGO) deny --locked check
 
-rust-foundation-gate: rust-format rust-clippy rust-toolchain rust-tests rust-docs
+rust-audit:
+	$(CARGO) audit
+
+rust-foundation-gate: rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit
 
 eval-readiness:
 	PATH="$(CURDIR)/.agent-evals/bin:$(PATH)" $(PYTHON) scripts/check_eval_readiness.py
