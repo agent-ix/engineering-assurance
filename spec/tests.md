@@ -289,6 +289,7 @@ implemented and reviewed.
 | TC-116 | Exact Rust 1.98.1 builds and tests every target with unsafe code forbidden | Compile | P0 | NFR-005-AC-1 | ✅ Rust package foundation; exact all-target gates recorded with implementation review |
 | TC-117 | Rust requirement tests use the canonical bare ix-trace-rs macro form | Static | P0 | NFR-005-AC-2 | 🚧 pending implementation |
 | TC-118 | Quire reconciles every Rust test marker without missing, orphaned, or duplicate bindings | Integration | P0 | NFR-005-AC-3 | 🚧 pending implementation |
+| TC-119 | The pure Rust content-rights classifier matches retained finding/exception behavior, rejects unsafe paths without echoing them, preserves Unicode protected-token matching, leaks no matched content, and remains deterministic and I/O-free | Property | P0 | FR-017-AC-5, FR-017-CON-3 | ✅ typed Rust classifier, retained-Python differential, exhaustive boundary cases, and mutation probes passing |
 
 ## Option Permutation Matrix
 
@@ -380,6 +381,7 @@ evaluation envelopes.
 | EC-014 | ix-flow or cli-agent-evals cannot load a structured external provider | FR-016, FR-017 | TC-108, TC-109 | JavaScript remains an undeclared permanent dependency |
 | EC-015 | A legacy path is deleted before its Rust replacement and direct invocation pass | FR-018 | TC-113 | Qualification or onboarding becomes unavailable |
 | EC-016 | Path-qualified ix-trace-rs macro compiles but Quire cannot bind it | NFR-005 | TC-117, TC-118 | Passing Rust tests provide no requirement evidence |
+| EC-017 | Content path or protected token attempts to escape or disclose selected bytes | FR-017 | TC-119 | Qualification reads unowned content or leaks the material it is meant to reject |
 
 ## Integration Test Matrix
 

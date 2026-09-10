@@ -47,6 +47,12 @@ checking, manifest validation, and qualification assertions to Rust.
   pass decision, required-cell count, complete-cell count, and a deterministic
   ordered list of stable failure codes. It does not persist evidence or infer a
   release decision.
+- The pure content-rights boundary emits typed findings containing only a
+  normalized repository-relative path when path validation succeeds, a
+  one-based line number (or zero for a whole-file finding), and one closed
+  finding category. An unsafe path finding carries no path value. A finding
+  never returns the rejected unsafe path, matched source text, or a protected
+  token.
 
 ## Behavior
 
@@ -87,6 +93,33 @@ checking, manifest validation, and qualification assertions to Rust.
 - Order missing, duplicate, cell-validation, aggregate-identity,
   scenario-workflow, and terminal-pair failures deterministically by closed
   host/scenario order so equivalent input permutations produce the same result.
+- Classify content-rights inputs through one deterministic Rust policy that
+  accepts explicit repository-relative paths, file/symbolic-link kind, file
+  bytes, and protected tokens from its caller. Admit text files with no suffix
+  or one of `.cfg`, `.css`, `.html`, `.js`, `.json`, `.lock`, `.md`, `.mjs`,
+  `.py`, `.rs`, `.sh`, `.toml`, `.ts`, `.txt`, `.yaml`, and `.yml`; classify
+  `.doc`, `.docx`, `.epub`, `.gif`, `.jpg`, `.jpeg`, `.ods`, `.odt`, `.pdf`,
+  `.png`, `.ppt`, `.pptx`, `.xls`, `.xlsx`, and `.zip` as forbidden, and every
+  other suffix as unreviewed. Preserve the 512,000-byte non-license ceiling; NUL,
+  non-UTF-8, Git LFS pointer, workstation-path, external-publication-identifier,
+  prohibited semantic-content, unapproved-URL, long encoded-payload, and
+  protected-token findings; the exact Cargo registry URL exceptions for
+  `Cargo.lock` and `deny.toml`; the JSON Schema draft-07 URL-prefix exception;
+  and the `LICENSE` URL exception.
+- Exempt semantic-policy phrases only in `AGENTS.md`, `CONTENT_RIGHTS.md`,
+  `content-rights.yaml`, `src/content_rights.rs`, and
+  `tests/content_rights_parity.rs`. During additive parity, apply the same
+  exception to the retained `scripts/check_content_rights.py` and
+  `tests/test_content_rights.py`; deleting those two exceptions is part of the
+  later governed removal, not this slice.
+- Reject an empty, absolute, backslash-delimited, dot-segment, parent-traversing,
+  control-character, or non-normalized content path. Order findings by path,
+  line, and closed category rather than discovery or hash-map order. Protected
+  token matching preserves Unicode case-fold behavior, ignores empty tokens,
+  and emits no matched bytes. One-based line numbers treat LF, CR, CRLF,
+  vertical tab, form feed, file/group/record separators, NEL, Unicode line
+  separator, and Unicode paragraph separator as line boundaries, matching the
+  retained classifier.
 - Compare complete staged package membership with explicit allowlists and reject
   missing, extra, or escaping members.
 - Inspect the complete selected tree and staged members for content rights.
@@ -106,7 +139,7 @@ attempted publication fail their corresponding local gate.
 | --- | --- | --- | --- |
 | FR-017-CON-1 | The Rust evaluator SHALL NOT infer a human terminal decision. | Responsibility | Test |
 | FR-017-CON-2 | Package-manager and host configuration SHALL contain no first-party semantic assertion. | Architecture | Test |
-| FR-017-CON-3 | The reusable Rust evaluation validator and aggregator SHALL NOT access the filesystem, environment, process table, network, or system clock; transcript-byte loading, host execution, and current-HEAD comparison belong to explicit binary adapters. | Responsibility | Test |
+| FR-017-CON-3 | The reusable Rust qualification library SHALL NOT access the filesystem, environment, child programs, network, or system clock; tree enumeration, transcript-byte loading, host execution, and current-HEAD comparison belong to explicit binary adapters. | Responsibility | Test |
 
 ## Acceptance Criteria
 
@@ -116,6 +149,7 @@ attempted publication fail their corresponding local gate.
 | FR-017-AC-2 | The pure Rust boundary preserves the 28-cell retained evaluation contract and deterministically withholds aggregation for every missing, duplicate, malformed, unsupported, unavailable, failed, stale-revision, changed-governing-identity, changed-workflow, unsupported-addition, invalid-transcript-reference, invalid-count, outcome-mismatch, and terminal-pair case; input permutation cannot change the result. | Property (TC-110) |
 | FR-017-AC-3 | Rust package, rights, manifest, integration, and publication-refusal checks match the retained pass/fail corpus and reject extra, missing, or escaping package members. | Property (TC-111) |
 | FR-017-AC-4 | Static inspection finds only declarative dispatch in package-manager and host configuration; qualification is performed locally and real-agent evaluation, publication, and release operations remain explicit manual actions. | Test (TC-112) |
+| FR-017-AC-5 | The pure Rust content-rights classifier matches every retained finding class and exception, rejects unsafe paths without echoing them, preserves Unicode protected-token matching, emits no matched content, and returns deterministic typed findings without filesystem, environment, child-program, network, or clock access. | Property (TC-119) |
 
 ## Dependencies
 
@@ -126,3 +160,7 @@ attempted publication fail their corresponding local gate.
   independently reviewable additive slice. It does not satisfy FR-017-AC-1,
   verify transcript bytes, compare the current repository revision, authorize
   host execution, or permit removal under FR-018.
+- **Sequence**: FR-017-AC-5 is an independently reviewable pure classifier
+  slice. It does not enumerate a repository, replace the tree adapter, select a
+  package format, satisfy the combined FR-017-AC-3 gate, or permit removal under
+  FR-018.
