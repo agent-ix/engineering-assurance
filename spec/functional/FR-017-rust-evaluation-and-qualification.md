@@ -35,6 +35,10 @@ checking, manifest validation, and qualification assertions to Rust.
 - For the pure package-membership boundary, one explicit expected-member
   allowlist and one observed file-member sequence supplied by an archive or
   staging adapter.
+- For the package-audit adapter, one explicit repository root containing the
+  retained Python-wheel and private-npm distribution definitions. The adapter
+  invokes the fixed local `python3`, `npm`, and package-installer commands; it
+  does not accept caller-selected executable names or command fragments.
 - For the pure module-manifest boundary, the expected module name and version,
   module-manifest YAML bytes, authoritative module-manifest JSON Schema bytes,
   edge-registry manifest YAML bytes, and one supplied schema/skeleton resource
@@ -58,6 +62,10 @@ checking, manifest validation, and qualification assertions to Rust.
 - One `engineering-assurance.content-rights-tree-result/v1` result containing
   the accepted/withheld outcome, inspected regular-file and symbolic-link
   count, and deterministic typed findings from the pure classifier.
+- One `engineering-assurance.package-audit-result/v1` success result containing
+  the accepted outcome and the audited wheel, npm, and installed-canonical file
+  counts. Package, archive, process, rights, membership, or installed-bundle
+  failures produce a typed adapter error and no success result.
 - The pure aggregation boundary emits one
   `engineering-assurance.evaluation-aggregate-result/v1` value containing the
   pass decision, required-cell count, complete-cell count, and a deterministic
@@ -255,6 +263,94 @@ checking, manifest validation, and qualification assertions to Rust.
   distribution format. Archive decoding,
   member-kind validation, package construction, installation, and filesystem
   traversal remain responsibilities of later binary adapters.
+- The package-audit adapter SHALL require an explicit existing non-symbolic-link
+  repository root.
+- The package-audit adapter SHALL create all package-builder outputs,
+  package-manager cache entries, archives, and installation outputs beneath one
+  invocation-owned temporary directory.
+- The package-audit adapter SHALL treat compiler caches selected by the
+  reviewed Rust lifecycle dispatch as tool-owned caches rather than package-
+  audit artifacts.
+- The package-audit adapter SHALL require the six fixed npm lifecycle staging
+  destinations to be absent before invoking `npm pack`.
+- While `npm pack` executes, the package-audit adapter SHALL admit only the six fixed
+  transient staging destinations created by the reviewed Rust package-
+  lifecycle hook.
+- When a successful or failed `npm pack` process terminates, the package-audit adapter SHALL remove only an exact staging population whose pre-invocation absence it established.
+- When exact post-process staging cleanup cannot be proven, the package-audit adapter SHALL fail closed.
+- The package-audit adapter SHALL invoke child programs directly without a
+  shell.
+- The package-audit adapter SHALL build exactly one wheel with `python3 -m pip
+  wheel . --no-deps --no-build-isolation` and install that wheel with `python3
+  -m pip install --no-index --no-deps --target`.
+- The package-audit adapter SHALL build exactly one npm archive with `npm pack
+  --json --pack-destination` and install that archive with `npm install
+  --ignore-scripts --offline --prefix` and an invocation-owned npm cache.
+- Each package-audit child process SHALL terminate within 180 seconds.
+- Each package-audit child process SHALL produce no more than 8,388,608 bytes
+  on either stdout or stderr.
+- The package-audit adapter SHALL fail an unavailable, timed-out, unsuccessful,
+  malformed, or over-output process without interpreting diagnostic prose.
+- The package-audit adapter SHALL select exactly one `.whl` and one `.tgz`
+  output.
+- Each selected archive SHALL be a regular file no larger than 67,108,864
+  bytes.
+- For each archive, the package-audit adapter SHALL accept no more than 65,536
+  total entries, an individual expanded regular file no larger than 8,388,608
+  bytes, or more than 67,108,864 aggregate expanded regular-file bytes.
+- The package-audit adapter SHALL reject a non-UTF-8, absolute,
+  backslash-delimited, empty-segment, dot-segment, parent-traversing,
+  control-character, over-4,096-byte, or duplicate file-member name.
+- The package-audit adapter SHALL reject symbolic-link, hard-link, device,
+  FIFO, socket, or otherwise unsupported archive members.
+- The package-audit adapter SHALL skip a directory entry only after validating
+  its name and kind.
+- The wheel file-member population SHALL equal the retained package-root,
+  fixed data-file, and fixed distribution-metadata contract.
+- The wheel SHALL contain exactly one of the admitted wheel license locations.
+- The emitted wheel-license bytes SHALL equal the repository `LICENSE`.
+- The emitted wheel `METADATA` SHALL retain the private-package refusal
+  classifier.
+- The npm pack report and decoded npm archive SHALL independently equal the
+  same repository-owned npm allowlist after removal of exactly one `package/`
+  archive prefix.
+- The package-audit adapter SHALL construct the npm allowlist only from the
+  fixed root files and declared package subtrees.
+- The package-audit adapter SHALL NOT enlarge an allowlist from an archive
+  observation.
+- Every regular archive member SHALL pass the pure Rust content-rights policy.
+- A member whose final path component is `LICENSE` SHALL use the license policy
+  identity.
+- Every other archive member SHALL use its validated normalized package path
+  as the content-rights policy identity.
+- Package-audit protected-token input SHALL use the same bounded environment
+  parser as the repository-tree adapter.
+- A package-audit failure SHALL NOT disclose source bytes or a protected token.
+- Each offline installed bundle SHALL contain the retained module roots,
+  exactly four supported thin host manifests resolving the one canonical
+  assurance-onboarding skill, and exactly the four declared canonical and pilot
+  workflows.
+- Installed host-manifest validation SHALL reject unknown keys, missing or
+  multiple skill sources, noncanonical targets, and escaping paths.
+- Installed canonical and pilot definitions for each workflow SHALL parse as
+  equivalent YAML values without accepting duplicate or merge keys.
+- Installed-tree traversal SHALL use the same member-path, entry-population,
+  per-file, and aggregate-byte ceilings as archive inspection.
+- Installed-tree traversal SHALL reject symbolic links or special entries
+  instead of following them.
+- The canonical skill file population and bytes installed from the wheel and
+  npm archive SHALL be identical.
+- A direct package-audit invocation SHALL emit exactly one versioned JSON
+  success result on stdout and return status zero only after both archives and
+  both installations pass.
+- A typed package-audit adapter failure SHALL return status two and write no
+  success result.
+- At package-audit return, the package-audit adapter SHALL leave no output
+  outside its invocation-owned temporary directory.
+- The repository `package-audit` target SHALL invoke the exact Rust 1.98.1 CLI
+  declaratively.
+- When the retained Python audit becomes eligible for deletion, the repository SHALL demonstrate that the Python and Rust paths both pass at one candidate revision.
+- When the retained Python audit becomes eligible for deletion, the repository SHALL record a reversible dispatch cutover.
 - The Rust manifest classifier SHALL parse both supplied manifests as YAML
   mappings and SHALL reject duplicate mapping keys or merge keys rather than
   inheriting language-specific merge behavior.
@@ -324,6 +420,11 @@ unsupported selected entry, invalid protected-token population, or exceeded
 tree resource ceiling refuses the content-rights tree operation without a
 success result. A classified content-rights finding returns a well-formed
 withheld result rather than an adapter error.
+An invalid package-audit root, package-builder or installer failure, malformed
+npm report, missing or multiple archive, unsafe or unsupported archive member,
+resource-limit breach, membership mismatch, content-rights finding, installed
+discovery mismatch, link or special installed entry, or cross-format canonical
+byte mismatch refuses the package audit without a success result.
 
 ## Constraints
 
@@ -339,7 +440,7 @@ withheld result rather than an adapter error.
 | --- | --- | --- |
 | FR-017-AC-1 | The Rust evaluation path completes all required host-scenario cells and matches retained success and declared failure behavior. | E2E (TC-109) |
 | FR-017-AC-2 | The pure Rust boundary preserves the 28-cell retained evaluation contract and deterministically withholds aggregation for every missing, duplicate, malformed, unsupported, unavailable, failed, stale-revision, changed-governing-identity, changed-workflow, unsupported-addition, invalid-transcript-reference, invalid-count, outcome-mismatch, and terminal-pair case; input permutation cannot change the result. | Property (TC-110) |
-| FR-017-AC-3 | Rust package, rights, manifest, integration, and publication-refusal checks match the retained pass/fail corpus and reject extra, missing, or escaping package members. | Property (TC-111) |
+| FR-017-AC-3 | Rust package, rights, manifest, integration, and publication-refusal checks match the retained pass/fail corpus; the package-audit adapter builds, bounds, decodes, audits, installs, and compares the retained wheel and npm distributions offline and rejects extra, missing, duplicate, unsafe, linked, special, oversized, rights-denied, escaping, or byte-divergent members. | Property (TC-111) |
 | FR-017-AC-4 | Static inspection finds only declarative dispatch in package-manager and host configuration; qualification is performed locally and real-agent evaluation, publication, and release operations remain explicit manual actions. | Test (TC-112) |
 | FR-017-AC-5 | The pure Rust content-rights classifier matches every retained finding class and exception, rejects unsafe paths without echoing them, preserves Unicode protected-token matching, emits no matched content, and returns deterministic typed findings without filesystem, environment, child-program, network, or clock access. | Property (TC-119) |
 | FR-017-AC-6 | For every caller-supplied expected allowlist and observed file-member sequence within the declared ceilings, the pure Rust membership classifier matches retained extra/missing behavior on the shared safe unique domain, additionally rejects unsafe or duplicate membership without disclosing unsafe paths, remains permutation-invariant, and performs no filesystem, environment, child-program, network, clock, archive-decoding, or package-format selection. | Property (TC-120) |
@@ -366,3 +467,8 @@ withheld result rather than an adapter error.
   It does not discover the shared schema, traverse a module tree, replace Quire
   artifact validation, select a distribution format, satisfy the combined
   FR-017-AC-3 gate, or permit removal under FR-018.
+- **Sequence**: the package-audit adapter consumes the completed content-rights,
+  membership, package-lifecycle, and manifest/discovery seams. It may cut over
+  only after same-revision correspondence and rollback evidence. Removal of the
+  retained package audit, content-rights checker, their Python tests, temporary
+  policy exemptions, and Rust-test subprocess references is the final step.

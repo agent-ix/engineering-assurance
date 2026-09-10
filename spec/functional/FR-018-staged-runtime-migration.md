@@ -50,6 +50,13 @@ then update this repository's direct invocation and remove the old path.
   checker, its Python tests, and their temporary Rust policy exemptions only
   after the Rust dispatch passes independently and the package/archive audit no
   longer imports the retained classifier.
+- For the package/archive capability, run the retained Python audit and the Rust
+  adapter successfully at one candidate revision, record a reversible
+  `package-audit` dispatch cutover, and then remove `scripts/audit_packages.py`,
+  `tests/test_packages.py`, `scripts/check_content_rights.py`, and
+  `tests/test_content_rights.py` together with all executable test imports or
+  subprocess references to those paths and the two temporary Rust semantic-
+  policy exemptions. Historical review references remain inert records.
 - Preserve historical corpus and evidence bytes.
 - Return changed interfaces or compatibility promises to specification before
   implementation continues.
