@@ -20,14 +20,17 @@ four responsibilities and hand-walked PGM-01 JSON in one 1,678-line module;
 that architectural finding is now remediated rather than waived. The library
 does not persist evidence, discover a corpus checkout, execute generated
 foreign-language fixtures, or expose a new CLI protocol. Four review findings
-were corrected in the first pass and two architectural findings in the deeper
-pass; no open Rust finding remains.
+were corrected in the first pass, two architectural findings in the deeper
+pass, and the independent-review mapping and audit findings in the final pass;
+no open Rust finding remains.
 
 ## Findings
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
+| FND-120 | high | Closed: an empty legacy schema or record identity could produce an `Ok` compatibility view that violated the committed output schema. Empty and scalar identities now retain Python-compatible normalization, and every return path validates the typed output invariants plus exact source digest before returning. Five adverse identity cases are differentially asserted. | `src/semantics/pgm01.rs`; `tests/semantics_parity.rs`; FR-015-AC-1; TC-100; TC-103 |
 | FND-118 | high | Closed: the initial implementation put semantic validation, ownership checks, report rendering, PGM-01 decoding, and fixture generation in one 1,678-line module. Those responsibilities now have separate modules behind the unchanged `engineering_assurance::semantics` facade. | `src/semantics/mod.rs`; `src/semantics/report.rs`; `src/semantics/pgm01.rs`; `src/semantics/fixtures.rs` |
+| FND-121 | medium | Closed: the negative-capability audit listed four source files and searched import-path substrings, so a fifth module or braced process import escaped. It now discovers every Rust source recursively, rejects the capability identifiers independent of import spelling, and proves three braced-import mutants are detected. | `tests/semantics_parity.rs`; FR-015-AC-4; TC-104 |
 | FND-113 | medium | Closed: the first PGM-01 implementation converted retained byte counts through `u64`, so a valid non-negative Python integer above `u64::MAX` became `unreadable`. The mapper now validates the exact arbitrary-precision JSON integer token, preserves large values, and retains Python's `-0` → `0` behavior; both cases are asserted. | `src/semantics/pgm01.rs`; `tests/semantics_parity.rs`; FR-015-AC-1; TC-100; TC-103 |
 | FND-114 | medium | Closed: the first generator embedded the pinned qa-corpus into the production crate at compile time. The pure API now requires exact corpus bytes from its caller, so it neither discovers workstation state nor hides qualification data in the product artifact. | `src/semantics/fixtures.rs`; `tests/semantics_parity.rs`; FR-015-AC-1; FR-015-CON-1; TC-100 |
 | FND-115 | medium | Closed: the static inert-fixture audit treated an unreadable script/workflow as empty text, allowing an I/O failure to erase the audited population and pass. Every selected audit input now fails the test when unreadable. | `tests/semantics_parity.rs:389`; FR-015-AC-4; TC-104 |
@@ -43,14 +46,14 @@ pass; no open Rust finding remains.
 | `cargo fmt --all -- --check` | pass; repository `rustfmt.toml` emits its pre-existing stable-channel warning for nightly-only import grouping |
 | `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` | pass with two build jobs |
 | `cargo check --workspace --all-targets --all-features --locked` | pass with two build jobs |
-| `cargo test --workspace --all-targets --all-features --locked` | pass — 24 tests, including six semantic integration tests |
+| `cargo test --workspace --all-targets --all-features --locked` | pass — 25 tests, including seven semantic integration tests |
 | `RUSTDOCFLAGS=-D warnings cargo doc --workspace --all-features --no-deps --locked` | pass |
 | `cargo deny check --disable-fetch` | pass — advisories, bans, licenses, and sources |
-| Retained-Python differential | pass — PGM-01 v1/v2 mappings and JSON/Markdown report bytes agree |
+| Retained-Python differential | pass — PGM-01 v1/v2 mappings, five adverse identity cases, and JSON/Markdown report bytes agree |
 | Generated fixture comparison | pass — all seven committed `.py`, `.ts`, and `.rs` inert projections agree |
 | Ownership/adverse mutations | pass — authority confusion, missing/wrong links, source-version skew, aggregate verdict insertion, unsupported PGM version, tamper, malformed bytes, and arbitrary-precision integer boundaries are discriminating |
 | `make lint` | pass |
-| `make test` | pass — 186 tests and 2 stated optional-source skips from the linked worktree |
+| `make test` | pass — 186 tests and 2 location-dependent sibling-checkout skips from the linked worktree; they are not represented as optional-source evidence |
 | `make package-audit` | pass |
 | Local Quire validation | pass; inherited duplicate-provider diagnostics only |
 

@@ -25,6 +25,30 @@ fn fixture(name: &str) -> Vec<u8> {
     .expect("governed semantic fixture must be readable")
 }
 
+fn rust_sources_under(directory: &std::path::Path) -> Vec<(PathBuf, String)> {
+    let mut sources = Vec::new();
+    for entry in fs::read_dir(directory).expect("Rust source directory must be readable") {
+        let path = entry.expect("Rust source entry must be readable").path();
+        if path.is_dir() {
+            sources.extend(rust_sources_under(&path));
+        } else if path.extension().is_some_and(|extension| extension == "rs") {
+            let source = fs::read_to_string(&path).expect("Rust source must be UTF-8");
+            sources.push((path, source));
+        }
+    }
+    sources
+}
+
+fn forbidden_semantic_capability(source: &str) -> Option<&'static str> {
+    let identifiers: std::collections::BTreeSet<&str> = source
+        .split(|character: char| !(character.is_ascii_alphanumeric() || character == '_'))
+        .filter(|identifier| !identifier.is_empty())
+        .collect();
+    ["fs", "process", "env", "Command"]
+        .into_iter()
+        .find(|forbidden| identifiers.contains(forbidden))
+}
+
 #[trace("TC-100", "FR-015-AC-1")]
 #[trace("TC-102", "FR-015-AC-2")]
 #[test]
@@ -282,6 +306,51 @@ fn tc_103_pgm01_adverse_outcomes_preserve_source_identity() {
 }
 
 #[trace("TC-100", "FR-015-AC-1")]
+#[trace("TC-103", "FR-015-AC-3")]
+#[test]
+fn tc_100_pgm01_adverse_identity_views_match_retained_python() {
+    let cases = [
+        br#"{"schemaVersion":"","recordId":"legacy-1"}"#.as_slice(),
+        br#"{"schemaVersion":"quire.pgm01-evidence/v99","recordId":""}"#.as_slice(),
+        br#"{"schemaVersion":123,"recordId":"legacy-1"}"#.as_slice(),
+        br#"{"schemaVersion":"quire.pgm01-evidence/v99","recordId":42}"#.as_slice(),
+        br#"{"schemaVersion":false,"recordId":null}"#.as_slice(),
+    ];
+    let actual: Vec<serde_json::Value> = cases
+        .iter()
+        .map(|raw| {
+            serde_json::to_value(map_pgm01_bytes(raw, None).expect("case must classify"))
+                .expect("view must serialize")
+        })
+        .collect();
+    let script = r#"
+import json
+from engineering_assurance.verification_semantics import map_pgm01_bytes
+cases = [
+    b'{"schemaVersion":"","recordId":"legacy-1"}',
+    b'{"schemaVersion":"quire.pgm01-evidence/v99","recordId":""}',
+    b'{"schemaVersion":123,"recordId":"legacy-1"}',
+    b'{"schemaVersion":"quire.pgm01-evidence/v99","recordId":42}',
+    b'{"schemaVersion":false,"recordId":null}',
+]
+print(json.dumps([map_pgm01_bytes(case) for case in cases], sort_keys=True, separators=(',', ':')))
+"#;
+    let output = Command::new("python3")
+        .args(["-c", script])
+        .current_dir(root())
+        .output()
+        .expect("retained Python reference must execute during additive parity");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let expected: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("Python reference must emit JSON");
+    assert_eq!(serde_json::Value::Array(actual), expected);
+}
+
+#[trace("TC-100", "FR-015-AC-1")]
 #[test]
 fn tc_100_report_rendering_matches_retained_python() {
     let raw = fixture("report-projection.json");
@@ -350,17 +419,23 @@ fn tc_100_rust_generator_matches_all_committed_inert_fixtures() {
     // FR-008-AC-4 / NFR-004-AC-2 are negative capability requirements. Static
     // inspection is the direct gate: there is no runtime path to exercise for
     // an execution or persistence capability that must not exist.
-    let semantic_sources = [
-        include_str!("../src/semantics/mod.rs"),
-        include_str!("../src/semantics/fixtures.rs"),
-        include_str!("../src/semantics/pgm01.rs"),
-        include_str!("../src/semantics/report.rs"),
-    ]
-    .concat();
-    for forbidden in ["std::fs", "std::process", "std::env", "Command::new"] {
+    let semantic_sources = rust_sources_under(&root().join("src/semantics"));
+    for (path, source) in semantic_sources {
+        assert_eq!(
+            forbidden_semantic_capability(&source),
+            None,
+            "pure semantic library {} contains a forbidden capability identifier",
+            path.display()
+        );
+    }
+    for mutant in [
+        "use std::{collections::BTreeMap, fs}; fn read() { fs::read(\"x\"); }",
+        "use std::{collections::BTreeMap, process::Command as Spawn}; fn run() { Spawn::new(\"x\"); }",
+        "use std::{collections::BTreeMap, env as ambient}; fn read() { ambient::var(\"X\"); }",
+    ] {
         assert!(
-            !semantic_sources.contains(forbidden),
-            "pure semantic library contains {forbidden}"
+            forbidden_semantic_capability(mutant).is_some(),
+            "negative-capability mutant escaped the static gate: {mutant}"
         );
     }
 

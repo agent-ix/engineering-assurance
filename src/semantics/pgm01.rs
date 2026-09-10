@@ -82,6 +82,50 @@ impl Pgm01View {
             limitations: Vec::new(),
         }
     }
+
+    fn validate_contract(self, raw: &[u8]) -> Result<Self, SemanticError> {
+        if self.mapping_version != PGM01_MAPPING_PROTOCOL {
+            return Err(SemanticError::new(
+                "generated PGM-01 view has an invalid mapping version",
+            ));
+        }
+        if self.source_schema_version.is_empty() || self.source_record_id.is_empty() {
+            return Err(SemanticError::new(
+                "generated PGM-01 view has an empty source identity",
+            ));
+        }
+        if self.source_digest != sha256_hex(raw)
+            || validate_digest(&self.source_digest, "generated PGM-01 source digest").is_err()
+        {
+            return Err(SemanticError::new(
+                "generated PGM-01 view changed the source identity",
+            ));
+        }
+        if self
+            .mappings
+            .iter()
+            .any(|item| !item.source_path.starts_with('/') || item.target_field.is_empty())
+        {
+            return Err(SemanticError::new(
+                "generated PGM-01 view has an invalid field mapping",
+            ));
+        }
+        if self
+            .unmapped_fields
+            .iter()
+            .any(|item| !item.source_path.starts_with('/') || item.reason.is_empty())
+        {
+            return Err(SemanticError::new(
+                "generated PGM-01 view has an invalid unmapped field",
+            ));
+        }
+        if self.limitations.iter().any(String::is_empty) {
+            return Err(SemanticError::new(
+                "generated PGM-01 view has an empty limitation",
+            ));
+        }
+        Ok(self)
+    }
 }
 
 fn mapping(
@@ -230,6 +274,15 @@ fn required_legacy_string<'a>(value: &'a str, path: &str) -> Result<&'a str, Sem
         )))
     } else {
         Ok(value)
+    }
+}
+
+fn compatibility_identity(value: Option<&Value>, fallback: &str) -> String {
+    match value {
+        Some(Value::String(value)) if !value.is_empty() => value.clone(),
+        Some(Value::Number(value)) if value.as_f64() != Some(0.0) => value.to_string(),
+        Some(Value::Bool(true)) => "True".to_owned(),
+        _ => fallback.to_owned(),
     }
 }
 
@@ -553,25 +606,27 @@ pub fn map_pgm01_bytes(
             ));
             view.limitations
                 .push("No field from the altered source was interpreted.".to_owned());
-            return Ok(view);
+            return view.validate_contract(raw);
         }
     }
 
     let decoded: Value = match serde_json::from_slice(raw) {
         Ok(decoded) => decoded,
-        Err(error) => return Ok(unreadable_view(raw, format!("invalid JSON: {error}"))),
+        Err(error) => {
+            return unreadable_view(raw, format!("invalid JSON: {error}")).validate_contract(raw);
+        }
     };
     let Some(record) = decoded.as_object() else {
-        return Ok(unreadable_view(raw, "legacy record must be a JSON object"));
+        return unreadable_view(raw, "legacy record must be a JSON object").validate_contract(raw);
     };
-    let schema_version = record
-        .get("schemaVersion")
+    let schema_version_value = record.get("schemaVersion");
+    let record_id_value = record.get("recordId");
+    let schema_version = schema_version_value
         .and_then(Value::as_str)
         .map(str::to_owned);
-    let record_id = record
-        .get("recordId")
-        .and_then(Value::as_str)
-        .map(str::to_owned);
+    let source_schema_version = compatibility_identity(schema_version_value, "unknown");
+    let source_record_id = compatibility_identity(record_id_value, "incompatible-source");
+    let unreadable_record_id = compatibility_identity(record_id_value, "unreadable-source");
 
     let mapped = match schema_version.as_deref() {
         Some("quire.pgm01-evidence/v1") => serde_json::from_value::<Pgm01V1>(decoded)
@@ -581,29 +636,21 @@ pub fn map_pgm01_bytes(
             .map_err(|error| SemanticError::new(format!("invalid PGM-01 v2 record: {error}")))
             .and_then(|record| map_pgm01_v2(raw, record)),
         _ => {
-            let mut view = Pgm01View::base(
-                raw,
-                schema_version.as_deref().unwrap_or("unknown"),
-                record_id.as_deref().unwrap_or("incompatible-source"),
-            );
+            let mut view = Pgm01View::base(raw, source_schema_version, source_record_id);
             view.outcome = Pgm01Outcome::Incompatible;
             view.unmapped_fields
                 .push(unmapped("/schemaVersion", "unknown PGM-01 schema version"));
             view.limitations
                 .push("No unknown schema was treated as empty or current.".to_owned());
-            return Ok(view);
+            return view.validate_contract(raw);
         }
     };
 
-    Ok(match mapped {
+    match mapped {
         Ok(view) => view,
-        Err(error) => malformed_view(
-            raw,
-            schema_version.as_deref().unwrap_or("unknown"),
-            record_id.as_deref().unwrap_or("unreadable-source"),
-            &error,
-        ),
-    })
+        Err(error) => malformed_view(raw, &source_schema_version, &unreadable_record_id, &error),
+    }
+    .validate_contract(raw)
 }
 
 fn unreadable_view(raw: &[u8], reason: impl Into<String>) -> Pgm01View {
