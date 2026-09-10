@@ -1,0 +1,422 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Agent-IX
+
+//! Additive-migration parity and adverse coverage for evaluation aggregation.
+
+use std::{
+    io::Write,
+    process::{Command, Stdio},
+};
+
+use engineering_assurance::{
+    evaluation::{
+        EvaluationEnvelope, EvaluationHost, EvaluationScenario, ExecutionStatus, MAX_REQUEST_BYTES,
+        REQUEST_PROTOCOL, aggregate_evaluations, evaluate_request_bytes, required_matrix,
+    },
+    evidence::{GoverningVersions, VersionIdentity},
+    workflow::{DecisionChoice, DecisionEvent},
+};
+use ix_trace_rs::trace;
+use serde_json::{Value, json};
+
+const DIGEST: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const SOURCE_REVISION: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+const PYTHON_REFERENCE: &str = r#"
+import json
+import sys
+from dataclasses import asdict
+from engineering_assurance.evaluation import EvaluationEnvelope, aggregate_evaluations
+from engineering_assurance.evidence import GoverningVersions, VersionIdentity
+from engineering_assurance.workflow import DecisionEvent
+
+def identity(value):
+    return VersionIdentity(**value)
+
+def governing(value):
+    if value is None:
+        return None
+    return GoverningVersions(**{key: identity(item) for key, item in value.items()})
+
+def terminal(value):
+    return None if value is None else DecisionEvent(**value)
+
+def envelope(value):
+    value = dict(value)
+    value["governing"] = governing(value.get("governing"))
+    value["terminal_event"] = terminal(value.get("terminal_event"))
+    value["unsupported_additions"] = tuple(value["unsupported_additions"])
+    return EvaluationEnvelope(**value)
+
+matrices = json.load(sys.stdin)
+results = []
+for matrix in matrices:
+    result = aggregate_evaluations([envelope(item) for item in matrix])
+    results.append(asdict(result))
+print(json.dumps(results, separators=(",", ":")))
+"#;
+
+fn identity(name: &str) -> VersionIdentity {
+    VersionIdentity {
+        name: name.to_owned(),
+        version: "1.2.3".to_owned(),
+        digest: DIGEST.to_owned(),
+    }
+}
+
+fn governing(scenario: EvaluationScenario) -> GoverningVersions {
+    let workflow = match scenario {
+        EvaluationScenario::InterruptionResume
+        | EvaluationScenario::HumanAcceptance
+        | EvaluationScenario::HumanRejection => "architecture-evaluation",
+        EvaluationScenario::ExistingProfile
+        | EvaluationScenario::NoProfile
+        | EvaluationScenario::MalformedProducer
+        | EvaluationScenario::UnavailableProducer => "assurance-intake",
+    };
+    GoverningVersions {
+        module: identity("engineering-assurance"),
+        plugin: identity("engineering-assurance-plugin"),
+        skill: identity("assurance-onboarding"),
+        workflow: identity(workflow),
+        quire: identity("quire"),
+        quoin: identity("quoin"),
+        ix_flow: identity("ix-flow"),
+        schema: identity("evaluation-envelope"),
+        producer: identity("cli-agent-evals"),
+    }
+}
+
+fn terminal(host: EvaluationHost, scenario: EvaluationScenario) -> Option<DecisionEvent> {
+    let choice = match scenario {
+        EvaluationScenario::HumanAcceptance => DecisionChoice::Accept,
+        EvaluationScenario::HumanRejection => DecisionChoice::Reject,
+        EvaluationScenario::ExistingProfile
+        | EvaluationScenario::NoProfile
+        | EvaluationScenario::MalformedProducer
+        | EvaluationScenario::UnavailableProducer
+        | EvaluationScenario::InterruptionResume => return None,
+    };
+    Some(DecisionEvent {
+        run_id: format!("{}-{}-run", host.as_str(), choice.as_str()),
+        workflow: "architecture-evaluation".to_owned(),
+        workflow_version: "1.2.3".to_owned(),
+        owner: "architecture-owner".to_owned(),
+        choice,
+        outcome: scenario.expected_outcome().to_owned(),
+        timestamp: "2026-08-30T00:00:00Z".to_owned(),
+    })
+}
+
+fn envelope(host: EvaluationHost, scenario: EvaluationScenario) -> EvaluationEnvelope {
+    EvaluationEnvelope {
+        host,
+        scenario,
+        execution_status: ExecutionStatus::Executed,
+        passed: true,
+        suite_revision: "suite-v1".to_owned(),
+        fixture_revision: "fixtures-v1".to_owned(),
+        source_revision: SOURCE_REVISION.to_owned(),
+        host_version: Some("1.2.3".to_owned()),
+        governing: Some(governing(scenario)),
+        transcript_path: Some(format!(
+            "transcripts/{}-{}.jsonl",
+            host.as_str(),
+            scenario.as_str()
+        )),
+        transcript_digest: Some(DIGEST.to_owned()),
+        command_count: Some(4),
+        elapsed_ms: Some(1_200),
+        human_prompt_count: Some(i64::from(terminal(host, scenario).is_some())),
+        manual_translation_count: Some(0),
+        repeated_prompt_count: Some(0),
+        observed_outcome: Some(scenario.expected_outcome().to_owned()),
+        terminal_event: terminal(host, scenario),
+        unsupported_additions: Vec::new(),
+        diagnostic: None,
+    }
+}
+
+fn complete_matrix() -> Vec<EvaluationEnvelope> {
+    required_matrix()
+        .into_iter()
+        .map(|cell| envelope(cell.host, cell.scenario))
+        .collect()
+}
+
+fn changed(
+    source: &[EvaluationEnvelope],
+    index: usize,
+    change: impl FnOnce(&mut EvaluationEnvelope),
+) -> Vec<EvaluationEnvelope> {
+    let mut result = source.to_vec();
+    change(&mut result[index]);
+    result
+}
+
+fn python_results(matrices: &[Vec<EvaluationEnvelope>]) -> Vec<Value> {
+    let mut child = Command::new("python3")
+        .args(["-c", PYTHON_REFERENCE])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("retained Python evaluator must start during additive migration");
+    child
+        .stdin
+        .take()
+        .expect("piped stdin must exist")
+        .write_all(&serde_json::to_vec(matrices).expect("matrix fixtures must serialize"))
+        .expect("matrix fixtures must be writable");
+    let output = child.wait_with_output().expect("evaluator must terminate");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice(&output.stdout).expect("reference results must be JSON")
+}
+
+fn rust_result_without_protocol(matrix: &[EvaluationEnvelope]) -> Value {
+    let result = aggregate_evaluations(matrix);
+    json!({
+        "ok": result.ok,
+        "required_cells": result.required_cells,
+        "complete_cells": result.complete_cells,
+        "failures": result.failures,
+    })
+}
+
+#[test]
+#[trace("TC-110", "FR-017-AC-2", "FR-017-CON-1", "FR-017-CON-3")]
+fn complete_matrix_matches_retained_aggregation() {
+    let complete = complete_matrix();
+    let mut missing = complete.clone();
+    missing.pop();
+    let mut duplicate = complete.clone();
+    duplicate.push(duplicate[0].clone());
+    let failed = changed(&complete, 0, |item| item.passed = false);
+    let drifted = changed(&complete, 0, |item| {
+        item.source_revision = "c".repeat(40);
+    });
+    let unavailable = changed(&complete, 0, |item| {
+        item.execution_status = ExecutionStatus::NotExecuted;
+        item.passed = false;
+        item.diagnostic = Some("executable-not-found".to_owned());
+    });
+    let matrices = vec![complete, missing, duplicate, failed, drifted, unavailable];
+    let expected = python_results(&matrices);
+    let observed = matrices
+        .iter()
+        .map(|matrix| rust_result_without_protocol(matrix))
+        .collect::<Vec<_>>();
+    assert_eq!(observed, expected);
+}
+
+#[test]
+#[trace("TC-110", "FR-017-AC-2", "FR-017-CON-1", "FR-017-CON-3")]
+fn every_incomplete_semantic_class_withholds_aggregation() {
+    let complete = complete_matrix();
+    assert!(aggregate_evaluations(&complete).ok);
+
+    let cases = [
+        changed(&complete, 0, |item| {
+            item.source_revision = "main".to_owned();
+        }),
+        changed(&complete, 0, |item| {
+            item.governing
+                .as_mut()
+                .expect("fixture governing")
+                .module
+                .version = "1.2.4".to_owned();
+        }),
+        changed(&complete, 0, |item| {
+            item.governing
+                .as_mut()
+                .expect("fixture governing")
+                .workflow
+                .version = "1.2.4".to_owned();
+        }),
+        changed(&complete, 0, |item| {
+            item.unsupported_additions.push("invented-check".to_owned());
+        }),
+        changed(&complete, 0, |item| {
+            item.transcript_path = Some("../escape.jsonl".to_owned());
+        }),
+        changed(&complete, 0, |item| {
+            item.transcript_path = Some("..\\escape.jsonl".to_owned());
+        }),
+        changed(&complete, 0, |item| {
+            item.transcript_path = Some("C:/escape.jsonl".to_owned());
+        }),
+        changed(&complete, 0, |item| item.command_count = Some(-1)),
+        changed(&complete, 0, |item| {
+            item.host_version = Some("nightly".to_owned());
+        }),
+        changed(&complete, 0, |item| {
+            item.source_revision = "release-1.x".to_owned();
+        }),
+        changed(&complete, 0, |item| {
+            item.observed_outcome = Some("invented".to_owned());
+        }),
+        changed(&complete, 0, |item| item.passed = false),
+        changed(&complete, 0, |item| {
+            item.execution_status = ExecutionStatus::NotExecuted;
+            item.passed = false;
+            item.diagnostic = Some("executable-not-found".to_owned());
+        }),
+        changed(&complete, 5, |item| {
+            item.terminal_event
+                .as_mut()
+                .expect("decision fixture")
+                .run_id = "claude-reject-run".to_owned();
+        }),
+        changed(&complete, 5, |item| item.terminal_event = None),
+        changed(&complete, 5, |item| {
+            item.terminal_event
+                .as_mut()
+                .expect("decision fixture")
+                .workflow_version = "9.9.9".to_owned();
+        }),
+    ];
+
+    let expected_codes = [
+        "source-revision-not-immutable",
+        "matrix-governing-versions-mismatch",
+        "workflow-version-mismatch",
+        "unsupported-assurance-addition",
+        "transcript-path-invalid",
+        "transcript-path-invalid",
+        "transcript-path-invalid",
+        "command-count-invalid",
+        "host-version-not-immutable",
+        "source-revision-not-immutable",
+        "observed-outcome-mismatch",
+        "scenario-failed",
+        "scenario-not-executed",
+        "terminal-pair-invalid",
+        "terminal-event-missing",
+        "terminal-event-invalid",
+    ];
+    for (case, expected) in cases.iter().zip(expected_codes) {
+        let result = aggregate_evaluations(case);
+        assert!(!result.ok, "{expected} case must withhold");
+        assert!(
+            result
+                .failures
+                .iter()
+                .any(|failure| failure.to_string().contains(expected)),
+            "{expected} absent from {:?}",
+            result.failures
+        );
+    }
+}
+
+#[test]
+#[trace("TC-110", "FR-017-AC-2", "FR-017-CON-1", "FR-017-CON-3")]
+fn missing_duplicate_and_input_permutation_are_deterministic() {
+    let complete = complete_matrix();
+    let mut invalid = complete[1..].to_vec();
+    invalid.push(complete[1].clone());
+    invalid[1].passed = false;
+    let expected = aggregate_evaluations(&invalid);
+    assert!(!expected.ok);
+    assert_eq!(
+        expected.failures.first().map(ToString::to_string),
+        Some("missing:claude:existing-profile".to_owned())
+    );
+    assert!(
+        expected
+            .failures
+            .iter()
+            .any(|failure| failure.to_string() == "duplicate:claude:no-profile")
+    );
+
+    invalid.reverse();
+    assert_eq!(aggregate_evaluations(&invalid), expected);
+}
+
+#[test]
+#[trace("TC-110", "FR-017-AC-2", "FR-017-CON-1", "FR-017-CON-3")]
+fn closed_request_refuses_malformed_unsupported_or_open_input() {
+    let valid = json!({
+        "protocol": REQUEST_PROTOCOL,
+        "envelopes": complete_matrix(),
+    });
+    let result = evaluate_request_bytes(
+        &serde_json::to_vec(&valid).expect("valid request fixture must serialize"),
+    )
+    .expect("valid request must aggregate");
+    assert!(result.ok);
+    assert_eq!(result.required_cells, 28);
+
+    let mut wrong_protocol = valid.clone();
+    wrong_protocol["protocol"] = json!("engineering-assurance.evaluation-aggregate-request/v2");
+    let error = evaluate_request_bytes(
+        &serde_json::to_vec(&wrong_protocol).expect("fixture must serialize"),
+    )
+    .expect_err("unknown protocol must refuse");
+    assert_eq!(error.code(), "evaluation_aggregate_protocol_unsupported");
+
+    let mut open = valid.clone();
+    open["envelopes"][0]["invented"] = json!(true);
+    let mut invalid_scalar = valid.clone();
+    invalid_scalar["envelopes"][0]["command_count"] = json!("four");
+    let mut unsupported_scenario = valid.clone();
+    unsupported_scenario["envelopes"][0]["scenario"] = json!("invented");
+    let mut open_terminal = valid;
+    open_terminal["envelopes"][5]["scenario"] = json!("human-acceptance");
+    open_terminal["envelopes"][5]["terminal_event"] = json!({
+        "run_id": "claude-accept-run",
+        "workflow": "architecture-evaluation",
+        "workflow_version": "1.2.3",
+        "owner": "architecture-owner",
+        "choice": "accept",
+        "outcome": "accepted",
+        "timestamp": "2026-08-30T00:00:00Z",
+        "invented": true,
+    });
+    for malformed in [open, invalid_scalar, unsupported_scenario, open_terminal] {
+        let error = evaluate_request_bytes(
+            &serde_json::to_vec(&malformed).expect("fixture must serialize"),
+        )
+        .expect_err("malformed request must refuse");
+        assert_eq!(error.code(), "evaluation_aggregate_request_invalid");
+    }
+
+    let unsupported_host = json!({
+        "protocol": REQUEST_PROTOCOL,
+        "envelopes": [{
+            "host": "invented",
+            "scenario": "existing-profile",
+            "execution_status": "not_executed",
+            "passed": false,
+            "suite_revision": "suite-v1",
+            "fixture_revision": "fixtures-v1",
+            "source_revision": SOURCE_REVISION,
+            "host_version": null,
+            "governing": null,
+            "transcript_path": null,
+            "transcript_digest": null,
+            "command_count": null,
+            "elapsed_ms": null,
+            "human_prompt_count": null,
+            "manual_translation_count": null,
+            "repeated_prompt_count": null,
+            "observed_outcome": null,
+            "terminal_event": null,
+            "unsupported_additions": [],
+            "diagnostic": "unsupported",
+        }],
+    });
+    let error = evaluate_request_bytes(
+        &serde_json::to_vec(&unsupported_host).expect("fixture must serialize"),
+    )
+    .expect_err("unsupported host must refuse");
+    assert_eq!(error.code(), "evaluation_aggregate_request_invalid");
+
+    let oversized = vec![b' '; MAX_REQUEST_BYTES + 1];
+    let error = evaluate_request_bytes(&oversized).expect_err("oversized input must refuse");
+    assert_eq!(error.code(), "evaluation_aggregate_request_too_large");
+}
