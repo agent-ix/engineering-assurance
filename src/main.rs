@@ -5,6 +5,8 @@
 
 #![forbid(unsafe_code)]
 
+mod onboarding_host;
+
 use std::{
     io::{self, Read, Write},
     process::ExitCode,
@@ -12,11 +14,13 @@ use std::{
 
 use clap::Command;
 use engineering_assurance::compatibility::{CompatibilityOutcome, evaluate_request_bytes};
+use engineering_assurance::onboarding;
 use engineering_assurance::workflow_invariants;
 use serde::Serialize;
 
 const ERROR_PROTOCOL: &str = "engineering-assurance.error/v1";
 const COMPATIBILITY_CAPABILITY: &str = "compatibility";
+const ONBOARDING_CAPABILITY: &str = "onboarding";
 const WORKFLOW_INVARIANTS_CAPABILITY: &str = "workflow-invariants";
 const MAX_STDIN_BYTES: usize = 8 * 1024 * 1024;
 
@@ -39,6 +43,10 @@ fn command() -> Command {
                 .about("Classify explicit observations against the reviewed compatibility matrix"),
         )
         .subcommand(
+            Command::new(ONBOARDING_CAPABILITY)
+                .about("Inventory a selected repository and produce a bounded onboarding result"),
+        )
+        .subcommand(
             Command::new(WORKFLOW_INVARIANTS_CAPABILITY)
                 .about("Evaluate a closed workflow projection against named invariants"),
         )
@@ -48,8 +56,38 @@ fn main() -> ExitCode {
     let matches = command().get_matches();
     match matches.subcommand_name() {
         Some(COMPATIBILITY_CAPABILITY) => run_compatibility(),
+        Some(ONBOARDING_CAPABILITY) => run_onboarding(),
         Some(WORKFLOW_INVARIANTS_CAPABILITY) => run_workflow_invariants(),
         Some(_) | None => ExitCode::from(2),
+    }
+}
+
+fn run_onboarding() -> ExitCode {
+    let bytes = match read_stdin(ONBOARDING_CAPABILITY, "onboarding_request_invalid") {
+        Ok(bytes) => bytes,
+        Err(exit_code) => return exit_code,
+    };
+    let request = match onboarding::parse_request_bytes(&bytes) {
+        Ok(request) => request,
+        Err(error) => {
+            return emit_error(ONBOARDING_CAPABILITY, error.code(), &error.to_string());
+        }
+    };
+    let result = match onboarding_host::execute(&request) {
+        Ok(result) => result,
+        Err(error) => {
+            return emit_error(ONBOARDING_CAPABILITY, error.code(), &error.to_string());
+        }
+    };
+    match result.to_json_line() {
+        Ok(encoded) => match write_stdout(&encoded) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("failed to write onboarding result: {error}");
+                ExitCode::from(2)
+            }
+        },
+        Err(error) => emit_error(ONBOARDING_CAPABILITY, error.code(), &error.to_string()),
     }
 }
 

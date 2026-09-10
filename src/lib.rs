@@ -11,6 +11,7 @@
 
 pub mod compatibility;
 pub mod evidence;
+pub mod onboarding;
 pub mod semantics;
 pub mod workflow_invariants;
 

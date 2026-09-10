@@ -116,7 +116,7 @@ implemented and reviewed.
 | FR-015 | FR-015-AC-2 | TC-102 | 🚧 Evidence-availability and semantic-reference state vocabularies backed; aggregate pending |
 | FR-015 | FR-015-AC-3 | TC-103 | 🚧 Evidence, semantic, and PGM refusal families backed; aggregate pending |
 | FR-015 | FR-015-AC-4 | TC-104 | 🚧 Semantic ownership and inert-fixture static slice backed; aggregate executable-language audit pending |
-| FR-016 | FR-016-AC-1 | TC-105 | 🚧 Pending implementation |
+| FR-016 | FR-016-AC-1 | TC-105 | ✅ Rust onboarding core, CLI, retained-reference parity, and confined publication backed |
 | FR-016 | FR-016-AC-2 | TC-106 | ✅ Rust evaluator and CLI parity backed |
 | FR-016 | FR-016-AC-3 | TC-107 | 🚧 Pending implementation |
 | FR-016 | FR-016-AC-4 | TC-108 | 🚧 Pending implementation |
@@ -157,6 +157,7 @@ implemented and reviewed.
 | FR-016-CON-1 | TC-107 | 🚧 Pending implementation |
 | FR-016-CON-2 | TC-115 | 🚧 Pending owner disposition |
 | FR-016-CON-3 | TC-106 | ✅ Deterministic I/O-free Rust evaluator backed |
+| FR-016-CON-4 | TC-105 | ✅ Pure library and binary-only host adapter backed |
 | FR-017-CON-1 | TC-109 | 🚧 Pending implementation |
 | FR-017-CON-2 | TC-112 | 🚧 Pending implementation |
 | FR-018-CON-1 | TC-113 | 🚧 Pending implementation |
@@ -271,7 +272,7 @@ implemented and reviewed.
 | TC-102 | Every successful and non-successful semantic state remains distinct; typed state spellings and exact-one untyped-label validation remain callable without string parsing | Integration | P0 | FR-015-AC-2 | 🚧 evidence-availability and semantic-reference state vocabularies backed; aggregate pending |
 | TC-103 | Invalid semantic inputs, including non-finite/retained-domain-overflow numbers, invalid/mutable version tokens, and structured PGM-01 identities, fail or classify read-only without an identity digest or source-byte change; independent fixture classes retain leading/trailing and interior ASCII space plus lowercase/uppercase immutable `x` metadata boundaries; every exercised semantic and PGM-01 refusal exposes a typed reason without diagnostic-prose matching | Integration | P0 | FR-015-AC-3, FR-015-CON-1 | 🚧 evidence, semantic, and PGM refusals backed; aggregate pending |
 | TC-104 | Contract ownership and inert foreign-language fixtures remain bounded | Static | P0 | FR-015-AC-4, FR-015-CON-2, FR-015-CON-3 | 🚧 semantic ownership and inert-fixture slice backed; aggregate audit pending |
-| TC-105 | Rust onboarding matches retained boundary and adverse-case behavior | Property | P0 | FR-016-AC-1 | 🚧 pending implementation |
+| TC-105 | Rust onboarding matches the retained complete sorted inventory, status, recommendation, and artifact path for existing, absent, conflicting, malformed, unavailable, unjustified, incomplete-boundary, and valid-authoring cases; duplicate-key and merge-key artifact identities remain malformed; newly authored artifacts retain equivalent parsed frontmatter and an identical Markdown body and pass Quire, while malformed requests, unsupported types, absolute or parent-traversing targets, symlink escapes, existing destinations, and invalid staged artifacts publish nothing | Property | P0 | FR-016-AC-1, FR-016-CON-4 | ✅ Rust core/CLI parity, fail-closed YAML identity, real Quire validation, no-replace publication, and boundary refusals passing |
 | TC-106 | Rust and the retained invariant provider return the same ordered typed outcomes for all eleven canonical invariants and valid boundary fixtures at one explicit evaluation instant; unknown invariant names and malformed Rust requests fail before an outcome | Integration | P0 | FR-016-AC-2, FR-016-CON-3 | ✅ Rust evaluator, retained-reference parity, fail-closed probes, and CLI boundary passing |
 | TC-107 | Rust coordination preserves ix-flow lifecycle and human gates | Integration | P0 | FR-016-AC-3, FR-016-CON-1 | 🚧 pending implementation |
 | TC-108 | Canonical and pilot workflows pass through the Rust invariant provider before removal | Integration | P0 | FR-016-AC-4 | 🚧 pending host interface |
@@ -323,6 +324,7 @@ evaluation envelopes.
 | TC-100 | Pure capability | compatibility classification; semantic validation; bounded projection; fixture generation; canonical identity | each ADR-002 row has an independently reported old/new corpus and adverse-case result |
 | TC-111 | Qualification capability | package members; rights; manifest; integration; publication refusal | each gate has one retained passing case and every named refusal case |
 | TC-106 | Invariant request | eleven canonical names; ordered multi-name request; unknown name; malformed Rust request; expired/current exception at one explicit instant | exact ordered Rust/reference parity for the valid shared domain or a typed pre-outcome refusal |
+| TC-105 | Onboarding request | retained inventory/status cases; absent Quire; malformed, duplicate-key, or merge-key frontmatter; duplicate artifact; unsupported type; absolute, parent, symlink, and existing targets; valid/invalid staged artifact | exact Rust/reference inventory and decision parity on the supported domain, explicit fail-closed YAML identity handling, equivalent parsed frontmatter plus identical Markdown body for valid publication, or a typed refusal with no published bytes |
 
 ## Constraint Boundary Tests
 
