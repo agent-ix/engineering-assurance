@@ -5,8 +5,10 @@
 
 #![forbid(unsafe_code)]
 
+mod content_rights_host;
 mod onboarding_host;
 mod package_host;
+mod process_host;
 mod workflow_host;
 
 use std::{
@@ -17,6 +19,7 @@ use std::{
 
 use clap::{Arg, ArgMatches, Command};
 use engineering_assurance::compatibility::{CompatibilityOutcome, evaluate_request_bytes};
+use engineering_assurance::content_rights::ContentRightsTreeOutcome;
 use engineering_assurance::onboarding;
 use engineering_assurance::package_lifecycle::PackageLifecycleResult;
 use engineering_assurance::workflow;
@@ -25,6 +28,7 @@ use serde::Serialize;
 
 const ERROR_PROTOCOL: &str = "engineering-assurance.error/v1";
 const COMPATIBILITY_CAPABILITY: &str = "compatibility";
+const CONTENT_RIGHTS_TREE_CAPABILITY: &str = "content-rights-tree";
 const ONBOARDING_CAPABILITY: &str = "onboarding";
 const PACKAGE_LIFECYCLE_CAPABILITY: &str = "package-lifecycle";
 const WORKFLOW_INVARIANTS_CAPABILITY: &str = "workflow-invariants";
@@ -48,6 +52,17 @@ fn command() -> Command {
         .subcommand(
             Command::new(COMPATIBILITY_CAPABILITY)
                 .about("Classify explicit observations against the reviewed compatibility matrix"),
+        )
+        .subcommand(
+            Command::new(CONTENT_RIGHTS_TREE_CAPABILITY)
+                .about("Inspect one complete Git-selected repository tree for content rights")
+                .arg(
+                    Arg::new("root")
+                        .long("root")
+                        .value_name("PATH")
+                        .value_parser(clap::value_parser!(PathBuf))
+                        .required(true),
+                ),
         )
         .subcommand(
             Command::new(ONBOARDING_CAPABILITY)
@@ -105,11 +120,48 @@ fn main() -> ExitCode {
     let matches = command().get_matches();
     match matches.subcommand() {
         Some((COMPATIBILITY_CAPABILITY, _)) => run_compatibility(),
+        Some((CONTENT_RIGHTS_TREE_CAPABILITY, arguments)) => run_content_rights_tree(arguments),
         Some((ONBOARDING_CAPABILITY, _)) => run_onboarding(),
         Some((WORKFLOW_INVARIANTS_CAPABILITY, _)) => run_workflow_invariants(),
         Some((WORKFLOW_HOST_CAPABILITY, _)) => run_workflow_host(),
         Some((PACKAGE_LIFECYCLE_CAPABILITY, arguments)) => run_package_lifecycle(arguments),
         Some(_) | None => ExitCode::from(2),
+    }
+}
+
+fn run_content_rights_tree(arguments: &ArgMatches) -> ExitCode {
+    let Some(root) = arguments.get_one::<PathBuf>("root") else {
+        return emit_error(
+            CONTENT_RIGHTS_TREE_CAPABILITY,
+            "content_rights_root_invalid",
+            "content-rights repository root is missing",
+        );
+    };
+    let result = match content_rights_host::execute(root) {
+        Ok(result) => result,
+        Err(error) => {
+            return emit_error(
+                CONTENT_RIGHTS_TREE_CAPABILITY,
+                error.code(),
+                &error.to_string(),
+            );
+        }
+    };
+    let outcome = result.outcome();
+    match result.to_json_line() {
+        Ok(encoded) => match write_stdout(&encoded) {
+            Ok(()) if outcome == ContentRightsTreeOutcome::Accepted => ExitCode::SUCCESS,
+            Ok(()) => ExitCode::from(1),
+            Err(error) => {
+                eprintln!("failed to write content-rights tree result: {error}");
+                ExitCode::from(2)
+            }
+        },
+        Err(error) => emit_error(
+            CONTENT_RIGHTS_TREE_CAPABILITY,
+            error.code(),
+            &error.to_string(),
+        ),
     }
 }
 
