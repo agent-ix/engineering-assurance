@@ -110,7 +110,15 @@ def test_a_correctly_pinned_toolchain_does_not_open_an_unaccepted_gate() -> None
     alone. Every version being right says nothing about whether anybody agreed
     to migrate.
     """
-    assert human_acceptance_recorded(MATRIX)
+    accepted_matrix = dict(MATRIX) | {
+        "accepted": {
+            "state": "accepted",
+            "accepted_by": "Fictional Owner",
+            "accepted_at": "2026-09-10",
+            "note": "Accepted by a named human for this fixture.",
+        }
+    }
+    assert human_acceptance_recorded(accepted_matrix)
 
     for state in ("pending_human_acceptance", "withdrawn", "", "ACCEPTED"):
         withheld = dict(MATRIX) | {"accepted": dict(MATRIX["accepted"]) | {"state": state}}
@@ -186,9 +194,14 @@ def test_pinned_artifact_digests_match_this_tree() -> None:
 def test_upgrade_and_rollback_are_stated_per_component() -> None:
     """Trace: FR-012-AC-6, TC-084."""
     rollback = MATRIX["rollback"]
-    for name in ("quoin", "quire-cli", "engineering-assurance", "corpus"):
+    for name in ("quoin", "quire-cli", "ix-flow", "engineering-assurance", "corpus"):
         assert name in rollback, f"{name} has no rollback note"
         assert rollback[name].strip(), f"{name}'s rollback note is empty"
+
+    ix_flow = next(item for item in MATRIX["components"] if item["name"] == "ix-flow")
+    assert ix_flow["version"] == "0.2.3"
+    assert ix_flow["source_revision"] == "8b6cf8287db828b4db2df814bc7c1ef10362db24"
+    assert ix_flow["release_integrity"].startswith("sha512-")
     assert "None of the above" in rollback["irreversible"]
 
     upgrade = MATRIX["upgrade"]

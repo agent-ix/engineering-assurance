@@ -13,6 +13,7 @@ pub mod compatibility;
 pub mod evidence;
 pub mod onboarding;
 pub mod semantics;
+pub mod workflow;
 pub mod workflow_invariants;
 
 /// The Cargo package name shared by the library and CLI targets.

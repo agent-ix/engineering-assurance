@@ -2,10 +2,10 @@
   "matrix_version": "engineering-assurance.compatibility-matrix/v1",
   "purpose": "One reviewed set of shared-assurance component versions known to work together, with the digests that identify what those versions ship. Answers agent-ix/engineering-assurance#8.",
   "accepted": {
-    "state": "accepted",
-    "accepted_by": "Peter Krenesky",
-    "accepted_at": "2026-09-01",
-    "note": "Accepted by the named human, who directed an agent to transcribe the decision into this file. The agent did not make the decision. An agent may prepare this matrix and may not accept it."
+    "state": "pending_human_acceptance",
+    "accepted_by": null,
+    "accepted_at": null,
+    "note": "The ix-flow candidate pin changed from 0.0.4 to 0.2.3 after public-release and interface verification. A human must accept the complete revised matrix after local TC-107 evidence; an agent may prepare it and may not accept it."
   },
   "gate": {
     "rule": "Every component must classify as compatible before an enforcing migration begins.",
@@ -55,9 +55,11 @@
     },
     {
       "name": "ix-flow",
-      "version": "0.0.4",
+      "version": "0.2.3",
       "released": true,
-      "release": "npm @agent-ix/ix-flow@0.0.4 (public registry)",
+      "release": "npm @agent-ix/ix-flow@0.2.3 (public registry)",
+      "source_revision": "8b6cf8287db828b4db2df814bc7c1ef10362db24",
+      "release_integrity": "sha512-tmFIMgOhGS4Tova901cm/yRUANBKhRT3L9Sz/SNxZig1XXR8BGtuXXoETcU6kXqynVLg8uHMyoZ7+AM74Ig/BQ==",
       "provides": "Human decision events retained as an integrity-verified chain.",
       "observe": "ix-flow --version",
       "incompatible": [],
@@ -126,12 +128,13 @@
     "principle": "Every pin here is a released artifact, so rolling back is installing the previous release. Nothing in this matrix requires a rebuild from source to undo.",
     "quoin": "Reinstall @agent-ix/quoin@0.22.5. The `change-assurance` commands disappear; retained records, attestations, and receipts are unaffected, because 0.23.x added a surface over existing contracts rather than changing the stored layout.",
     "quire-cli": "Reinstall @agent-ix/quire-cli@0.30.2. Exports produced by 0.31.0 remain readable; the provenance command is not present.",
+    "ix-flow": "Reinstall @agent-ix/ix-flow@0.0.4. Existing run-state and event-chain files remain owned by ix-flow; the Rust adapter is additive and must be removed from invocation before the package downgrade.",
     "engineering-assurance": "Check out the previous tag. There is none before v0.2.0, so rollback for this component means removing the dependency rather than downgrading it.",
     "corpus": "Move the `corpus` gitlink to the earlier commit and re-run the FR-011 gate. The corpus is content-addressed, so an earlier pin is a complete, self-verifying set.",
     "irreversible": "None of the above. No pin here migrates data, rewrites evidence, or changes a stored schema."
   },
   "upgrade": {
-    "order": "quire-cli, then quoin, then this repository's tag, then the corpus gitlink. Each step is independently verifiable, and only the last one moves the gate.",
+    "order": "quire-cli, then quoin, then ix-flow, then this repository's tag, then the corpus gitlink. Each step is independently verifiable, and only the last one moves the gate.",
     "verification": "After each step run `python3 scripts/check_compatibility_matrix.py`, which classifies what is installed against these pins and exits non-zero unless every component is compatible.",
     "what_does_not_change": "No campaign repository is touched by an upgrade of these components. Migrations are agent-ix/engineering-assurance#10 and begin only after this matrix is accepted."
   },
