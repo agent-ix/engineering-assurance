@@ -60,3 +60,18 @@ fn tc_111_non_repository_root_fails_before_package_construction() {
     assert_eq!(result["capability"], "package-audit");
     assert_eq!(result["code"], "package_audit_root_invalid");
 }
+
+#[test]
+#[trace("TC-112", "FR-017-AC-4", "FR-017-CON-2")]
+fn tc_112_package_audit_make_target_is_exact_rust_dispatch() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let makefile = std::fs::read_to_string(root.join("Makefile")).unwrap();
+    assert_eq!(
+        makefile
+            .matches("cargo +1.98.1 run --locked --quiet -- package-audit --root .")
+            .count(),
+        1
+    );
+    assert!(!makefile.contains("python3 scripts/audit_packages.py"));
+    assert!(!makefile.contains("$(PYTHON) scripts/audit_packages.py"));
+}
