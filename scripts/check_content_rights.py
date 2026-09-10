@@ -53,7 +53,9 @@ SEMANTIC_POLICY_FILES = {
     "AGENTS.md",
     "CONTENT_RIGHTS.md",
     "content-rights.yaml",
+    "src/content_rights.rs",
     "scripts/check_content_rights.py",
+    "tests/content_rights_parity.rs",
     "tests/test_content_rights.py",
 }
 ALLOWED_URL_PREFIXES = {
