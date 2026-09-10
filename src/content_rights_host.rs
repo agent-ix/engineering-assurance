@@ -128,10 +128,10 @@ fn require_git_top_level(root: &Path) -> Result<(), ContentRightsHostError> {
     }
     let text = std::str::from_utf8(&output.stdout)
         .map_err(|_| ContentRightsHostError::GitResponseInvalid)?;
-    let top_level = text
+    let line = text
         .strip_suffix('\n')
-        .and_then(|line| line.strip_suffix('\r').or(Some(line)))
         .ok_or(ContentRightsHostError::GitResponseInvalid)?;
+    let top_level = line.strip_suffix('\r').unwrap_or(line);
     if top_level.is_empty() || top_level.contains(['\r', '\n']) {
         return Err(ContentRightsHostError::GitResponseInvalid);
     }
@@ -192,15 +192,15 @@ fn map_process_error(error: &ProcessError) -> ContentRightsHostError {
 }
 
 fn parse_selected_paths(bytes: &[u8]) -> Result<Vec<String>, ContentRightsHostError> {
-    if bytes.is_empty() {
+    let Some((terminator, population)) = bytes.split_last() else {
         return Ok(Vec::new());
-    }
-    if bytes.last() != Some(&0) {
+    };
+    if *terminator != 0 {
         return Err(ContentRightsHostError::GitResponseInvalid);
     }
     let mut selected = Vec::new();
     let mut unique = BTreeSet::new();
-    for raw in bytes[..bytes.len().saturating_sub(1)].split(|byte| *byte == 0) {
+    for raw in population.split(|byte| *byte == 0) {
         if raw.is_empty() {
             return Err(ContentRightsHostError::GitResponseInvalid);
         }
