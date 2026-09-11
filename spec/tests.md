@@ -182,17 +182,17 @@ remain pending until every named capability is implemented and reviewed.
 |---------|-------|------|----------|-----------|--------|
 | TC-001 | Inventory precedes every onboarding proposal | E2E | P0 | StR-001-VC-1 | ✅ |
 | TC-002 | Unjustified profile is not scaffolded | E2E | P0 | StR-001-VC-2 | ✅ |
-| TC-003 | Named human owns every terminal outcome | Integration | P0 | StR-001-VC-3 | ✅ |
+| TC-003 | A run cannot be bound, and so cannot reach a terminal outcome, without a named human owner; a blank or whitespace owner refuses before the run exists | Integration | P0 | StR-001-VC-3 | ✅ |
 | TC-004 | Existing valid profile is inventoried and reused | E2E | P0 | FR-001-AC-1, US-001-EX-1 | ✅ |
 | TC-005 | No-profile repository creates no generic profile | E2E | P0 | FR-001-AC-2, US-001-EX-2 | ✅ |
 | TC-006 | Justified artifact uses installed skeleton and Quire | Integration | P0 | FR-001-AC-3 | ✅ |
 | TC-007 | Incomplete boundary requests input without writing | E2E | P0 | FR-001-AC-4 | ✅ |
 | TC-008 | Inventory separates all required collections | Unit | P1 | FR-001-AC-5 | ✅ |
-| TC-009 | Exactly one canonical onboarding skill exists | Static | P0 | FR-002-AC-1 | ✅ |
-| TC-010 | Four host surfaces resolve one canonical skill | Integration | P0 | FR-002-AC-2, US-002-EX-1 | ✅ |
-| TC-011 | Canonical skill exposes exactly four workflows | Integration | P0 | FR-002-AC-3, US-002-EX-2 | ✅ |
-| TC-012 | Behavioral text in a host manifest is rejected | Static | P1 | FR-002-AC-4 | ✅ |
-| TC-013 | Missing or escaping canonical target is rejected | Unit | P0 | FR-002-AC-5 | ✅ |
+| TC-009 | The bundle's skill population is exactly the one canonical onboarding skill; a second skill file refuses rather than passing an existence check | Static | P0 | FR-002-AC-1 | ✅ |
+| TC-010 | Each of the four host surfaces resolves the canonical skill through its own manifest file, so the agreement cannot be four readings of one manifest | Integration | P0 | FR-002-AC-2, US-002-EX-1 | ✅ |
+| TC-011 | The canonical workflow set is compared in both directions against the promoted names and asserted non-empty, and each name is backed by a definition with bytes in it | Integration | P0 | FR-002-AC-3, US-002-EX-2 | ✅ |
+| TC-012 | A key outside a host's allowed set refuses, asserted against the manifest this repository actually ships rather than a constructed fixture | Static | P1 | FR-002-AC-4 | ✅ |
+| TC-013 | An absent, absolute, parent-traversing, drive-prefixed, backslashed or NUL-bearing target refuses lexically, before any adapter resolves it | Unit | P0 | FR-002-AC-5 | ✅ |
 | TC-014 | Wheel includes explicit module and onboarding members | Integration | P0 | FR-003-AC-1 | ✅ |
 | TC-015 | Npm archive includes explicit module and onboarding members | Integration | P0 | FR-003-AC-2 | ✅ |
 | TC-016 | Local-source installation preserves discovery | Integration | P0 | FR-003-AC-3 | ✅ |
@@ -205,11 +205,11 @@ remain pending until every named capability is implemented and reviewed.
 | TC-023 | Excluded producer remains not applicable | Unit | P1 | FR-004-AC-4 | ✅ |
 | TC-024 | Malformed output or missing/mutable provenance fails validation | Unit | P0 | FR-004-AC-5 | ✅ |
 | TC-025 | Persisted evidence delegates to Quoin | Unit | P0 | FR-004-AC-6 | ✅ |
-| TC-026 | Interrupted ix-flow run resumes without repetition | Integration | P0 | FR-005-AC-1, US-003-EX-1 | ✅ |
-| TC-027 | All terminal transitions remain human gated | Static | P0 | FR-005-AC-2 | ✅ |
-| TC-028 | Explicit rejection records one attributed event and no success state | Integration | P0 | FR-005-AC-3, US-003-EX-2 | ✅ |
-| TC-029 | Missing human choice leaves run non-terminal | Integration | P0 | FR-005-AC-4 | ✅ |
-| TC-030 | Automatic terminal-gate override fails closed | Unit | P0 | FR-005-AC-5 | ✅ |
+| TC-026 | Resume after ix-flow advanced the run reports the completed phase and a greater state version, so a silent restart fails rather than passing as an identical snapshot | Integration | P0 | FR-005-AC-1, US-003-EX-1 | ✅ |
+| TC-027 | Every transition into a terminal phase of every promoted workflow is gated `hitl`, over a population taken from the promoted names rather than from a directory listing | Static | P0 | FR-005-AC-2 | ✅ |
+| TC-028 | An explicit rejection records one attributed acknowledgement, leaves the run rejected, and leaves the accepting outcome absent from the run history, not merely from the current phase | Integration | P0 | FR-005-AC-3, US-003-EX-2 | ✅ |
+| TC-029 | A run with no choice stays at `decision_ready` and leaves no gate open, so no acknowledgeable token is left behind | Integration | P0 | FR-005-AC-4 | ✅ |
+| TC-030 | A terminal transition configured automatic is refused as a decision conflict and the run's phase and state are unchanged | Unit | P0 | FR-005-AC-5 | ✅ |
 | TC-031 | Evaluation suite executes all five classes and seven variants on four hosts | E2E | P0 | FR-006-AC-1 | ✅ |
 | TC-032 | Evaluation envelopes retain versions, transcript digests, effort, and outcomes | Unit | P0 | FR-006-AC-2 | ✅ |
 | TC-033 | Missing executable fails aggregate gate | Unit | P0 | FR-006-AC-3 | ✅ |
@@ -217,17 +217,17 @@ remain pending until every named capability is implemented and reviewed.
 | TC-035 | Four pilot workflow invocations still load | Integration | P0 | FR-007-AC-1 | ✅ |
 | TC-036 | Pilot and canonical workflows are equivalent | Property | P0 | FR-007-AC-2 | ✅ |
 | TC-037 | Canonical install docs precede compatibility path | Static | P1 | FR-007-AC-3 | ✅ |
-| TC-038 | Cross-agent canonical parity reaches all thresholds | Integration | P0 | NFR-001 | ✅ |
+| TC-038 | The four hosts install the same canonical skill bytes, the four promoted workflows have four distinct definitions, and no manifest carries a sentence of the canonical behaviour | Integration | P0 | NFR-001 | ✅ |
 | TC-039 | Evaluation produces zero unsupported outcomes | E2E | P0 | NFR-002 | 🚧 |
 | TC-040 | Package contract stability reaches all thresholds | Integration | P0 | NFR-003 | ✅ |
-| TC-041 | Supported-agent set rejects missing, extra, or duplicate hosts | Property | P1 | FR-002-CON-1 | ✅ |
-| TC-042 | Thin manifests reject behavioral sections and copied workflows | Property | P1 | FR-002-CON-2 | ✅ |
+| TC-041 | A short, duplicated or substituted host set refuses; a substituted surface keeps four distinct host names while changing where one looks | Property | P1 | FR-002-CON-1 | ✅ |
+| TC-042 | The shipped manifests carry only discovery metadata and exactly one canonical target, and opencode declaring none, two or a blank source refuses | Property | P1 | FR-002-CON-2 | ✅ |
 | TC-043 | Compatibility inventory is exactly the four promoted pilots | Property | P1 | FR-007-CON-1 | ✅ |
 | TC-044 | Malformed or conflicting existing artifacts remain unchanged and require human resolution | E2E | P0 | FR-001-AC-6 | ✅ |
 | TC-045 | Artifact publication is staged, Quire-validated, atomic, and confined to the selected root | Integration | P0 | FR-001-AC-7 | ✅ |
 | TC-046 | Exactly one availability state exists for every considered producer | Unit | P0 | FR-004-AC-7 | ✅ |
-| TC-047 | Explicit acceptance records one attributed event and no prior acceptance state | Integration | P0 | FR-005-AC-6 | ✅ |
-| TC-048 | A run-id binding mismatch is refused without changing either run | Property | P0 | FR-005-AC-7 | ✅ |
+| TC-047 | Acceptance records one attributed event carrying run, workflow, version, owner and a universal-time stamp, with no acknowledgement present beforehand | Integration | P0 | FR-005-AC-6 | ✅ |
+| TC-048 | A changed repository, boundary, workflow or workflow version on an existing run id is each refused without changing ix-flow state | Property | P0 | FR-005-AC-7 | ✅ |
 | TC-049 | Equivalent runs retain explicit acceptance and rejection on every host | Unit | P0 | FR-006-AC-5 | ✅ |
 | TC-050 | Evaluation agents and post-run verification use the snapshotted full ix-flow runtime package | Unit | P0 | FR-006-AC-6 | ✅ |
 | TC-051 | Release verification rejects an aggregate retained for a different repository revision | Integration | P0 | FR-006-AC-7 | ✅ |

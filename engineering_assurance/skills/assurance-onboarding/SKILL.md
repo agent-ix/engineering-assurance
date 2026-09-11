@@ -51,8 +51,10 @@ Use the definitions under `workflows/`:
 Run them through ix-flow and preserve its state for resume. Terminal transitions
 remain named human decisions; never acknowledge or override those gates.
 
-Use `engineering_assurance.workflow.start_or_resume` to create or resume the
-stable run and its `run_binding` item. Record interviews and evidence items with
-ix-flow itself. At `decision_ready`, use `engineering_assurance.workflow.decide`
-only after the bound owner supplies an explicit `accept` or `reject`; pass no
-choice to leave the run non-terminal.
+Drive the run through the `engineering-assurance workflow-host` command, which
+reads one `engineering-assurance.workflow-host/v1` request on standard input and
+writes one result on standard output. Use its `start_or_resume` operation to
+create or resume the stable run and its `run_binding` item. Record interviews
+and evidence items with ix-flow itself. At `decision_ready`, use the `decide`
+operation only after the bound owner supplies an explicit `accept` or `reject`;
+send no choice to leave the run non-terminal.
