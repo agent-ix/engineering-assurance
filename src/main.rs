@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 mod content_rights_host;
+mod evaluation_report_host;
 mod onboarding_host;
 mod package_archive;
 mod package_audit_host;
@@ -28,10 +29,12 @@ use engineering_assurance::package_lifecycle::PackageLifecycleResult;
 use engineering_assurance::workflow;
 use engineering_assurance::workflow_invariants;
 use serde::Serialize;
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 const ERROR_PROTOCOL: &str = "engineering-assurance.error/v1";
 const COMPATIBILITY_CAPABILITY: &str = "compatibility";
 const CONTENT_RIGHTS_TREE_CAPABILITY: &str = "content-rights-tree";
+const EVALUATION_AGGREGATE_CAPABILITY: &str = "evaluation-aggregate";
 const ONBOARDING_CAPABILITY: &str = "onboarding";
 const PACKAGE_AUDIT_CAPABILITY: &str = "package-audit";
 const PACKAGE_LIFECYCLE_CAPABILITY: &str = "package-lifecycle";
@@ -67,6 +70,27 @@ fn command() -> Command {
                         .value_parser(clap::value_parser!(PathBuf))
                         .required(true),
                 ),
+        )
+        .subcommand(
+            Command::new(EVALUATION_AGGREGATE_CAPABILITY)
+                .about("Verify retained evaluation reports and build a complete-only aggregate")
+                .arg(required_path_arg("root"))
+                .arg(required_path_arg("workspace-root"))
+                .arg(
+                    Arg::new("report")
+                        .long("report")
+                        .value_name("PATH")
+                        .value_parser(clap::value_parser!(PathBuf))
+                        .action(clap::ArgAction::Append)
+                        .required(true),
+                )
+                .arg(
+                    Arg::new("source-revision")
+                        .long("source-revision")
+                        .value_name("REVISION")
+                        .required(true),
+                )
+                .arg(required_path_arg("output")),
         )
         .subcommand(
             Command::new(ONBOARDING_CAPABILITY)
@@ -136,12 +160,104 @@ fn main() -> ExitCode {
     match matches.subcommand() {
         Some((COMPATIBILITY_CAPABILITY, _)) => run_compatibility(),
         Some((CONTENT_RIGHTS_TREE_CAPABILITY, arguments)) => run_content_rights_tree(arguments),
+        Some((EVALUATION_AGGREGATE_CAPABILITY, arguments)) => run_evaluation_aggregate(arguments),
         Some((ONBOARDING_CAPABILITY, _)) => run_onboarding(),
         Some((PACKAGE_AUDIT_CAPABILITY, arguments)) => run_package_audit(arguments),
         Some((WORKFLOW_INVARIANTS_CAPABILITY, _)) => run_workflow_invariants(),
         Some((WORKFLOW_HOST_CAPABILITY, _)) => run_workflow_host(),
         Some((PACKAGE_LIFECYCLE_CAPABILITY, arguments)) => run_package_lifecycle(arguments),
         Some(_) | None => ExitCode::from(2),
+    }
+}
+
+fn required_path_arg(name: &'static str) -> Arg {
+    Arg::new(name)
+        .long(name)
+        .value_name("PATH")
+        .value_parser(clap::value_parser!(PathBuf))
+        .required(true)
+}
+
+fn run_evaluation_aggregate(arguments: &ArgMatches) -> ExitCode {
+    let Some(root) = arguments.get_one::<PathBuf>("root") else {
+        return emit_error(
+            EVALUATION_AGGREGATE_CAPABILITY,
+            "evaluation_report_repository_root_invalid",
+            "evaluation report repository root is missing",
+        );
+    };
+    let Some(workspace_root) = arguments.get_one::<PathBuf>("workspace-root") else {
+        return emit_error(
+            EVALUATION_AGGREGATE_CAPABILITY,
+            "evaluation_report_workspace_root_invalid",
+            "evaluation workspace root is missing",
+        );
+    };
+    let Some(reports) = arguments.get_many::<PathBuf>("report") else {
+        return emit_error(
+            EVALUATION_AGGREGATE_CAPABILITY,
+            "evaluation_report_collection_invalid",
+            "evaluation report collection is missing",
+        );
+    };
+    let Some(source_revision) = arguments.get_one::<String>("source-revision") else {
+        return emit_error(
+            EVALUATION_AGGREGATE_CAPABILITY,
+            "evaluation_report_source_revision_invalid",
+            "expected source revision is missing",
+        );
+    };
+    let Some(output) = arguments.get_one::<PathBuf>("output") else {
+        return emit_error(
+            EVALUATION_AGGREGATE_CAPABILITY,
+            "evaluation_report_output_path_invalid",
+            "evaluation aggregate output path is missing",
+        );
+    };
+    let generated_at = match OffsetDateTime::now_utc().format(&Rfc3339) {
+        Ok(value) => value,
+        Err(error) => {
+            eprintln!("failed to render evaluation aggregate timestamp: {error}");
+            return ExitCode::from(2);
+        }
+    };
+    let report_paths = reports.cloned().collect::<Vec<_>>();
+    let artifact = match evaluation_report_host::execute(
+        root,
+        workspace_root,
+        &report_paths,
+        source_revision,
+        generated_at,
+    ) {
+        Ok(artifact) => artifact,
+        Err(error) => {
+            return emit_error(
+                EVALUATION_AGGREGATE_CAPABILITY,
+                error.code(),
+                &error.to_string(),
+            );
+        }
+    };
+    if let Err(error) = evaluation_report_host::write_artifact(root, output, &artifact) {
+        return emit_error(
+            EVALUATION_AGGREGATE_CAPABILITY,
+            error.code(),
+            &error.to_string(),
+        );
+    }
+    println!(
+        "evaluation aggregate: {}/{} complete",
+        artifact.complete_cells(),
+        artifact.required_cells()
+    );
+    println!("report: {}", output.display());
+    for failure in artifact.failures() {
+        println!("- {failure}");
+    }
+    if artifact.ok() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
     }
 }
 

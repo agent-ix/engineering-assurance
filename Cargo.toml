@@ -29,7 +29,7 @@ syn = { version = "=3.0.5", features = ["full", "visit"] }
 tar = { version = "=0.4.46", default-features = false }
 tempfile = "=3.27.0"
 thiserror = "=2.0.20"
-time = { version = "=0.3.55", features = ["parsing"] }
+time = { version = "=0.3.55", features = ["formatting", "parsing"] }
 unicode-casefold = "=0.2.0"
 yaml_serde = "=0.10.7"
 zip = { version = "=8.6.0", default-features = false, features = ["deflate-flate2"] }
