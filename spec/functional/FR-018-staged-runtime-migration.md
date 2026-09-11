@@ -71,6 +71,25 @@ then update this repository's direct invocation and remove the old path.
   those paths.
 - Retain Python packaging support and unrelated Python onboarding and workflow
   code across that removal, and change no retained corpus byte.
+- For the canonical-discovery and ix-flow workflow capability, port canonical
+  bundle discovery to Rust before cutting over the workflow lane that reads its
+  promoted workflow names, because the retained workflow module imports that
+  name set from the retained discovery module. Keep the retained Python until
+  Rust host-surface manifest validation, canonical skill and workflow inventory,
+  bounded bundle-relative target resolution, and the ix-flow lifecycle adapter
+  all pass locally at one candidate revision; restate every criterion the
+  retired Python tests carried against a Rust assertion that fails when the
+  property is violated, including interrupted-run resume from a completed phase,
+  the human gate configured on every canonical terminal transition, and each
+  binding field whose change must refuse a mismatched run; update the canonical
+  skill's own invocation text to the Rust workflow-host capability; and then
+  remove `engineering_assurance/discovery.py`,
+  `engineering_assurance/workflow.py`, `tests/test_discovery.py`,
+  `tests/test_workflow_resume.py`, and `tests/test_workflow_integration_gate.py`
+  together with every executable import of those paths.
+- Removal of a retained module SHALL NOT be recorded as complete while a
+  criterion it carried is backed only by a test that asserts against a fixture
+  the test itself wrote or by a check that passes over an empty population.
 - Where a retired Python test carries a criterion with no native replacement,
   relocate that test rather than deleting it, and record which criterion it
   carries. The accepted corpus reproducing from its recorded sources is that
