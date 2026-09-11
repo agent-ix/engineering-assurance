@@ -26,7 +26,9 @@ checking, manifest validation, and qualification assertions to Rust.
 ## Inputs
 
 - Canonical agent-evaluation scenarios and supported hosts.
-- Versioned cli-agent-evals results and retained transcripts.
+- Versioned `cli-agent-evals.report/v1` results, retained transcripts, one
+  explicit evaluation-workspace root, and one expected immutable source
+  revision.
 - Package manifests, staged archives, rights policy, and integration evidence.
 - For the npm package-lifecycle adapter, one explicit repository root and one
   closed operation: `stage`, `clean`, or `refuse-publication`.
@@ -71,6 +73,10 @@ checking, manifest validation, and qualification assertions to Rust.
   pass decision, required-cell count, complete-cell count, and a deterministic
   ordered list of stable failure codes. It does not persist evidence or infer a
   release decision.
+- The report adapter emits the retained `evaluation-aggregate-v1` artifact
+  shape, including exact source revision, selected report identities, host
+  models, failed-attempt diagnostics, complete-cell counts, and aggregate
+  failures. It does not infer a terminal or release decision.
 - The pure content-rights boundary emits typed findings containing only a
   normalized repository-relative path when path validation succeeds, a
   one-based line number (or zero for a whole-file finding), and one closed
@@ -91,6 +97,42 @@ checking, manifest validation, and qualification assertions to Rust.
 
 - Preserve the evaluation fields and explicit terminal events required by
   FR-006.
+- Decode each cli-agent-evals report through closed Rust structures. Require
+  the exact `cli-agent-evals.report/v1` discriminator and reject unknown fields
+  at the report, result, sample, token-usage, and Engineering Assurance result
+  levels. Treat cli-agent-evals metric maps, aggregate maps, and non-EA check
+  values as host-owned observations rather than reinterpreting them.
+- Require each report to name one supported host, exactly one repeat, and no
+  more than 256 results. Require each result selected for aggregation to name
+  one supported scenario and exactly one sample. Preserve a missing model as
+  the explicit `runner-default` selection, and reject multiple model values for
+  one host across the selected report collection.
+- Preserve failed samples as bounded diagnostics without admitting an
+  envelope. Admit a successful sample only when its exit is `complete`, its
+  retention state is `retained`, its lowercase SHA-256 digest and normalized
+  forward-slash relative transcript path are present, and its typed
+  `evaluation_result` observation is complete.
+- The report host adapter SHALL accept no more than 64 explicit
+  repository-relative report paths beneath one canonical repository root.
+  Each report SHALL be a non-symbolic-link regular file no larger than
+  8,388,608 bytes.
+- The report host adapter SHALL accept one canonical non-symbolic-link
+  evaluation-workspace root.
+- Every reported work directory and transcript SHALL resolve beneath the
+  evaluation-workspace root without following a symbolic link or reading a
+  special file.
+- A transcript SHALL be no larger than 67,108,864 bytes.
+- The report host adapter SHALL hash the exact retained transcript bytes and
+  reject a missing, changed, linked, special, escaping, or oversized
+  transcript before constructing an evaluation envelope.
+- The report adapter SHALL compare every result source revision with the
+  caller-supplied immutable expected revision before aggregation.
+- The report adapter SHALL sort report identities, models, failed attempts,
+  and adapter diagnostics so input path order cannot change the retained
+  aggregate artifact.
+- The `agent-evals-aggregate` repository command SHALL invoke the Rust CLI
+  after same-revision parity with the retained Python loader and script. The
+  cutover SHALL be reversible before the replaced Python paths are deleted.
 - Treat the supported host population as `claude`, `codex`, `opencode`, and
   `copilot`, and the scenario population as `existing-profile`, `no-profile`,
   `malformed-producer`, `unavailable-producer`, `interruption-resume`,
@@ -448,6 +490,11 @@ unsupported selected entry, invalid protected-token population, or exceeded
 tree resource ceiling refuses the content-rights tree operation without a
 success result. A classified content-rights finding returns a well-formed
 withheld result rather than an adapter error.
+An unknown cli-agent-evals report version, malformed or open report shape,
+unsupported host or scenario, invalid sample population, non-retained success,
+model drift, unsafe path, transcript identity failure, or report/transcript
+resource breach withholds the report collection without admitting an envelope
+from the affected sample.
 An invalid package-audit root, package-builder or installer failure, malformed
 npm report, missing or multiple archive, unsafe or unsupported archive member,
 resource-limit breach, membership mismatch, content-rights finding, installed
@@ -500,3 +547,8 @@ byte mismatch refuses the package audit without a success result.
   only after same-revision correspondence and rollback evidence. Removal of the
   retained package audit, content-rights checker, their Python tests, temporary
   policy exemptions, and Rust-test subprocess references is the final step.
+- **Sequence**: the Rust report/transcript adapter and aggregate-command
+  cutover are independently reviewable under TC-129. They do not satisfy the
+  live 28-cell TC-109 gate, provide the still-missing external scenario
+  provider, authorize a token-bearing agent run, or permit aggregate legacy
+  removal before same-revision parity and rollback evidence.

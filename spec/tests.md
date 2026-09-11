@@ -126,6 +126,7 @@ implemented and reviewed.
 | FR-017 | FR-017-AC-4 | TC-112 | 🚧 npm lifecycle, content-rights, and package-audit gates are declarative Rust dispatch; remaining host-configuration census pending |
 | FR-017 | FR-017-AC-6 | TC-120 | ✅ Typed Rust policy, retained-Python differential, adverse boundaries, ordering, resource ceilings, and mutation probes passing |
 | FR-017 | FR-017-AC-7 | TC-121 | ✅ Rust manifest classifier and retained-validator parity backed |
+| FR-017 | FR-017-AC-1 | TC-129 | 🚧 Rust report/transcript adapter planned; live TC-109 remains pending |
 | FR-018 | FR-018-AC-1 | TC-097 | 🚧 Pending implementation |
 | FR-018 | FR-018-AC-2 | TC-113 | 🚧 Content-rights and package-audit same-revision cutovers plus final four-file deletion candidate backed; aggregate removal population pending |
 | FR-018 | FR-018-AC-3 | TC-114 | 🚧 Content-rights and package-audit dispatch rollback/reapplication backed; aggregate rollback population pending |
@@ -294,6 +295,7 @@ implemented and reviewed.
 | TC-119 | The pure Rust content-rights classifier matches retained finding/exception behavior, rejects unsafe paths without echoing them, preserves Unicode protected-token matching, leaks no matched content, and remains deterministic and I/O-free | Property | P0 | FR-017-AC-5, FR-017-CON-3 | ✅ typed Rust classifier, retained-Python differential, exhaustive boundary cases, and mutation probes passing |
 | TC-120 | The pure Rust package-membership classifier matches retained extra/missing behavior for safe unique names; rejects invalid expected policies and population limits; withholds on invalid, duplicate, unexpected, or missing observed members without echoing unsafe paths; remains permutation-invariant and I/O-free; and does not select or decode a package format | Property | P0 | FR-017-AC-6, FR-017-CON-3 | ✅ Typed Rust policy, retained-Python differential, adverse boundaries, ordering, resource ceilings, and mutation probes passing |
 | TC-121 | The pure Rust module-manifest classifier accepts the retained valid module; consumes the authoritative module and artifact schemas offline; and deterministically withholds for every malformed manifest/schema/registry/resource/frontmatter/heading case without unsafe-reference or source-byte disclosure, I/O, schema discovery, or copied manifest grammar | Property | P0 | FR-017-AC-7, FR-017-CON-3 | ✅ `tests/manifest_parity.rs` |
+| TC-129 | The Rust report adapter strictly decodes `cli-agent-evals.report/v1`, admits only retained successful single-run samples beneath the explicit workspace root, verifies exact transcript bytes and source identity, preserves failed-attempt and host-model behavior, refuses every malformed/version/path/link/kind/digest/resource/population case, remains input-order invariant, and matches the retained Python aggregate artifact before Rust command cutover | Integration | P0 | FR-017-AC-1, FR-017-CON-1, FR-017-CON-3 | 🚧 planned; live 28-cell execution remains TC-109 |
 
 ## Option Permutation Matrix
 
@@ -334,6 +336,7 @@ evaluation envelopes.
 | TC-111 | Qualification capability | package members; rights; manifest; npm stage/clean; integration; publication refusal | each gate has one retained passing case and every named refusal case; cleanup deletes nothing unless every present staged byte corresponds |
 | TC-120 | Package membership | exact match; empty expected/actual; extra; missing; duplicate expected/actual; absolute, backslash, trailing-slash, empty, dot, parent, control, non-normalized, and overlong path; 65,536 and 65,537 entries; permuted inputs | exact safe membership is accepted; invalid policy or resource limits refuse without a result; every observed mismatch withholds with deterministic typed findings and no unsafe-path disclosure |
 | TC-121 | Module manifest | retained valid bundle; malformed/duplicate/merge-key manifest; invalid or mismatching authoritative schema; identity drift; duplicate artifact; unregistered edge; missing/duplicate/extra resource; unsafe schema reference; malformed/invalid artifact schema; missing/malformed/duplicate/merge-key/schema-invalid skeleton frontmatter; optional or absent required locator heading; exact/over document, artifact-count, and combined-byte ceilings; permuted resources | valid input is accepted; ceiling violations refuse without a result; every semantic/input defect withholds through deterministic typed findings without source-byte or unsafe-reference disclosure |
+| TC-129 | Retained report adapter | exact/unknown report version; complete/failed run; retained/not-retained/unavailable transcript; safe/absolute/backslash/dot/parent/control path; matching/changed/missing/linked/special/oversized transcript; one/two model identities; exact/over report, result, and collection ceilings; permuted report paths | exact retained samples map to typed envelopes and the retained aggregate; every adverse case refuses or withholds without reading outside the explicit roots; permutation cannot alter output |
 | TC-106 | Invariant request | eleven canonical names; ordered multi-name request; unknown name; malformed Rust request; expired/current exception at one explicit instant | exact ordered Rust/reference parity for the valid shared domain or a typed pre-outcome refusal |
 | TC-105 | Onboarding request | retained inventory/status cases; absent Quire; malformed, duplicate-key, or merge-key frontmatter; duplicate artifact; unsupported type; absolute, parent, symlink, and existing targets; valid/invalid staged artifact | exact Rust/reference inventory and decision parity on the supported domain, explicit fail-closed YAML identity handling, equivalent parsed frontmatter plus identical Markdown body for valid publication, or a typed refusal with no published bytes |
 
@@ -402,6 +405,7 @@ evaluation envelopes.
 | INT-005 | Validate shared semantic references and historical compatibility | Quire, Quoin, ix-flow, native producer fixtures | library | TC-052..TC-068 | ✅ |
 | INT-006 | Load Rust workflow invariants through a structured host interface | ix-flow | service | TC-107, TC-108 | 🚧 |
 | INT-007 | Load Rust-owned scenarios and assertions through a structured host interface | cli-agent-evals | service | TC-109, TC-110 | 🚧 |
+| INT-009 | Decode and verify retained cli-agent-evals reports through Rust | cli-agent-evals | service | TC-129 | 🚧 |
 
 ### Integration Test Details
 
@@ -424,6 +428,7 @@ evaluation envelopes.
 | TC-107 | INT-006 | Run lifecycle and human gates | Versioned Rust provider and fictional runs | Existing ix-flow state behavior is preserved | P0 |
 | TC-108 | INT-006 | Canonical and pilot invariant loading | Canonical and compatibility workflows | Both resolve the same Rust invariant provider | P0 |
 | TC-109 | INT-007 | Complete supported-host evaluation | Seven scenarios on four hosts | 28 valid result cells with explicit decisions | P0 |
+| TC-129 | INT-009 | Retained report ingestion | Versioned reports and transcripts under an explicit workspace root | Typed aggregate input or deterministic refusal without out-of-root reads | P0 |
 | TC-110 | INT-007 | Invalid or incomplete evaluation | Missing and malformed host results | Aggregate gate remains withheld | P0 |
 
 ## Engineering Assurance #5 Coverage
