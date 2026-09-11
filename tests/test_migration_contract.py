@@ -7,16 +7,15 @@ recurring script family" is a claim about the world and not about the document.
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from engineering_assurance.compatibility import load_matrix
-from engineering_assurance.compatibility_corpus import CORPUS_SUBMODULE
-
-REPO_ROOT = CORPUS_SUBMODULE.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent
+MATRIX_PATH = REPO_ROOT / "engineering_assurance" / "compatibility-matrix.json"
 CONTRACT_PATH = REPO_ROOT / "docs" / "migration-contract.md"
 CONTRACT = CONTRACT_PATH.read_text(encoding="utf-8")
 
@@ -174,7 +173,7 @@ def test_migration_waits_on_acceptance_and_claims_no_qualification() -> None:
     # human on record. Asserting it is still *closed* would freeze this test at
     # the moment it was written; asserting it cannot open anonymously is the
     # property the contract actually depends on.
-    acceptance = load_matrix()["accepted"]
+    acceptance = json.loads(MATRIX_PATH.read_text(encoding="utf-8"))["accepted"]
     assert acceptance["state"] in {"pending_human_acceptance", "accepted"}
     if acceptance["state"] == "accepted":
         assert acceptance["accepted_by"], "the gate opened with nobody on record"

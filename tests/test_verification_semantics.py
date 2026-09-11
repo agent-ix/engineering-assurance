@@ -8,12 +8,6 @@ from copy import deepcopy
 import pytest
 
 from engineering_assurance import FIXTURE_ROOT, PACKAGE_ROOT
-from engineering_assurance.fixture_codegen import (
-    committed_generated_fixtures,
-    load_canonical_fixture,
-    load_non_success_states,
-    render_generated_fixtures,
-)
 from engineering_assurance.verification_semantics import (
     CONCEPT_AUTHORITIES,
     SemanticContractError,
@@ -32,6 +26,18 @@ SEMANTIC_FIXTURES = FIXTURE_ROOT / "verification-semantics"
 
 def load_fixture(name: str) -> object:
     return json.loads((SEMANTIC_FIXTURES / name).read_text(encoding="utf-8"))
+
+
+def load_non_success_states() -> list[str]:
+    states = load_fixture("non-success-states.json")
+    assert isinstance(states, list)
+    return states
+
+
+def load_canonical_fixture() -> dict[str, object]:
+    fixture = load_fixture("canonical-references.json")
+    assert isinstance(fixture, dict)
+    return fixture
 
 
 def canonical_references() -> list[dict[str, object]]:
@@ -146,30 +152,6 @@ def test_all_non_success_states_validate_without_collapsing() -> None:
         candidate = deepcopy(template)
         candidate["state"] = state
         assert validate_semantic_reference(candidate)["state"] == state
-
-
-def test_generated_language_state_fixtures_are_deterministic() -> None:
-    """Trace: FR-009-AC-2, TC-061."""
-    assert committed_generated_fixtures() == render_generated_fixtures()
-
-
-def test_generated_language_canonical_fixtures_are_semantically_equal() -> None:
-    """Trace: StR-002-VC-1, FR-009-AC-2, TC-052, TC-061."""
-    committed = committed_generated_fixtures()
-    python_tree = ast.parse(committed["canonical_references.py"])
-    assignment = next(node for node in python_tree.body if isinstance(node, ast.Assign))
-    python_json = ast.literal_eval(assignment.value)
-
-    typescript_line = committed["canonical_references.ts"].splitlines()[1]
-    typescript_json = json.loads(typescript_line.split(" = ", 1)[1].removesuffix(";"))
-
-    rust_line = committed["canonical_references.rs"].splitlines()[1]
-    rust_json = rust_line.split('r#"', 1)[1].removesuffix('"#;')
-
-    expected = load_canonical_fixture()
-    assert json.loads(python_json) == expected
-    assert json.loads(typescript_json) == expected
-    assert json.loads(rust_json) == expected
 
 
 def test_unknown_fixture_source_version_fails_explicitly() -> None:

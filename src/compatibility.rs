@@ -374,6 +374,30 @@ impl Matrix {
     }
 }
 
+/// Whether a caller-supplied matrix carries a complete attributed acceptance.
+///
+/// Deliberately separate from version classification. Pinned versions are a
+/// fact about a machine; acceptance is a decision somebody made. A gate needs
+/// both, and answering only the first is how a correctly pinned toolchain comes
+/// to report an approval nobody gave.
+///
+/// A `state` of `accepted` with no name, no date, or no note against it is not
+/// a record; it is a claim with nobody behind it, and it withholds too.
+///
+/// # Errors
+///
+/// Returns [`CompatibilityError::InvalidMatrix`] when the supplied bytes do not
+/// satisfy the reviewed matrix contract.
+pub fn acceptance_recorded_in(matrix_bytes: &[u8]) -> Result<bool, CompatibilityError> {
+    let matrix: Matrix = serde_json::from_slice(matrix_bytes).map_err(|error| {
+        CompatibilityError::InvalidMatrix {
+            detail: error.to_string(),
+        }
+    })?;
+    matrix.validate()?;
+    Ok(matrix.human_acceptance_recorded())
+}
+
 /// Parse and evaluate one compatibility request without performing I/O.
 ///
 /// # Errors
@@ -586,6 +610,174 @@ mod tests {
                 .expect_err("unknown component must fail")
                 .code(),
             "unknown_compatibility_component"
+        );
+    }
+
+    #[trace("TC-084", "FR-012-AC-6")]
+    #[test]
+    fn tc_084_states_upgrade_and_rollback_per_component() {
+        let matrix: serde_json::Value =
+            serde_json::from_slice(MATRIX_BYTES).expect("the embedded matrix must be JSON");
+
+        let rollback = &matrix["rollback"];
+        for name in [
+            "quoin",
+            "quire-cli",
+            "ix-flow",
+            "engineering-assurance",
+            "corpus",
+        ] {
+            let note = rollback[name]
+                .as_str()
+                .unwrap_or_else(|| panic!("{name} has no rollback note"));
+            assert!(!note.trim().is_empty(), "{name}'s rollback note is empty");
+        }
+        assert!(
+            rollback["irreversible"]
+                .as_str()
+                .is_some_and(|note| note.contains("None of the above"))
+        );
+
+        let upgrade = &matrix["upgrade"];
+        assert!(
+            upgrade["order"]
+                .as_str()
+                .is_some_and(|order| order.contains("quire-cli"))
+        );
+        assert!(
+            upgrade["verification"]
+                .as_str()
+                .is_some_and(|step| step.contains("compatibility"))
+        );
+        // The upgrade explicitly does not touch a campaign repository.
+        assert!(
+            upgrade["what_does_not_change"]
+                .as_str()
+                .is_some_and(|note| note.contains("Migrations are"))
+        );
+
+        // Publication changes no repository's CI posture.
+        assert!(
+            matrix["hosted_ci"]
+                .as_str()
+                .is_some_and(|note| note.contains("manual-dispatch only"))
+        );
+
+        // The release channel is the public registry, and the internal mirror
+        // is ruled out by name. A pin naming npm.ix cannot install or publish
+        // from CI, and the mirror lagging a real publish already produced one
+        // wrong reading while this matrix was prepared.
+        let registry = &matrix["registry"];
+        assert_eq!(
+            registry["release_channel"].as_str(),
+            Some("public npm registry (registry.npmjs.org)")
+        );
+        for field in ["rule", "mirror_is_not_an_oracle"] {
+            assert!(
+                registry[field]
+                    .as_str()
+                    .is_some_and(|value| value.contains("npm.ix")),
+                "registry.{field} does not rule out the internal mirror by name"
+            );
+        }
+        assert!(
+            registry["rule"]
+                .as_str()
+                .is_some_and(|rule| rule.contains("MUST NOT appear"))
+        );
+        for component in matrix["components"]
+            .as_array()
+            .expect("components must be an array")
+        {
+            for field in ["release", "version"] {
+                assert!(
+                    !component[field]
+                        .as_str()
+                        .unwrap_or_default()
+                        .contains("npm.ix"),
+                    "{} pins the internal mirror in {field}",
+                    component["name"]
+                );
+            }
+        }
+    }
+
+    #[trace("TC-095", "FR-012-AC-9")]
+    #[test]
+    fn tc_095_a_pinned_toolchain_does_not_open_an_unaccepted_gate() {
+        let with_acceptance = |acceptance: serde_json::Value| -> Vec<u8> {
+            let mut matrix: serde_json::Value =
+                serde_json::from_slice(MATRIX_BYTES).expect("the embedded matrix must be JSON");
+            matrix["accepted"] = acceptance;
+            serde_json::to_vec(&matrix).expect("the mutated matrix must serialize")
+        };
+
+        assert!(
+            acceptance_recorded_in(&with_acceptance(serde_json::json!({
+                "state": "accepted",
+                "accepted_by": "Fictional Owner",
+                "accepted_at": "2026-09-10",
+                "note": "Accepted by a named human for this fixture.",
+            })))
+            .expect("a complete acceptance must parse"),
+            "a fully attributed acceptance was not recorded"
+        );
+
+        // Any state but `accepted` withholds, including one this module has
+        // never seen, on the same reasoning that makes an unrecognised version
+        // `unknown` rather than a pass.
+        for state in ["pending_human_acceptance", "withdrawn", "", "ACCEPTED"] {
+            assert!(
+                !acceptance_recorded_in(&with_acceptance(serde_json::json!({
+                    "state": state,
+                    "accepted_by": "Fictional Owner",
+                    "accepted_at": "2026-09-10",
+                    "note": "Prepared for this fixture.",
+                })))
+                .expect("the mutated matrix must parse"),
+                "state {state:?} opened the gate"
+            );
+        }
+
+        // A state of `accepted` with nobody, no date, or no note behind it is a
+        // claim, not a record, and withholds exactly as a pending state does.
+        for hole in [
+            serde_json::json!({"accepted_by": serde_json::Value::Null}),
+            serde_json::json!({"accepted_by": "   "}),
+            serde_json::json!({"accepted_at": serde_json::Value::Null}),
+            serde_json::json!({"accepted_at": "   "}),
+            serde_json::json!({"note": "   "}),
+        ] {
+            let mut acceptance = serde_json::json!({
+                "state": "accepted",
+                "accepted_by": "Fictional Owner",
+                "accepted_at": "2026-09-10",
+                "note": "Accepted by a named human for this fixture.",
+            });
+            for (key, value) in hole.as_object().expect("a hole must be an object") {
+                acceptance[key] = value.clone();
+            }
+            assert!(
+                !acceptance_recorded_in(&with_acceptance(acceptance.clone()))
+                    .expect("the mutated matrix must parse"),
+                "half-recorded acceptance {acceptance} opened the gate"
+            );
+        }
+
+        // And the two conditions are genuinely independent: a fully pinned
+        // toolchain still fails to open a pending matrix.
+        let exact = evaluate_request_bytes(&request(&exact_observations()))
+            .expect("exact request must evaluate");
+        assert!(exact.versions_compatible);
+        assert!(
+            !acceptance_recorded_in(&with_acceptance(serde_json::json!({
+                "state": "pending_human_acceptance",
+                "accepted_by": serde_json::Value::Null,
+                "accepted_at": serde_json::Value::Null,
+                "note": "An agent may prepare the matrix and may not accept it.",
+            })))
+            .expect("a pending matrix must parse"),
+            "a pinned toolchain opened a pending gate"
         );
     }
 

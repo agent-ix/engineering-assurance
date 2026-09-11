@@ -61,6 +61,18 @@ identities or ownership.
 - Assign a new explicit version to a different canonicalization algorithm.
 - Keep generated foreign-language fixtures as inert data from one canonical
   semantic source.
+- Read the accepted compatibility corpus only through one explicit
+  caller-selected corpus root, and SHALL NOT discover a root from the ambient
+  environment.
+- Re-hash every retained corpus artifact against the identity its index records
+  before that artifact's bytes are used, and refuse the artifact on any
+  mismatch.
+- Refuse a `referenced` retention rather than reading bytes for it, because a
+  referenced artifact is pinned by digest and deliberately not retained.
+- Refuse an absolute retained path, a parent-traversing retained path, a
+  symlinked or non-regular retained entry, a missing retained entry, a duplicate
+  case or chain-role identity, an unknown corpus version, a malformed corpus
+  index, and tampered retained bytes, each as a distinct typed refusal.
 - Consume portable verification contracts by version rather than copying them
   into a second contract family.
 
@@ -88,6 +100,7 @@ diagnostic prose is not the discriminator.
 | FR-015-AC-2 | Success, unavailable, not-computed, not-applicable, failed, inconclusive, malformed, stale, tampered, lossy, and unreadable remain distinguishable; typed state labels retain stable wire spellings and untyped labels require exactly one known state. | Test (TC-102) |
 | FR-015-AC-3 | Invalid versions, provenance, mappings, fixtures, digests, and numeric identity inputs fail without an identity digest or source-byte change; immutable `x`/`X` metadata remains accepted; every exercised semantic and PGM-01 refusal exposes its expected typed reason without inspecting diagnostic prose. | Test (TC-103) |
 | FR-015-AC-4 | Static ownership and execution audits find no copied portable contract family, persisted evidence family, or executable foreign-language fixture. | Test (TC-104) |
+| FR-015-AC-5 | Native accepted-corpus access reads every retained artifact from one explicit corpus root, reproduces each recorded identity, covers every required corpus state, and refuses referenced retentions, absolute or parent-traversing paths, symlinked or non-regular entries, missing entries, duplicate identities, unknown corpus versions, malformed indexes, and tampered bytes without writing a byte. | Test (TC-069, TC-070, TC-071, TC-072, TC-073, TC-074, TC-075, TC-076, TC-078) |
 
 ## Dependencies
 
