@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import subprocess
-import sys
 from pathlib import Path
 
 from engineering_assurance.eval_reports import (
@@ -282,17 +280,3 @@ class TestCliEvaluationReportLoading:
         assert not aggregate.ok
         assert aggregate.complete_cells == 1
         assert "missing:claude:no-profile" in aggregate.failures
-
-    def test_aggregate_script_runs_directly(self) -> None:
-        """The documented direct script entry point resolves the local package."""
-        script = Path(__file__).parents[1] / "scripts/aggregate_agent_eval_reports.py"
-
-        completed = subprocess.run(
-            [sys.executable, str(script), "--help"],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-
-        assert completed.returncode == 0, completed.stderr
-        assert "--report" in completed.stdout

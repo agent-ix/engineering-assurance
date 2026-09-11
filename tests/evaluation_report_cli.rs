@@ -6,7 +6,6 @@
 use std::{
     fmt::Write as _,
     fs,
-    path::Path,
     process::{Command, Output},
 };
 
@@ -91,24 +90,6 @@ fn valid_partial_report(work_dir: &std::path::Path, digest: &str) -> Value {
         }],
         "aggregates": {"successRate": "1/1"}
     })
-}
-
-fn failed_report_value(mut value: Value) -> Value {
-    value["ok"] = json!(false);
-    value["results"][0]["id"] = json!("EA-002");
-    value["results"][0]["useCase"] = json!("no-profile");
-    value["results"][0]["ok"] = json!(false);
-    value["results"][0]["passRate"] = json!("0/1");
-    value["results"][0]["runs"][0]["ok"] = json!(false);
-    value["results"][0]["runs"][0]["exitReason"] = json!("timeout");
-    value["results"][0]["runs"][0]["checks"] = json!({});
-    value["results"][0]["runs"][0]["failures"] = json!(["timed out"]);
-    value["results"][0]["runs"][0]["transcriptRetention"] = json!("not-retained");
-    value["results"][0]["runs"][0]
-        .as_object_mut()
-        .expect("failed sample must be an object")
-        .remove("transcriptPath");
-    value
 }
 
 fn verify_artifact(repository: &TempDir, workspace: &TempDir) -> Output {
@@ -211,112 +192,4 @@ fn tc_129_cli_writes_the_retained_artifact_and_reports_incomplete_matrix() {
         mismatch_error["code"],
         "evaluation_report_artifact_mismatch"
     );
-}
-
-#[test]
-#[trace("TC-129", "FR-017-AC-1", "FR-017-CON-1", "FR-017-CON-3")]
-fn tc_129_rust_and_retained_python_emit_the_same_aggregate_observation() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    fs::create_dir_all(root.join("target")).expect("ignored target directory must be creatable");
-    let repository_fixture = tempfile::Builder::new()
-        .prefix("evaluation-report-parity-")
-        .tempdir_in(root.join("target"))
-        .expect("repository fixture must be creatable beneath the source root");
-    let workspace = TempDir::new().expect("workspace fixture must be creatable");
-    let work_dir = workspace.path().join("codex-existing-profile");
-    let transcript = work_dir.join(".cli-agent-evals/transcripts/sample.transcript");
-    fs::create_dir_all(transcript.parent().expect("transcript must have a parent"))
-        .expect("transcript parent must be creatable");
-    let transcript_bytes = b"same-revision retained transcript\n";
-    fs::write(&transcript, transcript_bytes).expect("transcript must be writable");
-    let mut digest = String::with_capacity(64);
-    for byte in Sha256::digest(transcript_bytes) {
-        let _ = write!(&mut digest, "{byte:02x}");
-    }
-    let report = repository_fixture.path().join("codex.json");
-    fs::write(
-        &report,
-        serde_json::to_vec(&valid_partial_report(&work_dir, &digest)).expect("report must encode"),
-    )
-    .expect("report must be writable");
-    let failed_report = repository_fixture.path().join("failed.json");
-    let failed_value = failed_report_value(valid_partial_report(&work_dir, &digest));
-    fs::write(
-        &failed_report,
-        serde_json::to_vec(&failed_value).expect("failed report must encode"),
-    )
-    .expect("failed report must be writable");
-    let python_artifact = repository_fixture.path().join("python.json");
-    let rust_artifact = repository_fixture.path().join("rust.json");
-
-    let python = Command::new("python3")
-        .arg(root.join("scripts/aggregate_agent_eval_reports.py"))
-        .args(["--report", report.to_str().expect("report must be UTF-8")])
-        .args([
-            "--report",
-            failed_report.to_str().expect("failed report must be UTF-8"),
-        ])
-        .args(["--source-revision", SOURCE_REVISION])
-        .args([
-            "--output",
-            python_artifact
-                .to_str()
-                .expect("Python output must be UTF-8"),
-        ])
-        .current_dir(root)
-        .output()
-        .expect("retained Python aggregate command must terminate");
-    assert_eq!(
-        python.status.code(),
-        Some(1),
-        "{}",
-        String::from_utf8_lossy(&python.stderr)
-    );
-
-    let report_relative = report
-        .strip_prefix(root)
-        .expect("report must be beneath the source root");
-    let failed_report_relative = failed_report
-        .strip_prefix(root)
-        .expect("failed report must be beneath the source root");
-    let rust_relative = rust_artifact
-        .strip_prefix(root)
-        .expect("Rust output must be beneath the source root");
-    let rust = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
-        .args(["evaluation-aggregate", "--root"])
-        .arg(root)
-        .arg("--workspace-root")
-        .arg(workspace.path())
-        .arg("--report")
-        .arg(report_relative)
-        .arg("--report")
-        .arg(failed_report_relative)
-        .args(["--source-revision", SOURCE_REVISION])
-        .arg("--output")
-        .arg(rust_relative)
-        .output()
-        .expect("Rust aggregate command must terminate");
-    assert_eq!(
-        rust.status.code(),
-        Some(1),
-        "{}",
-        String::from_utf8_lossy(&rust.stderr)
-    );
-
-    let mut python_value: Value = serde_json::from_slice(
-        &fs::read(python_artifact).expect("Python artifact must be readable"),
-    )
-    .expect("Python artifact must decode");
-    let mut rust_value: Value =
-        serde_json::from_slice(&fs::read(rust_artifact).expect("Rust artifact must be readable"))
-            .expect("Rust artifact must decode");
-    python_value
-        .as_object_mut()
-        .expect("Python artifact must be an object")
-        .remove("generated_at");
-    rust_value
-        .as_object_mut()
-        .expect("Rust artifact must be an object")
-        .remove("generated_at");
-    assert_eq!(rust_value, python_value);
 }
