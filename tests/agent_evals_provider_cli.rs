@@ -108,6 +108,45 @@ fn invoke(root: &TempDir, request: &Value) -> Output {
 }
 
 #[test]
+#[trace("TC-031", "FR-006-AC-1")]
+fn tc_031_external_provider_config_declares_the_native_rust_provider() {
+    let repository = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let config = repository.join("evals/cli-agent-evals.config.mjs");
+    let script = r"
+        import { pathToFileURL } from 'node:url';
+        const module = await import(pathToFileURL(process.argv[1]).href);
+        process.stdout.write(JSON.stringify(module.default.provider));
+    ";
+    let output = Command::new("node")
+        .args([
+            "--input-type=module",
+            "-e",
+            script,
+            config.to_str().expect("configuration path must be UTF-8"),
+        ])
+        .output()
+        .expect("node must load the external-provider configuration");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let provider: Value =
+        serde_json::from_slice(&output.stdout).expect("provider configuration must emit JSON");
+    assert_eq!(
+        provider,
+        json!({
+            "command": "engineering-assurance",
+            "args": [
+                "agent-evals-provider",
+                "--root",
+                repository.to_str().expect("repository path must be UTF-8"),
+            ],
+        })
+    );
+}
+
+#[test]
 #[trace("TC-109", "FR-017-AC-1", "FR-017-CON-1")]
 fn tc_109_provider_prepares_and_checks_a_synthetic_native_evaluation() {
     let root = root();
