@@ -116,29 +116,6 @@ fn copy_skeleton(root: &Path, artifact_type: &str, target: &str) -> PathBuf {
     destination
 }
 
-fn python_inventory(root: &Path) -> Value {
-    let script = r#"
-import json
-import sys
-from pathlib import Path
-from engineering_assurance.onboarding import inventory_repository
-
-print(json.dumps(inventory_repository(Path(sys.argv[1]), quire_bin="quire").to_dict(), separators=(",", ":")))
-"#;
-    let output = Command::new("python3")
-        .args(["-c", script])
-        .arg(root)
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .expect("retained Python onboarding reference must start");
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    serde_json::from_slice(&output.stdout).expect("reference inventory must be JSON")
-}
-
 fn result(output: &Output) -> Value {
     serde_json::from_slice(&output.stdout).expect("CLI stdout must contain one JSON value")
 }
@@ -154,9 +131,18 @@ fn assert_no_stages(root: &Path) {
     assert!(stages.is_empty(), "staged files remain after refusal");
 }
 
-#[trace("TC-105", "FR-016-AC-1", "FR-016-CON-4")]
+#[trace(
+    "TC-105",
+    "FR-016-AC-1",
+    "FR-016-CON-4",
+    "TC-004",
+    "FR-001-AC-1",
+    "US-001-EX-1",
+    "TC-008",
+    "FR-001-AC-5"
+)]
 #[test]
-fn tc_105_cli_inventory_and_reuse_match_the_retained_reference() {
+fn tc_105_cli_inventory_and_reuse_follow_the_native_contract() {
     let repository = TestDirectory::new("inventory");
     copy_skeleton(repository.path(), "AssuranceProfile", "spec/AP-001.md");
     copy_skeleton(repository.path(), "MeasurementPlan", "spec/MP-001.md");
@@ -201,14 +187,99 @@ fn tc_105_cli_inventory_and_reuse_match_the_retained_reference() {
     assert_eq!(result["protocol"], RESULT_PROTOCOL);
     assert_eq!(result["status"], "reuse");
     assert_eq!(result["artifact_path"], "spec/AP-001.md");
-    assert_eq!(result["inventory"], python_inventory(repository.path()));
+    let inventory = &result["inventory"];
+    assert_eq!(inventory["decisions"], json!(["decisions/release.md"]));
+    assert_eq!(
+        inventory["evidence_references"],
+        json!(["spec/evidence/observation.json"])
+    );
+    assert_eq!(
+        inventory["producer_configurations"],
+        json!([".github/workflows/assurance.yml"])
+    );
+    assert_eq!(
+        inventory["unresolved_inputs"],
+        json!([
+            "malformed-frontmatter:spec/AP-malformed.md",
+            "symlink-not-inspected:spec/AP-link.md",
+        ])
+    );
+    for (collection, path, artifact_type) in [
+        ("assurance_artifacts", "spec/AP-001.md", "AssuranceProfile"),
+        ("measurements", "spec/MP-001.md", "MeasurementPlan"),
+    ] {
+        let artifact = &inventory[collection][0];
+        assert_eq!(artifact["path"], path);
+        assert_eq!(artifact["artifact_type"], artifact_type);
+        assert_eq!(artifact["valid"], true);
+        assert!(
+            artifact["diagnostics"]
+                .as_array()
+                .expect("validated artifact diagnostics must be an array")
+                .iter()
+                .any(|diagnostic| diagnostic == "UnknownEdgeType: archetype 'AssuranceProfile' allowed_links uses 'governs' which is not in any edge_types registry"),
+            "Quire diagnostics must remain observable rather than discarded"
+        );
+    }
     assert_eq!(
         fs::read(existing).expect("existing artifact must remain readable"),
         before
     );
 }
 
-#[trace("TC-105", "FR-016-AC-1", "FR-016-CON-4")]
+#[trace(
+    "TC-001",
+    "StR-001-VC-1",
+    "FR-001-AC-1",
+    "TC-002",
+    "StR-001-VC-2",
+    "FR-001-AC-2",
+    "TC-005",
+    "US-001-EX-2",
+    "TC-007",
+    "FR-001-AC-4"
+)]
+#[test]
+fn tc_001_and_tc_002_cli_inventory_precedes_a_no_write_unjustified_decision() {
+    let repository = TestDirectory::new("inventory-before-proposal");
+    write(
+        &repository.path().join("decisions/fictional.md"),
+        "---\ntype: DecisionRecord\n---\n# Fictional decision\n",
+    );
+    let missing_boundary = run(&request(
+        repository.path(),
+        &json!({
+            "decision_boundary": null,
+            "requested_artifact": "AssuranceProfile",
+            "justification": "a boundary is still required",
+            "target": "spec/AP-003.md",
+            "frontmatter": {"id": "AP-003"},
+        }),
+    ));
+    assert!(missing_boundary.status.success());
+    let missing_boundary = result(&missing_boundary);
+    assert_eq!(missing_boundary["status"], "needs-input");
+    assert_eq!(
+        missing_boundary["inventory"]["decisions"],
+        json!(["decisions/fictional.md"])
+    );
+    assert!(!repository.path().join("spec/AP-003.md").exists());
+
+    let unjustified = run(&request(
+        repository.path(),
+        &json!({"requested_artifact": "AssuranceProfile"}),
+    ));
+    assert!(unjustified.status.success());
+    let unjustified = result(&unjustified);
+    assert_eq!(unjustified["status"], "no-applicable-work");
+    assert_eq!(unjustified["artifact_path"], Value::Null);
+    assert!(
+        !repository.path().join("spec").exists(),
+        "an unjustified request must not scaffold a generic profile"
+    );
+}
+
+#[trace("TC-105", "FR-016-AC-1", "FR-016-CON-4", "TC-006", "FR-001-AC-3")]
 #[test]
 fn tc_105_cli_authors_one_quire_validated_confined_artifact() {
     let repository = TestDirectory::new("author");
@@ -252,7 +323,7 @@ fn tc_105_cli_authors_one_quire_validated_confined_artifact() {
     assert_no_stages(repository.path());
 }
 
-#[trace("TC-105", "FR-016-AC-1", "FR-016-CON-4")]
+#[trace("TC-105", "FR-016-AC-1", "FR-016-CON-4", "TC-045", "FR-001-AC-7")]
 #[test]
 fn tc_105_cli_refuses_invalid_or_escaping_publication_without_bytes() {
     let repository = TestDirectory::new("refusals");
@@ -306,6 +377,36 @@ fn tc_105_cli_refuses_invalid_or_escaping_publication_without_bytes() {
     assert_eq!(result(&output)["code"], "onboarding_target_invalid");
     assert_eq!(fs::read(&existing).unwrap(), b"sentinel\n");
     assert_no_stages(repository.path());
+}
+
+#[trace("TC-105", "FR-016-AC-1", "TC-044", "FR-001-AC-6")]
+#[test]
+fn tc_044_cli_preserves_an_invalid_applicable_artifact_for_human_selection() {
+    let repository = TestDirectory::new("malformed-applicable");
+    let artifact = copy_skeleton(repository.path(), "AssuranceProfile", "spec/AP-bad.md");
+    let text = fs::read_to_string(&artifact).expect("installed skeleton must be readable");
+    fs::write(
+        &artifact,
+        text.replace("owner: juniper-release-owner\n", ""),
+    )
+    .expect("fixture must be writable");
+    let before = fs::read(&artifact).expect("fixture must be readable");
+
+    let output = run(&request(
+        repository.path(),
+        &json!({"requested_artifact": "AssuranceProfile"}),
+    ));
+    assert!(output.status.success());
+    let result = result(&output);
+    assert_eq!(result["status"], "needs-human-selection");
+    assert_eq!(
+        result["inventory"]["assurance_artifacts"][0]["valid"],
+        false
+    );
+    assert_eq!(
+        fs::read(&artifact).expect("fixture must remain readable"),
+        before
+    );
 }
 
 #[cfg(unix)]
