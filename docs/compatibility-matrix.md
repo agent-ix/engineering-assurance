@@ -25,7 +25,17 @@ tag.
 
 ## Three answers, and why the third matters
 
-`scripts/check_compatibility_matrix.py` classifies what is installed:
+`scripts/check_compatibility_matrix.py` is retained temporarily as the
+same-revision reference observer. The native replacement is:
+
+```sh
+engineering-assurance compatibility-observe --root .
+```
+
+It emits one versioned JSON result, observes only the matrix-declared tools,
+and delegates classification to the pure Rust matrix capability. The Python
+path is not removed until its same-revision parity and rollback evidence is
+recorded. Its current invocation classifies what is installed:
 
 | Verdict | Meaning |
 | --- | --- |
