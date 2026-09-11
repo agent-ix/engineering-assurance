@@ -57,6 +57,20 @@ then update this repository's direct invocation and remove the old path.
   `tests/test_content_rights.py` together with all executable test imports or
   subprocess references to those paths and the two temporary Rust semantic-
   policy exemptions. Historical review references remain inert records.
+- For the compatibility, accepted-corpus, and fixture-generation capability,
+  keep the retained Python until native Rust compatibility classification,
+  accepted-corpus access, corpus identity and integrity checking, and
+  deterministic fixture generation all pass locally at one candidate revision;
+  replace the Python-backed Rust differential with checked-in expected fixtures
+  so no Python is executed as a test oracle after cutover; and then remove
+  `engineering_assurance/compatibility.py`,
+  `engineering_assurance/compatibility_corpus.py`,
+  `engineering_assurance/fixture_codegen.py`,
+  `tests/test_compatibility_matrix.py`, and
+  `tests/test_compatibility_corpus.py` together with every executable import of
+  those paths.
+- Retain Python packaging support and unrelated Python onboarding and workflow
+  code across that removal, and change no retained corpus byte.
 - Preserve historical corpus and evidence bytes.
 - Return changed interfaces or compatibility promises to specification before
   implementation continues.
