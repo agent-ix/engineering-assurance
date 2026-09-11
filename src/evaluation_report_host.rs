@@ -814,6 +814,15 @@ mod tests {
     #[trace("TC-129", "FR-017-AC-1", "FR-017-CON-3")]
     fn tc_129_bounds_collection_and_transcript_bytes_before_allocation() {
         let (repository, workspace, _, transcript) = fixture(Some("model-a"));
+        let exact_paths = vec![PathBuf::from("reports/codex.json"); MAX_REPORT_COLLECTION];
+        execute(
+            repository.path(),
+            workspace.path(),
+            &exact_paths,
+            SOURCE_REVISION,
+            "2026-09-10T00:00:00Z".to_owned(),
+        )
+        .expect("the exact report collection ceiling must be accepted");
         let paths = vec![PathBuf::from("reports/codex.json"); MAX_REPORT_COLLECTION + 1];
         let error = execute(
             repository.path(),
@@ -841,6 +850,20 @@ mod tests {
                 .failures
                 .iter()
                 .any(|value| value.ends_with("file-too-large"))
+        );
+
+        let boundary = repository.path().join("reports/boundary.bin");
+        fs::write(&boundary, b"1234").expect("boundary fixture must be writable");
+        let root = Dir::open_ambient_dir(repository.path(), ambient_authority())
+            .expect("fixture root must open");
+        assert_eq!(
+            read_rooted_file(&root, Path::new("reports/boundary.bin"), 4)
+                .expect("exact byte ceiling must read"),
+            b"1234"
+        );
+        assert_eq!(
+            read_rooted_file(&root, Path::new("reports/boundary.bin"), 3),
+            Err("file-too-large")
         );
     }
 

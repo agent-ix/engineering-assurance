@@ -199,7 +199,9 @@ fn decode_report(
         .collect::<Result<Vec<_>, _>>()?;
     Ok(DecodedEvaluationReport {
         host,
-        model: model.unwrap_or_else(|| RUNNER_DEFAULT_MODEL.to_owned()),
+        model: model
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| RUNNER_DEFAULT_MODEL.to_owned()),
         samples,
     })
 }

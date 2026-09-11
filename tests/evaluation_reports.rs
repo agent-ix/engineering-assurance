@@ -144,6 +144,15 @@ fn tc_129_decodes_one_retained_success_into_a_typed_envelope() {
     assert_eq!(envelope.host, EvaluationHost::Codex);
     assert_eq!(envelope.scenario, EvaluationScenario::ExistingProfile);
     assert!(envelope.errors().is_empty());
+
+    let mut empty_model = report(true);
+    empty_model["model"] = json!("");
+    assert_eq!(
+        decode(&empty_model)
+            .expect("empty producer model must preserve retained defaulting")
+            .model(),
+        RUNNER_DEFAULT_MODEL
+    );
 }
 
 #[test]
@@ -278,6 +287,11 @@ fn tc_129_rejects_unsafe_or_contradictory_retention_identity() {
 #[test]
 #[trace("TC-129", "FR-017-AC-1", "FR-017-CON-1")]
 fn tc_129_enforces_predecode_and_result_population_ceilings() {
+    let encoded = serde_json::to_vec(&report(true)).expect("fixture must encode");
+    let mut exact = encoded;
+    exact.resize(MAX_CLI_REPORT_BYTES, b' ');
+    decode_cli_eval_report(&exact, SOURCE_REVISION)
+        .expect("a valid report exactly at the byte ceiling must decode");
     let oversized = vec![b' '; MAX_CLI_REPORT_BYTES + 1];
     let error = decode_cli_eval_report(&oversized, SOURCE_REVISION)
         .expect_err("one byte beyond the report ceiling must refuse");
@@ -285,6 +299,8 @@ fn tc_129_enforces_predecode_and_result_population_ceilings() {
 
     let mut value = report(true);
     let result = value["results"][0].clone();
+    value["results"] = Value::Array(vec![result.clone(); MAX_CLI_REPORT_RESULTS]);
+    decode(&value).expect("the exact result population ceiling must decode");
     value["results"] = Value::Array(vec![result; MAX_CLI_REPORT_RESULTS + 1]);
     let error = decode(&value).expect_err("one result beyond the ceiling must refuse");
     assert_eq!(error, "evaluation_report_result_limit");

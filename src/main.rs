@@ -16,6 +16,7 @@ mod process_host;
 mod workflow_host;
 
 use std::{
+    fmt::Write as _,
     io::{self, Read, Write},
     path::PathBuf,
     process::ExitCode,
@@ -245,14 +246,19 @@ fn run_evaluation_aggregate(arguments: &ArgMatches) -> ExitCode {
             &error.to_string(),
         );
     }
-    println!(
+    let mut rendered = format!(
         "evaluation aggregate: {}/{} complete",
         artifact.complete_cells(),
         artifact.required_cells()
     );
-    println!("report: {}", output.display());
+    rendered.push('\n');
+    let _ = writeln!(&mut rendered, "report: {}", output.display());
     for failure in artifact.failures() {
-        println!("- {failure}");
+        let _ = writeln!(&mut rendered, "- {failure}");
+    }
+    if let Err(error) = write_stdout(rendered.as_bytes()) {
+        eprintln!("failed to write evaluation aggregate summary: {error}");
+        return ExitCode::from(2);
     }
     if artifact.ok() {
         ExitCode::SUCCESS

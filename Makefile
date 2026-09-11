@@ -76,7 +76,7 @@ agent-evals-aggregate:
 		echo "EVAL_WORKSPACE_ROOT is required for retained transcript confinement" >&2; \
 		exit 2; \
 	}
-	CARGO_BUILD_JOBS=2 cargo +1.98.1 run --locked --quiet -- evaluation-aggregate \
+	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet -- evaluation-aggregate \
 		--root . \
 		--workspace-root "$(EVAL_WORKSPACE_ROOT)" \
 		$(foreach report,$(EVAL_REPORTS),--report "$(report)") \
