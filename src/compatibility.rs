@@ -17,8 +17,17 @@ pub const RESULT_PROTOCOL: &str = "engineering-assurance.compatibility-result/v1
 const MATRIX_VERSION: &str = "engineering-assurance.compatibility-matrix/v1";
 const MATRIX_BYTES: &[u8] = include_bytes!("../engineering_assurance/compatibility-matrix.json");
 
+/// A repository-relative artifact digest recorded by the reviewed matrix.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RecordedArtifactDigest {
+    /// Repository-relative artifact path.
+    pub path: String,
+    /// Expected lowercase SHA-256 hex digest.
+    pub sha256: String,
+}
+
 /// One caller-observed component version.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentObservation {
     /// Component identity from the reviewed matrix.
@@ -28,7 +37,7 @@ pub struct ComponentObservation {
 }
 
 /// Versioned request for pure compatibility classification.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CompatibilityRequest {
     /// Exact request protocol discriminator.
@@ -243,8 +252,17 @@ struct MatrixComponent {
     _observe: String,
     incompatible: Vec<String>,
     incompatible_reasons: BTreeMap<String, String>,
-    #[serde(rename = "artifacts")]
-    _artifacts: Vec<serde_json::Value>,
+    artifacts: Vec<MatrixArtifact>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MatrixArtifact {
+    path: String,
+    sha256: String,
+    #[serde(default)]
+    #[serde(rename = "note")]
+    _note: Option<String>,
 }
 
 /// Return one exact component pin from the embedded reviewed matrix.
@@ -264,6 +282,27 @@ pub fn expected_component_version(name: &str) -> Result<String, CompatibilityErr
         .ok_or_else(|| CompatibilityError::UnknownComponent {
             component: name.to_owned(),
         })
+}
+
+/// Return every artifact digest recorded by the embedded reviewed matrix.
+///
+/// This exposes matrix data only. Callers that read files and compute hashes
+/// remain separate host adapters, preserving the classifier's I/O-free boundary.
+///
+/// # Errors
+///
+/// Returns [`CompatibilityError::InvalidMatrix`] if the embedded matrix is malformed.
+pub fn recorded_artifact_digests() -> Result<Vec<RecordedArtifactDigest>, CompatibilityError> {
+    let matrix = Matrix::parse()?;
+    Ok(matrix
+        .components
+        .into_iter()
+        .flat_map(|component| component.artifacts)
+        .map(|artifact| RecordedArtifactDigest {
+            path: artifact.path,
+            sha256: artifact.sha256,
+        })
+        .collect())
 }
 
 impl Matrix {

@@ -7,6 +7,7 @@
 
 mod agent_evals_host;
 mod agent_evals_provider;
+mod compatibility_observer;
 mod content_rights_host;
 mod evaluation_report_host;
 mod integration_evidence_host;
@@ -37,6 +38,7 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 const ERROR_PROTOCOL: &str = "engineering-assurance.error/v1";
 const COMPATIBILITY_CAPABILITY: &str = "compatibility";
+const COMPATIBILITY_OBSERVE_CAPABILITY: &str = "compatibility-observe";
 const AGENT_EVALS_PROVIDER_CAPABILITY: &str = "agent-evals-provider";
 const AGENT_EVALS_CAPABILITY: &str = "agent-evals";
 const CONTENT_RIGHTS_TREE_CAPABILITY: &str = "content-rights-tree";
@@ -70,6 +72,7 @@ fn command() -> Command {
             Command::new(COMPATIBILITY_CAPABILITY)
                 .about("Classify explicit observations against the reviewed compatibility matrix"),
         )
+        .subcommand(compatibility_observe_command())
         .subcommand(
             Command::new(CONTENT_RIGHTS_TREE_CAPABILITY)
                 .about("Inspect one complete Git-selected repository tree for content rights")
@@ -165,6 +168,12 @@ fn agent_evals_provider_command() -> Command {
         .arg(required_path_arg("root"))
 }
 
+fn compatibility_observe_command() -> Command {
+    Command::new(COMPATIBILITY_OBSERVE_CAPABILITY)
+        .about("Observe the declared local toolchain then classify it against the reviewed matrix")
+        .arg(required_path_arg("root"))
+}
+
 fn agent_evals_command() -> Command {
     Command::new(AGENT_EVALS_CAPABILITY)
         .arg(required_path_arg("root"))
@@ -241,6 +250,7 @@ fn main() -> ExitCode {
         Some((AGENT_EVALS_CAPABILITY, arguments)) => run_agent_evals(arguments),
         Some((AGENT_EVALS_PROVIDER_CAPABILITY, arguments)) => run_agent_evals_provider(arguments),
         Some((COMPATIBILITY_CAPABILITY, _)) => run_compatibility(),
+        Some((COMPATIBILITY_OBSERVE_CAPABILITY, arguments)) => run_compatibility_observe(arguments),
         Some((CONTENT_RIGHTS_TREE_CAPABILITY, arguments)) => run_content_rights_tree(arguments),
         Some((EVALUATION_AGGREGATE_CAPABILITY, arguments)) => run_evaluation_aggregate(arguments),
         Some((EVALUATION_AGGREGATE_VERIFY_CAPABILITY, arguments)) => {
@@ -253,6 +263,45 @@ fn main() -> ExitCode {
         Some((WORKFLOW_HOST_CAPABILITY, _)) => run_workflow_host(),
         Some((PACKAGE_LIFECYCLE_CAPABILITY, arguments)) => run_package_lifecycle(arguments),
         Some(_) | None => ExitCode::from(2),
+    }
+}
+
+fn run_compatibility_observe(arguments: &ArgMatches) -> ExitCode {
+    let Some(root) = arguments.get_one::<PathBuf>("root") else {
+        return emit_error(
+            COMPATIBILITY_OBSERVE_CAPABILITY,
+            "compatibility_observe_root_invalid",
+            "compatibility-observe repository root is missing",
+        );
+    };
+    let result = match compatibility_observer::observe(root) {
+        Ok(result) => result,
+        Err(error) => {
+            return emit_error(
+                COMPATIBILITY_OBSERVE_CAPABILITY,
+                error.code(),
+                &error.to_string(),
+            );
+        }
+    };
+    let exit = if result.gate_satisfied {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    };
+    match compatibility_observer::to_json_line(&result) {
+        Ok(encoded) => match write_stdout(&encoded) {
+            Ok(()) => exit,
+            Err(error) => {
+                eprintln!("failed to write compatibility-observe result: {error}");
+                ExitCode::from(2)
+            }
+        },
+        Err(error) => emit_error(
+            COMPATIBILITY_OBSERVE_CAPABILITY,
+            error.code(),
+            &error.to_string(),
+        ),
     }
 }
 

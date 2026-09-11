@@ -51,6 +51,10 @@ acceptance of that matrix.
 - The gate SHALL require every pinned component to be compatible.
 - The classifier SHALL execute nothing. Observing the environment SHALL be a
   separate program.
+- The Rust-owned CLI host adapter SHALL invoke only the matrix-declared `quire`,
+  `quoin`, `ix-flow`, and local Git tag observations with bounded capture.
+- The Rust-owned CLI host adapter SHALL pass typed observations to the classifier
+  without reimplementing matrix policy.
 - Publication of these versions SHALL leave every campaign repository's
   workflows on manual dispatch only.
 
@@ -85,6 +89,7 @@ tree does not contain is skipped rather than reported as drift.
 | FR-012-AC-7 | An unknown matrix version and an unknown component name are refused. | Test (TC-085) |
 | FR-012-AC-8 | The classifier reaches for no subprocess, socket, or write, and the observing program is a separate file (CON-1). | Inspection (TC-086) |
 | FR-012-AC-9 | Compatible versions and recorded human acceptance are independent gate conditions; a fully pinned toolchain does not satisfy the gate while acceptance is unrecorded, any state but `accepted` withholds, and an `accepted` state lacking a name or a date withholds as a half-record. | Test (TC-095) |
+| FR-012-AC-10 | The Rust observer keeps an unavailable, failed, timed-out, oversized, or unparseable declared tool observation as unknown; it invokes no undeclared tool, preserves artifact-digest drift as a separate gate condition, and delegates all verdicts to the pure classifier. | Test (TC-130) |
 
 ## Dependencies
 
