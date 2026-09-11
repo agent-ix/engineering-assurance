@@ -1,4 +1,4 @@
-.PHONY: lint test manifest-validate package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-evidence integration-gate release-gate
+.PHONY: lint test manifest-validate compatibility-observe package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-evidence integration-gate release-gate
 
 EVAL_AGENT ?= codex
 EVAL_RUN ?= canary
@@ -30,6 +30,19 @@ manifest-validate:
 	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet -- manifest-validate \
 		--root . \
 		--module-root "$(MANIFEST_MODULE_ROOT)"
+
+# Classify the toolchain on this machine against the reviewed compatibility
+# matrix. This is a manual command, deliberately not part of `integration-gate`
+# or hosted CI: it answers a question about the operator's installed toolchain,
+# and both of those run where `quire`, `quoin` and `ix-flow` are not all on PATH
+# at their pinned versions, so wiring it in would report unknown for a component
+# that is present but invoked another way. The matrix names it as the upgrade
+# verification step and this target is where that name resolves. The one fact it
+# used to be the only detector of — hosted CI and the matrix pinning different
+# Quire CLI versions — is now asserted by TC-130 in `tests/compatibility_cli.rs`,
+# which needs nothing installed and so runs under `make rust-tests`.
+compatibility-observe:
+	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet -- compatibility-observe --root .
 
 package-audit:
 	CARGO_BUILD_JOBS=2 cargo +1.98.1 run --locked --quiet -- package-audit --root .

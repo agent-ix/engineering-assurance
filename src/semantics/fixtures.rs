@@ -23,12 +23,31 @@ use crate::compatibility_corpus::{CorpusCase, CorpusError, CorpusIndex};
 /// names; an absent or empty required member is content the corpus does not
 /// carry, which is what [`SemanticErrorKind::EmptyFixture`] names.
 fn semantic_refusal(error: &CorpusError) -> SemanticError {
+    // Every variant is named rather than swept into a catch-all. `CorpusError`
+    // is a closed enum this crate owns, so a wildcard arm would silently
+    // relabel a future variant as an encoding failure and the compiler would
+    // never say so; the one place that is visible is a caller acting on the
+    // wrong reason. Listing the variants makes adding one a compile error here,
+    // which is exactly where the decision belongs.
     let kind = match error {
         CorpusError::UnknownVersion { .. } => SemanticErrorKind::UnsupportedProtocol,
         CorpusError::MissingMember { .. }
         | CorpusError::MissingRequiredKind { .. }
         | CorpusError::EmptyMember { .. } => SemanticErrorKind::EmptyFixture,
-        _ => SemanticErrorKind::InvalidInputEncoding,
+        CorpusError::IndexTooLarge
+        | CorpusError::InvalidIndex { .. }
+        | CorpusError::DuplicateIdentity { .. }
+        | CorpusError::UnsafeRetainedPath { .. }
+        | CorpusError::InvalidRecordedDigest { .. }
+        | CorpusError::RetainedCaseWithoutPath { .. }
+        | CorpusError::RetainedCaseWithoutDigest { .. }
+        | CorpusError::ReferencedCaseWithPath { .. }
+        | CorpusError::ReferencedCaseWithDigest { .. }
+        | CorpusError::RetainedArtifactWithoutPath { .. }
+        | CorpusError::RetainedArtifactWithoutDigest { .. }
+        | CorpusError::NotRetained { .. }
+        | CorpusError::DigestMismatch { .. }
+        | CorpusError::UnknownIdentity { .. } => SemanticErrorKind::InvalidInputEncoding,
     };
     SemanticError::new(kind, format!("invalid compatibility corpus: {error}"))
 }
@@ -109,6 +128,17 @@ pub fn render_generated_fixtures(
     // that three languages then read as authoritative.
     let corpus =
         CorpusIndex::parse(compatibility_corpus_bytes).map_err(|error| semantic_refusal(&error))?;
+
+    // `parse` alone is not what the gate requires. The gate also calls
+    // `require_all_kinds`, and without the same call here a corpus that had
+    // dropped every `tampered` case — or any other required state — still
+    // rendered fixtures, which three languages then read as the full set of
+    // states they must distinguish. A generator that validates less than the
+    // gate it claims to share is a generator that can emit fixtures the gate
+    // would have refused.
+    corpus
+        .require_all_kinds()
+        .map_err(|error| semantic_refusal(&error))?;
     let cases: Vec<BTreeMap<&'static str, Value>> =
         corpus.cases.into_iter().map(generated_case).collect();
     let cases_json = serde_json::to_string(&cases).map_err(|error| {
@@ -317,6 +347,32 @@ mod tests {
                 .kind(),
             SemanticErrorKind::InvalidInputEncoding
         );
+
+        // Dropping a required state has to refuse here for the same reason.
+        // `CorpusIndex::parse` does not check the required states — the gate
+        // calls `require_all_kinds` separately — so a corpus that had lost
+        // every `tampered` case parsed cleanly and rendered a fixture set that
+        // three languages then read as the full set of states. The generator
+        // claims to read the corpus through the gate's parser; this asserts it
+        // applies the gate's whole contract and not the half of it that
+        // `parse` happens to cover.
+        for dropped in REQUIRED_KINDS {
+            let mut incomplete = valid_index();
+            incomplete["cases"] = json!(
+                incomplete["cases"]
+                    .as_array()
+                    .expect("the fictional index lists its cases")
+                    .iter()
+                    .filter(|case| case["kind"] != json!(dropped))
+                    .cloned()
+                    .collect::<Vec<Value>>()
+            );
+            let error = render_generated_fixtures(
+                &serde_json::to_vec(&incomplete).expect("index must serialize"),
+            )
+            .expect_err("a corpus missing a required state must not render fixtures");
+            assert_eq!(error.kind(), SemanticErrorKind::EmptyFixture, "{dropped}");
+        }
 
         // Every refusal arm is reachable from a real corpus error, so the
         // mapping cannot silently collapse onto one answer.

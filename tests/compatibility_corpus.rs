@@ -191,7 +191,7 @@ impl CorpusRoot {
         Ok(bytes)
     }
 
-    /// Every file the corpus retains, in stable order.
+    /// Every file the corpus retains, in stable order, under the shipping bounds.
     ///
     /// # Errors
     ///
@@ -200,8 +200,37 @@ impl CorpusRoot {
     /// [`MAX_CORPUS_DEPTH`], and [`CorpusHostError::EntryInvalid`] for an entry
     /// that is neither a regular file nor a directory.
     fn corpus_paths(&self) -> Result<Vec<PathBuf>, CorpusHostError> {
+        self.corpus_paths_within(MAX_CORPUS_ENTRIES, MAX_CORPUS_DEPTH)
+    }
+
+    /// Every file the corpus retains, under explicit population and depth bounds.
+    ///
+    /// The two bounds are parameters for the same reason [`MAX_INDEX_BYTES`] is
+    /// one on `load_index_within`: a qualification case has to drive the
+    /// refusal each bound exists for, and the only other ways to reach them are
+    /// to lower the real constants — which weakens the shipping bound to test it
+    /// — or to build a corpus of four thousand files, which nothing would be
+    /// learned from. With the bounds as parameters a case can put a tree of
+    /// known shape exactly at each limit and exactly one past it, which is what
+    /// makes a flipped comparison visible; a case that only ever refuses a wildly
+    /// oversized tree cannot tell `>` from `>=`.
+    ///
+    /// Production reads go through [`Self::corpus_paths`], which supplies
+    /// [`MAX_CORPUS_ENTRIES`] and [`MAX_CORPUS_DEPTH`] and nothing else.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CorpusHostError::PopulationTooLarge`] beyond `entries`,
+    /// [`CorpusHostError::TreeTooDeep`] beyond `depth`, and
+    /// [`CorpusHostError::EntryInvalid`] for an entry that is neither a regular
+    /// file nor a directory.
+    fn corpus_paths_within(
+        &self,
+        entries: usize,
+        depth: usize,
+    ) -> Result<Vec<PathBuf>, CorpusHostError> {
         let mut found = Vec::new();
-        self.walk(Path::new(""), 0, &mut found)?;
+        self.walk(Path::new(""), 0, entries, depth, &mut found)?;
         found.sort();
         Ok(found)
     }
@@ -210,13 +239,15 @@ impl CorpusRoot {
         &self,
         relative: &Path,
         depth: usize,
+        max_entries: usize,
+        max_depth: usize,
         found: &mut Vec<PathBuf>,
     ) -> Result<(), CorpusHostError> {
         // The depth is checked before the directory is opened, so a tree deeper
         // than the bound is refused rather than descended one more level. A
         // file-count bound alone would not stop it: the stack runs out first,
         // and a crash is not a refusal an operator can act on.
-        if depth > MAX_CORPUS_DEPTH {
+        if depth > max_depth {
             return Err(CorpusHostError::TreeTooDeep);
         }
         let listing = if relative.as_os_str().is_empty() {
@@ -241,9 +272,9 @@ impl CorpusRoot {
                 })?
                 .file_type();
             if kind.is_dir() {
-                self.walk(&child, depth + 1, found)?;
+                self.walk(&child, depth + 1, max_entries, max_depth, found)?;
             } else if kind.is_file() {
-                if found.len() >= MAX_CORPUS_ENTRIES {
+                if found.len() >= max_entries {
                     return Err(CorpusHostError::PopulationTooLarge);
                 }
                 found.push(child);
@@ -1019,5 +1050,80 @@ fn tc_103_the_confined_reader_refuses_every_escaping_or_invalid_path() {
             .expect_err("tampered bytes must refuse")
             .code(),
         "compatibility_corpus_digest_mismatch"
+    );
+}
+
+#[trace("TC-103", "FR-015-AC-5", "FR-015-CON-1")]
+#[test]
+fn tc_103_the_walk_refuses_exactly_one_file_past_its_population_bound() {
+    let (root, _index) = corpus();
+    let all = root
+        .corpus_paths()
+        .expect("the pinned corpus must enumerate under the shipping bounds");
+    let population = all.len();
+    assert!(
+        population > 1,
+        "a one-file corpus cannot distinguish a bound from its neighbour"
+    );
+
+    // Exactly at the bound the walk succeeds. This half is what catches a
+    // comparison shifted the other way: a case that only ever refuses a wildly
+    // oversized population passes whether the source reads `>=` or `>`, which
+    // is how a bound comes to look defended while nothing holds it in place.
+    assert_eq!(
+        root.corpus_paths_within(population, MAX_CORPUS_DEPTH)
+            .expect("a population exactly at the bound must be enumerated")
+            .len(),
+        population
+    );
+
+    // One file past it refuses, with its own code rather than collapsing into
+    // the generic invalid-entry answer.
+    assert_eq!(
+        root.corpus_paths_within(population - 1, MAX_CORPUS_DEPTH)
+            .expect_err("a population past the bound must refuse")
+            .code(),
+        "compatibility_corpus_population_too_large"
+    );
+}
+
+#[trace("TC-103", "FR-015-AC-5", "FR-015-CON-1")]
+#[test]
+fn tc_103_the_walk_refuses_exactly_one_directory_past_its_depth_bound() {
+    let (root, _index) = corpus();
+    let all = root
+        .corpus_paths()
+        .expect("the pinned corpus must enumerate under the shipping bounds");
+
+    // The walk descends one level per directory, so the deepest recursion a
+    // path forces is one less than its component count.
+    let deepest = all
+        .iter()
+        .map(|path| path.components().count() - 1)
+        .max()
+        .expect("the corpus retains at least one file");
+    assert!(
+        deepest > 0,
+        "a flat corpus cannot distinguish a depth bound from its neighbour"
+    );
+
+    // The depth bound exists because the file count does not bound a recursive
+    // walk: a tree that is deep rather than wide exhausts the stack, and a
+    // crash is not a refusal an operator can act on. Both halves are asserted
+    // for the same reason as the population bound above — at the bound it
+    // descends, one past it refuses — so neither removing the check nor
+    // shifting its comparison leaves this suite green.
+    assert_eq!(
+        root.corpus_paths_within(MAX_CORPUS_ENTRIES, deepest)
+            .expect("a tree exactly at the depth bound must be enumerated")
+            .len(),
+        all.len()
+    );
+
+    assert_eq!(
+        root.corpus_paths_within(MAX_CORPUS_ENTRIES, deepest - 1)
+            .expect_err("a tree past the depth bound must refuse")
+            .code(),
+        "compatibility_corpus_tree_too_deep"
     );
 }
