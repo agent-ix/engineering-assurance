@@ -260,7 +260,7 @@ fn selected_root(root: &Path) -> Result<PathBuf, PackageAuditHostError> {
                 .into_iter()
                 .filter(|source| *source != "manifest.yaml"),
         )
-        .chain(["setup.cfg"])
+        .chain(["pyproject.toml", "setup.cfg"])
         .collect::<BTreeSet<_>>();
     for source in fixed_sources {
         validate_regular_source(&root, source)?;
@@ -732,7 +732,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
+    #[trace("TC-018", "FR-003-AC-5", "TC-111", "FR-017-AC-3", "FR-017-CON-3")]
     fn npm_report_and_archive_membership_are_independent_gates() {
         let expected = vec!["one".to_owned()];
         let matching = ArchiveSnapshot {
@@ -754,6 +754,65 @@ mod tests {
         ));
         assert!(matches!(
             audit_npm_membership(&expected, &["one".to_owned()], &mismatching),
+            Err(PackageAuditHostError::MembershipMismatch)
+        ));
+    }
+
+    #[test]
+    #[trace("TC-040", "NFR-003-AC-1")]
+    fn repository_allowlists_retain_the_existing_module_roots() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let metadata_root = format!("engineering_assurance-{DISTRIBUTION_VERSION}.dist-info");
+        let wheel = ArchiveSnapshot {
+            files: vec![ArchiveFile {
+                path: format!("{metadata_root}/LICENSE"),
+                bytes: Vec::new(),
+            }],
+        };
+        let wheel_members = wheel_allowlist(root, &wheel)
+            .expect("wheel allowlist must retain the current module root");
+        for required in [
+            "engineering_assurance/manifest.yaml",
+            "engineering_assurance/contracts/",
+            "engineering_assurance/fixtures/",
+            "engineering_assurance/schemas/",
+            "engineering_assurance/skeletons/",
+        ] {
+            assert!(
+                wheel_members
+                    .iter()
+                    .any(|member| member == required.trim_end_matches('/')
+                        || member.starts_with(required)),
+                "wheel allowlist is missing {required}"
+            );
+        }
+
+        let npm_members =
+            npm_allowlist(root).expect("npm allowlist must retain the current module root");
+        for required in [
+            "engineering_assurance/manifest.yaml",
+            "contracts/",
+            "fixtures/",
+            "schemas/",
+            "skeletons/",
+        ] {
+            assert!(
+                npm_members
+                    .iter()
+                    .any(|member| member == required.trim_end_matches('/')
+                        || member.starts_with(required)),
+                "npm allowlist is missing {required}"
+            );
+        }
+    }
+
+    #[test]
+    #[trace("TC-040", "NFR-003-AC-2")]
+    fn archive_observations_cannot_enlarge_the_explicit_allowlist() {
+        let expected = ["declared".to_owned()];
+        assert!(audit_membership(&expected, &expected).is_ok());
+        assert!(matches!(
+            audit_membership(&expected, &["declared".to_owned(), "extra".to_owned()]),
             Err(PackageAuditHostError::MembershipMismatch)
         ));
     }
@@ -806,6 +865,34 @@ mod tests {
         ));
     }
 
+    #[test]
+    #[trace("TC-017", "FR-003-AC-4", "TC-111", "FR-017-AC-3")]
+    fn repository_source_install_preserves_installed_discovery() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let temporary = tempfile::tempdir().expect("temporary directory must be available");
+        let destination = temporary.path().join("repository-source-install");
+        let arguments = vec![
+            OsString::from("-m"),
+            OsString::from("pip"),
+            OsString::from("install"),
+            OsString::from("--no-index"),
+            OsString::from("--no-deps"),
+            OsString::from("--no-build-isolation"),
+            OsString::from("--target"),
+            destination.as_os_str().to_owned(),
+            OsString::from("."),
+        ];
+        let cache = temporary.path().join("pip-cache");
+        let environment =
+            package_temporary_environment(temporary.path(), Some(("PIP_CACHE_DIR", &cache)));
+        run_required_confined(OsStr::new("python3"), &arguments, root, &environment)
+            .expect("repository-source installation must succeed");
+        let installed =
+            package_install::inspect(&destination, &destination.join("engineering_assurance"))
+                .expect("repository-source installation must preserve discovery");
+        assert!(installed.canonical_file_count() > 0);
+    }
+
     #[cfg(unix)]
     #[test]
     #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
@@ -822,6 +909,40 @@ mod tests {
             .expect("fixture directory link must be created");
         assert!(matches!(
             validate_regular_source(directory.path(), "linked/source.txt"),
+            Err(PackageAuditHostError::RootInvalid)
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
+    fn wheel_build_configuration_is_a_preflighted_fixed_source() {
+        use std::os::unix::fs::symlink;
+
+        let directory = tempfile::tempdir().expect("temporary directory must be available");
+        let fixed_sources = ROOT_DATA_FILES
+            .into_iter()
+            .chain(
+                NPM_ROOT_FILES
+                    .into_iter()
+                    .filter(|source| *source != "manifest.yaml"),
+            )
+            .chain(["pyproject.toml", "setup.cfg"])
+            .collect::<BTreeSet<_>>();
+        for source in fixed_sources {
+            let path = directory.path().join(source);
+            fs::create_dir_all(path.parent().expect("fixed source must have a parent"))
+                .expect("fixed-source parent must be created");
+            fs::write(path, b"fixture").expect("fixed source must be written");
+        }
+        fs::write(directory.path().join("outside.toml"), b"[build-system]\n")
+            .expect("fixture build configuration must be written");
+        fs::remove_file(directory.path().join("pyproject.toml"))
+            .expect("regular build configuration must be removed");
+        symlink("outside.toml", directory.path().join("pyproject.toml"))
+            .expect("fixture build configuration link must be created");
+        assert!(matches!(
+            selected_root(directory.path()),
             Err(PackageAuditHostError::RootInvalid)
         ));
     }

@@ -98,7 +98,13 @@ pub(crate) fn read_npm(path: &Path) -> Result<ArchiveSnapshot, ArchiveError> {
     let file = archive_file(path)?;
     let decoder = GzDecoder::new(file);
     let mut archive = tar::Archive::new(decoder);
-    let entries = archive.entries().map_err(|_| ArchiveError::DecodeFailed)?;
+    // Raw iteration exposes extension headers instead of allowing the tar
+    // decoder to allocate and apply them before this adapter's population,
+    // member-kind, and path ceilings run.
+    let entries = archive
+        .entries()
+        .map_err(|_| ArchiveError::DecodeFailed)?
+        .raw(true);
     let mut snapshot = SnapshotBuilder::default();
     let mut entry_count = 0_usize;
     for entry in entries {
@@ -112,6 +118,9 @@ pub(crate) fn read_npm(path: &Path) -> Result<ArchiveSnapshot, ArchiveError> {
         let kind = entry.header().entry_type();
         if kind.is_dir() {
             validate_directory_name(name, Some("package/"))?;
+            if entry.size() != 0 {
+                return Err(ArchiveError::MemberKindInvalid);
+            }
             continue;
         }
         if !kind.is_file() {
@@ -362,6 +371,60 @@ mod tests {
         header.set_cksum();
         archive
             .append_data(&mut header, "package/linked", Cursor::new(Vec::new()))
+            .unwrap();
+        let gzip = archive.into_inner().unwrap();
+        gzip.finish().unwrap();
+
+        assert!(matches!(
+            read_npm(&path),
+            Err(ArchiveError::MemberKindInvalid)
+        ));
+    }
+
+    #[test]
+    #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
+    fn decoded_npm_archive_rejects_extension_headers_before_preprocessing() {
+        use flate2::{Compression, write::GzEncoder};
+        use tar::{Builder, EntryType, Header};
+
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("extension.tgz");
+        let file = File::create(&path).unwrap();
+        let gzip = GzEncoder::new(file, Compression::default());
+        let mut archive = Builder::new(gzip);
+        let mut header = Header::new_gnu();
+        header.set_entry_type(EntryType::XHeader);
+        header.set_size(12);
+        header.set_cksum();
+        archive
+            .append_data(&mut header, "pax", Cursor::new(b"12 path=one\n"))
+            .unwrap();
+        let gzip = archive.into_inner().unwrap();
+        gzip.finish().unwrap();
+
+        assert!(matches!(
+            read_npm(&path),
+            Err(ArchiveError::MemberKindInvalid)
+        ));
+    }
+
+    #[test]
+    #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
+    fn decoded_npm_archive_rejects_directory_payloads() {
+        use flate2::{Compression, write::GzEncoder};
+        use tar::{Builder, EntryType, Header};
+
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("directory-payload.tgz");
+        let file = File::create(&path).unwrap();
+        let gzip = GzEncoder::new(file, Compression::default());
+        let mut archive = Builder::new(gzip);
+        let mut header = Header::new_gnu();
+        header.set_entry_type(EntryType::Directory);
+        header.set_size(1);
+        header.set_cksum();
+        archive
+            .append_data(&mut header, "package/directory/", Cursor::new(b"x"))
             .unwrap();
         let gzip = archive.into_inner().unwrap();
         gzip.finish().unwrap();

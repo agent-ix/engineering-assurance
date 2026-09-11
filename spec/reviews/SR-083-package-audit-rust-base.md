@@ -3,7 +3,7 @@ id: SR-083
 title: "Rust package-audit adapter and governed deletion base review"
 type: SpecReview
 analysis: base
-scope: "FR-003-AC-1, FR-003-AC-2, FR-003-AC-5, FR-003-AC-6, FR-007-AC-3, FR-017-AC-3, FR-017-AC-4, FR-017-CON-2, FR-017-CON-3, FR-018-AC-2, FR-018-AC-3, FR-018-CON-1, FR-018-CON-2, TC-019, TC-037, TC-111, TC-112, TC-113, TC-114"
+scope: "FR-003-AC-1, FR-003-AC-2, FR-003-AC-4, FR-003-AC-5, FR-003-AC-6, NFR-003-AC-1, NFR-003-AC-2, FR-007-AC-3, FR-017-AC-3, FR-017-AC-4, FR-017-CON-2, FR-017-CON-3, FR-018-AC-2, FR-018-AC-3, FR-018-CON-1, FR-018-CON-2, TC-014, TC-015, TC-017, TC-018, TC-019, TC-037, TC-040, TC-111, TC-112, TC-113, TC-114"
 review_set: base
 relationships:
   - target: "ix://agent-ix/engineering-assurance/FR-003"
@@ -49,6 +49,11 @@ installation ownership; first-party acceptance decisions live in Rust.
 | FND-017 | high | **Closed after Rust review returned to `/specify`.** Naming one temporary output root did not prove that pip/npm caches, tool temporary workspaces, or new repository-root entries stayed within it. The requirement now binds package-manager cache/temp paths and requires bounded before/after top-level entry correspondence around every invocation, after the admitted npm staging cleanup. | FR-017 Behavior; TC-111 |
 | FND-018 | medium | **Closed after Rust review expanded the deletion census.** Deleting `tests/test_packages.py` would remove the only TC-019/TC-037 assertion that local/repository module and plugin installation instructions remain distinct and ordered. The deletion scope now retains those acceptance cases in a Rust test rather than silently turning their matrix rows green without an executable assertion. | FR-003-AC-6; FR-007-AC-3; TC-019; TC-037 |
 | FND-019 | high | **Closed after Rust review returned to `/specify`.** Archive validation occurs after external builders read package sources, so rejecting a linked archive member cannot undo a builder following a linked module, plugin, or pilot source outside the selected tree. FR-017 and TC-111 now require complete bounded source preflight before either builder runs. | FR-017 Behavior; TC-111 |
+| FND-020 | high | **Closed after Rust review returned to `/specify`.** Process-group termination was implemented only on Unix while the non-Unix branch silently degraded to direct-child termination, so a descendant retaining an output pipe could still make the declared deadline unbounded. The shared process adapter now fails before spawn when process-group containment is unavailable. | FR-017 Behavior; TC-111 |
+| FND-021 | high | **Closed after Rust review returned to `/specify`.** `pyproject.toml` selects the wheel build backend but was absent from the fixed-source preflight, allowing a linked build configuration to be followed before archive inspection. It is now a required regular preflighted source. | FR-017 Behavior; TC-111 |
+| FND-022 | high | **Closed after Rust review returned to `/specify`.** Default tar iteration preprocesses GNU/PAX extension headers and allocates their payloads before the adapter observes a member, bypassing the declared entry/kind/resource gate. npm archives now use raw iteration, refuse extension headers before preprocessing, count every raw header, and reject non-empty directory payloads before skipping them. | FR-017 Behavior; TC-111 |
+| FND-023 | medium | **Closed through `/specify`.** The prior “no output outside temporary directory” sentence overclaimed an operating-system sandbox and contradicted the separately accepted tool-owned compiler cache. The requirement now names the invocation-owned output classes actually confined and expressly excludes both that compiler cache and an unimplemented general package-manager sandbox. | FR-017 Behavior; FR-017-CON-2 |
+| FND-024 | high | **Closed after the governed deletion census was rerun.** Removing `tests/test_packages.py` also erased the only TC-015, TC-017, TC-018, and NFR-003 package-stability bindings even though the first review recorded only its documentation assertion. The Rust archive integration and explicit allowlist tests now carry npm and stability bindings, the membership gate carries the missing/extra refusal, and a bounded real repository-source install preserves TC-017 discovery before deletion. Aggregate traceability restores the deleted population. | FR-003-AC-1; FR-003-AC-2; FR-003-AC-4; FR-003-AC-5; NFR-003-AC-1; NFR-003-AC-2; TC-014; TC-015; TC-017; TC-018; TC-040 |
 | FND-012 | low | No open base-review finding remains. The npm package remains an approved distribution format; the adapter does not claim that it distributes a native executable or broaden the Rust-port finish line. | FR-017-CON-2; FR-017 Dependencies |
 
 ## Base checklist result
@@ -61,9 +66,10 @@ installation ownership; first-party acceptance decisions live in Rust.
 - FR-017-AC-3 remains mapped to TC-111 and cannot turn green unless real wheel
   and npm artifacts both pass. TC-112 gates exact declarative Rust dispatch;
   TC-113 and TC-114 gate same-revision removal and rollback.
-- Boundaries cover exact/over process output, archive bytes, total entry count,
-  member bytes, aggregate expansion, path bytes, installed traversal, malformed
-  reports, missing/multiple archives, every unsupported member kind, membership
+- Boundaries cover exact/over process output, archive bytes, total raw entry
+  count, member bytes, aggregate expansion, path bytes, installed traversal,
+  unavailable process-group containment, malformed reports, missing/multiple
+  archives, every unsupported member kind and extension header, membership
   drift, rights refusal, installed discovery drift, and byte divergence.
 - The reusable Rust policies remain I/O-free. Filesystem, environment, archive,
   child-process, and temporary-directory capabilities remain in explicit

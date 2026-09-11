@@ -265,10 +265,10 @@ checking, manifest validation, and qualification assertions to Rust.
   traversal remain responsibilities of later binary adapters.
 - The package-audit adapter SHALL require an explicit existing non-symbolic-link
   repository root.
-- When the complete `engineering_assurance` source tree or a fixed
-  root/plugin/pilot package source contains a missing, linked, special, unsafe,
-  or over-limit entry, the package-audit adapter SHALL reject the root before
-  invoking a builder.
+- When the complete `engineering_assurance` source tree, `pyproject.toml`,
+  `setup.cfg`, or another fixed root/plugin/pilot package source contains a
+  missing, linked, special, unsafe, or over-limit entry, the package-audit
+  adapter SHALL reject the root before invoking a builder.
 - The package-audit adapter SHALL NOT treat a later archive observation as
   retroactive authorization for a source the builder already followed.
 - The package-audit adapter SHALL create all package-builder outputs,
@@ -300,6 +300,9 @@ checking, manifest validation, and qualification assertions to Rust.
   invocation-owned process group and
   terminate that group before joining captured output on timeout or after the
   direct child exits.
+- When the host cannot provide invocation-owned process-group isolation and
+  descendant termination, the package-audit adapter SHALL fail before spawning
+  a package-manager child.
 - Each package-audit child process SHALL produce no more than 8,388,608 bytes
   on either stdout or stderr.
 - The package-audit adapter SHALL fail an unavailable, timed-out, unsuccessful,
@@ -315,9 +318,12 @@ checking, manifest validation, and qualification assertions to Rust.
   backslash-delimited, empty-segment, dot-segment, parent-traversing,
   control-character, over-4,096-byte, or duplicate file-member name.
 - The package-audit adapter SHALL reject symbolic-link, hard-link, device,
-  FIFO, socket, or otherwise unsupported archive members.
+  FIFO, socket, tar extension-header, or otherwise unsupported archive members.
+- The package-audit adapter SHALL iterate npm tar members without extension-
+  header preprocessing so that every raw header is subject to the entry and
+  kind ceilings before decoder allocation or path substitution.
 - The package-audit adapter SHALL skip a directory entry only after validating
-  its name and kind.
+  its name and kind and confirming that its declared payload size is zero.
 - The wheel file-member population SHALL equal the retained package-root,
   fixed data-file, and fixed distribution-metadata contract.
 - The wheel SHALL contain exactly one of the admitted wheel license locations.
@@ -358,8 +364,12 @@ checking, manifest validation, and qualification assertions to Rust.
   both installations pass.
 - A typed package-audit adapter failure SHALL return status two and write no
   success result.
-- At package-audit return, the package-audit adapter SHALL leave no output
-  outside its invocation-owned temporary directory.
+- At package-audit return, the package-audit adapter SHALL leave no invocation-
+  created distribution, package-manager cache, package-manager temporary,
+  installation, or npm-staging output outside its invocation-owned temporary
+  directory; the separately declared tool-owned compiler cache is not such an
+  output and this rule does not claim operating-system sandboxing of external
+  package managers.
 - The adapter SHALL compare the selected repository's top-level entry
   population before and after each package-manager invocation, after exact npm
   staging cleanup where applicable, and SHALL fail closed if a process creates,
