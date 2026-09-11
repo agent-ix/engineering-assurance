@@ -6,7 +6,8 @@
 use std::{
     collections::BTreeSet,
     ffi::{OsStr, OsString},
-    fs,
+    fs::{self, OpenOptions},
+    io::{Read, Write},
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -31,7 +32,8 @@ use crate::{
 const PACKAGE_PROCESS_TIMEOUT: Duration = Duration::from_secs(180);
 const MAX_PROCESS_OUTPUT_BYTES: usize = 8_388_608;
 const MAX_ROOT_ENTRIES: usize = 4_096;
-const DISTRIBUTION_VERSION: &str = "0.2.0";
+const MAX_WHEEL_SOURCE_BYTES: usize = 67_108_864;
+const DISTRIBUTION_VERSION: &str = "0.2.1";
 const PRIVATE_CLASSIFIER: &[u8] = b"Classifier: Private :: Do Not Upload\n";
 const ROOT_DATA_FILES: [&str; 11] = [
     ".claude-plugin/plugin.json",
@@ -64,6 +66,8 @@ pub(crate) enum PackageAuditHostError {
     RootInvalid,
     #[error("package-audit temporary directory is unavailable")]
     TemporaryDirectoryUnavailable,
+    #[error("package-audit wheel source staging failed")]
+    SourceStagingFailed,
     #[error("package-audit protected-token input is invalid")]
     ProtectedTokensInvalid,
     #[error("package-audit child process is unavailable")]
@@ -111,6 +115,7 @@ impl PackageAuditHostError {
         match self {
             Self::RootInvalid => "package_audit_root_invalid",
             Self::TemporaryDirectoryUnavailable => "package_audit_temporary_directory_unavailable",
+            Self::SourceStagingFailed => "package_audit_source_staging_failed",
             Self::ProtectedTokensInvalid => "package_audit_protected_tokens_invalid",
             Self::ProcessUnavailable => "package_audit_process_unavailable",
             Self::ProcessTimedOut => "package_audit_process_timed_out",
@@ -289,6 +294,7 @@ fn validate_regular_source(root: &Path, relative: &str) -> Result<(), PackageAud
 }
 
 fn build_wheel(root: &Path, output: &Path) -> Result<(), PackageAuditHostError> {
+    let source = stage_wheel_source(root, output)?;
     let arguments = vec![
         OsString::from("-m"),
         OsString::from("pip"),
@@ -301,7 +307,99 @@ fn build_wheel(root: &Path, output: &Path) -> Result<(), PackageAuditHostError> 
     ];
     let cache = output.join("pip-cache");
     let environment = package_temporary_environment(output, Some(("PIP_CACHE_DIR", &cache)));
-    run_required_confined(OsStr::new("python3"), &arguments, root, &environment).map(|_| ())
+    let root_before = root_population(root)?;
+    let process = invoke(OsStr::new("python3"), &arguments, &source, &environment);
+    ensure_root_unchanged(root, &root_before)?;
+    let process = process?;
+    if !process.status.success() {
+        return Err(PackageAuditHostError::ProcessFailed);
+    }
+    Ok(())
+}
+
+fn stage_wheel_source(root: &Path, output: &Path) -> Result<PathBuf, PackageAuditHostError> {
+    let source = output.join("wheel-source");
+    fs::create_dir(&source).map_err(|_| PackageAuditHostError::SourceStagingFailed)?;
+    let package = package_install::inspect_tree(&root.join("engineering_assurance"))
+        .map_err(|_| PackageAuditHostError::SourceStagingFailed)?;
+    let mut total_bytes = 0_usize;
+    for (relative, bytes) in package
+        .files
+        .iter()
+        .filter(|(path, _)| !path.split('/').any(|component| component == "__pycache__"))
+    {
+        add_wheel_source_bytes(&mut total_bytes, bytes.len())?;
+        write_wheel_source(
+            &source.join("engineering_assurance"),
+            Path::new(relative),
+            bytes,
+        )?;
+    }
+    for relative in ["pyproject.toml", "setup.cfg", "README.md", "LICENSE"]
+        .into_iter()
+        .chain(ROOT_DATA_FILES)
+    {
+        let bytes = read_wheel_source(root, relative)?;
+        add_wheel_source_bytes(&mut total_bytes, bytes.len())?;
+        write_wheel_source(&source, Path::new(relative), &bytes)?;
+    }
+    Ok(source)
+}
+
+fn read_wheel_source(root: &Path, relative: &str) -> Result<Vec<u8>, PackageAuditHostError> {
+    validate_regular_source(root, relative)?;
+    let path = root.join(relative);
+    let metadata =
+        fs::symlink_metadata(&path).map_err(|_| PackageAuditHostError::SourceStagingFailed)?;
+    let expected =
+        usize::try_from(metadata.len()).map_err(|_| PackageAuditHostError::SourceStagingFailed)?;
+    if expected > MAX_PROCESS_OUTPUT_BYTES {
+        return Err(PackageAuditHostError::SourceStagingFailed);
+    }
+    let input = fs::File::open(path).map_err(|_| PackageAuditHostError::SourceStagingFailed)?;
+    let limit = u64::try_from(MAX_PROCESS_OUTPUT_BYTES)
+        .unwrap_or(u64::MAX)
+        .saturating_add(1);
+    let mut bytes = Vec::with_capacity(expected);
+    input
+        .take(limit)
+        .read_to_end(&mut bytes)
+        .map_err(|_| PackageAuditHostError::SourceStagingFailed)?;
+    if bytes.len() != expected || bytes.len() > MAX_PROCESS_OUTPUT_BYTES {
+        return Err(PackageAuditHostError::SourceStagingFailed);
+    }
+    Ok(bytes)
+}
+
+fn add_wheel_source_bytes(total: &mut usize, length: usize) -> Result<(), PackageAuditHostError> {
+    *total = total
+        .checked_add(length)
+        .ok_or(PackageAuditHostError::SourceStagingFailed)?;
+    if *total > MAX_WHEEL_SOURCE_BYTES {
+        return Err(PackageAuditHostError::SourceStagingFailed);
+    }
+    Ok(())
+}
+
+fn write_wheel_source(
+    root: &Path,
+    relative: &Path,
+    bytes: &[u8],
+) -> Result<(), PackageAuditHostError> {
+    let destination = root.join(relative);
+    let parent = destination
+        .parent()
+        .ok_or(PackageAuditHostError::SourceStagingFailed)?;
+    fs::create_dir_all(parent).map_err(|_| PackageAuditHostError::SourceStagingFailed)?;
+    let mut output = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(destination)
+        .map_err(|_| PackageAuditHostError::SourceStagingFailed)?;
+    output
+        .write_all(bytes)
+        .and_then(|()| output.sync_all())
+        .map_err(|_| PackageAuditHostError::SourceStagingFailed)
 }
 
 fn install_wheel(
@@ -870,6 +968,8 @@ mod tests {
     fn repository_source_install_preserves_installed_discovery() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let temporary = tempfile::tempdir().expect("temporary directory must be available");
+        let source = stage_wheel_source(root, temporary.path())
+            .expect("repository source must stage outside the selected root");
         let destination = temporary.path().join("repository-source-install");
         let arguments = vec![
             OsString::from("-m"),
@@ -885,8 +985,18 @@ mod tests {
         let cache = temporary.path().join("pip-cache");
         let environment =
             package_temporary_environment(temporary.path(), Some(("PIP_CACHE_DIR", &cache)));
-        run_required_confined(OsStr::new("python3"), &arguments, root, &environment)
-            .expect("repository-source installation must succeed");
+        let before = root_population(root).expect("repository root must be inspectable");
+        let process = invoke(OsStr::new("python3"), &arguments, &source, &environment)
+            .expect("repository-source installation must be observable");
+        assert!(
+            process.status.success(),
+            "{}",
+            String::from_utf8_lossy(&process.stderr)
+        );
+        assert_eq!(
+            root_population(root).expect("repository root must remain inspectable"),
+            before
+        );
         let installed =
             package_install::inspect(&destination, &destination.join("engineering_assurance"))
                 .expect("repository-source installation must preserve discovery");

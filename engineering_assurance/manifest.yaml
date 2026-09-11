@@ -1,6 +1,6 @@
 manifest_version: 1.0.0
 name: engineering-assurance
-version: 0.2.0
+version: 0.2.1
 description: Original decision-boundary and evidence-authoring contracts
 nav:
   category:

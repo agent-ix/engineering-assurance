@@ -183,12 +183,12 @@ Quire unavailability during staged publication refuses publication.
 
 - **Upstream**: FR-001 through FR-005, FR-014, FR-015, and an ix-flow interface
   supported by the ix-flow owner.
-- **Compatibility gate**: ix-flow 0.2.3 is the current released candidate and
+- **Compatibility gate**: ix-flow 0.2.3 is the accepted released pin and
   retains the required JSON envelope, optimistic concurrency, resume, and
-  human-gate contracts. The additive Rust adapter may be prepared against that
-  candidate, but no enforcing migration or legacy removal begins until
-  [FR-012](./FR-012-pinned-compatibility-matrix.md) records human acceptance of
-  a matrix that pins it.
+  human-gate contracts. [FR-012](./FR-012-pinned-compatibility-matrix.md)
+  records Peter Krenesky's 2026-09-10 acceptance after TC-107 passed locally;
+  any enforcing migration or legacy removal still requires its own acceptance
+  evidence.
 - **Downstream**: FR-018 governs removal of the old paths.
 - **Sequence**: FR-016-AC-2 is an independently reviewable additive slice. It
   does not authorize the host bridge or JavaScript removal required by

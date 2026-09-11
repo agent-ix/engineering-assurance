@@ -48,7 +48,7 @@ def shared_manifest_schema() -> Path | None:
 def main() -> int:
     manifest = yaml.safe_load((PACKAGE / "manifest.yaml").read_text())
     assert manifest["name"] == "engineering-assurance"
-    assert manifest["version"] == "0.2.0"
+    assert manifest["version"] == "0.2.1"
     shared = shared_manifest_schema()
     if shared is None:
         raise SystemExit("shared module manifest schema is unavailable")

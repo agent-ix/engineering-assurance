@@ -46,7 +46,7 @@ def schema(name: str) -> dict:
 
 def test_module_inventory_is_exact() -> None:
     data = manifest()
-    assert data["version"] == "0.2.0"
+    assert data["version"] == "0.2.1"
     assert [item["name"] for item in data["artifact_types"]] == [
         "AssuranceProfile",
         "MeasurementPlan",
