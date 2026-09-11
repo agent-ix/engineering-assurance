@@ -13,12 +13,14 @@
 pub mod compatibility;
 #[cfg(feature = "full")]
 pub mod compatibility_corpus;
+#[cfg(feature = "full")]
 pub mod content_rights;
 #[cfg(feature = "full")]
 pub mod discovery;
 pub mod evaluation;
 #[cfg(feature = "full")]
 pub mod evaluation_reports;
+#[cfg(feature = "full")]
 pub mod evidence;
 #[cfg(feature = "full")]
 pub mod manifest;
