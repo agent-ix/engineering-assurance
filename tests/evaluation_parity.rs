@@ -1,12 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-//! Additive-migration parity and adverse coverage for evaluation aggregation.
-
-use std::{
-    io::Write,
-    process::{Command, Stdio},
-};
+//! Native Rust coverage and adverse cases for evaluation aggregation.
 
 use engineering_assurance::{
     evaluation::{
@@ -17,44 +12,10 @@ use engineering_assurance::{
     workflow::{DecisionChoice, DecisionEvent},
 };
 use ix_trace_rs::trace;
-use serde_json::{Value, json};
+use serde_json::json;
 
 const DIGEST: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const SOURCE_REVISION: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-
-const PYTHON_REFERENCE: &str = r#"
-import json
-import sys
-from dataclasses import asdict
-from engineering_assurance.evaluation import EvaluationEnvelope, aggregate_evaluations
-from engineering_assurance.evidence import GoverningVersions, VersionIdentity
-from engineering_assurance.workflow import DecisionEvent
-
-def identity(value):
-    return VersionIdentity(**value)
-
-def governing(value):
-    if value is None:
-        return None
-    return GoverningVersions(**{key: identity(item) for key, item in value.items()})
-
-def terminal(value):
-    return None if value is None else DecisionEvent(**value)
-
-def envelope(value):
-    value = dict(value)
-    value["governing"] = governing(value.get("governing"))
-    value["terminal_event"] = terminal(value.get("terminal_event"))
-    value["unsupported_additions"] = tuple(value["unsupported_additions"])
-    return EvaluationEnvelope(**value)
-
-matrices = json.load(sys.stdin)
-results = []
-for matrix in matrices:
-    result = aggregate_evaluations([envelope(item) for item in matrix])
-    results.append(asdict(result))
-print(json.dumps(results, separators=(",", ":")))
-"#;
 
 fn identity(name: &str) -> VersionIdentity {
     VersionIdentity {
@@ -154,43 +115,9 @@ fn changed(
     result
 }
 
-fn python_results(matrices: &[Vec<EvaluationEnvelope>]) -> Vec<Value> {
-    let mut child = Command::new("python3")
-        .args(["-c", PYTHON_REFERENCE])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("retained Python evaluator must start during additive migration");
-    child
-        .stdin
-        .take()
-        .expect("piped stdin must exist")
-        .write_all(&serde_json::to_vec(matrices).expect("matrix fixtures must serialize"))
-        .expect("matrix fixtures must be writable");
-    let output = child.wait_with_output().expect("evaluator must terminate");
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    serde_json::from_slice(&output.stdout).expect("reference results must be JSON")
-}
-
-fn rust_result_without_protocol(matrix: &[EvaluationEnvelope]) -> Value {
-    let result = aggregate_evaluations(matrix);
-    json!({
-        "ok": result.ok,
-        "required_cells": result.required_cells,
-        "complete_cells": result.complete_cells,
-        "failures": result.failures,
-    })
-}
-
 #[test]
 #[trace("TC-110", "FR-017-AC-2", "FR-017-CON-1", "FR-017-CON-3")]
-fn complete_matrix_matches_retained_aggregation() {
+fn complete_matrix_preserves_declared_aggregation_outcomes() {
     let complete = complete_matrix();
     let mut missing = complete.clone();
     missing.pop();
@@ -205,13 +132,33 @@ fn complete_matrix_matches_retained_aggregation() {
         item.passed = false;
         item.diagnostic = Some("executable-not-found".to_owned());
     });
-    let matrices = vec![complete, missing, duplicate, failed, drifted, unavailable];
-    let expected = python_results(&matrices);
-    let observed = matrices
-        .iter()
-        .map(|matrix| rust_result_without_protocol(matrix))
-        .collect::<Vec<_>>();
-    assert_eq!(observed, expected);
+    let complete_result = aggregate_evaluations(&complete);
+    assert_eq!(complete_result.required_cells, 28);
+    assert_eq!(complete_result.complete_cells, 28);
+    assert!(complete_result.ok);
+    assert!(complete_result.failures.is_empty());
+
+    let cases = [
+        (missing, 27, "missing:copilot:human-rejection"),
+        (duplicate, 27, "duplicate:claude:existing-profile"),
+        (failed, 27, "scenario-failed"),
+        (drifted, 28, "matrix-source-revision-mismatch"),
+        (unavailable, 27, "scenario-not-executed"),
+    ];
+    for (matrix, complete_cells, failure) in cases {
+        let result = aggregate_evaluations(&matrix);
+        assert!(!result.ok, "{failure} must withhold aggregation");
+        assert_eq!(result.required_cells, 28);
+        assert_eq!(result.complete_cells, complete_cells);
+        assert!(
+            result
+                .failures
+                .iter()
+                .any(|item| item.to_string().contains(failure)),
+            "{failure} absent from {:?}",
+            result.failures
+        );
+    }
 }
 
 #[test]

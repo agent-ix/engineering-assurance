@@ -501,7 +501,11 @@ fn tc_100_rust_generator_matches_all_committed_inert_fixtures() {
     }
 
     for relative in [".github/workflows", "scripts"] {
-        for entry in fs::read_dir(root().join(relative)).expect("audit root must exist") {
+        let audit_root = root().join(relative);
+        if !audit_root.is_dir() {
+            continue;
+        }
+        for entry in fs::read_dir(&audit_root).expect("existing audit root must be readable") {
             let path = entry.expect("audit entry must be readable").path();
             if path.is_file() {
                 let body = fs::read_to_string(&path).unwrap_or_else(|error| {

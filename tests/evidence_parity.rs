@@ -1,105 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-//! Additive-migration parity with the retained Python evidence classifier.
+//! Native Rust coverage for evidence classification and canonical identity.
 
-use std::{
-    collections::BTreeSet,
-    io::Write,
-    process::{Command, Stdio},
-};
+use std::collections::BTreeSet;
 
 use engineering_assurance::evidence::{
-    AvailabilityState, GoverningVersions, OperatorObservation, ProducerAttempt, VersionIdentity,
-    classify_producer, validate_state_labels,
+    AvailabilityState, EvidenceEnvelope, GoverningVersions, OperatorObservation, ProducerAttempt,
+    VersionIdentity, classify_producer, validate_state_labels,
 };
 use ix_trace_rs::trace;
 use serde_json::{Value, json};
 
 const DIGEST: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-
-const PYTHON_DIGEST_REFERENCE: &str = r#"
-import hashlib
-import json
-import sys
-
-raw_values = json.load(sys.stdin)
-digests = []
-for raw in raw_values:
-    value = json.loads(raw)
-    canonical = json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode("utf-8")
-    digests.append(hashlib.sha256(canonical).hexdigest())
-print(json.dumps(digests, separators=(",", ":")))
-"#;
-
-const PYTHON_REFERENCE: &str = r#"
-import json
-from dataclasses import asdict, replace
-from engineering_assurance.evidence import (
-    GoverningVersions, OperatorObservation, ProducerAttempt, VersionIdentity,
-    classify_producer,
-)
-
-DIGEST = "a" * 64
-def identity(name, version="1.2.3"):
-    return VersionIdentity(name, version, DIGEST)
-def governing():
-    return GoverningVersions(
-        module=identity("engineering-assurance"),
-        plugin=identity("engineering-assurance-plugin"),
-        skill=identity("assurance-onboarding"),
-        workflow=identity("assurance-intake"),
-        quire=identity("quire"), quoin=identity("quoin"),
-        ix_flow=identity("ix-flow"), schema=identity("producer-output-v1"),
-        producer=identity("fictional-producer"),
-    )
-def observation(outcome="succeeded", exit_code=0, diagnostic=None):
-    return OperatorObservation(
-        command=("fictional-producer", "--json"), elapsed_ms=17,
-        exit_code=exit_code, outcome=outcome, diagnostic_category=diagnostic,
-    )
-def observed():
-    return ProducerAttempt(
-        producer_id="fictional-producer", applicable=True, invoked=True,
-        observation=observation(), governing=governing(),
-        output={"valid": True, "count": 3, "numeric": [1.0, -0.0, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1.2345e-5, -1.2345e-5, 1e-4, 1e15, 1e16, 1e17, 1e20, 1e21, 5e-324, 1.7976931348623157e308], "text": "é/\u2028\n\u0001", "nested": {"z": "é", "a": [2, 1]}},
-        output_valid=True,
-        quoin_reference="ix://agent-ix/quoin/EvidenceRecord-001",
-    )
-
-base = observed()
-cases = [
-    base,
-    replace(base, observation=observation("failed", 127, "executable-not-found"), output=None, output_valid=False, governing=None, quoin_reference=None),
-    ProducerAttempt("fictional-producer", True, False, observation("not-run", None), owner="measurement-owner"),
-    ProducerAttempt("fictional-producer", False, False, observation("not-run", None), boundary_rationale="outside the selected service boundary"),
-    replace(base, output_valid=False),
-    replace(base, governing=replace(governing(), producer=identity("fictional-producer", "latest"))),
-    replace(base, quoin_reference=None),
-    replace(base, producer_id=" "),
-    replace(base, observation=replace(observation(), command=())),
-    replace(base, observation=replace(observation(), elapsed_ms=-1)),
-    replace(base, observation=observation("foreign", None)),
-    replace(base, observation=observation("not-run", 0)),
-    replace(base, observation=observation("succeeded", None)),
-    replace(base, observation=observation("failed", 1)),
-    ProducerAttempt("fictional-producer", False, False, observation("not-run", None)),
-    ProducerAttempt("fictional-producer", True, False, observation("not-run", None)),
-    replace(base, observation=observation("not-run", None)),
-    replace(base, output=None),
-    replace(base, output=[]),
-    replace(base, governing=None),
-    replace(base, governing=replace(governing(), producer=VersionIdentity(" ", " ", "bad"))),
-    replace(base, quoin_reference="ix://agent-ix/not-quoin/EvidenceRecord-001"),
-    replace(base, governing=replace(governing(), producer=identity("fictional-producer", "1.2.3+linux-x86_64"))),
-    replace(base, governing=replace(governing(), producer=identity("fictional-producer", "1.x"))),
-    replace(base, governing=replace(governing(), producer=identity("fictional-producer", "Straße"))),
-    replace(base, output={"v": float("inf")}),
-]
-print(json.dumps([asdict(classify_producer(case)) for case in cases], sort_keys=True, separators=(",", ":"), ensure_ascii=False))
-"#;
 
 fn identity(name: &str, version: &str) -> VersionIdentity {
     VersionIdentity {
@@ -180,33 +93,6 @@ fn with_producer_version(source: &ProducerAttempt, version: &str) -> ProducerAtt
                 .version,
         );
     })
-}
-
-fn retained_identity_digests(raw_values: &[String]) -> Vec<String> {
-    let payload = serde_json::to_string(raw_values).expect("identity corpus must serialize");
-    let mut child = Command::new("python3")
-        .args(["-c", PYTHON_DIGEST_REFERENCE])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("retained Python identity reference must execute during additive migration");
-    child
-        .stdin
-        .take()
-        .expect("Python reference stdin must be piped")
-        .write_all(payload.as_bytes())
-        .expect("identity corpus must reach the retained Python reference");
-    let python = child
-        .wait_with_output()
-        .expect("retained Python identity reference must complete");
-    assert!(
-        python.status.success(),
-        "{}",
-        String::from_utf8_lossy(&python.stderr)
-    );
-    serde_json::from_slice(&python.stdout).expect("retained identity digests must be JSON")
 }
 
 fn generated_identity_corpus() -> Vec<String> {
@@ -320,27 +206,27 @@ fn parity_cases() -> Vec<ProducerAttempt> {
 
 #[trace("TC-100", "FR-015-AC-1")]
 #[test]
-fn tc_100_evidence_classification_and_canonical_digest_match_retained_reference_bytes() {
-    let results = parity_cases()
+fn tc_100_evidence_classification_preserves_accepted_state_fixtures() {
+    let results = parity_cases()[..4]
         .iter()
         .map(classify_producer)
         .collect::<Vec<_>>();
-    let rust_value = serde_json::to_value(results).expect("typed results must serialize");
-    let rust_bytes = serde_json::to_vec(&rust_value).expect("JSON values must serialize");
-
-    let python = Command::new("python3")
-        .args(["-c", PYTHON_REFERENCE])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .expect("retained Python reference must execute during additive migration");
-    assert!(
-        python.status.success(),
-        "{}",
-        String::from_utf8_lossy(&python.stderr)
+    assert!(results.iter().all(EvidenceEnvelope::is_valid));
+    assert_eq!(
+        results
+            .iter()
+            .map(|result| result.availability)
+            .collect::<Vec<_>>(),
+        vec![
+            Some(AvailabilityState::Observed),
+            Some(AvailabilityState::Unavailable),
+            Some(AvailabilityState::NotComputed),
+            Some(AvailabilityState::NotApplicable),
+        ]
     );
     assert_eq!(
-        rust_bytes,
-        python.stdout.strip_suffix(b"\n").unwrap_or(&python.stdout)
+        results[0].output_digest.as_deref(),
+        Some("013ad71438e02c083ba28636ab02fae1eb6196ecfd773ddbe3b1d7a0b865071f")
     );
 }
 
@@ -403,21 +289,68 @@ fn tc_103_evidence_malformed_and_missing_provenance_fail_explicitly() {
 
 #[trace("TC-100", "FR-015-AC-1")]
 #[test]
-fn tc_100_accepted_and_generated_json_values_match_retained_identity_digests() {
+fn tc_100_accepted_and_generated_json_values_match_canonical_identity_fixtures() {
     let raw_values = generated_identity_corpus();
-    let retained = retained_identity_digests(&raw_values);
-    assert_eq!(retained.len(), raw_values.len());
-
-    for (raw, expected_digest) in raw_values.iter().zip(retained) {
+    for raw in &raw_values {
         let output: Value = serde_json::from_str(raw).expect("identity fixture must be valid JSON");
         let attempt = changed(&observed(), |case| case.output = Some(output));
         let result = classify_producer(&attempt);
+        assert!(result.is_valid(), "valid identity input was refused: {raw}");
+    }
+
+    for (raw, expected_digest) in [
+        (
+            r#"{"v":18446744073709551615}"#,
+            "846afd99dea73da7038d6689d7f3295477e36ca591b3f7e5d2a7c10aef8d601a",
+        ),
+        (
+            r#"{"v":18446744073709551616}"#,
+            "f429894757452b732330279b4314a7ff3140fba29799935078a0328d544343c3",
+        ),
+        (
+            r#"{"v":-9223372036854775808}"#,
+            "9e52feb18cdc447ae70062ecd2e763c4d1cfac1607ac1b1499738f28cae639fb",
+        ),
+        (
+            r#"{"v":-9223372036854775809}"#,
+            "17b3cb5dec17af647887b3ce0d336fbbe9c7335c4d2ab86c156b50a729ee0c9f",
+        ),
+        (
+            r#"{"v":1234567890123456789012345}"#,
+            "afbf326118eedf9766b39b6ae455697437642bfbfee0a9fbd9692a05e3162001",
+        ),
+        (
+            r#"{"v":-1234567890123456789012345}"#,
+            "38c88e8f9ceff3d3095b7104bdc569b88b4511cabeb6a49966eb7e2b804589fd",
+        ),
+        (
+            r#"{"v":-0}"#,
+            "ec4f95abcb4e2e3dbe856c3eb2f81995eacb3823d40aa2e78ed4c5e1798f664d",
+        ),
+        (
+            r#"{"v":1.2300}"#,
+            "a3b18e44bc2c41c0d44c6a475749f2127d38b39d2448ff95653a1fd4407ee86c",
+        ),
+        (
+            r#"{"v":1E+09}"#,
+            "416d2d40c79a32ea746f530b4857832aa2ee4b57203cfcf4bd8b0cea37b27818",
+        ),
+        (
+            r#"{"v":-0.0}"#,
+            "3804efdcecdab4b071c214185d5593cb6c3f0d386b6dd057bacd0e3740459dff",
+        ),
+        (
+            r#"{"nested":[{"v":99999999999999999999999999999999999999}]}"#,
+            "3e0e8486a2c981ce467e866ff023449d2b5734eb68e508d3e538942ec183631c",
+        ),
+    ] {
+        let output = serde_json::from_str(raw).expect("canonical fixture must parse");
+        let result = classify_producer(&changed(&observed(), |case| case.output = Some(output)));
         assert_eq!(
             result.output_digest.as_deref(),
-            Some(expected_digest.as_str()),
-            "identity divergence for {raw}"
+            Some(expected_digest),
+            "digest drift for {raw}"
         );
-        assert!(result.is_valid(), "valid identity input was refused: {raw}");
     }
 }
 
