@@ -10,10 +10,14 @@ type: TestMatrix
 
 This matrix records completed verification for the canonical assurance-onboarding
 and verification-semantics baseline and planned verification for the proposed
-Rust port. TC-001..TC-095 have passing repository or retained real-agent
-evidence. TC-096..TC-121 are staged: completed slices are identified explicitly,
-while aggregate port cases remain pending until every named capability is
-implemented and reviewed.
+Rust port. Each row states the evidence it holds rather than an aggregate
+promise: a row marked ✅ carries at least one tracking tag that `quire coverage`
+reconciles to a test in this repository, and a row marked 🚧 names what is
+still missing. A criterion whose only verification method is a live
+agent-behaviour evaluation stays 🚧 while no evaluation aggregate is retained
+here, because nothing in this repository can re-run it. TC-096..TC-121 are
+staged: completed slices are identified explicitly, while aggregate port cases
+remain pending until every named capability is implemented and reviewed.
 
 ## Test Matrix Rules
 
@@ -138,7 +142,7 @@ implemented and reviewed.
 | Non-Functional Req | Verification Method | Evidence/Test Cases | Status |
 |--------------------|---------------------|---------------------|--------|
 | NFR-001 | Install, discovery, digest comparison, and static scan | TC-038 | ✅ Passing |
-| NFR-002 | Agent evaluation against fixture-authorized outcomes | TC-039 | ✅ Passing |
+| NFR-002 | Agent evaluation against fixture-authorized outcomes | TC-039 | 🚧 No evaluation aggregate is retained in this repository, so no test here decides the three measured counts; the aggregate gate that refuses an unsupported addition or an inferred terminal decision is backed by TC-032, TC-034, and TC-049 |
 | NFR-003 | Wheel/npm member audit plus compatibility invocation | TC-040 | ✅ Passing |
 | NFR-005 | Exact toolchain build, unsafe audit, executable-path audit, and Quire reconciliation | TC-115..TC-118 | 🚧 Pending implementation |
 
@@ -158,6 +162,7 @@ implemented and reviewed.
 | FR-015-CON-1 | TC-076, TC-103 | 🚧 Read-only corpus, evidence, and semantic/PGM slices backed; aggregate pending |
 | FR-015-CON-2 | TC-104 | 🚧 Inert generated-fixture slice backed natively against the committed projections; aggregate pending |
 | FR-015-CON-3 | TC-104 | 🚧 Semantic-contract slice backed; aggregate pending |
+| FR-015-CON-4 | TC-103 | 🚧 Index-byte and retained-path ceilings backed; the retained-byte, entry-count, and nesting-depth ceilings are unexercised |
 | FR-016-CON-1 | TC-107 | ✅ Delegated ix-flow state/chain behavior passes against accepted ix-flow 0.2.3 |
 | FR-016-CON-2 | TC-115 | 🚧 Pending owner disposition |
 | FR-016-CON-3 | TC-106 | ✅ Deterministic I/O-free Rust evaluator backed |
@@ -194,38 +199,38 @@ implemented and reviewed.
 | TC-017 | Repository-source installation preserves discovery | Integration | P0 | FR-003-AC-4 | ✅ |
 | TC-018 | Unexpected, missing, or escaping package content fails audit | Unit | P0 | FR-003-AC-5 | ✅ |
 | TC-019 | Module/plugin and local/repository install procedures are distinct | Static | P1 | FR-003-AC-6 | ✅ |
-| TC-020 | Observed producer retains the complete immutable governing-version tuple | E2E | P0 | FR-004-AC-1, US-004-EX-2 | ✅ |
-| TC-021 | Invocation failure remains unavailable | E2E | P0 | FR-004-AC-2, US-004-EX-1 | ✅ |
+| TC-020 | Observed producer retains the complete immutable governing-version tuple | Unit | P0 | FR-004-AC-1, US-004-EX-2 | ✅ |
+| TC-021 | Invocation failure remains unavailable | Unit | P0 | FR-004-AC-2, US-004-EX-1 | ✅ |
 | TC-022 | Deferred producer remains not computed | Unit | P1 | FR-004-AC-3 | ✅ |
 | TC-023 | Excluded producer remains not applicable | Unit | P1 | FR-004-AC-4 | ✅ |
-| TC-024 | Malformed output or missing/mutable provenance fails validation | E2E | P0 | FR-004-AC-5 | ✅ |
-| TC-025 | Persisted evidence delegates to Quoin | Integration | P0 | FR-004-AC-6 | ✅ |
+| TC-024 | Malformed output or missing/mutable provenance fails validation | Unit | P0 | FR-004-AC-5 | ✅ |
+| TC-025 | Persisted evidence delegates to Quoin | Unit | P0 | FR-004-AC-6 | ✅ |
 | TC-026 | Interrupted ix-flow run resumes without repetition | Integration | P0 | FR-005-AC-1, US-003-EX-1 | ✅ |
 | TC-027 | All terminal transitions remain human gated | Static | P0 | FR-005-AC-2 | ✅ |
 | TC-028 | Explicit rejection records one attributed event and no success state | Integration | P0 | FR-005-AC-3, US-003-EX-2 | ✅ |
 | TC-029 | Missing human choice leaves run non-terminal | Integration | P0 | FR-005-AC-4 | ✅ |
 | TC-030 | Automatic terminal-gate override fails closed | Unit | P0 | FR-005-AC-5 | ✅ |
 | TC-031 | Evaluation suite executes all five classes and seven variants on four hosts | E2E | P0 | FR-006-AC-1 | ✅ |
-| TC-032 | Evaluation envelopes retain versions, transcript digests, effort, and outcomes | Property | P0 | FR-006-AC-2 | ✅ |
-| TC-033 | Missing executable fails aggregate gate | E2E | P0 | FR-006-AC-3 | ✅ |
-| TC-034 | Aggregate passes only for complete passing scenarios | Property | P0 | FR-006-AC-4 | ✅ |
+| TC-032 | Evaluation envelopes retain versions, transcript digests, effort, and outcomes | Unit | P0 | FR-006-AC-2 | ✅ |
+| TC-033 | Missing executable fails aggregate gate | Unit | P0 | FR-006-AC-3 | ✅ |
+| TC-034 | Aggregate passes only for complete passing scenarios | Unit | P0 | FR-006-AC-4 | ✅ |
 | TC-035 | Four pilot workflow invocations still load | Integration | P0 | FR-007-AC-1 | ✅ |
 | TC-036 | Pilot and canonical workflows are equivalent | Property | P0 | FR-007-AC-2 | ✅ |
 | TC-037 | Canonical install docs precede compatibility path | Static | P1 | FR-007-AC-3 | ✅ |
 | TC-038 | Cross-agent canonical parity reaches all thresholds | Integration | P0 | NFR-001 | ✅ |
-| TC-039 | Evaluation produces zero unsupported outcomes | E2E | P0 | NFR-002 | ✅ |
+| TC-039 | Evaluation produces zero unsupported outcomes | E2E | P0 | NFR-002 | 🚧 |
 | TC-040 | Package contract stability reaches all thresholds | Integration | P0 | NFR-003 | ✅ |
 | TC-041 | Supported-agent set rejects missing, extra, or duplicate hosts | Property | P1 | FR-002-CON-1 | ✅ |
 | TC-042 | Thin manifests reject behavioral sections and copied workflows | Property | P1 | FR-002-CON-2 | ✅ |
 | TC-043 | Compatibility inventory is exactly the four promoted pilots | Property | P1 | FR-007-CON-1 | ✅ |
 | TC-044 | Malformed or conflicting existing artifacts remain unchanged and require human resolution | E2E | P0 | FR-001-AC-6 | ✅ |
 | TC-045 | Artifact publication is staged, Quire-validated, atomic, and confined to the selected root | Integration | P0 | FR-001-AC-7 | ✅ |
-| TC-046 | Exactly one availability state exists for every considered producer | Property | P0 | FR-004-AC-7 | ✅ |
+| TC-046 | Exactly one availability state exists for every considered producer | Unit | P0 | FR-004-AC-7 | ✅ |
 | TC-047 | Explicit acceptance records one attributed event and no prior acceptance state | Integration | P0 | FR-005-AC-6 | ✅ |
 | TC-048 | A run-id binding mismatch is refused without changing either run | Property | P0 | FR-005-AC-7 | ✅ |
-| TC-049 | Equivalent runs retain explicit acceptance and rejection on every host | E2E | P0 | FR-006-AC-5 | ✅ |
+| TC-049 | Equivalent runs retain explicit acceptance and rejection on every host | Unit | P0 | FR-006-AC-5 | ✅ |
 | TC-050 | Evaluation agents and post-run verification use the snapshotted full ix-flow runtime package | Unit | P0 | FR-006-AC-6 | ✅ |
-| TC-051 | Release verification rejects an aggregate retained for a different repository revision | Unit | P0 | FR-006-AC-7 | ✅ |
+| TC-051 | Release verification rejects an aggregate retained for a different repository revision | Integration | P0 | FR-006-AC-7 | ✅ |
 | TC-052 | Complete cross-component semantic fixture | Integration | P0 | StR-002-VC-1, IT-005 | ✅ |
 | TC-053 | Ownership/type-fit registry is complete | Static | P0 | US-005-AC-1 | ✅ |
 | TC-054 | Bounded report contains required sections and no trust score | Unit | P0 | US-005-AC-2 | ✅ |
@@ -277,7 +282,7 @@ implemented and reviewed.
 | TC-100 | For each ADR-002 compatibility/semantic/projection/fixture capability row, Rust agrees byte-for-byte with the accepted identity and report reference over the named corpus and focused adverse cases, including generated arbitrary-precision integer boundaries; the accepted corpus is read natively | Integration | P0 | StR-003-VC-3, FR-015-AC-1 | 🚧 The compatibility slice compares against checked-in reference bytes and executes no Python; the PGM-01 and report slices in `tests/semantics_parity.rs` still execute the retained Python as a differential oracle, so the no-oracle property holds for part of this row's population, not all of it |
 | TC-101 | Parsed Rust syntax for every reusable-library module rejects filesystem, environment, child-program, network, persistence, and arbitrary-stdout capability paths, including lexical aliases declared in that source, without treating comments or literals as code or claiming cross-document compiler resolution | Static | P0 | FR-014-AC-4, FR-014-CON-1, FR-014-CON-2 | ✅ AST audit, closed findings, adverse scope/alias cases, and mutation evidence passing |
 | TC-102 | Every successful and non-successful semantic state remains distinct; typed state spellings and exact-one untyped-label validation remain callable without string parsing | Integration | P0 | FR-015-AC-2 | 🚧 evidence-availability and semantic-reference state vocabularies backed; aggregate pending |
-| TC-103 | Invalid semantic inputs, including non-finite/retained-domain-overflow numbers, invalid/mutable version tokens, and structured PGM-01 identities, fail or classify read-only without an identity digest or source-byte change; unknown corpus versions, missing index members, unavailable corpora, referenced-only retentions, absolute or parent-traversing retained paths, symlinked or non-regular entries, missing entries, duplicate identities, and tampered bytes refuse explicitly without reading or writing outside the supplied corpus root; independent fixture classes retain leading/trailing and interior ASCII space plus lowercase/uppercase immutable `x` metadata boundaries; every exercised semantic and PGM-01 refusal exposes a typed reason without diagnostic-prose matching | Integration | P0 | FR-015-AC-3, FR-015-CON-1 | 🚧 evidence, semantic, and PGM refusals backed; aggregate pending |
+| TC-103 | Invalid semantic inputs, including non-finite/retained-domain-overflow numbers, invalid/mutable version tokens, and structured PGM-01 identities, fail or classify read-only without an identity digest or source-byte change; unknown corpus versions, missing index members, unavailable corpora, referenced-only retentions, absolute or parent-traversing retained paths, symlinked or non-regular entries, missing entries, duplicate identities, and tampered bytes refuse explicitly without reading or writing outside the supplied corpus root; an index or retained path beyond its declared ceiling refuses before allocating for it; independent fixture classes retain leading/trailing and interior ASCII space plus lowercase/uppercase immutable `x` metadata boundaries; every exercised semantic and PGM-01 refusal exposes a typed reason without diagnostic-prose matching | Integration | P0 | FR-015-AC-3, FR-015-CON-1, FR-015-CON-4 | 🚧 evidence, semantic, and PGM refusals backed; aggregate pending |
 | TC-104 | Contract ownership and inert foreign-language fixtures remain bounded | Static | P0 | FR-015-AC-4, FR-015-CON-2, FR-015-CON-3 | 🚧 semantic ownership and inert-fixture slice backed; aggregate audit pending |
 | TC-105 | Rust onboarding produces the declared complete sorted inventory, status, recommendation, and artifact path for accepted existing, absent, conflicting, malformed, unavailable, unjustified, incomplete-boundary, and valid-authoring fixtures without executing another implementation; duplicate-key and merge-key artifact identities remain malformed; newly authored artifacts retain the declared parsed frontmatter and Markdown body and pass Quire, while malformed requests, unsupported types, absolute or parent-traversing targets, symlink escapes, existing destinations, and invalid staged artifacts publish nothing | Property | P0 | FR-016-AC-1, FR-016-CON-4 | ✅ Native explicit-oracle core/CLI, fail-closed YAML identity, real Quire validation, confined publication, and legacy lane removal passing |
 | TC-106 | Rust and the retained invariant provider return the same ordered typed outcomes for all eleven canonical invariants and valid boundary fixtures at one explicit evaluation instant; unknown invariant names and malformed Rust requests fail before an outcome | Integration | P0 | FR-016-AC-2, FR-016-CON-3 | ✅ Rust evaluator, retained-reference parity, fail-closed probes, and CLI boundary passing |
