@@ -25,9 +25,11 @@ producer is a deterministic fictional executable retained only by the test.
 
 - Both repositories select exact Rust 1.98.1.
 - The consumer pins the accepted Engineering Assurance revision.
-- A temporary capability root contains the fictional bounded input and output
-  fixtures, while the exact producer executable is opened and executed through
-  one retained no-follow descriptor.
+- A temporary source capability root contains the declared fictional inputs
+  plus undeclared and mutable control files. The exact Rust fixture producer is
+  opened and executed through one retained no-follow descriptor against an
+  invocation-owned working projection containing only declared inputs and
+  output parents.
 
 ## Inputs
 
@@ -36,36 +38,46 @@ producer is a deterministic fictional executable retained only by the test.
 - One consumer-owned response adapter and typed observation.
 - Null and retained-input stdin cases; one declared output artifact; and
   invalid digest, unavailable executable, timeout, malformed response,
-  cancellation, admitted/rejected non-zero exit, and containment-breach
+  cancellation, admitted/rejected non-zero exit, containment-breach,
+  source-root mutation, output-path replacement, and non-canonical observation
   variants of the same fictional case.
 
 ## Test Procedure
 
 1. Compile the synthetic consumer against the accepted Engineering Assurance
    revision.
-   - IT-006-SC-01: the consumer uses the public Rust library and contains no
-     direct process launch or Engineering Assurance CLI-output parser.
+   - IT-006-SC-01: the consumer uses only the `producer-execution` Cargo feature
+     with default features disabled, contains no direct process launch or
+     Engineering Assurance CLI-output parser, and resolves none of the
+     unrelated direct full-package dependencies.
 2. Execute the valid fictional case through the shared executor.
    - IT-006-SC-02: exactly one typed completed result preserves the JCS request,
      caller, adapter and producer identities and carries bounded raw evidence,
-     validated artifact references and the consumer-owned observation.
+     immutable retained artifact bytes and the consumer-owned observation; the
+     complete result has canonical bytes and a stable result identity.
 3. Execute each non-completion variant.
    - IT-006-SC-03: every variant returns its distinct executor state, only
      admitted exits reach the adapter, non-completed states carry no typed
      observation, and no ordinary descendant or invocation-owned state remains;
      the escaping-descendant case returns `containment_failure` without a
-     full-tree-containment claim.
+     full-tree-containment claim; every state has canonical bytes and identity.
 4. Inspect the consumer and provider boundaries.
    - IT-006-SC-04: neither repository introduces a duplicate evidence store,
      Quoin record schema, generic stdout verdict scraper, or domain oracle in
      Engineering Assurance.
+5. Mutate the source capability root and observed output paths around launch
+   and observation.
+   - IT-006-SC-05: the producer sees exactly the staged declared projection,
+     and the adapter/consumer reads the same immutable output snapshot whose
+     digest appears in the canonical result without reopening a mutable path.
 
 ## Expected Results
 
-The real consumer compiles and executes the fictional producer only through the
-shared Rust boundary. Completed and non-completed outcomes remain typed and
-identity-bound, while domain interpretation and evidence retention stay with
-their authoritative owners.
+The real consumer compiles the lightweight feature and executes the fictional
+Rust producer only through the shared boundary. Completed and non-completed
+outcomes remain typed, canonically serializable and identity-bound; retained
+output bytes remain readable without a path race; and domain interpretation
+and evidence persistence stay with their authoritative owners.
 
 ## Metadata
 
@@ -82,7 +94,9 @@ required.
 ## Notes
 
 This test does not qualify the fictional producer and does not standardize fuzz,
-mutation, catalogue, advice, or other domain response semantics.
+mutation, catalogue, advice, or other domain response semantics. Foreign
+runtime support is a protocol capability, not permission to execute a
+first-party foreign-language fixture for this gate.
 
 ## Traceability
 

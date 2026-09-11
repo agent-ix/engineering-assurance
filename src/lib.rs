@@ -9,23 +9,38 @@
 
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "full")]
 pub mod compatibility;
+#[cfg(feature = "full")]
 pub mod compatibility_corpus;
 pub mod content_rights;
+#[cfg(feature = "full")]
 pub mod discovery;
 pub mod evaluation;
+#[cfg(feature = "full")]
 pub mod evaluation_reports;
 pub mod evidence;
+#[cfg(feature = "full")]
 pub mod manifest;
+#[cfg(feature = "full")]
 pub mod onboarding;
+#[cfg(feature = "full")]
 pub mod package_audit;
+#[cfg(feature = "full")]
 pub mod package_lifecycle;
+#[cfg(feature = "full")]
 pub mod package_membership;
+#[cfg(feature = "producer-execution")]
 pub mod producer_execution;
+#[cfg(feature = "full")]
 pub mod semantics;
+#[cfg(feature = "full")]
 pub mod source_audit;
+#[cfg(feature = "full")]
 pub mod structured_yaml;
+#[cfg(feature = "full")]
 pub mod workflow;
+#[cfg(feature = "full")]
 pub mod workflow_invariants;
 
 /// The Cargo package name shared by the library and CLI targets.

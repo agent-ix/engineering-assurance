@@ -16,7 +16,7 @@ use std::{
     path::{Component, Path},
     process::ExitStatus,
     sync::{
-        Mutex,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
     time::Duration,
@@ -45,6 +45,8 @@ pub const PRODUCER_EXECUTION_RESULT_PROTOCOL: &str =
     "engineering-assurance.producer-execution-result/v1";
 /// Request-identity scheme.
 pub const REQUEST_IDENTITY_SCHEME: &str = "sha256-jcs";
+/// Result-identity scheme.
+pub const RESULT_IDENTITY_SCHEME: &str = "sha256-jcs";
 /// Maximum accepted wall-clock budget in milliseconds (24 hours).
 pub const MAX_TIMEOUT_MILLIS: u64 = 86_400_000;
 /// Maximum accepted capture budget for either process stream.
@@ -366,7 +368,8 @@ impl ProducerExecutionRequest {
 }
 
 /// RFC 8785 canonical request identity.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RequestIdentity {
     /// Exact identity algorithm and canonicalization scheme.
     pub scheme: &'static str,
@@ -447,7 +450,8 @@ impl CancellationToken {
 }
 
 /// One bounded captured stream.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CapturedStream {
     /// Retained bytes, never exceeding the request limit.
     pub bytes: Vec<u8>,
@@ -458,7 +462,8 @@ pub struct CapturedStream {
 }
 
 /// Closed terminal status observed from the direct producer process.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum TerminalStatus {
     /// Normal process exit.
     ExitCode(i32),
@@ -467,7 +472,8 @@ pub enum TerminalStatus {
 }
 
 /// Bounded raw process evidence retained with every observable launched state.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProcessEvidence {
     /// Terminal status, absent when observation ended before one was available.
     pub terminal_status: Option<TerminalStatus>,
@@ -478,22 +484,54 @@ pub struct ProcessEvidence {
 }
 
 /// Exact observed output-artifact reference.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OutputArtifact {
     /// Caller-owned output role.
     pub role: String,
-    /// Declared relative path beneath the retained capability root.
+    /// Declared relative path beneath the invocation-owned staged root.
     pub path: String,
     /// Observed regular-file byte length.
     pub byte_length: u64,
     /// SHA-256 identity of the observed retained bytes.
     pub digest: ContentDigest,
+    /// Sealed descriptor for the exact bytes represented by the metadata.
+    #[serde(skip)]
+    snapshot: Arc<File>,
 }
+
+impl OutputArtifact {
+    /// Returns a reader for the immutable retained bytes represented by this artifact.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error when the retained descriptor cannot be duplicated or
+    /// rewound. The producer pathname is never reopened.
+    pub fn try_reader(&self) -> io::Result<File> {
+        #[cfg(target_os = "linux")]
+        let mut reader = File::open(descriptor_path(&self.snapshot))?;
+        #[cfg(not(target_os = "linux"))]
+        let mut reader = self.snapshot.try_clone()?;
+        reader.seek(SeekFrom::Start(0))?;
+        Ok(reader)
+    }
+}
+
+impl PartialEq for OutputArtifact {
+    fn eq(&self, other: &Self) -> bool {
+        self.role == other.role
+            && self.path == other.path
+            && self.byte_length == other.byte_length
+            && self.digest == other.digest
+    }
+}
+
+impl Eq for OutputArtifact {}
 
 /// A caller-owned typed decoder for one exact response binding.
 pub trait ProducerResponseAdapter {
     /// Consumer-owned typed observation.
-    type Observation;
+    type Observation: Serialize;
 
     /// Returns the exact response protocol and adapter implementation binding.
     fn binding(&self) -> &ResponseBinding;
@@ -517,7 +555,8 @@ pub trait ProducerResponseAdapter {
 pub struct MalformedResponse;
 
 /// Identity-bearing request refusal decided before producer launch.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ExecutionRefusal {
     /// The retained executable bytes differ from the request.
     ExecutableIdentity,
@@ -536,7 +575,8 @@ pub enum ExecutionRefusal {
 }
 
 /// Process failure categories not interpreted from diagnostic prose.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum ExecutionFailure {
     /// The process exited normally with a code the response binding rejects.
     ExitCode(i32),
@@ -553,7 +593,8 @@ pub enum ExecutionFailure {
 }
 
 /// Closed execution state. Only [`Self::Completed`] carries `T`.
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ProducerExecutionState<T> {
     /// The selected executable could not be opened or launched.
     Unavailable,
@@ -583,7 +624,8 @@ pub enum ProducerExecutionState<T> {
 }
 
 /// Measured monotonic durations for one execution attempt.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExecutionTiming {
     /// Structure, identity and capability preflight duration.
     pub preflight_nanos: u64,
@@ -594,7 +636,8 @@ pub struct ExecutionTiming {
 }
 
 /// Identity-bound result of one structurally valid producer-execution attempt.
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProducerExecutionResult<T> {
     /// Exact result contract discriminator.
     pub protocol: &'static str,
@@ -615,6 +658,50 @@ pub struct ProducerExecutionResult<T> {
     /// Closed execution state.
     pub state: ProducerExecutionState<T>,
 }
+
+impl<T: Serialize> ProducerExecutionResult<T> {
+    /// Returns RFC 8785 canonical JSON bytes for every portable result field.
+    ///
+    /// The live descriptors retained by output artifacts are deliberately not
+    /// encoded; their role, path, byte length and digest are encoded instead.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ResultEncodingError`] when the caller-owned observation or any
+    /// result field cannot be represented as canonical JSON.
+    pub fn canonical_bytes(&self) -> Result<Vec<u8>, ResultEncodingError> {
+        serde_json_canonicalizer::to_vec(self).map_err(|_| ResultEncodingError)
+    }
+
+    /// Computes the `sha256-jcs` identity of the canonical result bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ResultEncodingError`] when canonical encoding fails. No result
+    /// identity is returned in that case.
+    pub fn identity(&self) -> Result<ResultIdentity, ResultEncodingError> {
+        let canonical = self.canonical_bytes()?;
+        Ok(ResultIdentity {
+            scheme: RESULT_IDENTITY_SCHEME,
+            digest: ContentDigest::of_bytes(&canonical),
+        })
+    }
+}
+
+/// RFC 8785 canonical identity of a complete portable execution result.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResultIdentity {
+    /// Exact identity algorithm and canonicalization scheme.
+    pub scheme: &'static str,
+    /// SHA-256 digest of the canonical result bytes.
+    pub digest: ContentDigest,
+}
+
+/// The complete portable result could not be represented canonically.
+#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+#[error("producer execution result encoding failed")]
+pub struct ResultEncodingError;
 
 /// Construction failure for a shared executor.
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
@@ -819,6 +906,7 @@ enum AcquireFailure {
 #[cfg(target_os = "linux")]
 struct ValidatedExecution {
     executable: File,
+    _working_tree: tempfile::TempDir,
     root: File,
     inputs: Vec<ValidatedInput>,
     executable_digest: ContentDigest,
@@ -827,6 +915,7 @@ struct ValidatedExecution {
 #[cfg(target_os = "linux")]
 struct ValidatedInput {
     role: String,
+    path: String,
     file: File,
 }
 
@@ -1184,10 +1273,12 @@ fn validate_capabilities(
     let root = open_capability_root(&request.capability_root)?;
     let (executable, executable_digest) = open_executable(request, cancellation)?;
     let inputs = open_inputs(request, &root, &executable_digest, cancellation)?;
-    validate_output_paths(request, &root, &executable_digest)?;
+    let (working_tree, staged_root) =
+        stage_working_projection(request, &inputs, &executable_digest, cancellation)?;
     Ok(ValidatedExecution {
         executable,
-        root,
+        _working_tree: working_tree,
+        root: staged_root,
         inputs,
         executable_digest,
     })
@@ -1275,6 +1366,7 @@ fn open_inputs(
         let file = open_input(input, root, executable_digest, cancellation, &mut remaining)?;
         inputs.push(ValidatedInput {
             role: input.role.clone(),
+            path: input.path.clone(),
             file,
         });
     }
@@ -1374,54 +1466,66 @@ fn snapshot_reader(
 }
 
 #[cfg(target_os = "linux")]
-fn validate_output_paths(
+fn stage_working_projection(
     request: &ProducerExecutionRequest,
-    root: &File,
+    inputs: &[ValidatedInput],
     executable_digest: &ContentDigest,
-) -> Result<(), PreflightFailure> {
-    use rustix::fs::{Mode, OFlags, ResolveFlags, openat2};
+    cancellation: &CancellationToken,
+) -> Result<(tempfile::TempDir, File), PreflightFailure> {
+    use std::{fs::OpenOptions, os::unix::fs::PermissionsExt};
+
+    let refused =
+        || PreflightFailure::Refused(ExecutionRefusal::Input, Some(executable_digest.clone()));
+    let working_tree = tempfile::tempdir().map_err(|_| refused())?;
+    for input in inputs {
+        if cancellation.is_cancelled() {
+            return Err(PreflightFailure::Cancelled(Some(executable_digest.clone())));
+        }
+        let destination = working_tree.path().join(&input.path);
+        let parent = destination.parent().ok_or_else(refused)?;
+        std::fs::create_dir_all(parent).map_err(|_| refused())?;
+        let mut source = File::open(descriptor_path(&input.file)).map_err(|_| refused())?;
+        source.seek(SeekFrom::Start(0)).map_err(|_| refused())?;
+        let mut staged = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&destination)
+            .map_err(|_| refused())?;
+        io::copy(&mut source, &mut staged).map_err(|_| refused())?;
+        staged.flush().map_err(|_| refused())?;
+        std::fs::set_permissions(&destination, std::fs::Permissions::from_mode(0o400))
+            .map_err(|_| refused())?;
+    }
 
     for output in &request.outputs {
+        if cancellation.is_cancelled() {
+            return Err(PreflightFailure::Cancelled(Some(executable_digest.clone())));
+        }
         let parent = Path::new(&output.path)
             .parent()
             .unwrap_or_else(|| Path::new("."));
         if !parent.as_os_str().is_empty() && parent != Path::new(".") {
-            let parent_fd = openat2(
-                root,
-                parent,
-                OFlags::PATH | OFlags::DIRECTORY | OFlags::CLOEXEC,
-                Mode::empty(),
-                ResolveFlags::BENEATH | ResolveFlags::NO_MAGICLINKS | ResolveFlags::NO_SYMLINKS,
-            )
-            .map_err(|_| {
+            std::fs::create_dir_all(working_tree.path().join(parent)).map_err(|_| {
                 PreflightFailure::Refused(ExecutionRefusal::Output, Some(executable_digest.clone()))
             })?;
-            drop(parent_fd);
-        }
-        match openat2(
-            root,
-            &output.path,
-            OFlags::PATH | OFlags::CLOEXEC,
-            Mode::empty(),
-            ResolveFlags::BENEATH | ResolveFlags::NO_MAGICLINKS | ResolveFlags::NO_SYMLINKS,
-        ) {
-            Ok(existing) => {
-                drop(existing);
-                return Err(PreflightFailure::Refused(
-                    ExecutionRefusal::Output,
-                    Some(executable_digest.clone()),
-                ));
-            }
-            Err(error) if error == rustix::io::Errno::NOENT => {}
-            Err(_) => {
-                return Err(PreflightFailure::Refused(
-                    ExecutionRefusal::Output,
-                    Some(executable_digest.clone()),
-                ));
-            }
         }
     }
-    Ok(())
+    for output in &request.outputs {
+        let destination = working_tree.path().join(&output.path);
+        if destination.exists() {
+            return Err(PreflightFailure::Refused(
+                ExecutionRefusal::Output,
+                Some(executable_digest.clone()),
+            ));
+        }
+    }
+    let root = File::open(working_tree.path()).map_err(|_| {
+        PreflightFailure::Refused(
+            ExecutionRefusal::CapabilityRoot,
+            Some(executable_digest.clone()),
+        )
+    })?;
+    Ok((working_tree, root))
 }
 
 #[cfg(target_os = "linux")]
@@ -1737,18 +1841,24 @@ fn observe_outputs(
         if !metadata.is_file() {
             return (artifacts, true);
         }
-        let Some(next_remaining) = remaining.checked_sub(metadata.len()) else {
+        let Ok((snapshot, digest)) =
+            snapshot_reader(&mut file, remaining, cancellation, "producer-output")
+        else {
+            return (artifacts, true);
+        };
+        let Ok(snapshot_metadata) = snapshot.metadata() else {
+            return (artifacts, true);
+        };
+        let Some(next_remaining) = remaining.checked_sub(snapshot_metadata.len()) else {
             return (artifacts, true);
         };
         remaining = next_remaining;
-        let Ok(digest) = digest_reader(&mut file, metadata.len(), Some(cancellation)) else {
-            return (artifacts, true);
-        };
         artifacts.push(OutputArtifact {
             role: output.role.clone(),
             path: output.path.clone(),
-            byte_length: metadata.len(),
+            byte_length: snapshot_metadata.len(),
             digest,
+            snapshot: Arc::new(snapshot),
         });
     }
     (artifacts, false)
