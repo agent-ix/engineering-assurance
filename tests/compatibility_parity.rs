@@ -1,35 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-//! Additive-migration parity with the retained Python compatibility classifier.
-
-use std::process::Command;
+//! Compatibility-classification parity against checked-in reference bytes.
+//!
+//! The reference is a file, not a process. It was captured once from the
+//! retained Python classifier at the candidate revision that cut this capability
+//! over, and it is committed here so the cutover could delete that classifier
+//! without deleting the evidence that Rust reproduces it. Executing the retained
+//! implementation as an oracle would have made the two inseparable.
 
 use engineering_assurance::compatibility::{REQUEST_PROTOCOL, evaluate_request_bytes};
 use ix_trace_rs::trace;
 
-const PYTHON_REFERENCE: &str = r#"
-import json
-from engineering_assurance.compatibility import classify_all, load_matrix
-
-observed = {
-    "quire-cli": "0.31.0",
-    "quoin": "0.22.5",
-    "ix-flow": "99.0.0",
-    "engineering-assurance": None,
-}
-items = classify_all(load_matrix(), observed)
-print(json.dumps([
-    {
-        "component": item.component,
-        "observed": item.observed,
-        "expected": item.expected,
-        "verdict": item.verdict,
-        "reason": item.reason,
-    }
-    for item in items
-], separators=(",", ":")))
-"#;
+/// Classifications the retained Python implementation produced for the request
+/// below, captured verbatim and compared byte for byte.
+const REFERENCE_CLASSIFICATIONS: &[u8] =
+    include_bytes!("fixtures/compatibility-classifications.json");
 
 #[trace("TC-100", "FR-015-AC-1")]
 #[test]
@@ -49,18 +35,30 @@ fn tc_100_compatibility_classifications_match_the_retained_reference_bytes() {
     let rust_bytes =
         serde_json::to_vec(&rust.components).expect("Rust classifications must serialize");
 
-    let python = Command::new("python3")
-        .args(["-c", PYTHON_REFERENCE])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .expect("retained Python reference must execute during additive migration");
-    assert!(
-        python.status.success(),
-        "{}",
-        String::from_utf8_lossy(&python.stderr)
-    );
+    let reference = REFERENCE_CLASSIFICATIONS
+        .strip_suffix(b"\n")
+        .unwrap_or(REFERENCE_CLASSIFICATIONS);
     assert_eq!(
-        rust_bytes,
-        python.stdout.strip_suffix(b"\n").unwrap_or(&python.stdout)
+        String::from_utf8_lossy(&rust_bytes),
+        String::from_utf8_lossy(reference),
+        "Rust classifications drifted from the captured reference bytes"
     );
+
+    // The reference is only evidence while it still describes this matrix. A
+    // pin that moved without the reference moving with it would otherwise pass
+    // silently, comparing Rust against a record of a matrix that no longer
+    // exists.
+    let captured: Vec<serde_json::Value> =
+        serde_json::from_slice(reference).expect("the captured reference must be JSON");
+    assert_eq!(captured.len(), rust.components.len());
+    for (recorded, produced) in captured.iter().zip(&rust.components) {
+        assert_eq!(
+            recorded["component"].as_str(),
+            Some(produced.component.as_str())
+        );
+        assert_eq!(
+            recorded["expected"].as_str(),
+            Some(produced.expected.as_str())
+        );
+    }
 }

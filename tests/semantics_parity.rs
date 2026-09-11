@@ -520,3 +520,87 @@ fn tc_100_rust_generator_matches_all_committed_inert_fixtures() {
         }
     }
 }
+
+#[trace("TC-052", "StR-002-VC-1")]
+#[trace("TC-061", "FR-009-AC-2")]
+#[trace("TC-104", "FR-015-AC-4")]
+#[test]
+fn tc_061_committed_generated_fixtures_agree_across_every_language() {
+    let generated = root().join("engineering_assurance/fixtures/verification-semantics/generated");
+    let read = |name: &str| -> String {
+        fs::read_to_string(generated.join(name)).expect("committed fixture must be UTF-8")
+    };
+
+    // Each committed projection is inert data in its own language's syntax.
+    // Extracting the payload from each and comparing the decoded values is the
+    // assertion: a generator that diverged per language would still round-trip
+    // against itself, and only a cross-language comparison catches it.
+    let python = read("canonical_references.py");
+    let python_json: String = serde_json::from_str(
+        python
+            .lines()
+            .nth(1)
+            .expect("the Python fixture must assign on its second line")
+            .split_once(" = ")
+            .expect("the Python fixture must be an assignment")
+            .1,
+    )
+    .expect("the Python payload must be a JSON string literal");
+
+    let typescript = read("canonical_references.ts");
+    let typescript_json: String = serde_json::from_str(
+        typescript
+            .lines()
+            .nth(1)
+            .expect("the TypeScript fixture must assign on its second line")
+            .split_once(" = ")
+            .expect("the TypeScript fixture must be an assignment")
+            .1
+            .strip_suffix(';')
+            .expect("the TypeScript assignment must end in a semicolon"),
+    )
+    .expect("the TypeScript payload must be a JSON string literal");
+
+    let rust = read("canonical_references.rs");
+    let rust_json = rust
+        .lines()
+        .nth(1)
+        .expect("the Rust fixture must assign on its second line")
+        .split_once("r#\"")
+        .expect("the Rust fixture must use a raw string literal")
+        .1
+        .strip_suffix("\"#;")
+        .expect("the Rust raw string must be terminated")
+        .to_owned();
+
+    let expected: serde_json::Value = serde_json::from_slice(&fixture("canonical-references.json"))
+        .expect("the canonical semantic source must be JSON");
+    for (language, payload) in [
+        ("Python", python_json),
+        ("TypeScript", typescript_json),
+        ("Rust", rust_json),
+    ] {
+        let decoded: serde_json::Value =
+            serde_json::from_str(&payload).expect("the committed payload must be JSON");
+        assert_eq!(
+            decoded, expected,
+            "the committed {language} projection does not decode to the canonical source"
+        );
+    }
+
+    // The state projections carry the same set, in the same order, in all three.
+    let states: Vec<String> = serde_json::from_slice(&fixture("non-success-states.json"))
+        .expect("the non-success-state source must be JSON");
+    for (name, prefix, suffix) in [
+        ("non_success_states.py", "    \"", "\","),
+        ("non_success_states.ts", "  \"", "\","),
+        ("non_success_states.rs", "    \"", "\","),
+    ] {
+        let body = read(name);
+        let listed: Vec<&str> = body
+            .lines()
+            .filter_map(|line| line.strip_prefix(prefix)?.strip_suffix(suffix))
+            .collect();
+        assert_eq!(listed, states, "{name} lists a different state set");
+    }
+}

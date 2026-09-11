@@ -258,9 +258,9 @@ implemented and reviewed.
 | TC-081 | The gate requires every pinned component; one unobserved component withholds it | Property | P0 | FR-012-AC-3 | ✅ |
 | TC-082 | Matrix acceptance is pending-and-unattributed or accepted-with-name-and-date, never half-recorded, and documented as a human act | Static | P0 | FR-012-AC-4, FR-012-CON-2, FR-012-CON-4, FR-012-CON-5 | ✅ |
 | TC-083 | Every recorded artifact digest matches this tree over at least the ten schema assets | Integration | P0 | FR-012-AC-5 | ✅ |
-| TC-084 | Upgrade order and per-component rollback notes exist, no rollback is irreversible, and publication changes no CI posture | Static | P0 | FR-012-AC-6 | ✅ |
+| TC-084 | Upgrade order and per-component rollback notes exist, no rollback is irreversible, and publication changes no CI posture | Static | P0 | FR-012-AC-6 | ✅ Native Rust matrix assertions |
 | TC-085 | An unknown matrix version and an unknown component name are refused | Unit | P0 | FR-012-AC-7 | ✅ |
-| TC-086 | The classifier reaches for no subprocess, socket, or write, and the observing program is a separate file | Static | P0 | FR-012-AC-8, FR-012-CON-1 | ✅ |
+| TC-086 | The classifier reaches for no subprocess, socket, or write, and the observing program is a separate file | Static | P0 | FR-012-AC-8, FR-012-CON-1 | ✅ Parsed library-module capability audit; the observing adapter is a separate binary-side module |
 | TC-087 | Every family in the decision table carries exactly one of keep, delete, or replace | Static | P0 | FR-013-AC-1 | ✅ |
 | TC-088 | The decision table accounts for every recurring script family present in the eight repositories, and states when the sources cannot be read | Integration | P0 | FR-013-AC-2 | ✅ |
 | TC-089 | Repository-local generic evidence schemas and stdout-derived verdicts are forbidden by name, and a domain-output schema is permitted | Static | P0 | FR-013-AC-3 | ✅ |
@@ -269,7 +269,7 @@ implemented and reviewed.
 | TC-092 | The review checklist covers inventory, both prohibitions, byte-identical legacy evidence, every non-success state, and manual dispatch | Static | P0 | FR-013-AC-6 | ✅ |
 | TC-093 | All eight repositories appear exactly once in the Agent A/B/C allocation | Static | P0 | FR-013-AC-7 | ✅ |
 | TC-094 | The contract waits on matrix acceptance, changes no trigger, and makes no qualification claim | Unit | P0 | FR-013-AC-8, FR-013-CON-1, FR-013-CON-2, FR-013-CON-3 | ✅ |
-| TC-095 | A fully pinned toolchain does not open an unaccepted gate; any state but `accepted`, and any half-record missing a name or date, withholds | Unit | P0 | FR-012-AC-9 | ✅ |
+| TC-095 | A fully pinned toolchain does not open an unaccepted gate; any state but `accepted`, and any half-record missing a name, date, or note, withholds | Unit | P0 | FR-012-AC-9 | ✅ Native Rust acceptance classifier over mutated matrix bytes |
 | TC-096 | Existing repository builds the named Rust library and CLI | Compile | P0 | StR-003-VC-1, FR-014-AC-1, FR-014-CON-3 | ✅ Rust package foundation backed |
 | TC-097 | Every first-party executable path in this repository has one current state and final disposition | Static | P0 | StR-003-VC-2, FR-018-AC-1 | 🚧 pending implementation |
 | TC-098 | Machine CLI output obeys the versioned stdout/stderr contract | Property | P0 | FR-014-AC-2 | 🚧 compatibility-command slice backed; aggregate pending |
@@ -469,10 +469,10 @@ evaluation envelopes.
 | FR-012 | FR-012-AC-3 | TC-081 | ✅ Passing |
 | FR-012 | FR-012-AC-4 | TC-082 | ✅ Passing |
 | FR-012 | FR-012-AC-5 | TC-083 | ✅ Passing |
-| FR-012 | FR-012-AC-6 | TC-084 | ✅ Passing |
+| FR-012 | FR-012-AC-6 | TC-084 | ✅ Passing natively |
 | FR-012 | FR-012-AC-7 | TC-085 | ✅ Passing |
-| FR-012 | FR-012-AC-8 | TC-086 | ✅ Passing |
-| FR-012 | FR-012-AC-9 | TC-095 | ✅ Passing |
+| FR-012 | FR-012-AC-8 | TC-086 | ✅ Passing through the parsed library-module capability audit |
+| FR-012 | FR-012-AC-9 | TC-095 | ✅ Passing natively |
 | FR-013 | FR-013-AC-1 | TC-087 | ✅ Passing |
 | FR-013 | FR-013-AC-2 | TC-088 | ✅ Passing |
 | FR-013 | FR-013-AC-3 | TC-089 | ✅ Passing |

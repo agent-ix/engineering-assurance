@@ -43,8 +43,9 @@ the `engineering-assurance` native CLI.
   filesystem, subprocess, socket, and environment access.
 - The CLI SHALL preserve the caller-selected repository root as an explicit
   boundary.
-- Corpus and repository filesystem and Git access SHALL live in a binary-side
-  host adapter rather than the reusable library.
+- Filesystem and Git access for a capability SHALL live in a host adapter
+  outside the reusable library: in the binary where a production command needs
+  it, and in the qualification tree where only qualification reads it.
 - The pure Rust source audit SHALL parse Rust syntax rather than matching raw
   source substrings, so comments and string literals cannot create or satisfy a
   capability finding.
