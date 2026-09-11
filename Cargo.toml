@@ -6,6 +6,7 @@ rust-version = "1.98.1"
 license = "AGPL-3.0-or-later"
 description = "Rust domain library and CLI for Engineering Assurance"
 publish = false
+default-run = "engineering-assurance"
 
 [lib]
 name = "engineering_assurance"
@@ -14,25 +15,61 @@ path = "src/lib.rs"
 [[bin]]
 name = "engineering-assurance"
 path = "src/main.rs"
+required-features = ["full"]
+
+[[bin]]
+name = "producer-execution-fixture"
+path = "tests/fixtures/producer_execution_fixture.rs"
+test = false
+doc = false
+required-features = ["producer-execution"]
+
+[features]
+default = ["full"]
+producer-execution = [
+  "dep:rustix",
+  "dep:serde",
+  "dep:serde_json",
+  "dep:serde_json_canonicalizer",
+  "dep:sha2",
+  "dep:tempfile",
+  "dep:thiserror",
+]
+full = [
+  "producer-execution",
+  "serde_json/arbitrary_precision",
+  "dep:cap-std",
+  "dep:clap",
+  "dep:flate2",
+  "dep:jsonschema",
+  "dep:regex",
+  "dep:syn",
+  "dep:tar",
+  "dep:time",
+  "dep:unicode-casefold",
+  "dep:yaml_serde",
+  "dep:zip",
+]
 
 [dependencies]
-cap-std = "=4.0.3"
-clap = { version = "=4.5.47", default-features = false, features = ["error-context", "help", "std", "usage"] }
-flate2 = { version = "=1.1.10", default-features = false, features = ["rust_backend"] }
-jsonschema = { version = "=0.56.0", default-features = false }
-regex = "=1.13.1"
-rustix = { version = "=1.1.4", features = ["process"] }
-serde = { version = "=1.0.229", features = ["derive"] }
-serde_json = { version = "=1.0.151", features = ["arbitrary_precision"] }
-sha2 = { version = "=0.11.0", default-features = false }
-syn = { version = "=3.0.5", features = ["full", "visit"] }
-tar = { version = "=0.4.46", default-features = false }
-tempfile = "=3.27.0"
-thiserror = "=2.0.20"
-time = { version = "=0.3.55", features = ["formatting", "parsing"] }
-unicode-casefold = "=0.2.0"
-yaml_serde = "=0.10.7"
-zip = { version = "=8.6.0", default-features = false, features = ["deflate-flate2"] }
+cap-std = { version = "=4.0.3", optional = true }
+clap = { version = "=4.5.47", default-features = false, features = ["error-context", "help", "std", "usage"], optional = true }
+flate2 = { version = "=1.1.10", default-features = false, features = ["rust_backend"], optional = true }
+jsonschema = { version = "=0.56.0", default-features = false, optional = true }
+regex = { version = "=1.13.1", optional = true }
+rustix = { version = "=1.1.4", features = ["fs", "process"], optional = true }
+serde = { version = "=1.0.229", features = ["derive"], optional = true }
+serde_json = { version = "=1.0.151", optional = true }
+serde_json_canonicalizer = { version = "=0.3.2", optional = true }
+sha2 = { version = "=0.11.0", default-features = false, optional = true }
+syn = { version = "=3.0.5", features = ["full", "visit"], optional = true }
+tar = { version = "=0.4.46", default-features = false, optional = true }
+tempfile = { version = "=3.27.0", optional = true }
+thiserror = { version = "=2.0.20", optional = true }
+time = { version = "=0.3.55", features = ["formatting", "parsing"], optional = true }
+unicode-casefold = { version = "=0.2.0", optional = true }
+yaml_serde = { version = "=0.10.7", optional = true }
+zip = { version = "=8.6.0", default-features = false, features = ["deflate-flate2"], optional = true }
 
 [dev-dependencies]
 ix-trace-rs = { path = "vendor/ix-trace-rs", version = "=0.1.0" }

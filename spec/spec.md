@@ -56,6 +56,8 @@ defines their shared scope and indexes them.
 - A Rust library crate and native CLI that own this repository's production,
   validation, generation, evaluation, and qualification behavior.
 - Supported structured host interfaces for ix-flow and agent evaluations.
+- One reusable bounded Rust producer-execution boundary for declared native
+  tools and caller-owned typed response adapters.
 - A parity-gated Rust port and cutover of this repository's current Python,
   JavaScript, and MJS executable paths.
 
@@ -70,8 +72,9 @@ defines their shared scope and indexes them.
   decisions.
 - Publishing this private module to a public package registry.
 - Adding agent-specific copies of canonical skill or workflow content.
-- Executing native verification producers, scraping arbitrary stdout for a
-  verdict, persisting a parallel evidence store, or inferring human decisions.
+- Selecting or qualifying native verification producers, scraping arbitrary
+  stdout for a verdict, persisting a parallel evidence store, or inferring
+  human decisions.
 - Replacing Quire static facts, Quoin evidence/audit/report records, native
   domain result formats, or ix-flow decision history.
 - Moving Engineering Assurance behavior into another repository or creating a
@@ -156,6 +159,8 @@ same canonical bundle and do not redefine these responsibilities.
   evaluation and repository qualification behavior behind the Rust boundary.
 - [FR-018](./functional/FR-018-staged-runtime-migration.md) — retire replaced
   executable paths after local parity and direct-invocation cutover.
+- [FR-019](./functional/FR-019-bounded-producer-execution.md) — execute an exact
+  caller-declared producer through one bounded public Rust library boundary.
 
 ### Non-Functional Requirements
 
@@ -183,6 +188,8 @@ same canonical bundle and do not redefine these responsibilities.
   workflow and retain an explicit rejection.
 - [IT-005](./integration/IT-005-verification-semantics-compatibility.md) — validate
   current and historical semantic fixtures without running producers.
+- [IT-006](./integration/IT-006-producer-execution-consumer.md) — verify that a
+  real Rust consumer uses the bounded producer-execution library directly.
 
 ## Ownership Boundaries
 
@@ -194,7 +201,8 @@ same canonical bundle and do not redefine these responsibilities.
 | Agent discovery | engineering-assurance | Expose one canonical bundle through thin host manifests. |
 | Onboarding judgment | engineering-assurance plus named human | Inventory, propose bounded work, and leave terminal choices to the human owner. |
 | Shared verification vocabulary | engineering-assurance | Define semantic distinctions and type-fit mappings without owning a second persisted record family. |
-| Native verification execution and domain result | campaign repository/domain tool | Execute checks and preserve the domain result schema, oracle, and failure behavior. |
+| Bounded native producer execution | engineering-assurance | Execute only an exact caller-declared tool through FR-019 and return a typed state without interpreting domain success. |
+| Native producer selection, response semantics, and domain result | campaign repository/domain tool | Select checks and preserve the domain result schema, oracle, and failure behavior through a caller-owned response adapter. |
 | Engineering Assurance executable behavior | engineering-assurance Rust crate | Implement repository-owned validation, generation, orchestration, evaluation, and qualification behavior. |
 | Portable verification contracts | quire-verification | Publish versioned shared contract types; this module consumes rather than copies accepted definitions. |
 

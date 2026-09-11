@@ -39,8 +39,9 @@ the `engineering-assurance` native CLI.
   action.
 - The CLI SHALL write machine results only to stdout and diagnostics only to
   stderr.
-- Reusable library validation and transformation behavior SHALL remain free of
-  filesystem, subprocess, socket, and environment access.
+- Reusable library validation and transformation behavior outside the dedicated
+  FR-019 producer-execution module SHALL remain free of filesystem, subprocess,
+  socket, and environment access.
 - The CLI SHALL preserve the caller-selected repository root as an explicit
   boundary.
 - Filesystem and Git access for a capability SHALL live in a host adapter
@@ -49,7 +50,8 @@ the `engineering-assurance` native CLI.
 - The pure Rust source audit SHALL parse Rust syntax rather than matching raw
   source substrings, so comments and string literals cannot create or satisfy a
   capability finding.
-- For a caller-designated reusable-library source, the audit SHALL reject use
+- For a caller-designated reusable-library source other than the dedicated
+  producer-execution module, the audit SHALL reject use
   or path access rooted in filesystem, child-program, environment, socket, or
   capability-filesystem APIs, including lexical import aliases declared in the
   same parsed source.
@@ -98,9 +100,9 @@ containment finding and cannot satisfy the corresponding static gate.
 | FR-014-AC-1 | A root Cargo package produces the `engineering_assurance` library and `engineering-assurance` binary without requiring a new repository. | Test (TC-096) |
 | FR-014-AC-2 | Every machine-facing command emits exactly one declared-version JSON result on stdout and sends diagnostics only to stderr. | Property (TC-098) |
 | FR-014-AC-3 | Unknown versions, malformed inputs, escaping roots, unavailable hosts, and invalid host responses fail before a write or downstream action. | Property (TC-099) |
-| FR-014-AC-4 | An AST-based audit of every reusable-library module finds no filesystem, environment, child-program, network, persistence, or arbitrary-stdout recovery capability named directly or through a lexical alias in that source; comments and literals cannot manufacture a finding, and the audit does not claim cross-document compiler name resolution. | Test (TC-101) |
+| FR-014-AC-4 | An AST-based audit of every reusable-library module except the dedicated FR-019 producer-execution module finds no filesystem, environment, child-program, network, persistence, or arbitrary-stdout recovery capability named directly or through a lexical alias in that source; the dedicated module is separately checked against FR-019, comments and literals cannot manufacture a finding, and the audit does not claim cross-document compiler name resolution. | Test (TC-101, TC-127) |
 
 ## Dependencies
 
 - **Upstream**: accepted [ADR-002](../assets/adr/0002-rust-native-engineering-assurance.md).
-- **Downstream**: FR-015 through FR-018 use this boundary.
+- **Downstream**: FR-015 through FR-019 use this boundary.
