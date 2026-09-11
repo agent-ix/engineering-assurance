@@ -8,9 +8,9 @@ use std::{
     fs,
     io::{self, Write},
     path::{Component, Path, PathBuf},
-    process::Command,
     str::FromStr,
     sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
 };
 
 use cap_std::{
@@ -24,7 +24,11 @@ use engineering_assurance::onboarding::{
 };
 use thiserror::Error;
 
+use crate::process_host::{self, ProcessLimits};
+
 static STAGE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+const QUIRE_VALIDATION_TIMEOUT: Duration = Duration::from_secs(30);
+const MAX_QUIRE_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Error)]
 pub(crate) enum OnboardingHostError {
@@ -286,13 +290,24 @@ fn validate_artifact(
     quire_executable: &OsStr,
     artifact_type: ArtifactType,
 ) -> ArtifactValidation {
-    let output = Command::new(quire_executable)
-        .args(["validate", "--module"])
-        .arg(module_root)
-        .arg("--strict")
-        .arg(path)
-        .current_dir(root)
-        .output();
+    let arguments = [
+        OsStr::new("validate"),
+        OsStr::new("--module"),
+        module_root.as_os_str(),
+        OsStr::new("--strict"),
+        path.as_os_str(),
+    ];
+    let output = process_host::run_configured(
+        quire_executable,
+        &arguments,
+        Some(root),
+        &[],
+        &[],
+        ProcessLimits {
+            timeout: QUIRE_VALIDATION_TIMEOUT,
+            max_output_bytes: MAX_QUIRE_OUTPUT_BYTES,
+        },
+    );
     let (valid, diagnostics) = match output {
         Ok(output) => (
             output.status.success(),

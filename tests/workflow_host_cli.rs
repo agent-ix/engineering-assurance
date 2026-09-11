@@ -760,8 +760,8 @@ fn tc_107_incompatible_unavailable_and_malformed_inputs_fail_before_state() {
         BTreeSet::new()
     );
     assert_eq!(production.matches("process_host::run(").count(), 1);
-    assert_eq!(process_adapter.matches("Command::new(").count(), 1);
-    assert!(process_adapter.contains("Command::new(executable)"));
+    assert_eq!(process_adapter.matches("Command::new(").count(), 0);
+    assert!(process_adapter.contains("producer_execution::__private"));
     assert_eq!(production.matches("next_actions").count(), 4);
     assert_eq!(production.matches("fs::read(").count(), 1);
     assert_eq!(production.matches("fs::canonicalize(").count(), 1);

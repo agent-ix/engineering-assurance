@@ -14,7 +14,7 @@ use engineering_assurance::source_audit::{
     RustSourceFinding, RustSourceFindingCategory, audit_rust_source,
 };
 use ix_trace_rs::trace;
-use syn::Item;
+use syn::{Item, UseTree, visit::Visit};
 
 fn repository_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -120,6 +120,84 @@ fn synthetic_source(template: &str) -> String {
     template.replace("TRACE", "trace")
 }
 
+fn use_tree_imports_child_program(tree: &UseTree, prefix: &mut Vec<String>) -> bool {
+    match tree {
+        UseTree::Path(path) => {
+            prefix.push(path.ident.to_string());
+            let found = use_tree_imports_child_program(&path.tree, prefix);
+            prefix.pop();
+            found
+        }
+        UseTree::Name(name) => {
+            let mut path = prefix.clone();
+            path.push(name.ident.to_string());
+            path == ["std", "process"]
+                || (path.starts_with(&["std".to_owned(), "process".to_owned()])
+                    && matches!(
+                        path.last().map(String::as_str),
+                        Some("Command" | "Child" | "Stdio")
+                    ))
+        }
+        UseTree::Rename(rename) => {
+            let mut path = prefix.clone();
+            path.push(rename.ident.to_string());
+            path == ["std"]
+                || path == ["std", "self"]
+                || path == ["std", "process"]
+                || (path.starts_with(&["std".to_owned(), "process".to_owned()])
+                    && matches!(
+                        path.last().map(String::as_str),
+                        Some("Command" | "Child" | "Stdio")
+                    ))
+        }
+        UseTree::Group(group) => group
+            .items
+            .iter()
+            .any(|item| use_tree_imports_child_program(item, prefix)),
+        UseTree::Glob(_) => prefix == &["std", "process"],
+    }
+}
+
+#[derive(Default)]
+struct ChildProgramUse {
+    found: bool,
+    capture_calls: usize,
+    paths: Vec<Vec<String>>,
+}
+
+impl<'ast> Visit<'ast> for ChildProgramUse {
+    fn visit_item_use(&mut self, item: &'ast syn::ItemUse) {
+        self.found |= use_tree_imports_child_program(&item.tree, &mut Vec::new());
+        syn::visit::visit_item_use(self, item);
+    }
+
+    fn visit_path(&mut self, path: &'ast syn::Path) {
+        let segments = path
+            .segments
+            .iter()
+            .map(|segment| segment.ident.to_string())
+            .collect::<Vec<_>>();
+        if segments.starts_with(&["std".to_owned(), "process".to_owned()])
+            && segments
+                .get(2)
+                .is_some_and(|name| matches!(name.as_str(), "Command" | "Child" | "Stdio"))
+        {
+            self.found = true;
+        }
+        self.paths.push(segments);
+        syn::visit::visit_path(self, path);
+    }
+
+    fn visit_expr_call(&mut self, call: &'ast syn::ExprCall) {
+        if let syn::Expr::Path(function) = call.func.as_ref()
+            && function.path.is_ident("capture_command")
+        {
+            self.capture_calls += 1;
+        }
+        syn::visit::visit_expr_call(self, call);
+    }
+}
+
 #[test]
 #[trace("TC-086", "FR-012-AC-8")]
 #[trace("TC-101", "FR-014-AC-4", "FR-014-CON-1", "FR-014-CON-2")]
@@ -135,6 +213,88 @@ fn tc_101_every_library_module_is_capability_confined() {
             .unwrap_or_else(|error| panic!("cannot audit {}: {error}", path.display()));
         assert!(findings.is_empty(), "{}: {findings:?}", path.display());
     }
+}
+
+#[trace(
+    "TC-127",
+    "FR-014-AC-4",
+    "FR-019-AC-5",
+    "FR-019-CON-2",
+    "FR-019-CON-3",
+    "NFR-004-AC-2"
+)]
+#[test]
+fn tc_127_producer_execution_owns_the_only_first_party_process_capability() {
+    let root = repository_root();
+    let producer_path = root.join("src/producer_execution.rs");
+    let mut sources = Vec::new();
+    rust_files(&root.join("src"), &mut sources);
+    for path in sources.iter().filter(|path| **path != producer_path) {
+        let source = fs::read_to_string(path)
+            .unwrap_or_else(|error| panic!("cannot read {}: {error}", path.display()));
+        let syntax = syn::parse_file(&source)
+            .unwrap_or_else(|error| panic!("cannot parse {}: {error}", path.display()));
+        let mut process_use = ChildProgramUse::default();
+        process_use.visit_file(&syntax);
+        assert!(
+            !process_use.found,
+            "{} owns a child-program capability outside producer execution",
+            path.display()
+        );
+    }
+
+    let producer = fs::read_to_string(&producer_path)
+        .expect("producer-execution source must remain inspectable");
+    let compatibility = fs::read_to_string(root.join("src/process_host.rs"))
+        .expect("legacy host compatibility facade must remain inspectable");
+    let producer_syntax = syn::parse_file(&producer).expect("producer source must be valid Rust");
+    let compatibility_syntax =
+        syn::parse_file(&compatibility).expect("compatibility facade must be valid Rust");
+    let mut producer_ownership = ChildProgramUse::default();
+    producer_ownership.visit_file(&producer_syntax);
+    let mut compatibility_ownership = ChildProgramUse::default();
+    compatibility_ownership.visit_file(&compatibility_syntax);
+    assert_eq!(producer_ownership.capture_calls, 2);
+    assert!(compatibility_ownership.paths.iter().any(|path| {
+        path.windows(2)
+            .any(|pair| pair == ["producer_execution", "__private"])
+    }));
+    for path in &producer_ownership.paths {
+        assert!(
+            !matches!(
+                path.as_slice(),
+                [crate_name, parser, ..]
+                    if crate_name == "serde_json"
+                        && matches!(parser.as_str(), "from_reader" | "from_slice" | "from_str")
+            ) && !matches!(
+                path.first().map(String::as_str),
+                Some("rusqlite" | "sqlx" | "quire")
+            ),
+            "producer execution contains a forbidden parser, persistence, or Quoin path: {path:?}"
+        );
+    }
+    assert!(
+        !root.join("src/producer_execution/Cargo.toml").exists(),
+        "producer execution must remain in the existing crate"
+    );
+
+    for mutant in [
+        "use std::process::Command; fn escape() { let _ = Command::new(\"tool\"); }",
+        "mod nested { use std::process::Command as Runner; fn escape() { let _ = Runner::new(\"tool\"); } }",
+        "use std as platform; fn escape() { let _ = platform::process::Command::new(\"tool\"); }",
+    ] {
+        let syntax = syn::parse_file(mutant).expect("ownership mutant must be valid Rust");
+        let mut process_use = ChildProgramUse::default();
+        process_use.visit_file(&syntax);
+        assert!(process_use.found, "child-process ownership mutant escaped");
+    }
+    let safe = syn::parse_file(
+        "use std::process::ExitCode; fn complete() -> ExitCode { ExitCode::SUCCESS }",
+    )
+    .expect("safe process-status source must be valid Rust");
+    let mut process_use = ChildProgramUse::default();
+    process_use.visit_file(&safe);
+    assert!(!process_use.found, "process status is not child execution");
 }
 
 #[test]

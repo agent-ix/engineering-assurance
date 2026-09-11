@@ -14,6 +14,7 @@ use std::{
     fs::File,
     io::{self, Read, Seek, SeekFrom, Write},
     path::{Component, Path},
+    process::ExitStatus,
     sync::{
         Mutex,
         atomic::{AtomicBool, Ordering},
@@ -21,16 +22,16 @@ use std::{
     time::Duration,
 };
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use std::{
-    os::{
-        fd::AsRawFd,
-        unix::process::{CommandExt, ExitStatusExt},
-    },
-    process::{Command, ExitStatus, Stdio},
+    os::unix::process::{CommandExt, ExitStatusExt},
+    process::{Command, Stdio},
     thread,
     time::Instant,
 };
+
+#[cfg(target_os = "linux")]
+use std::os::fd::AsRawFd;
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -910,6 +911,60 @@ enum ProcessConclusion {
     Terminal(TerminalStatus),
 }
 
+#[cfg(unix)]
+#[derive(Clone, Copy)]
+struct KernelBudget {
+    timeout: Duration,
+    max_stdout_bytes: usize,
+    max_stderr_bytes: usize,
+}
+
+#[cfg(unix)]
+#[derive(Clone, Copy)]
+enum DescendantPolicy {
+    ProcessGroup,
+    Observed { maximum: usize },
+}
+
+#[cfg(unix)]
+enum KernelConclusion {
+    Unavailable(String),
+    PipeUnavailable(&'static str),
+    Observation(String),
+    OutputUnreadable {
+        stream: &'static str,
+        detail: String,
+    },
+    TimedOut,
+    ContainmentFailure,
+    Cancelled,
+    Terminal(ExitStatus),
+}
+
+#[cfg(unix)]
+struct KernelCapture {
+    conclusion: KernelConclusion,
+    terminal_status: Option<ExitStatus>,
+    stdout: Option<CapturedBytes>,
+    stderr: Option<CapturedBytes>,
+}
+
+#[cfg(unix)]
+impl KernelCapture {
+    fn without_evidence(conclusion: KernelConclusion) -> Self {
+        Self::without_streams(conclusion, None)
+    }
+
+    fn without_streams(conclusion: KernelConclusion, terminal_status: Option<ExitStatus>) -> Self {
+        Self {
+            conclusion,
+            terminal_status,
+            stdout: None,
+            stderr: None,
+        }
+    }
+}
+
 #[cfg(target_os = "linux")]
 fn finish_outcome<A: ProducerResponseAdapter>(
     request: &ProducerExecutionRequest,
@@ -1459,93 +1514,167 @@ fn descriptor_path(file: &File) -> String {
 
 #[cfg(target_os = "linux")]
 fn capture_process(
-    mut command: Command,
+    command: Command,
     budget: ExecutionBudget,
     cancellation: &CancellationToken,
 ) -> CapturedProcessOutcome {
-    let Ok(mut child) = command.spawn() else {
-        return CapturedProcessOutcome {
-            conclusion: ProcessConclusion::Unavailable,
-            evidence: None,
-        };
-    };
-    let Some(stdout) = child.stdout.take() else {
-        let _ = terminate_group(&mut child, &BTreeSet::new());
-        return CapturedProcessOutcome {
-            conclusion: ProcessConclusion::ContainmentFailure,
-            evidence: None,
-        };
-    };
-    let Some(stderr) = child.stderr.take() else {
-        let _ = terminate_group(&mut child, &BTreeSet::new());
-        return CapturedProcessOutcome {
-            conclusion: ProcessConclusion::ContainmentFailure,
-            evidence: None,
-        };
-    };
-    let stdout_reader = bounded_reader(stdout, budget.max_stdout_bytes);
-    let stderr_reader = bounded_reader(stderr, budget.max_stderr_bytes);
-    let (completion, forced_terminal_status) = supervise_child(
-        &mut child,
-        Duration::from_millis(budget.timeout_millis),
-        budget.max_descendants,
-        cancellation,
+    let captured = capture_command(
+        command,
+        KernelBudget {
+            timeout: Duration::from_millis(budget.timeout_millis),
+            max_stdout_bytes: budget.max_stdout_bytes,
+            max_stderr_bytes: budget.max_stderr_bytes,
+        },
+        DescendantPolicy::Observed {
+            maximum: budget.max_descendants,
+        },
+        Some(cancellation),
     );
-    let (Ok(stdout), Ok(stderr)) = (join_reader(stdout_reader), join_reader(stderr_reader)) else {
+    let KernelCapture {
+        conclusion,
+        terminal_status,
+        stdout,
+        stderr,
+    } = captured;
+    let Some((stdout, stderr)) = stdout.zip(stderr) else {
         return CapturedProcessOutcome {
-            conclusion: ProcessConclusion::Failed(ExecutionFailure::Observation),
+            conclusion: match conclusion {
+                KernelConclusion::Unavailable(_) => ProcessConclusion::Unavailable,
+                KernelConclusion::ContainmentFailure | KernelConclusion::PipeUnavailable(_) => {
+                    ProcessConclusion::ContainmentFailure
+                }
+                KernelConclusion::Observation(_)
+                | KernelConclusion::OutputUnreadable { .. }
+                | KernelConclusion::Terminal(_) => {
+                    ProcessConclusion::Failed(ExecutionFailure::Observation)
+                }
+                KernelConclusion::TimedOut => ProcessConclusion::TimedOut,
+                KernelConclusion::Cancelled => ProcessConclusion::Cancelled,
+            },
             evidence: None,
         };
     };
     CapturedProcessOutcome {
         evidence: Some(ProcessEvidence {
-            terminal_status: terminal_status(&completion).or(forced_terminal_status),
+            terminal_status: terminal_status.map(status_to_terminal),
             stdout: captured_stream(stdout),
             stderr: captured_stream(stderr),
         }),
-        conclusion: completion,
+        conclusion: match conclusion {
+            KernelConclusion::Unavailable(_) => ProcessConclusion::Unavailable,
+            KernelConclusion::PipeUnavailable(_)
+            | KernelConclusion::Observation(_)
+            | KernelConclusion::OutputUnreadable { .. } => {
+                ProcessConclusion::Failed(ExecutionFailure::Observation)
+            }
+            KernelConclusion::TimedOut => ProcessConclusion::TimedOut,
+            KernelConclusion::ContainmentFailure => ProcessConclusion::ContainmentFailure,
+            KernelConclusion::Cancelled => ProcessConclusion::Cancelled,
+            KernelConclusion::Terminal(status) => terminal_conclusion(status),
+        },
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
+fn capture_command(
+    mut command: Command,
+    budget: KernelBudget,
+    descendant_policy: DescendantPolicy,
+    cancellation: Option<&CancellationToken>,
+) -> KernelCapture {
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(error) => {
+            return KernelCapture::without_evidence(KernelConclusion::Unavailable(
+                error.to_string(),
+            ));
+        }
+    };
+    let Some(stdout) = child.stdout.take() else {
+        let status = terminate_group(&mut child, &BTreeSet::new());
+        return KernelCapture::without_streams(KernelConclusion::PipeUnavailable("stdout"), status);
+    };
+    let Some(stderr) = child.stderr.take() else {
+        let status = terminate_group(&mut child, &BTreeSet::new());
+        return KernelCapture::without_streams(KernelConclusion::PipeUnavailable("stderr"), status);
+    };
+    let stdout_reader = bounded_reader(stdout, budget.max_stdout_bytes);
+    let stderr_reader = bounded_reader(stderr, budget.max_stderr_bytes);
+    let (conclusion, terminal_status) =
+        supervise_child(&mut child, budget.timeout, descendant_policy, cancellation);
+    let stdout = match join_reader(stdout_reader) {
+        Ok(captured) => captured,
+        Err(detail) => {
+            return KernelCapture::without_evidence(KernelConclusion::OutputUnreadable {
+                stream: "stdout",
+                detail,
+            });
+        }
+    };
+    let stderr = match join_reader(stderr_reader) {
+        Ok(captured) => captured,
+        Err(detail) => {
+            return KernelCapture::without_evidence(KernelConclusion::OutputUnreadable {
+                stream: "stderr",
+                detail,
+            });
+        }
+    };
+    KernelCapture {
+        conclusion,
+        terminal_status,
+        stdout: Some(stdout),
+        stderr: Some(stderr),
+    }
+}
+
+#[cfg(unix)]
 fn supervise_child(
     child: &mut std::process::Child,
     timeout: Duration,
-    maximum_descendants: usize,
-    cancellation: &CancellationToken,
-) -> (ProcessConclusion, Option<TerminalStatus>) {
+    descendant_policy: DescendantPolicy,
+    cancellation: Option<&CancellationToken>,
+) -> (KernelConclusion, Option<ExitStatus>) {
     let started = Instant::now();
     let mut tracked_descendants = BTreeSet::new();
     loop {
-        if cancellation.is_cancelled() {
+        if cancellation.is_some_and(CancellationToken::is_cancelled) {
             let status = terminate_group(child, &tracked_descendants);
-            return (ProcessConclusion::Cancelled, status);
+            return (KernelConclusion::Cancelled, status);
         }
-        let Ok(observation) = inspect_descendants(child.id(), maximum_descendants) else {
-            let status = terminate_group(child, &tracked_descendants);
-            return (ProcessConclusion::ContainmentFailure, status);
-        };
-        tracked_descendants.extend(observation.descendants);
-        if observation.escaped {
-            let status = terminate_group(child, &tracked_descendants);
-            return (ProcessConclusion::ContainmentFailure, status);
+        if let DescendantPolicy::Observed { maximum } = descendant_policy {
+            #[cfg(not(target_os = "linux"))]
+            {
+                let _ = maximum;
+                let status = terminate_group(child, &tracked_descendants);
+                return (KernelConclusion::ContainmentFailure, status);
+            }
+            #[cfg(target_os = "linux")]
+            {
+                let Ok(observation) = inspect_descendants(child.id(), maximum) else {
+                    let status = terminate_group(child, &tracked_descendants);
+                    return (KernelConclusion::ContainmentFailure, status);
+                };
+                tracked_descendants.extend(observation.descendants);
+                if observation.escaped {
+                    let status = terminate_group(child, &tracked_descendants);
+                    return (KernelConclusion::ContainmentFailure, status);
+                }
+            }
         }
         match child.try_wait() {
             Ok(Some(status)) => {
                 terminate_process_group(child.id());
-                return (terminal_conclusion(status), None);
+                return (KernelConclusion::Terminal(status), Some(status));
             }
             Ok(None) if started.elapsed() < timeout => thread::sleep(Duration::from_millis(1)),
             Ok(None) => {
                 let status = terminate_group(child, &tracked_descendants);
-                return (ProcessConclusion::TimedOut, status);
+                return (KernelConclusion::TimedOut, status);
             }
-            Err(_) => {
+            Err(error) => {
                 let status = terminate_group(child, &tracked_descendants);
-                return (
-                    ProcessConclusion::Failed(ExecutionFailure::Observation),
-                    status,
-                );
+                return (KernelConclusion::Observation(error.to_string()), status);
             }
         }
     }
@@ -1577,18 +1706,6 @@ fn qualify_captured_process(
 #[cfg(target_os = "linux")]
 fn terminal_conclusion(status: ExitStatus) -> ProcessConclusion {
     ProcessConclusion::Terminal(status_to_terminal(status))
-}
-
-#[cfg(target_os = "linux")]
-fn terminal_status(conclusion: &ProcessConclusion) -> Option<TerminalStatus> {
-    match conclusion {
-        ProcessConclusion::Terminal(status) => Some(*status),
-        ProcessConclusion::Unavailable
-        | ProcessConclusion::Failed(_)
-        | ProcessConclusion::TimedOut
-        | ProcessConclusion::ContainmentFailure
-        | ProcessConclusion::Cancelled => None,
-    }
 }
 
 #[cfg(target_os = "linux")]
@@ -1690,11 +1807,11 @@ fn inspect_descendants(root: u32, maximum: usize) -> Result<DescendantObservatio
     })
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn terminate_group(
     child: &mut std::process::Child,
     descendants: &BTreeSet<i32>,
-) -> Option<TerminalStatus> {
+) -> Option<ExitStatus> {
     terminate_process_group(child.id());
     for raw in descendants {
         if let Some(pid) = rustix::process::Pid::from_raw(*raw) {
@@ -1702,7 +1819,7 @@ fn terminate_group(
         }
     }
     let _ = child.kill();
-    child.wait().ok().map(status_to_terminal)
+    child.wait().ok()
 }
 
 #[cfg(target_os = "linux")]
@@ -1713,7 +1830,7 @@ fn status_to_terminal(status: ExitStatus) -> TerminalStatus {
     )
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn terminate_process_group(id: u32) {
     let Ok(raw) = i32::try_from(id) else {
         return;
@@ -1724,7 +1841,7 @@ fn terminate_process_group(id: u32) {
     let _ = rustix::process::kill_process_group(group, rustix::process::Signal::KILL);
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn bounded_reader<R>(reader: R, maximum: usize) -> thread::JoinHandle<io::Result<CapturedBytes>>
 where
     R: Read + Send + 'static,
@@ -1739,12 +1856,17 @@ where
     })
 }
 
-#[cfg(target_os = "linux")]
-fn join_reader(handle: thread::JoinHandle<io::Result<CapturedBytes>>) -> Result<CapturedBytes, ()> {
-    handle.join().map_err(|_| ())?.map_err(|_| ())
+#[cfg(unix)]
+fn join_reader(
+    handle: thread::JoinHandle<io::Result<CapturedBytes>>,
+) -> Result<CapturedBytes, String> {
+    handle
+        .join()
+        .map_err(|_| "reader thread panicked".to_owned())?
+        .map_err(|error| error.to_string())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 struct CapturedBytes {
     bytes: Vec<u8>,
     truncated: bool,
@@ -1756,6 +1878,239 @@ fn captured_stream(captured: CapturedBytes) -> CapturedStream {
         digest: ContentDigest::of_bytes(&captured.bytes),
         bytes: captured.bytes,
         truncated: captured.truncated,
+    }
+}
+
+/// Unstable package-internal bridge for EA's existing binary-only adapters.
+///
+/// This API is public only because Cargo builds the package library and binary
+/// as separate crates. New external consumers should use [`ProducerExecutor`]
+/// and the closed producer-execution protocol instead. No compatibility is
+/// promised for anything beneath this namespace.
+#[doc(hidden)]
+pub mod __private {
+    use std::{ffi::OsStr, path::Path, process::ExitStatus, time::Duration};
+
+    use thiserror::Error;
+
+    /// Timeout and per-stream capture limits for a legacy host invocation.
+    #[derive(Clone, Copy)]
+    pub struct ProcessLimits {
+        /// Maximum wall-clock duration.
+        pub timeout: Duration,
+        /// Maximum retained bytes for each output stream.
+        pub max_output_bytes: usize,
+    }
+
+    /// Terminal result returned to an existing binary adapter.
+    pub struct CompletedProcess {
+        /// Direct child terminal status.
+        pub status: ExitStatus,
+        /// Bounded standard output.
+        pub stdout: Vec<u8>,
+        /// Bounded standard error.
+        pub stderr: Vec<u8>,
+    }
+
+    /// Process-mechanics failure returned to an existing binary adapter.
+    #[derive(Debug, Error)]
+    pub enum ProcessError {
+        /// The selected child could not be launched on this host.
+        #[error("child process is unavailable: {detail}")]
+        Unavailable {
+            /// Host diagnostic retained for the adapter's existing mapping.
+            detail: String,
+        },
+        /// A configured output pipe was unavailable after launch.
+        #[error("child process {stream} pipe is unavailable")]
+        PipeUnavailable {
+            /// Missing stream name.
+            stream: &'static str,
+        },
+        /// The child could not be observed or reaped.
+        #[error("cannot observe child process: {detail}")]
+        Observation {
+            /// Host diagnostic retained for the adapter's existing mapping.
+            detail: String,
+        },
+        /// The child exceeded its wall-clock limit.
+        #[error("child process exceeded the {timeout:?} time limit")]
+        TimedOut {
+            /// Configured wall-clock limit.
+            timeout: Duration,
+        },
+        /// One captured stream could not be read.
+        #[error("cannot read child process {stream}: {detail}")]
+        OutputUnreadable {
+            /// Unreadable stream name.
+            stream: &'static str,
+            /// Host diagnostic retained for the adapter's existing mapping.
+            detail: String,
+        },
+        /// One captured stream exceeded its byte limit.
+        #[error("child process {stream} exceeded the {limit}-byte limit")]
+        OutputTooLarge {
+            /// Oversized stream name.
+            stream: &'static str,
+            /// Configured byte ceiling.
+            limit: usize,
+        },
+    }
+
+    /// Runs an existing binary adapter with inherited environment and no cwd.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed process-mechanics failure while preserving the legacy
+    /// adapter contract.
+    pub fn run(
+        executable: &OsStr,
+        arguments: &[&OsStr],
+        limits: ProcessLimits,
+    ) -> Result<CompletedProcess, ProcessError> {
+        run_configured(executable, arguments, None, &[], &[], limits)
+    }
+
+    /// Runs an existing binary adapter through the shared execution kernel.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed process-mechanics failure while preserving inherited
+    /// environment, explicit overrides/removals, and optional cwd.
+    pub fn run_configured(
+        executable: &OsStr,
+        arguments: &[&OsStr],
+        current_directory: Option<&Path>,
+        environment: &[(&OsStr, &OsStr)],
+        removed_environment: &[&OsStr],
+        limits: ProcessLimits,
+    ) -> Result<CompletedProcess, ProcessError> {
+        #[cfg(unix)]
+        {
+            run_unix(
+                executable,
+                arguments,
+                current_directory,
+                environment,
+                removed_environment,
+                limits,
+            )
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (
+                executable,
+                arguments,
+                current_directory,
+                environment,
+                removed_environment,
+                limits,
+            );
+            Err(ProcessError::Unavailable {
+                detail: "descendant process-group containment is unavailable on this host"
+                    .to_owned(),
+            })
+        }
+    }
+
+    #[cfg(unix)]
+    fn run_unix(
+        executable: &OsStr,
+        arguments: &[&OsStr],
+        current_directory: Option<&Path>,
+        environment: &[(&OsStr, &OsStr)],
+        removed_environment: &[&OsStr],
+        limits: ProcessLimits,
+    ) -> Result<CompletedProcess, ProcessError> {
+        use std::os::unix::process::CommandExt;
+        use std::process::{Command, Stdio};
+
+        use super::{
+            DescendantPolicy, KernelBudget, KernelCapture, KernelConclusion, capture_command,
+        };
+
+        let mut command = Command::new(executable);
+        command.args(arguments);
+        if let Some(directory) = current_directory {
+            command.current_dir(directory);
+        }
+        command.envs(environment.iter().copied());
+        for name in removed_environment {
+            command.env_remove(name);
+        }
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .process_group(0);
+        let KernelCapture {
+            conclusion,
+            stdout,
+            stderr,
+            ..
+        } = capture_command(
+            command,
+            KernelBudget {
+                timeout: limits.timeout,
+                max_stdout_bytes: limits.max_output_bytes,
+                max_stderr_bytes: limits.max_output_bytes,
+            },
+            DescendantPolicy::ProcessGroup,
+            None,
+        );
+        match conclusion {
+            KernelConclusion::Unavailable(detail) => Err(ProcessError::Unavailable { detail }),
+            KernelConclusion::PipeUnavailable(stream) => {
+                Err(ProcessError::PipeUnavailable { stream })
+            }
+            KernelConclusion::Observation(detail) => Err(ProcessError::Observation { detail }),
+            KernelConclusion::OutputUnreadable { stream, detail } => {
+                Err(ProcessError::OutputUnreadable { stream, detail })
+            }
+            KernelConclusion::TimedOut => Err(ProcessError::TimedOut {
+                timeout: limits.timeout,
+            }),
+            KernelConclusion::ContainmentFailure | KernelConclusion::Cancelled => {
+                Err(ProcessError::Observation {
+                    detail: "shared execution kernel lost process containment".to_owned(),
+                })
+            }
+            KernelConclusion::Terminal(status) => finish(status, stdout, stderr, limits),
+        }
+    }
+
+    #[cfg(unix)]
+    fn finish(
+        status: ExitStatus,
+        stdout: Option<super::CapturedBytes>,
+        stderr: Option<super::CapturedBytes>,
+        limits: ProcessLimits,
+    ) -> Result<CompletedProcess, ProcessError> {
+        let stdout = stdout.ok_or(ProcessError::OutputUnreadable {
+            stream: "stdout",
+            detail: "bounded capture was unavailable".to_owned(),
+        })?;
+        let stderr = stderr.ok_or(ProcessError::OutputUnreadable {
+            stream: "stderr",
+            detail: "bounded capture was unavailable".to_owned(),
+        })?;
+        if stdout.truncated {
+            return Err(ProcessError::OutputTooLarge {
+                stream: "stdout",
+                limit: limits.max_output_bytes,
+            });
+        }
+        if stderr.truncated {
+            return Err(ProcessError::OutputTooLarge {
+                stream: "stderr",
+                limit: limits.max_output_bytes,
+            });
+        }
+        Ok(CompletedProcess {
+            status,
+            stdout: stdout.bytes,
+            stderr: stderr.bytes,
+        })
     }
 }
 
