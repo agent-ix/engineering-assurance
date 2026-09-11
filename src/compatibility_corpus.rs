@@ -331,6 +331,56 @@ pub struct CorpusIndex {
     pub chain: Chain,
 }
 
+/// Why one retained path is not a safe corpus-relative descendant.
+///
+/// A closed enum rather than a `&'static str`, because the nine refusals were
+/// distinguishable only by prose: every one produced the same diagnostic code
+/// and the same variant, so a test could assert nothing finer than "refused"
+/// and swapping two of the messages broke nothing. A caller's response to all
+/// nine is the same — fix the path — which is why they stay one error variant
+/// and one code rather than becoming nine; what they must not share is the
+/// discriminant, because that is what makes each refusal individually
+/// verifiable.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UnsafePathReason {
+    /// The path names nothing at all.
+    Empty,
+    /// The path is longer than [`MAX_RETAINED_PATH_BYTES`].
+    TooLong,
+    /// The path contains a NUL byte.
+    ContainsNul,
+    /// The path contains a backslash, which separates components on some hosts.
+    ContainsBackslash,
+    /// The path is rooted and so escapes the corpus root entirely.
+    Absolute,
+    /// The path carries a drive prefix, which is absolute on some hosts.
+    DrivePrefix,
+    /// The path contains an empty component, as in a doubled separator.
+    EmptyComponent,
+    /// The path contains a current-directory component.
+    CurrentDirectoryComponent,
+    /// The path traverses above the corpus root.
+    ParentTraversal,
+}
+
+impl std::fmt::Display for UnsafePathReason {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Empty => "retained path is empty",
+            Self::TooLong => "retained path is longer than the accepted bound",
+            Self::ContainsNul => "retained path contains a NUL byte",
+            Self::ContainsBackslash => "retained path contains a backslash",
+            Self::Absolute => "retained path is absolute",
+            Self::DrivePrefix => "retained path carries a drive prefix",
+            Self::EmptyComponent => "retained path contains an empty component",
+            Self::CurrentDirectoryComponent => {
+                "retained path contains a current-directory component"
+            }
+            Self::ParentTraversal => "retained path traverses above the corpus root",
+        })
+    }
+}
+
 /// Stable failures at the accepted-corpus boundary.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum CorpusError {
@@ -370,12 +420,12 @@ pub enum CorpusError {
         identity: String,
     },
     /// A retained path is absolute, escaping, or otherwise unsafe.
-    #[error("unsafe retained path for {identity:?}: {detail}")]
+    #[error("unsafe retained path for {identity:?}: {reason}")]
     UnsafeRetainedPath {
         /// Identity of the entry that carries the path.
         identity: String,
-        /// Stable explanation of why the path is refused.
-        detail: &'static str,
+        /// Closed reason the path is refused.
+        reason: UnsafePathReason,
     },
     /// A recorded digest is not a lowercase hexadecimal SHA-256 value.
     #[error("invalid recorded digest for {identity:?}")]
@@ -572,38 +622,38 @@ fn validate_producer_retention(producer: &ProducerCase) -> Result<(), CorpusErro
 /// refused here rather than resolved, so a confined host adapter never has to
 /// decide whether a resolved path is still inside its root.
 fn validate_retained_path(identity: &str, path: &str) -> Result<(), CorpusError> {
-    let refuse = |detail: &'static str| {
+    let refuse = |reason: UnsafePathReason| {
         Err(CorpusError::UnsafeRetainedPath {
             identity: identity.to_owned(),
-            detail,
+            reason,
         })
     };
     if path.is_empty() {
-        return refuse("retained path is empty");
+        return refuse(UnsafePathReason::Empty);
     }
     if path.len() > MAX_RETAINED_PATH_BYTES {
-        return refuse("retained path is longer than the accepted bound");
+        return refuse(UnsafePathReason::TooLong);
     }
     if path.contains('\0') {
-        return refuse("retained path contains a NUL byte");
+        return refuse(UnsafePathReason::ContainsNul);
     }
     if path.contains('\\') {
-        return refuse("retained path contains a backslash");
+        return refuse(UnsafePathReason::ContainsBackslash);
     }
     if path.starts_with('/') {
-        return refuse("retained path is absolute");
+        return refuse(UnsafePathReason::Absolute);
     }
     // A Windows drive or UNC prefix is absolute on some hosts and relative on
     // others. It is refused on every host, so the corpus reads the same bytes
     // everywhere.
     if path.len() >= 2 && path.as_bytes()[1] == b':' {
-        return refuse("retained path carries a drive prefix");
+        return refuse(UnsafePathReason::DrivePrefix);
     }
     for component in path.split('/') {
         match component {
-            "" => return refuse("retained path contains an empty component"),
-            "." => return refuse("retained path contains a current-directory component"),
-            ".." => return refuse("retained path traverses above the corpus root"),
+            "" => return refuse(UnsafePathReason::EmptyComponent),
+            "." => return refuse(UnsafePathReason::CurrentDirectoryComponent),
+            ".." => return refuse(UnsafePathReason::ParentTraversal),
             _ => {}
         }
     }
@@ -1224,22 +1274,43 @@ mod tests {
     fn tc_103_refuses_every_unsafe_path_and_incomplete_retention() {
         // Every unsafe retained-path shape is refused here, so a confined host
         // never has to decide whether a resolved path is still inside its root.
+        // Each unsafe shape is paired with the reason it must produce. All nine
+        // share one diagnostic code because a caller's response to all nine is
+        // the same — fix the path — but they must not share the discriminant:
+        // while the reason was a `&'static str` inside one variant, nothing
+        // distinguished a traversal from a doubled separator, and swapping two
+        // of the messages left every assertion here passing.
         let long = format!("records/{}.json", "a".repeat(MAX_RETAINED_PATH_BYTES));
-        for unsafe_path in [
-            "",
-            "/etc/passwd",
-            "../outside.json",
-            "records/../../outside.json",
-            "records/./here.json",
-            "records//here.json",
-            "records\\here.json",
-            "C:/records/here.json",
-            &long,
+        for (unsafe_path, expected) in [
+            ("", UnsafePathReason::Empty),
+            ("/etc/passwd", UnsafePathReason::Absolute),
+            ("../outside.json", UnsafePathReason::ParentTraversal),
+            (
+                "records/../../outside.json",
+                UnsafePathReason::ParentTraversal,
+            ),
+            (
+                "records/./here.json",
+                UnsafePathReason::CurrentDirectoryComponent,
+            ),
+            ("records//here.json", UnsafePathReason::EmptyComponent),
+            ("records\\here.json", UnsafePathReason::ContainsBackslash),
+            ("C:/records/here.json", UnsafePathReason::DrivePrefix),
+            ("records/\u{0}here.json", UnsafePathReason::ContainsNul),
+            (long.as_str(), UnsafePathReason::TooLong),
         ] {
+            let error = mutated(|raw| raw["cases"][0]["retained_path"] = json!(unsafe_path));
             assert_eq!(
-                mutated(|raw| raw["cases"][0]["retained_path"] = json!(unsafe_path)).code(),
+                error.code(),
                 "unsafe_compatibility_corpus_path",
                 "{unsafe_path:?} was not refused"
+            );
+            assert!(
+                matches!(
+                    &error,
+                    CorpusError::UnsafeRetainedPath { reason, .. } if *reason == expected
+                ),
+                "{unsafe_path:?} was refused as {error:?}, not {expected:?}"
             );
         }
 

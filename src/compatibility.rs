@@ -148,13 +148,20 @@ pub enum CompatibilityError {
         /// Unknown component identity.
         component: String,
     },
-    /// An observation contains a blank identity or version.
-    #[error("invalid compatibility observation for {component:?}: {detail}")]
-    InvalidObservation {
-        /// Component identity, possibly blank.
+    /// An observation names no component at all.
+    ///
+    /// Separate from [`Self::BlankObservedVersion`] because the two are
+    /// different mistakes in the caller's request and were distinguishable only
+    /// by prose: a blank identity means the request does not say what was
+    /// observed, while a blank version means it says what was observed and not
+    /// what version it is. A caller repairing its request needs to know which.
+    #[error("invalid compatibility observation: component identity is blank")]
+    BlankObservedComponent,
+    /// An observation names a component but leaves its version blank.
+    #[error("invalid compatibility observation for {component:?}: observed version is blank")]
+    BlankObservedVersion {
+        /// Component identity.
         component: String,
-        /// Stable explanation of the invalid value.
-        detail: &'static str,
     },
     /// The embedded reviewed matrix violates its required contract.
     #[error("embedded compatibility matrix is invalid: {detail}")]
@@ -179,7 +186,8 @@ impl CompatibilityError {
             Self::UnsupportedProtocol { .. } => "unsupported_compatibility_protocol",
             Self::DuplicateObservation { .. } => "duplicate_compatibility_observation",
             Self::UnknownComponent { .. } => "unknown_compatibility_component",
-            Self::InvalidObservation { .. } => "invalid_compatibility_observation",
+            Self::BlankObservedComponent => "blank_compatibility_observation_component",
+            Self::BlankObservedVersion { .. } => "blank_compatibility_observation_version",
             Self::InvalidMatrix { .. } => "invalid_embedded_compatibility_matrix",
             Self::ResultSerialization { .. } => "compatibility_result_serialization_failed",
         }
@@ -475,10 +483,7 @@ pub fn evaluate_request_bytes(input: &[u8]) -> Result<CompatibilityResult, Compa
     let mut observed = BTreeMap::new();
     for observation in request.observed {
         if observation.component.trim().is_empty() {
-            return Err(CompatibilityError::InvalidObservation {
-                component: observation.component,
-                detail: "component identity is blank",
-            });
+            return Err(CompatibilityError::BlankObservedComponent);
         }
         if !known.contains(observation.component.as_str()) {
             return Err(CompatibilityError::UnknownComponent {
@@ -490,9 +495,8 @@ pub fn evaluate_request_bytes(input: &[u8]) -> Result<CompatibilityResult, Compa
             .as_deref()
             .is_some_and(|version| version.trim().is_empty())
         {
-            return Err(CompatibilityError::InvalidObservation {
+            return Err(CompatibilityError::BlankObservedVersion {
                 component: observation.component,
-                detail: "observed version is blank",
             });
         }
         let component = observation.component;
@@ -1094,6 +1098,24 @@ mod tests {
             .expect_err("duplicate component must fail")
             .code(),
             "duplicate_compatibility_observation"
+        );
+
+        // A blank identity and a blank version are separate refusals. They
+        // shared one variant and one code, distinguished only by a `detail`
+        // string, so nothing here could tell them apart and no assertion drove
+        // either one: a caller repairing its request could not learn whether it
+        // had failed to say what was observed or failed to say which version.
+        assert_eq!(
+            evaluate_request_bytes(&request(&[("   ", Some("0.23.1"))]))
+                .expect_err("a blank component identity must fail")
+                .code(),
+            "blank_compatibility_observation_component"
+        );
+        assert_eq!(
+            evaluate_request_bytes(&request(&[("quoin", Some("   "))]))
+                .expect_err("a blank observed version must fail")
+                .code(),
+            "blank_compatibility_observation_version"
         );
 
         // A rejection reason recorded against a version the `incompatible` list
