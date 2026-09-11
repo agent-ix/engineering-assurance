@@ -28,6 +28,11 @@ struct ErrorResult {
     message: String,
 }
 
+#[derive(Deserialize)]
+struct NpmPackageContract {
+    files: Vec<String>,
+}
+
 fn run(root: &Path) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
         .args(["package-audit", "--root"])
@@ -37,7 +42,16 @@ fn run(root: &Path) -> std::process::Output {
 }
 
 #[test]
-#[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
+#[trace(
+    "TC-015",
+    "FR-003-AC-2",
+    "TC-040",
+    "NFR-003-AC-1",
+    "NFR-003-AC-2",
+    "TC-111",
+    "FR-017-AC-3",
+    "FR-017-CON-3"
+)]
 fn tc_111_real_wheel_and_npm_archives_install_and_agree() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let output = run(root);
@@ -64,6 +78,28 @@ fn tc_111_real_wheel_and_npm_archives_install_and_agree() {
         assert!(
             !root.join(staged).exists(),
             "package audit must clean {staged}"
+        );
+    }
+}
+
+#[test]
+#[trace("TC-015", "FR-003-AC-2")]
+fn tc_015_npm_contract_declares_the_audited_payloads() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let contract: NpmPackageContract = serde_json::from_slice(
+        &std::fs::read(root.join("package.json")).expect("package contract must be readable"),
+    )
+    .expect("package contract must be valid JSON");
+    for required in [
+        "engineering_assurance/skills/",
+        "contracts/",
+        "fixtures/",
+        "pilots/assurance-workflows/",
+        "engineering_assurance/INSTALL.md",
+    ] {
+        assert!(
+            contract.files.iter().any(|entry| entry == required),
+            "npm package contract is missing {required}"
         );
     }
 }

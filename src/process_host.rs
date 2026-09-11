@@ -7,13 +7,14 @@
 //! semantics. Callers remain responsible for their own command identity,
 //! response protocol, and mutation uncertainty.
 
+use std::{ffi::OsStr, path::Path, process::ExitStatus, time::Duration};
+
+#[cfg(unix)]
 use std::{
-    ffi::OsStr,
     io::{self, Read},
-    path::Path,
-    process::{Command, ExitStatus, Stdio},
+    process::{Command, Stdio},
     thread,
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 #[cfg(unix)]
@@ -68,6 +69,42 @@ pub(crate) fn run_configured(
     removed_environment: &[&OsStr],
     limits: ProcessLimits,
 ) -> Result<CompletedProcess, ProcessError> {
+    #[cfg(unix)]
+    {
+        run_configured_contained(
+            executable,
+            arguments,
+            current_directory,
+            environment,
+            removed_environment,
+            limits,
+        )
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (
+            executable,
+            arguments,
+            current_directory,
+            environment,
+            removed_environment,
+            limits,
+        );
+        Err(ProcessError::Unavailable {
+            detail: "descendant process-group containment is unavailable on this host".to_owned(),
+        })
+    }
+}
+
+#[cfg(unix)]
+fn run_configured_contained(
+    executable: &OsStr,
+    arguments: &[&OsStr],
+    current_directory: Option<&Path>,
+    environment: &[(&OsStr, &OsStr)],
+    removed_environment: &[&OsStr],
+    limits: ProcessLimits,
+) -> Result<CompletedProcess, ProcessError> {
     let mut command = Command::new(executable);
     command.args(arguments);
     if let Some(directory) = current_directory {
@@ -77,7 +114,6 @@ pub(crate) fn run_configured(
     for name in removed_environment {
         command.env_remove(name);
     }
-    #[cfg(unix)]
     command.process_group(0);
     let mut child = command
         .stdin(Stdio::null())
@@ -153,6 +189,7 @@ pub(crate) fn run_configured(
     })
 }
 
+#[cfg(unix)]
 fn terminate(child: &mut std::process::Child) {
     terminate_process_group(child.id());
     let _ = child.kill();
@@ -170,9 +207,7 @@ fn terminate_process_group(id: u32) {
     let _ = rustix::process::kill_process_group(group, rustix::process::Signal::KILL);
 }
 
-#[cfg(not(unix))]
-const fn terminate_process_group(_id: u32) {}
-
+#[cfg(unix)]
 fn bounded_reader<R>(reader: R, maximum: usize) -> thread::JoinHandle<io::Result<CapturedBytes>>
 where
     R: Read + Send + 'static,
@@ -188,6 +223,7 @@ where
     })
 }
 
+#[cfg(unix)]
 fn join_reader(
     handle: thread::JoinHandle<io::Result<CapturedBytes>>,
     stream: &'static str,
@@ -204,6 +240,7 @@ fn join_reader(
         })
 }
 
+#[cfg(unix)]
 struct CapturedBytes {
     bytes: Vec<u8>,
     overflow: bool,
