@@ -15,69 +15,117 @@ relationships:
 
 Engineering Assurance SHALL expose one public Rust library boundary that
 executes a caller-declared producer directly under explicit identity, input,
-environment, concurrency, time, and output bounds and returns a typed result to
-the caller-owned response adapter.
+environment, confinement, concurrency, time, and output bounds and returns a
+typed result to the caller-owned response adapter.
 
 ## Inputs
 
-- One versioned producer-execution request containing a stable producer name,
-  version and source revision; an executable path and expected SHA-256 digest;
-  the direct procedure; an ordered argument vector; an explicit working root;
-  an ordered environment; exact input-artifact or input-projection path/digest
-  bindings; execution limits; and the expected response protocol binding.
-- One caller-owned Rust response adapter whose declared binding equals the
-  request and which converts a completed bounded process observation into the
-  consumer's typed domain result.
-- An optional cancellation handle supplied by the caller.
+- One closed `engineering-assurance.producer-execution-request/v1` request
+  containing:
+  - a stable producer name, exact version and source revision;
+  - an absolute producer executable path and expected SHA-256 retained-byte
+    digest;
+  - an exact kind/version/revision/digest binding for the caller's domain
+    request or context;
+  - an exact kind/version/revision/digest binding for the response adapter;
+  - a direct procedure, explicit capability root, ordered argument bindings,
+    normalized environment map, ordered input bindings, closed stdin binding,
+    ordered output-artifact bindings, cooperative-confinement contract, exact
+    cancellation authority/event, execution limits, and response protocol;
+  - an exit policy that is either every normal exit code or a normalized set of
+    exact normal exit codes admitted to the response adapter.
+- One caller-owned Rust response adapter whose exact implementation binding and
+  response protocol equal the request and which converts a completed bounded
+  process observation into the consumer's typed domain result.
+- One cancellation handle carrying the request's exact authority/event binding.
+
+Argument, input and output collections are identity-significant ordered lists.
+Environment keys and exact admitted exit codes are normalized sets represented
+in deterministic key or numeric order. Input-role and output-role names are
+unique within their respective request collections.
 
 ## Outputs
 
-- A deterministic SHA-256 identity over every execution-request field.
-- One typed `ProducerExecutionResult<T>` carrying that exact request identity,
-  producer provenance, observed executable digest, and one closed execution
-  state.
-- A completed state carrying the caller adapter's typed observation and exact
-  output/artifact references; no non-completed state carries an observation.
+- A request identity represented as `sha256-jcs` of the RFC 8785 canonical
+  JSON bytes of the complete closed request, including its protocol domain and
+  version.
+- Structurally invalid input produces a typed `InvalidExecutionRequest` and no
+  request identity or execution result.
+- A structurally valid request produces one
+  `ProducerExecutionResult<T>` carrying the exact request identity, producer
+  provenance, observed executable digest when available, monotonic timing,
+  cancellation binding/event, optional bounded raw process evidence, exact
+  output-artifact references/digests, and one closed execution state.
+- Every launched-process state may carry bounded raw process evidence and
+  validated output-artifact references. Only `completed` carries the caller
+  adapter's typed domain observation.
 
 ## Behavior
 
-- When a request is submitted, the executor SHALL validate every request field,
-  require an absolute canonical executable path without ambient `PATH`
-  resolution, reject a linked or non-regular executable, and require its
-  retained bytes to match the declared SHA-256 digest before launch.
-- When a request is submitted, the executor SHALL validate each selected input as a bounded,
-  non-linked regular file beneath the selected working root and require its
-  bytes to match the declared path/digest binding before launch.
-- When a valid slot is available, the executor SHALL launch the declared
-  executable directly with the ordered arguments, no shell, an empty inherited
-  environment, and only the request's validated environment entries.
-- The executor SHALL place the child and its descendants in one invocation-owned
-  process group and SHALL terminate and reap that group before returning from a
-  timeout, cancellation, containment failure, or direct-child completion.
-- If the host cannot establish and terminate an invocation-owned descendant
-  process group, then the executor SHALL return `containment_failure` before
-  producer launch.
+- The executor SHALL validate the closed request structure before minting its
+  identity. Empty, over-limit, internally inconsistent, non-relative artifact,
+  or unsupported protocol fields are structurally invalid.
+- For a structurally valid request, the executor SHALL open the absolute
+  capability root and executable without following symbolic links in any path
+  component, copy the selected executable into a sealed retained descriptor,
+  hash that exact snapshot, and execute the same sealed descriptor without
+  ambient `PATH` resolution.
+- The executor SHALL open each ordered input relative to the retained
+  capability-root descriptor without following symbolic links, copy its exact
+  observed bytes into a sealed retained descriptor, hash that snapshot before
+  launch, and expose only the same sealed snapshot as a descriptor argument or
+  the request-bound stdin source.
+- The executor SHALL validate every declared output parent beneath the retained
+  capability root before launch, enforce output-artifact count and aggregate
+  byte bounds, and after termination open each produced artifact without
+  following links. Each returned artifact reference SHALL contain its role,
+  declared relative path, byte length and SHA-256 digest.
+- When a valid slot is available, the executor SHALL launch the retained
+  executable directly with the ordered resolved arguments, no shell, the
+  retained capability root as working directory, an empty inherited
+  environment, only the request's environment entries, and the exact null or
+  retained-input stdin binding.
+- The supported `process-group-v1` confinement profile SHALL require an exact
+  producer confinement-contract binding that prohibits session/group escape,
+  daemonization and untracked descendants. The executor SHALL establish an
+  invocation-owned process group, terminate and reap that group before return,
+  and return `containment_failure` if the host cannot establish the profile or
+  if it observes a descendant leaving the group. This profile SHALL NOT claim
+  adversarial full-tree containment; a consumer requiring that stronger
+  property must use a separately accepted provider mechanism.
 - The executor SHALL enforce non-zero finite wall-clock, stdout, stderr, input-
-  byte, and executor-wide concurrency limits at their exact admitted boundaries.
-- The executor SHALL reject a request whose timeout exceeds 86,400 seconds,
-  whose stdout or stderr limit exceeds 8,388,608 bytes, whose selected-input
-  limit exceeds 1,073,741,824 bytes, whose argument population exceeds 4,096,
-  whose environment population exceeds 512, or whose executor concurrency
-  limit is outside one through 64.
-- The executor SHALL return distinguishable `unavailable`, `refused`, `failed`,
-  `timed_out`, `malformed_response`, `containment_failure`, `cancelled`, and
-  `completed` states without deriving state from diagnostic prose.
-- When bounded process execution completes, the executor SHALL give the exit status and
-  captured output only to the request-bound Rust response adapter; an adapter
-  rejection SHALL return `malformed_response` without a typed observation.
-- The executor SHALL preserve the exact request identity and producer provenance
-  in every result state.
-- The executor SHALL release its concurrency slot and remove invocation-owned
-  temporary state before returning on every path.
+  byte, output-artifact-count, output-artifact-byte, and executor-wide
+  concurrency limits at their exact admitted boundaries.
+- The executor SHALL reject structurally a request whose timeout exceeds 86,400
+  seconds, whose stdout or stderr limit exceeds 8,388,608 bytes, whose selected
+  input or output-artifact byte limit exceeds 1,073,741,824 bytes, whose
+  argument population exceeds 4,096, whose input or output population exceeds
+  4,096, whose observable descendant population exceeds 4,096, whose
+  environment population exceeds 512, or whose executor
+  concurrency limit is outside one through 64.
+- The response adapter SHALL receive every bounded normal terminal exit admitted
+  by the request exit policy, including admitted non-zero exits. A rejected
+  normal exit, signal termination, capture failure, or artifact failure is an
+  executor `failed` result rather than a domain observation.
+- The executor SHALL release its concurrency slot and invocation-owned process
+  resources before returning on every path.
 - A consumer SHALL remain the owner of its response schema, satisfaction,
   violation, stopping-rule, replay, oracle, and domain-failure semantics.
 - Existing Engineering Assurance binary adapters SHALL reuse the same bounded
   process kernel rather than retaining a second process runner.
+
+## Closed state boundaries
+
+| State | Exact boundary |
+| --- | --- |
+| `unavailable` | A structurally valid request selects an executable that cannot be opened or the retained executable cannot be launched. |
+| `refused` | An identity-bearing request fails a pre-launch identity, capability, adapter, input, output-parent, cancellation-binding, or concurrency admission check. |
+| `failed` | A launched process has a rejected normal exit, signal termination, stream overflow/read failure, process observation failure, or output-artifact failure. |
+| `timed_out` | Monotonic elapsed execution time reaches the request deadline before terminal observation. |
+| `malformed_response` | The exact request-bound caller adapter rejects an otherwise admitted bounded terminal response. |
+| `containment_failure` | The selected confinement profile cannot be established or an escaping descendant/group breach is observed. |
+| `cancelled` | The exact bound cancellation event is observed before completion and all observable invocation resources are terminated/reaped. |
+| `completed` | The exact adapter accepts an admitted bounded terminal response and returns `T`; this is the only state carrying `T`. |
 
 ## Constraints
 
@@ -86,16 +134,17 @@ the caller-owned response adapter.
 | FR-019-CON-1 | The executor SHALL NOT invoke a shell or inherit the ambient process environment. | Security | Test (TC-123) |
 | FR-019-CON-2 | The executor SHALL NOT persist evidence, infer evidence sufficiency, qualify a producer, or make a human disposition. | Responsibility | Test (TC-127) |
 | FR-019-CON-3 | The implementation SHALL remain a module of the existing `engineering_assurance` crate unless a separately accepted isolation requirement justifies another crate. | Architecture | Inspection (TC-127) |
+| FR-019-CON-4 | The `process-group-v1` profile SHALL NOT be represented as adversarial full-descendant containment. | Safety | Test (TC-125) |
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-019-AC-1 | A valid synthetic producer request executes once through the public Rust library, and the typed completed result carries the exact request identity, executable digest, producer provenance, and adapter-produced observation. | Test (TC-122) |
-| FR-019-AC-2 | Every request field is identity-significant, and an invalid version, procedure, path, digest, input, environment name, response binding, or zero/over-limit budget refuses before producer launch. | Property (TC-123) |
-| FR-019-AC-3 | Unavailable, refused, failed, timed-out, malformed-response, containment-failure, cancelled, and completed remain distinguishable, and only completed carries a typed observation. | Test (TC-124) |
-| FR-019-AC-4 | Exact wall-clock, stream, input-byte and concurrency boundaries are admitted while the next value is refused or terminated; descendants and invocation-owned state do not survive completion, timeout, cancellation, or failure. | Test (TC-125) |
-| FR-019-AC-5 | A caller-owned typed response adapter receives bounded process output without requiring the consumer to parse CLI stdout, and Engineering Assurance contains no domain oracle, qualification verdict, evidence store, or Quoin record clone. | Test (TC-127) |
+| FR-019-AC-1 | A valid synthetic producer request executes once through the public Rust library, and the typed completed result carries the exact `sha256-jcs` request identity, executable digest, producer provenance, bounded raw evidence, monotonic timing, validated artifacts, and adapter-produced observation. | Test (TC-122) |
+| FR-019-AC-2 | Every request field is JCS-identity-significant, ordered and set collections have their declared semantics, structurally invalid input mints no identity, and an identity-bearing digest, capability, input, adapter, or cancellation mismatch refuses before producer launch. | Property (TC-123) |
+| FR-019-AC-3 | Unavailable, refused, failed, timed-out, malformed-response, containment-failure, cancelled, and completed remain distinguishable; launched failures retain bounded raw evidence where observable; and only completed carries `T`. | Test (TC-124) |
+| FR-019-AC-4 | Exact wall-clock, stream, input-byte, output-count/byte and concurrency boundaries are admitted while the next value is structurally invalid or terminated; an admitted non-zero exit reaches the adapter; ordinary descendants are reaped and an escaping-descendant mutant produces `containment_failure`. | Test (TC-125) |
+| FR-019-AC-5 | A caller-owned typed response adapter receives the exact bound terminal evidence without requiring the consumer to parse CLI stdout, and Engineering Assurance contains no domain oracle, qualification verdict, evidence store, or Quoin record clone. | Test (TC-127) |
 | FR-019-AC-6 | A real `quire-verification` synthetic consumer compiles against the accepted Engineering Assurance revision and distinguishes completed domain observations from every executor non-completion state without a local runner or stdout adapter. | Integration (TC-126) |
 
 ## Dependencies

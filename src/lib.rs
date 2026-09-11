@@ -3,9 +3,9 @@
 
 //! Engineering Assurance domain types and deterministic behavior.
 //!
-//! This crate is the reusable, I/O-free boundary governed by ADR-002 and
-//! FR-014. Filesystem, process, environment, and host interaction belong to the
-//! `engineering-assurance` binary rather than this library.
+//! This crate is the reusable boundary governed by ADR-002 and FR-014. Domain
+//! modules are I/O-free. FR-019 admits process, filesystem, and environment
+//! access only inside the bounded [`producer_execution`] capability.
 
 #![forbid(unsafe_code)]
 
@@ -21,6 +21,7 @@ pub mod onboarding;
 pub mod package_audit;
 pub mod package_lifecycle;
 pub mod package_membership;
+pub mod producer_execution;
 pub mod semantics;
 pub mod source_audit;
 pub mod structured_yaml;

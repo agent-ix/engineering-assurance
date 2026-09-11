@@ -124,7 +124,11 @@ fn synthetic_source(template: &str) -> String {
 #[trace("TC-086", "FR-012-AC-8")]
 #[trace("TC-101", "FR-014-AC-4", "FR-014-CON-1", "FR-014-CON-2")]
 fn tc_101_every_library_module_is_capability_confined() {
+    let producer_execution = repository_root().join("src/producer_execution.rs");
     for path in library_module_files() {
+        if path == producer_execution {
+            continue;
+        }
         let bytes = fs::read(&path)
             .unwrap_or_else(|error| panic!("cannot read {}: {error}", path.display()));
         let findings = audit_rust_source(&bytes, RustSourceAuditRole::ReusableLibrary)

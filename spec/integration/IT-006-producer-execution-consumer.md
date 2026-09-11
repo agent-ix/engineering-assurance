@@ -25,16 +25,19 @@ producer is a deterministic fictional executable retained only by the test.
 
 - Both repositories select exact Rust 1.98.1.
 - The consumer pins the accepted Engineering Assurance revision.
-- A temporary working root contains the fictional producer and bounded input
-  fixture with their exact recorded SHA-256 digests.
+- A temporary capability root contains the fictional bounded input and output
+  fixtures, while the exact producer executable is opened and executed through
+  one retained no-follow descriptor.
 
 ## Inputs
 
-- One valid qualification-case request projected into a producer-execution
-  request.
+- One valid qualification-case request/context identity projected into a
+  producer-execution request with exact adapter and confinement bindings.
 - One consumer-owned response adapter and typed observation.
-- Invalid digest, unavailable executable, timeout, malformed response,
-  cancellation, and non-zero-exit variants of the same fictional case.
+- Null and retained-input stdin cases; one declared output artifact; and
+  invalid digest, unavailable executable, timeout, malformed response,
+  cancellation, admitted/rejected non-zero exit, and containment-breach
+  variants of the same fictional case.
 
 ## Test Procedure
 
@@ -43,11 +46,15 @@ producer is a deterministic fictional executable retained only by the test.
    - IT-006-SC-01: the consumer uses the public Rust library and contains no
      direct process launch or Engineering Assurance CLI-output parser.
 2. Execute the valid fictional case through the shared executor.
-   - IT-006-SC-02: exactly one typed completed result preserves the request and
-     producer identities and carries the consumer-owned observation.
+   - IT-006-SC-02: exactly one typed completed result preserves the JCS request,
+     caller, adapter and producer identities and carries bounded raw evidence,
+     validated artifact references and the consumer-owned observation.
 3. Execute each non-completion variant.
-   - IT-006-SC-03: every variant returns its distinct executor state, carries no
-     typed observation, and leaves no descendant or invocation-owned state.
+   - IT-006-SC-03: every variant returns its distinct executor state, only
+     admitted exits reach the adapter, non-completed states carry no typed
+     observation, and no ordinary descendant or invocation-owned state remains;
+     the escaping-descendant case returns `containment_failure` without a
+     full-tree-containment claim.
 4. Inspect the consumer and provider boundaries.
    - IT-006-SC-04: neither repository introduces a duplicate evidence store,
      Quoin record schema, generic stdout verdict scraper, or domain oracle in
@@ -82,4 +89,3 @@ mutation, catalogue, advice, or other domain response semantics.
 This integration verifies [FR-019](../functional/FR-019-bounded-producer-execution.md)
 and preserves the ownership constraint in
 [NFR-004](../non-functional/NFR-004-no-parallel-assurance-framework.md).
-
