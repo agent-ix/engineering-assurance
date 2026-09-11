@@ -426,11 +426,20 @@ impl Matrix {
 /// A `state` of `accepted` with no name, no date, or no note against it is not
 /// a record; it is a claim with nobody behind it, and it withholds too.
 ///
+/// Test-only. Production reads the embedded matrix and reaches acceptance
+/// through [`Matrix::human_acceptance_recorded`]; this entry point exists so a
+/// test can put a mutated matrix in front of the same rule. It was `pub` with
+/// no caller outside this module's own tests, which is a test seam shipped in
+/// the public surface: a published function nobody calls still has to be kept
+/// working, documented and compatible, and a reader has no way to tell it apart
+/// from an API somebody depends on.
+///
 /// # Errors
 ///
 /// Returns [`CompatibilityError::InvalidMatrix`] when the supplied bytes do not
 /// satisfy the reviewed matrix contract.
-pub fn acceptance_recorded_in(matrix_bytes: &[u8]) -> Result<bool, CompatibilityError> {
+#[cfg(test)]
+fn acceptance_recorded_in(matrix_bytes: &[u8]) -> Result<bool, CompatibilityError> {
     let matrix: Matrix = serde_json::from_slice(matrix_bytes).map_err(|error| {
         CompatibilityError::InvalidMatrix {
             detail: error.to_string(),
