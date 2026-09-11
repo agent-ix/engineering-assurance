@@ -288,10 +288,26 @@ mod tests {
     #[test]
     #[trace("TC-083", "FR-012-AC-5")]
     fn matrix_artifact_digests_match_the_repository_root() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         assert!(
-            artifact_mismatches(Path::new(env!("CARGO_MANIFEST_DIR")))
+            artifact_mismatches(root)
                 .expect("repository artifacts must be readable")
                 .is_empty()
+        );
+
+        // `artifact_mismatches` skips any recorded path that is absent, so an
+        // empty mismatch list is also exactly what a matrix recording nothing,
+        // or recording paths that no longer exist, produces. Counting the
+        // recorded artifacts that really are present keeps the assertion above
+        // from passing while it hashed no files at all.
+        let present = recorded_artifact_digests()
+            .expect("the embedded matrix must expose its recorded digests")
+            .into_iter()
+            .filter(|artifact| root.join(&artifact.path).is_file())
+            .count();
+        assert!(
+            present >= 10,
+            "the digest check examined too few artifacts: {present}"
         );
     }
 }
