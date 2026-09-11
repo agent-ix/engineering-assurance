@@ -1001,7 +1001,7 @@ fn seed_fixture(
         .map_err(|_| AgentEvalsProviderError::WorkspaceInvalid)?;
     }
     if let Some(state_dir) = fixture_input(root, scenario)?.workflow_state_dir {
-        let path = workspace.join(state_dir);
+        let path = workspace.join(safe_relative_path(&state_dir)?);
         fs::create_dir_all(&path).map_err(|_| AgentEvalsProviderError::WorkspaceInvalid)?;
     }
     if matches!(scenario, "malformed-producer" | "unavailable-producer") {
@@ -1016,6 +1016,19 @@ fn seed_fixture(
             .map_err(|_| AgentEvalsProviderError::WorkspaceInvalid)?;
     }
     Ok(())
+}
+
+fn safe_relative_path(value: &str) -> Result<&Path, AgentEvalsProviderError> {
+    let path = Path::new(value);
+    if path.as_os_str().is_empty()
+        || path.is_absolute()
+        || path
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        return Err(AgentEvalsProviderError::FixtureInvalid);
+    }
+    Ok(path)
 }
 
 fn fixture_input(root: &Path, scenario: &str) -> Result<FixtureInput, AgentEvalsProviderError> {

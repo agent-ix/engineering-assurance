@@ -238,3 +238,32 @@ fn tc_109_provider_emits_the_complete_terminal_contract() {
     assert_eq!(terminal["workflow_state_dir"], "workflow-state");
     assert!(workspace.path().join("workflow-state").is_dir());
 }
+
+#[test]
+#[trace("TC-109", "FR-017-AC-1", "FR-017-CON-3")]
+fn tc_109_provider_refuses_a_fixture_state_path_that_escapes_the_workspace() {
+    let root = root();
+    let fixture = root.path().join("evals/fixtures/suite.json");
+    let original = fs::read_to_string(&fixture).expect("fixture must be readable");
+    fs::write(&fixture, original.replace("workflow-state", "../escape"))
+        .expect("fixture must be writable");
+    let workspace = TempDir::new().expect("workspace must be creatable");
+    let response = invoke(
+        &root,
+        &request(
+            workspace.path(),
+            "prepare",
+            &json!({"id":"EA-006", "use_case":"human-acceptance"}),
+            None,
+        ),
+    );
+    assert_eq!(response.status.code(), Some(2));
+    assert!(
+        !workspace
+            .path()
+            .parent()
+            .expect("workspace parent must exist")
+            .join("escape")
+            .exists()
+    );
+}
