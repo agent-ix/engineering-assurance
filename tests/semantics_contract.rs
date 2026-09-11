@@ -14,8 +14,8 @@ use std::{collections::BTreeSet, fmt::Write as _, fs, path::PathBuf};
 
 use engineering_assurance::semantics::{
     Authority, Pgm01Outcome, ReportProjection, SemanticConcept, SemanticError, SemanticErrorKind,
-    SemanticFixture, map_pgm01_bytes, validate_ownership_registry_bytes, validate_semantic_bundle,
-    validate_semantic_fixture_bytes,
+    SemanticFixture, map_pgm01_bytes, validate_ownership_registry_bytes, validate_report_bytes,
+    validate_semantic_bundle, validate_semantic_fixture_bytes,
 };
 use ix_trace_rs::trace;
 use sha2::{Digest, Sha256};
@@ -46,6 +46,14 @@ fn ownership_registry() -> serde_json::Value {
 fn canonical_fixture() -> SemanticFixture {
     validate_semantic_fixture_bytes(&fixture("canonical-references.json"))
         .expect("the canonical fixture must validate")
+}
+
+/// Apply one mutation to the packaged ownership registry and report the refusal.
+fn refuse_mutated_registry(mutate: impl FnOnce(&mut serde_json::Value)) -> SemanticError {
+    let mut value = ownership_registry();
+    mutate(&mut value);
+    validate_ownership_registry_bytes(&serde_json::to_vec(&value).expect("mutant must serialize"))
+        .expect_err("the mutated registry must be refused")
 }
 
 /// Re-encode a reference bundle, apply one mutation to the raw JSON, and report
@@ -105,22 +113,58 @@ fn tc_053_ownership_registry_assigns_every_concept_to_exactly_one_authority() {
         "the registry must declare itself non-executing"
     );
 
+    // The criterion is one authority *and one link direction* per concept. A
+    // concept whose direction went blank would still have exactly one
+    // authority, so the authority check above cannot stand in for this one.
+    for entry in concepts {
+        let direction = entry["link_direction"]
+            .as_str()
+            .expect("every concept must declare a link direction");
+        assert!(
+            !direction.is_empty(),
+            "{} declares an empty link direction",
+            entry["concept"]
+        );
+    }
+
     // A registry that simply drops a concept is the failure a shrinking
-    // vocabulary produces, and it is the one registry mutation no other test
-    // exercises: the authority, duplicate, and non-executing mutants all leave
-    // the population intact.
-    let mut shrunk = registry;
-    shrunk["concepts"]
-        .as_array_mut()
-        .expect("the registry must declare a concept array")
-        .pop();
+    // vocabulary produces, and it is the mutation that leaves every other
+    // registry rule satisfied.
     assert_eq!(
-        validate_ownership_registry_bytes(
-            &serde_json::to_vec(&shrunk).expect("mutant must serialize")
-        )
-        .expect_err("an incomplete registry must be refused")
+        refuse_mutated_registry(|value| {
+            value["concepts"]
+                .as_array_mut()
+                .expect("the registry must declare a concept array")
+                .pop();
+        })
         .kind(),
         SemanticErrorKind::IncompleteOwnershipConceptSet
+    );
+
+    // The row names four registry refusals. Exercising only one of them under
+    // this tag left the other three backed by a test carrying FR-015 tags,
+    // which is how a row comes to describe work its own criterion does not
+    // reach.
+    assert_eq!(
+        refuse_mutated_registry(|value| {
+            value["concepts"][0]["authority"] = serde_json::json!("quoin");
+        })
+        .kind(),
+        SemanticErrorKind::AuthorityMismatch
+    );
+    assert_eq!(
+        refuse_mutated_registry(|value| {
+            value["concepts"][1] = value["concepts"][0].clone();
+        })
+        .kind(),
+        SemanticErrorKind::DuplicateOwnershipConcept
+    );
+    assert_eq!(
+        refuse_mutated_registry(|value| {
+            value["non_executing"] = serde_json::json!(false);
+        })
+        .kind(),
+        SemanticErrorKind::InvalidOwnershipBoundary
     );
 }
 
@@ -177,6 +221,18 @@ fn tc_052_canonical_fixture_keeps_every_identity_distinct_and_externally_linked(
 #[test]
 fn tc_058_absent_confused_self_and_omitted_links_each_refuse_distinctly() {
     let accepted = canonical_fixture();
+
+    // A link whose target is simply not in the bundle is the plainest form of
+    // this failure, and the one a dropped reference produces.
+    let mut absent = accepted.clone();
+    absent.references.remove(0);
+    assert_eq!(
+        absent
+            .validate()
+            .expect_err("a link to an absent reference must refuse")
+            .kind(),
+        SemanticErrorKind::MissingReference
+    );
 
     let mut confused = accepted.clone();
     confused.references[3].links.result = Some("sem:report-001".to_owned());
@@ -255,6 +311,20 @@ fn tc_060_producer_tuple_is_complete_over_a_non_empty_population() {
     assert_eq!(
         audited, 5,
         "the producer-tuple audit read the wrong population"
+    );
+
+    // A producer-owned concept with no tuple at all is what the row calls an
+    // absent tuple. The loop above skips `None` producers by construction, so
+    // without this the row's plainest case would be exercised nowhere under its
+    // own tag.
+    let mut stripped = accepted;
+    stripped.references[1].producer = None;
+    assert_eq!(
+        stripped
+            .validate()
+            .expect_err("a producer-owned concept without its tuple must refuse")
+            .kind(),
+        SemanticErrorKind::MissingProducer
     );
 
     // A tuple missing one field is refused by the decoder, before any semantic
@@ -576,9 +646,12 @@ fn tc_054_bounded_report_round_trips_and_declares_no_aggregate_verdict() {
         "the bounded report did not survive its round trip unchanged"
     );
 
-    // Rendering twice is the cheapest statement that the projection carries no
-    // iteration-order or timestamp dependence, which a report used as evidence
-    // cannot have.
+    // Rendering twice is a weak statement on today's types, which carry no
+    // clock and no unordered map, and it is kept as a regression floor for the
+    // day one of them does: a report used as evidence cannot acquire a
+    // rendering that differs between two calls. The newline is the load-bearing
+    // assertion here, because the retained reference ends in one and a renderer
+    // that dropped it would change every downstream byte.
     let first = report.render_json().expect("report JSON must render");
     assert_eq!(
         first,
@@ -675,5 +748,180 @@ fn tc_057_authority_confusion_and_unknown_source_versions_refuse() {
         })
         .kind(),
         SemanticErrorKind::DuplicateSourcePremise
+    );
+}
+
+/// Compile one packaged schema and refuse a schema this repository ships but
+/// cannot compile, which would otherwise make every check against it vacuous.
+fn packaged_validator(name: &str) -> jsonschema::Validator {
+    let raw = fs::read(root().join("engineering_assurance/schemas").join(name))
+        .unwrap_or_else(|error| panic!("packaged schema {name} must be readable: {error}"));
+    let schema: serde_json::Value = serde_json::from_slice(&raw)
+        .unwrap_or_else(|error| panic!("packaged schema {name} must be JSON: {error}"));
+    jsonschema::meta::options()
+        .validate(&schema)
+        .unwrap_or_else(|error| panic!("packaged schema {name} is not a valid schema: {error}"));
+    jsonschema::options()
+        .offline()
+        .should_validate_formats(true)
+        .build(&schema)
+        .unwrap_or_else(|error| panic!("packaged schema {name} must compile: {error}"))
+}
+
+fn assert_conforms(validator: &jsonschema::Validator, instance: &serde_json::Value, what: &str) {
+    if let Err(error) = validator.validate(instance) {
+        panic!("{what} no longer conforms to the schema this repository publishes: {error}");
+    }
+}
+
+#[trace("TC-052", "StR-002-VC-1")]
+#[trace("TC-063", "FR-009-AC-4")]
+#[trace("TC-068", "NFR-004-AC-1")]
+#[test]
+fn tc_068_published_schemas_still_describe_the_values_this_library_produces() {
+    // The retired Python validated every instance against these packaged
+    // schemas before it applied a single semantic rule. The Rust port replaced
+    // that with typed decoding, which is stricter about structure but says
+    // nothing about the schema files — and those files are still shipped by
+    // `setup.cfg` and still named in `compatibility-matrix.json`, so they
+    // remain this repository's published description of these records. Without
+    // this test the two can drift apart indefinitely, and the first party to
+    // notice would be an external consumer reading the published contract.
+    let fixture_schema = packaged_validator("verification-semantics-fixture-v1.schema.json");
+    let canonical: serde_json::Value =
+        serde_json::from_slice(&fixture("canonical-references.json"))
+            .expect("the canonical fixture must parse");
+    assert_conforms(
+        &fixture_schema,
+        &canonical,
+        "the canonical semantic fixture",
+    );
+
+    // Each reference is also published on its own, so it is checked on its own
+    // rather than only as a member of the bundle.
+    let reference_schema = packaged_validator("semantic-reference-v1.schema.json");
+    let references = canonical["references"]
+        .as_array()
+        .expect("the fixture must carry a reference array");
+    assert_eq!(
+        references.len(),
+        8,
+        "the per-reference schema check read the wrong population"
+    );
+    for reference in references {
+        assert_conforms(
+            &reference_schema,
+            reference,
+            "a canonical semantic reference",
+        );
+    }
+
+    let ownership_schema = packaged_validator("verification-semantics-ownership-v1.schema.json");
+    assert_conforms(
+        &ownership_schema,
+        &ownership_registry(),
+        "the ownership registry",
+    );
+
+    let report_schema = packaged_validator("assurance-report-projection-v1.schema.json");
+    let report: serde_json::Value = serde_json::from_slice(&fixture("report-projection.json"))
+        .expect("the report fixture must parse");
+    assert_conforms(&report_schema, &report, "the bounded report projection");
+
+    // The views are generated rather than committed, so they are the values
+    // most able to drift away from the published schema without anyone editing
+    // a file. Both accepted versions and one adverse classification are
+    // checked, because the adverse branches build their views by a different
+    // path than the mapping branches do.
+    let view_schema = packaged_validator("pgm01-compatibility-view-v1.schema.json");
+    for name in ["pgm01-v1.json", "pgm01-v2.json"] {
+        let view = map_pgm01_bytes(&fixture(name), None).expect("the governed fixture must map");
+        assert_conforms(
+            &view_schema,
+            &serde_json::to_value(view).expect("the view must serialize"),
+            name,
+        );
+    }
+    for raw in [
+        b"not-json".as_slice(),
+        br#"{"schemaVersion":"quire.pgm01-evidence/v99","recordId":"legacy-1"}"#.as_slice(),
+    ] {
+        let view = map_pgm01_bytes(raw, None).expect("an adverse input is a classified result");
+        assert_conforms(
+            &view_schema,
+            &serde_json::to_value(view).expect("the view must serialize"),
+            "an adverse PGM-01 classification",
+        );
+    }
+}
+
+#[trace("TC-054", "US-005-AC-2")]
+#[trace("TC-067", "FR-010-AC-4")]
+#[test]
+fn tc_054_an_empty_bounded_report_declares_its_absences_rather_than_inferring() {
+    // Every claim, evidence, gap and action list in the governed fixture is
+    // populated, and it carries a decision reference, so the renderer's
+    // "No X declared." branches — including "No decision recorded." — were
+    // reached by nothing. Those branches are where an empty report would
+    // silently become a report that says nothing, which reads as a report with
+    // no objections. An assurance report that renders a claim-free, gap-free,
+    // decision-free subject must say so in words.
+    let empty = serde_json::json!({
+        "projection_type": "engineering-assurance.assurance-report-projection/v1",
+        "report_id": "report-empty-001",
+        "subject": "a fictional subject with nothing recorded against it",
+        "claims": [],
+        "evidence": [],
+        "counterevidence": [],
+        "gaps": [],
+        "owner": "fictional-assurance-owner",
+        "actions": []
+    });
+    let encoded = serde_json::to_vec(&empty).expect("the empty report must serialize");
+
+    // `validate_report_bytes` is this module's published entry point for
+    // encoded reports and was reached by no test at all; every other test
+    // decodes with serde directly and so never exercises the refusal wrapper
+    // that external callers actually meet.
+    let report = validate_report_bytes(&encoded).expect("an empty bounded report must validate");
+    let markdown = report
+        .render_markdown()
+        .expect("an empty report must still render");
+    for declared in [
+        "- No claims declared.",
+        "- No evidence declared.",
+        "- No counterevidence declared.",
+        "- No gaps declared.",
+        "- No actions declared.",
+        "No decision recorded.",
+    ] {
+        assert!(
+            markdown.contains(declared),
+            "an empty bounded report rendered without stating {declared:?}"
+        );
+    }
+
+    // An absent human decision must read as absent, never as a decision. This
+    // is the clause of US-005-AC-2 that forbids inferring one.
+    assert!(
+        !markdown.to_lowercase().contains("approved"),
+        "an undecided report rendered an approval"
+    );
+
+    // The wrapper must refuse, not decode-and-hope, when the bytes are not a
+    // bounded report at all.
+    assert_eq!(
+        validate_report_bytes(b"not-json")
+            .expect_err("malformed report bytes must refuse")
+            .kind(),
+        SemanticErrorKind::InvalidInputEncoding
+    );
+    let mut unsupported = empty;
+    unsupported["projection_type"] = serde_json::json!("something.else/v1");
+    assert_eq!(
+        validate_report_bytes(&serde_json::to_vec(&unsupported).expect("mutant must serialize"))
+            .expect_err("an unsupported protocol must refuse")
+            .kind(),
+        SemanticErrorKind::UnsupportedProtocol
     );
 }
