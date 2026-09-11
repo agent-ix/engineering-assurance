@@ -36,6 +36,7 @@ finding below into FR-017 and TC-129.
 | FND-005 | medium | Multiple reports could silently combine different model selections for one host or change diagnostics with input order | FR-017 Behavior; TC-129 | missing-requirement |
 | FND-006 | high | A passing synthetic report adapter could be misreported as the live 28-cell host/provider acceptance gate | FR-017 Dependencies; TC-109; TC-129 | wrong-requirement |
 | FND-007 | medium | Replacing the Python aggregate command without same-revision parity and rollback evidence would make removal irreversible | FR-017 Behavior; TC-129 | missing-requirement |
+| FND-008 | medium | Independent report, result, pass-rate, and sample outcomes could contradict while the adapter selected only the convenient field | FR-017 Behavior; TC-129 | missing-requirement |
 
 ## Dispositions
 
@@ -54,6 +55,8 @@ finding below into FR-017 and TC-129.
   pending and no live agent evaluation is authorized by this review.
 - **FND-007 resolved**: parity, cutover, rollback, and deletion remain ordered
   gates rather than one irreversible change.
+- **FND-008 resolved**: report, result, pass-rate, and single-sample outcomes
+  must agree before any observation is admitted.
 
 ## Boundary
 

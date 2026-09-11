@@ -107,6 +107,9 @@ checking, manifest validation, and qualification assertions to Rust.
   one supported scenario and exactly one sample. Preserve a missing model as
   the explicit `runner-default` selection, and reject multiple model values for
   one host across the selected report collection.
+- Require the report outcome, each result outcome and `1/1` or `0/1` pass rate,
+  and its single sample outcome to agree before the report contributes an
+  observation.
 - Preserve failed samples as bounded diagnostics without admitting an
   envelope. Admit a successful sample only when its exit is `complete`, its
   retention state is `retained`, its lowercase SHA-256 digest and normalized
