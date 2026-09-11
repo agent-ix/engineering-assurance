@@ -14,7 +14,7 @@ source; this document is what a human reads before accepting it.
 | quire-rs (engine) | 0.46.0 | inside quire-cli 0.31.0 | The export the CLI delegates to |
 | quoin | 0.23.1 | npm `@agent-ix/quoin@0.23.1` | Evidence, measurements, change-assurance records, attestations, intake, audit, receipts |
 | ix-flow | 0.2.3 | npm `@agent-ix/ix-flow@0.2.3` | Human decision events as an integrity-verified chain |
-| engineering-assurance | 0.2.1 | git tag `v0.2.1` | Shared semantics, PGM-01 compatibility mapping, the accepted corpus gate, the Rust classifier, and the ix-flow lifecycle host |
+| engineering-assurance | 0.3.0 | git tag `v0.3.0` | Rust-native shared semantics, PGM-01 compatibility mapping, the accepted corpus gate, the Rust classifier, and the ix-flow lifecycle host |
 
 Every one is a released artifact. No pin is a branch head, a bare revision, or
 a floating tag — that is `FR-012-AC-1`, and TC-079 enforces it.
@@ -105,7 +105,7 @@ release. Nothing here requires a rebuild from source to undo.
 | quoin | install `@agent-ix/quoin@0.22.5` | the `change-assurance` commands; retained records, attestations, and receipts are unaffected, because 0.23.x added a surface over existing contracts rather than changing the stored layout |
 | quire-cli | install `@agent-ix/quire-cli@0.30.2` | the `provenance` command; exports produced by 0.31.0 remain readable |
 | ix-flow | install `@agent-ix/ix-flow@0.0.4` after restoring the prior invocation | the additive Rust lifecycle adapter; ix-flow-owned run state and event history remain intact |
-| engineering-assurance | check out the previous tag `v0.2.0` | the Rust compatibility classifier and ix-flow lifecycle host; retained external evidence and ix-flow state are unchanged |
+| engineering-assurance | check out the previous tag `v0.2.1` | the Rust-native port and semantic boundary; retained external evidence and ix-flow state are unchanged |
 | corpus | move the gitlink to the earlier commit and re-run the FR-011 gate | nothing; the corpus is content-addressed, so an earlier pin is a complete self-verifying set |
 
 **Nothing in this matrix is irreversible.** No pin migrates data, rewrites

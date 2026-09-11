@@ -33,7 +33,7 @@ const PACKAGE_PROCESS_TIMEOUT: Duration = Duration::from_secs(180);
 const MAX_PROCESS_OUTPUT_BYTES: usize = 8_388_608;
 const MAX_ROOT_ENTRIES: usize = 4_096;
 const MAX_WHEEL_SOURCE_BYTES: usize = 67_108_864;
-const DISTRIBUTION_VERSION: &str = "0.2.1";
+const DISTRIBUTION_VERSION: &str = "0.3.0";
 const PRIVATE_CLASSIFIER: &[u8] = b"Classifier: Private :: Do Not Upload\n";
 const ROOT_DATA_FILES: [&str; 11] = [
     ".claude-plugin/plugin.json",
