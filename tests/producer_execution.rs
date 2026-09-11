@@ -199,6 +199,28 @@ fn execute(
         .expect("fixture request must be structurally valid")
 }
 
+fn cargo_feature_tree(manifest_path: &Path) -> String {
+    let feature_tree = Command::new(env!("CARGO"))
+        .args([
+            "tree",
+            "--offline",
+            "--edges",
+            "features",
+            "--invert",
+            "serde_json",
+            "--manifest-path",
+        ])
+        .arg(manifest_path)
+        .output()
+        .expect("feature tree must launch");
+    assert!(
+        feature_tree.status.success(),
+        "feature tree failed: {}",
+        String::from_utf8_lossy(&feature_tree.stderr)
+    );
+    String::from_utf8(feature_tree.stdout).expect("feature tree must be UTF-8")
+}
+
 fn assert_identity_changes(
     base: &ProducerExecutionRequest,
     mutate: impl FnOnce(&mut ProducerExecutionRequest),
@@ -1095,4 +1117,16 @@ fn tc_128_minimal_downstream_compiles_only_producer_execution_feature() {
             "unexpected activated direct dependency {forbidden}"
         );
     }
+
+    let feature_tree = cargo_feature_tree(&consumer.path().join("Cargo.toml"));
+    assert!(
+        !feature_tree.contains("arbitrary_precision"),
+        "minimal producer-execution consumer must not enable serde_json arbitrary_precision"
+    );
+
+    let full_feature_tree = cargo_feature_tree(&manifest_dir.join("Cargo.toml"));
+    assert!(
+        full_feature_tree.contains("arbitrary_precision"),
+        "full Engineering Assurance feature set must retain serde_json arbitrary_precision"
+    );
 }
