@@ -69,6 +69,18 @@ then update this repository's direct invocation and remove the old path.
   `tests/test_compatibility_matrix.py`, and
   `tests/test_compatibility_corpus.py` together with every executable import of
   those paths.
+- For the verification-semantics capability, keep the retained Python until
+  native Rust semantic-reference and fixture validation, ownership-registry
+  validation, historical PGM-01 mapping, and bounded report rendering all pass
+  locally at one candidate revision; replace every Python-backed Rust
+  differential for that capability with expected fixtures captured once from the
+  retained implementation and committed to this repository, so no Python is
+  executed as a test oracle after cutover; carry every acceptance criterion the
+  retired Python tests backed on a tracking-tagged Rust test that fails when its
+  property is violated; and then remove
+  `engineering_assurance/verification_semantics.py` and
+  `tests/test_verification_semantics.py` together with every executable import
+  or subprocess reference to those paths.
 - Retain Python packaging support and unrelated Python onboarding and workflow
   code across that removal, and change no retained corpus byte.
 - For the canonical-discovery and ix-flow workflow capability, port canonical

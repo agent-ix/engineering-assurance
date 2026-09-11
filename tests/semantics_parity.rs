@@ -1,9 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-//! Requirement and differential tests for the Rust semantic/projection slice.
+//! Requirement and reference-parity tests for the Rust semantic/projection slice.
+//!
+//! Each reference here is a file, not a process. Every byte was captured once
+//! from `engineering_assurance/verification_semantics.py` as it stood at
+//! `bd6d2ce`, the candidate revision that cut this capability over, and
+//! committed so that the cutover could delete that lane without deleting the
+//! evidence that Rust reproduces it. While the reference was a `python3`
+//! invocation the two were inseparable: deleting the implementation would have
+//! deleted the only statement of what its output was.
+//!
+//! A reader who wants to re-derive the captures rather than trust them can
+//! restore that file from `bd6d2ce` and run `map_pgm01_bytes`,
+//! `render_report_json` and `render_report_markdown` over the same governed
+//! fixtures, dumping each result with sorted keys and no separator padding.
+//! That is how these bytes were produced and how they have been checked since.
 
-use std::{collections::BTreeMap, fs, path::PathBuf, process::Command};
+use std::{collections::BTreeMap, fmt::Write as _, fs, path::PathBuf};
 
 use engineering_assurance::semantics::{
     Pgm01Outcome, ReportProjection, SemanticErrorKind, SemanticFixture, map_pgm01_bytes,
@@ -11,6 +25,61 @@ use engineering_assurance::semantics::{
     validate_ownership_registry_bytes, validate_semantic_fixture_bytes,
 };
 use ix_trace_rs::trace;
+use sha2::{Digest, Sha256};
+
+/// The two accepted PGM-01 views the retired Python lane produced for the
+/// governed v1 and v2 fixtures, captured verbatim in sorted-key compact JSON.
+const REFERENCE_ACCEPTED_VIEWS: &[u8] =
+    include_bytes!("fixtures/semantics-pgm01-accepted-views.json");
+
+/// The five adverse scalar-identity views the retired Python lane produced,
+/// captured verbatim. These fix the identity fallbacks an empty, numeric,
+/// boolean, or null `schemaVersion`/`recordId` resolves to.
+const REFERENCE_ADVERSE_IDENTITY_VIEWS: &[u8] =
+    include_bytes!("fixtures/semantics-pgm01-adverse-identity-views.json");
+
+/// The rendered bounded report the retired Python lane produced for the
+/// governed projection fixture, as its JSON and Markdown strings.
+const REFERENCE_REPORT_RENDER: &[u8] = include_bytes!("fixtures/semantics-report-render.json");
+
+/// What the retired Python lane did with a structured PGM-01 identity, recorded
+/// because FR-015 declares a deliberate divergence there rather than parity.
+const REFERENCE_STRUCTURED_IDENTITY: &[u8] =
+    include_bytes!("fixtures/semantics-structured-identity-observations.json");
+
+/// Compare one produced value against captured reference bytes.
+///
+/// The comparison is on the encoded bytes rather than on parsed structures
+/// because a projection that widened a number, re-spelled a value, or renamed a
+/// field would still compare equal under a looser reading while no longer being
+/// the same record. Key order is not among the differences this catches: the
+/// encoder sorts object keys, which is also what makes the captured reference
+/// comparable at all. Trailing newlines differ between a file and an in-memory
+/// encoding and are not part of the record, so they are trimmed from both.
+fn assert_matches_reference(produced: &serde_json::Value, reference: &[u8], what: &str) {
+    let encoded = serde_json::to_string(produced).expect("produced value must serialize");
+    let expected = String::from_utf8(reference.to_vec()).expect("captured reference must be UTF-8");
+    assert_eq!(
+        encoded.trim_end(),
+        expected.trim_end(),
+        "{what} drifted from the captured reference bytes"
+    );
+}
+
+/// Hash bytes with SHA-256 and render the digest as lowercase hexadecimal.
+///
+/// This deliberately does not reach for the library's own digest helper: a test
+/// that asked the code under test to confirm its own arithmetic would agree with
+/// it whatever that arithmetic became.
+fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    let mut encoded = String::with_capacity(64);
+    for byte in hasher.finalize() {
+        write!(encoded, "{byte:02x}").expect("a String write cannot fail");
+    }
+    encoded
+}
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -44,7 +113,7 @@ fn forbidden_semantic_capability(source: &str) -> Option<&'static str> {
         .split(|character: char| !(character.is_ascii_alphanumeric() || character == '_'))
         .filter(|identifier| !identifier.is_empty())
         .collect();
-    ["fs", "process", "env", "Command"]
+    ["fs", "process", "env", "Command", "io", "net", "libc"]
         .into_iter()
         .find(|forbidden| identifiers.contains(forbidden))
 }
@@ -112,6 +181,7 @@ fn tc_100_semantic_fixture_and_non_success_states_are_complete() {
     );
 }
 
+#[trace("TC-057", "FR-008-AC-2")]
 #[trace("TC-102", "FR-015-AC-2")]
 #[trace("TC-103", "FR-015-AC-3")]
 #[test]
@@ -165,28 +235,32 @@ fn tc_103_semantic_reference_failures_do_not_collapse() {
 #[trace("TC-100", "FR-015-AC-1")]
 #[trace("TC-103", "FR-015-AC-3")]
 #[test]
-fn tc_100_pgm01_views_match_retained_python_for_accepted_inputs() {
-    let script = r"
-import json
-from pathlib import Path
-from engineering_assurance.verification_semantics import map_pgm01_bytes
-root = Path('engineering_assurance/fixtures/verification-semantics')
-print(json.dumps([map_pgm01_bytes((root / name).read_bytes()) for name in ('pgm01-v1.json', 'pgm01-v2.json')], sort_keys=True, separators=(',', ':')))
-";
-    let output = Command::new("python3")
-        .args(["-c", script])
-        .current_dir(root())
-        .output()
-        .expect("retained Python reference must execute during additive parity");
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
+fn tc_100_pgm01_views_match_the_captured_accepted_reference() {
+    // The digest each reference records is compared against a hash of the
+    // fixture bytes computed here, not against anything the mapper produced.
+    // That ordering matters: a governed fixture edited without its reference
+    // moving with it would otherwise surface below as a mapping regression,
+    // blaming the mapper for a stale record. Checking it against the bytes on
+    // disk first names the real cause, and is the one statement in this test
+    // that the mapper cannot satisfy by agreeing with itself.
+    let recorded: Vec<serde_json::Value> =
+        serde_json::from_slice(REFERENCE_ACCEPTED_VIEWS).expect("reference must be JSON");
+    let names = ["pgm01-v1.json", "pgm01-v2.json"];
+    assert_eq!(
+        recorded.len(),
+        names.len(),
+        "the reference must cover both PGM-01 versions"
     );
-    let expected: serde_json::Value =
-        serde_json::from_slice(&output.stdout).expect("Python reference must emit JSON");
+    for (index, name) in names.into_iter().enumerate() {
+        assert_eq!(
+            recorded[index]["source_digest"].as_str(),
+            Some(sha256_hex(&fixture(name)).as_str()),
+            "the captured reference describes a different {name}"
+        );
+    }
+
     let actual = serde_json::Value::Array(
-        ["pgm01-v1.json", "pgm01-v2.json"]
+        names
             .into_iter()
             .map(|name| {
                 serde_json::to_value(
@@ -196,9 +270,14 @@ print(json.dumps([map_pgm01_bytes((root / name).read_bytes()) for name in ('pgm0
             })
             .collect(),
     );
-    assert_eq!(actual, expected);
+    assert_matches_reference(
+        &actual,
+        REFERENCE_ACCEPTED_VIEWS,
+        "the accepted PGM-01 v1 and v2 views",
+    );
 }
 
+#[trace("TC-066", "FR-010-AC-3")]
 #[trace("TC-102", "FR-015-AC-2")]
 #[trace("TC-103", "FR-015-AC-3")]
 #[test]
@@ -292,7 +371,11 @@ fn tc_103_pgm01_adverse_outcomes_preserve_source_identity() {
 #[trace("TC-100", "FR-015-AC-1")]
 #[trace("TC-103", "FR-015-AC-3")]
 #[test]
-fn tc_100_pgm01_adverse_scalar_identity_views_match_retained_python() {
+fn tc_100_pgm01_adverse_scalar_identity_views_match_the_captured_reference() {
+    // An empty, numeric, boolean, or absent scalar identity each resolve to a
+    // declared fallback rather than to an invented one. These five cases reach
+    // every fallback branch, so a mapper that started echoing an empty string
+    // or an integer as a record identity would fail here.
     let cases = [
         br#"{"schemaVersion":"","recordId":"legacy-1"}"#.as_slice(),
         br#"{"schemaVersion":"quire.pgm01-evidence/v99","recordId":""}"#.as_slice(),
@@ -300,38 +383,20 @@ fn tc_100_pgm01_adverse_scalar_identity_views_match_retained_python() {
         br#"{"schemaVersion":"quire.pgm01-evidence/v99","recordId":42}"#.as_slice(),
         br#"{"schemaVersion":false,"recordId":null}"#.as_slice(),
     ];
-    let actual: Vec<serde_json::Value> = cases
-        .iter()
-        .map(|raw| {
-            serde_json::to_value(map_pgm01_bytes(raw, None).expect("case must classify"))
-                .expect("view must serialize")
-        })
-        .collect();
-    let script = r#"
-import json
-from engineering_assurance.verification_semantics import map_pgm01_bytes
-cases = [
-    b'{"schemaVersion":"","recordId":"legacy-1"}',
-    b'{"schemaVersion":"quire.pgm01-evidence/v99","recordId":""}',
-    b'{"schemaVersion":123,"recordId":"legacy-1"}',
-    b'{"schemaVersion":"quire.pgm01-evidence/v99","recordId":42}',
-    b'{"schemaVersion":false,"recordId":null}',
-]
-print(json.dumps([map_pgm01_bytes(case) for case in cases], sort_keys=True, separators=(',', ':')))
-"#;
-    let output = Command::new("python3")
-        .args(["-c", script])
-        .current_dir(root())
-        .output()
-        .expect("retained Python reference must execute during additive parity");
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
+    let actual = serde_json::Value::Array(
+        cases
+            .iter()
+            .map(|raw| {
+                serde_json::to_value(map_pgm01_bytes(raw, None).expect("case must classify"))
+                    .expect("view must serialize")
+            })
+            .collect(),
     );
-    let expected: serde_json::Value =
-        serde_json::from_slice(&output.stdout).expect("Python reference must emit JSON");
-    assert_eq!(serde_json::Value::Array(actual), expected);
+    assert_matches_reference(
+        &actual,
+        REFERENCE_ADVERSE_IDENTITY_VIEWS,
+        "the adverse scalar-identity views",
+    );
 }
 
 #[trace("TC-100", "FR-015-AC-1")]
@@ -348,69 +413,50 @@ fn tc_103_pgm01_structured_identity_divergences_are_explicit() {
     assert_eq!(rust_list.outcome, Pgm01Outcome::Incompatible);
     assert_eq!(rust_list.source_schema_version, "unknown");
 
-    let script = r#"
-import json
-from engineering_assurance.verification_semantics import map_pgm01_bytes
-
-cases = [
-    b'{"schemaVersion":"quire.pgm01-evidence/v99","recordId":{"a":1}}',
-    b'{"schemaVersion":[1,2],"recordId":"legacy-1"}',
-]
-observed = []
-for case in cases:
-    try:
-        observed.append({"result": map_pgm01_bytes(case)})
-    except TypeError as error:
-        observed.append({"error_type": type(error).__name__, "message": str(error)})
-print(json.dumps(observed, sort_keys=True, separators=(",", ":")))
-"#;
-    let output = Command::new("python3")
-        .args(["-c", script])
-        .current_dir(root())
-        .output()
-        .expect("retained Python reference must execute during additive parity");
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
+    // FR-015 declares this one case a deliberate divergence rather than parity:
+    // the retired implementation rendered a structured identity as a
+    // language-specific object literal, and raised an interpreter exception on
+    // a list. Three of the four assertions below pin the captured record rather
+    // than the implementation — nothing in `src/` can make them fail, and they
+    // fail only if someone edits the observation. That is their purpose: the
+    // divergence must stay a decision on the record, not quietly become an
+    // absence of comparison. The `assert_ne!` is the one that reads Rust's own
+    // output, and it is what refuses a silent convergence back onto the
+    // language-specific spelling.
+    let recorded: serde_json::Value =
+        serde_json::from_slice(REFERENCE_STRUCTURED_IDENTITY).expect("observation must be JSON");
+    assert_eq!(recorded[0]["result"]["source_record_id"], "{'a': 1}");
+    assert_ne!(
+        recorded[0]["result"]["source_record_id"],
+        serde_json::Value::String(rust_object.source_record_id.clone()),
+        "the recorded divergence must still be a divergence"
     );
-    let python: serde_json::Value =
-        serde_json::from_slice(&output.stdout).expect("Python observation must be JSON");
-    assert_eq!(python[0]["result"]["source_record_id"], "{'a': 1}");
-    assert_eq!(python[1]["error_type"], "TypeError");
-    assert_eq!(python[1]["message"], "unhashable type: 'list'");
+    assert_eq!(recorded[1]["error_type"], "TypeError");
+    assert_eq!(recorded[1]["message"], "unhashable type: 'list'");
 }
 
+#[trace("TC-067", "FR-010-AC-4")]
 #[trace("TC-100", "FR-015-AC-1")]
 #[test]
-fn tc_100_report_rendering_matches_retained_python() {
+fn tc_100_report_rendering_matches_the_captured_reference() {
     let raw = fixture("report-projection.json");
     let report: ReportProjection = serde_json::from_slice(&raw).expect("report must parse");
     let rust_json = report.render_json().expect("report JSON must render");
     let rust_markdown = report
         .render_markdown()
         .expect("report Markdown must render");
-    let script = r"
-import json
-from pathlib import Path
-from engineering_assurance.verification_semantics import render_report_json, render_report_markdown
-value = json.loads(Path('engineering_assurance/fixtures/verification-semantics/report-projection.json').read_text())
-print(json.dumps({'json': render_report_json(value), 'markdown': render_report_markdown(value)}, sort_keys=True, separators=(',', ':')))
-";
-    let output = Command::new("python3")
-        .args(["-c", script])
-        .current_dir(root())
-        .output()
-        .expect("retained Python reference must execute during additive parity");
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
     let expected: serde_json::Value =
-        serde_json::from_slice(&output.stdout).expect("Python reference must emit JSON");
-    assert_eq!(rust_json, expected["json"]);
-    assert_eq!(rust_markdown, expected["markdown"]);
+        serde_json::from_slice(REFERENCE_REPORT_RENDER).expect("reference must be JSON");
+    assert_eq!(
+        serde_json::Value::String(rust_json),
+        expected["json"],
+        "the rendered report JSON drifted from the captured reference"
+    );
+    assert_eq!(
+        serde_json::Value::String(rust_markdown),
+        expected["markdown"],
+        "the rendered report Markdown drifted from the captured reference"
+    );
 
     let mut extended: serde_json::Value =
         serde_json::from_slice(&raw).expect("report must parse as generic JSON");
@@ -440,6 +486,10 @@ fn tc_100_rust_generator_matches_all_committed_inert_fixtures() {
         (name, body)
     })
     .collect();
+    assert!(
+        !expected.is_empty(),
+        "the generated-fixture comparison read no committed projection"
+    );
     let corpus = fs::read(root().join("corpus/compatibility/corpus.json"))
         .expect("pinned compatibility corpus must be readable");
     assert_eq!(
@@ -447,10 +497,77 @@ fn tc_100_rust_generator_matches_all_committed_inert_fixtures() {
         expected
     );
 
-    // FR-008-AC-4 / NFR-004-AC-2 are negative capability requirements. Static
+    // FR-015-CON-2 forbids qualification from executing a generated
+    // foreign-language fixture, so the audit has to read the files that decide
+    // what qualification runs. Reading only `.github/workflows` satisfied a
+    // population floor of one while never opening the Makefile, which AGENTS.md
+    // names as this repository's entry point and which is where such a call
+    // would most plausibly be added. The roots below are walked recursively and
+    // the named repository-root files are read individually.
+    let mut audited = 0_usize;
+    let mut audit = |path: &std::path::Path| {
+        let body = fs::read_to_string(path).unwrap_or_else(|error| {
+            panic!("audit input {} must be readable: {error}", path.display())
+        });
+        assert!(
+            !body.contains("fixtures/verification-semantics/generated"),
+            "generated foreign-language fixture is executed by {}",
+            path.display()
+        );
+        audited += 1;
+    };
+    for relative in [".github", "scripts"] {
+        let audit_root = root().join(relative);
+        if !audit_root.is_dir() {
+            continue;
+        }
+        let mut pending = vec![audit_root];
+        while let Some(directory) = pending.pop() {
+            for entry in fs::read_dir(&directory).expect("existing audit root must be readable") {
+                let path = entry.expect("audit entry must be readable").path();
+                if path.is_dir() {
+                    pending.push(path);
+                } else if path.is_file() {
+                    audit(&path);
+                }
+            }
+        }
+    }
+    for named in [
+        "Makefile",
+        "pyproject.toml",
+        "package.json",
+        "opencode.json",
+    ] {
+        let path = root().join(named);
+        if path.is_file() {
+            audit(&path);
+        }
+    }
+
+    // A renamed entry point or a deleted directory audits nothing, and an empty
+    // population would pass every assertion above by default. Five is the count
+    // of first-party executable-configuration files this repository has, so a
+    // floor below it would accept exactly that silence.
+    assert!(
+        audited >= 5,
+        "the executable-path audit read {audited} first-party files, too few to mean anything"
+    );
+}
+
+#[trace("TC-059", "FR-008-AC-4")]
+#[trace("TC-059", "NFR-004-AC-2")]
+#[trace("TC-104", "FR-015-AC-4")]
+#[test]
+fn tc_059_semantic_library_reaches_for_no_execution_or_persistence_capability() {
+    // FR-008-AC-4 and NFR-004-AC-2 are negative capability requirements. Static
     // inspection is the direct gate: there is no runtime path to exercise for
     // an execution or persistence capability that must not exist.
     let semantic_sources = rust_sources_under(&root().join("src/semantics"));
+    assert!(
+        semantic_sources.len() >= 4,
+        "the capability audit read fewer semantic modules than this library has"
+    );
     for (path, source) in semantic_sources {
         assert_eq!(
             forbidden_semantic_capability(&source),
@@ -459,35 +576,62 @@ fn tc_100_rust_generator_matches_all_committed_inert_fixtures() {
             path.display()
         );
     }
+
+    // The audit above is a detector, and a detector that has stopped detecting
+    // reports a compromised library indistinguishably from a clean one. Each
+    // mutant below is a real way a capability enters a module: a direct call,
+    // an aliased type, and a renamed module.
     for mutant in [
         "use std::{collections::BTreeMap, fs}; fn read() { fs::read(\"x\"); }",
         "use std::{collections::BTreeMap, process::Command as Spawn}; fn run() { Spawn::new(\"x\"); }",
         "use std::{collections::BTreeMap, env as ambient}; fn read() { ambient::var(\"X\"); }",
+        "use std::{collections::BTreeMap, io}; fn read() { io::stdout(); }",
+        "use std::{collections::BTreeMap, net::TcpStream}; fn dial() { net::connect(); }",
+        "extern crate libc; fn call() { libc::exit(0); }",
     ] {
         assert!(
             forbidden_semantic_capability(mutant).is_some(),
             "negative-capability mutant escaped the static gate: {mutant}"
         );
     }
+}
 
-    let contracts = fs::read_dir(root().join("engineering_assurance/contracts"))
-        .expect("contract directory must exist")
-        .chain(
-            fs::read_dir(root().join("engineering_assurance/schemas"))
-                .expect("schema directory must exist"),
-        )
-        .map(|entry| {
+#[trace("TC-068", "NFR-004-AC-1")]
+#[trace("TC-104", "FR-015-AC-4")]
+#[test]
+fn tc_068_semantic_contracts_declare_no_parallel_record_family() {
+    let mut audited = 0_usize;
+    let mut contracts = String::new();
+    for relative in [
+        "engineering_assurance/contracts",
+        "engineering_assurance/schemas",
+    ] {
+        for entry in
+            fs::read_dir(root().join(relative)).expect("contract directory must be readable")
+        {
             let path = entry.expect("contract entry must be readable").path();
             if path
                 .extension()
                 .is_some_and(|extension| extension == "json")
             {
-                fs::read_to_string(path).expect("contract JSON must be UTF-8")
-            } else {
-                String::new()
+                contracts.push_str(&fs::read_to_string(path).expect("contract JSON must be UTF-8"));
+                audited += 1;
             }
-        })
-        .collect::<String>();
+        }
+    }
+
+    // Concatenating a directory and searching the result passes trivially when
+    // the directory is empty or has been renamed out from under the audit, so
+    // the population is counted before it is searched.
+    assert!(
+        audited >= 4,
+        "the contract audit read no meaningful contract population"
+    );
+
+    // These four tokens are how a second persisted evidence family would first
+    // appear: a record discriminator, a retention policy, a store reference, or
+    // the envelope named outright.
+    let folded = contracts.to_lowercase();
     for forbidden in [
         "\"record_type\"",
         "\"retention\"",
@@ -495,39 +639,10 @@ fn tc_100_rust_generator_matches_all_committed_inert_fixtures() {
         "generic evidence envelope",
     ] {
         assert!(
-            !contracts.to_lowercase().contains(&forbidden.to_lowercase()),
+            !folded.contains(&forbidden.to_lowercase()),
             "semantic contracts duplicate persisted evidence field {forbidden}"
         );
     }
-
-    // A first-party executable directory that no longer exists audits nothing;
-    // an empty population would otherwise pass this assertion by default, so
-    // the count below refuses that reading.
-    let mut audited = 0_usize;
-    for relative in [".github/workflows", "scripts"] {
-        let audit_root = root().join(relative);
-        if !audit_root.is_dir() {
-            continue;
-        }
-        for entry in fs::read_dir(&audit_root).expect("existing audit root must be readable") {
-            let path = entry.expect("audit entry must be readable").path();
-            if path.is_file() {
-                let body = fs::read_to_string(&path).unwrap_or_else(|error| {
-                    panic!("audit input {} must be readable: {error}", path.display())
-                });
-                assert!(
-                    !body.contains("fixtures/verification-semantics/generated"),
-                    "generated foreign-language fixture is executed by {}",
-                    path.display()
-                );
-                audited += 1;
-            }
-        }
-    }
-    assert!(
-        audited > 0,
-        "the executable-path audit read no first-party file"
-    );
 }
 
 #[trace("TC-052", "StR-002-VC-1")]
@@ -600,6 +715,15 @@ fn tc_061_committed_generated_fixtures_agree_across_every_language() {
     // The state projections carry the same set, in the same order, in all three.
     let states: Vec<String> = serde_json::from_slice(&fixture("non-success-states.json"))
         .expect("the non-success-state source must be JSON");
+
+    // An empty source makes every extracted list empty too, and three empty
+    // lists agree with each other and with the source. The floor is repeated
+    // here rather than relied on from the contract suite, because a guard in
+    // another test binary is a coincidence, not an invariant of this one.
+    assert!(
+        states.len() >= 17,
+        "the declared non-success vocabulary lost states"
+    );
     for (name, prefix, suffix) in [
         ("non_success_states.py", "    \"", "\","),
         ("non_success_states.ts", "  \"", "\","),
