@@ -193,3 +193,73 @@ fn tc_129_cli_writes_the_retained_artifact_and_reports_incomplete_matrix() {
         "evaluation_report_artifact_mismatch"
     );
 }
+
+#[test]
+#[trace("TC-051", "FR-006-AC-7")]
+fn tc_051_verification_rejects_an_aggregate_retained_for_another_revision() {
+    // Retained evaluation evidence is only evidence about the revision it was
+    // produced from. An aggregate that is internally consistent but was
+    // retained for a different revision is the case that would otherwise let
+    // yesterday's passing run certify today's tree, so verification refuses it
+    // on the revision alone rather than on any byte difference in the reports.
+    let repository = TempDir::new().expect("repository fixture must be creatable");
+    let workspace = TempDir::new().expect("workspace fixture must be creatable");
+    let work_dir = workspace.path().join("codex-existing-profile");
+    let transcript = work_dir.join(".cli-agent-evals/transcripts/sample.transcript");
+    fs::create_dir_all(transcript.parent().expect("transcript must have a parent"))
+        .expect("transcript parent must be creatable");
+    let transcript_bytes = b"retained transcript\n";
+    fs::write(&transcript, transcript_bytes).expect("transcript must be writable");
+    let mut digest = String::with_capacity(64);
+    for byte in Sha256::digest(transcript_bytes) {
+        let _ = write!(&mut digest, "{byte:02x}");
+    }
+    let report_path = repository.path().join("reports/codex.json");
+    fs::create_dir_all(report_path.parent().expect("report must have a parent"))
+        .expect("report parent must be creatable");
+    fs::write(
+        &report_path,
+        serde_json::to_vec(&valid_partial_report(&work_dir, &digest)).expect("report must encode"),
+    )
+    .expect("report must be writable");
+
+    let aggregated = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
+        .args([
+            "evaluation-aggregate",
+            "--root",
+            repository.path().to_str().expect("root must be UTF-8"),
+            "--workspace-root",
+            workspace.path().to_str().expect("workspace must be UTF-8"),
+            "--report",
+            "reports/codex.json",
+            "--source-revision",
+            SOURCE_REVISION,
+            "--output",
+            "artifacts/aggregate.json",
+        ])
+        .output()
+        .expect("evaluation aggregate command must terminate");
+    assert_eq!(aggregated.status.code(), Some(1));
+
+    // The unchanged artifact verifies, so the refusal below is caused by the
+    // retained revision rather than by an artifact that never verified at all.
+    assert!(verify_artifact(&repository, &workspace).status.success());
+
+    let artifact_path = repository.path().join("artifacts/aggregate.json");
+    let mut artifact: Value = serde_json::from_slice(
+        &fs::read(&artifact_path).expect("aggregate artifact must be readable"),
+    )
+    .expect("aggregate artifact must decode");
+    artifact["source_revision"] = json!("c".repeat(40));
+    fs::write(
+        &artifact_path,
+        serde_json::to_vec(&artifact).expect("retained artifact must encode"),
+    )
+    .expect("retained artifact must be writable");
+
+    let refused = verify_artifact(&repository, &workspace);
+    assert_eq!(refused.status.code(), Some(2));
+    let error: Value =
+        serde_json::from_slice(&refused.stdout).expect("refusal must decode as a machine error");
+    assert_eq!(error["code"], "evaluation_report_artifact_invalid");
+}

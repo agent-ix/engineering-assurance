@@ -231,6 +231,7 @@ fn tc_100_evidence_classification_preserves_accepted_state_fixtures() {
 }
 
 #[trace("TC-102", "FR-015-AC-2")]
+#[trace("TC-046", "FR-004-AC-7")]
 #[test]
 fn tc_102_evidence_availability_states_remain_distinct() {
     let states = parity_cases()[..4]
@@ -267,6 +268,7 @@ fn tc_102_evidence_availability_states_remain_distinct() {
 }
 
 #[trace("TC-103", "FR-015-AC-3")]
+#[trace("TC-024", "FR-004-AC-5")]
 #[test]
 fn tc_103_evidence_malformed_and_missing_provenance_fail_explicitly() {
     let results = parity_cases()[4..22]
@@ -468,4 +470,138 @@ fn tc_100_canonical_json_digest_fixture_is_stable() {
         Value::String("observed".to_owned()),
         serde_json::to_value(result.availability).expect("availability must serialize")
     );
+}
+
+#[trace("TC-020", "FR-004-AC-1", "US-004-EX-2")]
+#[test]
+fn tc_020_observed_evidence_retains_the_governing_tuple_and_operator_observation() {
+    // An `observed` record is the only state that asserts a producer actually
+    // ran, so it is the state that must carry enough provenance for a reader to
+    // re-derive the claim. Asserting the retained tuple, the operator
+    // observation and the output digest together prevents a classifier that
+    // labels a result `observed` while dropping the identities that make the
+    // label checkable.
+    let result = classify_producer(&observed());
+    assert_eq!(result.availability, Some(AvailabilityState::Observed));
+    assert_eq!(result.governing.as_ref(), Some(&governing()));
+    assert_eq!(result.observation, observation("succeeded", Some(0), None));
+    assert_eq!(
+        result.output_digest.as_deref(),
+        Some("013ad71438e02c083ba28636ab02fae1eb6196ecfd773ddbe3b1d7a0b865071f")
+    );
+    assert!(result.is_valid());
+
+    // Without the tuple the same otherwise-valid attempt must refuse rather
+    // than fall back to a provenance-free `observed` record.
+    let untraceable = classify_producer(&changed(&observed(), |case| case.governing = None));
+    assert_eq!(
+        untraceable.validation_errors,
+        ["governing-versions-missing"]
+    );
+    assert_eq!(untraceable.availability, None);
+}
+
+#[trace("TC-021", "FR-004-AC-2", "US-004-EX-1")]
+#[test]
+fn tc_021_unavailable_evidence_retains_the_observed_failure_category() {
+    // A producer that could not be invoked is the case most likely to be
+    // quietly rounded up to a success or down to silence. The failure category
+    // is what keeps the absence readable, so it is required on the way in and
+    // must survive onto the classified record.
+    let unavailable = changed(&observed(), |case| {
+        case.observation = observation("failed", Some(127), Some("executable-not-found"));
+        case.output = None;
+        case.output_valid = false;
+        case.governing = None;
+        case.quoin_reference = None;
+    });
+    let result = classify_producer(&unavailable);
+    assert_eq!(result.availability, Some(AvailabilityState::Unavailable));
+    assert_eq!(
+        result.observation.diagnostic_category.as_deref(),
+        Some("executable-not-found")
+    );
+    assert_eq!(result.observation.exit_code, Some(127));
+    assert!(result.is_valid());
+
+    // A failure with no category would leave a reader unable to tell one kind
+    // of absence from another, so it is refused instead of classified.
+    let uncategorized = classify_producer(&changed(&unavailable, |case| {
+        case.observation = observation("failed", Some(127), None);
+    }));
+    assert_eq!(
+        uncategorized.validation_errors,
+        ["failure-category-missing"]
+    );
+    assert_eq!(uncategorized.availability, None);
+}
+
+#[trace("TC-022", "FR-004-AC-3")]
+#[trace("TC-023", "FR-004-AC-4")]
+#[test]
+fn tc_022_and_tc_023_deferred_and_excluded_producers_name_their_reason() {
+    // `not_computed` and `not_applicable` are the two states a reader cannot
+    // act on without knowing who owes the work or why the producer was ruled
+    // out. Each state is checked both for retaining its reason and for refusing
+    // the attempt that omits one, so neither can decay into an unexplained
+    // blank.
+    let deferred = changed(&observed(), |case| {
+        case.invoked = false;
+        case.observation = observation("not-run", None, None);
+        case.governing = None;
+        case.output = None;
+        case.output_valid = false;
+        case.owner = Some("measurement-owner".to_owned());
+        case.quoin_reference = None;
+    });
+    let result = classify_producer(&deferred);
+    assert_eq!(result.availability, Some(AvailabilityState::NotComputed));
+    assert_eq!(result.owner.as_deref(), Some("measurement-owner"));
+    let unowned = classify_producer(&changed(&deferred, |case| case.owner = None));
+    assert_eq!(unowned.validation_errors, ["next-action-or-owner-missing"]);
+    assert_eq!(unowned.availability, None);
+
+    let excluded = changed(&deferred, |case| {
+        case.applicable = false;
+        case.owner = None;
+        case.boundary_rationale = Some("outside the selected service boundary".to_owned());
+    });
+    let result = classify_producer(&excluded);
+    assert_eq!(result.availability, Some(AvailabilityState::NotApplicable));
+    assert_eq!(
+        result.boundary_rationale.as_deref(),
+        Some("outside the selected service boundary")
+    );
+    let unexplained = classify_producer(&changed(&excluded, |case| case.boundary_rationale = None));
+    assert_eq!(
+        unexplained.validation_errors,
+        ["boundary-rationale-missing"]
+    );
+    assert_eq!(unexplained.availability, None);
+}
+
+#[trace("TC-025", "FR-004-AC-6")]
+#[test]
+fn tc_025_observed_evidence_delegates_its_record_to_quoin() {
+    // Evidence that is retained or reported belongs to Quoin. Requiring the
+    // handoff identity on every `observed` record is what stops this module
+    // from growing a second, module-local evidence store: an attempt that names
+    // no Quoin record, or names some other authority, cannot become evidence.
+    let result = classify_producer(&observed());
+    assert_eq!(
+        result.quoin_reference.as_deref(),
+        Some("ix://agent-ix/quoin/EvidenceRecord-001")
+    );
+
+    for reference in [
+        None,
+        Some("ix://agent-ix/not-quoin/EvidenceRecord-001".to_owned()),
+        Some("EvidenceRecord-001".to_owned()),
+    ] {
+        let result = classify_producer(&changed(&observed(), |case| {
+            case.quoin_reference = reference;
+        }));
+        assert_eq!(result.validation_errors, ["quoin-handoff-missing"]);
+        assert_eq!(result.availability, None);
+    }
 }

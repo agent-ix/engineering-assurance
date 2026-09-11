@@ -1099,7 +1099,7 @@ mod tests {
         );
     }
 
-    #[trace("TC-103", "FR-015-AC-3", "FR-015-AC-5")]
+    #[trace("TC-103", "FR-015-AC-3", "FR-015-AC-5", "FR-015-CON-4")]
     #[test]
     fn tc_103_refuses_every_malformed_unsafe_or_incomplete_index() {
         assert_eq!(
@@ -1168,7 +1168,7 @@ mod tests {
         }
     }
 
-    #[trace("TC-103", "FR-015-AC-3", "FR-015-AC-5")]
+    #[trace("TC-103", "FR-015-AC-3", "FR-015-AC-5", "FR-015-CON-4")]
     #[test]
     fn tc_103_refuses_every_unsafe_path_and_incomplete_retention() {
         // Every unsafe retained-path shape is refused here, so a confined host

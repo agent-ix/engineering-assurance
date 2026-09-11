@@ -73,6 +73,10 @@ identities or ownership.
   symlinked or non-regular retained entry, a missing retained entry, a duplicate
   case or chain-role identity, an unknown corpus version, a malformed corpus
   index, and tampered retained bytes, each as a distinct typed refusal.
+- If an accepted-corpus input exceeds a declared ceiling on index bytes,
+  retained artifact bytes, retained path bytes, entry population, or directory
+  nesting depth, then the accepted-corpus reader SHALL refuse that input as a
+  typed error before reading or allocating beyond the ceiling.
 - Consume portable verification contracts by version rather than copying them
   into a second contract family.
 
@@ -91,6 +95,7 @@ diagnostic prose is not the discriminator.
 | FR-015-CON-1 | Compatibility access SHALL be read-only. | Data Integrity | Test |
 | FR-015-CON-2 | Generated foreign-language fixtures SHALL NOT be executed by qualification. | Security | Test |
 | FR-015-CON-3 | The implementation SHALL NOT define a second persisted verification or evidence record family. | Responsibility | Test |
+| FR-015-CON-4 | The accepted-corpus reader SHALL refuse, as a typed error and before allocating for it, any input beyond its declared ceiling on index bytes, retained artifact bytes, retained path bytes, entry population, or directory nesting depth. | Resource | Test |
 
 ## Acceptance Criteria
 
