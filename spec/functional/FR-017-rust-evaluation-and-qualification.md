@@ -136,6 +136,16 @@ checking, manifest validation, and qualification assertions to Rust.
 - The `agent-evals-aggregate` repository command SHALL invoke the Rust CLI
   after same-revision parity with the retained Python loader and script. The
   cutover SHALL be reversible before the replaced Python paths are deleted.
+- The native manifest host adapter SHALL accept one explicit non-symbolic-link
+  repository root and one explicit non-symbolic-link authoritative module root.
+  It SHALL read only the declared module manifest, authoritative manifest
+  schema and edge registry, and manifest-declared schema/skeleton resource
+  pairs beneath those roots before delegating qualification to the pure Rust
+  manifest boundary.
+- The native manifest host adapter SHALL reject missing, linked, special,
+  escaping, duplicate, or over-limit resources before qualification. It SHALL
+  NOT search environment variables, parent directories, home directories, or
+  network locations for an authoritative schema.
 - Treat the supported host population as `claude`, `codex`, `opencode`, and
   `copilot`, and the scenario population as `existing-profile`, `no-profile`,
   `malformed-producer`, `unavailable-producer`, `interruption-resume`,
@@ -523,6 +533,7 @@ byte mismatch refuses the package audit without a success result.
 | FR-017-AC-5 | The pure Rust content-rights classifier matches every retained finding class and exception, rejects unsafe paths without echoing them, preserves Unicode protected-token matching, emits no matched content, and returns deterministic typed findings without filesystem, environment, child-program, network, or clock access. | Property (TC-119) |
 | FR-017-AC-6 | For every caller-supplied expected allowlist and observed file-member sequence within the declared ceilings, the pure Rust membership classifier matches retained extra/missing behavior on the shared safe unique domain, additionally rejects unsafe or duplicate membership without disclosing unsafe paths, remains permutation-invariant, and performs no filesystem, environment, child-program, network, clock, archive-decoding, or package-format selection. | Property (TC-120) |
 | FR-017-AC-7 | For the retained valid module and every declared malformed-manifest, schema, registry, resource, frontmatter, and heading case within the declared ceilings, the pure Rust manifest classifier matches retained acceptance on the shared supported domain, fails closed through typed deterministic findings, consumes rather than copies authoritative schemas, and performs no filesystem, environment, child-program, network, or clock access. | Property (TC-121) |
+| FR-017-AC-8 | The native manifest host adapter validates the retained module through explicit repository and authoritative-module roots, emits one versioned result, and refuses invalid roots or unsafe/missing/linked/special/escaping/over-limit resources before the pure qualifier runs. | Test (TC-131) |
 
 ## Dependencies
 
