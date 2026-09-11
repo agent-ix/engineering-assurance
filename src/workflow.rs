@@ -68,6 +68,19 @@ pub enum WorkflowKind {
 }
 
 impl WorkflowKind {
+    /// Every promoted Engineering Assurance workflow, in name order.
+    ///
+    /// The canonical bundle and the lifecycle adapter have to agree on which
+    /// workflows exist, and they used to agree by each carrying its own list.
+    /// One list means a workflow cannot be promoted into the bundle without
+    /// also becoming bindable, or bound without also being discoverable.
+    pub const ALL: [Self; 4] = [
+        Self::ArchitectureEvaluation,
+        Self::AssuranceIntake,
+        Self::ChangeAssurance,
+        Self::MeasurementPromotion,
+    ];
+
     /// Return the canonical ix-flow definition name.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
@@ -121,14 +134,18 @@ impl fmt::Display for WorkflowKind {
 impl FromStr for WorkflowKind {
     type Err = ();
 
+    /// Parse a workflow name out of [`WorkflowKind::ALL`].
+    ///
+    /// Deliberately not a second hand-written match. A variant reachable here
+    /// but absent from `ALL` would be bindable without being discoverable,
+    /// which is precisely what one shared list is supposed to make impossible —
+    /// and a fixed-size array is not exhaustiveness-checked, so nothing else
+    /// would report the divergence.
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value {
-            "assurance-intake" => Ok(Self::AssuranceIntake),
-            "architecture-evaluation" => Ok(Self::ArchitectureEvaluation),
-            "measurement-promotion" => Ok(Self::MeasurementPromotion),
-            "change-assurance" => Ok(Self::ChangeAssurance),
-            _ => Err(()),
-        }
+        Self::ALL
+            .into_iter()
+            .find(|workflow| workflow.as_str() == value)
+            .ok_or(())
     }
 }
 
@@ -513,6 +530,39 @@ mod tests {
                 .is_err(),
                 "candidate unexpectedly passed: {candidate}"
             );
+        }
+    }
+
+    #[trace("TC-003", "StR-001-VC-3", "TC-107", "FR-016-AC-3")]
+    #[test]
+    fn tc_003_a_terminal_run_cannot_be_bound_without_a_named_human_owner() {
+        let named = WorkflowBinding {
+            run_id: "named-owner-run".to_owned(),
+            repository_id: "fictional-repository@revision-1".to_owned(),
+            workflow: "architecture-evaluation".to_owned(),
+            workflow_version: "0.1.0".to_owned(),
+            decision_boundary: "one fictional boundary".to_owned(),
+            decision_owner: "architecture-owner".to_owned(),
+        };
+        assert!(named.validate().is_ok());
+
+        // An unnamed owner is refused before the run exists, so there is never a
+        // decision-ready run whose terminal outcome could be recorded against
+        // nobody. Whitespace counts as unnamed: a run bound to " " would carry
+        // an owner field through every downstream record and attribute nothing.
+        for blank in ["", " ", "\t", "\n"] {
+            let unnamed = WorkflowBinding {
+                decision_owner: blank.to_owned(),
+                ..named.clone()
+            };
+            let error = unnamed
+                .validate()
+                .expect_err("an unnamed decision owner must refuse");
+            assert!(
+                error.to_string().contains("decision_owner"),
+                "the refusal must name the missing field: {error}"
+            );
+            assert_eq!(error.code(), "workflow_binding_invalid");
         }
     }
 

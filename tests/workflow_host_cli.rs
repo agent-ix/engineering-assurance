@@ -12,7 +12,10 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
-use engineering_assurance::workflow::{REQUEST_PROTOCOL, RESULT_PROTOCOL};
+use engineering_assurance::{
+    discovery::expected_workflows,
+    workflow::{REQUEST_PROTOCOL, RESULT_PROTOCOL},
+};
 use ix_trace_rs::trace;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -278,6 +281,7 @@ fn gate_token(payload: &Value, outcome: &str) -> String {
 }
 
 #[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-5")]
+#[trace("TC-026", "FR-005-AC-1", "US-003-EX-1")]
 #[test]
 fn tc_107_new_resume_and_pristine_interruption_recovery_preserve_binding() {
     let state = TestDirectory::new("resume");
@@ -291,6 +295,40 @@ fn tc_107_new_resume_and_pristine_interruption_recovery_preserve_binding() {
     let resumed = run_host(&request(state.path(), "new-run", "start_or_resume", None));
     assert!(resumed.status.success());
     assert_eq!(result(&resumed), first_result);
+
+    // Resuming an unchanged run proves idempotence but not that a completed
+    // phase survives. FR-005-AC-1 is about the operator who stopped partway:
+    // the run is advanced here first, so a resume that silently restarted the
+    // workflow would report `capture` again and fail instead of passing as an
+    // identical snapshot.
+    ix_flow(
+        state.path(),
+        &[
+            "record-answers",
+            "new-run",
+            "architecture",
+            "--answers",
+            r#"{"scope":"fictional component","description_path":"spec/AD-001.md","concerns":["retained response"],"owner":"architecture-owner"}"#,
+        ],
+    );
+    ix_flow(state.path(), &["advance", "new-run", "scenarios_ready"]);
+    let advanced = run_host(&request(state.path(), "new-run", "start_or_resume", None));
+    assert!(
+        advanced.status.success(),
+        "{}",
+        String::from_utf8_lossy(&advanced.stderr)
+    );
+    let advanced_snapshot = result(&advanced)["snapshot"].clone();
+    assert_eq!(advanced_snapshot["phase"], "scenarios_ready");
+    assert!(
+        advanced_snapshot["state_version"]
+            .as_u64()
+            .expect("a state version must be an integer")
+            > first_result["snapshot"]["state_version"]
+                .as_u64()
+                .expect("a state version must be an integer"),
+        "resume must observe the run ix-flow advanced, not a replacement"
+    );
 
     ix_flow(
         state.path(),
@@ -318,6 +356,85 @@ fn tc_107_new_resume_and_pristine_interruption_recovery_preserve_binding() {
             .map(Vec::len),
         Some(1)
     );
+}
+
+/// The phase and transition shape of one canonical workflow definition.
+#[derive(serde::Deserialize)]
+struct Definition {
+    phases: Vec<DefinitionPhase>,
+    transitions: Vec<DefinitionTransition>,
+}
+
+/// One declared phase of a canonical workflow.
+#[derive(serde::Deserialize)]
+struct DefinitionPhase {
+    name: String,
+    #[serde(default)]
+    terminal: bool,
+}
+
+/// One declared transition of a canonical workflow.
+#[derive(serde::Deserialize)]
+struct DefinitionTransition {
+    to: String,
+    #[serde(rename = "defaultGate")]
+    default_gate: String,
+}
+
+#[trace("TC-027", "FR-005-AC-2")]
+#[test]
+fn tc_027_every_canonical_terminal_transition_is_human_gated() {
+    // The population is taken from the promoted workflow names rather than from
+    // whatever the directory happens to list. A check written over a listing
+    // passes over an empty or renamed workflows directory, which is the exact
+    // condition that would leave a terminal transition ungated and unnoticed.
+    let workflows = expected_workflows();
+    assert_eq!(workflows.len(), 4, "the promoted set must not be empty");
+    let root = skill_root().join("workflows");
+
+    for workflow in &workflows {
+        let path = root.join(workflow).join("def.yaml");
+        let bytes = fs::read(&path)
+            .unwrap_or_else(|error| panic!("cannot read {}: {error}", path.display()));
+        let definition: Definition = yaml_serde::from_slice(&bytes)
+            .unwrap_or_else(|error| panic!("cannot parse {}: {error}", path.display()));
+
+        let terminal = definition
+            .phases
+            .iter()
+            .filter(|phase| phase.terminal)
+            .map(|phase| phase.name.clone())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            terminal.len(),
+            2,
+            "{workflow} must declare an accepting and a rejecting terminal phase"
+        );
+
+        let into_terminal = definition
+            .transitions
+            .iter()
+            .filter(|transition| terminal.contains(&transition.to))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            into_terminal
+                .iter()
+                .map(|transition| transition.to.clone())
+                .collect::<BTreeSet<_>>(),
+            terminal,
+            "{workflow} must reach every terminal phase it declares"
+        );
+        // A single `auto` here is the whole defect: ix-flow would advance the
+        // run to its terminal outcome with no person selecting it, and every
+        // downstream record would still read as an owner decision.
+        for transition in into_terminal {
+            assert_eq!(
+                transition.default_gate, "hitl",
+                "{workflow} leaves the transition to {} ungated",
+                transition.to
+            );
+        }
+    }
 }
 
 #[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-6")]
@@ -397,6 +514,7 @@ fn tc_107_broken_event_chain_is_refused_without_state_mutation() {
 }
 
 #[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-6")]
+#[trace("TC-048", "FR-005-AC-7")]
 #[test]
 fn tc_107_binding_and_phase_refusals_leave_ix_flow_history_unchanged() {
     let state = TestDirectory::new("refusal");
@@ -404,12 +522,32 @@ fn tc_107_binding_and_phase_refusals_leave_ix_flow_history_unchanged() {
     assert!(started.status.success());
     let before = tree_digest(state.path());
 
-    let mut mismatched = request(state.path(), "bound-run", "start_or_resume", None);
-    mismatched["binding"]["repository_id"] = Value::String("other@revision".to_owned());
-    let mismatch = run_host(&mismatched);
-    assert_eq!(mismatch.status.code(), Some(2));
-    assert_eq!(result(&mismatch)["code"], "workflow_binding_invalid");
-    assert_eq!(tree_digest(state.path()), before);
+    // Every field of the binding is exercised, not one of them. The binding
+    // exists to keep one run from governing a second decision boundary, and a
+    // reused run id that changes only the boundary or the definition version is
+    // the contamination the criterion names — each was refused by code no
+    // assertion reached.
+    for (field, value) in [
+        ("repository_id", "other@revision"),
+        ("decision_boundary", "a different architecture boundary"),
+        ("workflow_version", "0.1.1"),
+        ("workflow", "assurance-intake"),
+    ] {
+        let mut mismatched = request(state.path(), "bound-run", "start_or_resume", None);
+        mismatched["binding"][field] = Value::String(value.to_owned());
+        let mismatch = run_host(&mismatched);
+        assert_eq!(
+            mismatch.status.code(),
+            Some(2),
+            "a changed {field} was accepted"
+        );
+        assert_eq!(result(&mismatch)["code"], "workflow_binding_invalid");
+        assert_eq!(
+            tree_digest(state.path()),
+            before,
+            "a refused {field} mismatch changed ix-flow state"
+        );
+    }
 
     let invalid_phase = run_host(&request(
         state.path(),
@@ -426,18 +564,41 @@ fn tc_107_binding_and_phase_refusals_leave_ix_flow_history_unchanged() {
 }
 
 #[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-5")]
+#[trace("TC-003", "StR-001-VC-3")]
+#[trace("TC-028", "FR-005-AC-3", "US-003-EX-2")]
+#[trace("TC-029", "FR-005-AC-4")]
+#[trace("TC-047", "FR-005-AC-6")]
 #[test]
 fn tc_107_explicit_decisions_are_human_attributed_idempotent_and_conflict_safe() {
-    for (run_id, choice, outcome) in [
-        ("accepted-run", "accept", "accepted"),
-        ("rejected-run", "reject", "rejected"),
+    for (run_id, choice, outcome, opposite_outcome) in [
+        ("accepted-run", "accept", "accepted", "rejected"),
+        ("rejected-run", "reject", "rejected", "accepted"),
     ] {
         let state = TestDirectory::new(run_id);
         prepare_decision_ready(state.path(), run_id);
+
+        // Nothing may be acknowledged before the owner decides. Without this,
+        // an already-acknowledged gate would satisfy every assertion below and
+        // the run would report an attributed decision nobody made.
+        let before = ix_flow(state.path(), &["status", run_id]);
+        assert!(
+            acknowledgements(&before).is_empty(),
+            "a decision was already acknowledged before the owner chose"
+        );
+
         let before_choice = tree_digest(state.path());
         let no_choice = run_host(&request(state.path(), run_id, "decide", None));
         assert!(no_choice.status.success());
-        assert_eq!(result(&no_choice)["snapshot"]["phase"], "decision_ready");
+        let waiting = result(&no_choice)["snapshot"].clone();
+        assert_eq!(waiting["phase"], "decision_ready");
+        // A run left at its gate must also have opened no gate: an open gate is
+        // a token an automated caller could acknowledge, so "non-terminal" and
+        // "nothing is pending acknowledgement" are two different properties.
+        assert_eq!(
+            waiting["open_gates"].as_array().map(Vec::len),
+            Some(0),
+            "an undecided run must leave no gate open"
+        );
         assert_eq!(tree_digest(state.path()), before_choice);
 
         let decided = run_host(&request(state.path(), run_id, "decide", Some(choice)));
@@ -450,6 +611,16 @@ fn tc_107_explicit_decisions_are_human_attributed_idempotent_and_conflict_safe()
         assert_eq!(event["choice"], choice);
         assert_eq!(event["outcome"], outcome);
         assert_eq!(event["owner"], "architecture-owner");
+        assert_eq!(event["run_id"], run_id);
+        assert_eq!(event["workflow"], "architecture-evaluation");
+        assert_eq!(event["workflow_version"], "0.1.0");
+        assert!(
+            event["timestamp"]
+                .as_str()
+                .expect("a decision timestamp must be a string")
+                .ends_with('Z'),
+            "the decision timestamp must be recorded in universal time"
+        );
         let after_choice = tree_digest(state.path());
 
         let repeated = run_host(&request(state.path(), run_id, "decide", Some(choice)));
@@ -468,14 +639,30 @@ fn tc_107_explicit_decisions_are_human_attributed_idempotent_and_conflict_safe()
         assert_eq!(tree_digest(state.path()), after_choice);
 
         let status = ix_flow(state.path(), &["status", run_id]);
-        let terminal_events = status["data"]["events"]
-            .as_array()
-            .expect("events must be an array")
-            .iter()
-            .filter(|item| item["kind"] == "gate.acknowledged")
-            .collect::<Vec<_>>();
-        assert_eq!(terminal_events.len(), 1);
+        assert_eq!(acknowledgements(&status).len(), 1);
+        assert_eq!(status["data"]["phase"], outcome);
+        // The opposite outcome must be absent from the history, not merely
+        // absent from the current phase: a run that reached the other terminal
+        // state and was walked back would still read correctly at the end.
+        assert!(
+            !status["data"]["events"]
+                .as_array()
+                .expect("events must be an array")
+                .iter()
+                .any(|item| item["payload"]["to"] == opposite_outcome),
+            "the opposite terminal outcome appears in the run history"
+        );
     }
+}
+
+/// Every human gate acknowledgement recorded in one ix-flow status payload.
+fn acknowledgements(status: &Value) -> Vec<&Value> {
+    status["data"]["events"]
+        .as_array()
+        .expect("events must be an array")
+        .iter()
+        .filter(|item| item["kind"] == "gate.acknowledged")
+        .collect()
 }
 
 #[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-5")]
@@ -581,6 +768,7 @@ fn tc_107_incompatible_unavailable_and_malformed_inputs_fail_before_state() {
 }
 
 #[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-5")]
+#[trace("TC-030", "FR-005-AC-5")]
 #[test]
 fn tc_107_automatic_terminal_gate_configuration_is_refused_without_mutation() {
     let state = TestDirectory::new("automatic-gate");

@@ -12,6 +12,7 @@
 pub mod compatibility;
 pub mod compatibility_corpus;
 pub mod content_rights;
+pub mod discovery;
 pub mod evaluation;
 pub mod evaluation_reports;
 pub mod evidence;
