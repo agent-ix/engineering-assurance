@@ -7,6 +7,7 @@
 
 mod content_rights_host;
 mod evaluation_report_host;
+mod integration_evidence_host;
 mod onboarding_host;
 mod package_archive;
 mod package_audit_host;
@@ -37,6 +38,7 @@ const COMPATIBILITY_CAPABILITY: &str = "compatibility";
 const CONTENT_RIGHTS_TREE_CAPABILITY: &str = "content-rights-tree";
 const EVALUATION_AGGREGATE_CAPABILITY: &str = "evaluation-aggregate";
 const EVALUATION_AGGREGATE_VERIFY_CAPABILITY: &str = "evaluation-aggregate-verify";
+const INTEGRATION_EVIDENCE_CAPABILITY: &str = "integration-evidence";
 const ONBOARDING_CAPABILITY: &str = "onboarding";
 const PACKAGE_AUDIT_CAPABILITY: &str = "package-audit";
 const PACKAGE_LIFECYCLE_CAPABILITY: &str = "package-lifecycle";
@@ -107,6 +109,7 @@ fn command() -> Command {
                         .required(true),
                 ),
         )
+        .subcommand(integration_evidence_command())
         .subcommand(
             Command::new(ONBOARDING_CAPABILITY)
                 .about("Inventory a selected repository and produce a bounded onboarding result"),
@@ -150,6 +153,36 @@ fn command() -> Command {
         )
 }
 
+fn integration_evidence_command() -> Command {
+    Command::new(INTEGRATION_EVIDENCE_CAPABILITY)
+        .about("Verify typed Quire traceability and retained release evidence")
+        .arg(required_path_arg("root"))
+        .arg(
+            Arg::new("quire")
+                .long("quire")
+                .value_name("COMMAND")
+                .default_value("quire"),
+        )
+        .arg(
+            Arg::new("traceability-only")
+                .long("traceability-only")
+                .action(clap::ArgAction::SetTrue)
+                .conflicts_with_all(["artifact", "workspace-root"]),
+        )
+        .arg(
+            Arg::new("artifact")
+                .long("artifact")
+                .value_name("PATH")
+                .value_parser(clap::value_parser!(PathBuf)),
+        )
+        .arg(
+            Arg::new("workspace-root")
+                .long("workspace-root")
+                .value_name("PATH")
+                .value_parser(clap::value_parser!(PathBuf)),
+        )
+}
+
 fn package_root_command(name: &'static str, about: &'static str) -> Command {
     Command::new(name)
         .about(about)
@@ -179,12 +212,76 @@ fn main() -> ExitCode {
         Some((EVALUATION_AGGREGATE_VERIFY_CAPABILITY, arguments)) => {
             run_evaluation_aggregate_verify(arguments)
         }
+        Some((INTEGRATION_EVIDENCE_CAPABILITY, arguments)) => run_integration_evidence(arguments),
         Some((ONBOARDING_CAPABILITY, _)) => run_onboarding(),
         Some((PACKAGE_AUDIT_CAPABILITY, arguments)) => run_package_audit(arguments),
         Some((WORKFLOW_INVARIANTS_CAPABILITY, _)) => run_workflow_invariants(),
         Some((WORKFLOW_HOST_CAPABILITY, _)) => run_workflow_host(),
         Some((PACKAGE_LIFECYCLE_CAPABILITY, arguments)) => run_package_lifecycle(arguments),
         Some(_) | None => ExitCode::from(2),
+    }
+}
+
+fn run_integration_evidence(arguments: &ArgMatches) -> ExitCode {
+    let Some(root) = arguments.get_one::<PathBuf>("root") else {
+        return emit_error(
+            INTEGRATION_EVIDENCE_CAPABILITY,
+            "integration_evidence_root_invalid",
+            "integration-evidence repository root is missing",
+        );
+    };
+    let Some(quire) = arguments.get_one::<String>("quire") else {
+        return emit_error(
+            INTEGRATION_EVIDENCE_CAPABILITY,
+            "integration_evidence_quire_unavailable",
+            "quire command is missing",
+        );
+    };
+    let result = if arguments.get_flag("traceability-only") {
+        integration_evidence_host::traceability(root, std::ffi::OsStr::new(quire))
+    } else {
+        let Some(artifact) = arguments.get_one::<PathBuf>("artifact") else {
+            return emit_error(
+                INTEGRATION_EVIDENCE_CAPABILITY,
+                "integration_evidence_artifact_invalid",
+                "retained evaluation artifact is required unless traceability-only is selected",
+            );
+        };
+        let Some(workspace_root) = arguments.get_one::<PathBuf>("workspace-root") else {
+            return emit_error(
+                INTEGRATION_EVIDENCE_CAPABILITY,
+                "integration_evidence_artifact_invalid",
+                "evaluation workspace root is required with retained evidence",
+            );
+        };
+        integration_evidence_host::release(
+            root,
+            workspace_root,
+            artifact,
+            std::ffi::OsStr::new(quire),
+        )
+    };
+    match result {
+        Ok(summary) => {
+            let message = match summary.evaluation_cells {
+                None => "integration evidence passed: traceability complete\n".to_owned(),
+                Some((complete, required)) => format!(
+                    "integration evidence passed: traceability complete; evaluations {complete}/{required}\n"
+                ),
+            };
+            match write_stdout(message.as_bytes()) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    eprintln!("failed to write integration-evidence summary: {error}");
+                    ExitCode::from(2)
+                }
+            }
+        }
+        Err(error) => emit_error(
+            INTEGRATION_EVIDENCE_CAPABILITY,
+            error.code(),
+            &error.to_string(),
+        ),
     }
 }
 
