@@ -68,9 +68,9 @@
     },
     {
       "name": "engineering-assurance",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "released": true,
-      "release": "git tag v0.3.0 \u2014 pre-stabilization source distribution; npm publication is refused by design",
+      "release": "git tag v0.3.1 \u2014 pre-stabilization source distribution; npm publication is refused by design",
       "provides": "Shared verification semantics, the PGM-01 read-only compatibility mapping, the accepted compatibility corpus gate, and the Rust compatibility classifier and ix-flow lifecycle host (FR-008..FR-012, FR-016-AC-3).",
       "observe": "git describe --tags",
       "incompatible": [],

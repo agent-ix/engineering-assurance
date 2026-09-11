@@ -348,7 +348,7 @@ mod tests {
                             "--abbrev=0".to_owned(),
                         ],
                     ),
-                    b"v0.3.0\n".to_vec(),
+                    b"v0.3.1\n".to_vec(),
                 ),
             ]),
         }

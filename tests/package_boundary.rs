@@ -11,7 +11,7 @@ use ix_trace_rs::trace;
 #[test]
 fn tc_096_root_package_exports_library_and_native_cli() {
     assert_eq!(engineering_assurance::PACKAGE_NAME, "engineering-assurance");
-    assert_eq!(engineering_assurance::PACKAGE_VERSION, "0.3.0");
+    assert_eq!(engineering_assurance::PACKAGE_VERSION, "0.3.1");
 
     let output = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
         .arg("--version")

@@ -1,20 +1,20 @@
-# Engineering Assurance v0.3.0 consumption boundary
+# Engineering Assurance v0.3.1 consumption boundary
 
-`v0.3.0` is the first immutable Rust-port beta. It is deliberately a
+`v0.3.1` is the current immutable Rust-port beta. It is deliberately a
 pre-stabilization release: consumers may depend on it now, but its surface is
 expected to change in response to real consumer evidence. It is not a v1.0.0
 compatibility commitment.
 
 ## Pinning
 
-Use the immutable `v0.3.0` tag, never a branch name or a pull-request head.
+Use the immutable `v0.3.1` tag, never a branch name or a pull-request head.
 For a Rust consumer, pin the repository dependency by tag:
 
 ```toml
-engineering-assurance = { git = "<Engineering Assurance repository remote>", tag = "v0.3.0" }
+engineering-assurance = { git = "<Engineering Assurance repository remote>", tag = "v0.3.1" }
 ```
 
-For the configuration module or CLI, check out `v0.3.0` from this repository's
+For the configuration module or CLI, check out `v0.3.1` from this repository's
 canonical remote and record the resolved commit alongside the consuming change.
 The repository intentionally refuses npm publication, so a tag is the
 distribution boundary. Before adopting the tag, run the consumer's relevant
@@ -41,7 +41,7 @@ package registry, Python implementation behavior, or generated fixture layout.
 ## Stabilization feedback
 
 Report a boundary defect in the `agent-ix/engineering-assurance` issue tracker
-with the title prefix `v0.3.0 boundary:`. Include the tag, resolved commit,
+with the title prefix `v0.3.1 boundary:`. Include the tag, resolved commit,
 consumer repository, exact interface used, expected and actual typed result,
 and a minimal reproduction. The maintainers use those reports as the evidence
 set for the later v1.0.0 decision; elapsed time alone is not stabilization.
