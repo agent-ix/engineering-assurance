@@ -43,7 +43,7 @@ jobs:
         with:
           tool: cargo-audit@0.22.2
       - run: python -m pip install -e '.[dev]'
-      - run: npm install --global '@agent-ix/quire-cli@0.30.2'
+      - run: npm install --global '@agent-ix/quire-cli@0.31.0'
       - run: pnpm --dir .deps/ix-flow install --frozen-lockfile
       - run: pnpm --dir .deps/ix-flow build
       - run: make lint
