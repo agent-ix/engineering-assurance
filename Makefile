@@ -55,7 +55,7 @@ eval-readiness:
 	PATH="$(CURDIR)/.agent-evals/bin:$(PATH)" $(PYTHON) scripts/check_eval_readiness.py
 
 agent-evals:
-	PATH="$(CURDIR)/.agent-evals/bin:$(PATH)" $(PYTHON) scripts/run_agent_evals.py \
+	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet -- agent-evals --root . \
 		--agent "$(EVAL_AGENT)" \
 		--run "$(EVAL_RUN)" \
 		$(if $(strip $(EVAL_FILTER)),--filter "$(EVAL_FILTER)") \

@@ -106,9 +106,7 @@ def test_suite_matrix_is_seven_variants_across_four_hosts() -> None:
 def test_suite_config_loads_without_a_project_local_runner_package() -> None:
     """Trace: FR-006-AC-1, TC-031."""
     config = Path(__file__).parents[1] / "evals/cli-agent-evals.config.mjs"
-    script = (
-        "import(process.argv[1]).then(m => console.log(m.default.scenarios.length))"
-    )
+    script = "import(process.argv[1]).then(m => console.log(JSON.stringify(m.default.provider)))"
     completed = subprocess.run(
         ["node", "-e", script, config.as_uri()],
         check=False,
@@ -116,202 +114,14 @@ def test_suite_config_loads_without_a_project_local_runner_package() -> None:
         text=True,
     )
     assert completed.returncode == 0, completed.stderr
-    assert completed.stdout.strip() == "7"
-
-
-def test_live_suite_publishes_the_exact_result_contract() -> None:
-    """Trace: FR-006-AC-2, TC-032."""
-    contract = Path(__file__).parents[1] / "evals/result-contract.mjs"
-    script = """
-      import(process.argv[1]).then(m => {
-        const expectation = { expected: 'reused' };
-        const identity = { name: 'fixed', version: '1.0.0', digest: 'a'.repeat(64) };
-        const governing = Object.fromEntries(
-          m.governingIdentities.map(name => [name, { ...identity, name }]),
-        );
-        const result = m.resultContract(expectation, {
-          host: 'codex',
-          host_version: 'codex-cli 1.0.0',
-          source_revision: 'b'.repeat(40),
-          suite_revision: 'suite-v1',
-          fixture_revision: 'fixtures-v1',
-          governing,
-        });
-        const envelope = {
-          host: result.host,
-          host_version: result.host_version,
-          source_revision: result.source_revision,
-          suite_revision: result.suite_revision,
-          fixture_revision: result.fixture_revision,
-          governing: result.governing,
-          command_count: 1,
-          elapsed_ms: 2,
-          human_prompt_count: 0,
-          manual_translation_count: 0,
-          repeated_prompt_count: 0,
-          observed_outcome: result.observed_outcome,
-          terminal_event: null,
-          unsupported_additions: [],
-        };
-        const valid = m.validateResult(envelope, result, 'complete');
-        const drifted = m.validateResult(
-          { ...envelope, source_revision: 'c'.repeat(40) },
-          result,
-          'complete',
-        );
-        console.log(JSON.stringify({ result, valid, drifted }));
-      })
-    """
-    completed = subprocess.run(
-        ["node", "-e", script, contract.as_uri()],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert completed.returncode == 0, completed.stderr
-    observed = json.loads(completed.stdout)
-    result = observed["result"]
-    assert result["observed_outcome"] == "reused"
-    assert result["terminal_event_contract"] == {"required": False, "value": None}
-    assert result["unsupported_additions"] == []
-    assert result["governing_identities"] == [
-        "module",
-        "plugin",
-        "skill",
-        "workflow",
-        "quire",
-        "quoin",
-        "ix_flow",
-        "schema",
-        "producer",
-    ]
-    assert observed["valid"] == []
-    assert observed["drifted"] == ["result field mismatch: source_revision"]
-
-
-def test_live_suite_requires_the_complete_terminal_event_shape() -> None:
-    """Trace: FR-006-AC-2, FR-006-AC-5, TC-032, TC-049."""
-    contract = Path(__file__).parents[1] / "evals/result-contract.mjs"
-    script = """
-      import(process.argv[1]).then(m => {
-        const identity = { name: 'fixed', version: '1.0.0', digest: 'a'.repeat(64) };
-        const governing = Object.fromEntries(
-          m.governingIdentities.map(name => [name, { ...identity, name }]),
-        );
-        governing.workflow = { ...identity, name: 'architecture-evaluation' };
-        const expectation = {
-          expected: 'accepted',
-          choice: 'accept',
-          input: {
-            decision_owner: 'juniper-architecture-owner',
-            run_id: 'accept-run',
-            workflow_state_dir: 'workflow-state',
-          },
-        };
-        const contract = m.resultContract(expectation, {
-          host: 'copilot',
-          host_version: 'copilot 1.0.0',
-          source_revision: 'b'.repeat(40),
-          suite_revision: 'suite-v1',
-          fixture_revision: 'fixtures-v1',
-          governing,
-        });
-        const terminal = {
-          run_id: 'accept-run',
-          workflow: 'architecture-evaluation',
-          workflow_version: '1.0.0',
-          owner: 'juniper-architecture-owner',
-          choice: 'accept',
-          outcome: 'accepted',
-          timestamp: '2026-08-30T22:00:00Z',
-        };
-        const envelope = {
-          host: contract.host,
-          host_version: contract.host_version,
-          source_revision: contract.source_revision,
-          suite_revision: contract.suite_revision,
-          fixture_revision: contract.fixture_revision,
-          governing: contract.governing,
-          command_count: 1,
-          elapsed_ms: 2,
-          human_prompt_count: 0,
-          manual_translation_count: 0,
-          repeated_prompt_count: 0,
-          observed_outcome: contract.observed_outcome,
-          terminal_event: terminal,
-          unsupported_additions: [],
-        };
-        const history = {
-          ok: true,
-          instance_id: 'accept-run',
-          current_phase: 'accepted',
-          summary: {
-            id: 'accept-run',
-            defName: 'architecture-evaluation',
-            defVersion: '1.0.0',
-            phase: 'accepted',
-          },
-          data: [
-            {
-              kind: 'gate.acknowledged',
-              payload: {
-                transitionKey: 'decision_ready->accepted',
-                approver: 'juniper-architecture-owner',
-              },
-            },
-            {
-              kind: 'phase.advanced',
-              ts: '2026-08-30T22:00:00Z',
-              payload: { from: 'decision_ready', to: 'accepted' },
-            },
-          ],
-        };
-        console.log(JSON.stringify({
-          contract,
-          valid: m.validateResult(envelope, contract, 'complete'),
-          missing: m.validateResult(
-            { ...envelope, terminal_event: 'decision_ready->accepted' },
-            contract,
-            'complete',
-          ),
-          workflowValid: m.validateTerminalWorkflow(
-            envelope,
-            contract,
-            history,
-            { ok: true },
-          ),
-          workflowInvented: m.validateTerminalWorkflow(
-            envelope,
-            contract,
-            { ...history, data: [] },
-            { ok: true },
-          ),
-        }));
-      })
-    """
-    completed = subprocess.run(
-        ["node", "-e", script, contract.as_uri()],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert completed.returncode == 0, completed.stderr
-    observed = json.loads(completed.stdout)
-    terminal = observed["contract"]["terminal_event_contract"]
-    assert terminal["required"] is True
-    assert terminal["choice"] == "accept"
-    assert terminal["owner"] == "juniper-architecture-owner"
-    assert terminal["run_id"] == "accept-run"
-    assert terminal["workflow_state_dir"] == "workflow-state"
-    assert "phase.advanced" in terminal["timestamp"]
-    assert "never use the gate.acknowledged timestamp" in terminal["timestamp"]
-    assert observed["valid"] == []
-    assert observed["missing"] == ["explicit terminal event missing"]
-    assert observed["workflowValid"] == []
-    assert observed["workflowInvented"] == [
-        "ix-flow terminal owner acknowledgement missing",
-        "ix-flow terminal timestamp mismatch",
-    ]
+    assert json.loads(completed.stdout) == {
+        "command": "engineering-assurance",
+        "args": [
+            "agent-evals-provider",
+            "--root",
+            str(Path(__file__).parents[1]),
+        ],
+    }
 
 
 def test_complete_envelope_retains_versions_transcript_effort_and_outcome() -> None:
