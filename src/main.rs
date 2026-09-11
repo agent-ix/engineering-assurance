@@ -5,6 +5,8 @@
 
 #![forbid(unsafe_code)]
 
+mod agent_evals_host;
+mod agent_evals_provider;
 mod content_rights_host;
 mod evaluation_report_host;
 mod integration_evidence_host;
@@ -35,6 +37,8 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 const ERROR_PROTOCOL: &str = "engineering-assurance.error/v1";
 const COMPATIBILITY_CAPABILITY: &str = "compatibility";
+const AGENT_EVALS_PROVIDER_CAPABILITY: &str = "agent-evals-provider";
+const AGENT_EVALS_CAPABILITY: &str = "agent-evals";
 const CONTENT_RIGHTS_TREE_CAPABILITY: &str = "content-rights-tree";
 const EVALUATION_AGGREGATE_CAPABILITY: &str = "evaluation-aggregate";
 const EVALUATION_AGGREGATE_VERIFY_CAPABILITY: &str = "evaluation-aggregate-verify";
@@ -60,6 +64,8 @@ fn command() -> Command {
         .about("Engineering Assurance native command boundary")
         .disable_help_subcommand(true)
         .subcommand_required(true)
+        .subcommand(agent_evals_provider_command())
+        .subcommand(agent_evals_command())
         .subcommand(
             Command::new(COMPATIBILITY_CAPABILITY)
                 .about("Classify explicit observations against the reviewed compatibility matrix"),
@@ -153,6 +159,32 @@ fn command() -> Command {
         )
 }
 
+fn agent_evals_provider_command() -> Command {
+    Command::new(AGENT_EVALS_PROVIDER_CAPABILITY)
+        .about("Serve Engineering Assurance evaluation semantics to cli-agent-evals")
+        .arg(required_path_arg("root"))
+}
+
+fn agent_evals_command() -> Command {
+    Command::new(AGENT_EVALS_CAPABILITY)
+        .arg(required_path_arg("root"))
+        .arg(Arg::new("agent").long("agent").required(true))
+        .arg(
+            Arg::new("run")
+                .long("run")
+                .value_parser(["canary", "all"])
+                .default_value("canary"),
+        )
+        .arg(Arg::new("filter").long("filter"))
+        .arg(Arg::new("model").long("model"))
+        .arg(
+            Arg::new("keep")
+                .long("keep")
+                .action(clap::ArgAction::SetTrue),
+        )
+        .arg(required_path_arg("report"))
+}
+
 fn integration_evidence_command() -> Command {
     Command::new(INTEGRATION_EVIDENCE_CAPABILITY)
         .about("Verify typed Quire traceability and retained release evidence")
@@ -206,6 +238,8 @@ fn npm_hook_arg() -> Arg {
 fn main() -> ExitCode {
     let matches = command().get_matches();
     match matches.subcommand() {
+        Some((AGENT_EVALS_CAPABILITY, arguments)) => run_agent_evals(arguments),
+        Some((AGENT_EVALS_PROVIDER_CAPABILITY, arguments)) => run_agent_evals_provider(arguments),
         Some((COMPATIBILITY_CAPABILITY, _)) => run_compatibility(),
         Some((CONTENT_RIGHTS_TREE_CAPABILITY, arguments)) => run_content_rights_tree(arguments),
         Some((EVALUATION_AGGREGATE_CAPABILITY, arguments)) => run_evaluation_aggregate(arguments),
@@ -219,6 +253,68 @@ fn main() -> ExitCode {
         Some((WORKFLOW_HOST_CAPABILITY, _)) => run_workflow_host(),
         Some((PACKAGE_LIFECYCLE_CAPABILITY, arguments)) => run_package_lifecycle(arguments),
         Some(_) | None => ExitCode::from(2),
+    }
+}
+
+fn run_agent_evals(arguments: &ArgMatches) -> ExitCode {
+    let (Some(root), Some(agent), Some(run), Some(report)) = (
+        arguments.get_one::<PathBuf>("root"),
+        arguments.get_one::<String>("agent"),
+        arguments.get_one::<String>("run"),
+        arguments.get_one::<PathBuf>("report"),
+    ) else {
+        return ExitCode::from(2);
+    };
+    match agent_evals_host::run(&agent_evals_host::RunRequest {
+        root,
+        agent,
+        selector: run,
+        filter: arguments.get_one::<String>("filter").map(String::as_str),
+        model: arguments.get_one::<String>("model").map(String::as_str),
+        keep: arguments.get_flag("keep"),
+        report,
+    }) {
+        Ok((code, stdout, stderr)) => {
+            let _ = write_stdout(&stdout);
+            eprint!("{}", String::from_utf8_lossy(&stderr));
+            code
+        }
+        Err(error) => emit_error(
+            AGENT_EVALS_CAPABILITY,
+            "agent_evals_failed",
+            &error.to_string(),
+        ),
+    }
+}
+
+fn run_agent_evals_provider(arguments: &ArgMatches) -> ExitCode {
+    let Some(root) = arguments.get_one::<PathBuf>("root") else {
+        return emit_error(
+            AGENT_EVALS_PROVIDER_CAPABILITY,
+            "agent_evals_provider_root_invalid",
+            "agent-evals provider repository root is missing",
+        );
+    };
+    let bytes = match read_stdin(
+        AGENT_EVALS_PROVIDER_CAPABILITY,
+        "agent_evals_provider_request_invalid",
+    ) {
+        Ok(bytes) => bytes,
+        Err(exit_code) => return exit_code,
+    };
+    match agent_evals_provider::execute(root, &bytes) {
+        Ok(response) => match write_stdout(&response) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("failed to write agent-evals provider response: {error}");
+                ExitCode::from(2)
+            }
+        },
+        Err(error) => emit_error(
+            AGENT_EVALS_PROVIDER_CAPABILITY,
+            error.code(),
+            &error.to_string(),
+        ),
     }
 }
 

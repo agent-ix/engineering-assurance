@@ -9,6 +9,7 @@
 //! transcript decoding.
 
 use std::{
+    collections::BTreeMap,
     env,
     ffi::{OsStr, OsString},
     fmt::Write as _,
@@ -18,7 +19,7 @@ use std::{
 };
 
 use engineering_assurance::evidence::VersionIdentity;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -137,6 +138,78 @@ struct CoverageDiagnostic {
 #[derive(Debug, Deserialize)]
 struct VersionDocument {
     version: String,
+}
+
+#[derive(Serialize)]
+pub(crate) struct AgentEvalsSnapshot {
+    source_revision: String,
+    host: VersionIdentity,
+    governing: AgentEvalsGoverning,
+    workflows: BTreeMap<String, VersionIdentity>,
+}
+
+#[derive(Serialize)]
+struct AgentEvalsGoverning {
+    module: VersionIdentity,
+    plugin: VersionIdentity,
+    skill: VersionIdentity,
+    quire: VersionIdentity,
+    quoin: VersionIdentity,
+    ix_flow: VersionIdentity,
+    schema: VersionIdentity,
+    producer: VersionIdentity,
+}
+
+pub(crate) fn agent_evals_snapshot(
+    root: &Path,
+    agent: &str,
+) -> Result<AgentEvalsSnapshot, IntegrationEvidenceError> {
+    let root = canonical_root(root)?;
+    let path = selected_path(&root);
+    let module_version = yaml_version(&root.join("engineering_assurance/manifest.yaml"))?;
+    let plugin_version = json_version(&root.join(".codex-plugin/plugin.json"))?;
+    let mut workflows = BTreeMap::new();
+    for name in ["assurance-intake", "architecture-evaluation"] {
+        let definition = root
+            .join("engineering_assurance/skills/assurance-onboarding/workflows")
+            .join(name)
+            .join("def.yaml");
+        workflows.insert(
+            name.to_owned(),
+            file_identity(name, yaml_version(&definition)?, &definition)?,
+        );
+    }
+    Ok(AgentEvalsSnapshot {
+        source_revision: source_revision(&root)?,
+        host: executable_identity(agent, &path)?,
+        governing: AgentEvalsGoverning {
+            module: file_identity(
+                "engineering-assurance",
+                module_version,
+                &root.join("engineering_assurance/manifest.yaml"),
+            )?,
+            plugin: file_identity(
+                "engineering-assurance-plugin",
+                plugin_version.clone(),
+                &root.join(".codex-plugin/plugin.json"),
+            )?,
+            skill: file_identity(
+                "assurance-onboarding",
+                plugin_version,
+                &root.join("engineering_assurance/skills/assurance-onboarding/SKILL.md"),
+            )?,
+            quire: executable_identity("quire", &path)?,
+            quoin: executable_identity("quoin", &path)?,
+            ix_flow: runtime_identity("ix-flow", &path)?,
+            schema: file_identity(
+                "evaluation-result-contract",
+                "evaluation-result-v1".to_owned(),
+                &root.join("src/agent_evals_provider.rs"),
+            )?,
+            producer: runtime_identity("cli-evals", &path)?,
+        },
+        workflows,
+    })
 }
 
 pub(crate) fn traceability(
@@ -331,7 +404,7 @@ fn validate_governing(
     let schema = file_identity(
         "evaluation-result-contract",
         "evaluation-result-v1".to_owned(),
-        &root.join("evals/result-contract.mjs"),
+        &root.join("src/agent_evals_provider.rs"),
     )?;
     if (module, plugin, skill, schema)
         != (
