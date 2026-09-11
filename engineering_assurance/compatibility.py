@@ -4,9 +4,9 @@ One reviewed set of component versions that are known to work together, with
 the digests that identify the artifacts those versions ship.
 
 Everything here is pure. It classifies a version a caller observed; it does not
-observe one. `scripts/check_compatibility_matrix.py` does the observing, so the
-rules can be tested without executing anything and the two concerns cannot be
-confused for each other.
+observe one. The native `engineering-assurance compatibility-observe` command
+does the observing, so the rules can be tested without executing anything and
+the two concerns cannot be confused for each other.
 
 Three answers, and the difference between them is the whole point:
 

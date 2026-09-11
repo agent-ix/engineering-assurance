@@ -135,7 +135,7 @@
   },
   "upgrade": {
     "order": "quire-cli, then quoin, then ix-flow, then this repository's tag, then the corpus gitlink. Each step is independently verifiable, and only the last one moves the gate.",
-    "verification": "After each step run `python3 scripts/check_compatibility_matrix.py`, which classifies what is installed against these pins and exits non-zero unless every component is compatible.",
+    "verification": "After each step run `engineering-assurance compatibility-observe --root .`, which classifies the declared local toolchain against these pins and exits non-zero unless every component is compatible.",
     "what_does_not_change": "No campaign repository is touched by an upgrade of these components. Migrations are agent-ix/engineering-assurance#10 and begin only after this matrix is accepted."
   },
   "hosted_ci": "Publication does not enable automatic hosted CI in any campaign repository. Every workflow in this campaign remains manual-dispatch only.",

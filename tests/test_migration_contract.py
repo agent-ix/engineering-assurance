@@ -147,7 +147,7 @@ def test_the_review_checklist_covers_every_required_question() -> None:
         "compatibility view",
         "not-computed",
         "manual dispatch",
-        "check_compatibility_matrix",
+        "compatibility-observe",
     ):
         assert topic in joined, f"the checklist does not ask about {topic}"
 

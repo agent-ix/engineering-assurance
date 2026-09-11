@@ -8,7 +8,7 @@ repositories once the shared interfaces are released. Answers
 human acceptance.** That acceptance lives in `accepted_by` and `accepted_at` in
 `engineering_assurance/compatibility-matrix.json`. Do not read their current
 values from this document — read them from the file, or run
-`python3 scripts/check_compatibility_matrix.py`, which exits non-zero while the
+`engineering-assurance compatibility-observe --root .`, which exits non-zero while the
 matrix records no acceptance and prints the state either way.
 
 An agent cannot grant that acceptance. It may transcribe one a named human has
@@ -159,7 +159,7 @@ body, not in a reviewer's head.
 - [ ] The shared path and the old path both pass at the same candidate
       revision, and the deletion commit is separate and last.
 - [ ] The Makefile is native orchestration; no target computes a verdict.
-- [ ] `python3 scripts/check_compatibility_matrix.py` passes in the migrating
+- [ ] `engineering-assurance compatibility-observe --root .` passes in the migrating
       repository's environment.
 - [ ] No workflow changed from manual dispatch.
 
