@@ -68,9 +68,9 @@
     },
     {
       "name": "engineering-assurance",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "released": true,
-      "release": "git tag v0.2.1 \u2014 source distribution only; npm publication is refused by design",
+      "release": "git tag v0.3.0 \u2014 pre-stabilization source distribution; npm publication is refused by design",
       "provides": "Shared verification semantics, the PGM-01 read-only compatibility mapping, the accepted compatibility corpus gate, and the Rust compatibility classifier and ix-flow lifecycle host (FR-008..FR-012, FR-016-AC-3).",
       "observe": "git describe --tags",
       "incompatible": [],
@@ -129,7 +129,7 @@
     "quoin": "Reinstall @agent-ix/quoin@0.22.5. The `change-assurance` commands disappear; retained records, attestations, and receipts are unaffected, because 0.23.x added a surface over existing contracts rather than changing the stored layout.",
     "quire-cli": "Reinstall @agent-ix/quire-cli@0.30.2. Exports produced by 0.31.0 remain readable; the provenance command is not present.",
     "ix-flow": "Reinstall @agent-ix/ix-flow@0.0.4. Existing run-state and event-chain files remain owned by ix-flow; the Rust adapter is additive and must be removed from invocation before the package downgrade.",
-    "engineering-assurance": "Check out the previous tag v0.2.0. The Rust compatibility classifier and ix-flow lifecycle host are then unavailable; retained external evidence and ix-flow state are unchanged.",
+    "engineering-assurance": "Check out the previous tag v0.2.1. The Rust port and its native semantic boundary are then unavailable; retained external evidence and ix-flow state are unchanged.",
     "corpus": "Move the `corpus` gitlink to the earlier commit and re-run the FR-011 gate. The corpus is content-addressed, so an earlier pin is a complete, self-verifying set.",
     "irreversible": "None of the above. No pin here migrates data, rewrites evidence, or changes a stored schema."
   },

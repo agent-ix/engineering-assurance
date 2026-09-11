@@ -33,7 +33,7 @@ def schema(name: str) -> dict:
 
 def test_module_inventory_is_exact() -> None:
     data = manifest()
-    assert data["version"] == "0.2.1"
+    assert data["version"] == "0.3.0"
     assert [item["name"] for item in data["artifact_types"]] == [
         "AssuranceProfile",
         "MeasurementPlan",
@@ -44,6 +44,14 @@ def test_module_inventory_is_exact() -> None:
     assert data["lint_rules"] == []
     assert data["object_types"] == []
     assert "edge_types" not in data
+
+
+def test_only_the_configuration_package_entry_point_remains_python() -> None:
+    python_sources = sorted(path.name for path in package.PACKAGE_ROOT.glob("*.py"))
+    assert python_sources == ["__init__.py"]
+    source = (package.PACKAGE_ROOT / "__init__.py").read_text(encoding="utf-8")
+    assert "def " not in source
+    assert "class " not in source
 
 
 def test_every_schema_and_skeleton_is_valid() -> None:
@@ -150,6 +158,7 @@ def test_repository_has_only_governed_review_evidence() -> None:
     }
     assert {path.name for path in (ROOT / "docs").iterdir()} == {
         "compatibility-matrix.md",
+        "consumption-boundary.md",
         "migration-contract.md",
         "structural-coverage.md",
         "verification-semantics",

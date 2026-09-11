@@ -51,10 +51,12 @@ printf '%s\n' '{"protocol":"engineering-assurance.compatibility-request/v1","obs
 
 Request, result, and error schemas live under
 `engineering_assurance/schemas/`. A compatible result exits 0, a valid but
-withheld result exits 1, and malformed or unsupported input exits 2. This slice
-does not yet replace the repository's legacy observation and qualification
-paths, and it does not claim that all Python, JavaScript, or MJS paths have been
-removed.
+withheld result exits 1, and malformed or unsupported input exits 2. The
+executable Python lanes have been retired; `engineering_assurance/__init__.py`
+remains only as the configuration-package path provider.
+
+For the pre-stabilization v0.3.0 consumption contract, see
+[docs/consumption-boundary.md](docs/consumption-boundary.md).
 
 ```bash
 make rust-foundation-gate
