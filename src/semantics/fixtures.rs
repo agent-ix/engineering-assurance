@@ -346,33 +346,47 @@ mod tests {
         let end = source
             .rfind(']')
             .expect("the generated fixture embeds a JSON array");
+        let embedded = &source[start..=end];
         let cases: Vec<BTreeMap<String, Value>> =
-            serde_json::from_str(&source[start..=end]).expect("the embedded array must parse");
+            serde_json::from_str(embedded).expect("the embedded array must parse");
         assert!(!cases.is_empty(), "the generator emitted no case");
 
         // Three committed fixtures are compared byte for byte against this
         // output, so the key order is part of the contract rather than a
-        // cosmetic detail. Re-reading the emitted text and checking the order
-        // that actually reached the bytes is what makes the ordering enforced
-        // instead of incidental: it fails whether the ordering is lost by
-        // changing the projection or by changing how it is serialized.
-        for case in &cases {
-            let emitted: Vec<&str> = case.keys().map(String::as_str).collect();
-            let mut sorted = emitted.clone();
-            sorted.sort_unstable();
-            assert_eq!(emitted, sorted, "generated case keys are not sorted");
+        // cosmetic detail. The keys are read out of the emitted text rather
+        // than out of the decoded cases: decoding sorts them, so a decoded case
+        // agrees with its own sort whatever the bytes said, and the assertion
+        // would hold even if the generator emitted them in any order at all.
+        let expected_shape = [
+            "constructed",
+            "expected_outcome",
+            "family",
+            "id",
+            "kind",
+            "retained_path",
+            "retained_sha256",
+        ];
+        let mut emitted = Vec::new();
+        let mut rest = embedded;
+        while let Some(open) = rest.find('"') {
+            let after = &rest[open + 1..];
+            let Some(close) = after.find('"') else { break };
+            let token = &after[..close];
+            let tail = &after[close + 1..];
+            if tail.starts_with(':') {
+                emitted.push(token);
+            }
+            rest = tail;
+        }
+        assert_eq!(
+            emitted.len(),
+            cases.len() * expected_shape.len(),
+            "the emitted text does not carry one complete key set per case"
+        );
+        for (index, chunk) in emitted.chunks(expected_shape.len()).enumerate() {
             assert_eq!(
-                emitted,
-                [
-                    "constructed",
-                    "expected_outcome",
-                    "family",
-                    "id",
-                    "kind",
-                    "retained_path",
-                    "retained_sha256"
-                ],
-                "the generated case shape changed"
+                chunk, expected_shape,
+                "case {index} was emitted with a different key shape or order"
             );
         }
     }

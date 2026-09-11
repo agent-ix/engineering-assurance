@@ -4,13 +4,20 @@
 //! Requirement and reference-parity tests for the Rust semantic/projection slice.
 //!
 //! Each reference here is a file, not a process. Every byte was captured once
-//! from the retained Python semantic lane at the candidate revision that cut
-//! this capability over, and committed so that the cutover could delete that
-//! lane without deleting the evidence that Rust reproduces it. While the
-//! reference was a `python3` invocation the two were inseparable: deleting the
-//! implementation would have deleted the only statement of what its output was.
+//! from `engineering_assurance/verification_semantics.py` as it stood at
+//! `bd6d2ce`, the candidate revision that cut this capability over, and
+//! committed so that the cutover could delete that lane without deleting the
+//! evidence that Rust reproduces it. While the reference was a `python3`
+//! invocation the two were inseparable: deleting the implementation would have
+//! deleted the only statement of what its output was.
+//!
+//! A reader who wants to re-derive the captures rather than trust them can
+//! restore that file from `bd6d2ce` and run `map_pgm01_bytes`,
+//! `render_report_json` and `render_report_markdown` over the same governed
+//! fixtures, dumping each result with sorted keys and no separator padding.
+//! That is how these bytes were produced and how they have been checked since.
 
-use std::{collections::BTreeMap, fs, path::PathBuf};
+use std::{collections::BTreeMap, fmt::Write as _, fs, path::PathBuf};
 
 use engineering_assurance::semantics::{
     Pgm01Outcome, ReportProjection, SemanticErrorKind, SemanticFixture, map_pgm01_bytes,
@@ -18,6 +25,7 @@ use engineering_assurance::semantics::{
     validate_ownership_registry_bytes, validate_semantic_fixture_bytes,
 };
 use ix_trace_rs::trace;
+use sha2::{Digest, Sha256};
 
 /// The two accepted PGM-01 views the retired Python lane produced for the
 /// governed v1 and v2 fixtures, captured verbatim in sorted-key compact JSON.
@@ -42,9 +50,11 @@ const REFERENCE_STRUCTURED_IDENTITY: &[u8] =
 /// Compare one produced value against captured reference bytes.
 ///
 /// The comparison is on the encoded bytes rather than on parsed structures
-/// because a projection that silently reordered, widened, or re-spelled a field
-/// would still compare equal as a parsed value while no longer being the same
-/// record. Trailing newlines differ between a captured file and an in-memory
+/// because a projection that widened a number, re-spelled a value, or renamed a
+/// field would still compare equal under a looser reading while no longer being
+/// the same record. Key order is not among the differences this catches: the
+/// encoder sorts object keys, which is also what makes the captured reference
+/// comparable at all. Trailing newlines differ between a file and an in-memory
 /// encoding and are not part of the record, so they are trimmed from both.
 fn assert_matches_reference(produced: &serde_json::Value, reference: &[u8], what: &str) {
     let encoded = serde_json::to_string(produced).expect("produced value must serialize");
@@ -54,6 +64,21 @@ fn assert_matches_reference(produced: &serde_json::Value, reference: &[u8], what
         expected.trim_end(),
         "{what} drifted from the captured reference bytes"
     );
+}
+
+/// Hash bytes with SHA-256 and render the digest as lowercase hexadecimal.
+///
+/// This deliberately does not reach for the library's own digest helper: a test
+/// that asked the code under test to confirm its own arithmetic would agree with
+/// it whatever that arithmetic became.
+fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    let mut encoded = String::with_capacity(64);
+    for byte in hasher.finalize() {
+        write!(encoded, "{byte:02x}").expect("a String write cannot fail");
+    }
+    encoded
 }
 
 fn root() -> PathBuf {
@@ -88,7 +113,7 @@ fn forbidden_semantic_capability(source: &str) -> Option<&'static str> {
         .split(|character: char| !(character.is_ascii_alphanumeric() || character == '_'))
         .filter(|identifier| !identifier.is_empty())
         .collect();
-    ["fs", "process", "env", "Command"]
+    ["fs", "process", "env", "Command", "io", "net", "libc"]
         .into_iter()
         .find(|forbidden| identifiers.contains(forbidden))
 }
@@ -156,6 +181,7 @@ fn tc_100_semantic_fixture_and_non_success_states_are_complete() {
     );
 }
 
+#[trace("TC-057", "FR-008-AC-2")]
 #[trace("TC-102", "FR-015-AC-2")]
 #[trace("TC-103", "FR-015-AC-3")]
 #[test]
@@ -207,12 +233,34 @@ fn tc_103_semantic_reference_failures_do_not_collapse() {
 }
 
 #[trace("TC-100", "FR-015-AC-1")]
-#[trace("TC-100", "FR-015-AC-1")]
 #[trace("TC-103", "FR-015-AC-3")]
 #[test]
 fn tc_100_pgm01_views_match_the_captured_accepted_reference() {
+    // The digest each reference records is compared against a hash of the
+    // fixture bytes computed here, not against anything the mapper produced.
+    // That ordering matters: a governed fixture edited without its reference
+    // moving with it would otherwise surface below as a mapping regression,
+    // blaming the mapper for a stale record. Checking it against the bytes on
+    // disk first names the real cause, and is the one statement in this test
+    // that the mapper cannot satisfy by agreeing with itself.
+    let recorded: Vec<serde_json::Value> =
+        serde_json::from_slice(REFERENCE_ACCEPTED_VIEWS).expect("reference must be JSON");
+    let names = ["pgm01-v1.json", "pgm01-v2.json"];
+    assert_eq!(
+        recorded.len(),
+        names.len(),
+        "the reference must cover both PGM-01 versions"
+    );
+    for (index, name) in names.into_iter().enumerate() {
+        assert_eq!(
+            recorded[index]["source_digest"].as_str(),
+            Some(sha256_hex(&fixture(name)).as_str()),
+            "the captured reference describes a different {name}"
+        );
+    }
+
     let actual = serde_json::Value::Array(
-        ["pgm01-v1.json", "pgm01-v2.json"]
+        names
             .into_iter()
             .map(|name| {
                 serde_json::to_value(
@@ -227,29 +275,9 @@ fn tc_100_pgm01_views_match_the_captured_accepted_reference() {
         REFERENCE_ACCEPTED_VIEWS,
         "the accepted PGM-01 v1 and v2 views",
     );
-
-    // The reference is only evidence while it still describes these fixtures. A
-    // governed fixture edited without the reference moving with it would
-    // otherwise be reported here as a mapping regression, blaming the mapper for
-    // a stale record, so each recorded digest is checked against the bytes on
-    // disk that it claims to describe.
-    let recorded: Vec<serde_json::Value> =
-        serde_json::from_slice(REFERENCE_ACCEPTED_VIEWS).expect("reference must be JSON");
-    assert_eq!(
-        recorded.len(),
-        2,
-        "the reference must cover both PGM-01 versions"
-    );
-    for (index, name) in ["pgm01-v1.json", "pgm01-v2.json"].into_iter().enumerate() {
-        let produced = map_pgm01_bytes(&fixture(name), None).expect("mapping must complete");
-        assert_eq!(
-            recorded[index]["source_digest"].as_str(),
-            Some(produced.source_digest.as_str()),
-            "the captured reference describes a different {name}"
-        );
-    }
 }
 
+#[trace("TC-066", "FR-010-AC-3")]
 #[trace("TC-102", "FR-015-AC-2")]
 #[trace("TC-103", "FR-015-AC-3")]
 #[test]
@@ -341,7 +369,6 @@ fn tc_103_pgm01_adverse_outcomes_preserve_source_identity() {
 }
 
 #[trace("TC-100", "FR-015-AC-1")]
-#[trace("TC-100", "FR-015-AC-1")]
 #[trace("TC-103", "FR-015-AC-3")]
 #[test]
 fn tc_100_pgm01_adverse_scalar_identity_views_match_the_captured_reference() {
@@ -373,7 +400,6 @@ fn tc_100_pgm01_adverse_scalar_identity_views_match_the_captured_reference() {
 }
 
 #[trace("TC-100", "FR-015-AC-1")]
-#[trace("TC-100", "FR-015-AC-1")]
 #[trace("TC-103", "FR-015-AC-3")]
 #[test]
 fn tc_103_pgm01_structured_identity_divergences_are_explicit() {
@@ -389,10 +415,14 @@ fn tc_103_pgm01_structured_identity_divergences_are_explicit() {
 
     // FR-015 declares this one case a deliberate divergence rather than parity:
     // the retired implementation rendered a structured identity as a
-    // language-specific object literal, and raised an interpreter exception on a
-    // list. The captured observation is kept so the divergence stays a recorded
-    // decision, and is asserted here to refuse the reading that Rust simply was
-    // never compared on these inputs.
+    // language-specific object literal, and raised an interpreter exception on
+    // a list. Three of the four assertions below pin the captured record rather
+    // than the implementation — nothing in `src/` can make them fail, and they
+    // fail only if someone edits the observation. That is their purpose: the
+    // divergence must stay a decision on the record, not quietly become an
+    // absence of comparison. The `assert_ne!` is the one that reads Rust's own
+    // output, and it is what refuses a silent convergence back onto the
+    // language-specific spelling.
     let recorded: serde_json::Value =
         serde_json::from_slice(REFERENCE_STRUCTURED_IDENTITY).expect("observation must be JSON");
     assert_eq!(recorded[0]["result"]["source_record_id"], "{'a': 1}");
@@ -405,6 +435,7 @@ fn tc_103_pgm01_structured_identity_divergences_are_explicit() {
     assert_eq!(recorded[1]["message"], "unhashable type: 'list'");
 }
 
+#[trace("TC-067", "FR-010-AC-4")]
 #[trace("TC-100", "FR-015-AC-1")]
 #[test]
 fn tc_100_report_rendering_matches_the_captured_reference() {
@@ -466,33 +497,61 @@ fn tc_100_rust_generator_matches_all_committed_inert_fixtures() {
         expected
     );
 
-    // A first-party executable directory that no longer exists audits nothing;
-    // an empty population would otherwise pass this assertion by default, so
-    // the count below refuses that reading.
+    // FR-015-CON-2 forbids qualification from executing a generated
+    // foreign-language fixture, so the audit has to read the files that decide
+    // what qualification runs. Reading only `.github/workflows` satisfied a
+    // population floor of one while never opening the Makefile, which AGENTS.md
+    // names as this repository's entry point and which is where such a call
+    // would most plausibly be added. The roots below are walked recursively and
+    // the named repository-root files are read individually.
     let mut audited = 0_usize;
-    for relative in [".github/workflows", "scripts"] {
+    let mut audit = |path: &std::path::Path| {
+        let body = fs::read_to_string(path).unwrap_or_else(|error| {
+            panic!("audit input {} must be readable: {error}", path.display())
+        });
+        assert!(
+            !body.contains("fixtures/verification-semantics/generated"),
+            "generated foreign-language fixture is executed by {}",
+            path.display()
+        );
+        audited += 1;
+    };
+    for relative in [".github", "scripts"] {
         let audit_root = root().join(relative);
         if !audit_root.is_dir() {
             continue;
         }
-        for entry in fs::read_dir(&audit_root).expect("existing audit root must be readable") {
-            let path = entry.expect("audit entry must be readable").path();
-            if path.is_file() {
-                let body = fs::read_to_string(&path).unwrap_or_else(|error| {
-                    panic!("audit input {} must be readable: {error}", path.display())
-                });
-                assert!(
-                    !body.contains("fixtures/verification-semantics/generated"),
-                    "generated foreign-language fixture is executed by {}",
-                    path.display()
-                );
-                audited += 1;
+        let mut pending = vec![audit_root];
+        while let Some(directory) = pending.pop() {
+            for entry in fs::read_dir(&directory).expect("existing audit root must be readable") {
+                let path = entry.expect("audit entry must be readable").path();
+                if path.is_dir() {
+                    pending.push(path);
+                } else if path.is_file() {
+                    audit(&path);
+                }
             }
         }
     }
+    for named in [
+        "Makefile",
+        "pyproject.toml",
+        "package.json",
+        "opencode.json",
+    ] {
+        let path = root().join(named);
+        if path.is_file() {
+            audit(&path);
+        }
+    }
+
+    // A renamed entry point or a deleted directory audits nothing, and an empty
+    // population would pass every assertion above by default. Five is the count
+    // of first-party executable-configuration files this repository has, so a
+    // floor below it would accept exactly that silence.
     assert!(
-        audited > 0,
-        "the executable-path audit read no first-party file"
+        audited >= 5,
+        "the executable-path audit read {audited} first-party files, too few to mean anything"
     );
 }
 
@@ -526,6 +585,9 @@ fn tc_059_semantic_library_reaches_for_no_execution_or_persistence_capability() 
         "use std::{collections::BTreeMap, fs}; fn read() { fs::read(\"x\"); }",
         "use std::{collections::BTreeMap, process::Command as Spawn}; fn run() { Spawn::new(\"x\"); }",
         "use std::{collections::BTreeMap, env as ambient}; fn read() { ambient::var(\"X\"); }",
+        "use std::{collections::BTreeMap, io}; fn read() { io::stdout(); }",
+        "use std::{collections::BTreeMap, net::TcpStream}; fn dial() { net::connect(); }",
+        "extern crate libc; fn call() { libc::exit(0); }",
     ] {
         assert!(
             forbidden_semantic_capability(mutant).is_some(),
@@ -653,6 +715,15 @@ fn tc_061_committed_generated_fixtures_agree_across_every_language() {
     // The state projections carry the same set, in the same order, in all three.
     let states: Vec<String> = serde_json::from_slice(&fixture("non-success-states.json"))
         .expect("the non-success-state source must be JSON");
+
+    // An empty source makes every extracted list empty too, and three empty
+    // lists agree with each other and with the source. The floor is repeated
+    // here rather than relied on from the contract suite, because a guard in
+    // another test binary is a coincidence, not an invariant of this one.
+    assert!(
+        states.len() >= 17,
+        "the declared non-success vocabulary lost states"
+    );
     for (name, prefix, suffix) in [
         ("non_success_states.py", "    \"", "\","),
         ("non_success_states.ts", "  \"", "\","),
