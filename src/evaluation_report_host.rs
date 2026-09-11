@@ -274,12 +274,7 @@ pub(crate) fn write_artifact(
         Err(_) => return Err(EvaluationReportHostError::OutputPathInvalid),
     }
     let bytes = artifact.to_json()?;
-    let stage = staged_output_path(path);
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    let mut output = repository
-        .open_with(&stage, &options)
-        .map_err(|_| EvaluationReportHostError::OutputWriteFailed)?;
+    let (stage, mut output) = open_staged_output(&repository, path)?;
     if output
         .write_all(&bytes)
         .and_then(|()| output.sync_all())
@@ -508,13 +503,30 @@ fn normal_components(relative: &Path) -> Result<Vec<&std::ffi::OsStr>, &'static 
         .collect()
 }
 
-fn staged_output_path(path: &Path) -> PathBuf {
+fn open_staged_output(
+    repository: &Dir,
+    path: &Path,
+) -> Result<(PathBuf, cap_std::fs::File), EvaluationReportHostError> {
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    for attempt in 0..64 {
+        let stage = staged_output_path(path, attempt);
+        match repository.open_with(&stage, &options) {
+            Ok(output) => return Ok((stage, output)),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(_) => return Err(EvaluationReportHostError::OutputWriteFailed),
+        }
+    }
+    Err(EvaluationReportHostError::OutputWriteFailed)
+}
+
+fn staged_output_path(path: &Path, attempt: usize) -> PathBuf {
     let parent = path.parent().unwrap_or_else(|| Path::new(""));
     let name = path
         .file_name()
         .and_then(|value| value.to_str())
         .unwrap_or("evaluation-aggregate.json");
-    parent.join(format!(".{name}.ea-stage-{}", std::process::id()))
+    parent.join(format!(".{name}.ea-stage-{}-{attempt}", std::process::id()))
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {
@@ -937,6 +949,21 @@ mod tests {
             .expect("aggregate output must be readable");
         let observed: Value = serde_json::from_slice(&encoded).expect("aggregate must decode");
         assert_eq!(observed["revision"], json!(ARTIFACT_REVISION));
+
+        let stale = repository
+            .path()
+            .join(staged_output_path(Path::new("artifacts/aggregate.json"), 0));
+        fs::write(&stale, b"stale prior stage").expect("stale stage must be creatable");
+        write_artifact(
+            repository.path(),
+            Path::new("artifacts/aggregate.json"),
+            &artifact,
+        )
+        .expect("one stale stage must not block a later atomic write");
+        assert_eq!(
+            fs::read(stale).expect("unowned stale stage must remain untouched"),
+            b"stale prior stage"
+        );
 
         #[cfg(unix)]
         {
