@@ -39,7 +39,7 @@ fn exact_request() -> serde_json::Value {
             {"component": "quire-cli", "version": "0.31.0"},
             {"component": "quoin", "version": "0.23.1"},
             {"component": "ix-flow", "version": "0.2.3"},
-            {"component": "engineering-assurance", "version": "0.3.0"}
+            {"component": "engineering-assurance", "version": "0.3.1"}
         ]
     })
 }

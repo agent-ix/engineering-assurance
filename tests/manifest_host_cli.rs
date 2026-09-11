@@ -19,7 +19,7 @@ fn fixture() -> (TempDir, TempDir) {
         .expect("skeleton fixture directory must be creatable");
     fs::write(
         package.join("manifest.yaml"),
-        "name: engineering-assurance\nversion: 0.3.0\nartifact_types:\n  - name: sample\n    frontmatter_schema_ref: schemas/sample.schema.json\n    allowed_links: [supports]\n    body_extraction:\n      yield_pattern:\n        match:\n          body:\n            after_heading: Required\n            required: true\n",
+        "name: engineering-assurance\nversion: 0.3.1\nartifact_types:\n  - name: sample\n    frontmatter_schema_ref: schemas/sample.schema.json\n    allowed_links: [supports]\n    body_extraction:\n      yield_pattern:\n        match:\n          body:\n            after_heading: Required\n            required: true\n",
     )
     .expect("manifest fixture must be writable");
     fs::write(

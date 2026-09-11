@@ -14,7 +14,7 @@ source; this document is what a human reads before accepting it.
 | quire-rs (engine) | 0.46.0 | inside quire-cli 0.31.0 | The export the CLI delegates to |
 | quoin | 0.23.1 | npm `@agent-ix/quoin@0.23.1` | Evidence, measurements, change-assurance records, attestations, intake, audit, receipts |
 | ix-flow | 0.2.3 | npm `@agent-ix/ix-flow@0.2.3` | Human decision events as an integrity-verified chain |
-| engineering-assurance | 0.3.0 | git tag `v0.3.0` | Rust-native shared semantics, PGM-01 compatibility mapping, the accepted corpus gate, the Rust classifier, and the ix-flow lifecycle host |
+| engineering-assurance | 0.3.1 | git tag `v0.3.1` | Rust-native shared semantics, PGM-01 compatibility mapping, the accepted corpus gate, the Rust classifier, and the ix-flow lifecycle host |
 
 Every one is a released artifact. No pin is a branch head, a bare revision, or
 a floating tag — that is `FR-012-AC-1`, and TC-079 enforces it.

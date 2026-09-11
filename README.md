@@ -55,7 +55,7 @@ withheld result exits 1, and malformed or unsupported input exits 2. The
 executable Python lanes have been retired; `engineering_assurance/__init__.py`
 remains only as the configuration-package path provider.
 
-For the pre-stabilization v0.3.0 consumption contract, see
+For the pre-stabilization v0.3.1 consumption contract, see
 [docs/consumption-boundary.md](docs/consumption-boundary.md).
 
 ```bash

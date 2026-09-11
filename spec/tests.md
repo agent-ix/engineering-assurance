@@ -138,7 +138,7 @@ implemented and reviewed.
 | Non-Functional Req | Verification Method | Evidence/Test Cases | Status |
 |--------------------|---------------------|---------------------|--------|
 | NFR-001 | Install, discovery, digest comparison, and static scan | TC-038 | ✅ Passing |
-| NFR-002 | Agent evaluation against fixture-authorized outcomes | TC-039 | ✅ Passing |
+| NFR-002 | Agent evaluation against fixture-authorized outcomes | TC-039 | 🚧 No evaluation aggregate is retained in this repository, so no test here decides the three measured counts; the aggregate gate that refuses an unsupported addition or an inferred terminal decision is backed by TC-032, TC-034, and TC-049 |
 | NFR-003 | Wheel/npm member audit plus compatibility invocation | TC-040 | ✅ Passing |
 | NFR-005 | Exact toolchain build, unsafe audit, executable-path audit, and Quire reconciliation | TC-115..TC-118 | 🚧 Pending implementation |
 
@@ -214,7 +214,7 @@ implemented and reviewed.
 | TC-036 | Pilot and canonical workflows are equivalent | Property | P0 | FR-007-AC-2 | ✅ |
 | TC-037 | Canonical install docs precede compatibility path | Static | P1 | FR-007-AC-3 | ✅ |
 | TC-038 | Cross-agent canonical parity reaches all thresholds | Integration | P0 | NFR-001 | ✅ |
-| TC-039 | Evaluation produces zero unsupported outcomes | E2E | P0 | NFR-002 | ✅ |
+| TC-039 | Evaluation produces zero unsupported outcomes | E2E | P0 | NFR-002 | 🚧 |
 | TC-040 | Package contract stability reaches all thresholds | Integration | P0 | NFR-003 | ✅ |
 | TC-041 | Supported-agent set rejects missing, extra, or duplicate hosts | Property | P1 | FR-002-CON-1 | ✅ |
 | TC-042 | Thin manifests reject behavioral sections and copied workflows | Property | P1 | FR-002-CON-2 | ✅ |

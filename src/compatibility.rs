@@ -619,7 +619,7 @@ mod tests {
             ("quire-cli", Some("0.31.0")),
             ("quoin", Some("0.23.1")),
             ("ix-flow", Some("0.2.3")),
-            ("engineering-assurance", Some("0.3.0")),
+            ("engineering-assurance", Some("0.3.1")),
         ]
     }
 

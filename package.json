@@ -1,6 +1,6 @@
 {
   "name": "@agent-ix/engineering-assurance",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Private configuration-only engineering assurance module",
   "license": "AGPL-3.0-or-later",
   "private": true,
