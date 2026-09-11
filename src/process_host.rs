@@ -16,6 +16,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+
 use thiserror::Error;
 
 #[derive(Clone, Copy)]
@@ -54,7 +57,7 @@ pub(crate) fn run(
     arguments: &[&OsStr],
     limits: ProcessLimits,
 ) -> Result<CompletedProcess, ProcessError> {
-    run_configured(executable, arguments, None, &[], limits)
+    run_configured(executable, arguments, None, &[], &[], limits)
 }
 
 pub(crate) fn run_configured(
@@ -62,6 +65,7 @@ pub(crate) fn run_configured(
     arguments: &[&OsStr],
     current_directory: Option<&Path>,
     environment: &[(&OsStr, &OsStr)],
+    removed_environment: &[&OsStr],
     limits: ProcessLimits,
 ) -> Result<CompletedProcess, ProcessError> {
     let mut command = Command::new(executable);
@@ -70,6 +74,11 @@ pub(crate) fn run_configured(
         command.current_dir(directory);
     }
     command.envs(environment.iter().copied());
+    for name in removed_environment {
+        command.env_remove(name);
+    }
+    #[cfg(unix)]
+    command.process_group(0);
     let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -92,11 +101,15 @@ pub(crate) fn run_configured(
     let started = Instant::now();
     let process_result = loop {
         match child.try_wait() {
-            Ok(Some(status)) => break Ok((status, false)),
+            Ok(Some(status)) => {
+                terminate_process_group(child.id());
+                break Ok((status, false));
+            }
             Ok(None) if started.elapsed() < limits.timeout => {
                 thread::sleep(Duration::from_millis(5));
             }
             Ok(None) => {
+                terminate_process_group(child.id());
                 let _ = child.kill();
                 break child.wait().map(|status| (status, true)).map_err(|source| {
                     ProcessError::Observation {
@@ -141,9 +154,24 @@ pub(crate) fn run_configured(
 }
 
 fn terminate(child: &mut std::process::Child) {
+    terminate_process_group(child.id());
     let _ = child.kill();
     let _ = child.wait();
 }
+
+#[cfg(unix)]
+fn terminate_process_group(id: u32) {
+    let Ok(raw) = i32::try_from(id) else {
+        return;
+    };
+    let Some(group) = rustix::process::Pid::from_raw(raw) else {
+        return;
+    };
+    let _ = rustix::process::kill_process_group(group, rustix::process::Signal::KILL);
+}
+
+#[cfg(not(unix))]
+const fn terminate_process_group(_id: u32) {}
 
 fn bounded_reader<R>(reader: R, maximum: usize) -> thread::JoinHandle<io::Result<CapturedBytes>>
 where
@@ -179,4 +207,87 @@ fn join_reader(
 struct CapturedBytes {
     bytes: Vec<u8>,
     overflow: bool,
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::{ffi::OsString, fs, thread, time::Duration};
+
+    use ix_trace_rs::trace;
+
+    use super::*;
+
+    #[test]
+    #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
+    fn timeout_terminates_descendants_before_joining_output() {
+        let directory = tempfile::tempdir().expect("temporary directory must be available");
+        let pid_path = directory.path().join("descendant.pid");
+        let completion_path = directory.path().join("descendant.completed");
+        let pid_argument = pid_path.as_os_str().to_owned();
+        let completion_argument = completion_path.as_os_str().to_owned();
+        let arguments = [
+            OsStr::new("-c"),
+            OsStr::new("(sleep 2; touch \"$2\") & echo $! > \"$1\"; wait"),
+            OsStr::new("process-host-test"),
+            pid_argument.as_os_str(),
+            completion_argument.as_os_str(),
+        ];
+        let result = run_configured(
+            OsStr::new("sh"),
+            &arguments,
+            None,
+            &[],
+            &[],
+            ProcessLimits {
+                timeout: Duration::from_secs(1),
+                max_output_bytes: 1024,
+            },
+        );
+        assert!(matches!(result, Err(ProcessError::TimedOut { .. })));
+
+        let raw = fs::read_to_string(pid_path).expect("fixture must publish its descendant pid");
+        let pid = raw
+            .trim()
+            .parse::<i32>()
+            .ok()
+            .and_then(rustix::process::Pid::from_raw)
+            .expect("fixture descendant pid must be valid");
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while rustix::process::test_kill_process(pid).is_ok() {
+            assert!(
+                Instant::now() < deadline,
+                "descendant remained alive after process-host timeout"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            !completion_path.exists(),
+            "terminated descendant must not complete after the adapter returns"
+        );
+    }
+
+    #[test]
+    #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
+    fn configured_environment_can_remove_protected_input() {
+        let variable = OsString::from("ASSURANCE_PROTECTED_TOKENS");
+        let protected = OsString::from("private-marker");
+        // The child exits successfully only when the protected variable is absent.
+        let arguments = [
+            OsStr::new("-c"),
+            OsStr::new("test -z \"${ASSURANCE_PROTECTED_TOKENS+x}\""),
+        ];
+        let result = run_configured(
+            OsStr::new("sh"),
+            &arguments,
+            None,
+            &[(variable.as_os_str(), protected.as_os_str())],
+            &[variable.as_os_str()],
+            ProcessLimits {
+                timeout: Duration::from_secs(1),
+                max_output_bytes: 1024,
+            },
+        )
+        .expect("environment probe must terminate");
+        assert!(result.status.success());
+    }
 }

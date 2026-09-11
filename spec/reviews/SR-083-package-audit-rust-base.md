@@ -3,7 +3,7 @@ id: SR-083
 title: "Rust package-audit adapter and governed deletion base review"
 type: SpecReview
 analysis: base
-scope: "FR-003-AC-1, FR-003-AC-2, FR-003-AC-5, FR-017-AC-3, FR-017-AC-4, FR-017-CON-2, FR-017-CON-3, FR-018-AC-2, FR-018-AC-3, FR-018-CON-1, FR-018-CON-2, TC-111, TC-112, TC-113, TC-114"
+scope: "FR-003-AC-1, FR-003-AC-2, FR-003-AC-5, FR-003-AC-6, FR-007-AC-3, FR-017-AC-3, FR-017-AC-4, FR-017-CON-2, FR-017-CON-3, FR-018-AC-2, FR-018-AC-3, FR-018-CON-1, FR-018-CON-2, TC-019, TC-037, TC-111, TC-112, TC-113, TC-114"
 review_set: base
 relationships:
   - target: "ix://agent-ix/engineering-assurance/FR-003"
@@ -45,6 +45,10 @@ installation ownership; first-party acceptance decisions live in Rust.
 | FND-013 | medium | **Closed after implementation design returned to `/specify`.** Bounding only regular-file members left directory-only archive populations unbounded. FR-017 and TC-111 now impose the 65,536 ceiling on every archive entry before a directory can be skipped. | FR-017 Behavior; TC-111 |
 | FND-014 | high | **Closed after implementation design returned to `/specify`.** The initial temporary-output rule ignored the six fixed root paths staged by the reviewed npm lifecycle hook. The adapter now must prove those destinations absent before `npm pack`, admit no other root output, and perform exact lifecycle cleanup after both successful and failed pack attempts; an unverifiable population remains in place and fails the audit. | FR-017 Behavior; TC-111; FR-017-CON-3 |
 | FND-015 | medium | **Closed after implementation design returned to `/specify`.** Calling Cargo from the reviewed npm hook uses a reusable compiler cache that is not a distribution artifact; forcing it beneath the invocation temp root would rebuild gigabytes per audit. The requirement now confines package-builder outputs, package-manager cache, archives, and installations while leaving the selected Cargo cache tool-owned. | FR-017 Behavior; FR-017-CON-2 |
+| FND-016 | high | **Closed after Rust review returned to `/specify`.** A timeout on only the direct package-manager child can leave a descendant holding stdout or stderr open, making the adapter block while joining its capture threads after the declared deadline. FR-017 and TC-111 now require one invocation-owned process group and group termination before output joins on timeout or direct-child exit. | FR-017 Behavior; TC-111 |
+| FND-017 | high | **Closed after Rust review returned to `/specify`.** Naming one temporary output root did not prove that pip/npm caches, tool temporary workspaces, or new repository-root entries stayed within it. The requirement now binds package-manager cache/temp paths and requires bounded before/after top-level entry correspondence around every invocation, after the admitted npm staging cleanup. | FR-017 Behavior; TC-111 |
+| FND-018 | medium | **Closed after Rust review expanded the deletion census.** Deleting `tests/test_packages.py` would remove the only TC-019/TC-037 assertion that local/repository module and plugin installation instructions remain distinct and ordered. The deletion scope now retains those acceptance cases in a Rust test rather than silently turning their matrix rows green without an executable assertion. | FR-003-AC-6; FR-007-AC-3; TC-019; TC-037 |
+| FND-019 | high | **Closed after Rust review returned to `/specify`.** Archive validation occurs after external builders read package sources, so rejecting a linked archive member cannot undo a builder following a linked module, plugin, or pilot source outside the selected tree. FR-017 and TC-111 now require complete bounded source preflight before either builder runs. | FR-017 Behavior; TC-111 |
 | FND-012 | low | No open base-review finding remains. The npm package remains an approved distribution format; the adapter does not claim that it distributes a native executable or broaden the Rust-port finish line. | FR-017-CON-2; FR-017 Dependencies |
 
 ## Base checklist result

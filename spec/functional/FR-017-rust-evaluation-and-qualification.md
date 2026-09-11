@@ -265,6 +265,12 @@ checking, manifest validation, and qualification assertions to Rust.
   traversal remain responsibilities of later binary adapters.
 - The package-audit adapter SHALL require an explicit existing non-symbolic-link
   repository root.
+- When the complete `engineering_assurance` source tree or a fixed
+  root/plugin/pilot package source contains a missing, linked, special, unsafe,
+  or over-limit entry, the package-audit adapter SHALL reject the root before
+  invoking a builder.
+- The package-audit adapter SHALL NOT treat a later archive observation as
+  retroactive authorization for a source the builder already followed.
 - The package-audit adapter SHALL create all package-builder outputs,
   package-manager cache entries, archives, and installation outputs beneath one
   invocation-owned temporary directory.
@@ -286,7 +292,14 @@ checking, manifest validation, and qualification assertions to Rust.
 - The package-audit adapter SHALL build exactly one npm archive with `npm pack
   --json --pack-destination` and install that archive with `npm install
   --ignore-scripts --offline --prefix` and an invocation-owned npm cache.
-- Each package-audit child process SHALL terminate within 180 seconds.
+- The package-audit adapter SHALL direct each package manager's cache and
+  temporary workspace beneath the invocation-owned temporary directory.
+- Each package-audit child process and every descendant retaining its process
+  or output-stream resources SHALL terminate within 180 seconds.
+- The package-audit adapter SHALL isolate the direct child in an
+  invocation-owned process group and
+  terminate that group before joining captured output on timeout or after the
+  direct child exits.
 - Each package-audit child process SHALL produce no more than 8,388,608 bytes
   on either stdout or stderr.
 - The package-audit adapter SHALL fail an unavailable, timed-out, unsuccessful,
@@ -347,6 +360,11 @@ checking, manifest validation, and qualification assertions to Rust.
   success result.
 - At package-audit return, the package-audit adapter SHALL leave no output
   outside its invocation-owned temporary directory.
+- The adapter SHALL compare the selected repository's top-level entry
+  population before and after each package-manager invocation, after exact npm
+  staging cleanup where applicable, and SHALL fail closed if a process creates,
+  removes, or changes the kind of any top-level entry. A population larger than
+  4,096 entries or an unreadable entry kind SHALL fail before invocation.
 - The repository `package-audit` target SHALL invoke the exact Rust 1.98.1 CLI
   declaratively.
 - When the retained Python audit becomes eligible for deletion, the repository SHALL demonstrate that the Python and Rust paths both pass at one candidate revision.

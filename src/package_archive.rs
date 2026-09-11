@@ -254,6 +254,16 @@ mod tests {
             validate_file_name("other/file", Some("package/")),
             Err(ArchiveError::MemberPathInvalid)
         );
+        assert!(validate_zip_kind(Some(0o100_644), false).is_ok());
+        assert!(validate_zip_kind(Some(0o040_755), true).is_ok());
+        assert_eq!(
+            validate_zip_kind(Some(0o120_777), false),
+            Err(ArchiveError::MemberKindInvalid)
+        );
+        assert_eq!(
+            validate_zip_kind(Some(0o060_644), false),
+            Err(ArchiveError::MemberKindInvalid)
+        );
     }
 
     #[test]
@@ -331,6 +341,34 @@ mod tests {
         assert!(matches!(
             read_wheel(&path),
             Err(ArchiveError::MemberPathInvalid)
+        ));
+    }
+
+    #[test]
+    #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
+    fn decoded_npm_archive_rejects_link_members() {
+        use flate2::{Compression, write::GzEncoder};
+        use tar::{Builder, EntryType, Header};
+
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("linked.tgz");
+        let file = File::create(&path).unwrap();
+        let gzip = GzEncoder::new(file, Compression::default());
+        let mut archive = Builder::new(gzip);
+        let mut header = Header::new_gnu();
+        header.set_entry_type(EntryType::Symlink);
+        header.set_size(0);
+        header.set_link_name("target").unwrap();
+        header.set_cksum();
+        archive
+            .append_data(&mut header, "package/linked", Cursor::new(Vec::new()))
+            .unwrap();
+        let gzip = archive.into_inner().unwrap();
+        gzip.finish().unwrap();
+
+        assert!(matches!(
+            read_npm(&path),
+            Err(ArchiveError::MemberKindInvalid)
         ));
     }
 }
