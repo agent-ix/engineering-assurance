@@ -1,4 +1,4 @@
-.PHONY: lint test package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-evidence integration-gate release-gate
+.PHONY: lint test manifest-validate package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-evidence integration-gate release-gate
 
 EVAL_AGENT ?= codex
 EVAL_RUN ?= canary
@@ -10,6 +10,7 @@ EVAL_REPORTS ?=
 EVAL_AGGREGATE_REPORT ?=
 EVAL_WORKSPACE_ROOT ?=
 EVAL_SOURCE_REVISION ?= $(shell git rev-parse HEAD)
+MANIFEST_MODULE_ROOT ?=
 PYTHON ?= python3
 QUIRE ?= quire
 CARGO ?= cargo
@@ -20,7 +21,15 @@ lint:
 test:
 	CARGO_BUILD_JOBS=2 cargo +1.98.1 run --locked --quiet -- content-rights-tree --root .
 	$(PYTHON) -m pytest
-	$(PYTHON) scripts/validate_manifest.py
+
+manifest-validate:
+	@test -n "$(strip $(MANIFEST_MODULE_ROOT))" || { \
+		echo "MANIFEST_MODULE_ROOT is required for explicit manifest validation" >&2; \
+		exit 2; \
+	}
+	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet -- manifest-validate \
+		--root . \
+		--module-root "$(MANIFEST_MODULE_ROOT)"
 
 package-audit:
 	CARGO_BUILD_JOBS=2 cargo +1.98.1 run --locked --quiet -- package-audit --root .

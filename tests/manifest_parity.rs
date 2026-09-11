@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-//! Additive-migration parity and adverse coverage for module manifests.
+//! Pure qualification and adverse coverage for module manifests.
 
-use std::{
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::path::{Path, PathBuf};
 
 use engineering_assurance::manifest::{
     MAX_MANIFEST_ARTIFACTS, MAX_MANIFEST_DOCUMENT_BYTES, MAX_MANIFEST_RESOURCE_BYTES,
@@ -142,18 +139,7 @@ fn replace(bytes: &[u8], old: &str, new: &str) -> Vec<u8> {
 
 #[test]
 #[trace("TC-121", "FR-017-AC-7", "FR-017-CON-3")]
-fn retained_valid_module_matches_python_acceptance() {
-    let output = Command::new("python3")
-        .arg("scripts/validate_manifest.py")
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .expect("retained Python validator must start during additive migration");
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
+fn retained_valid_module_is_accepted_by_the_pure_qualifier() {
     let bundle = retained_bundle();
     let resources = bundle.resource_views();
     let result = qualify_manifest(&input(&bundle, &resources)).expect("bounded retained bundle");

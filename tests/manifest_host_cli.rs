@@ -3,7 +3,7 @@
 
 //! Black-box coverage for the explicit-root manifest qualification command.
 
-use std::{fs, process::Command};
+use std::{fs, path::Path, process::Command};
 
 use ix_trace_rs::trace;
 use serde_json::Value;
@@ -79,5 +79,31 @@ fn tc_131_cli_emits_one_versioned_machine_result_for_explicit_roots() {
     assert_eq!(
         result.get("outcome").and_then(Value::as_str),
         Some("accepted")
+    );
+}
+
+#[test]
+#[trace("TC-131", "FR-017-AC-8", "FR-017-CON-3")]
+fn tc_131_make_target_requires_and_forwards_the_explicit_module_root() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let output = Command::new("make")
+        .args([
+            "--no-print-directory",
+            "-n",
+            "manifest-validate",
+            "MANIFEST_MODULE_ROOT=/module-root",
+        ])
+        .current_dir(root)
+        .output()
+        .expect("make dry run must terminate");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("make output must be UTF-8");
+    assert!(!stdout.contains("scripts/validate_manifest.py"));
+    assert!(
+        stdout.contains("manifest-validate \\\n\t--root . \\\n\t--module-root \"/module-root\"")
     );
 }
