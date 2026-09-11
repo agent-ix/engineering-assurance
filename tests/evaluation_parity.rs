@@ -117,6 +117,8 @@ fn changed(
 
 #[test]
 #[trace("TC-110", "FR-017-AC-2", "FR-017-CON-1", "FR-017-CON-3")]
+#[trace("TC-033", "FR-006-AC-3")]
+#[trace("TC-034", "FR-006-AC-4")]
 fn complete_matrix_preserves_declared_aggregation_outcomes() {
     let complete = complete_matrix();
     let mut missing = complete.clone();
@@ -366,4 +368,150 @@ fn closed_request_refuses_malformed_unsupported_or_open_input() {
     let oversized = vec![b' '; MAX_REQUEST_BYTES + 1];
     let error = evaluate_request_bytes(&oversized).expect_err("oversized input must refuse");
     assert_eq!(error.code(), "evaluation_aggregate_request_too_large");
+}
+
+#[test]
+#[trace("TC-032", "FR-006-AC-2")]
+fn tc_032_an_executed_scenario_without_a_complete_observation_is_refused() {
+    // An executed scenario is only re-checkable if every observation named by
+    // the envelope contract actually reached the record. Each case below blanks
+    // exactly one required observation on an otherwise complete matrix and
+    // expects that field's own failure code, so a validator that stopped
+    // requiring one field cannot hide behind the failures raised for the
+    // others.
+    let complete = complete_matrix();
+    let cases = [
+        (
+            changed(&complete, 0, |item| item.governing = None),
+            "governing-versions-missing",
+        ),
+        (
+            changed(&complete, 0, |item| item.host_version = None),
+            "host-version-not-immutable",
+        ),
+        (
+            changed(&complete, 0, |item| item.transcript_path = None),
+            "transcript-path-invalid",
+        ),
+        (
+            changed(&complete, 0, |item| item.transcript_digest = None),
+            "transcript-digest-invalid",
+        ),
+        (
+            changed(&complete, 0, |item| item.command_count = None),
+            "command-count-invalid",
+        ),
+        (
+            changed(&complete, 0, |item| item.elapsed_ms = None),
+            "elapsed-count-invalid",
+        ),
+        (
+            changed(&complete, 0, |item| item.human_prompt_count = None),
+            "human-prompt-count-invalid",
+        ),
+        (
+            changed(&complete, 0, |item| item.manual_translation_count = None),
+            "manual-translation-count-invalid",
+        ),
+        (
+            changed(&complete, 0, |item| item.repeated_prompt_count = None),
+            "repeated-prompt-count-invalid",
+        ),
+        (
+            changed(&complete, 0, |item| item.observed_outcome = None),
+            "observed-outcome-mismatch",
+        ),
+        (
+            changed(&complete, 0, |item| {
+                item.fixture_revision = "latest".to_owned();
+            }),
+            "fixture-revision-not-immutable",
+        ),
+        (
+            changed(&complete, 5, |item| item.terminal_event = None),
+            "terminal-event-missing",
+        ),
+    ];
+    for (matrix, expected) in cases {
+        let result = aggregate_evaluations(&matrix);
+        assert!(!result.ok, "{expected} must withhold aggregation");
+        assert!(
+            result
+                .failures
+                .iter()
+                .any(|failure| failure.to_string().ends_with(expected)),
+            "{expected} absent from {:?}",
+            result.failures
+        );
+    }
+}
+
+#[test]
+#[trace("TC-049", "FR-006-AC-5")]
+fn tc_049_every_host_retains_one_distinct_explicit_acceptance_and_rejection() {
+    // The two terminal scenarios are the pair a reader uses to tell a real
+    // human decision from a default. The required population is checked first
+    // so a host cannot be evaluated for acceptance alone, then each way the
+    // pair can stop being two distinct attributed decisions is checked to
+    // withhold: a shared run identity, an absent decision, and a decision
+    // attached to a scenario that reaches no terminal state at all.
+    for host in EvaluationHost::ALL {
+        let terminal = required_matrix()
+            .into_iter()
+            .filter(|cell| cell.host == host)
+            .filter_map(|cell| match cell.scenario {
+                EvaluationScenario::HumanAcceptance | EvaluationScenario::HumanRejection => {
+                    Some(cell.scenario)
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            terminal,
+            [
+                EvaluationScenario::HumanAcceptance,
+                EvaluationScenario::HumanRejection
+            ],
+            "{} must be evaluated for both terminal choices",
+            host.as_str()
+        );
+    }
+
+    let complete = complete_matrix();
+    assert!(aggregate_evaluations(&complete).ok);
+    let acceptance = complete
+        .iter()
+        .position(|item| item.scenario == EvaluationScenario::HumanAcceptance)
+        .expect("the required matrix evaluates explicit acceptance");
+    let rejection = complete
+        .iter()
+        .position(|item| item.scenario == EvaluationScenario::HumanRejection)
+        .expect("the required matrix evaluates explicit rejection");
+    let shared_run = changed(&complete, rejection, |item| {
+        item.terminal_event
+            .as_mut()
+            .expect("the rejection fixture carries a decision")
+            .run_id = "claude-accept-run".to_owned();
+    });
+    let absent = changed(&complete, acceptance, |item| item.terminal_event = None);
+    let inferred = changed(&complete, 0, |item| {
+        item.terminal_event = complete[acceptance].terminal_event.clone();
+    });
+
+    for (matrix, expected) in [
+        (shared_run, "terminal-pair-invalid"),
+        (absent, "terminal-event-missing"),
+        (inferred, "unexpected-terminal-event"),
+    ] {
+        let result = aggregate_evaluations(&matrix);
+        assert!(!result.ok, "{expected} must withhold aggregation");
+        assert!(
+            result
+                .failures
+                .iter()
+                .any(|failure| failure.to_string().ends_with(expected)),
+            "{expected} absent from {:?}",
+            result.failures
+        );
+    }
 }
