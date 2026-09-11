@@ -57,6 +57,50 @@ pub enum Retention {
     Referenced,
 }
 
+/// A shared-model concept a producer's output feeds.
+///
+/// The vocabulary is closed on purpose. A producer case that fed a concept
+/// nobody named would look like coverage while proving nothing about the
+/// contract, so an unrecognised value is refused when the index is parsed
+/// rather than carried through to a test that never checks it.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SharedConcept {
+    /// What a verification is required to do.
+    VerificationDefinition,
+    /// One run of a defined verification.
+    VerificationExecution,
+    /// The outcome one check reached.
+    CheckResult,
+    /// Retained bytes a conclusion rests on.
+    Evidence,
+    /// A measured quantity.
+    Measurement,
+    /// An explanation of a failure.
+    Diagnostic,
+    /// A rendered summary for a reader.
+    Report,
+    /// A judgement a person made.
+    HumanDecision,
+}
+
+impl SharedConcept {
+    /// The concept's stable wire name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::VerificationDefinition => "verification_definition",
+            Self::VerificationExecution => "verification_execution",
+            Self::CheckResult => "check_result",
+            Self::Evidence => "evidence",
+            Self::Measurement => "measurement",
+            Self::Diagnostic => "diagnostic",
+            Self::Report => "report",
+            Self::HumanDecision => "human_decision",
+        }
+    }
+}
+
 /// Where a real retained record came from, and the digest that source recorded.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -164,7 +208,7 @@ pub struct ProducerCase {
     /// Path to the output within the producing repository.
     pub path: String,
     /// Shared-model concept the output feeds.
-    pub feeds: String,
+    pub feeds: SharedConcept,
     /// Whether the bytes are retained here or pinned by digest.
     pub retention: Retention,
     /// Reviewer note, including why a referenced case is not retained.
@@ -363,6 +407,17 @@ pub enum CorpusError {
         /// Digest the corpus records.
         expected: String,
     },
+    /// An entry leaves a member empty that has to name something.
+    ///
+    /// A producer case with no producer or no source path is not evidence that
+    /// a real implementation was read; it is a row that satisfies a count.
+    #[error("compatibility corpus entry {identity:?} leaves {member} empty")]
+    EmptyMember {
+        /// Identity of the entry that leaves the member empty.
+        identity: String,
+        /// Name of the empty member.
+        member: &'static str,
+    },
     /// No entry carries the requested identity.
     #[error("no such compatibility corpus {member}: {identity:?}")]
     UnknownIdentity {
@@ -389,6 +444,7 @@ impl CorpusError {
             Self::IncompleteRetention { .. } => "incomplete_compatibility_corpus_retention",
             Self::NotRetained { .. } => "compatibility_corpus_artifact_not_retained",
             Self::DigestMismatch { .. } => "compatibility_corpus_digest_mismatch",
+            Self::EmptyMember { .. } => "empty_compatibility_corpus_member",
             Self::UnknownIdentity { .. } => "unknown_compatibility_corpus_identity",
         }
     }
@@ -409,6 +465,53 @@ fn is_sha256_hex(value: &str) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+/// Refuse a producer case whose retention and recorded members disagree.
+///
+/// A retained case must carry both halves of an identity — the path its bytes
+/// live at and the digest they must reproduce — because a reader that has one
+/// without the other cannot prove it read the recorded bytes. A referenced case
+/// must carry neither: its bytes are deliberately not here, and either half
+/// would let a reader treat it as retained after all.
+fn validate_producer_retention(producer: &ProducerCase) -> Result<(), CorpusError> {
+    match producer.retention {
+        Retention::Retained => {
+            let path = producer.retained_path.as_deref().ok_or_else(|| {
+                CorpusError::IncompleteRetention {
+                    identity: producer.id.clone(),
+                    detail: "a retained producer case names no retained path",
+                }
+            })?;
+            validate_retained_path(&producer.id, path)?;
+            let digest = producer.retained_sha256.as_deref().ok_or_else(|| {
+                CorpusError::IncompleteRetention {
+                    identity: producer.id.clone(),
+                    detail: "a retained producer case records no digest",
+                }
+            })?;
+            if !is_sha256_hex(digest) {
+                return Err(CorpusError::InvalidRecordedDigest {
+                    identity: producer.id.clone(),
+                });
+            }
+        }
+        Retention::Referenced => {
+            if producer.retained_path.is_some() {
+                return Err(CorpusError::IncompleteRetention {
+                    identity: producer.id.clone(),
+                    detail: "a referenced producer case names a retained path",
+                });
+            }
+            if producer.retained_sha256.is_some() {
+                return Err(CorpusError::IncompleteRetention {
+                    identity: producer.id.clone(),
+                    detail: "a referenced producer case records a retained digest",
+                });
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Refuse any retained path that is not a bounded, corpus-relative descendant.
@@ -518,36 +621,22 @@ impl CorpusIndex {
                     identity: producer.id.clone(),
                 });
             }
-            match producer.retention {
-                Retention::Retained => {
-                    let path = producer.retained_path.as_deref().ok_or_else(|| {
-                        CorpusError::IncompleteRetention {
-                            identity: producer.id.clone(),
-                            detail: "a retained producer case names no retained path",
-                        }
-                    })?;
-                    validate_retained_path(&producer.id, path)?;
-                    let digest = producer.retained_sha256.as_deref().ok_or_else(|| {
-                        CorpusError::IncompleteRetention {
-                            identity: producer.id.clone(),
-                            detail: "a retained producer case records no digest",
-                        }
-                    })?;
-                    if !is_sha256_hex(digest) {
-                        return Err(CorpusError::InvalidRecordedDigest {
-                            identity: producer.id.clone(),
-                        });
-                    }
-                }
-                Retention::Referenced => {
-                    if producer.retained_path.is_some() {
-                        return Err(CorpusError::IncompleteRetention {
-                            identity: producer.id.clone(),
-                            detail: "a referenced producer case names a retained path",
-                        });
-                    }
+            // A producer case exists to prove a real implementation's output was
+            // read. One that names no producer, or no path within it, records
+            // nothing anybody could go back to, so it is refused here rather
+            // than counted as coverage.
+            for (member, value) in [
+                ("producer", producer.producer.as_str()),
+                ("path", producer.path.as_str()),
+            ] {
+                if value.trim().is_empty() {
+                    return Err(CorpusError::EmptyMember {
+                        identity: producer.id.clone(),
+                        member,
+                    });
                 }
             }
+            validate_producer_retention(producer)?;
             if !is_sha256_hex(&producer.source_sha256) {
                 return Err(CorpusError::InvalidRecordedDigest {
                     identity: producer.id.clone(),
@@ -975,13 +1064,16 @@ mod tests {
             .iter()
             .map(|producer| producer.language.as_str())
             .collect();
-        let concepts: BTreeSet<&str> = index
+        let concepts: BTreeSet<SharedConcept> = index
             .producer_cases
             .iter()
-            .map(|producer| producer.feeds.as_str())
+            .map(|producer| producer.feeds)
             .collect();
         assert!(languages.contains("rust") && languages.contains("typescript"));
-        assert!(concepts.contains("check_result") && concepts.contains("measurement"));
+        assert!(
+            concepts.contains(&SharedConcept::CheckResult)
+                && concepts.contains(&SharedConcept::Measurement)
+        );
 
         let referenced = index
             .producer_cases
@@ -1128,6 +1220,37 @@ mod tests {
             )
             .code(),
             "incomplete_compatibility_corpus_retention"
+        );
+
+        // The digest half of a smuggled retention is refused on the same terms
+        // as the path half. A referenced case that records retained bytes is
+        // claiming an identity for bytes this corpus does not hold, and without
+        // this assertion only the path half of that claim was ever refused.
+        assert_eq!(
+            mutated(
+                |raw| raw["producer_cases"][1]["retained_sha256"] = json!(sha256_hex(b"smuggled"))
+            )
+            .code(),
+            "incomplete_compatibility_corpus_retention"
+        );
+
+        // A producer case that names no producer or no source path is refused
+        // when the index is parsed. Such a row satisfies a count without
+        // recording an implementation anyone could go back and read.
+        for member in ["producer", "path"] {
+            assert_eq!(
+                mutated(|raw| raw["producer_cases"][0][member] = json!("   ")).code(),
+                "empty_compatibility_corpus_member",
+                "an empty {member} was accepted"
+            );
+        }
+
+        // The shared-model vocabulary is closed. A case feeding a concept
+        // nobody named would look like cross-cutting coverage while proving
+        // nothing, so an unrecognised value never parses in the first place.
+        assert_eq!(
+            mutated(|raw| raw["producer_cases"][0]["feeds"] = json!("guesswork")).code(),
+            "invalid_compatibility_corpus_index"
         );
 
         // Unknown identities are their own answer, not an empty result.

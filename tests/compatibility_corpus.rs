@@ -24,7 +24,7 @@ use cap_std::{ambient_authority, fs::Dir};
 use engineering_assurance::{
     compatibility_corpus::{
         CorpusError, CorpusIndex, MAX_INDEX_BYTES, REQUIRED_KINDS, RetainedArtifact, Retention,
-        sha256_hex,
+        SharedConcept, sha256_hex,
     },
     semantics::{Pgm01Outcome, Pgm01View, map_pgm01_bytes},
 };
@@ -46,6 +46,13 @@ const MAX_RETAINED_BYTES: usize = 8_388_608;
 
 /// The most files this adapter will enumerate under one corpus root.
 const MAX_CORPUS_ENTRIES: usize = 4_096;
+
+/// The deepest directory nesting this adapter will descend into.
+///
+/// The accepted corpus groups its records two or three directories below the
+/// root, so this leaves an order of magnitude of headroom while keeping the
+/// recursive walk bounded by a typed refusal instead of the stack.
+const MAX_CORPUS_DEPTH: usize = 32;
 
 /// Stable failures at the confined corpus-filesystem boundary.
 #[derive(Debug, Error)]
@@ -80,6 +87,13 @@ enum CorpusHostError {
     /// The corpus holds more files than this adapter will enumerate.
     #[error("the compatibility corpus holds more than {MAX_CORPUS_ENTRIES} files")]
     PopulationTooLarge,
+    /// The corpus nests directories deeper than this adapter will descend.
+    ///
+    /// The file count alone does not bound a recursive walk: a tree that is
+    /// deep rather than wide would exhaust the stack, which is a crash and not
+    /// a refusal, so the depth carries a refusal of its own.
+    #[error("the compatibility corpus nests deeper than {MAX_CORPUS_DEPTH} directories")]
+    TreeTooDeep,
     /// The corpus index or a retained artifact violates its own contract.
     #[error(transparent)]
     Corpus(#[from] CorpusError),
@@ -94,6 +108,7 @@ impl CorpusHostError {
             Self::EntryUnreadable { .. } => "compatibility_corpus_entry_unreadable",
             Self::EntryTooLarge { .. } => "compatibility_corpus_entry_too_large",
             Self::PopulationTooLarge => "compatibility_corpus_population_too_large",
+            Self::TreeTooDeep => "compatibility_corpus_tree_too_deep",
             Self::Corpus(error) => error.code(),
         }
     }
@@ -134,12 +149,25 @@ impl CorpusRoot {
     ///
     /// # Errors
     ///
-    /// Returns [`CorpusHostError::RootUnavailable`] when the index cannot be
-    /// read, and a [`CorpusError`] when it does not describe itself correctly.
+    /// Returns whichever refusal the read itself produced — an unreadable or
+    /// oversized index is not the same failure as an absent corpus root — and a
+    /// [`CorpusError`] when the index does not describe itself correctly.
     fn load_index(&self) -> Result<CorpusIndex, CorpusHostError> {
-        let bytes = self
-            .read_relative(Path::new(CORPUS_INDEX_NAME), MAX_INDEX_BYTES)
-            .map_err(|_| CorpusHostError::RootUnavailable)?;
+        self.load_index_within(MAX_INDEX_BYTES)
+    }
+
+    /// Read and validate the accepted corpus index under an explicit bound.
+    ///
+    /// The bound is a parameter only so a qualification case can drive the
+    /// oversized-index path against the real corpus without weakening
+    /// [`MAX_INDEX_BYTES`], which is the bound every production read uses.
+    ///
+    /// # Errors
+    ///
+    /// Returns the read's own refusal, and a [`CorpusError`] when the index
+    /// parses but does not describe itself correctly.
+    fn load_index_within(&self, maximum: usize) -> Result<CorpusIndex, CorpusHostError> {
+        let bytes = self.read_relative(Path::new(CORPUS_INDEX_NAME), maximum)?;
         Ok(CorpusIndex::parse(&bytes)?)
     }
 
@@ -168,16 +196,29 @@ impl CorpusRoot {
     /// # Errors
     ///
     /// Returns [`CorpusHostError::PopulationTooLarge`] beyond
-    /// [`MAX_CORPUS_ENTRIES`] and [`CorpusHostError::EntryInvalid`] for an
-    /// entry that is neither a regular file nor a directory.
+    /// [`MAX_CORPUS_ENTRIES`], [`CorpusHostError::TreeTooDeep`] beyond
+    /// [`MAX_CORPUS_DEPTH`], and [`CorpusHostError::EntryInvalid`] for an entry
+    /// that is neither a regular file nor a directory.
     fn corpus_paths(&self) -> Result<Vec<PathBuf>, CorpusHostError> {
         let mut found = Vec::new();
-        self.walk(Path::new(""), &mut found)?;
+        self.walk(Path::new(""), 0, &mut found)?;
         found.sort();
         Ok(found)
     }
 
-    fn walk(&self, relative: &Path, found: &mut Vec<PathBuf>) -> Result<(), CorpusHostError> {
+    fn walk(
+        &self,
+        relative: &Path,
+        depth: usize,
+        found: &mut Vec<PathBuf>,
+    ) -> Result<(), CorpusHostError> {
+        // The depth is checked before the directory is opened, so a tree deeper
+        // than the bound is refused rather than descended one more level. A
+        // file-count bound alone would not stop it: the stack runs out first,
+        // and a crash is not a refusal an operator can act on.
+        if depth > MAX_CORPUS_DEPTH {
+            return Err(CorpusHostError::TreeTooDeep);
+        }
         let listing = if relative.as_os_str().is_empty() {
             self.directory.entries()
         } else {
@@ -200,7 +241,7 @@ impl CorpusRoot {
                 })?
                 .file_type();
             if kind.is_dir() {
-                self.walk(&child, found)?;
+                self.walk(&child, depth + 1, found)?;
             } else if kind.is_file() {
                 if found.len() >= MAX_CORPUS_ENTRIES {
                     return Err(CorpusHostError::PopulationTooLarge);
@@ -685,6 +726,97 @@ fn tc_074_the_current_receipt_validates_against_the_packaged_schema() {
     );
 }
 
+#[trace("TC-075", "FR-011-AC-7", "FR-015-AC-5")]
+#[test]
+fn tc_075_every_producer_case_names_a_real_producer_and_a_shared_concept() {
+    let (root, index) = corpus();
+    let mut concepts = BTreeSet::new();
+    let mut languages = BTreeSet::new();
+    for producer in &index.producer_cases {
+        // A producer case that names no producer or no path within it records
+        // nothing a reader could go back to, so it is coverage on paper only.
+        assert!(
+            !producer.producer.trim().is_empty(),
+            "{} names no producer",
+            producer.id
+        );
+        assert!(
+            !producer.path.trim().is_empty(),
+            "{} names no source path",
+            producer.id
+        );
+        match producer.retention {
+            // Retained bytes have to reproduce the identity the corpus records,
+            // or the case is describing output nobody here actually holds.
+            Retention::Retained => {
+                root.retained_bytes(producer.into())
+                    .expect("every retained producer case must reproduce its identity");
+            }
+            // A referenced case is pinned by digest and deliberately not copied
+            // here. It still has to name what it is and why it is not retained,
+            // so "referenced" can never become a quiet way to list nothing.
+            Retention::Referenced => {
+                assert_eq!(
+                    producer.source_sha256.len(),
+                    64,
+                    "{} is unpinned",
+                    producer.id
+                );
+                assert!(
+                    producer.retained_path.is_none(),
+                    "{} is referenced yet names retained bytes",
+                    producer.id
+                );
+                assert!(
+                    producer.note.contains("NOT"),
+                    "{} does not say why it is not retained",
+                    producer.id
+                );
+            }
+        }
+        concepts.insert(producer.feeds);
+        languages.insert(producer.language.as_str());
+    }
+
+    // Cross-language is the point: a contract that only ever reads its own
+    // language's output has not been tested against the campaign.
+    for language in ["rust", "typescript"] {
+        assert!(
+            languages.contains(language),
+            "no producer case was read from a {language} producer"
+        );
+    }
+
+    // The concepts each case feeds are already a closed vocabulary — an
+    // unrecognised one would have refused the index above — so what is left to
+    // prove is that the cases span the model rather than crowding one corner.
+    assert!(
+        concepts.len() >= 4,
+        "the producer cases exercise too few concepts"
+    );
+    for concept in [SharedConcept::CheckResult, SharedConcept::Measurement] {
+        assert!(
+            concepts.contains(&concept),
+            "no producer case feeds {}",
+            concept.as_str()
+        );
+    }
+
+    // A real governed producer case, named in the ticket that accepted this
+    // corpus, is present and pinned to an exact revision rather than a branch.
+    let code_graph = index
+        .producer_cases
+        .iter()
+        .find(|producer| producer.producer == "agent-ix/quire-code-rs")
+        .expect("the governed code-graph producer case must be retained");
+    assert_eq!(
+        code_graph.revision.len(),
+        40,
+        "{} is not pinned to an exact revision",
+        code_graph.id
+    );
+}
+
 #[trace(
     "TC-076",
     "FR-011-AC-8",
@@ -699,15 +831,19 @@ fn tc_076_the_corpus_is_read_only_and_executes_nothing() {
     let paths = root.corpus_paths().expect("the corpus must enumerate");
     assert!(!paths.is_empty(), "the corpus retains no file");
 
+    // The snapshot re-enumerates the corpus every time rather than reading a
+    // population captured once. A file created during mapping is a change to
+    // the corpus too, and a snapshot keyed on the paths seen beforehand could
+    // never see one: it would compare the same file list to itself and pass.
     let snapshot = |root: &CorpusRoot| -> Vec<(PathBuf, Vec<u8>)> {
-        paths
-            .iter()
+        root.corpus_paths()
+            .expect("the corpus must enumerate")
+            .into_iter()
             .map(|path| {
-                (
-                    path.clone(),
-                    root.read_relative(path, MAX_RETAINED_BYTES)
-                        .expect("every retained file must be readable"),
-                )
+                let bytes = root
+                    .read_relative(&path, MAX_RETAINED_BYTES)
+                    .expect("every retained file must be readable");
+                (path, bytes)
             })
             .collect()
     };
@@ -717,11 +853,13 @@ fn tc_076_the_corpus_is_read_only_and_executes_nothing() {
             let _ = view(&root, &index, &case.id);
         }
     }
+    let after = snapshot(&root);
     assert_eq!(
-        snapshot(&root),
-        before,
-        "mapping the corpus changed the corpus"
+        after.iter().map(|(path, _)| path).collect::<Vec<_>>(),
+        before.iter().map(|(path, _)| path).collect::<Vec<_>>(),
+        "mapping the corpus added or removed a file"
     );
+    assert_eq!(after, before, "mapping the corpus rewrote a retained file");
 
     // No retained artifact is executable: these are records, and a record
     // that can be run is a record that will be.
@@ -787,6 +925,18 @@ fn tc_078_the_pinned_corpus_is_the_reviewed_corpus() {
     let absent = CorpusRoot::open(Path::new("/nonexistent-engineering-assurance-root"))
         .expect_err("an absent corpus root must refuse");
     assert_eq!(absent.code(), "compatibility_corpus_root_unavailable");
+
+    // A corpus root that is present but whose index cannot be read is a
+    // different failure, and it must say so. Collapsing it into the refusal
+    // above would tell an operator to initialize a submodule that is already
+    // checked out, and would hide every size and read refusal behind one code.
+    let root = CorpusRoot::open(repository_root()).expect("the pinned corpus must be readable");
+    assert_eq!(
+        root.load_index_within(1)
+            .expect_err("an index beyond the read bound must refuse")
+            .code(),
+        "compatibility_corpus_entry_too_large"
+    );
 }
 
 #[trace("TC-103", "FR-015-AC-3", "FR-015-AC-5", "FR-015-CON-1")]
@@ -829,6 +979,21 @@ fn tc_103_the_confined_reader_refuses_every_escaping_or_invalid_path() {
             .expect_err("an oversized entry must refuse")
             .code(),
         "compatibility_corpus_entry_too_large"
+    );
+
+    // The accepted corpus nests far inside the depth bound, so the bound that
+    // keeps a deep tree from exhausting the stack instead of refusing is not
+    // also quietly refusing the corpus this gate is meant to read.
+    let deepest = root
+        .corpus_paths()
+        .expect("the corpus must enumerate")
+        .iter()
+        .map(|path| path.components().count())
+        .max()
+        .expect("the corpus retains at least one file");
+    assert!(
+        deepest < MAX_CORPUS_DEPTH,
+        "the corpus nests {deepest} components deep, against a bound of {MAX_CORPUS_DEPTH}"
     );
 
     // A referenced producer case is refused before any path is resolved.

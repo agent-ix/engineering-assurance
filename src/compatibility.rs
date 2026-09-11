@@ -235,8 +235,7 @@ struct MatrixComponent {
     name: String,
     version: String,
     released: bool,
-    #[serde(rename = "release")]
-    _release: String,
+    release: String,
     #[serde(default)]
     #[serde(rename = "source_revision")]
     _source_revision: Option<String>,
@@ -343,6 +342,49 @@ impl Matrix {
                 return Err(CompatibilityError::InvalidMatrix {
                     detail: format!("duplicate component {:?}", component.name),
                 });
+            }
+            // A component that names no release is not pinned to anything an
+            // operator can install, so `released: true` beside it is a claim
+            // with no artifact behind it.
+            if component.release.trim().is_empty() {
+                return Err(CompatibilityError::InvalidMatrix {
+                    detail: format!("component {:?} names no release", component.name),
+                });
+            }
+            // A branch name, `latest`, or a bare `HEAD` moves underneath the
+            // matrix: the same pin resolves to a different build tomorrow, so a
+            // toolchain this matrix classified compatible would silently become
+            // something nobody reviewed. That is the exact failure FR-012-AC-1
+            // exists to prevent.
+            if matches!(component.version.as_str(), "main" | "latest" | "HEAD") {
+                return Err(CompatibilityError::InvalidMatrix {
+                    detail: format!(
+                        "component {:?} pins the moving version {:?}",
+                        component.name, component.version
+                    ),
+                });
+            }
+            if component.release.to_lowercase().contains("branch") {
+                return Err(CompatibilityError::InvalidMatrix {
+                    detail: format!(
+                        "component {:?} names a branch rather than a release: {:?}",
+                        component.name, component.release
+                    ),
+                });
+            }
+            // Classification consults `incompatible`, never `incompatible_reasons`.
+            // A reason recorded for a version the list omits is therefore inert:
+            // that version comes back `unknown` while the matrix reads as though
+            // somebody had ruled it out, which is a downgrade nobody would see.
+            for version in component.incompatible_reasons.keys() {
+                if !component.incompatible.iter().any(|item| item == version) {
+                    return Err(CompatibilityError::InvalidMatrix {
+                        detail: format!(
+                            "component {:?} records a rejection reason for {version:?}, which its incompatible list does not name",
+                            component.name
+                        ),
+                    });
+                }
             }
             for incompatible in &component.incompatible {
                 if incompatible == &component.version {
@@ -524,8 +566,26 @@ fn classify(component: &MatrixComponent, observed: Option<String>) -> ComponentC
 #[cfg(test)]
 mod tests {
     use ix_trace_rs::trace;
+    use unicode_casefold::UnicodeCaseFold;
 
     use super::*;
+
+    fn matrix_value() -> serde_json::Value {
+        serde_json::from_slice(MATRIX_BYTES).expect("the embedded matrix must be JSON")
+    }
+
+    /// Assert a mutated matrix is refused by the contract check and return why.
+    ///
+    /// Structural rules live in [`Matrix::validate`] rather than only in a test
+    /// so a bad matrix is refused at runtime instead of classifying against it;
+    /// this drives that path through the one public entry point that accepts
+    /// caller-supplied bytes.
+    fn refusal_detail(matrix: &serde_json::Value) -> String {
+        let bytes = serde_json::to_vec(matrix).expect("the mutated matrix must serialize");
+        let error = acceptance_recorded_in(&bytes).expect_err("the mutated matrix must be refused");
+        assert_eq!(error.code(), "invalid_embedded_compatibility_matrix");
+        error.to_string()
+    }
 
     fn request(observed: &[(&str, Option<&str>)]) -> Vec<u8> {
         let observed = observed
@@ -572,6 +632,33 @@ mod tests {
                 CompatibilityVerdict::Unknown,
             ]
         );
+
+        // quoin 0.23.0 was tagged and never reached the registry. The matrix
+        // names it so nobody has to rediscover why a version that exists in git
+        // cannot be installed, and this asserts the recorded reason actually
+        // reaches the classification rather than sitting unread in the file.
+        let mut tagged_never_published = exact_observations();
+        tagged_never_published[1].1 = Some("0.23.0");
+        let result = evaluate_request_bytes(&request(&tagged_never_published))
+            .expect("request must evaluate");
+        let quoin = result
+            .components
+            .iter()
+            .find(|item| item.component == "quoin")
+            .expect("quoin must be classified");
+        assert_eq!(quoin.verdict, CompatibilityVerdict::Incompatible);
+        assert!(
+            quoin.reason.contains("never published"),
+            "the recorded reason for 0.23.0 did not reach the classification: {:?}",
+            quoin.reason
+        );
+
+        // Every other component is exactly pinned here, so this is the case
+        // where a single named-incompatible version has to be enough to withhold
+        // the gate on its own.
+        assert!(!result.versions_compatible);
+        assert!(!result.gate_satisfied);
+        assert_eq!(result.outcome, CompatibilityOutcome::Withheld);
     }
 
     #[trace("TC-081", "FR-012-AC-3")]
@@ -582,10 +669,119 @@ mod tests {
         assert!(exact.versions_compatible);
         assert_eq!(exact.outcome, CompatibilityOutcome::Compatible);
 
-        let missing = evaluate_request_bytes(&request(&exact_observations()[..3]))
-            .expect("partial request must evaluate");
-        assert!(!missing.versions_compatible);
-        assert_eq!(missing.outcome, CompatibilityOutcome::Withheld);
+        // One unobserved component is enough to withhold the gate, and it has to
+        // be true of every component rather than only the one a slice happens to
+        // drop. "Mostly pinned" is not a state the migration decision has.
+        for index in 0..exact_observations().len() {
+            let mut partial = exact_observations();
+            partial[index].1 = None;
+            let missing =
+                evaluate_request_bytes(&request(&partial)).expect("partial request must evaluate");
+            assert!(
+                !missing.versions_compatible,
+                "{} was allowed to go unobserved",
+                partial[index].0
+            );
+            assert!(
+                !missing.gate_satisfied,
+                "{} opened the gate unobserved",
+                partial[index].0
+            );
+            assert_eq!(missing.outcome, CompatibilityOutcome::Withheld);
+        }
+
+        // The gate section states in prose why an unrecognised version is not a
+        // pass. Losing that sentence would leave the rule documented only in the
+        // classifier, where an operator reading the matrix would never find it.
+        let matrix = matrix_value();
+        let gate = &matrix["gate"];
+        assert!(
+            gate["rule"]
+                .as_str()
+                .is_some_and(|rule| rule.to_lowercase().contains("compatible")),
+            "the gate rule no longer states what every component must classify as"
+        );
+        assert!(
+            gate["unknown_is_not_pass"]
+                .as_str()
+                .is_some_and(|note| note.to_lowercase().contains("unknown")),
+            "the gate no longer says that an unknown version is not a pass"
+        );
+    }
+
+    /// Assert one acceptance record has one of the two honest shapes.
+    ///
+    /// Acceptance is either pending with nothing filled in, or accepted with a
+    /// named human and a real date behind it. The shape this refuses is the
+    /// dangerous one, a state that reads as accepted while nobody is on record
+    /// as having accepted it.
+    fn assert_acceptance_is_honest(acceptance: &serde_json::Value) {
+        let state = acceptance["state"]
+            .as_str()
+            .expect("acceptance must name a state");
+        assert!(
+            matches!(state, "pending_human_acceptance" | "accepted"),
+            "acceptance is in the unrecognised state {state:?}"
+        );
+        let note = acceptance["note"]
+            .as_str()
+            .expect("acceptance must carry a note");
+        assert!(
+            note.to_lowercase().contains("human"),
+            "the acceptance note does not say a human decided: {note:?}"
+        );
+        assert!(
+            note.contains("agent may prepare"),
+            "the acceptance note does not record that an agent may only prepare: {note:?}"
+        );
+
+        if state == "pending_human_acceptance" {
+            // Pending means nobody has decided yet, so an attribution or a date
+            // recorded beside it is a half-recorded acceptance dressed as an
+            // honest pending state.
+            assert!(
+                acceptance["accepted_by"].is_null(),
+                "a pending matrix already attributes an acceptance"
+            );
+            assert!(
+                acceptance["accepted_at"].is_null(),
+                "a pending matrix already dates an acceptance"
+            );
+            return;
+        }
+
+        let who = acceptance["accepted_by"]
+            .as_str()
+            .expect("an accepted matrix must name who accepted it");
+        assert!(!who.trim().is_empty(), "the attribution is blank");
+
+        // CON-2: the attribution names the human who decided, not the agent that
+        // typed it. An agent may transcribe an acceptance and may not be the one
+        // on record for it. Without this, "Agent IX" satisfies every other
+        // assertion here and the constraint is decorative.
+        let folded = who.case_fold().collect::<String>();
+        for impostor in ["agent", "claude", "bot"] {
+            assert!(
+                !folded.contains(impostor),
+                "the attribution {who:?} names {impostor:?} rather than a human"
+            );
+        }
+
+        // An `accepted_at` that is not a real calendar date records nothing
+        // about when the decision was made, and a length check would accept both
+        // a wrong shape and an impossible day. Parsing against an exact
+        // year-month-day description rejects both. The standard that defines
+        // this date form is deliberately not named here: this repository's
+        // publication boundary refuses external publication identifiers, and
+        // the gate that enforces it reads source lines.
+        let when = acceptance["accepted_at"]
+            .as_str()
+            .expect("an accepted matrix must date the decision");
+        let iso_date = time::format_description::parse_borrowed::<2>("[year]-[month]-[day]")
+            .expect("the literal date description must compile");
+        time::Date::parse(when, &iso_date).unwrap_or_else(|error| {
+            panic!("accepted_at {when:?} is not a year-month-day calendar date: {error}")
+        });
     }
 
     #[trace("TC-082", "FR-012-AC-4")]
@@ -596,6 +792,19 @@ mod tests {
         assert!(result.versions_compatible);
         assert!(result.human_acceptance_recorded);
         assert!(result.gate_satisfied);
+
+        assert_acceptance_is_honest(&matrix_value()["accepted"]);
+
+        // The embedded matrix is currently `accepted`, so its pending branch is
+        // never reached above. Exercising a pending record keeps the rule that
+        // pending carries no attribution from rotting unobserved until the day
+        // somebody sets the state back.
+        assert_acceptance_is_honest(&serde_json::json!({
+            "state": "pending_human_acceptance",
+            "accepted_by": serde_json::Value::Null,
+            "accepted_at": serde_json::Value::Null,
+            "note": "An agent may prepare the matrix; only a human may accept it.",
+        }));
     }
 
     #[trace("TC-079", "FR-012-AC-1")]
@@ -611,13 +820,50 @@ mod tests {
                 .code(),
             "unknown_compatibility_component"
         );
+
+        // These four are the components the campaign actually depends on. A
+        // matrix that quietly stopped pinning one of them would still classify
+        // everything it does name as compatible, so the gate would open on a
+        // toolchain nobody checked.
+        for name in ["quire-cli", "quoin", "ix-flow", "engineering-assurance"] {
+            assert!(
+                expected_component_version(name).is_ok(),
+                "the matrix no longer pins {name}"
+            );
+        }
+
+        // The structural half of "names its release" is enforced by
+        // `Matrix::validate`, so a matrix carrying a moving pin is refused
+        // rather than classified against.
+        for moving in ["main", "latest", "HEAD"] {
+            let mut matrix = matrix_value();
+            matrix["components"][0]["version"] = serde_json::json!(moving);
+            assert!(
+                refusal_detail(&matrix).contains("moving version"),
+                "a matrix pinning {moving:?} was not refused as a moving version"
+            );
+        }
+
+        let mut branch_release = matrix_value();
+        branch_release["components"][0]["release"] =
+            serde_json::json!("npm dist-tag tracking the main Branch");
+        assert!(
+            refusal_detail(&branch_release).contains("names a branch"),
+            "a release naming a branch was not refused"
+        );
+
+        let mut blank_release = matrix_value();
+        blank_release["components"][0]["release"] = serde_json::json!("   ");
+        assert!(
+            refusal_detail(&blank_release).contains("names no release"),
+            "a component with no release was not refused"
+        );
     }
 
     #[trace("TC-084", "FR-012-AC-6")]
     #[test]
     fn tc_084_states_upgrade_and_rollback_per_component() {
-        let matrix: serde_json::Value =
-            serde_json::from_slice(MATRIX_BYTES).expect("the embedded matrix must be JSON");
+        let matrix = matrix_value();
 
         let rollback = &matrix["rollback"];
         for name in [
@@ -638,16 +884,44 @@ mod tests {
                 .is_some_and(|note| note.contains("None of the above"))
         );
 
+        // Rolling ix-flow back means reinstalling one exact published tarball,
+        // so the matrix has to identify that artifact and not merely its version
+        // number: a rebuilt or re-tagged 0.2.3 is a different set of bytes, and
+        // the source revision plus the registry integrity hash are what tell the
+        // two apart.
+        let ix_flow = matrix["components"]
+            .as_array()
+            .expect("components must be an array")
+            .iter()
+            .find(|component| component["name"] == "ix-flow")
+            .expect("the matrix must pin ix-flow");
+        assert_eq!(ix_flow["version"].as_str(), Some("0.2.3"));
+        assert_eq!(
+            ix_flow["source_revision"].as_str(),
+            Some("8b6cf8287db828b4db2df814bc7c1ef10362db24")
+        );
+        assert!(
+            ix_flow["release_integrity"]
+                .as_str()
+                .is_some_and(|integrity| integrity.starts_with("sha512-")),
+            "ix-flow records no sha512 release integrity"
+        );
+
         let upgrade = &matrix["upgrade"];
         assert!(
             upgrade["order"]
                 .as_str()
                 .is_some_and(|order| order.contains("quire-cli"))
         );
+        // The verification step has to name the command that actually
+        // classifies the toolchain. A bare "compatibility" would be satisfied by
+        // any sentence that merely mentions the word, including one that asks
+        // the reader to check by hand.
         assert!(
             upgrade["verification"]
                 .as_str()
-                .is_some_and(|step| step.contains("compatibility"))
+                .is_some_and(|step| step.contains("compatibility-observe")),
+            "the upgrade verification does not name `compatibility-observe`"
         );
         // The upgrade explicitly does not touch a campaign repository.
         assert!(
@@ -662,6 +936,12 @@ mod tests {
                 .as_str()
                 .is_some_and(|note| note.contains("manual-dispatch only"))
         );
+    }
+
+    #[trace("TC-084", "FR-012-AC-6")]
+    #[test]
+    fn tc_084_pins_every_component_to_the_public_release_channel() {
+        let matrix = matrix_value();
 
         // The release channel is the public registry, and the internal mirror
         // is ruled out by name. A pin naming npm.ix cannot install or publish
@@ -805,6 +1085,18 @@ mod tests {
             .expect_err("duplicate component must fail")
             .code(),
             "duplicate_compatibility_observation"
+        );
+
+        // A rejection reason recorded against a version the `incompatible` list
+        // does not name never reaches a classification: the version comes back
+        // `unknown`, silently downgraded from the rejection the matrix appears
+        // to record, and nothing reports the discrepancy.
+        let mut orphaned_reason = matrix_value();
+        orphaned_reason["components"][1]["incompatible_reasons"]["0.21.0"] =
+            serde_json::json!("recorded as rejected while the incompatible list omits it");
+        assert!(
+            refusal_detail(&orphaned_reason).contains("incompatible list does not name"),
+            "an unreferenced rejection reason was not refused"
         );
     }
 }

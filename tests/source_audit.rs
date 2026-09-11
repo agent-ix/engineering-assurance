@@ -388,3 +388,137 @@ fn source_size_encoding_and_syntax_boundaries_refuse_before_inspection() {
     ));
     assert_eq!(invalid_syntax.code(), "rust_source_syntax_invalid");
 }
+
+/// Repository-relative source that actually opens and reads the pinned corpus.
+///
+/// The pure index module `src/compatibility_corpus.rs` is already covered by
+/// the library capability audit above, but it performs no I/O by construction,
+/// so holding *it* to a capability contract proves nothing that its type
+/// signatures do not already prove. The reader below is where directories are
+/// opened and bytes are read, and it is the only place a corpus write, a
+/// socket, or a persistence handle could actually appear.
+const CORPUS_READER: &str = "tests/compatibility_corpus.rs";
+
+/// Identifiers that would mutate, replace, or remove something on disk.
+///
+/// Matched against parsed syntax rather than raw text, so prose in a doc
+/// comment that happens to say "writes nothing" cannot satisfy or trip the
+/// check, and a capability introduced inside a string literal cannot hide.
+const MUTATING_IDENTIFIERS: [&str; 14] = [
+    "OpenOptions",
+    "create",
+    "create_dir",
+    "create_dir_all",
+    "create_new",
+    "hard_link",
+    "remove_dir",
+    "remove_dir_all",
+    "remove_file",
+    "rename",
+    "set_len",
+    "set_permissions",
+    "symlink",
+    "write_all",
+];
+
+#[derive(Default)]
+struct NamedIdentifiers(BTreeSet<String>);
+
+impl<'ast> syn::visit::Visit<'ast> for NamedIdentifiers {
+    fn visit_path(&mut self, path: &'ast syn::Path) {
+        for segment in &path.segments {
+            self.0.insert(segment.ident.to_string());
+        }
+        syn::visit::visit_path(self, path);
+    }
+
+    fn visit_expr_method_call(&mut self, call: &'ast syn::ExprMethodCall) {
+        self.0.insert(call.method.to_string());
+        syn::visit::visit_expr_method_call(self, call);
+    }
+}
+
+#[test]
+#[trace("TC-076", "FR-011-AC-8", "FR-011-CON-1", "FR-011-CON-4")]
+fn tc_076_the_corpus_reader_holds_a_bounded_capability_contract() {
+    // What this audit proves: the source that reads the corpus reaches for no
+    // network, persistence, clock, or diagnostic-output capability, and names
+    // no identifier that would create, replace, truncate, or delete a file.
+    //
+    // What it does not prove: that the reader behaves read-only at run time.
+    // Static inspection cannot see through a helper, and a blanket capability
+    // ban would be dishonest here anyway — this reader legitimately holds a
+    // confined directory capability, reads metadata, canonicalizes one root,
+    // and runs `git` to check the corpus gitlink. The behavioral half of the
+    // property is TC-076 in `tests/compatibility_corpus.rs`, which enumerates
+    // the corpus before and after mapping it and refuses any changed byte. The
+    // two halves are complementary: this one fails when a capability appears in
+    // the source, that one fails when a byte moves.
+    let path = repository_root().join(CORPUS_READER);
+    let bytes = fs::read(&path)
+        .unwrap_or_else(|error| panic!("the corpus reader must be readable: {error}"));
+
+    let capabilities: BTreeSet<_> = audit_rust_source(&bytes, RustSourceAuditRole::ReusableLibrary)
+        .unwrap_or_else(|error| panic!("cannot audit {}: {error}", path.display()))
+        .iter()
+        .filter_map(RustSourceFinding::capability)
+        .collect();
+
+    // A reader that reached for neither a filesystem nor a child program is not
+    // this reader. Asserting the capabilities it is supposed to have keeps the
+    // exclusions below from passing against a file that was renamed, emptied,
+    // or reduced to re-exports, which is the failure mode that let this
+    // property be checked where it could not fail in the first place.
+    for expected in [
+        RustSourceCapability::Filesystem,
+        RustSourceCapability::ChildProgram,
+    ] {
+        assert!(
+            capabilities.contains(&expected),
+            "{CORPUS_READER} no longer reads the corpus directly: {capabilities:?}"
+        );
+    }
+
+    // The corpus is evidence. A reader that could open a socket could reach a
+    // source the retained bytes were supposed to replace; one that could open a
+    // persistence handle could carry state between runs; a clock would make the
+    // qualification non-deterministic. None of the three is needed to read a
+    // pinned directory, so none of the three is admitted.
+    for forbidden in [
+        RustSourceCapability::Network,
+        RustSourceCapability::Persistence,
+        RustSourceCapability::Clock,
+        RustSourceCapability::Output,
+    ] {
+        assert!(
+            !capabilities.contains(&forbidden),
+            "{CORPUS_READER} reaches for {forbidden:?}"
+        );
+    }
+
+    let source = std::str::from_utf8(&bytes).expect("the corpus reader must be UTF-8");
+    let syntax = syn::parse_file(source).expect("the corpus reader must parse");
+    let mut named = NamedIdentifiers::default();
+    syn::visit::Visit::visit_file(&mut named, &syntax);
+    for identifier in MUTATING_IDENTIFIERS {
+        assert!(
+            !named.0.contains(identifier),
+            "{CORPUS_READER} names the mutating operation {identifier}"
+        );
+    }
+
+    // The identifier list has to be able to fire, or it is decoration. A source
+    // that does write is rejected by the same walk that clears the reader.
+    let mut mutating = NamedIdentifiers::default();
+    syn::visit::Visit::visit_file(
+        &mut mutating,
+        &syn::parse_file(r#"fn edit() { std::fs::remove_file("corpus/corpus.json").ok(); }"#)
+            .expect("mutant must parse"),
+    );
+    assert!(
+        MUTATING_IDENTIFIERS
+            .iter()
+            .any(|identifier| mutating.0.contains(*identifier)),
+        "a writing mutant escaped the identifier walk"
+    );
+}

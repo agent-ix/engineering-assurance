@@ -112,11 +112,11 @@ implemented and reviewed.
 | FR-014 | FR-014-AC-2 | TC-098 | 🚧 Compatibility-command slice backed; aggregate pending |
 | FR-014 | FR-014-AC-3 | TC-099 | 🚧 Compatibility-command slice backed; aggregate pending |
 | FR-014 | FR-014-AC-4 | TC-101 | ✅ Parsed library-module audit, lexical-alias/comment adverse cases, and mutations passing |
-| FR-015 | FR-015-AC-1 | TC-100 | 🚧 Compatibility, evidence, semantic-validation, report/PGM projection, and fixture-generation slices backed against checked-in expected fixtures with no Python oracle; aggregate pending |
+| FR-015 | FR-015-AC-1 | TC-100 | 🚧 Compatibility and fixture-generation slices backed against checked-in expected fixtures with no Python oracle; the PGM-01 and report slices still run the retained Python differentially; aggregate pending |
 | FR-015 | FR-015-AC-2 | TC-102 | 🚧 Evidence-availability and semantic-reference state vocabularies backed; aggregate pending |
 | FR-015 | FR-015-AC-3 | TC-103 | 🚧 Evidence, semantic, PGM, and accepted-corpus refusal families backed; aggregate pending |
 | FR-015 | FR-015-AC-4 | TC-104 | 🚧 Semantic ownership and inert-fixture static slice backed; aggregate executable-language audit pending |
-| FR-015 | FR-015-AC-5 | TC-069..TC-076, TC-078 | 🚧 Native Rust accepted-corpus access, identity/integrity checking, and bounded-path refusals backed; TC-077 source reproduction remains out of scope for this repository |
+| FR-015 | FR-015-AC-5 | TC-069..TC-076, TC-078 | 🚧 Native Rust accepted-corpus access, identity/integrity checking, and bounded-path refusals backed; aggregate pending |
 | FR-016 | FR-016-AC-1 | TC-105 | ✅ Rust onboarding core, CLI, retained-reference parity, and confined publication backed |
 | FR-016 | FR-016-AC-2 | TC-106 | ✅ Rust evaluator and CLI parity backed |
 | FR-016 | FR-016-AC-3 | TC-107 | ✅ Rust lifecycle host and adverse cases pass against accepted ix-flow 0.2.3 |
@@ -249,17 +249,17 @@ implemented and reviewed.
 | TC-072 | No failed, unavailable, not-computed, malformed, or tampered case reads as clean or reports a passed check | Property | P0 | FR-011-AC-4, FR-015-AC-5 | ✅ Native Rust corpus host over the Rust PGM-01 mapper |
 | TC-073 | A real legacy record preserves revision, repository, producer identity, and environment, keeps inconclusive distinct, and names what it could not carry | Unit | P0 | FR-011-AC-5, FR-015-AC-5 | ✅ Native Rust corpus host |
 | TC-074 | The retained receipt validates against Quoin's packaged schema and binds the exact chain digests under pinned tools | Integration | P0 | FR-011-AC-6, FR-015-AC-5 | ✅ Native Rust corpus host |
-| TC-075 | Every producer case names a real producer, source path, and shared-model concept across languages | Unit | P0 | FR-011-AC-7, FR-015-AC-5 | ✅ Native Rust corpus index |
+| TC-075 | Every producer case names a real producer, source path, and shared-model concept across languages | Integration | P0 | FR-011-AC-7, FR-015-AC-5 | ✅ Native Rust corpus host over the pinned corpus; the closed concept vocabulary and non-empty producer/path rules are refused at parse time by the corpus index |
 | TC-076 | Reading and mapping the corpus changes no byte, no artifact is executable, and the reader reaches for no subprocess, socket, or write | Static | P0 | FR-011-AC-8, FR-011-CON-1, FR-011-CON-4, FR-015-AC-5, FR-015-CON-1 | ✅ Native Rust corpus host; the pure corpus index module is covered by the TC-101 library-capability audit |
-| TC-077 | The committed corpus reproduces from its recorded sources, and states plainly when it is skipped | Integration | P0 | FR-011-AC-9 | 🚧 Owned by the pinned `agent-ix/qa-corpus` submodule and its own builder; it requires cross-repository checkouts and is not reproduced in this repository |
+| TC-077 | The committed corpus reproduces from its recorded sources, and states plainly when it is skipped | Integration | P0 | FR-011-AC-9 | ✅ `tests/test_corpus_reproduction.py` invokes the pinned `agent-ix/qa-corpus` builder rather than reimplementing it; stated skip where the source repositories are absent |
 | TC-078 | The corpus is a gitlink whose checked-out commit equals the recorded pin, and an uninitialized corpus fails rather than passing quietly | Integration | P0 | FR-011-AC-10, FR-011-CON-5, FR-015-AC-5 | ✅ Native Rust corpus host |
-| TC-079 | Every matrix component pins a released version and names its release; no pin is a branch, latest, or HEAD | Static | P0 | FR-012-AC-1 | ✅ |
-| TC-080 | Compatible, incompatible, and unknown are distinct with reasons, and neither incompatible nor unknown satisfies the gate | Unit | P0 | FR-012-AC-2 | ✅ |
-| TC-081 | The gate requires every pinned component; one unobserved component withholds it | Property | P0 | FR-012-AC-3 | ✅ |
-| TC-082 | Matrix acceptance is pending-and-unattributed or accepted-with-name-and-date, never half-recorded, and documented as a human act | Static | P0 | FR-012-AC-4, FR-012-CON-2, FR-012-CON-4, FR-012-CON-5 | ✅ |
-| TC-083 | Every recorded artifact digest matches this tree over at least the ten schema assets | Integration | P0 | FR-012-AC-5 | ✅ |
-| TC-084 | Upgrade order and per-component rollback notes exist, no rollback is irreversible, and publication changes no CI posture | Static | P0 | FR-012-AC-6 | ✅ Native Rust matrix assertions |
-| TC-085 | An unknown matrix version and an unknown component name are refused | Unit | P0 | FR-012-AC-7 | ✅ |
+| TC-079 | Every matrix component pins a released version and names its release; no pin is a branch, latest, or HEAD | Static | P0 | FR-012-AC-1 | ✅ Refused at parse time by the Rust matrix validator, with adverse cases for a moving version, a branch release, and a blank release |
+| TC-080 | Compatible, incompatible, and unknown are distinct with reasons, and neither incompatible nor unknown satisfies the gate | Unit | P0 | FR-012-AC-2 | ✅ Native Rust classifier, including the tagged-but-never-published version |
+| TC-081 | The gate requires every pinned component; one unobserved component withholds it | Property | P0 | FR-012-AC-3 | ✅ Native Rust, withholding once per component rather than once overall |
+| TC-082 | Matrix acceptance is pending-and-unattributed or accepted-with-name-and-date, never half-recorded, and documented as a human act | Static | P0 | FR-012-AC-4, FR-012-CON-2, FR-012-CON-4, FR-012-CON-5 | ✅ Native Rust; an agent name in the attribution and a non-date acceptance date both refuse |
+| TC-083 | Every recorded artifact digest matches this tree over at least the ten schema assets | Integration | P0 | FR-012-AC-5 | ✅ Native Rust observer, guarded against passing on an empty artifact population |
+| TC-084 | Upgrade order and per-component rollback notes exist, no rollback is irreversible, and publication changes no CI posture | Static | P0 | FR-012-AC-6 | ✅ Native Rust matrix assertions, including the pinned release identity and the named verification command |
+| TC-085 | An unknown matrix version and an unknown component name are refused | Unit | P0 | FR-012-AC-7 | ✅ Native Rust; a rejection reason naming a version the incompatible list omits is refused too |
 | TC-086 | The classifier reaches for no subprocess, socket, or write, and the observing program is a separate file | Static | P0 | FR-012-AC-8, FR-012-CON-1 | ✅ Parsed library-module capability audit; the observing adapter is a separate binary-side module |
 | TC-087 | Every family in the decision table carries exactly one of keep, delete, or replace | Static | P0 | FR-013-AC-1 | ✅ |
 | TC-088 | The decision table accounts for every recurring script family present in the eight repositories, and states when the sources cannot be read | Integration | P0 | FR-013-AC-2 | ✅ |
@@ -274,7 +274,7 @@ implemented and reviewed.
 | TC-097 | Every first-party executable path in this repository has one current state and final disposition | Static | P0 | StR-003-VC-2, FR-018-AC-1 | 🚧 pending implementation |
 | TC-098 | Machine CLI output obeys the versioned stdout/stderr contract | Property | P0 | FR-014-AC-2 | 🚧 compatibility-command slice backed; aggregate pending |
 | TC-099 | Invalid protocol, input, root, host, and host response fail before side effects | Property | P0 | FR-014-AC-3 | 🚧 compatibility-command slice backed; aggregate pending |
-| TC-100 | For each ADR-002 compatibility/semantic/projection/fixture capability row, Rust agrees byte-for-byte with the accepted identity and report reference over the named corpus and focused adverse cases, including generated arbitrary-precision integer boundaries; the accepted corpus is read natively and no Python is executed as a qualification oracle | Integration | P0 | StR-003-VC-3, FR-015-AC-1 | 🚧 compatibility classification, accepted-corpus access, evidence, semantic validation, report/PGM projections, and fixture generation backed by checked-in expected fixtures; aggregate pending |
+| TC-100 | For each ADR-002 compatibility/semantic/projection/fixture capability row, Rust agrees byte-for-byte with the accepted identity and report reference over the named corpus and focused adverse cases, including generated arbitrary-precision integer boundaries; the accepted corpus is read natively | Integration | P0 | StR-003-VC-3, FR-015-AC-1 | 🚧 The compatibility slice compares against checked-in reference bytes and executes no Python; the PGM-01 and report slices in `tests/semantics_parity.rs` still execute the retained Python as a differential oracle, so the no-oracle property holds for part of this row's population, not all of it |
 | TC-101 | Parsed Rust syntax for every reusable-library module rejects filesystem, environment, child-program, network, persistence, and arbitrary-stdout capability paths, including lexical aliases declared in that source, without treating comments or literals as code or claiming cross-document compiler resolution | Static | P0 | FR-014-AC-4, FR-014-CON-1, FR-014-CON-2 | ✅ AST audit, closed findings, adverse scope/alias cases, and mutation evidence passing |
 | TC-102 | Every successful and non-successful semantic state remains distinct; typed state spellings and exact-one untyped-label validation remain callable without string parsing | Integration | P0 | FR-015-AC-2 | 🚧 evidence-availability and semantic-reference state vocabularies backed; aggregate pending |
 | TC-103 | Invalid semantic inputs, including non-finite/retained-domain-overflow numbers, invalid/mutable version tokens, and structured PGM-01 identities, fail or classify read-only without an identity digest or source-byte change; unknown corpus versions, missing index members, unavailable corpora, referenced-only retentions, absolute or parent-traversing retained paths, symlinked or non-regular entries, missing entries, duplicate identities, and tampered bytes refuse explicitly without reading or writing outside the supplied corpus root; independent fixture classes retain leading/trailing and interior ASCII space plus lowercase/uppercase immutable `x` metadata boundaries; every exercised semantic and PGM-01 refusal exposes a typed reason without diagnostic-prose matching | Integration | P0 | FR-015-AC-3, FR-015-CON-1 | 🚧 evidence, semantic, and PGM refusals backed; aggregate pending |
@@ -462,7 +462,7 @@ evaluation envelopes.
 | FR-011 | FR-011-AC-6 | TC-074 | ✅ Passing |
 | FR-011 | FR-011-AC-7 | TC-075 | ✅ Passing |
 | FR-011 | FR-011-AC-8 | TC-076 | ✅ Passing |
-| FR-011 | FR-011-AC-9 | TC-077 | 🚧 Owned by the pinned `agent-ix/qa-corpus` submodule builder; requires cross-repository checkouts and is not reproduced here |
+| FR-011 | FR-011-AC-9 | TC-077 | ✅ Passing where the recorded source repositories are present; stated skip otherwise |
 | FR-011 | FR-011-AC-10 | TC-078 | ✅ Passing |
 | FR-012 | FR-012-AC-1 | TC-079 | ✅ Passing |
 | FR-012 | FR-012-AC-2 | TC-080 | ✅ Passing |
@@ -496,8 +496,11 @@ compatibility classifier and observer, which together enforce the accepted
 compatibility corpus that FR-010 previously deferred and the pinned release
 matrix used by the existing campaign contract. TC-077 is the one exception: the
 corpus reproduces from its recorded sources through the pinned
-`agent-ix/qa-corpus` submodule's own builder, which requires cross-repository
-checkouts and is therefore not reproduced in this repository. TC-087..TC-094
+`agent-ix/qa-corpus` submodule's own builder, which
+`tests/test_corpus_reproduction.py` invokes rather than reimplementing: copying
+another repository's build tool into this one, and making cross-repository
+checkouts a dependency of this repository's gate, is the opposite of what the
+corpus pin is for. It states its skip where the source repositories are absent. TC-087..TC-094
 remain in `tests/test_migration_contract.py`, which reads the contract document
 and the matrix file directly.
 
