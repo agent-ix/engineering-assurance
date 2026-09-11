@@ -483,7 +483,7 @@ mod tests {
             ("quire-cli", Some("0.31.0")),
             ("quoin", Some("0.23.1")),
             ("ix-flow", Some("0.2.3")),
-            ("engineering-assurance", Some("0.2.0")),
+            ("engineering-assurance", Some("0.2.1")),
         ]
     }
 
@@ -517,7 +517,7 @@ mod tests {
         let exact = evaluate_request_bytes(&request(&exact_observations()))
             .expect("exact request must evaluate");
         assert!(exact.versions_compatible);
-        assert_eq!(exact.outcome, CompatibilityOutcome::Withheld);
+        assert_eq!(exact.outcome, CompatibilityOutcome::Compatible);
 
         let missing = evaluate_request_bytes(&request(&exact_observations()[..3]))
             .expect("partial request must evaluate");
@@ -531,8 +531,8 @@ mod tests {
         let result =
             evaluate_request_bytes(&request(&exact_observations())).expect("request must evaluate");
         assert!(result.versions_compatible);
-        assert!(!result.human_acceptance_recorded);
-        assert!(!result.gate_satisfied);
+        assert!(result.human_acceptance_recorded);
+        assert!(result.gate_satisfied);
     }
 
     #[trace("TC-079", "FR-012-AC-1")]

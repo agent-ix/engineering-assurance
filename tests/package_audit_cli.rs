@@ -68,6 +68,8 @@ fn tc_111_real_wheel_and_npm_archives_install_and_agree() {
     assert!(result.npm_files > 0);
     assert!(result.installed_canonical_files > 0);
     for staged in [
+        "build",
+        "engineering_assurance.egg-info",
         "manifest.yaml",
         "compatibility-matrix.json",
         "contracts",

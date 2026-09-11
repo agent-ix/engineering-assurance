@@ -118,7 +118,7 @@ implemented and reviewed.
 | FR-015 | FR-015-AC-4 | TC-104 | 🚧 Semantic ownership and inert-fixture static slice backed; aggregate executable-language audit pending |
 | FR-016 | FR-016-AC-1 | TC-105 | ✅ Rust onboarding core, CLI, retained-reference parity, and confined publication backed |
 | FR-016 | FR-016-AC-2 | TC-106 | ✅ Rust evaluator and CLI parity backed |
-| FR-016 | FR-016-AC-3 | TC-107 | 🚧 Rust lifecycle host and adverse cases pass against ix-flow 0.2.3; human matrix acceptance pending |
+| FR-016 | FR-016-AC-3 | TC-107 | ✅ Rust lifecycle host and adverse cases pass against accepted ix-flow 0.2.3 |
 | FR-016 | FR-016-AC-4 | TC-108 | 🚧 Pending implementation |
 | FR-017 | FR-017-AC-1 | TC-109 | 🚧 Pending implementation |
 | FR-017 | FR-017-AC-2 | TC-110 | 🚧 Pending implementation |
@@ -156,13 +156,13 @@ implemented and reviewed.
 | FR-015-CON-1 | TC-103 | 🚧 Read-only evidence and semantic/PGM slices backed; aggregate pending |
 | FR-015-CON-2 | TC-104 | 🚧 Inert generated-fixture slice backed; aggregate pending |
 | FR-015-CON-3 | TC-104 | 🚧 Semantic-contract slice backed; aggregate pending |
-| FR-016-CON-1 | TC-107 | 🚧 Delegated ix-flow state/chain behavior passing; human matrix acceptance pending |
+| FR-016-CON-1 | TC-107 | ✅ Delegated ix-flow state/chain behavior passes against accepted ix-flow 0.2.3 |
 | FR-016-CON-2 | TC-115 | 🚧 Pending owner disposition |
 | FR-016-CON-3 | TC-106 | ✅ Deterministic I/O-free Rust evaluator backed |
 | FR-016-CON-4 | TC-105 | ✅ Pure library and binary-only host adapter backed |
-| FR-016-CON-5 | TC-107 | 🚧 Supported ix-flow CLI-only lifecycle path passing; human matrix acceptance pending |
-| FR-016-CON-6 | TC-107 | 🚧 State-file isolation and delegated chain verification passing; human matrix acceptance pending |
-| FR-016-CON-7 | TC-107 | 🚧 Direct argv and display-only next-action guards passing; human matrix acceptance pending |
+| FR-016-CON-5 | TC-107 | ✅ Supported ix-flow CLI-only lifecycle path passes against accepted ix-flow 0.2.3 |
+| FR-016-CON-6 | TC-107 | ✅ State-file isolation and delegated chain verification pass against accepted ix-flow 0.2.3 |
+| FR-016-CON-7 | TC-107 | ✅ Direct argv and display-only next-action guards pass against accepted ix-flow 0.2.3 |
 | FR-017-CON-1 | TC-109 | 🚧 Pending implementation |
 | FR-017-CON-2 | TC-112 | 🚧 npm lifecycle hooks backed; remaining host-configuration census pending |
 | FR-018-CON-1 | TC-113 | 🚧 Pending implementation |
@@ -279,7 +279,7 @@ implemented and reviewed.
 | TC-104 | Contract ownership and inert foreign-language fixtures remain bounded | Static | P0 | FR-015-AC-4, FR-015-CON-2, FR-015-CON-3 | 🚧 semantic ownership and inert-fixture slice backed; aggregate audit pending |
 | TC-105 | Rust onboarding matches the retained complete sorted inventory, status, recommendation, and artifact path for existing, absent, conflicting, malformed, unavailable, unjustified, incomplete-boundary, and valid-authoring cases; duplicate-key and merge-key artifact identities remain malformed; newly authored artifacts retain equivalent parsed frontmatter and an identical Markdown body and pass Quire, while malformed requests, unsupported types, absolute or parent-traversing targets, symlink escapes, existing destinations, and invalid staged artifacts publish nothing | Property | P0 | FR-016-AC-1, FR-016-CON-4 | ✅ Rust core/CLI parity, fail-closed YAML identity, real Quire validation, no-replace publication, and boundary refusals passing |
 | TC-106 | Rust and the retained invariant provider return the same ordered typed outcomes for all eleven canonical invariants and valid boundary fixtures at one explicit evaluation instant; unknown invariant names and malformed Rust requests fail before an outcome | Integration | P0 | FR-016-AC-2, FR-016-CON-3 | ✅ Rust evaluator, retained-reference parity, fail-closed probes, and CLI boundary passing |
-| TC-107 | Against the exact accepted ix-flow pin, Rust start/resume and explicit decision coordination preserves ix-flow state ownership, recovers only pristine interrupted initialization, remains idempotent across gate interruption windows, requires ix-flow to verify an intact event chain, refuses incompatible hosts and binding/transition/decision conflicts before mutation, reports ambiguous post-mutation host failures as indeterminate for status reconciliation, bounds malformed/oversized/timed-out responses, and never supplies an automatic gate override or executes next-action text | Integration | P0 | FR-016-AC-3, FR-016-CON-1, FR-016-CON-5, FR-016-CON-6, FR-016-CON-7 | 🚧 implementation and adverse cases pass against ix-flow 0.2.3; human matrix acceptance pending |
+| TC-107 | Against the exact accepted ix-flow pin, Rust start/resume and explicit decision coordination preserves ix-flow state ownership, recovers only pristine interrupted initialization, remains idempotent across gate interruption windows, requires ix-flow to verify an intact event chain, refuses incompatible hosts and binding/transition/decision conflicts before mutation, reports ambiguous post-mutation host failures as indeterminate for status reconciliation, bounds malformed/oversized/timed-out responses, and never supplies an automatic gate override or executes next-action text | Integration | P0 | FR-016-AC-3, FR-016-CON-1, FR-016-CON-5, FR-016-CON-6, FR-016-CON-7 | ✅ 8 local lifecycle cases pass against accepted ix-flow 0.2.3 |
 | TC-108 | Canonical and pilot workflows pass through the Rust invariant provider before removal | Integration | P0 | FR-016-AC-4 | 🚧 pending host interface |
 | TC-109 | Rust evaluation completes the 28-cell matrix without inferred decisions | E2E | P0 | FR-017-AC-1, FR-017-CON-1 | 🚧 pending host interface |
 | TC-110 | The pure typed Rust evaluator preserves the exact 28-cell contract and deterministically withholds aggregation for missing, duplicate, malformed, unsupported, unavailable, failed, stale-revision, changed-governing-identity, changed-workflow, unsupported-addition, invalid-transcript-reference, invalid-count, outcome-mismatch, and terminal-pair cases; input permutation cannot change the result, oversized input refuses before decoding, and the reusable boundary performs no I/O | Property | P0 | FR-017-AC-2, FR-017-CON-1, FR-017-CON-3 | ✅ typed Rust aggregation, retained-Python differential cases, adverse cases, portable path/refusal rules, resource ceiling, and mutation probes passing |
