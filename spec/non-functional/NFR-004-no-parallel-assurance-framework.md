@@ -11,10 +11,12 @@ relationships:
 
 ## Statement
 
-The verification-semantics package SHALL remain a definition, mapping,
-validation, and projection boundary. It SHALL NOT execute producers, scrape
-arbitrary stdout for verdicts, persist evidence, define a second generic
-envelope or manifest, or infer a human decision.
+The verification-semantics modules SHALL remain a definition, mapping,
+validation, and projection boundary. Producer execution SHALL occur only
+through the request-bound [FR-019](../functional/FR-019-bounded-producer-execution.md)
+Rust module, which SHALL NOT scrape arbitrary stdout for verdicts, persist
+evidence, define a second generic envelope or manifest, or infer a human
+decision.
 
 ## Scope
 
@@ -26,7 +28,8 @@ fixtures, packaging, CLI integrations, and reports introduced by issue #5.
 | Metric | Target | Threshold | Method |
 | --- | --- | --- | --- |
 | Duplicate authoritative record families | 0 | 0 | static ownership/schema audit |
-| Producer execution or generic stdout scraping paths | 0 | 0 | static package audit |
+| Producer execution paths outside the FR-019 module | 0 | 0 | static package audit |
+| Generic stdout verdict scraping paths | 0 | 0 | static package audit |
 
 ## Rationale
 
@@ -38,7 +41,7 @@ ix-flow instead of replacing eight local frameworks with a ninth one.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | NFR-004-AC-1 | The issue #5 package adds no duplicate authoritative record family. | Test (TC-068) |
-| NFR-004-AC-2 | The package contains no producer execution, generic stdout verdict scraper, evidence persistence, or automatic human decision path. | Test (TC-059) |
+| NFR-004-AC-2 | Producer execution exists only in the bounded FR-019 module, and the package contains no generic stdout verdict scraper, evidence persistence, or automatic human decision path. | Test (TC-059, TC-127) |
 
 ## Verification
 
@@ -47,4 +50,5 @@ the complete package dependency/call surface.
 
 ## Dependencies
 
-FR-008 through FR-010 define the constrained implementation boundary.
+FR-008 through FR-010 and FR-019 define the constrained implementation
+boundary.

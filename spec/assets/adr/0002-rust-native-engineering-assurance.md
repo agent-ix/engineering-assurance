@@ -34,8 +34,9 @@ configuration, artifacts, and qualification priorities.
    in Rust.
 2. Preserve observable behavior, including non-success and refusal paths.
 3. Keep shared Engineering Assurance behavior in one repository-owned package.
-4. Avoid a new evidence model, producer runner, consumer registry, or ecosystem
-   coordination service.
+4. Avoid a new evidence model, arbitrary command runner, consumer registry, or
+   ecosystem coordination service while admitting one bounded producer-
+   execution capability required by real qualification consumers.
 5. Replace old implementations only after equivalent Rust behavior is locally
    demonstrated.
 6. Keep Engineering Assurance qualification isolated from the repositories and
@@ -62,6 +63,7 @@ configuration, artifacts, and qualification priorities.
 | Evaluation model and report aggregation | Port the existing result validation and aggregation behavior. |
 | Agent-evaluation scenarios | Port Engineering Assurance scenarios and assertions; keep cli-agent-evals host mechanics external. |
 | Repository qualification, package, and rights checks | Port existing checks; host files may remain declarative dispatch. |
+| Reusable producer execution | Execute an exact caller-declared producer through one bounded Rust library module; keep producer response semantics with the caller and evidence retention with Quoin. |
 | Schemas, manifests, skeletons, specifications, corpora, and generated fixtures | Keep in their suitable data or documentation formats. Generated source fixtures are inert test data. |
 
 ## Decision
@@ -72,10 +74,11 @@ named `engineering-assurance`, exporting the `engineering_assurance` Rust
 library crate and the `engineering-assurance` CLI binary. These are two targets
 of one package, not independently governed products.
 
-The library owns reusable deterministic domain behavior. The CLI owns explicit
-filesystem, process, and external-host boundaries and exposes versioned JSON for
-machine-facing operations. It does not infer verdicts from arbitrary producer
-stdout or persist authoritative evidence.
+The library owns reusable deterministic domain behavior and one explicitly
+bounded producer-execution module. Other filesystem, process, and external-host
+adapters remain CLI-owned. A caller-owned typed Rust response adapter interprets
+the selected producer protocol; neither the library nor CLI infers verdicts
+from arbitrary stdout or persists authoritative evidence.
 
 Schemas, manifests, skeletons, skills, Markdown specifications, corpora, and
 generated cross-language fixtures remain data or documentation in their native
@@ -84,9 +87,11 @@ dispatch. They do not own semantic branches or assertions duplicated from Rust.
 
 Quire validation, Quoin evidence retention and audit, ix-flow run and decision
 state, cli-agent-evals host mechanics, portable verification contracts, and
-native producer execution remain outside this package. Integration with an
-external host uses a supported versioned interface; Engineering Assurance does
-not copy or redesign that host.
+native producer semantics remain outside this package. Engineering Assurance
+may execute a declared producer through the [FR-019](../../functional/FR-019-bounded-producer-execution.md)
+module without owning its response schema, oracle, or qualification decision.
+Integration with an external host uses a supported versioned interface;
+Engineering Assurance does not copy or redesign that host.
 
 ## Port and cutover order
 
@@ -108,6 +113,8 @@ not copy or redesign that host.
 - External host changes remain separately owned and reviewed by those hosts.
 - No consumer registry, ecosystem snapshot, cross-repository CI checkout, or
   centralized migration ledger is created.
+- Producer execution is confined to one request-bound public Rust module rather
+  than becoming permission for arbitrary command execution elsewhere.
 - Accepted corpus and historical evidence bytes remain unchanged.
 
 ## Revisit triggers
