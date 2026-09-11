@@ -145,7 +145,9 @@ pub struct ResolvedSkill {
     pub surface: HostSurfaceName,
     /// Bundle-relative path of the manifest that resolved it.
     pub manifest: &'static str,
-    /// Bundle-relative path of the canonical skill file it names.
+    /// Bundle-relative skill directory this manifest declared.
+    pub skill_source: String,
+    /// Bundle-relative skill file that directory implies.
     pub skill_file: String,
 }
 
@@ -280,16 +282,11 @@ pub fn validate_manifest_document(
             surface: surface.name,
             observed: declared.to_owned(),
         })?;
-    if normalized != CANONICAL_SKILLS_DIRECTORY {
-        return Err(DiscoveryError::TargetNotCanonical {
-            surface: surface.name,
-            observed: normalized,
-        });
-    }
     Ok(ResolvedSkill {
         surface: surface.name,
         manifest: surface.manifest,
-        skill_file: CANONICAL_SKILL_FILE.to_owned(),
+        skill_file: format!("{normalized}/{CANONICAL_SKILL_NAME}/SKILL.md"),
+        skill_source: normalized,
     })
 }
 
@@ -373,13 +370,22 @@ pub fn validate_workflow_set(observed: &BTreeSet<String>) -> Result<(), Discover
     })
 }
 
-/// Validate that every supported host resolved the same one skill file.
+/// Validate that every supported host resolved the one canonical skill file.
+///
+/// Agreement is decided here rather than per manifest on purpose. A manifest
+/// validated in isolation against a hardcoded canonical answer can only ever
+/// produce that answer, so two manifests pointing at different in-bundle skill
+/// trees — the drift this module exists to catch — would be unrepresentable
+/// before any check saw them. Each manifest reports the target it actually
+/// named, and the disagreement is a failure the set can have.
 ///
 /// # Errors
 ///
 /// Returns [`DiscoveryError::HostSetNotExact`] when the resolutions do not
-/// cover the supported hosts exactly once, and
-/// [`DiscoveryError::DivergentResolution`] when they name more than one file.
+/// cover the supported hosts exactly once,
+/// [`DiscoveryError::DivergentResolution`] when they name more than one file,
+/// and [`DiscoveryError::TargetNotCanonical`] when they agree on a file that is
+/// not the canonical one.
 pub fn validate_resolution(resolved: &[ResolvedSkill]) -> Result<(), DiscoveryError> {
     let hosts = resolved
         .iter()
@@ -398,12 +404,20 @@ pub fn validate_resolution(resolved: &[ResolvedSkill]) -> Result<(), DiscoveryEr
         .iter()
         .map(|entry| entry.skill_file.clone())
         .collect::<BTreeSet<_>>();
-    if files.len() == 1 {
-        return Ok(());
+    let named = files.iter().cloned().collect::<Vec<_>>();
+    let [agreed] = named.as_slice() else {
+        return Err(DiscoveryError::DivergentResolution { observed: named });
+    };
+    if agreed != CANONICAL_SKILL_FILE {
+        let surface = resolved
+            .first()
+            .map_or(HostSurfaceName::ClaudeCode, |entry| entry.surface);
+        return Err(DiscoveryError::TargetNotCanonical {
+            surface,
+            observed: agreed.clone(),
+        });
     }
-    Err(DiscoveryError::DivergentResolution {
-        observed: files.into_iter().collect(),
-    })
+    Ok(())
 }
 
 /// Extract the one declared skill source from a manifest's `skills` value.
@@ -450,7 +464,14 @@ fn normalize_bundle_relative(value: &str) -> Option<String> {
     if value.starts_with('/') || value.contains('\\') || value.contains('\0') {
         return None;
     }
-    if value.chars().nth(1) == Some(':') {
+    // A Windows drive prefix is one ASCII letter and a colon. Refusing every
+    // second-position colon would reject an ordinary directory name.
+    let mut prefix = value.chars();
+    if prefix
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic())
+        && prefix.next() == Some(':')
+    {
         return None;
     }
     let mut components = Vec::new();
@@ -567,6 +588,75 @@ mod tests {
             .is_ok()
         );
         assert!(validate_manifest_document(&claude, &json!([])).is_err());
+    }
+
+    #[trace("TC-010", "FR-002-AC-2", "TC-038", "NFR-001-AC-1")]
+    #[test]
+    fn tc_010_two_hosts_pointing_at_different_skill_trees_refuse() {
+        let resolved = |source: &str| {
+            HOST_SURFACES
+                .into_iter()
+                .map(|surface| {
+                    validate_manifest_document(
+                        &surface,
+                        &match surface.source_shape {
+                            SkillSourceShape::SingleString => json!({"skills": source}),
+                            SkillSourceShape::SingleElementArray => {
+                                json!({"$schema": "s", "skills": [source]})
+                            }
+                        },
+                    )
+                    .expect("an in-bundle source must survive the document check")
+                })
+                .collect::<Vec<_>>()
+        };
+
+        let agreeing = resolved(CANONICAL_SKILLS_DIRECTORY);
+        assert!(validate_resolution(&agreeing).is_ok());
+
+        // This is the drift the four manifests exist to make impossible: two
+        // hosts install different behaviour, each reports a successful
+        // discovery, and nothing downstream records which one ran. It has to be
+        // representable to be refusable, so the manifest check reports the
+        // target named rather than the target required.
+        let mut divergent = agreeing.clone();
+        divergent[1] = resolved("engineering_assurance/other-skills")[1].clone();
+        assert_eq!(
+            validate_resolution(&divergent)
+                .expect_err("hosts naming different trees must refuse")
+                .code(),
+            "discovery_resolution_divergent"
+        );
+
+        // Unanimity is not canonicality: all four agreeing on the wrong tree is
+        // still the wrong tree.
+        assert_eq!(
+            validate_resolution(&resolved("engineering_assurance/other-skills"))
+                .expect_err("an agreed non-canonical tree must refuse")
+                .code(),
+            "discovery_target_not_canonical"
+        );
+
+        // A resolution short of the supported set cannot be read as agreement
+        // either, or a host that failed to resolve would improve the result.
+        assert_eq!(
+            validate_resolution(&agreeing[..3])
+                .expect_err("a short resolution must refuse")
+                .code(),
+            "discovery_host_set_not_exact"
+        );
+    }
+
+    #[trace("TC-041", "FR-002-CON-1")]
+    #[test]
+    fn tc_041_host_identity_has_one_wire_spelling() {
+        // The wire spelling is declared twice — by the serde attribute and by
+        // as_str — and a variant rename would silently split them, leaving a
+        // recorded host name that matches nothing the set is checked against.
+        for surface in HOST_SURFACES {
+            let encoded = serde_json::to_string(&surface.name).expect("a host name must serialize");
+            assert_eq!(encoded, format!("{:?}", surface.name.as_str()));
+        }
     }
 
     #[trace("TC-009", "FR-002-AC-1", "TC-011", "FR-002-AC-3")]

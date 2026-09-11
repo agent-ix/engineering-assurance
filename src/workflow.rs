@@ -134,14 +134,18 @@ impl fmt::Display for WorkflowKind {
 impl FromStr for WorkflowKind {
     type Err = ();
 
+    /// Parse a workflow name out of [`WorkflowKind::ALL`].
+    ///
+    /// Deliberately not a second hand-written match. A variant reachable here
+    /// but absent from `ALL` would be bindable without being discoverable,
+    /// which is precisely what one shared list is supposed to make impossible —
+    /// and a fixed-size array is not exhaustiveness-checked, so nothing else
+    /// would report the divergence.
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value {
-            "assurance-intake" => Ok(Self::AssuranceIntake),
-            "architecture-evaluation" => Ok(Self::ArchitectureEvaluation),
-            "measurement-promotion" => Ok(Self::MeasurementPromotion),
-            "change-assurance" => Ok(Self::ChangeAssurance),
-            _ => Err(()),
-        }
+        Self::ALL
+            .into_iter()
+            .find(|workflow| workflow.as_str() == value)
+            .ok_or(())
     }
 }
 

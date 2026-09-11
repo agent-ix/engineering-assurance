@@ -96,15 +96,26 @@ impl BundleRoot {
             .unwrap_or_else(|error| panic!("{} must be JSON: {error}", surface.manifest))
     }
 
-    /// Names of the immediate subdirectories of one bundle-relative directory.
-    fn subdirectories(&self, relative: &str) -> BTreeSet<String> {
-        let mut names = BTreeSet::new();
+    /// Every immediate entry of one bundle-relative directory, by kind.
+    ///
+    /// Files are returned alongside directories because the inventories built
+    /// on this have to see a skill added as a loose file, not only one added as
+    /// a directory. An entry the bundle is not supposed to hold is only
+    /// refusable if something enumerated it.
+    fn entries(&self, relative: &str) -> Vec<(String, bool)> {
+        let mut found = Vec::new();
         let listing = self
             .directory
             .read_dir(relative)
             .unwrap_or_else(|error| panic!("cannot enumerate {relative}: {error}"));
         for entry in listing {
             let entry = entry.unwrap_or_else(|error| panic!("cannot read {relative}: {error}"));
+            // The bound counts entries read, not entries kept: a directory full
+            // of files nobody keeps would otherwise iterate without limit.
+            assert!(
+                found.len() < MAX_BUNDLE_ENTRIES,
+                "{relative} holds more entries than this adapter will enumerate"
+            );
             let kind = entry
                 .file_type()
                 .unwrap_or_else(|error| panic!("cannot classify an entry of {relative}: {error}"));
@@ -112,40 +123,57 @@ impl BundleRoot {
                 !kind.is_symlink(),
                 "{relative} must not contain a symlinked entry"
             );
-            if kind.is_dir() {
-                names.insert(
-                    entry
-                        .file_name()
-                        .into_string()
-                        .expect("bundle directory names must be UTF-8"),
-                );
-            }
-            assert!(
-                names.len() <= MAX_BUNDLE_ENTRIES,
-                "{relative} holds more entries than this adapter will enumerate"
-            );
+            found.push((
+                entry
+                    .file_name()
+                    .into_string()
+                    .expect("bundle entry names must be UTF-8"),
+                kind.is_dir(),
+            ));
         }
-        names
+        found
+    }
+
+    /// Whether a bundle-relative path is a regular file that is not a symlink.
+    ///
+    /// `Dir::is_file` follows symlinks, so a symlinked `SKILL.md` would be
+    /// enumerated as canonical while its bytes came from outside the bundle.
+    fn is_regular_file(&self, relative: &str) -> bool {
+        self.directory
+            .symlink_metadata(relative)
+            .is_ok_and(|metadata| metadata.is_file())
     }
 
     /// Bundle-relative paths of every skill file the bundle exposes.
+    ///
+    /// A loose file directly under the skills directory counts as a skill here,
+    /// so a second skill added as `skills/OTHER.md` is refused rather than
+    /// passing unseen through an inventory that only looks one directory down.
     fn skill_inventory(&self) -> BTreeSet<String> {
-        self.subdirectories(CANONICAL_SKILLS_DIRECTORY)
+        self.entries(CANONICAL_SKILLS_DIRECTORY)
             .into_iter()
-            .map(|name| format!("{CANONICAL_SKILLS_DIRECTORY}/{name}/SKILL.md"))
-            .filter(|relative| self.directory.is_file(relative))
+            .filter_map(|(name, is_directory)| {
+                let relative = if is_directory {
+                    format!("{CANONICAL_SKILLS_DIRECTORY}/{name}/SKILL.md")
+                } else {
+                    format!("{CANONICAL_SKILLS_DIRECTORY}/{name}")
+                };
+                self.is_regular_file(&relative).then_some(relative)
+            })
             .collect()
     }
 
     /// Names of every workflow the canonical skill exposes a definition for.
     fn workflow_inventory(&self) -> BTreeSet<String> {
-        self.subdirectories(CANONICAL_WORKFLOWS_DIRECTORY)
+        self.entries(CANONICAL_WORKFLOWS_DIRECTORY)
             .into_iter()
-            .filter(|name| {
-                self.directory.is_file(format!(
-                    "{CANONICAL_WORKFLOWS_DIRECTORY}/{name}/{WORKFLOW_DEFINITION_NAME}"
-                ))
+            .filter(|(name, is_directory)| {
+                *is_directory
+                    && self.is_regular_file(&format!(
+                        "{CANONICAL_WORKFLOWS_DIRECTORY}/{name}/{WORKFLOW_DEFINITION_NAME}"
+                    ))
             })
+            .map(|(name, _)| name)
             .collect()
     }
 }
@@ -257,6 +285,11 @@ fn tc_038_supported_hosts_install_the_same_canonical_bytes() {
     assert!(!skill_bytes.is_empty());
     let canonical_digest = digest(&skill_bytes);
     for entry in &resolved {
+        // The path read here is the one this host's own manifest named, not a
+        // constant. A manifest redirected to a second in-bundle skill tree
+        // therefore hashes different bytes and this comparison fails, which is
+        // the whole point of comparing digests at all.
+        assert!(entry.skill_file.starts_with(&entry.skill_source));
         assert_eq!(entry.skill_file, CANONICAL_SKILL_FILE);
         assert_eq!(digest(&bundle.read(&entry.skill_file)), canonical_digest);
     }
@@ -356,24 +389,55 @@ fn tc_013_absent_and_escaping_targets_are_refused_against_the_real_bundle() {
     // starts from a document that really validates and differs from it in one
     // field. A hand-written fixture would prove only that the fixture is wrong.
     let document = bundle.manifest(&surface);
+    for target in ["../../outside", "/etc", "engineering_assurance/../outside"] {
+        let mut redirected = document.clone();
+        redirected["skills"] = Value::String(target.to_owned());
+        let Err(refusal) = validate_manifest_document(&surface, &redirected) else {
+            panic!("{target:?} must not stay inside the bundle");
+        };
+        assert!(
+            matches!(refusal, DiscoveryError::TargetEscapesBundle { .. }),
+            "{target:?} refused for the wrong reason: {refusal}"
+        );
+    }
+
+    // An in-bundle target that is not the canonical source is refused too, but
+    // by the set rather than the document, because a manifest checked alone
+    // against a hardcoded answer can only ever return that answer.
     for target in [
         "./missing-skills",
-        "../../outside",
-        "/etc",
         "engineering_assurance/skills/assurance-onboarding",
         "engineering_assurance",
     ] {
         let mut redirected = document.clone();
         redirected["skills"] = Value::String(target.to_owned());
-        let Err(refusal) = validate_manifest_document(&surface, &redirected) else {
-            panic!("{target:?} must not resolve canonically");
+        let entry = validate_manifest_document(&surface, &redirected)
+            .expect("an in-bundle target must survive the document check");
+        let mut set = resolve_bundle(&bundle);
+        set[0] = entry;
+        let Err(refusal) = validate_resolution(&set) else {
+            panic!("{target:?} must not pass as a canonical resolution");
         };
         assert!(
-            matches!(
-                refusal,
-                DiscoveryError::TargetEscapesBundle { .. }
-                    | DiscoveryError::TargetNotCanonical { .. }
-            ),
+            matches!(refusal, DiscoveryError::DivergentResolution { .. }),
+            "{target:?} refused for the wrong reason: {refusal}"
+        );
+
+        // And when every host agrees on the same wrong place, the agreement is
+        // not what makes it right.
+        let agreed = set
+            .iter()
+            .map(|entry| ResolvedSkill {
+                skill_source: set[0].skill_source.clone(),
+                skill_file: set[0].skill_file.clone(),
+                ..entry.clone()
+            })
+            .collect::<Vec<_>>();
+        let Err(refusal) = validate_resolution(&agreed) else {
+            panic!("{target:?} must not pass by unanimous agreement");
+        };
+        assert!(
+            matches!(refusal, DiscoveryError::TargetNotCanonical { .. }),
             "{target:?} refused for the wrong reason: {refusal}"
         );
     }
