@@ -414,14 +414,14 @@ impl EvaluationEnvelope {
         if self
             .transcript_path
             .as_deref()
-            .is_none_or(|path| !is_safe_relative_path(path))
+            .is_none_or(|path| !is_safe_transcript_reference(path))
         {
             errors.push(EnvelopeFailure::TranscriptPathInvalid);
         }
         if self
             .transcript_digest
             .as_deref()
-            .is_none_or(|digest| !is_lower_sha256(digest))
+            .is_none_or(|digest| !is_lower_sha256_digest(digest))
         {
             errors.push(EnvelopeFailure::TranscriptDigestInvalid);
         }
@@ -760,7 +760,9 @@ fn same_shared_governing(
     }
 }
 
-fn is_immutable_revision(value: &str) -> bool {
+/// Return whether a revision or version is nonblank and contains no mutable selector.
+#[must_use]
+pub fn is_immutable_revision(value: &str) -> bool {
     !value.trim().is_empty() && !contains_mutable_revision(value)
 }
 
@@ -789,10 +791,13 @@ fn boundary(byte: Option<u8>, at_edge: bool) -> bool {
     at_edge || byte.is_some_and(|value| matches!(value, b'-' | b'_' | b'.'))
 }
 
-fn is_safe_relative_path(value: &str) -> bool {
+/// Return whether a transcript reference uses the portable relative grammar.
+#[must_use]
+pub fn is_safe_transcript_reference(value: &str) -> bool {
     if value.is_empty()
         || value.starts_with('/')
-        || value.contains(['\\', '\0'])
+        || value.contains('\\')
+        || value.bytes().any(|byte| byte.is_ascii_control())
         || value
             .as_bytes()
             .get(..2)
@@ -805,7 +810,9 @@ fn is_safe_relative_path(value: &str) -> bool {
         .all(|component| !component.is_empty() && !matches!(component, "." | ".."))
 }
 
-fn is_lower_sha256(value: &str) -> bool {
+/// Return whether a digest is exactly 64 lowercase hexadecimal characters.
+#[must_use]
+pub fn is_lower_sha256_digest(value: &str) -> bool {
     value.len() == 64
         && value
             .bytes()

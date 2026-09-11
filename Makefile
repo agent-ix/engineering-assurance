@@ -8,6 +8,8 @@ EVAL_KEEP ?= 1
 EVAL_REPORT ?= evals/reports/$(EVAL_AGENT)-$(EVAL_RUN).json
 EVAL_REPORTS ?=
 EVAL_AGGREGATE_REPORT ?=
+EVAL_WORKSPACE_ROOT ?=
+EVAL_SOURCE_REVISION ?= $(shell git rev-parse HEAD)
 PYTHON ?= python3
 QUIRE ?= quire
 CARGO ?= cargo
@@ -62,8 +64,23 @@ agent-evals:
 		--report "$(EVAL_REPORT)"
 
 agent-evals-aggregate:
-	$(PYTHON) scripts/aggregate_agent_eval_reports.py \
+	@test -n "$(strip $(EVAL_REPORTS))" || { \
+		echo "EVAL_REPORTS is required for retained evaluation aggregation" >&2; \
+		exit 2; \
+	}
+	@test -n "$(strip $(EVAL_AGGREGATE_REPORT))" || { \
+		echo "EVAL_AGGREGATE_REPORT is required for retained evaluation aggregation" >&2; \
+		exit 2; \
+	}
+	@test -n "$(strip $(EVAL_WORKSPACE_ROOT))" || { \
+		echo "EVAL_WORKSPACE_ROOT is required for retained transcript confinement" >&2; \
+		exit 2; \
+	}
+	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet -- evaluation-aggregate \
+		--root . \
+		--workspace-root "$(EVAL_WORKSPACE_ROOT)" \
 		$(foreach report,$(EVAL_REPORTS),--report "$(report)") \
+		--source-revision "$(EVAL_SOURCE_REVISION)" \
 		--output "$(EVAL_AGGREGATE_REPORT)"
 
 integration-traceability:
