@@ -25,16 +25,18 @@ non-obvious assertion was verified by mutation rather than by inspection.
 
 ## Verdict
 
-**CONDITIONAL** — no high findings. Two low findings are recorded: one
-deliberate source-inspection test, and one scope item whose premise does not
-exist in this tree.
+**CONDITIONAL** — no high findings. One medium finding is closed in this
+change; three low findings are recorded, two of them open and bounded by the
+TC-076 containment audit.
 
 ## Findings
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-212 | low | `tc_130_hosted_ci_installs_the_version_the_reviewed_matrix_pins` is a source-inspection test (`include_str!` over `.github/workflows/ci.yml`). Accepted under rust-review §2: the fact being asserted — which version hosted CI installs — exists only as workflow text, so no runtime path can reach it. Compile-time inclusion was chosen over a runtime read so the assertion cannot silently examine the wrong file. | tests/compatibility_cli.rs:127 |
-| FND-213 | low | The issue's resource-bound scope item names `MAX_CORPUS_ENTRIES`, `MAX_CORPUS_DEPTH`, `compatibility_corpus_population_too_large`, `compatibility_corpus_tree_too_deep`, `compatibility_corpus_entry_unreadable` and a `walk` function. None exist anywhere in this tree at `bd6d2ce`. The two bounds that do exist, `MAX_INDEX_BYTES` and `MAX_RETAINED_PATH_BYTES`, were verified by mutation to fail their tests when removed or when the comparison is shifted. | src/compatibility_corpus.rs:48; src/compatibility_corpus.rs:45 |
+| FND-213 | medium | **Closed:** `walk` enforced `MAX_CORPUS_ENTRIES` and `MAX_CORPUS_DEPTH` with nothing driving either, so removing either check or shifting its comparison left the suite green. `walk` is now parameterized as `corpus_paths_within(entries, depth)`, the same treatment `load_index_within` already had, and both bounds are driven against the pinned corpus at exactly the bound and exactly one unit past it. An initial version of these cases built a synthetic tree in a temp directory; that was withdrawn because it tripped the TC-076 containment audit, which forbids the corpus reader's source from naming any mutating filesystem identifier. | tests/compatibility_corpus.rs:202; tests/compatibility_corpus.rs:238 |
+| FND-215 | low | **Open:** `compatibility_corpus_entry_unreadable` is still asserted nowhere. Its three sites are reached only when a path passes the regular-file metadata check and then fails to open, which on this platform requires changing a file's permissions. The TC-076 containment audit forbids `set_permissions` — and every other mutating identifier — anywhere in the corpus reader's source, and that audit is a deliberate gate rather than an obstacle to work around. The arm is an I/O failure rather than a resource bound, so it falls outside the issue's acceptance criterion. | tests/compatibility_corpus.rs:303; tests/source_audit.rs:407 |
+| FND-216 | low | **Open:** parameterizing the bounds adds a delegation nobody asserts — replacing `corpus_paths`'s `(MAX_CORPUS_ENTRIES, MAX_CORPUS_DEPTH)` arguments with `usize::MAX` leaves the suite green, because the pinned corpus sits comfortably inside both bounds and no reachable corpus exceeds them. This is the same residual the pre-existing `load_index_within` carries and the repository already accepted; closing it would need a corpus larger than the shipping bound, which nothing would be learned from. | tests/compatibility_corpus.rs:203 |
 | FND-214 | low | `compatibility-observe` is now a `make` target but is deliberately absent from `integration-gate` and hosted CI, because neither runs with `quire`, `quoin` and `ix-flow` all on PATH at their pinned versions. The Makefile records that reasoning rather than leaving it to be inferred. The drift this previously hid is now detected by TC-130 instead. | Makefile:35 |
 
 ## Checks applied
@@ -73,7 +75,7 @@ exist in this tree.
 
 ## Mutations run
 
-Fourteen mutations were applied and reverted; each failed at least one test.
+Nineteen mutations were applied and reverted. Eighteen failed at least one test; the one that survived is recorded as a finding rather than left unstated.
 
 | Mutation | Result |
 | --- | --- |
@@ -88,6 +90,11 @@ Fourteen mutations were applied and reverted; each failed at least one test.
 | Revert hosted CI to the unpinned Quire version | fails |
 | Shift the `MAX_INDEX_BYTES` comparison | fails |
 | Remove the `MAX_RETAINED_PATH_BYTES` bound | fails |
+| Remove the `MAX_CORPUS_ENTRIES` population check | fails |
+| Flip the population comparison `>=` to `>` | fails |
+| Remove the `MAX_CORPUS_DEPTH` check | fails |
+| Flip the depth comparison `>` to `>=` | fails |
+| Replace `corpus_paths`'s shipping bounds with `usize::MAX` | **survives** — recorded as FND-216 |
 | Report a parent traversal as a current-directory component | fails |
 | Report a NUL path as a backslash path | fails |
 | Swap the two blank-observation refusals | fails |
