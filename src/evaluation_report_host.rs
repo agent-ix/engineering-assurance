@@ -16,8 +16,8 @@ use cap_std::{
 };
 use engineering_assurance::{
     evaluation::{
-        EvaluationEnvelope, EvaluationFailure, EvaluationHost, aggregate_evaluations,
-        is_immutable_revision,
+        EvaluationEnvelope, EvaluationFailure, EvaluationHost, EvaluationScenario,
+        aggregate_evaluations, is_immutable_revision,
     },
     evaluation_reports::{DecodedEvaluationSample, MAX_CLI_REPORT_BYTES, decode_cli_eval_report},
 };
@@ -54,6 +54,8 @@ pub(crate) enum EvaluationReportHostError {
     ArtifactInvalid,
     #[error("evaluation aggregate artifact does not match retained reports")]
     ArtifactMismatch,
+    #[error("evaluation aggregate artifact is not complete release evidence")]
+    ArtifactIncomplete,
 }
 
 impl EvaluationReportHostError {
@@ -70,8 +72,23 @@ impl EvaluationReportHostError {
             Self::ArtifactReadFailed => "evaluation_report_artifact_read_failed",
             Self::ArtifactInvalid => "evaluation_report_artifact_invalid",
             Self::ArtifactMismatch => "evaluation_report_artifact_mismatch",
+            Self::ArtifactIncomplete => "evaluation_report_artifact_incomplete",
         }
     }
+}
+
+/// The governing identities retained by complete evaluation evidence.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct RetainedGoverning {
+    pub(crate) module: engineering_assurance::evidence::VersionIdentity,
+    pub(crate) plugin: engineering_assurance::evidence::VersionIdentity,
+    pub(crate) skill: engineering_assurance::evidence::VersionIdentity,
+    pub(crate) quire: engineering_assurance::evidence::VersionIdentity,
+    pub(crate) quoin: engineering_assurance::evidence::VersionIdentity,
+    pub(crate) ix_flow: engineering_assurance::evidence::VersionIdentity,
+    pub(crate) schema: engineering_assurance::evidence::VersionIdentity,
+    pub(crate) producer: engineering_assurance::evidence::VersionIdentity,
+    pub(crate) workflows: BTreeMap<String, engineering_assurance::evidence::VersionIdentity>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -276,6 +293,131 @@ pub(crate) fn verify_artifact(
     } else {
         Err(EvaluationReportHostError::ArtifactMismatch)
     }
+}
+
+/// Verify that an artifact is byte-reproducible and satisfies the complete
+/// release-evidence population.  The returned identities are intentionally
+/// derived from the retained reports, so the integration host can compare them
+/// to the current governed files and selected executables without reparsing
+/// untyped JSON.
+pub(crate) fn verify_complete_artifact(
+    repository_root: &Path,
+    workspace_root: &Path,
+    artifact_path: &Path,
+    expected_source_revision: &str,
+) -> Result<RetainedGoverning, EvaluationReportHostError> {
+    verify_artifact(
+        repository_root,
+        workspace_root,
+        artifact_path,
+        expected_source_revision,
+    )?;
+    let (_, repository) = open_root(
+        repository_root,
+        EvaluationReportHostError::RepositoryRootInvalid,
+    )?;
+    let Some(relative) = safe_relative_text(artifact_path) else {
+        return Err(EvaluationReportHostError::ArtifactPathInvalid);
+    };
+    let bytes = read_rooted_file(&repository, Path::new(relative), MAX_CLI_REPORT_BYTES)
+        .map_err(|_| EvaluationReportHostError::ArtifactReadFailed)?;
+    let artifact: EvaluationAggregateArtifact =
+        serde_json::from_slice(&bytes).map_err(|_| EvaluationReportHostError::ArtifactInvalid)?;
+    if artifact.revision != ARTIFACT_REVISION
+        || artifact.source_revision != expected_source_revision
+        || !artifact.ok
+        || !artifact.failures.is_empty()
+        || artifact.required_cells != EvaluationHost::ALL.len() * EvaluationScenario::ALL.len()
+        || artifact.complete_cells != artifact.required_cells
+        || artifact.models.len() != EvaluationHost::ALL.len()
+        || EvaluationHost::ALL.iter().any(|host| {
+            artifact
+                .models
+                .get(host.as_str())
+                .is_none_or(String::is_empty)
+        })
+    {
+        return Err(EvaluationReportHostError::ArtifactIncomplete);
+    }
+    retained_governing(&repository, &artifact.reports, expected_source_revision)
+}
+
+fn retained_governing(
+    repository: &Dir,
+    identities: &[EvaluationReportIdentity],
+    expected_source_revision: &str,
+) -> Result<RetainedGoverning, EvaluationReportHostError> {
+    let mut retained: Option<RetainedGoverning> = None;
+    for identity in identities {
+        let bytes = read_rooted_file(repository, Path::new(&identity.path), MAX_CLI_REPORT_BYTES)
+            .map_err(|_| EvaluationReportHostError::ArtifactMismatch)?;
+        if sha256_hex(&bytes) != identity.digest {
+            return Err(EvaluationReportHostError::ArtifactMismatch);
+        }
+        let report = decode_cli_eval_report(&bytes, expected_source_revision)
+            .map_err(|_| EvaluationReportHostError::ArtifactMismatch)?;
+        for sample in report.samples() {
+            let DecodedEvaluationSample::Retained { envelope, .. } = sample else {
+                continue;
+            };
+            let Some(governing) = envelope.governing.as_ref() else {
+                return Err(EvaluationReportHostError::ArtifactMismatch);
+            };
+            let candidate = RetainedGoverning {
+                module: governing.module.clone(),
+                plugin: governing.plugin.clone(),
+                skill: governing.skill.clone(),
+                quire: governing.quire.clone(),
+                quoin: governing.quoin.clone(),
+                ix_flow: governing.ix_flow.clone(),
+                schema: governing.schema.clone(),
+                producer: governing.producer.clone(),
+                workflows: BTreeMap::from([(
+                    governing.workflow.name.clone(),
+                    governing.workflow.clone(),
+                )]),
+            };
+            match retained.as_mut() {
+                None => retained = Some(candidate),
+                Some(current) => {
+                    if (
+                        current.module.clone(),
+                        current.plugin.clone(),
+                        current.skill.clone(),
+                        current.quire.clone(),
+                        current.quoin.clone(),
+                        current.ix_flow.clone(),
+                        current.schema.clone(),
+                        current.producer.clone(),
+                    ) != (
+                        candidate.module,
+                        candidate.plugin,
+                        candidate.skill,
+                        candidate.quire,
+                        candidate.quoin,
+                        candidate.ix_flow,
+                        candidate.schema,
+                        candidate.producer,
+                    ) {
+                        return Err(EvaluationReportHostError::ArtifactMismatch);
+                    }
+                    match current.workflows.get(&governing.workflow.name) {
+                        Some(existing) if existing != &governing.workflow => {
+                            return Err(EvaluationReportHostError::ArtifactMismatch);
+                        }
+                        Some(_) => {}
+                        None => {
+                            current.workflows.insert(
+                                governing.workflow.name.clone(),
+                                governing.workflow.clone(),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    retained.ok_or(EvaluationReportHostError::ArtifactIncomplete)
 }
 
 fn retained_aggregate_failures(failures: &[EvaluationFailure]) -> Vec<String> {

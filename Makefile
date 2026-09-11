@@ -84,7 +84,8 @@ agent-evals-aggregate:
 		--output "$(EVAL_AGGREGATE_REPORT)"
 
 integration-traceability:
-	$(PYTHON) scripts/check_integration_evidence.py \
+	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet -- integration-evidence \
+		--root . \
 		--quire "$(QUIRE)" \
 		--traceability-only
 
@@ -93,9 +94,15 @@ integration-evidence:
 		echo "EVAL_AGGREGATE_REPORT is required for real-agent release evidence" >&2; \
 		exit 2; \
 	}
-	$(PYTHON) scripts/check_integration_evidence.py \
+	@test -n "$(strip $(EVAL_WORKSPACE_ROOT))" || { \
+		echo "EVAL_WORKSPACE_ROOT is required for retained transcript confinement" >&2; \
+		exit 2; \
+	}
+	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet -- integration-evidence \
+		--root . \
 		--quire "$(QUIRE)" \
-		--aggregate "$(EVAL_AGGREGATE_REPORT)"
+		--artifact "$(EVAL_AGGREGATE_REPORT)" \
+		--workspace-root "$(EVAL_WORKSPACE_ROOT)"
 
 integration-gate: lint test package-audit validate-docs rust-foundation-gate integration-traceability
 
