@@ -11,6 +11,7 @@ mod compatibility_observer;
 mod content_rights_host;
 mod evaluation_report_host;
 mod integration_evidence_host;
+mod manifest_host;
 mod onboarding_host;
 mod package_archive;
 mod package_audit_host;
@@ -45,6 +46,7 @@ const CONTENT_RIGHTS_TREE_CAPABILITY: &str = "content-rights-tree";
 const EVALUATION_AGGREGATE_CAPABILITY: &str = "evaluation-aggregate";
 const EVALUATION_AGGREGATE_VERIFY_CAPABILITY: &str = "evaluation-aggregate-verify";
 const INTEGRATION_EVIDENCE_CAPABILITY: &str = "integration-evidence";
+const MANIFEST_VALIDATE_CAPABILITY: &str = "manifest-validate";
 const ONBOARDING_CAPABILITY: &str = "onboarding";
 const PACKAGE_AUDIT_CAPABILITY: &str = "package-audit";
 const PACKAGE_LIFECYCLE_CAPABILITY: &str = "package-lifecycle";
@@ -119,6 +121,7 @@ fn command() -> Command {
                 ),
         )
         .subcommand(integration_evidence_command())
+        .subcommand(manifest_validate_command())
         .subcommand(
             Command::new(ONBOARDING_CAPABILITY)
                 .about("Inventory a selected repository and produce a bounded onboarding result"),
@@ -224,6 +227,13 @@ fn integration_evidence_command() -> Command {
         )
 }
 
+fn manifest_validate_command() -> Command {
+    Command::new(MANIFEST_VALIDATE_CAPABILITY)
+        .about("Qualify the Engineering Assurance module against an explicit module root")
+        .arg(required_path_arg("root"))
+        .arg(required_path_arg("module-root"))
+}
+
 fn package_root_command(name: &'static str, about: &'static str) -> Command {
     Command::new(name)
         .about(about)
@@ -257,12 +267,51 @@ fn main() -> ExitCode {
             run_evaluation_aggregate_verify(arguments)
         }
         Some((INTEGRATION_EVIDENCE_CAPABILITY, arguments)) => run_integration_evidence(arguments),
+        Some((MANIFEST_VALIDATE_CAPABILITY, arguments)) => run_manifest_validate(arguments),
         Some((ONBOARDING_CAPABILITY, _)) => run_onboarding(),
         Some((PACKAGE_AUDIT_CAPABILITY, arguments)) => run_package_audit(arguments),
         Some((WORKFLOW_INVARIANTS_CAPABILITY, _)) => run_workflow_invariants(),
         Some((WORKFLOW_HOST_CAPABILITY, _)) => run_workflow_host(),
         Some((PACKAGE_LIFECYCLE_CAPABILITY, arguments)) => run_package_lifecycle(arguments),
         Some(_) | None => ExitCode::from(2),
+    }
+}
+
+fn run_manifest_validate(arguments: &ArgMatches) -> ExitCode {
+    let (Some(root), Some(module_root)) = (
+        arguments.get_one::<PathBuf>("root"),
+        arguments.get_one::<PathBuf>("module-root"),
+    ) else {
+        return emit_error(
+            MANIFEST_VALIDATE_CAPABILITY,
+            "manifest_validate_arguments_invalid",
+            "manifest-validate requires repository and module roots",
+        );
+    };
+    let result = match manifest_host::execute(root, module_root) {
+        Ok(result) => result,
+        Err(error) => {
+            return emit_error(
+                MANIFEST_VALIDATE_CAPABILITY,
+                error.code(),
+                &error.to_string(),
+            );
+        }
+    };
+    let exit = result.exit_code();
+    match manifest_host::to_json_line(&result) {
+        Ok(encoded) => match write_stdout(&encoded) {
+            Ok(()) => exit,
+            Err(error) => {
+                eprintln!("failed to write manifest-validate result: {error}");
+                ExitCode::from(2)
+            }
+        },
+        Err(error) => emit_error(
+            MANIFEST_VALIDATE_CAPABILITY,
+            error.code(),
+            &error.to_string(),
+        ),
     }
 }
 
