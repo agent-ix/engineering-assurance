@@ -30,6 +30,7 @@ use crate::{
 
 const PACKAGE_PROCESS_TIMEOUT: Duration = Duration::from_secs(180);
 const MAX_PROCESS_OUTPUT_BYTES: usize = 8_388_608;
+const MAX_ROOT_ENTRIES: usize = 4_096;
 const DISTRIBUTION_VERSION: &str = "0.2.0";
 const PRIVATE_CLASSIFIER: &[u8] = b"Classifier: Private :: Do Not Upload\n";
 const ROOT_DATA_FILES: [&str; 11] = [
@@ -75,6 +76,10 @@ pub(crate) enum PackageAuditHostError {
     ProcessObservationFailed,
     #[error("package-audit child process failed")]
     ProcessFailed,
+    #[error("package-audit repository entry population cannot be bounded")]
+    RootPopulationInvalid,
+    #[error("package-audit child process changed the repository entry population")]
+    RootOutputChanged,
     #[error("package-audit archive population is missing or ambiguous")]
     ArchiveSelectionInvalid,
     #[error(transparent)]
@@ -112,6 +117,8 @@ impl PackageAuditHostError {
             Self::ProcessOutputTooLarge => "package_audit_process_output_too_large",
             Self::ProcessObservationFailed => "package_audit_process_observation_failed",
             Self::ProcessFailed => "package_audit_process_failed",
+            Self::RootPopulationInvalid => "package_audit_root_population_invalid",
+            Self::RootOutputChanged => "package_audit_root_output_changed",
             Self::ArchiveSelectionInvalid => "package_audit_archive_selection_invalid",
             Self::Archive(error) => match error {
                 ArchiveError::ArchiveInvalid => "package_audit_archive_invalid",
@@ -197,16 +204,15 @@ pub(crate) fn execute(root: &Path) -> Result<PackageAuditResult, PackageAuditHos
     validate_wheel_identity(&root, &wheel)?;
 
     let wheel_install = output.join("wheel-install");
-    install_wheel(&root, &wheel_path, &wheel_install)?;
+    install_wheel(&root, &wheel_path, &wheel_install, output)?;
     let wheel_bundle =
         package_install::inspect(&wheel_install, &wheel_install.join("engineering_assurance"))?;
 
     let npm_report = build_npm(&root, output)?;
     let npm_expected = npm_allowlist(&root)?;
-    audit_membership(&npm_expected, &npm_report)?;
     let npm_path = select_archive(output, "tgz")?;
     let npm = package_archive::read_npm(&npm_path)?;
-    audit_membership(&npm_expected, &npm.names())?;
+    audit_npm_membership(&npm_expected, &npm_report, &npm)?;
     audit_content_rights(&npm, &protected_tokens)?;
 
     let npm_install = output.join("npm-install");
@@ -245,7 +251,41 @@ fn selected_root(root: &Path) -> Result<PathBuf, PackageAuditHostError> {
     if module.file_type().is_symlink() || !module.is_dir() {
         return Err(PackageAuditHostError::RootInvalid);
     }
+    package_install::inspect_tree(&root.join("engineering_assurance"))
+        .map_err(|_| PackageAuditHostError::RootInvalid)?;
+    let fixed_sources = ROOT_DATA_FILES
+        .into_iter()
+        .chain(
+            NPM_ROOT_FILES
+                .into_iter()
+                .filter(|source| *source != "manifest.yaml"),
+        )
+        .chain(["setup.cfg"])
+        .collect::<BTreeSet<_>>();
+    for source in fixed_sources {
+        validate_regular_source(&root, source)?;
+    }
     Ok(root)
+}
+
+fn validate_regular_source(root: &Path, relative: &str) -> Result<(), PackageAuditHostError> {
+    let mut current = root.to_owned();
+    let mut components = Path::new(relative).components().peekable();
+    while let Some(component) = components.next() {
+        let std::path::Component::Normal(component) = component else {
+            return Err(PackageAuditHostError::RootInvalid);
+        };
+        current.push(component);
+        let metadata =
+            fs::symlink_metadata(&current).map_err(|_| PackageAuditHostError::RootInvalid)?;
+        if metadata.file_type().is_symlink()
+            || (components.peek().is_some() && !metadata.is_dir())
+            || (components.peek().is_none() && !metadata.is_file())
+        {
+            return Err(PackageAuditHostError::RootInvalid);
+        }
+    }
+    Ok(())
 }
 
 fn build_wheel(root: &Path, output: &Path) -> Result<(), PackageAuditHostError> {
@@ -259,13 +299,16 @@ fn build_wheel(root: &Path, output: &Path) -> Result<(), PackageAuditHostError> 
         OsString::from("--wheel-dir"),
         output.as_os_str().to_owned(),
     ];
-    run_required(OsStr::new("python3"), &arguments, root, &[]).map(|_| ())
+    let cache = output.join("pip-cache");
+    let environment = package_temporary_environment(output, Some(("PIP_CACHE_DIR", &cache)));
+    run_required_confined(OsStr::new("python3"), &arguments, root, &environment).map(|_| ())
 }
 
 fn install_wheel(
     root: &Path,
     wheel: &Path,
     destination: &Path,
+    output: &Path,
 ) -> Result<(), PackageAuditHostError> {
     let arguments = vec![
         OsString::from("-m"),
@@ -277,12 +320,15 @@ fn install_wheel(
         destination.as_os_str().to_owned(),
         wheel.as_os_str().to_owned(),
     ];
-    run_required(OsStr::new("python3"), &arguments, root, &[]).map(|_| ())
+    let cache = output.join("pip-cache");
+    let environment = package_temporary_environment(output, Some(("PIP_CACHE_DIR", &cache)));
+    run_required_confined(OsStr::new("python3"), &arguments, root, &environment).map(|_| ())
 }
 
 fn build_npm(root: &Path, output: &Path) -> Result<Vec<String>, PackageAuditHostError> {
     package_host::require_staged_destinations_absent(root)
         .map_err(|_| PackageAuditHostError::NpmStagingInvalid)?;
+    let root_before = root_population(root)?;
     let arguments = vec![
         OsString::from("pack"),
         OsString::from("--json"),
@@ -290,16 +336,10 @@ fn build_npm(root: &Path, output: &Path) -> Result<Vec<String>, PackageAuditHost
         output.as_os_str().to_owned(),
     ];
     let cache = output.join("npm-cache");
-    let environment = vec![
-        (
-            OsString::from("npm_config_cache"),
-            cache.as_os_str().to_owned(),
-        ),
-        (OsString::from("CARGO_BUILD_JOBS"), OsString::from("2")),
-    ];
+    let mut environment = package_temporary_environment(output, Some(("npm_config_cache", &cache)));
+    environment.push((OsString::from("CARGO_BUILD_JOBS"), OsString::from("2")));
     let process = invoke(OsStr::new("npm"), &arguments, root, &environment);
-    package_host::clean(root).map_err(|_| PackageAuditHostError::NpmStagingCleanupFailed)?;
-    let process = process?;
+    let process = finish_npm_pack(root, &root_before, process)?;
     if !process.status.success() {
         return Err(PackageAuditHostError::ProcessFailed);
     }
@@ -321,20 +361,20 @@ fn install_npm(
         archive.as_os_str().to_owned(),
     ];
     let cache = output.join("npm-cache");
-    let environment = vec![(
-        OsString::from("npm_config_cache"),
-        cache.as_os_str().to_owned(),
-    )];
-    run_required(OsStr::new("npm"), &arguments, root, &environment).map(|_| ())
+    let environment = package_temporary_environment(output, Some(("npm_config_cache", &cache)));
+    run_required_confined(OsStr::new("npm"), &arguments, root, &environment).map(|_| ())
 }
 
-fn run_required(
+fn run_required_confined(
     executable: &OsStr,
     arguments: &[OsString],
     root: &Path,
     environment: &[(OsString, OsString)],
 ) -> Result<process_host::CompletedProcess, PackageAuditHostError> {
-    let process = invoke(executable, arguments, root, environment)?;
+    let before = root_population(root)?;
+    let process = invoke(executable, arguments, root, environment);
+    ensure_root_unchanged(root, &before)?;
+    let process = process?;
     if !process.status.success() {
         return Err(PackageAuditHostError::ProcessFailed);
     }
@@ -360,12 +400,87 @@ fn invoke(
         &arguments,
         Some(root),
         &environment,
+        &[OsStr::new("ASSURANCE_PROTECTED_TOKENS")],
         ProcessLimits {
             timeout: PACKAGE_PROCESS_TIMEOUT,
             max_output_bytes: MAX_PROCESS_OUTPUT_BYTES,
         },
     )
     .map_err(|error| map_process_error(&error))
+}
+
+fn package_temporary_environment(
+    output: &Path,
+    cache: Option<(&str, &Path)>,
+) -> Vec<(OsString, OsString)> {
+    let mut environment = ["TMPDIR", "TMP", "TEMP"]
+        .into_iter()
+        .map(|name| (OsString::from(name), output.as_os_str().to_owned()))
+        .collect::<Vec<_>>();
+    if let Some((name, path)) = cache {
+        environment.push((OsString::from(name), path.as_os_str().to_owned()));
+    }
+    environment
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum RootEntryKind {
+    Directory,
+    File,
+    SymbolicLink,
+    Other,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct RootEntry {
+    name: OsString,
+    kind: RootEntryKind,
+}
+
+fn root_population(root: &Path) -> Result<Vec<RootEntry>, PackageAuditHostError> {
+    let entries = fs::read_dir(root).map_err(|_| PackageAuditHostError::RootPopulationInvalid)?;
+    let mut population = Vec::new();
+    for entry in entries {
+        if population.len() >= MAX_ROOT_ENTRIES {
+            return Err(PackageAuditHostError::RootPopulationInvalid);
+        }
+        let entry = entry.map_err(|_| PackageAuditHostError::RootPopulationInvalid)?;
+        let file_type = entry
+            .file_type()
+            .map_err(|_| PackageAuditHostError::RootPopulationInvalid)?;
+        let kind = if file_type.is_file() {
+            RootEntryKind::File
+        } else if file_type.is_dir() {
+            RootEntryKind::Directory
+        } else if file_type.is_symlink() {
+            RootEntryKind::SymbolicLink
+        } else {
+            RootEntryKind::Other
+        };
+        population.push(RootEntry {
+            name: entry.file_name(),
+            kind,
+        });
+    }
+    population.sort();
+    Ok(population)
+}
+
+fn ensure_root_unchanged(root: &Path, before: &[RootEntry]) -> Result<(), PackageAuditHostError> {
+    if root_population(root)? != before {
+        return Err(PackageAuditHostError::RootOutputChanged);
+    }
+    Ok(())
+}
+
+fn finish_npm_pack(
+    root: &Path,
+    root_before: &[RootEntry],
+    process: Result<process_host::CompletedProcess, PackageAuditHostError>,
+) -> Result<process_host::CompletedProcess, PackageAuditHostError> {
+    package_host::clean(root).map_err(|_| PackageAuditHostError::NpmStagingCleanupFailed)?;
+    ensure_root_unchanged(root, root_before)?;
+    process
 }
 
 fn map_process_error(error: &ProcessError) -> PackageAuditHostError {
@@ -477,6 +592,15 @@ fn audit_membership(expected: &[String], observed: &[String]) -> Result<(), Pack
     Ok(())
 }
 
+fn audit_npm_membership(
+    expected: &[String],
+    report: &[String],
+    archive: &ArchiveSnapshot,
+) -> Result<(), PackageAuditHostError> {
+    audit_membership(expected, report)?;
+    audit_membership(expected, &archive.names())
+}
+
 fn audit_content_rights(
     archive: &ArchiveSnapshot,
     protected_tokens: &[String],
@@ -559,8 +683,24 @@ fn parse_npm_report(bytes: &[u8]) -> Result<Vec<String>, PackageAuditHostError> 
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
+    use crate::package_archive::ArchiveFile;
     use ix_trace_rs::trace;
+
+    fn lifecycle_root() -> tempfile::TempDir {
+        let directory = tempfile::tempdir().expect("temporary directory must be available");
+        let module = directory.path().join("engineering_assurance");
+        for name in ["contracts", "fixtures", "schemas", "skeletons"] {
+            fs::create_dir_all(module.join(name)).expect("fixture directory must be created");
+        }
+        fs::write(module.join("manifest.yaml"), b"name: fixture\n")
+            .expect("fixture manifest must be written");
+        fs::write(module.join("compatibility-matrix.json"), b"{}\n")
+            .expect("fixture matrix must be written");
+        directory
+    }
 
     #[test]
     #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
@@ -588,6 +728,101 @@ mod tests {
                 limit: 1
             }),
             PackageAuditHostError::ProcessOutputTooLarge
+        ));
+    }
+
+    #[test]
+    #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
+    fn npm_report_and_archive_membership_are_independent_gates() {
+        let expected = vec!["one".to_owned()];
+        let matching = ArchiveSnapshot {
+            files: vec![ArchiveFile {
+                path: "one".to_owned(),
+                bytes: Vec::new(),
+            }],
+        };
+        let mismatching = ArchiveSnapshot {
+            files: vec![ArchiveFile {
+                path: "other".to_owned(),
+                bytes: Vec::new(),
+            }],
+        };
+        assert!(audit_npm_membership(&expected, &["one".to_owned()], &matching).is_ok());
+        assert!(matches!(
+            audit_npm_membership(&expected, &["other".to_owned()], &matching),
+            Err(PackageAuditHostError::MembershipMismatch)
+        ));
+        assert!(matches!(
+            audit_npm_membership(&expected, &["one".to_owned()], &mismatching),
+            Err(PackageAuditHostError::MembershipMismatch)
+        ));
+    }
+
+    #[test]
+    #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
+    fn archive_content_rights_gate_rejects_a_policy_finding() {
+        let denied = ["legal", " advice"].concat();
+        let archive = ArchiveSnapshot {
+            files: vec![ArchiveFile {
+                path: "candidate.md".to_owned(),
+                bytes: denied.into_bytes(),
+            }],
+        };
+        assert!(matches!(
+            audit_content_rights(&archive, &[]),
+            Err(PackageAuditHostError::ContentRightsRefused)
+        ));
+    }
+
+    #[test]
+    #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
+    fn failed_npm_pack_still_cleans_only_the_preflighted_staging_population() {
+        let directory = lifecycle_root();
+        let before = root_population(directory.path()).expect("fixture root must be inspectable");
+        package_host::stage(directory.path()).expect("fixture staging must succeed");
+        let result = finish_npm_pack(
+            directory.path(),
+            &before,
+            Err(PackageAuditHostError::ProcessFailed),
+        );
+        assert!(matches!(result, Err(PackageAuditHostError::ProcessFailed)));
+        assert_eq!(
+            root_population(directory.path()).expect("cleaned root must be inspectable"),
+            before
+        );
+    }
+
+    #[test]
+    #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
+    fn child_created_repository_output_fails_confinement() {
+        let directory = tempfile::tempdir().expect("temporary directory must be available");
+        let arguments = [OsString::from("-c"), OsString::from("touch escaped-output")];
+        let environment = package_temporary_environment(directory.path(), None);
+        let result =
+            run_required_confined(OsStr::new("sh"), &arguments, directory.path(), &environment);
+        assert!(matches!(
+            result,
+            Err(PackageAuditHostError::RootOutputChanged)
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
+    fn fixed_package_sources_refuse_linked_path_components_before_build() {
+        use std::os::unix::fs::symlink;
+
+        let directory = tempfile::tempdir().expect("temporary directory must be available");
+        fs::create_dir(directory.path().join("real")).expect("fixture directory must be created");
+        fs::write(directory.path().join("real/source.txt"), b"source")
+            .expect("fixture source must be written");
+        assert!(validate_regular_source(directory.path(), "real/source.txt").is_ok());
+
+        symlink("real", directory.path().join("linked"))
+            .expect("fixture directory link must be created");
+        assert!(matches!(
+            validate_regular_source(directory.path(), "linked/source.txt"),
+            Err(PackageAuditHostError::RootInvalid)
         ));
     }
 }

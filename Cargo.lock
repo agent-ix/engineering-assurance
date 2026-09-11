@@ -232,6 +232,7 @@ dependencies = [
  "ix-trace-rs",
  "jsonschema",
  "regex",
+ "rustix",
  "serde",
  "serde_json",
  "sha2",
