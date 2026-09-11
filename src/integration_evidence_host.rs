@@ -701,4 +701,103 @@ mod tests {
             Err(IntegrationEvidenceError::CoverageInvalid)
         ));
     }
+
+    #[cfg(unix)]
+    fn runtime_package(marker: &str) -> tempfile::TempDir {
+        use std::os::unix::fs::PermissionsExt;
+
+        let package = tempfile::tempdir().expect("runtime package fixture must be creatable");
+        let bin = package.path().join("bin");
+        let dist = package.path().join("dist");
+        fs::create_dir_all(&bin).expect("launcher directory must be creatable");
+        fs::create_dir_all(&dist).expect("runtime directory must be creatable");
+        fs::write(
+            package.path().join("package.json"),
+            br#"{"name":"ix-flow","version":"1.2.3"}"#,
+        )
+        .expect("runtime manifest must be writable");
+        fs::write(dist.join("runtime.js"), b"module.exports = 1;\n")
+            .expect("runtime file must be writable");
+        let launcher = bin.join("ix-flow");
+        fs::write(
+            &launcher,
+            format!("#!/bin/sh\n# {marker}\necho 'ix-flow 1.2.3'\n").as_bytes(),
+        )
+        .expect("launcher must be writable");
+        fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755))
+            .expect("launcher must be executable");
+        package
+    }
+
+    #[cfg(unix)]
+    fn runtime_digest(package: &tempfile::TempDir) -> (String, String) {
+        let path =
+            env::join_paths([package.path().join("bin")]).expect("fixture launcher path must join");
+        let identity = runtime_identity("ix-flow", &path).expect("fixture runtime must resolve");
+        (identity.version, identity.digest)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[trace("TC-050", "FR-006-AC-6")]
+    fn tc_050_runtime_identity_covers_the_manifest_launcher_and_dist_runtime() {
+        // Pinning a runtime by its launcher alone would let the code the agents
+        // actually execute change while the recorded identity stayed still,
+        // which is the failure this identity exists to prevent. Each mutation
+        // below leaves the reported version untouched and changes one governed
+        // part of the package, so an identity narrowed back to the launcher or
+        // the manifest fails here instead of silently certifying a different
+        // runtime.
+        let package = runtime_package("original");
+        let (version, baseline) = runtime_digest(&package);
+        assert_eq!(version, "ix-flow 1.2.3");
+        assert_eq!(
+            runtime_digest(&package),
+            (version.clone(), baseline.clone())
+        );
+
+        fs::write(
+            package.path().join("dist/runtime.js"),
+            b"module.exports = 2;\n",
+        )
+        .expect("runtime file must be rewritable");
+        let (changed_version, changed_runtime) = runtime_digest(&package);
+        assert_eq!(changed_version, version);
+        assert_ne!(changed_runtime, baseline);
+
+        fs::write(
+            package.path().join("dist/added.js"),
+            b"module.exports = 3;\n",
+        )
+        .expect("added runtime file must be writable");
+        let (_, extended_runtime) = runtime_digest(&package);
+        assert_ne!(extended_runtime, changed_runtime);
+
+        let manifest = package.path().join("package.json");
+        fs::write(
+            &manifest,
+            br#"{"name":"ix-flow","version":"1.2.3","main":"dist/runtime.js"}"#,
+        )
+        .expect("runtime manifest must be rewritable");
+        let (_, changed_manifest) = runtime_digest(&package);
+        assert_ne!(changed_manifest, extended_runtime);
+
+        let launcher = runtime_package("original");
+        let (_, launcher_baseline) = runtime_digest(&launcher);
+        let relaunched = runtime_package("rewritten");
+        let (relaunched_version, relaunched_digest) = runtime_digest(&relaunched);
+        assert_eq!(relaunched_version, version);
+        assert_ne!(relaunched_digest, launcher_baseline);
+
+        // A package with no runtime directory is refused outright rather than
+        // pinned to whatever the launcher happens to be.
+        fs::remove_dir_all(package.path().join("dist"))
+            .expect("runtime directory must be removable");
+        let path =
+            env::join_paths([package.path().join("bin")]).expect("fixture launcher path must join");
+        assert!(matches!(
+            runtime_identity("ix-flow", &path),
+            Err(IntegrationEvidenceError::GoverningRuntimeInvalid)
+        ));
+    }
 }
