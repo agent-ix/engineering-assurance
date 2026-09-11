@@ -21,7 +21,7 @@ use engineering_assurance::{
     },
     evaluation_reports::{DecodedEvaluationSample, MAX_CLI_REPORT_BYTES, decode_cli_eval_report},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -46,6 +46,14 @@ pub(crate) enum EvaluationReportHostError {
     OutputWriteFailed,
     #[error("evaluation aggregate artifact could not be encoded")]
     ArtifactEncodingFailed,
+    #[error("evaluation aggregate artifact path is invalid")]
+    ArtifactPathInvalid,
+    #[error("evaluation aggregate artifact could not be read")]
+    ArtifactReadFailed,
+    #[error("evaluation aggregate artifact is invalid")]
+    ArtifactInvalid,
+    #[error("evaluation aggregate artifact does not match retained reports")]
+    ArtifactMismatch,
 }
 
 impl EvaluationReportHostError {
@@ -58,19 +66,25 @@ impl EvaluationReportHostError {
             Self::OutputPathInvalid => "evaluation_report_output_path_invalid",
             Self::OutputWriteFailed => "evaluation_report_output_write_failed",
             Self::ArtifactEncodingFailed => "evaluation_report_artifact_encoding_failed",
+            Self::ArtifactPathInvalid => "evaluation_report_artifact_path_invalid",
+            Self::ArtifactReadFailed => "evaluation_report_artifact_read_failed",
+            Self::ArtifactInvalid => "evaluation_report_artifact_invalid",
+            Self::ArtifactMismatch => "evaluation_report_artifact_mismatch",
         }
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct EvaluationReportIdentity {
     path: String,
     digest: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct EvaluationAggregateArtifact {
-    revision: &'static str,
+    revision: String,
     generated_at: String,
     source_revision: String,
     reports: Vec<EvaluationReportIdentity>,
@@ -200,7 +214,7 @@ pub(crate) fn execute(
     let mut failures = diagnostics;
     failures.extend(retained_aggregate_failures(&aggregate.failures));
     Ok(EvaluationAggregateArtifact {
-        revision: ARTIFACT_REVISION,
+        revision: ARTIFACT_REVISION.to_owned(),
         generated_at,
         source_revision: source_revision.to_owned(),
         reports: identities,
@@ -211,6 +225,57 @@ pub(crate) fn execute(
         ok: failures.is_empty() && aggregate.ok,
         failures,
     })
+}
+
+/// Recompute a retained aggregate from its referenced reports and transcripts.
+///
+/// The caller supplies the expected immutable source revision instead of relying
+/// on an ambient checkout. Successful verification proves every retained report
+/// byte, transcript byte, host model, failed attempt, and aggregate field still
+/// corresponds to the artifact.
+pub(crate) fn verify_artifact(
+    repository_root: &Path,
+    workspace_root: &Path,
+    artifact_path: &Path,
+    expected_source_revision: &str,
+) -> Result<(), EvaluationReportHostError> {
+    if !is_immutable_revision(expected_source_revision) {
+        return Err(EvaluationReportHostError::SourceRevisionInvalid);
+    }
+    let (_, repository) = open_root(
+        repository_root,
+        EvaluationReportHostError::RepositoryRootInvalid,
+    )?;
+    let Some(relative) = safe_relative_text(artifact_path) else {
+        return Err(EvaluationReportHostError::ArtifactPathInvalid);
+    };
+    let bytes = read_rooted_file(&repository, Path::new(relative), MAX_CLI_REPORT_BYTES)
+        .map_err(|_| EvaluationReportHostError::ArtifactReadFailed)?;
+    let artifact: EvaluationAggregateArtifact =
+        serde_json::from_slice(&bytes).map_err(|_| EvaluationReportHostError::ArtifactInvalid)?;
+    if artifact.revision != ARTIFACT_REVISION
+        || artifact.source_revision != expected_source_revision
+        || artifact.reports.len() > MAX_REPORT_COLLECTION
+    {
+        return Err(EvaluationReportHostError::ArtifactInvalid);
+    }
+    let report_paths = artifact
+        .reports
+        .iter()
+        .map(|identity| PathBuf::from(&identity.path))
+        .collect::<Vec<_>>();
+    let recomputed = execute(
+        repository_root,
+        workspace_root,
+        &report_paths,
+        expected_source_revision,
+        artifact.generated_at.clone(),
+    )?;
+    if recomputed == artifact {
+        Ok(())
+    } else {
+        Err(EvaluationReportHostError::ArtifactMismatch)
+    }
 }
 
 fn retained_aggregate_failures(failures: &[EvaluationFailure]) -> Vec<String> {

@@ -36,6 +36,7 @@ const ERROR_PROTOCOL: &str = "engineering-assurance.error/v1";
 const COMPATIBILITY_CAPABILITY: &str = "compatibility";
 const CONTENT_RIGHTS_TREE_CAPABILITY: &str = "content-rights-tree";
 const EVALUATION_AGGREGATE_CAPABILITY: &str = "evaluation-aggregate";
+const EVALUATION_AGGREGATE_VERIFY_CAPABILITY: &str = "evaluation-aggregate-verify";
 const ONBOARDING_CAPABILITY: &str = "onboarding";
 const PACKAGE_AUDIT_CAPABILITY: &str = "package-audit";
 const PACKAGE_LIFECYCLE_CAPABILITY: &str = "package-lifecycle";
@@ -92,6 +93,19 @@ fn command() -> Command {
                         .required(true),
                 )
                 .arg(required_path_arg("output")),
+        )
+        .subcommand(
+            Command::new(EVALUATION_AGGREGATE_VERIFY_CAPABILITY)
+                .about("Recompute a retained evaluation aggregate without changing it")
+                .arg(required_path_arg("root"))
+                .arg(required_path_arg("workspace-root"))
+                .arg(required_path_arg("artifact"))
+                .arg(
+                    Arg::new("source-revision")
+                        .long("source-revision")
+                        .value_name("REVISION")
+                        .required(true),
+                ),
         )
         .subcommand(
             Command::new(ONBOARDING_CAPABILITY)
@@ -162,12 +176,62 @@ fn main() -> ExitCode {
         Some((COMPATIBILITY_CAPABILITY, _)) => run_compatibility(),
         Some((CONTENT_RIGHTS_TREE_CAPABILITY, arguments)) => run_content_rights_tree(arguments),
         Some((EVALUATION_AGGREGATE_CAPABILITY, arguments)) => run_evaluation_aggregate(arguments),
+        Some((EVALUATION_AGGREGATE_VERIFY_CAPABILITY, arguments)) => {
+            run_evaluation_aggregate_verify(arguments)
+        }
         Some((ONBOARDING_CAPABILITY, _)) => run_onboarding(),
         Some((PACKAGE_AUDIT_CAPABILITY, arguments)) => run_package_audit(arguments),
         Some((WORKFLOW_INVARIANTS_CAPABILITY, _)) => run_workflow_invariants(),
         Some((WORKFLOW_HOST_CAPABILITY, _)) => run_workflow_host(),
         Some((PACKAGE_LIFECYCLE_CAPABILITY, arguments)) => run_package_lifecycle(arguments),
         Some(_) | None => ExitCode::from(2),
+    }
+}
+
+fn run_evaluation_aggregate_verify(arguments: &ArgMatches) -> ExitCode {
+    let Some(root) = arguments.get_one::<PathBuf>("root") else {
+        return emit_error(
+            EVALUATION_AGGREGATE_VERIFY_CAPABILITY,
+            "evaluation_report_repository_root_invalid",
+            "evaluation report repository root is missing",
+        );
+    };
+    let Some(workspace_root) = arguments.get_one::<PathBuf>("workspace-root") else {
+        return emit_error(
+            EVALUATION_AGGREGATE_VERIFY_CAPABILITY,
+            "evaluation_report_workspace_root_invalid",
+            "evaluation workspace root is missing",
+        );
+    };
+    let Some(artifact) = arguments.get_one::<PathBuf>("artifact") else {
+        return emit_error(
+            EVALUATION_AGGREGATE_VERIFY_CAPABILITY,
+            "evaluation_report_artifact_path_invalid",
+            "evaluation aggregate artifact path is missing",
+        );
+    };
+    let Some(source_revision) = arguments.get_one::<String>("source-revision") else {
+        return emit_error(
+            EVALUATION_AGGREGATE_VERIFY_CAPABILITY,
+            "evaluation_report_source_revision_invalid",
+            "expected source revision is missing",
+        );
+    };
+    match evaluation_report_host::verify_artifact(root, workspace_root, artifact, source_revision) {
+        Ok(()) => {
+            match write_stdout(b"evaluation aggregate verification: retained bytes match\n") {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    eprintln!("failed to write evaluation aggregate verification: {error}");
+                    ExitCode::from(2)
+                }
+            }
+        }
+        Err(error) => emit_error(
+            EVALUATION_AGGREGATE_VERIFY_CAPABILITY,
+            error.code(),
+            &error.to_string(),
+        ),
     }
 }
 

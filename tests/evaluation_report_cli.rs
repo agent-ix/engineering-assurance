@@ -3,7 +3,12 @@
 
 //! Direct command coverage for retained evaluation-report aggregation.
 
-use std::{fmt::Write as _, fs, path::Path, process::Command};
+use std::{
+    fmt::Write as _,
+    fs,
+    path::Path,
+    process::{Command, Output},
+};
 
 use ix_trace_rs::trace;
 use serde_json::{Value, json};
@@ -106,6 +111,23 @@ fn failed_report_value(mut value: Value) -> Value {
     value
 }
 
+fn verify_artifact(repository: &TempDir, workspace: &TempDir) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
+        .args([
+            "evaluation-aggregate-verify",
+            "--root",
+            repository.path().to_str().expect("root must be UTF-8"),
+            "--workspace-root",
+            workspace.path().to_str().expect("workspace must be UTF-8"),
+            "--artifact",
+            "artifacts/aggregate.json",
+            "--source-revision",
+            SOURCE_REVISION,
+        ])
+        .output()
+        .expect("evaluation aggregate verification command must terminate")
+}
+
 #[test]
 #[trace("TC-129", "FR-017-AC-1", "FR-017-CON-1", "FR-017-CON-3")]
 fn tc_129_cli_writes_the_retained_artifact_and_reports_incomplete_matrix() {
@@ -165,6 +187,29 @@ fn tc_129_cli_writes_the_retained_artifact_and_reports_incomplete_matrix() {
     assert_eq!(
         artifact["reports"][0]["digest"].as_str().map(str::len),
         Some(64)
+    );
+
+    let verification = verify_artifact(&repository, &workspace);
+    assert!(
+        verification.status.success(),
+        "{}",
+        String::from_utf8_lossy(&verification.stderr)
+    );
+
+    let mut altered = artifact;
+    altered["models"]["codex"] = json!("different-model");
+    fs::write(
+        repository.path().join("artifacts/aggregate.json"),
+        serde_json::to_vec(&altered).expect("altered artifact must encode"),
+    )
+    .expect("altered artifact must be writable");
+    let mismatch = verify_artifact(&repository, &workspace);
+    assert_eq!(mismatch.status.code(), Some(2));
+    let mismatch_error: Value =
+        serde_json::from_slice(&mismatch.stdout).expect("mismatch error must decode");
+    assert_eq!(
+        mismatch_error["code"],
+        "evaluation_report_artifact_mismatch"
     );
 }
 
