@@ -500,6 +500,10 @@ fn tc_100_rust_generator_matches_all_committed_inert_fixtures() {
         );
     }
 
+    // A first-party executable directory that no longer exists audits nothing;
+    // an empty population would otherwise pass this assertion by default, so
+    // the count below refuses that reading.
+    let mut audited = 0_usize;
     for relative in [".github/workflows", "scripts"] {
         let audit_root = root().join(relative);
         if !audit_root.is_dir() {
@@ -516,9 +520,14 @@ fn tc_100_rust_generator_matches_all_committed_inert_fixtures() {
                     "generated foreign-language fixture is executed by {}",
                     path.display()
                 );
+                audited += 1;
             }
         }
     }
+    assert!(
+        audited > 0,
+        "the executable-path audit read no first-party file"
+    );
 }
 
 #[trace("TC-052", "StR-002-VC-1")]
