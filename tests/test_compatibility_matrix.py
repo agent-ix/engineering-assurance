@@ -206,7 +206,7 @@ def test_upgrade_and_rollback_are_stated_per_component() -> None:
 
     upgrade = MATRIX["upgrade"]
     assert "quire-cli" in upgrade["order"]
-    assert "check_compatibility_matrix" in upgrade["verification"]
+    assert "compatibility-observe" in upgrade["verification"]
     # The upgrade explicitly does not touch a campaign repository.
     assert "Migrations are" in upgrade["what_does_not_change"]
 
@@ -252,10 +252,9 @@ def test_the_classifier_executes_nothing() -> None:
     ):
         assert forbidden not in source, f"the classifier reaches for {forbidden}"
 
-    # The observing half is a separate file, and it is the only one allowed to
-    # ask the environment anything.
-    observer = (REPO_ROOT / "scripts" / "check_compatibility_matrix.py").read_text(
-        encoding="utf-8"
-    )
-    assert "subprocess" in observer
-    assert "shutil.which" in observer
+    # The observing half is a separate Rust host adapter. It is the only
+    # compatibility path allowed to invoke declared external tools.
+    observer = (REPO_ROOT / "src" / "compatibility_observer.rs").read_text(encoding="utf-8")
+    assert "process_host::run" in observer
+    assert "SystemToolRunner" in observer
+    assert not (REPO_ROOT / "scripts" / "check_compatibility_matrix.py").exists()

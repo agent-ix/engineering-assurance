@@ -25,17 +25,15 @@ tag.
 
 ## Three answers, and why the third matters
 
-`scripts/check_compatibility_matrix.py` is retained temporarily as the
-same-revision reference observer. The native replacement is:
+The native observer is:
 
 ```sh
 engineering-assurance compatibility-observe --root .
 ```
 
 It emits one versioned JSON result, observes only the matrix-declared tools,
-and delegates classification to the pure Rust matrix capability. The Python
-path is not removed until its same-revision parity and rollback evidence is
-recorded. Its current invocation classifies what is installed:
+and delegates classification to the pure Rust matrix capability. It classifies
+what is installed:
 
 | Verdict | Meaning |
 | --- | --- |
@@ -85,7 +83,7 @@ step is independently verifiable, and only the last moves the gate.
 After each step:
 
 ```bash
-python3 scripts/check_compatibility_matrix.py
+engineering-assurance compatibility-observe --root .
 ```
 
 It exits non-zero unless every component is `compatible` **and** the matrix
