@@ -647,7 +647,7 @@ mod tests {
         );
     }
 
-    #[trace("TC-041", "FR-002-CON-1")]
+    #[trace("TC-041", "FR-002-AC-2", "FR-002-CON-1")]
     #[test]
     fn tc_041_host_identity_has_one_wire_spelling() {
         // The wire spelling is declared twice — by the serde attribute and by
