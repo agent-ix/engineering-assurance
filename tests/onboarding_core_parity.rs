@@ -3,92 +3,12 @@
 
 //! Differential evidence for the pure Rust onboarding core.
 
-use std::{
-    io::Write,
-    process::{Command, Stdio},
-    str::FromStr,
-};
-
 use engineering_assurance::onboarding::{
     ArtifactType, Inventory, OnboardingPlan, REQUEST_PROTOCOL, authored_result,
     parse_request_bytes, plan, render_from_skeleton,
 };
 use ix_trace_rs::trace;
 use serde_json::{Map, Value, json};
-
-const PYTHON_REFERENCE: &str = r#"
-import json
-import sys
-import tempfile
-from pathlib import Path
-
-import engineering_assurance.onboarding as onboarding
-
-payload = json.load(sys.stdin)
-if payload["mode"] == "frontmatter":
-    with tempfile.TemporaryDirectory() as directory:
-        path = Path(directory) / "artifact.md"
-        path.write_text(payload["text"])
-        data, error = onboarding._frontmatter(path)
-    value = data.get("type") if isinstance(data, dict) else None
-    print(json.dumps({
-        "type": value if isinstance(value, str) else None,
-        "error": error,
-    }, separators=(",", ":")))
-elif payload["mode"] == "render":
-    sys.stdout.write(onboarding.render_from_skeleton(
-        payload["artifact_type"], payload["replacements"]
-    ))
-else:
-    inventory = onboarding.Inventory(
-        decisions=payload["inventory"]["decisions"],
-        measurements=[onboarding.Validation(**item) for item in payload["inventory"]["measurements"]],
-        assurance_artifacts=[onboarding.Validation(**item) for item in payload["inventory"]["assurance_artifacts"]],
-        evidence_references=payload["inventory"]["evidence_references"],
-        producer_configurations=payload["inventory"]["producer_configurations"],
-        unresolved_inputs=payload["inventory"]["unresolved_inputs"],
-    )
-    onboarding.inventory_repository = lambda *_args, **_kwargs: inventory
-    onboarding.publish_validated_artifact = (
-        lambda root, target, *_args, **_kwargs: Path(root) / target
-    )
-    request_data = payload["request"]
-    request_data["repository_root"] = Path(request_data["repository_root"])
-    if request_data.get("target") is not None:
-        request_data["target"] = Path(request_data["target"])
-    request = onboarding.OnboardingRequest(**request_data)
-    result = onboarding.run_onboarding(request)
-    print(json.dumps({
-        "status": result.status,
-        "inventory": result.inventory.to_dict(),
-        "recommendation": result.recommendation,
-        "artifact_path": result.artifact_path,
-    }, separators=(",", ":")))
-"#;
-
-fn python(payload: &Value) -> Vec<u8> {
-    let mut child = Command::new("python3")
-        .args(["-c", PYTHON_REFERENCE])
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("retained Python onboarding reference must start");
-    child
-        .stdin
-        .take()
-        .expect("piped stdin must exist")
-        .write_all(&serde_json::to_vec(payload).expect("payload must serialize"))
-        .expect("payload must be writable");
-    let output = child.wait_with_output().expect("reference must terminate");
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    output.stdout
-}
 
 fn empty_inventory() -> Value {
     json!({
@@ -139,28 +59,9 @@ fn rust_plan(request: &Value, inventory: &Value) -> Value {
     value
 }
 
-fn python_plan(request: &Value, inventory: &Value) -> Value {
-    let mut python_request = request.clone();
-    let object = python_request
-        .as_object_mut()
-        .expect("request fixture must be an object");
-    object.remove("protocol");
-    object.remove("module_root");
-    object.remove("quire_executable");
-    if let Some(target) = object.get_mut("target") {
-        *target = json!(target.as_str().expect("target must be a string"));
-    }
-    let output = python(&json!({
-        "mode": "plan",
-        "request": python_request,
-        "inventory": inventory,
-    }));
-    serde_json::from_slice(&output).expect("reference result must be JSON")
-}
-
 #[trace("TC-105", "FR-016-AC-1", "FR-016-CON-4")]
 #[test]
-fn tc_105_recommendation_states_match_the_retained_reference() {
+fn tc_105_recommendation_states_are_explicit_native_contracts() {
     let mut invalid = empty_inventory();
     invalid["assurance_artifacts"] = json!([{
         "path": "spec/AP-bad.md",
@@ -191,23 +92,44 @@ fn tc_105_recommendation_states_match_the_retained_reference() {
         (
             request(&json!({"decision_boundary": null})),
             empty_inventory(),
+            "needs-input",
+            "Provide the exact decision boundary and human decision owner.",
+            None,
         ),
-        (request(&json!({})), empty_inventory()),
+        (
+            request(&json!({})),
+            empty_inventory(),
+            "no-applicable-work",
+            "No assurance artifact or governed workflow is justified by the request.",
+            None,
+        ),
         (
             request(&json!({"requested_artifact": "AssuranceProfile"})),
             empty_inventory(),
+            "no-applicable-work",
+            "No justification was supplied for a new AssuranceProfile.",
+            None,
         ),
         (
             request(&json!({"requested_artifact": "AssuranceProfile"})),
             invalid,
+            "needs-human-selection",
+            "Applicable artifacts are malformed or conflicting; preserve them and select or correct one.",
+            None,
         ),
         (
             request(&json!({"requested_artifact": "AssuranceProfile"})),
             duplicate,
+            "needs-human-selection",
+            "Applicable artifacts are malformed or conflicting; preserve them and select or correct one.",
+            None,
         ),
         (
             request(&json!({"requested_artifact": "AssuranceProfile"})),
             reusable,
+            "reuse",
+            "Reuse the applicable validated AssuranceProfile.",
+            Some("spec/AP-001.md"),
         ),
         (
             request(&json!({
@@ -215,6 +137,9 @@ fn tc_105_recommendation_states_match_the_retained_reference() {
                 "justification": "material fictional decision",
             })),
             empty_inventory(),
+            "needs-input",
+            "Provide a confined target and artifact frontmatter before authoring.",
+            None,
         ),
         (
             request(&json!({
@@ -224,13 +149,17 @@ fn tc_105_recommendation_states_match_the_retained_reference() {
                 "frontmatter": {"id": "AP-002", "title": "Fictional profile"},
             })),
             empty_inventory(),
+            "authored",
+            "Authored and validated one justified AssuranceProfile.",
+            Some("spec/AP-002.md"),
         ),
     ];
-    for (request, inventory) in cases {
-        assert_eq!(
-            rust_plan(&request, &inventory),
-            python_plan(&request, &inventory)
-        );
+    for (request, inventory, status, recommendation, artifact_path) in cases {
+        let result = rust_plan(&request, &inventory);
+        assert_eq!(result["status"], status);
+        assert_eq!(result["recommendation"], recommendation);
+        assert_eq!(result["artifact_path"], json!(artifact_path));
+        assert_eq!(result["inventory"], inventory);
     }
 }
 
@@ -261,19 +190,53 @@ fn tc_105_rendered_skeletons_preserve_frontmatter_and_body_semantics() {
             .expect("installed skeleton fixture must be readable");
             let rust = render_from_skeleton(artifact_type, &skeleton, &replacements)
                 .expect("Rust renderer must accept installed skeleton");
-            let payload = json!({
-                "mode": "render",
-                "artifact_type": artifact_type,
-                "replacements": replacements,
-            });
-            let python =
-                String::from_utf8(python(&payload)).expect("reference output must be UTF-8");
             let (rust_frontmatter, rust_body) = rendered_parts(&rust);
-            let (python_frontmatter, python_body) = rendered_parts(&python);
-            assert_eq!(rust_frontmatter, python_frontmatter);
-            assert_eq!(rust_body, python_body);
+            let (skeleton_frontmatter, skeleton_body) = rendered_parts(&skeleton);
+            let rust_frontmatter = rust_frontmatter
+                .as_mapping()
+                .expect("rendered frontmatter must remain a mapping");
+            let skeleton_frontmatter = skeleton_frontmatter
+                .as_mapping()
+                .expect("skeleton frontmatter must be a mapping");
+            for key in ["id", "owner"] {
+                let expected = replacements
+                    .get(key)
+                    .map(|value| yaml_serde::to_value(value).expect("value must convert"))
+                    .or_else(|| {
+                        skeleton_frontmatter
+                            .get(yaml_serde::Value::String(key.to_owned()))
+                            .cloned()
+                    });
+                assert_eq!(
+                    rust_frontmatter.get(yaml_serde::Value::String(key.to_owned())),
+                    expected.as_ref(),
+                    "{artifact_type} must preserve or replace {key}"
+                );
+            }
+            assert_eq!(
+                rust_frontmatter.get(yaml_serde::Value::String("type".to_owned())),
+                Some(&yaml_serde::Value::String(artifact_type.to_string()))
+            );
+            let expected_title = replacements
+                .get("title")
+                .and_then(Value::as_str)
+                .filter(|title| !title.trim().is_empty());
+            if let Some(title) = expected_title {
+                assert!(rust_body.starts_with(&format!("\n# {title}\n")));
+                assert_eq!(body_after_title(rust_body), body_after_title(skeleton_body));
+            } else {
+                assert_eq!(rust_body, skeleton_body);
+            }
         }
     }
+}
+
+fn body_after_title(body: &str) -> &str {
+    body.strip_prefix("\n# ")
+        .expect("installed skeleton body must begin with one title")
+        .split_once('\n')
+        .expect("installed skeleton title must end with a newline")
+        .1
 }
 
 fn rendered_parts(rendered: &str) -> (yaml_serde::Value, &str) {
@@ -298,31 +261,26 @@ fn tc_105_frontmatter_type_matches_yaml_boundary_cases() {
         "---\ntype: [unterminated\n---\n# Invalid\n",
         "---\ntype: yes\n---\n# Implicit boolean\n",
     ];
-    for text in shared_cases {
-        let rust = match engineering_assurance::onboarding::frontmatter_type(text) {
-            Ok(artifact_type) => json!({
-                "type": artifact_type.filter(|value| {
-                    ArtifactType::from_str(value).is_ok()
-                        || value.to_lowercase().contains("decision")
-                }),
-                "error": null,
-            }),
-            Err(_) => json!({"type": null, "error": "malformed-frontmatter"}),
-        };
-        let reference = python(&json!({"mode": "frontmatter", "text": text}));
-        let reference: Value =
-            serde_json::from_slice(&reference).expect("reference result must be JSON");
-        assert_eq!(rust, reference, "frontmatter case differs: {text:?}");
+    let expected = [None, Some("AssuranceProfile")];
+    for (text, expected) in shared_cases[..2].iter().zip(expected) {
+        assert_eq!(
+            engineering_assurance::onboarding::frontmatter_type(text).expect("valid boundary"),
+            expected.map(str::to_owned),
+        );
     }
+    for text in &shared_cases[2..4] {
+        assert!(engineering_assurance::onboarding::frontmatter_type(text).is_err());
+    }
+    assert_eq!(
+        engineering_assurance::onboarding::frontmatter_type(shared_cases[4])
+            .expect("implicit non-string type is not malformed"),
+        Some("yes".to_owned())
+    );
 
     for text in [
         "---\ntype: DecisionRecord\ntype: AssuranceProfile\n---\n# Duplicate\n",
         "---\ndefaults: &defaults\n  type: AssuranceProfile\n<<: *defaults\n---\n# Merge\n",
     ] {
-        let reference = python(&json!({"mode": "frontmatter", "text": text}));
-        let reference: Value =
-            serde_json::from_slice(&reference).expect("reference result must be JSON");
-        assert_eq!(reference["type"], "AssuranceProfile");
         assert!(
             engineering_assurance::onboarding::frontmatter_type(text).is_err(),
             "ambiguous artifact identity must fail closed: {text:?}"
