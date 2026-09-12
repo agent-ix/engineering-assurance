@@ -109,11 +109,11 @@ struct ProviderContext {
 #[serde(deny_unknown_fields)]
 struct ProviderScenario {
     id: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     use_case: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     title: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     canary: Option<bool>,
 }
 
