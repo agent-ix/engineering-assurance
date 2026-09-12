@@ -12,7 +12,7 @@ use std::{
     collections::BTreeMap,
     env,
     ffi::{OsStr, OsString},
-    fmt::Write as _,
+    fmt::{self, Write as _},
     fs,
     path::{Component, Path, PathBuf},
     time::Duration,
@@ -40,7 +40,7 @@ const MAX_RUNTIME_BYTES: u64 = 64 * 1024 * 1024;
 /// Pinning the count is what catches a test case being silently deleted, so it
 /// is raised deliberately whenever one is added — never derived from the
 /// document it is meant to guard.
-const REQUIRED_TEST_CASES: usize = 132;
+const REQUIRED_TEST_CASES: usize = 133;
 
 #[derive(Debug, Error)]
 pub(crate) enum IntegrationEvidenceError {
@@ -56,8 +56,10 @@ pub(crate) enum IntegrationEvidenceError {
     QuireObservationFailed,
     #[error("quire coverage exited unsuccessfully")]
     QuireFailed,
-    #[error("quire coverage returned an invalid document")]
-    CoverageInvalid,
+    #[error("quire coverage returned a document that could not be decoded: {0}")]
+    CoverageUnparseable(String),
+    #[error("{0}")]
+    CoverageRefused(CoverageRefusals),
     #[error("repository test matrix is invalid")]
     MatrixInvalid,
     #[error("current source revision is unavailable")]
@@ -75,7 +77,7 @@ pub(crate) enum IntegrationEvidenceError {
 }
 
 impl IntegrationEvidenceError {
-    pub(crate) const fn code(&self) -> &'static str {
+    pub(crate) fn code(&self) -> &'static str {
         match self {
             Self::RootInvalid => "integration_evidence_root_invalid",
             Self::QuireUnavailable => "integration_evidence_quire_unavailable",
@@ -83,7 +85,8 @@ impl IntegrationEvidenceError {
             Self::QuireOutputTooLarge => "integration_evidence_quire_output_too_large",
             Self::QuireObservationFailed => "integration_evidence_quire_observation_failed",
             Self::QuireFailed => "integration_evidence_quire_failed",
-            Self::CoverageInvalid => "integration_evidence_coverage_invalid",
+            Self::CoverageUnparseable(_) => "integration_evidence_coverage_unparseable",
+            Self::CoverageRefused(refusals) => refusals.code(),
             Self::MatrixInvalid => "integration_evidence_matrix_invalid",
             Self::RevisionUnavailable => "integration_evidence_revision_unavailable",
             Self::RevisionInvalid => "integration_evidence_revision_invalid",
@@ -98,6 +101,53 @@ impl IntegrationEvidenceError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct IntegrationEvidence {
     pub(crate) evaluation_cells: Option<(usize, usize)>,
+}
+
+/// One failing coverage condition, with its own code and the authored
+/// locations that caused it.
+///
+/// The shared error envelope carries a single `code`, so a refusal set reports
+/// the first condition in declaration order as the result code while every
+/// condition still appears, named, in the message. Collapsing them into one
+/// code is what made a repository gap indistinguishable from a coverage-tool
+/// malfunction (FR-017-AC-10).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct CoverageRefusal {
+    code: &'static str,
+    detail: String,
+}
+
+impl fmt::Display for CoverageRefusal {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}: {}", self.code, self.detail)
+    }
+}
+
+/// Every failing coverage condition, in fixed severity order and never empty.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct CoverageRefusals(Vec<CoverageRefusal>);
+
+impl CoverageRefusals {
+    fn code(&self) -> &'static str {
+        self.0
+            .first()
+            .map_or("integration_evidence_coverage_refused", |refusal| {
+                refusal.code
+            })
+    }
+}
+
+impl fmt::Display for CoverageRefusals {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "integration-evidence refused the repository coverage"
+        )?;
+        for refusal in &self.0 {
+            write!(formatter, "\n{refusal}")?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -121,10 +171,25 @@ struct CoverageTotals {
     total: usize,
 }
 
-#[derive(Debug, Deserialize)]
+/// One offending coverage row.
+///
+/// Quire authors `document`, `row_id`, `line`, `path`, `symbol`, and
+/// `trace_id` on its findings; decoding only `path` is what left the host
+/// unable to name a single offending row (FR-017-AC-10).
+#[derive(Clone, Debug, Default, Deserialize)]
 struct CoverageReference {
     #[serde(default)]
     path: Option<String>,
+    #[serde(default)]
+    document: Option<String>,
+    #[serde(default)]
+    row_id: Option<String>,
+    #[serde(default)]
+    symbol: Option<String>,
+    #[serde(default)]
+    trace_id: Option<String>,
+    #[serde(default)]
+    line: Option<u64>,
 }
 
 impl CoverageReference {
@@ -133,6 +198,28 @@ impl CoverageReference {
     /// fixtures deliberately carry unminted ids — that is what they exist to
     /// test — and vendored dependencies carry their own. A reference with no
     /// path is treated as first-party so the gate fails closed.
+    /// `document:line row_id -> trace_id`, using whichever locators the
+    /// finding carries. An error about files must say where in those files the
+    /// error is, so a finding with no locator at all still names itself.
+    fn locate(&self) -> String {
+        let where_ = self.document.as_deref().or(self.path.as_deref());
+        let mut rendered = match (where_, self.line) {
+            (Some(place), Some(line)) => format!("{place}:{line}"),
+            (Some(place), None) => place.to_owned(),
+            (None, Some(line)) => format!("<unlocated>:{line}"),
+            (None, None) => "<unlocated>".to_owned(),
+        };
+        if let Some(subject) = self.row_id.as_deref().or(self.symbol.as_deref()) {
+            rendered.push(' ');
+            rendered.push_str(subject);
+        }
+        if let Some(trace_id) = self.trace_id.as_deref() {
+            rendered.push_str(" -> ");
+            rendered.push_str(trace_id);
+        }
+        rendered
+    }
+
     fn is_first_party(&self, submodules: &[String]) -> bool {
         let Some(path) = self.path.as_deref() else {
             return true;
@@ -141,6 +228,21 @@ impl CoverageReference {
         !submodules
             .iter()
             .any(|prefix| path == prefix || path.starts_with(&format!("{prefix}/")))
+    }
+}
+
+impl CoverageDiagnostic {
+    fn locate(&self) -> String {
+        let reason = self.reason.as_deref().unwrap_or("<unnamed reason>");
+        let place = match (self.path.as_deref(), self.line) {
+            (Some(path), Some(line)) => format!("{path}:{line}"),
+            (Some(path), None) => path.to_owned(),
+            (None, _) => "<unlocated>".to_owned(),
+        };
+        match self.declaration.as_deref() {
+            Some(declaration) => format!("{place} {reason} (declaration `{declaration}`)"),
+            None => format!("{place} {reason}"),
+        }
     }
 }
 
@@ -165,12 +267,16 @@ struct CoverageGroup {
     total: usize,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 struct CoverageDiagnostic {
     #[serde(default)]
     reason: Option<String>,
     #[serde(default)]
     path: Option<String>,
+    #[serde(default)]
+    line: Option<u64>,
+    #[serde(default)]
+    declaration: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -317,7 +423,8 @@ fn run_coverage(root: &Path, quire: &OsStr) -> Result<CoverageDocument, Integrat
     if !output.status.success() {
         return Err(IntegrationEvidenceError::QuireFailed);
     }
-    serde_json::from_slice(&output.stdout).map_err(|_| IntegrationEvidenceError::CoverageInvalid)
+    serde_json::from_slice(&output.stdout)
+        .map_err(|error| IntegrationEvidenceError::CoverageUnparseable(error.to_string()))
 }
 
 fn map_quire_process(error: &ProcessError) -> IntegrationEvidenceError {
@@ -331,43 +438,191 @@ fn map_quire_process(error: &ProcessError) -> IntegrationEvidenceError {
     }
 }
 
+/// Diagnostic reasons that make the census itself untrustworthy.
+///
+/// `hollow-denominator`, `marker-form-mismatch`, and `section-matches-nothing`
+/// each mean a population was counted wrongly or not at all, so a complete
+/// result computed over it asserts more than was measured.
+/// `status-column-matches-nothing` is the same failure in its most dangerous
+/// form: the tool reports that status classification was *skipped*, after
+/// which `status_lies` is empty because nothing ran, not because the rows are
+/// honest. Accepting that emptiness certified an unmeasured property
+/// (FR-017-AC-10).
+const CENSUS_FATAL_REASONS: [&str; 4] = [
+    "hollow-denominator",
+    "marker-form-mismatch",
+    "section-matches-nothing",
+    "status-column-matches-nothing",
+];
+
+/// Render at most `LOCATION_SAMPLE` locations, then say how many remain, so a
+/// large gap stays readable without hiding its size.
+const LOCATION_SAMPLE: usize = 20;
+
+fn render_locations(locations: &[String]) -> String {
+    let shown = locations
+        .iter()
+        .take(LOCATION_SAMPLE)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join("\n    ");
+    if locations.len() > LOCATION_SAMPLE {
+        format!(
+            "{shown}\n    ... and {} more",
+            locations.len() - LOCATION_SAMPLE
+        )
+    } else {
+        shown
+    }
+}
+
+/// A refusal naming every row in `references`, or `None` when there are none.
+fn located_refusal(
+    code: &'static str,
+    summary: &str,
+    references: &[CoverageReference],
+) -> Option<CoverageRefusal> {
+    if references.is_empty() {
+        return None;
+    }
+    let locations = references
+        .iter()
+        .map(CoverageReference::locate)
+        .collect::<Vec<_>>();
+    Some(CoverageRefusal {
+        code,
+        detail: format!(
+            "{} {summary}:\n    {}",
+            locations.len(),
+            render_locations(&locations)
+        ),
+    })
+}
+
+/// A partial census means every count below it was measured over a population
+/// the tool could not fully classify, so it is reported first.
+fn census_refusal(coverage: &CoverageDocument, root: &Path) -> Option<CoverageRefusal> {
+    let locations = coverage
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| {
+            diagnostic
+                .reason
+                .as_deref()
+                .is_some_and(|reason| CENSUS_FATAL_REASONS.contains(&reason))
+                && diagnostic
+                    .path
+                    .as_deref()
+                    .is_none_or(|path| is_local_diagnostic(path, root))
+        })
+        .map(CoverageDiagnostic::locate)
+        .collect::<Vec<_>>();
+    if locations.is_empty() {
+        return None;
+    }
+    Some(CoverageRefusal {
+        code: "integration_evidence_coverage_census_partial",
+        detail: format!(
+            "repository traceability census is partial, so the counts below were measured \
+             over an incomplete population:\n    {}",
+            render_locations(&locations)
+        ),
+    })
+}
+
+fn totals_refusal(totals: &CoverageTotals) -> Option<CoverageRefusal> {
+    if totals.total == 0 {
+        return Some(CoverageRefusal {
+            code: "integration_evidence_coverage_population_empty",
+            detail: "traceability totals report no population at all".to_owned(),
+        });
+    }
+    if totals.backed == totals.total {
+        return None;
+    }
+    Some(CoverageRefusal {
+        code: "integration_evidence_coverage_incomplete",
+        detail: format!(
+            "traceability is {}/{}, expected complete backing",
+            totals.backed, totals.total
+        ),
+    })
+}
+
+fn test_case_population_refusal(coverage: &CoverageDocument) -> Option<CoverageRefusal> {
+    const CODE: &str = "integration_evidence_coverage_test_case_population";
+    let group = coverage
+        .groups
+        .iter()
+        .find(|group| group.document == "spec/tests.md" && group.target == "test-case");
+    match group {
+        Some(group)
+            if group.backed == REQUIRED_TEST_CASES && group.total == REQUIRED_TEST_CASES =>
+        {
+            None
+        }
+        Some(group) => Some(CoverageRefusal {
+            code: CODE,
+            detail: format!(
+                "spec/tests.md test-case population is {}/{}, expected \
+                 {REQUIRED_TEST_CASES}/{REQUIRED_TEST_CASES}",
+                group.backed, group.total
+            ),
+        }),
+        None => Some(CoverageRefusal {
+            code: CODE,
+            detail: "spec/tests.md declares no test-case traceability group".to_owned(),
+        }),
+    }
+}
+
+/// Collect every failing condition, in fixed severity order.
+///
+/// Each condition is evaluated independently: stopping at the first one is
+/// what made a multi-cause failure look like a single defect (FR-017-AC-10).
 fn validate_coverage(
     coverage: &CoverageDocument,
     root: &Path,
 ) -> Result<(), IntegrationEvidenceError> {
-    if coverage.totals.total == 0 || coverage.totals.backed != coverage.totals.total {
-        return Err(IntegrationEvidenceError::CoverageInvalid);
-    }
     let submodules = submodule_paths(root);
-    if !coverage.unbacked_rows.is_empty()
-        || !coverage.status_lies.is_empty()
-        || coverage
-            .untracked_symbols
-            .iter()
-            .any(|symbol| symbol.is_first_party(&submodules))
-    {
-        return Err(IntegrationEvidenceError::CoverageInvalid);
-    }
-    let test_cases = coverage
-        .groups
+    let orphaned = coverage
+        .untracked_symbols
         .iter()
-        .find(|group| group.document == "spec/tests.md" && group.target == "test-case");
-    if !matches!(test_cases, Some(group) if group.backed == REQUIRED_TEST_CASES && group.total == REQUIRED_TEST_CASES)
-    {
-        return Err(IntegrationEvidenceError::CoverageInvalid);
+        .filter(|symbol| symbol.is_first_party(&submodules))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let refusals = [
+        census_refusal(coverage, root),
+        totals_refusal(&coverage.totals),
+        located_refusal(
+            "integration_evidence_coverage_unbacked_rows",
+            "row(s) name no backing test",
+            &coverage.unbacked_rows,
+        ),
+        located_refusal(
+            "integration_evidence_coverage_status_lies",
+            "row(s) claim a status their backing does not support",
+            &coverage.status_lies,
+        ),
+        located_refusal(
+            "integration_evidence_coverage_untracked_symbols",
+            "first-party trace tag(s) bind to nothing the matrix minted",
+            &orphaned,
+        ),
+        test_case_population_refusal(coverage),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+
+    if refusals.is_empty() {
+        Ok(())
+    } else {
+        Err(IntegrationEvidenceError::CoverageRefused(CoverageRefusals(
+            refusals,
+        )))
     }
-    if coverage.diagnostics.iter().any(|diagnostic| {
-        matches!(
-            diagnostic.reason.as_deref(),
-            Some("hollow-denominator" | "marker-form-mismatch" | "section-matches-nothing")
-        ) && diagnostic
-            .path
-            .as_deref()
-            .is_none_or(|path| is_local_diagnostic(path, root))
-    }) {
-        return Err(IntegrationEvidenceError::CoverageInvalid);
-    }
-    Ok(())
 }
 
 fn is_local_diagnostic(value: &str, root: &Path) -> bool {
@@ -732,6 +987,7 @@ mod tests {
                 .iter()
                 .map(|path| CoverageReference {
                     path: Some((*path).to_owned()),
+                    ..CoverageReference::default()
                 })
                 .collect(),
             groups: vec![CoverageGroup {
@@ -755,29 +1011,37 @@ mod tests {
             .is_ok()
         );
 
-        // A first-party untracked tag is still a gate failure.
-        assert!(matches!(
-            validate_coverage(&document(&["src/evaluation.rs"]), root.path()),
-            Err(IntegrationEvidenceError::CoverageInvalid)
-        ));
+        // A first-party untracked tag is still a gate failure, and it names
+        // the condition rather than a generic invalid document.
+        let orphan = validate_coverage(&document(&["src/evaluation.rs"]), root.path())
+            .expect_err("a first-party untracked tag must refuse");
+        assert_eq!(
+            orphan.code(),
+            "integration_evidence_coverage_untracked_symbols"
+        );
+        assert!(orphan.to_string().contains("src/evaluation.rs"));
 
         // A path-less reference fails closed.
-        assert!(matches!(
+        assert_eq!(
             validate_coverage(
                 &CoverageDocument {
-                    untracked_symbols: vec![CoverageReference { path: None }],
+                    untracked_symbols: vec![CoverageReference::default()],
                     ..document(&[])
                 },
                 root.path(),
-            ),
-            Err(IntegrationEvidenceError::CoverageInvalid)
-        ));
+            )
+            .expect_err("a path-less reference must fail closed")
+            .code(),
+            "integration_evidence_coverage_untracked_symbols"
+        );
 
         // A directory that merely shares a prefix with a submodule is first-party.
-        assert!(matches!(
-            validate_coverage(&document(&["corpus-tools/src/lib.rs"]), root.path()),
-            Err(IntegrationEvidenceError::CoverageInvalid)
-        ));
+        assert_eq!(
+            validate_coverage(&document(&["corpus-tools/src/lib.rs"]), root.path())
+                .expect_err("a prefix-sharing directory must refuse")
+                .code(),
+            "integration_evidence_coverage_untracked_symbols"
+        );
     }
 
     #[test]
@@ -808,10 +1072,138 @@ mod tests {
             },
             ..complete
         };
-        assert!(matches!(
-            validate_coverage(&incomplete, root.path()),
-            Err(IntegrationEvidenceError::CoverageInvalid)
-        ));
+        let refusal = validate_coverage(&incomplete, root.path())
+            .expect_err("incomplete backing must refuse");
+        assert_eq!(refusal.code(), "integration_evidence_coverage_incomplete");
+        assert!(refusal.to_string().contains("91/92"));
+    }
+
+    fn complete_coverage() -> CoverageDocument {
+        CoverageDocument {
+            totals: CoverageTotals {
+                backed: 92,
+                total: 92,
+            },
+            unbacked_rows: vec![],
+            status_lies: vec![],
+            untracked_symbols: vec![],
+            groups: vec![CoverageGroup {
+                document: "spec/tests.md".into(),
+                target: "test-case".into(),
+                backed: REQUIRED_TEST_CASES,
+                total: REQUIRED_TEST_CASES,
+            }],
+            diagnostics: vec![],
+        }
+    }
+
+    fn matrix_row(row_id: &str, line: u64) -> CoverageReference {
+        CoverageReference {
+            document: Some("spec/tests.md".to_owned()),
+            row_id: Some(row_id.to_owned()),
+            line: Some(line),
+            ..CoverageReference::default()
+        }
+    }
+
+    #[test]
+    #[trace("TC-137", "FR-017-AC-10")]
+    fn tc_137_each_failing_coverage_condition_has_its_own_code_and_location() {
+        let root = tempfile::tempdir().expect("fixture root");
+        assert!(validate_coverage(&complete_coverage(), root.path()).is_ok());
+
+        // A skipped status classification is a refusal in its own right. This
+        // is the regression that mattered most: `status_lies` is empty because
+        // nothing ran, and the gate used to read that emptiness as honesty.
+        let skipped = CoverageDocument {
+            diagnostics: vec![CoverageDiagnostic {
+                reason: Some("status-column-matches-nothing".to_owned()),
+                path: Some("spec/tests.md".to_owned()),
+                line: Some(67),
+                declaration: Some("functional-coverage".to_owned()),
+            }],
+            ..complete_coverage()
+        };
+        let refusal = validate_coverage(&skipped, root.path())
+            .expect_err("a skipped status classification must refuse");
+        assert_eq!(
+            refusal.code(),
+            "integration_evidence_coverage_census_partial"
+        );
+        let rendered = refusal.to_string();
+        assert!(
+            rendered.contains("spec/tests.md:67"),
+            "a census refusal must name the authored location, got: {rendered}"
+        );
+        assert!(rendered.contains("functional-coverage"));
+
+        // A status lie is its own condition, distinct from an unbacked row.
+        let lie = CoverageDocument {
+            status_lies: vec![matrix_row("FR-001", 69)],
+            ..complete_coverage()
+        };
+        let refusal = validate_coverage(&lie, root.path()).expect_err("a status lie must refuse");
+        assert_eq!(refusal.code(), "integration_evidence_coverage_status_lies");
+        assert!(refusal.to_string().contains("spec/tests.md:69 FR-001"));
+
+        // A wrong pinned population names both counts.
+        let population = CoverageDocument {
+            groups: vec![CoverageGroup {
+                document: "spec/tests.md".into(),
+                target: "test-case".into(),
+                backed: REQUIRED_TEST_CASES - 1,
+                total: REQUIRED_TEST_CASES,
+            }],
+            ..complete_coverage()
+        };
+        let refusal = validate_coverage(&population, root.path())
+            .expect_err("a short test-case population must refuse");
+        assert_eq!(
+            refusal.code(),
+            "integration_evidence_coverage_test_case_population"
+        );
+        assert!(refusal.to_string().contains("spec/tests.md test-case"));
+    }
+
+    #[test]
+    #[trace("TC-137", "FR-017-AC-10")]
+    fn tc_137_all_failing_conditions_are_reported_without_blaming_the_coverage_tool() {
+        let root = tempfile::tempdir().expect("fixture root");
+        let unbacked = CoverageDocument {
+            totals: CoverageTotals {
+                backed: 91,
+                total: 92,
+            },
+            unbacked_rows: vec![matrix_row("FR-016", 123)],
+            ..complete_coverage()
+        };
+        let refusal =
+            validate_coverage(&unbacked, root.path()).expect_err("an unbacked row must refuse");
+        let rendered = refusal.to_string();
+
+        assert!(
+            rendered.contains("spec/tests.md:123 FR-016"),
+            "an unbacked row must be located, got: {rendered}"
+        );
+        // Both failing conditions appear, each under its own code.
+        assert!(rendered.contains("integration_evidence_coverage_incomplete"));
+        assert!(rendered.contains("integration_evidence_coverage_unbacked_rows"));
+        assert_eq!(
+            refusal.code(),
+            "integration_evidence_coverage_incomplete",
+            "the result code is the first condition in severity order"
+        );
+
+        // A repository gap is never described as a coverage-tool failure.
+        assert_ne!(
+            refusal.code(),
+            "integration_evidence_coverage_unparseable",
+            "a repository gap must not reuse the decoding code"
+        );
+        assert!(
+            !rendered.contains("invalid document"),
+            "a repository gap must not be described as a tool malfunction"
+        );
     }
 
     #[cfg(unix)]
