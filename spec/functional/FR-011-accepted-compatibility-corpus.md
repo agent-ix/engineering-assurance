@@ -89,7 +89,7 @@ reports a count in place of the failing case.
 | --- | --- | --- | --- |
 | FR-011-CON-1 | The corpus reader SHALL execute no subprocess, open no socket, and write no file. | Architecture | Test |
 | FR-011-CON-2 | Source evidence trees SHALL be read at a named revision and never written to. | Integrity | Test |
-| FR-011-CON-3 | The corpus SHALL make no claim about the live state of the source repositories. | Responsibility | Inspection |
+| FR-011-CON-3 | The corpus SHALL make no claim about the live state of the source repositories. | Responsibility | Inspection (TC-070) |
 | FR-011-CON-5 | This repository SHALL reference the corpus by pinned gitlink only, holding no retained operational evidence of its own. | Integrity | Test |
 | FR-011-CON-4 | No retained artifact SHALL be executable. | Integrity | Test |
 

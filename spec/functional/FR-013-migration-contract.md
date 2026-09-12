@@ -66,7 +66,7 @@ fail its gate.
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
 | FR-013-CON-1 | The contract SHALL NOT authorize a migration while matrix acceptance is unrecorded. | Responsibility | Test |
-| FR-013-CON-2 | The contract SHALL change no repository's workflow trigger. | Architecture | Test |
+| FR-013-CON-2 | The contract SHALL change no repository's workflow trigger. | Architecture | Test (TC-094) |
 | FR-013-CON-3 | The contract SHALL claim no certification, accreditation, authorization, identity, or non-repudiation. | Responsibility | Test |
 
 ## Acceptance Criteria

@@ -468,7 +468,7 @@ fn tc_100_report_rendering_matches_the_captured_reference() {
 }
 
 #[trace("TC-100", "FR-015-AC-1")]
-#[trace("TC-104", "FR-015-AC-4")]
+#[trace("TC-104", "FR-015-AC-4", "FR-015-CON-2")]
 #[test]
 fn tc_100_rust_generator_matches_all_committed_inert_fixtures() {
     let expected: BTreeMap<String, String> = fs::read_dir(
@@ -597,7 +597,7 @@ fn tc_059_semantic_library_reaches_for_no_execution_or_persistence_capability() 
 }
 
 #[trace("TC-068", "NFR-004-AC-1")]
-#[trace("TC-104", "FR-015-AC-4")]
+#[trace("TC-104", "FR-015-AC-4", "FR-015-CON-3")]
 #[test]
 fn tc_068_semantic_contracts_declare_no_parallel_record_family() {
     let mut audited = 0_usize;

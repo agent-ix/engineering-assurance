@@ -91,7 +91,7 @@ containment finding and cannot satisfy the corresponding static gate.
 | --- | --- | --- | --- |
 | FR-014-CON-1 | The Rust boundary SHALL NOT persist an authoritative evidence record. | Responsibility | Test |
 | FR-014-CON-2 | The CLI SHALL NOT derive a verdict from arbitrary stdout or stderr. | Responsibility | Test |
-| FR-014-CON-3 | The implementation SHALL remain in this repository. | Architecture | Test |
+| FR-014-CON-3 | The implementation SHALL remain in this repository. | Architecture | Test (TC-096) |
 
 ## Acceptance Criteria
 

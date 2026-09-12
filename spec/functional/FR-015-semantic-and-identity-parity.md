@@ -100,8 +100,8 @@ reading prose.
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
 | FR-015-CON-1 | Compatibility access SHALL be read-only. | Data Integrity | Test |
-| FR-015-CON-2 | Generated foreign-language fixtures SHALL NOT be executed by qualification. | Security | Test |
-| FR-015-CON-3 | The implementation SHALL NOT define a second persisted verification or evidence record family. | Responsibility | Test |
+| FR-015-CON-2 | Generated foreign-language fixtures SHALL NOT be executed by qualification. | Security | Test (TC-104) |
+| FR-015-CON-3 | The implementation SHALL NOT define a second persisted verification or evidence record family. | Responsibility | Test (TC-104) |
 | FR-015-CON-4 | The accepted-corpus reader SHALL refuse, as a typed error and before allocating for it, any input beyond its declared ceiling on index bytes, retained artifact bytes, retained path bytes, entry population, or directory nesting depth. | Resource | Test |
 
 ## Acceptance Criteria

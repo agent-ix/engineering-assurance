@@ -471,7 +471,7 @@ fn tc_069_every_retained_artifact_is_the_artifact_recorded() {
     );
 }
 
-#[trace("TC-070", "FR-011-AC-2", "FR-015-AC-5")]
+#[trace("TC-070", "FR-011-AC-2", "FR-015-AC-5", "FR-011-CON-3")]
 #[test]
 fn tc_070_the_accepted_corpus_covers_every_required_state() {
     let (_root, index) = corpus();
@@ -508,6 +508,14 @@ fn tc_070_the_accepted_corpus_covers_every_required_state() {
     let limitations = index.limitations.join(" ");
     assert!(limitations.contains("derived"));
     assert!(limitations.contains("not-computed"));
+
+    // FR-011-CON-3: the corpus makes no claim about the live state of the
+    // source repositories, and says so. Retained bytes prove fixture
+    // integrity offline; they are not a re-observation.
+    assert!(
+        limitations.contains("does not re-observe the source repositories"),
+        "the corpus index must disclaim any claim about live source state: {limitations}"
+    );
 }
 
 #[trace("TC-071", "FR-011-AC-3", "FR-015-AC-5")]

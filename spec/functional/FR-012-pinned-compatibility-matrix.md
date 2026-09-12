@@ -80,10 +80,10 @@ conditions withhold the gate; neither is skipped.
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
 | FR-012-CON-1 | The classifier SHALL execute no subprocess and write no file. | Architecture | Test |
-| FR-012-CON-2 | An agent SHALL NOT decide acceptance of the matrix. | Responsibility | Test |
+| FR-012-CON-2 | An agent SHALL NOT decide acceptance of the matrix. | Responsibility | Test (TC-082) |
 | FR-012-CON-3 | No pin SHALL require a rebuild from source to roll back. | Compatibility | Inspection |
-| FR-012-CON-4 | Engineering Assurance MAY transcribe an acceptance only when a named human explicitly directs it to do so. | Responsibility | Test |
-| FR-012-CON-5 | The recorded acceptance attribution SHALL name that human rather than the agent. | Responsibility | Test |
+| FR-012-CON-4 | Engineering Assurance MAY transcribe an acceptance only when a named human explicitly directs it to do so. | Responsibility | Test (TC-082) |
+| FR-012-CON-5 | The recorded acceptance attribution SHALL name that human rather than the agent. | Responsibility | Test (TC-082) |
 
 ## Acceptance Criteria
 
