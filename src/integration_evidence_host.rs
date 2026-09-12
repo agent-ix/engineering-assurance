@@ -35,7 +35,12 @@ const MAX_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_MATRIX_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_RUNTIME_FILES: usize = 16_384;
 const MAX_RUNTIME_BYTES: u64 = 64 * 1024 * 1024;
-const REQUIRED_TEST_CASES: usize = 68;
+/// The declared test-case population in `spec/tests.md`.
+///
+/// Pinning the count is what catches a test case being silently deleted, so it
+/// is raised deliberately whenever one is added — never derived from the
+/// document it is meant to guard.
+const REQUIRED_TEST_CASES: usize = 132;
 
 #[derive(Debug, Error)]
 pub(crate) enum IntegrationEvidenceError {
@@ -117,7 +122,40 @@ struct CoverageTotals {
 }
 
 #[derive(Debug, Deserialize)]
-struct CoverageReference {}
+struct CoverageReference {
+    #[serde(default)]
+    path: Option<String>,
+}
+
+impl CoverageReference {
+    /// A trace tag inside a declared submodule belongs to that submodule's own
+    /// repository, not to Engineering Assurance. The qa-corpus detection
+    /// fixtures deliberately carry unminted ids — that is what they exist to
+    /// test — and vendored dependencies carry their own. A reference with no
+    /// path is treated as first-party so the gate fails closed.
+    fn is_first_party(&self, submodules: &[String]) -> bool {
+        let Some(path) = self.path.as_deref() else {
+            return true;
+        };
+        let path = path.trim_start_matches("./");
+        !submodules
+            .iter()
+            .any(|prefix| path == prefix || path.starts_with(&format!("{prefix}/")))
+    }
+}
+
+/// Submodule directories declared by the repository root `.gitmodules`.
+fn submodule_paths(root: &Path) -> Vec<String> {
+    let Ok(text) = fs::read_to_string(root.join(".gitmodules")) else {
+        return Vec::new();
+    };
+    text.lines()
+        .filter_map(|line| line.trim().strip_prefix("path"))
+        .filter_map(|rest| rest.trim().strip_prefix('='))
+        .map(|value| value.trim().trim_end_matches('/').to_owned())
+        .filter(|value| !value.is_empty())
+        .collect()
+}
 
 #[derive(Debug, Deserialize)]
 struct CoverageGroup {
@@ -300,9 +338,13 @@ fn validate_coverage(
     if coverage.totals.total == 0 || coverage.totals.backed != coverage.totals.total {
         return Err(IntegrationEvidenceError::CoverageInvalid);
     }
+    let submodules = submodule_paths(root);
     if !coverage.unbacked_rows.is_empty()
         || !coverage.status_lies.is_empty()
-        || !coverage.untracked_symbols.is_empty()
+        || coverage
+            .untracked_symbols
+            .iter()
+            .any(|symbol| symbol.is_first_party(&submodules))
     {
         return Err(IntegrationEvidenceError::CoverageInvalid);
     }
@@ -670,6 +712,76 @@ mod tests {
 
     #[test]
     #[trace("TC-111", "FR-017-AC-3")]
+    fn tc_111_untracked_symbols_inside_declared_submodules_are_not_local_gaps() {
+        let root = tempfile::tempdir().expect("fixture root");
+        std::fs::write(
+            root.path().join(".gitmodules"),
+            "[submodule \"corpus\"]\n\tpath = corpus\n\turl = ../qa-corpus.git\n\
+             [submodule \"vendor/ix-trace-rs\"]\n\tpath = vendor/ix-trace-rs\n\
+             \turl = ../ix-trace-rs.git\n",
+        )
+        .expect("submodule declaration must be writable");
+        let document = |paths: &[&str]| CoverageDocument {
+            totals: CoverageTotals {
+                backed: 92,
+                total: 92,
+            },
+            unbacked_rows: vec![],
+            status_lies: vec![],
+            untracked_symbols: paths
+                .iter()
+                .map(|path| CoverageReference {
+                    path: Some((*path).to_owned()),
+                })
+                .collect(),
+            groups: vec![CoverageGroup {
+                document: "spec/tests.md".into(),
+                target: "test-case".into(),
+                backed: REQUIRED_TEST_CASES,
+                total: REQUIRED_TEST_CASES,
+            }],
+            diagnostics: vec![],
+        };
+
+        // Fixtures inside a declared submodule are that submodule's business.
+        assert!(
+            validate_coverage(
+                &document(&[
+                    "corpus/cases/detection/stale-name-correct-trace/rust/input/src/lib.rs",
+                    "vendor/ix-trace-rs/src/lib.rs",
+                ]),
+                root.path(),
+            )
+            .is_ok()
+        );
+
+        // A first-party untracked tag is still a gate failure.
+        assert!(matches!(
+            validate_coverage(&document(&["src/evaluation.rs"]), root.path()),
+            Err(IntegrationEvidenceError::CoverageInvalid)
+        ));
+
+        // A path-less reference fails closed.
+        assert!(matches!(
+            validate_coverage(
+                &CoverageDocument {
+                    untracked_symbols: vec![CoverageReference { path: None }],
+                    ..document(&[])
+                },
+                root.path(),
+            ),
+            Err(IntegrationEvidenceError::CoverageInvalid)
+        ));
+
+        // A directory that merely shares a prefix with a submodule is first-party.
+        assert!(matches!(
+            validate_coverage(&document(&["corpus-tools/src/lib.rs"]), root.path()),
+            Err(IntegrationEvidenceError::CoverageInvalid)
+        ));
+    }
+
+    #[test]
+    #[trace("TC-111", "FR-017-AC-3")]
     fn tc_111_coverage_requires_the_complete_closed_population() {
         let complete = CoverageDocument {
             totals: CoverageTotals {
@@ -682,8 +794,8 @@ mod tests {
             groups: vec![CoverageGroup {
                 document: "spec/tests.md".into(),
                 target: "test-case".into(),
-                backed: 68,
-                total: 68,
+                backed: REQUIRED_TEST_CASES,
+                total: REQUIRED_TEST_CASES,
             }],
             diagnostics: vec![],
         };

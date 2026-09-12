@@ -350,6 +350,45 @@ mod tests {
     }
 
     #[test]
+    #[trace("TC-016", "FR-003-AC-3")]
+    fn tc_016_local_source_installation_resolves_from_the_installed_tree() {
+        let (repository, module) = fixture();
+
+        // A copy inside the repository tree must never stand in for the
+        // authoritative installed module bundle.
+        fs::write(
+            repository.path().join(MODULE_SCHEMA_PATH),
+            b"{\"type\":\"object\"}",
+        )
+        .expect("repository decoy schema must be writable");
+        fs::write(
+            repository.path().join(EDGE_REGISTRY_PATH),
+            "edge_types:\n  supports: {}\n",
+        )
+        .expect("repository decoy registry must be writable");
+        fs::remove_file(module.path().join(MODULE_SCHEMA_PATH))
+            .expect("installed schema must be removable");
+
+        assert!(
+            execute(repository.path(), module.path()).is_err(),
+            "the repository copy must not satisfy the installed module bundle"
+        );
+
+        // Restoring it in the installed tree — and only there — qualifies.
+        fs::write(
+            module.path().join(MODULE_SCHEMA_PATH),
+            b"{\"type\":\"object\"}",
+        )
+        .expect("installed schema must be restorable");
+        let result =
+            execute(repository.path(), module.path()).expect("installed bundle must qualify");
+        assert_eq!(
+            result.qualification.outcome,
+            ManifestQualificationOutcome::Accepted
+        );
+    }
+
+    #[test]
     #[trace("TC-131", "FR-017-AC-8", "FR-017-CON-3", "FR-014-AC-2")]
     fn tc_131_qualifies_the_explicit_module_bundle() {
         let (repository, module) = fixture();

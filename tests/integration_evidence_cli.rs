@@ -23,7 +23,7 @@ fn quire_fixture(root: &TempDir) -> std::path::PathBuf {
     let quire = root.path().join("quire-fixture.sh");
     fs::write(
         &quire,
-        "#!/bin/sh\nprintf '%s\\n' '{\"totals\":{\"backed\":92,\"total\":92},\"unbacked_rows\":[],\"status_lies\":[],\"untracked_symbols\":[],\"groups\":[{\"document\":\"spec/tests.md\",\"target\":\"test-case\",\"backed\":68,\"total\":68}],\"diagnostics\":[]}'\n",
+        "#!/bin/sh\nprintf '%s\\n' '{\"totals\":{\"backed\":92,\"total\":92},\"unbacked_rows\":[],\"status_lies\":[],\"untracked_symbols\":[],\"groups\":[{\"document\":\"spec/tests.md\",\"target\":\"test-case\",\"backed\":132,\"total\":132}],\"diagnostics\":[]}'\n",
     )
     .expect("quire fixture must be writable");
     #[cfg(unix)]
