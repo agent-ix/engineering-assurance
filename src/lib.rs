@@ -17,6 +17,7 @@ pub mod compatibility_corpus;
 pub mod content_rights;
 #[cfg(feature = "full")]
 pub mod discovery;
+#[cfg(feature = "full")]
 pub mod evaluation;
 #[cfg(feature = "full")]
 pub mod evaluation_reports;
