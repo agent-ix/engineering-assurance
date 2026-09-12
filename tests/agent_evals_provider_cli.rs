@@ -306,3 +306,62 @@ fn tc_109_provider_refuses_a_fixture_state_path_that_escapes_the_workspace() {
             .exists()
     );
 }
+
+#[test]
+#[trace("TC-136", "FR-017-AC-9")]
+fn tc_136_describe_omits_optional_scenario_metadata_it_does_not_hold() {
+    let root = root();
+    let output = invoke(
+        &root,
+        &json!({
+            "protocol": "cli-agent-evals.external-provider-request/v1",
+            "operation": "describe",
+            "context": {
+                "scenario": {"id": ""},
+                "work_dir": "",
+                "cwd": "",
+                "session_id": "",
+                "report_dir": ""
+            }
+        }),
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let response: Value =
+        serde_json::from_slice(&output.stdout).expect("describe response must be JSON");
+    let scenarios = response["scenarios"]
+        .as_array()
+        .expect("describe response must carry a scenario catalogue");
+    assert!(!scenarios.is_empty());
+    let mut canaries = 0_usize;
+    for scenario in scenarios {
+        let object = scenario
+            .as_object()
+            .expect("each described scenario must be an object");
+        for (key, value) in object {
+            assert!(
+                !value.is_null(),
+                "described scenario {} serialized a null {key}; the external-provider contract \
+                 requires an absent optional field to be omitted",
+                object["id"]
+            );
+        }
+        assert!(object.contains_key("id"));
+        assert!(object.contains_key("use_case"));
+        assert!(
+            !object.contains_key("title"),
+            "no described scenario carries a title, so the key must be omitted"
+        );
+        if object.contains_key("canary") {
+            assert_eq!(object["canary"], json!(true));
+            canaries += 1;
+        }
+    }
+    assert_eq!(
+        canaries, 1,
+        "exactly one described scenario is the canary and only that scenario carries the key"
+    );
+}
