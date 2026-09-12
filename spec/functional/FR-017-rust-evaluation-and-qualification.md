@@ -150,7 +150,7 @@ checking, manifest validation, and qualification assertions to Rust.
   `copilot`, and the scenario population as `existing-profile`, `no-profile`,
   `malformed-producer`, `unavailable-producer`, `interruption-resume`,
   `human-acceptance`, and `human-rejection`; their Cartesian product is exactly
-  28 required cells.
+  the required cells of the declared qualification population.
 - Validate envelopes through closed Rust types rather than untyped object
   walking. Unknown envelope fields, malformed request structure, an unknown
   protocol, unsupported host or scenario values, and invalid scalar types are
@@ -527,7 +527,7 @@ byte mismatch refuses the package audit without a success result.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-017-AC-1 | The Rust evaluation path completes all required host-scenario cells and matches retained success and declared failure behavior. | Test (TC-109) |
-| FR-017-AC-2 | The pure Rust boundary preserves the 28-cell retained evaluation contract and deterministically withholds aggregation for every missing, duplicate, malformed, unsupported, unavailable, failed, stale-revision, changed-governing-identity, changed-workflow, unsupported-addition, invalid-transcript-reference, invalid-count, outcome-mismatch, and terminal-pair case; input permutation cannot change the result. | Test (TC-110) |
+| FR-017-AC-2 | The pure Rust boundary preserves the retained evaluation contract over the declared qualification population and deterministically withholds aggregation for every missing, duplicate, malformed, unsupported, unavailable, failed, stale-revision, changed-governing-identity, changed-workflow, unsupported-addition, invalid-transcript-reference, invalid-count, outcome-mismatch, and terminal-pair case; input permutation cannot change the result. | Test (TC-110) |
 | FR-017-AC-3 | Rust package, rights, manifest, integration, and publication-refusal checks match the retained pass/fail corpus; the package-audit adapter builds, bounds, decodes, audits, installs, and compares the retained wheel and npm distributions offline and rejects extra, missing, duplicate, unsafe, linked, special, oversized, rights-denied, escaping, or byte-divergent members. | Test (TC-111) |
 | FR-017-AC-4 | Static inspection finds only declarative dispatch in package-manager and host configuration; qualification is performed locally and real-agent evaluation, publication, and release operations remain explicit manual actions. | Test (TC-112) |
 | FR-017-AC-5 | The pure Rust content-rights classifier matches every retained finding class and exception, rejects unsafe paths without echoing them, preserves Unicode protected-token matching, emits no matched content, and returns deterministic typed findings without filesystem, environment, child-program, network, or clock access. | Test (TC-119) |
@@ -565,6 +565,6 @@ byte mismatch refuses the package audit without a success result.
   policy exemptions, and Rust-test subprocess references is the final step.
 - **Sequence**: the Rust report/transcript adapter and aggregate-command
   cutover are independently reviewable under TC-129. They do not satisfy the
-  live 28-cell TC-109 gate, provide the still-missing external scenario
+  live declared-population TC-109 gate, provide the still-missing external scenario
   provider, authorize a token-bearing agent run, or permit aggregate legacy
   removal before same-revision parity and rollback evidence.

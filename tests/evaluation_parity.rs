@@ -17,6 +17,9 @@ use serde_json::json;
 const DIGEST: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const SOURCE_REVISION: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
+/// The declared qualification population, not every host the type can name.
+const REQUIRED_CELLS: usize = EvaluationHost::QUALIFIED.len() * EvaluationScenario::ALL.len();
+
 fn identity(name: &str) -> VersionIdentity {
     VersionIdentity {
         name: name.to_owned(),
@@ -135,22 +138,30 @@ fn complete_matrix_preserves_declared_aggregation_outcomes() {
         item.diagnostic = Some("executable-not-found".to_owned());
     });
     let complete_result = aggregate_evaluations(&complete);
-    assert_eq!(complete_result.required_cells, 28);
-    assert_eq!(complete_result.complete_cells, 28);
+    assert_eq!(complete_result.required_cells, REQUIRED_CELLS);
+    assert_eq!(complete_result.complete_cells, REQUIRED_CELLS);
     assert!(complete_result.ok);
     assert!(complete_result.failures.is_empty());
 
     let cases = [
-        (missing, 27, "missing:copilot:human-rejection"),
-        (duplicate, 27, "duplicate:claude:existing-profile"),
-        (failed, 27, "scenario-failed"),
-        (drifted, 28, "matrix-source-revision-mismatch"),
-        (unavailable, 27, "scenario-not-executed"),
+        (
+            missing,
+            REQUIRED_CELLS - 1,
+            "missing:claude:human-rejection",
+        ),
+        (
+            duplicate,
+            REQUIRED_CELLS - 1,
+            "duplicate:claude:existing-profile",
+        ),
+        (failed, REQUIRED_CELLS - 1, "scenario-failed"),
+        (drifted, REQUIRED_CELLS, "matrix-source-revision-mismatch"),
+        (unavailable, REQUIRED_CELLS - 1, "scenario-not-executed"),
     ];
     for (matrix, complete_cells, failure) in cases {
         let result = aggregate_evaluations(&matrix);
         assert!(!result.ok, "{failure} must withhold aggregation");
-        assert_eq!(result.required_cells, 28);
+        assert_eq!(result.required_cells, REQUIRED_CELLS);
         assert_eq!(result.complete_cells, complete_cells);
         assert!(
             result
@@ -178,13 +189,6 @@ fn every_incomplete_semantic_class_withholds_aggregation() {
                 .as_mut()
                 .expect("fixture governing")
                 .module
-                .version = "1.2.4".to_owned();
-        }),
-        changed(&complete, 0, |item| {
-            item.governing
-                .as_mut()
-                .expect("fixture governing")
-                .workflow
                 .version = "1.2.4".to_owned();
         }),
         changed(&complete, 0, |item| {
@@ -230,10 +234,18 @@ fn every_incomplete_semantic_class_withholds_aggregation() {
         }),
     ];
 
+    // `workflow-version-mismatch` and its case are absent deliberately, and
+    // removed as a pair so the positional zip below stays aligned.
+    // `append_scenario_workflow_failures` compares governing workflow identity
+    // across hosts within one scenario, and the aggregator drops cells outside
+    // the required matrix before that check runs. While
+    // `EvaluationHost::QUALIFIED` names one host there is exactly one cell per
+    // scenario, so no input can reach the class. It becomes reachable again the
+    // moment a second host is declared, which is why the failure variant is
+    // kept rather than deleted.
     let expected_codes = [
         "source-revision-not-immutable",
         "matrix-governing-versions-mismatch",
-        "workflow-version-mismatch",
         "unsupported-assurance-addition",
         "transcript-path-invalid",
         "transcript-path-invalid",
@@ -298,7 +310,7 @@ fn closed_request_refuses_malformed_unsupported_or_open_input() {
     )
     .expect("valid request must aggregate");
     assert!(result.ok);
-    assert_eq!(result.required_cells, 28);
+    assert_eq!(result.required_cells, REQUIRED_CELLS);
 
     let mut wrong_protocol = valid.clone();
     wrong_protocol["protocol"] = json!("engineering-assurance.evaluation-aggregate-request/v2");
@@ -455,7 +467,7 @@ fn tc_049_every_host_retains_one_distinct_explicit_acceptance_and_rejection() {
     // pair can stop being two distinct attributed decisions is checked to
     // withhold: a shared run identity, an absent decision, and a decision
     // attached to a scenario that reaches no terminal state at all.
-    for host in EvaluationHost::ALL {
+    for host in EvaluationHost::QUALIFIED {
         let terminal = required_matrix()
             .into_iter()
             .filter(|cell| cell.host == host)

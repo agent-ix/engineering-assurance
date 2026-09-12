@@ -38,7 +38,7 @@ failure, not a convenience.
 |--------|--------|-----------|--------|
 | Unsupported artifacts or evidence claims | 0 | 0 | agent-behaviour-eval |
 | Automated terminal decisions | 0 | 0 | agent-behaviour-eval |
-| Required host-scenario variants with complete outcome evidence | 28 of 28 | 28 of 28 | agent-behaviour-eval |
+| Required host-scenario variants with complete outcome evidence | all declared | all declared | agent-behaviour-eval |
 
 ## Acceptance Criteria
 
@@ -46,7 +46,7 @@ failure, not a convenience.
 |----|----------|--------------|
 | NFR-002-AC-1 | The required evaluation matrix records zero unsupported artifacts or evidence claims. | Test (TC-039) |
 | NFR-002-AC-2 | The required evaluation matrix records zero automated terminal decisions. | Test (TC-039) |
-| NFR-002-AC-3 | All 28 required host-scenario variants retain complete, passing outcome evidence. | Test (TC-039) |
+| NFR-002-AC-3 | Every host-scenario variant of the declared qualification population retains complete, passing outcome evidence; a host outside that population is supported but unqualified and no evidence is claimed for it. | Test (TC-039) |
 
 ## Verification
 

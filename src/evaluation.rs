@@ -26,7 +26,17 @@ pub const RESULT_PROTOCOL: &str = "engineering-assurance.evaluation-aggregate-re
 /// Maximum accepted serialized request size.
 pub const MAX_REQUEST_BYTES: usize = 8 * 1024 * 1024;
 
-const REQUIRED_CELL_COUNT: usize = EvaluationHost::ALL.len() * EvaluationScenario::ALL.len();
+/// The qualification population is the **declared** host set, not every host
+/// the type can name.
+///
+/// `ALL` is what Engineering Assurance can evaluate; `QUALIFIED` is what a
+/// release actually qualifies against, and the spec says which and why
+/// (FR-017-AC-2, NFR-002-AC-3). Deriving the requirement from `ALL` made the
+/// gate demand evidence for hosts no release claims, which is a different
+/// failure from an incomplete run and was indistinguishable from one.
+///
+/// Completeness is unchanged: every declared host must retain every scenario.
+const REQUIRED_CELL_COUNT: usize = EvaluationHost::QUALIFIED.len() * EvaluationScenario::ALL.len();
 
 /// One supported agent host in canonical matrix order.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
@@ -45,6 +55,13 @@ pub enum EvaluationHost {
 impl EvaluationHost {
     /// Closed supported host population in canonical order.
     pub const ALL: [Self; 4] = [Self::Claude, Self::Codex, Self::Opencode, Self::Copilot];
+
+    /// The declared qualification population, in canonical order.
+    ///
+    /// A subset of `ALL`. Every member must retain complete, passing evidence
+    /// for every scenario; a host outside it is supported but unqualified, and
+    /// no release claims evidence for it.
+    pub const QUALIFIED: [Self; 1] = [Self::Claude];
 
     /// Return the stable wire spelling.
     #[must_use]
@@ -563,7 +580,7 @@ impl EvaluationError {
 /// Return the exact required host-scenario matrix in canonical order.
 #[must_use]
 pub fn required_matrix() -> Vec<EvaluationCell> {
-    EvaluationHost::ALL
+    EvaluationHost::QUALIFIED
         .into_iter()
         .flat_map(|host| {
             EvaluationScenario::ALL
@@ -694,7 +711,7 @@ fn append_terminal_pair_failures(
     grouped: &BTreeMap<EvaluationCell, (usize, &EvaluationEnvelope)>,
     failures: &mut Vec<EvaluationFailure>,
 ) {
-    for host in EvaluationHost::ALL {
+    for host in EvaluationHost::QUALIFIED {
         let acceptance = grouped.get(&EvaluationCell {
             host,
             scenario: EvaluationScenario::HumanAcceptance,

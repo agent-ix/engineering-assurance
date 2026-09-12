@@ -33,7 +33,7 @@ fn valid_partial_report(work_dir: &std::path::Path, digest: &str) -> Value {
         "producer": identity("cli-agent-evals")
     });
     let observation = json!({
-        "host": "codex",
+        "host": "claude",
         "host_version": "1.2.3",
         "source_revision": SOURCE_REVISION,
         "suite_revision": "suite-v1",
@@ -77,7 +77,7 @@ fn valid_partial_report(work_dir: &std::path::Path, digest: &str) -> Value {
         "ok": true,
         "generatedAt": "2026-09-10T00:00:00Z",
         "suite": "engineering-assurance-onboarding",
-        "agent": "codex",
+        "agent": "claude",
         "model": "model-a",
         "repeats": 1,
         "results": [{
@@ -114,7 +114,7 @@ fn verify_artifact(repository: &TempDir, workspace: &TempDir) -> Output {
 fn tc_129_cli_writes_the_retained_artifact_and_reports_incomplete_matrix() {
     let repository = TempDir::new().expect("repository fixture must be creatable");
     let workspace = TempDir::new().expect("workspace fixture must be creatable");
-    let work_dir = workspace.path().join("codex-existing-profile");
+    let work_dir = workspace.path().join("claude-existing-profile");
     let transcript = work_dir.join(".cli-agent-evals/transcripts/sample.transcript");
     fs::create_dir_all(transcript.parent().expect("transcript must have a parent"))
         .expect("transcript parent must be creatable");
@@ -124,7 +124,7 @@ fn tc_129_cli_writes_the_retained_artifact_and_reports_incomplete_matrix() {
     for byte in Sha256::digest(transcript_bytes) {
         let _ = write!(&mut digest, "{byte:02x}");
     }
-    let report_path = repository.path().join("reports/codex.json");
+    let report_path = repository.path().join("reports/claude.json");
     fs::create_dir_all(report_path.parent().expect("report must have a parent"))
         .expect("report parent must be creatable");
     fs::write(
@@ -141,7 +141,7 @@ fn tc_129_cli_writes_the_retained_artifact_and_reports_incomplete_matrix() {
             "--workspace-root",
             workspace.path().to_str().expect("workspace must be UTF-8"),
             "--report",
-            "reports/codex.json",
+            "reports/claude.json",
             "--source-revision",
             SOURCE_REVISION,
             "--output",
@@ -153,7 +153,7 @@ fn tc_129_cli_writes_the_retained_artifact_and_reports_incomplete_matrix() {
     assert_eq!(output.status.code(), Some(1));
     assert!(output.stderr.is_empty());
     let stdout = String::from_utf8(output.stdout).expect("stdout must be UTF-8");
-    assert!(stdout.contains("evaluation aggregate: 1/28 complete"));
+    assert!(stdout.contains("evaluation aggregate: 1/7 complete"));
     let artifact: Value = serde_json::from_slice(
         &fs::read(repository.path().join("artifacts/aggregate.json"))
             .expect("aggregate artifact must be readable"),
@@ -162,9 +162,9 @@ fn tc_129_cli_writes_the_retained_artifact_and_reports_incomplete_matrix() {
     assert_eq!(artifact["revision"], "evaluation-aggregate-v1");
     assert_eq!(artifact["source_revision"], SOURCE_REVISION);
     assert_eq!(artifact["complete_cells"], 1);
-    assert_eq!(artifact["required_cells"], 28);
-    assert_eq!(artifact["models"]["codex"], "model-a");
-    assert_eq!(artifact["reports"][0]["path"], "reports/codex.json");
+    assert_eq!(artifact["required_cells"], 7);
+    assert_eq!(artifact["models"]["claude"], "model-a");
+    assert_eq!(artifact["reports"][0]["path"], "reports/claude.json");
     assert_eq!(
         artifact["reports"][0]["digest"].as_str().map(str::len),
         Some(64)
@@ -204,7 +204,7 @@ fn tc_051_verification_rejects_an_aggregate_retained_for_another_revision() {
     // on the revision alone rather than on any byte difference in the reports.
     let repository = TempDir::new().expect("repository fixture must be creatable");
     let workspace = TempDir::new().expect("workspace fixture must be creatable");
-    let work_dir = workspace.path().join("codex-existing-profile");
+    let work_dir = workspace.path().join("claude-existing-profile");
     let transcript = work_dir.join(".cli-agent-evals/transcripts/sample.transcript");
     fs::create_dir_all(transcript.parent().expect("transcript must have a parent"))
         .expect("transcript parent must be creatable");
@@ -214,7 +214,7 @@ fn tc_051_verification_rejects_an_aggregate_retained_for_another_revision() {
     for byte in Sha256::digest(transcript_bytes) {
         let _ = write!(&mut digest, "{byte:02x}");
     }
-    let report_path = repository.path().join("reports/codex.json");
+    let report_path = repository.path().join("reports/claude.json");
     fs::create_dir_all(report_path.parent().expect("report must have a parent"))
         .expect("report parent must be creatable");
     fs::write(
@@ -231,7 +231,7 @@ fn tc_051_verification_rejects_an_aggregate_retained_for_another_revision() {
             "--workspace-root",
             workspace.path().to_str().expect("workspace must be UTF-8"),
             "--report",
-            "reports/codex.json",
+            "reports/claude.json",
             "--source-revision",
             SOURCE_REVISION,
             "--output",
