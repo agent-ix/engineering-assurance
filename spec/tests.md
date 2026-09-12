@@ -285,10 +285,10 @@ implemented and reviewed.
 | TC-106 | Rust and the retained invariant provider return the same ordered typed outcomes for all eleven canonical invariants and valid boundary fixtures at one explicit evaluation instant; unknown invariant names and malformed Rust requests fail before an outcome | Integration | P0 | FR-016-AC-2, FR-016-CON-3 | ✅ Rust evaluator, retained-reference parity, fail-closed probes, and CLI boundary passing |
 | TC-107 | Against the exact accepted ix-flow pin, Rust start/resume and explicit decision coordination preserves ix-flow state ownership, recovers only pristine interrupted initialization, remains idempotent across gate interruption windows, requires ix-flow to verify an intact event chain, refuses incompatible hosts and binding/transition/decision conflicts before mutation, reports ambiguous post-mutation host failures as indeterminate for status reconciliation, bounds malformed/oversized/timed-out responses, and never supplies an automatic gate override or executes next-action text | Integration | P0 | FR-016-AC-3, FR-016-CON-1, FR-016-CON-5, FR-016-CON-6, FR-016-CON-7 | 🚧 implementation and adverse cases pass against ix-flow 0.2.3; human matrix acceptance pending |
 | TC-108 | Canonical and pilot workflows pass through the Rust invariant provider before removal | Integration | P0 | FR-016-AC-4 | 🚧 pending host interface |
-| TC-109 | Rust evaluation completes the 28-cell matrix without inferred decisions | E2E | P0 | FR-017-AC-1, FR-017-CON-1 | 🚧 pending host interface |
+| TC-109 | Rust evaluation completes the declared host-scenario matrix without inferred decisions | E2E | P0 | FR-017-AC-1, FR-017-CON-1 | 🚧 pending host interface |
 | TC-136 | A `describe` response omits `title` and `canary` from the emitted bytes for every scenario that carries neither, still emits `canary` for the canary scenario and `use_case` for every scenario, and emits no null anywhere in the described catalogue | Integration | P0 | FR-017-AC-9 | ✅ emitted-byte omission backed |
 | TC-137 | Each coverage refusal condition — incomplete totals, unbacked rows, status lies, first-party untracked symbols, the pinned test-case population, a fatal local diagnostic, a skipped status classification, and an unparseable document — yields its own code, every offending row is named with its authored document and line, all failing conditions are reported together, and no repository gap is reported as a coverage-tool failure | Integration | P0 | FR-017-AC-10 | ✅ condition-specific located refusals backed |
-| TC-110 | The pure typed Rust evaluator preserves the exact 28-cell contract and deterministically withholds aggregation for missing, duplicate, malformed, unsupported, unavailable, failed, stale-revision, changed-governing-identity, changed-workflow, unsupported-addition, invalid-transcript-reference, invalid-count, outcome-mismatch, and terminal-pair cases; input permutation cannot change the result, oversized input refuses before decoding, and the reusable boundary performs no I/O | Property | P0 | FR-017-AC-2, FR-017-CON-1, FR-017-CON-3 | ✅ typed Rust aggregation, retained-Python differential cases, adverse cases, portable path/refusal rules, resource ceiling, and mutation probes passing |
+| TC-110 | The pure typed Rust evaluator preserves the exact declared-population contract and deterministically withholds aggregation for missing, duplicate, malformed, unsupported, unavailable, failed, stale-revision, changed-governing-identity, changed-workflow, unsupported-addition, invalid-transcript-reference, invalid-count, outcome-mismatch, and terminal-pair cases; input permutation cannot change the result, oversized input refuses before decoding, and the reusable boundary performs no I/O | Property | P0 | FR-017-AC-2, FR-017-CON-1, FR-017-CON-3 | ✅ typed Rust aggregation, retained-Python differential cases, adverse cases, portable path/refusal rules, resource ceiling, and mutation probes passing |
 | TC-111 | Each package, rights, manifest, integration, and publication-refusal capability has independent positive and negative subcases matching the retained gate; npm stage/cleanup covers missing, linked, special, non-portable, oversized, excessive, pre-existing, changed, exact-copy, rollback, idempotent-absence, direct-JSON, and hook-empty-stdout states; the content-rights tree adapter covers exact Git selection, tracked/untracked/ignored entries, gitlinks, links, special files, protected tokens, repository-root identity, deterministic findings, and every exact/over resource boundary; the package-audit adapter covers pre-build linked/special/unsafe/over-limit source refusal including wheel build configuration, direct bounded builder/installer processes and descendant groups, fail-closed hosts without process-group containment, invocation-owned package-manager cache/temporary paths, bounded top-level output correspondence, preflight-absent and exact post-process npm staging cleanup on success and failure, exact archive selection, validated regular/zero-payload-directory kinds, raw tar extension-header refusal before preprocessing, safe unique member names, exact/over archive bytes, total entries, member bytes, and aggregate expanded bytes, traceability coverage that counts an untracked trace tag as a gap only when it lies outside every declared submodule, independent report/archive allowlist agreement, every content-rights category without disclosure, exact license/private metadata, offline installs, thin host discovery, canonical/pilot YAML equivalence, installed links/special files/escapes, and cross-format canonical byte identity | Property | P0 | FR-017-AC-3 | ✅ bounded Rust package, rights, manifest, integration, publication-refusal, archive, install, correspondence, and adverse-case slices reviewed and passing |
 | TC-112 | Package-manager and host files contain declarative dispatch only; npm lifecycle hooks invoke the pinned local Rust CLI in explicit hook mode without embedded staging/refusal semantics or contamination of npm output; `make test` invokes the Rust content-rights tree adapter and `make package-audit` invokes the Rust package-audit adapter after their respective same-revision correspondence; local qualification, real-agent evaluation, publication, and release operations remain explicit manual actions | Static | P0 | FR-017-AC-4, FR-017-CON-2 | 🚧 npm lifecycle, content-rights, and package-audit Rust dispatch backed; remaining host-configuration census pending |
 | TC-113 | Removal refuses mismatched revisions, incomplete parity, and direct invocations that still use the old path; content-rights removal additionally requires exact full-tree status/finding correspondence and an independently passing Rust tree and package-audit dispatch at one candidate revision, followed by removal of every executable import or subprocess reference to the deleted Python paths | Property | P0 | FR-018-AC-2, FR-018-CON-1 | 🚧 content-rights and package-audit same-revision cutovers plus final four-file deletion candidate backed; aggregate removal population pending |
@@ -307,7 +307,7 @@ implemented and reviewed.
 | TC-126 | A real quire-verification synthetic consumer compiles against the accepted Engineering Assurance revision and consumes completed plus every non-completion state without a local runner, CLI-output parser, or evidence store | Integration | P0 | FR-019-AC-6 | 🚧 pending consumer integration |
 | TC-127 | Static ownership and capability checks admit process execution only in the FR-019 module and find no Engineering Assurance domain oracle, generic stdout verdict scraper, qualification decision, evidence store, Quoin schema clone, or second crate/repository | Static | P0 | FR-014-AC-4, FR-019-AC-5, FR-019-CON-2, FR-019-CON-3, NFR-004-AC-2 | ✅ parsed process-ownership census, shared-kernel cutover, forbidden parser/persistence dependency checks, and single-crate check passing |
 | TC-128 | A minimal downstream crate compiles Engineering Assurance with default features disabled and only `producer-execution`; Engineering Assurance activates no direct dependency used solely for package/archive, onboarding, CLI, YAML, regex or source-audit behavior while shared dependencies remain admissible and the default full feature preserves existing package gates | Compile | P0 | FR-019-AC-7 | ✅ isolated offline downstream compile and activated direct-dependency census passing; default full-package gates passing |
-| TC-129 | The Rust report adapter strictly decodes `cli-agent-evals.report/v1`, admits only retained successful single-run samples beneath the explicit workspace root, verifies exact transcript bytes and source identity, preserves failed-attempt and host-model behavior, refuses every malformed/version/path/link/kind/digest/resource/population case, remains input-order invariant, and matches the retained Python aggregate artifact before Rust command cutover | Integration | P0 | FR-017-AC-1, FR-017-CON-1, FR-017-CON-3 | ✅ retained-report adapter, artifact verification, same-revision parity, and direct Rust dispatch passed; obsolete wrapper removed. Live 28-cell execution remains TC-109. |
+| TC-129 | The Rust report adapter strictly decodes `cli-agent-evals.report/v1`, admits only retained successful single-run samples beneath the explicit workspace root, verifies exact transcript bytes and source identity, preserves failed-attempt and host-model behavior, refuses every malformed/version/path/link/kind/digest/resource/population case, remains input-order invariant, and matches the retained Python aggregate artifact before Rust command cutover | Integration | P0 | FR-017-AC-1, FR-017-CON-1, FR-017-CON-3 | ✅ retained-report adapter, artifact verification, same-revision parity, and direct Rust dispatch passed; obsolete wrapper removed. Live declared-population execution remains TC-109. |
 | TC-130 | The Rust compatibility observer performs only the matrix-declared bounded tool observations, reports unavailable or malformed observations as unknown, verifies present recorded artifact digests, and delegates compatible/incompatible/unknown classification to the I/O-free matrix classifier | Integration | P0 | FR-012-AC-10, FR-012-CON-1, FR-014-AC-2 | ✅ deterministic fixture host, unavailable-tool, digest, and machine-boundary cases passing |
 | TC-131 | The Rust manifest host adapter accepts the retained module only from explicit safe repository and authoritative-module roots, delegates its closed resource bundle to the pure qualifier, emits one versioned result, and refuses unsafe roots or resources before qualification | Integration | P0 | FR-017-AC-8, FR-017-CON-3, FR-014-AC-2 | ✅ `src/manifest_host.rs`, `tests/manifest_host_cli.rs`; explicit `make manifest-validate` dispatch; obsolete wrapper removed |
 
@@ -326,16 +326,28 @@ implemented and reviewed.
 
 ## Agent Evaluation Permutation Matrix
 
-| Scenario Class | Required Variants | Hosts | Required Cells |
-|----------------|-------------------|-------|----------------|
-| Existing repository | applicable valid profile | 4 | 4 |
-| No applicable profile | bounded no-profile decision | 4 | 4 |
-| Producer failure | malformed output; unavailable executable | 4 | 8 |
-| Interruption | interrupt then resume | 4 | 4 |
-| Human terminal decision | explicit acceptance; explicit rejection | 4 | 8 |
+The **declared qualification population** is Claude Code. Codex, opencode and
+GitHub Copilot remain supported hosts that Engineering Assurance can evaluate,
+but no release claims retained evidence for them, so the gate does not demand
+cells it would have to invent.
 
-The aggregate gate therefore requires 28 of 28 host-scenario cells with complete
-evaluation envelopes.
+| Scenario Class | Required Variants | Declared Hosts | Required Cells |
+|----------------|-------------------|----------------|----------------|
+| Existing repository | applicable valid profile | 1 | 1 |
+| No applicable profile | bounded no-profile decision | 1 | 1 |
+| Producer failure | malformed output; unavailable executable | 1 | 2 |
+| Interruption | interrupt then resume | 1 | 2 |
+| Human terminal decision | explicit acceptance; explicit rejection | 1 | 2 |
+
+The aggregate gate therefore requires all 7 of 7 declared host-scenario cells
+with complete evaluation envelopes. Completeness is unchanged — every declared
+host must retain every scenario; only the declared population is smaller.
+
+Narrowing the population makes one aggregation class unreachable:
+`workflow-version-mismatch` compares governing workflow identity across hosts
+within one scenario, and with a single declared host there is exactly one cell
+per scenario to compare. The check and its failure variant are retained, and
+become reachable again the moment a second host is declared.
 
 ## Rust Port Permutation Matrix
 
@@ -440,7 +452,7 @@ evaluation envelopes.
 | TC-011 | INT-004 | Workflow discovery | Canonical skill | Exactly four workflow definitions | P0 |
 | TC-107 | INT-006 | Run lifecycle and human gates | Versioned Rust provider and fictional runs | Existing ix-flow state behavior is preserved | P0 |
 | TC-108 | INT-006 | Canonical and pilot invariant loading | Canonical and compatibility workflows | Both resolve the same Rust invariant provider | P0 |
-| TC-109 | INT-007 | Complete supported-host evaluation | Seven scenarios on four hosts | 28 valid result cells with explicit decisions | P0 |
+| TC-109 | INT-007 | Complete declared-host evaluation | Seven scenarios on every declared host | One valid result cell per declared cell, with explicit decisions | P0 |
 | TC-110 | INT-007 | Invalid or incomplete evaluation | Missing and malformed host results | Aggregate gate remains withheld | P0 |
 
 ## Engineering Assurance #5 Coverage
@@ -496,7 +508,7 @@ evaluation envelopes.
 ## Coverage Gaps
 
 The completed baseline has no open gap: Quire reconciles TC-001..TC-051
-to real tracking-tagged symbols, and the retained 28-cell aggregate records the
+to real tracking-tagged symbols, and the retained declared-population aggregate records the
 selected host commands, models, governing versions, transcripts, and outcomes.
 TC-052..TC-068 are backed natively by the Rust semantic library, whose
 tracking-tagged tests carry every criterion the retired

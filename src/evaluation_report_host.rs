@@ -327,10 +327,11 @@ pub(crate) fn verify_complete_artifact(
         || artifact.source_revision != expected_source_revision
         || !artifact.ok
         || !artifact.failures.is_empty()
-        || artifact.required_cells != EvaluationHost::ALL.len() * EvaluationScenario::ALL.len()
+        || artifact.required_cells
+            != EvaluationHost::QUALIFIED.len() * EvaluationScenario::ALL.len()
         || artifact.complete_cells != artifact.required_cells
-        || artifact.models.len() != EvaluationHost::ALL.len()
-        || EvaluationHost::ALL.iter().any(|host| {
+        || artifact.models.len() != EvaluationHost::QUALIFIED.len()
+        || EvaluationHost::QUALIFIED.iter().any(|host| {
             artifact
                 .models
                 .get(host.as_str())
@@ -774,7 +775,7 @@ mod tests {
             "producer": identity("cli-agent-evals")
         });
         let observation = json!({
-            "host": "codex",
+            "host": "claude",
             "host_version": "1.2.3",
             "source_revision": SOURCE_REVISION,
             "suite_revision": "suite-v1",
@@ -826,7 +827,7 @@ mod tests {
             "ok": true,
             "generatedAt": "2026-09-10T00:00:00Z",
             "suite": "engineering-assurance-onboarding",
-            "agent": "codex",
+            "agent": "claude",
             "model": model,
             "repeats": 1,
             "results": [result],
@@ -844,13 +845,13 @@ mod tests {
     fn fixture(model: Option<&str>) -> (TempDir, TempDir, PathBuf, PathBuf) {
         let repository = TempDir::new().expect("repository fixture must be creatable");
         let workspace = TempDir::new().expect("workspace fixture must be creatable");
-        let work_dir = workspace.path().join("codex-existing-profile");
+        let work_dir = workspace.path().join("claude-existing-profile");
         let transcript = work_dir.join(".cli-agent-evals/transcripts/sample.transcript");
         fs::create_dir_all(transcript.parent().expect("transcript must have a parent"))
             .expect("transcript parent must be creatable");
         fs::write(&transcript, b"retained transcript\n")
             .expect("transcript fixture must be writable");
-        let report_path = repository.path().join("reports/codex.json");
+        let report_path = repository.path().join("reports/claude.json");
         fs::create_dir_all(report_path.parent().expect("report must have a parent"))
             .expect("report parent must be creatable");
         fs::write(
@@ -888,12 +889,12 @@ mod tests {
         let artifact = execute_fixture(
             &repository,
             &workspace,
-            &[PathBuf::from("reports/codex.json")],
+            &[PathBuf::from("reports/claude.json")],
         );
 
         assert_eq!(artifact.complete_cells, 1);
         assert_eq!(
-            artifact.models.get("codex"),
+            artifact.models.get("claude"),
             Some(&"runner-default".to_owned())
         );
         assert_eq!(artifact.reports.len(), 1);
@@ -902,7 +903,7 @@ mod tests {
             artifact
                 .failures
                 .iter()
-                .any(|value| value == "missing:claude:existing-profile")
+                .any(|value| value == "missing:claude:no-profile")
         );
         assert!(
             !artifact
@@ -920,7 +921,7 @@ mod tests {
         let changed = execute_fixture(
             &repository,
             &workspace,
-            &[PathBuf::from("reports/codex.json")],
+            &[PathBuf::from("reports/claude.json")],
         );
         assert_eq!(changed.complete_cells, 0);
         assert!(
@@ -934,7 +935,7 @@ mod tests {
         let missing = execute_fixture(
             &repository,
             &workspace,
-            &[PathBuf::from("reports/codex.json")],
+            &[PathBuf::from("reports/claude.json")],
         );
         assert!(
             missing
@@ -950,7 +951,7 @@ mod tests {
             let linked = execute_fixture(
                 &repository,
                 &workspace,
-                &[PathBuf::from("reports/codex.json")],
+                &[PathBuf::from("reports/claude.json")],
             );
             assert!(
                 linked
@@ -964,7 +965,7 @@ mod tests {
             let non_regular = execute_fixture(
                 &repository,
                 &workspace,
-                &[PathBuf::from("reports/codex.json")],
+                &[PathBuf::from("reports/claude.json")],
             );
             assert!(
                 non_regular
@@ -1019,7 +1020,7 @@ mod tests {
         let workdir_escape = execute_fixture(
             &repository,
             &workspace,
-            &[PathBuf::from("reports/codex.json")],
+            &[PathBuf::from("reports/claude.json")],
         );
         assert!(
             workdir_escape
@@ -1033,7 +1034,7 @@ mod tests {
     #[trace("TC-129", "FR-017-AC-1", "FR-017-CON-3")]
     fn tc_129_bounds_collection_and_transcript_bytes_before_allocation() {
         let (repository, workspace, _, transcript) = fixture(Some("model-a"));
-        let exact_paths = vec![PathBuf::from("reports/codex.json"); MAX_REPORT_COLLECTION];
+        let exact_paths = vec![PathBuf::from("reports/claude.json"); MAX_REPORT_COLLECTION];
         execute(
             repository.path(),
             workspace.path(),
@@ -1042,7 +1043,7 @@ mod tests {
             "2026-09-10T00:00:00Z".to_owned(),
         )
         .expect("the exact report collection ceiling must be accepted");
-        let paths = vec![PathBuf::from("reports/codex.json"); MAX_REPORT_COLLECTION + 1];
+        let paths = vec![PathBuf::from("reports/claude.json"); MAX_REPORT_COLLECTION + 1];
         let error = execute(
             repository.path(),
             workspace.path(),
@@ -1062,7 +1063,7 @@ mod tests {
         let oversized = execute_fixture(
             &repository,
             &workspace,
-            &[PathBuf::from("reports/codex.json")],
+            &[PathBuf::from("reports/claude.json")],
         );
         assert!(
             oversized
@@ -1096,7 +1097,7 @@ mod tests {
             &repository,
             &workspace,
             &[
-                PathBuf::from("reports/codex.json"),
+                PathBuf::from("reports/claude.json"),
                 PathBuf::from("reports/second.json"),
             ],
         );
@@ -1105,7 +1106,7 @@ mod tests {
             &workspace,
             &[
                 PathBuf::from("reports/second.json"),
-                PathBuf::from("reports/codex.json"),
+                PathBuf::from("reports/claude.json"),
             ],
         );
         assert_eq!(forward, reverse);
@@ -1124,7 +1125,7 @@ mod tests {
             &repository,
             &workspace,
             &[
-                PathBuf::from("reports/codex.json"),
+                PathBuf::from("reports/claude.json"),
                 PathBuf::from("reports/second.json"),
             ],
         );
@@ -1132,9 +1133,9 @@ mod tests {
             drifted
                 .failures
                 .iter()
-                .any(|value| value == "codex:model-mismatch:model-a,model-b")
+                .any(|value| value == "claude:model-mismatch:model-a,model-b")
         );
-        assert!(!drifted.models.contains_key("codex"));
+        assert!(!drifted.models.contains_key("claude"));
     }
 
     #[test]
@@ -1144,7 +1145,7 @@ mod tests {
         let artifact = execute_fixture(
             &repository,
             &workspace,
-            &[PathBuf::from("reports/codex.json")],
+            &[PathBuf::from("reports/claude.json")],
         );
         write_artifact(
             repository.path(),
