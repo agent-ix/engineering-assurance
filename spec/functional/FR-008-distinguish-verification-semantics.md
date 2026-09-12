@@ -52,7 +52,7 @@ its authoritative Quire, Quoin, native-producer, or ix-flow representation.
 | FR-008-AC-1 | Every semantic concept has exactly one authoritative owner/type and a declared link direction. | Test (TC-056) |
 | FR-008-AC-2 | Definition, execution, result, retained evidence, and report identities remain distinct in valid fixtures. | Test (TC-057) |
 | FR-008-AC-3 | Missing definition, execution, result, or evidence references fail validation instead of being inferred. | Test (TC-058) |
-| FR-008-AC-4 | The contract contains no runner, shell command execution, evidence persistence, or human-decision inference capability. | Static (TC-059) |
+| FR-008-AC-4 | The contract contains no runner, shell command execution, evidence persistence, or human-decision inference capability. | Analysis (TC-059) |
 
 ## Dependencies
 
