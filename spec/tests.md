@@ -44,14 +44,14 @@ implemented and reviewed.
 
 ### Stakeholder Requirement Coverage
 
-| Stakeholder Req | Trace to US/FR | Test/Validation | Coverage Status |
+| Stakeholder Req | Trace to US/FR | Test/Validation | Status |
 |-----------------|----------------|-----------------|-----------------|
 | StR-001 | FR-001, FR-004, FR-005 | StR-001-VC-1..VC-3 → TC-001..TC-003 | ✅ Passing |
 | StR-003 | FR-014..FR-018, NFR-005 | StR-003-VC-1..VC-4 → TC-096, TC-097, TC-100, TC-115 | 🚧 Pending implementation |
 
 ### User Story Coverage
 
-| User Story | Acceptance Criteria | Test Cases | Coverage Status |
+| User Story | Acceptance Criteria | Test Cases | Status |
 |------------|---------------------|------------|-----------------|
 | US-001 | US-001-EX-1 | TC-004 | ✅ Passing |
 | US-001 | US-001-EX-2 | TC-005 | ✅ Passing |
@@ -64,7 +64,7 @@ implemented and reviewed.
 
 ### Functional Requirement Coverage
 
-| Functional Req | Acceptance Criteria | Test Cases | Coverage Status |
+| Functional Req | Acceptance Criteria | Test Cases | Status |
 |----------------|---------------------|------------|-----------------|
 | FR-001 | FR-001-AC-1 | TC-004 | ✅ Passing |
 | FR-001 | FR-001-AC-2 | TC-005 | ✅ Passing |
