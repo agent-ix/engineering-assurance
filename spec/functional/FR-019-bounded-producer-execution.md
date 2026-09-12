@@ -170,10 +170,19 @@ unique within their respective request collections.
 | FR-019-AC-3 | Unavailable, refused, failed, timed-out, malformed-response, containment-failure, cancelled, and completed remain distinguishable and canonically serializable; launched failures retain bounded raw evidence where observable; and only completed carries `T`. | Test (TC-124) |
 | FR-019-AC-4 | Exact wall-clock, stream, input-byte, output-count/byte and concurrency boundaries are admitted while the next value is structurally invalid or terminated; an admitted non-zero exit reaches the adapter; ordinary descendants are reaped and an escaping-descendant mutant produces `containment_failure`. | Test (TC-125) |
 | FR-019-AC-5 | A caller-owned typed response adapter receives the exact bound terminal evidence without requiring the consumer to parse CLI stdout, and Engineering Assurance contains no domain oracle, qualification verdict, evidence store, or Quoin record clone. | Test (TC-127) |
-| FR-019-AC-6 | A real `quire-verification` synthetic consumer compiles against the accepted Engineering Assurance revision and distinguishes completed domain observations from every executor non-completion state without a local runner or stdout adapter. | Test (TC-126) |
 | FR-019-AC-7 | A minimal consumer compiles the existing crate with default features disabled and only `producer-execution` enabled; Engineering Assurance activates no direct dependency used solely for package/archive, onboarding, CLI, YAML, regex, or source-audit behavior, while dependencies shared with the producer API remain admissible and the default full feature preserves the existing package library and CLI gates. | Test (TC-128) |
 
 ## Dependencies
 
 - **Upstream**: accepted [ADR-002](../assets/adr/0002-rust-native-engineering-assurance.md), the exact Rust 1.98.1 boundary in [FR-014](./FR-014-versioned-rust-boundary.md), and [NFR-004](../non-functional/NFR-004-no-parallel-assurance-framework.md).
 - **Downstream**: [IT-006](../integration/IT-006-producer-execution-consumer.md) and the consumer-owned `quire-verification` qualification cases.
+  The retired FR-019-AC-6 asserted that the real `quire-verification` consumer
+  had adopted this boundary. Every technical claim it made about Engineering
+  Assurance is proven here already — the feature-gated compile and dependency
+  census by FR-019-AC-7, the caller-owned adapter with no stdout parsing by
+  FR-019-AC-5, and the distinguishable non-completion states by FR-019-AC-3.
+  What remained was the consumer's identity, which is adoption by another
+  repository rather than a guarantee this one can make or verify, so it is
+  recorded here as a dependency instead of as an acceptance criterion that
+  could never be discharged locally. Criterion numbering is left unchanged;
+  renumbering would silently re-point every existing reference to AC-7.
