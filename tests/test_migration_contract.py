@@ -1,4 +1,4 @@
-"""FR-013 — the reviewed campaign migration contract.
+"""The reviewed campaign migration contract defined by FR-013.
 
 Most of these read the contract. One reads the eight campaign repositories and
 checks the decision table actually accounts for what is in them, because "every

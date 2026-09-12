@@ -129,7 +129,7 @@ hosts, changed historical bytes, and unresolved path dispositions block removal.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-018-AC-1 | Every first-party executable-path matrix row records one current state and one final disposition. | Test (TC-097) |
-| FR-018-AC-2 | Removal is refused unless old and new paths pass at the same candidate revision and direct invocations use the Rust interface. | Property (TC-113) |
+| FR-018-AC-2 | Removal is refused unless old and new paths pass at the same candidate revision and direct invocations use the Rust interface. | Test (TC-113) |
 | FR-018-AC-3 | Before deletion, a failed Rust cutover can restore the previous invocation without rewriting historical evidence or corpus bytes. | Test (TC-114) |
 | FR-018-AC-4 | Final inventory and static scans find no unapproved first-party non-Rust semantic or assertion logic and exclude inert fixture samples from executable debt. | Test (TC-115) |
 

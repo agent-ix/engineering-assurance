@@ -27,9 +27,9 @@ fixtures, packaging, CLI integrations, and reports introduced by issue #5.
 
 | Metric | Target | Threshold | Method |
 | --- | --- | --- | --- |
-| Duplicate authoritative record families | 0 | 0 | static ownership/schema audit |
-| Producer execution paths outside the FR-019 module | 0 | 0 | static package audit |
-| Generic stdout verdict scraping paths | 0 | 0 | static package audit |
+| Duplicate authoritative record families | 0 | 0 | architecture-conformance |
+| Producer execution paths outside the FR-019 module | 0 | 0 | architecture-conformance |
+| Generic stdout verdict scraping paths | 0 | 0 | architecture-conformance |
 
 ## Rationale
 
