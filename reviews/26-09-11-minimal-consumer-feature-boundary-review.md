@@ -39,7 +39,7 @@ simply omitted from it.
 | ID | Severity | Summary | Refs | Escape Cause |
 | --- | --- | --- | --- | --- |
 | FND-219 | high | Closed. `pub mod evaluation;` was the one library module not confined to the `full` feature, so the FR-019 minimal-consumer boundary did not exist in practice and `make rust-foundation-gate` — and therefore `make integration-gate` and `make release-gate` — could not pass. | `src/lib.rs:20` | implementation-bug-despite-evidence |
-| FND-220 | high | Closed by this review rather than by code. The TC-128 row in `spec/tests.md` read `✅ isolated offline downstream compile and activated direct-dependency census passing` at `d9d3023`, where the test was red. A P0 compile gate was reported green while failing, which is precisely the matrix-truth failure the v0.3.1 patch set out to end. The row is accurate as of this change; the escape is that it was published before the gate was run. | `spec/tests.md:307` | unverified-status-claim |
+| FND-220 | high | Closed by this review rather than by code. The TC-128 row in `spec/tests.md` read `✅ isolated offline downstream compile and activated direct-dependency census passing` at `d9d3023`, where the test was red. A P0 compile gate was reported green while failing, which is precisely the matrix-truth failure the v0.3.1 patch set out to end. The row is accurate as of this change; the escape is that it was published before the gate was run. | `spec/tests.md:307` | correct-requirement-no-evidence |
 
 ## Scope limits
 
