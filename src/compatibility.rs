@@ -797,7 +797,13 @@ mod tests {
         });
     }
 
-    #[trace("TC-082", "FR-012-AC-4")]
+    #[trace(
+        "TC-082",
+        "FR-012-AC-4",
+        "FR-012-CON-2",
+        "FR-012-CON-4",
+        "FR-012-CON-5"
+    )]
     #[test]
     fn tc_082_reports_attributed_acceptance_separately() {
         let result =

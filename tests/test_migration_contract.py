@@ -162,7 +162,7 @@ def test_the_agent_allocation_covers_all_eight_repositories_once() -> None:
 
 
 def test_migration_waits_on_acceptance_and_claims_no_qualification() -> None:
-    """Trace: FR-013-AC-8, TC-094, FR-013-CON-1, FR-013-CON-3."""
+    """Trace: FR-013-AC-8, TC-094, FR-013-CON-1, FR-013-CON-2, FR-013-CON-3."""
     assert "may begin until the compatibility matrix records" in CONTRACT
     # Whitespace-normalized: the sentence is line-wrapped in the document, and
     # a reader cares that it is said, not where it broke.

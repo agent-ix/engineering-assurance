@@ -7,7 +7,7 @@ use std::process::Command;
 
 use ix_trace_rs::trace;
 
-#[trace("TC-096", "FR-014-AC-1")]
+#[trace("TC-096", "FR-014-AC-1", "FR-014-CON-3")]
 #[test]
 fn tc_096_root_package_exports_library_and_native_cli() {
     assert_eq!(engineering_assurance::PACKAGE_NAME, "engineering-assurance");
