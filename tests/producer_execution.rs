@@ -1052,7 +1052,7 @@ fn tc_128_minimal_downstream_compiles_only_producer_execution_feature() {
     fs::write(
         consumer.path().join("Cargo.toml"),
         format!(
-            "[package]\nname='producer-consumer-fixture'\nversion='0.0.0'\nedition='2024'\nrust-version='1.98.1'\n[dependencies]\nengineering-assurance={{path={manifest_dir:?},default-features=false,features=['producer-execution']}}\n"
+            "[package]\nname='producer-consumer-fixture'\nversion='0.0.0'\nedition='2024'\nrust-version='1.98.1'\n[dependencies]\nengineering-assurance={{path={manifest_dir:?},default-features=false,features=['producer-execution']}}\nserde={{version='=1.0.228',features=['derive']}}\n"
         ),
     )
     .expect("consumer manifest");
@@ -1082,13 +1082,30 @@ fn tc_128_minimal_downstream_compiles_only_producer_execution_feature() {
         .expect("consumer metadata must launch");
     assert!(metadata.status.success());
     let graph: serde_json::Value = serde_json::from_slice(&metadata.stdout).expect("metadata JSON");
-    let assurance_id = graph["packages"]
+    let assurance_package = graph["packages"]
         .as_array()
         .expect("metadata packages")
         .iter()
         .find(|package| package["name"] == "engineering-assurance")
-        .and_then(|package| package["id"].as_str())
+        .expect("Engineering Assurance package");
+    let assurance_id = assurance_package["id"]
+        .as_str()
         .expect("Engineering Assurance package id");
+    for dependency in assurance_package["dependencies"]
+        .as_array()
+        .expect("Engineering Assurance dependencies")
+        .iter()
+        .filter(|dependency| dependency["kind"].is_null())
+    {
+        let requirement = dependency["req"]
+            .as_str()
+            .expect("normal dependency requirement");
+        assert!(
+            requirement.starts_with('^'),
+            "normal dependency {} must remain a caret range, got {requirement}",
+            dependency["name"].as_str().expect("normal dependency name")
+        );
+    }
     let direct_dependencies = graph["resolve"]["nodes"]
         .as_array()
         .expect("metadata resolve nodes")
