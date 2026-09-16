@@ -134,6 +134,11 @@ unique within their respective request collections.
   onboarding, CLI, YAML, regex, or source-audit behavior; dependencies shared
   with the producer API remain admissible. The default full Engineering
   Assurance package SHALL preserve its existing library and CLI surface.
+- Normal Cargo dependency requirements SHALL be compatible caret ranges rather
+  than exact `=` requirements, so a downstream library can select one
+  semver-compatible version for its complete graph. Engineering Assurance's
+  own `Cargo.lock` SHALL continue to record the exact versions exercised by its
+  repository gates.
 - First-party executable fixtures for TC-122 through TC-125 SHALL be Rust
   binaries. Foreign-language/runtime producers remain supported inputs to the
   public protocol, but the tests SHALL NOT execute Python, JavaScript, or shell
@@ -170,7 +175,7 @@ unique within their respective request collections.
 | FR-019-AC-3 | Unavailable, refused, failed, timed-out, malformed-response, containment-failure, cancelled, and completed remain distinguishable and canonically serializable; launched failures retain bounded raw evidence where observable; and only completed carries `T`. | Test (TC-124) |
 | FR-019-AC-4 | Exact wall-clock, stream, input-byte, output-count/byte and concurrency boundaries are admitted while the next value is structurally invalid or terminated; an admitted non-zero exit reaches the adapter; ordinary descendants are reaped and an escaping-descendant mutant produces `containment_failure`. | Test (TC-125) |
 | FR-019-AC-5 | A caller-owned typed response adapter receives the exact bound terminal evidence without requiring the consumer to parse CLI stdout, and Engineering Assurance contains no domain oracle, qualification verdict, evidence store, or Quoin record clone. | Test (TC-127) |
-| FR-019-AC-7 | A minimal consumer compiles the existing crate with default features disabled and only `producer-execution` enabled; Engineering Assurance activates no direct dependency used solely for package/archive, onboarding, CLI, YAML, regex, or source-audit behavior, while dependencies shared with the producer API remain admissible and the default full feature preserves the existing package library and CLI gates. | Test (TC-128) |
+| FR-019-AC-7 | A minimal consumer compiles the existing crate with default features disabled, only `producer-execution` enabled, and an exact semver-compatible shared-dependency version older than Engineering Assurance's locked version; every normal Engineering Assurance dependency declares a compatible range rather than an exact `=` requirement; Engineering Assurance activates no direct dependency used solely for package/archive, onboarding, CLI, YAML, regex, or source-audit behavior, while dependencies shared with the producer API remain admissible and the default full feature preserves the existing package library and CLI gates. | Test (TC-128) |
 
 ## Dependencies
 
