@@ -548,8 +548,21 @@ fn contains_tilde_workstation_path(line: &str) -> bool {
 fn url_is_allowed(path: &str, url: &str) -> bool {
     let schema_prefix = concat!("http:", "//json-schema.org/draft-07/schema#");
     let cargo_registry = concat!("https:", "//github.com/rust-lang/crates.io-index");
+    let discord_badge = concat!(
+        "https:",
+        "//img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white"
+    );
+    let discord_invite = concat!("https:", "//discord.gg/6qsdhSPE");
+    let agent_ix = concat!("https:", "//github.com/agent-ix");
+    let project_metadata = path.ends_with("README.md")
+        || path.ends_with(".claude-plugin/plugin.json")
+        || path.ends_with(".codex-plugin/plugin.json")
+        || path.ends_with(".github/plugin/plugin.json")
+        || path.ends_with(".dist-info/METADATA");
     url.starts_with(schema_prefix)
         || matches!(path, "Cargo.lock" | "deny.toml") && url == cargo_registry
+        || project_metadata && (url == discord_badge || url == discord_invite)
+        || project_metadata && url.starts_with(agent_ix)
 }
 
 fn contains_encoded_payload(line: &str) -> bool {

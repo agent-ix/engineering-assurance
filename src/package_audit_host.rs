@@ -35,10 +35,13 @@ const MAX_ROOT_ENTRIES: usize = 4_096;
 const MAX_WHEEL_SOURCE_BYTES: usize = 67_108_864;
 const DISTRIBUTION_VERSION: &str = "0.3.1";
 const PRIVATE_CLASSIFIER: &[u8] = b"Classifier: Private :: Do Not Upload\n";
-const ROOT_DATA_FILES: [&str; 11] = [
+const ROOT_DATA_FILES: [&str; 14] = [
     ".claude-plugin/plugin.json",
+    ".claude-plugin/marketplace.json",
     ".codex-plugin/plugin.json",
+    ".agents/plugins/marketplace.json",
     ".github/plugin/plugin.json",
+    ".github/plugin/marketplace.json",
     "opencode.json",
     "pilots/assurance-workflows/README.md",
     "pilots/assurance-workflows/SKILL.md",

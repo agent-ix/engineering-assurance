@@ -2,5 +2,13 @@
   "name": "engineering-assurance",
   "version": "0.3.1",
   "description": "Inventory assurance context and enter governed decision workflows.",
+  "author": {
+    "name": "Agent IX",
+    "url": "https://github.com/agent-ix"
+  },
+  "homepage": "https://github.com/agent-ix/engineering-assurance",
+  "repository": "https://github.com/agent-ix/engineering-assurance",
+  "license": "AGPL-3.0-or-later",
+  "keywords": ["engineering-assurance", "quire-rs", "decision-workflows"],
   "skills": "./engineering_assurance/skills/"
 }
