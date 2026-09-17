@@ -1,0 +1,20 @@
+{
+  "name": "engineering-assurance",
+  "interface": {
+    "displayName": "Engineering Assurance"
+  },
+  "plugins": [
+    {
+      "name": "engineering-assurance",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

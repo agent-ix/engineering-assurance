@@ -1,66 +1,205 @@
 # Engineering Assurance
 
-Engineering Assurance is an opt-in Quire module for authoring explicit
-decision boundaries, measurement plans, component contracts, architecture
-descriptions, and assurance arguments.
+[![Discord](https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white)](https://discord.gg/6qsdhSPE)
 
-The module is configuration-only. It does not calculate a trust or compliance
-score, embed external rules, or make a release decision. Decision owners remain
-responsible for claims, exceptions, evidence sufficiency, and terminal workflow
-choices.
+Engineering Assurance is the Agent IX assurance module for making engineering
+decisions explicit, reviewable, and owned by a person. It gives a coding agent
+one canonical onboarding skill and four resumable workflows for deciding what
+assurance work a repository actually needs.
 
-## Local use
+It is deliberately not a compliance oracle. Engineering Assurance does not
+calculate a trust score, import external rules, or approve a release. The
+decision owner remains responsible for the boundary, claims, exceptions,
+evidence sufficiency, and terminal decision.
+
+## How it fits
+
+Engineering Assurance is a small part of the Agent IX documentation toolchain:
+
+| Component | Responsibility |
+| --- | --- |
+| [quire-rs](https://github.com/agent-ix/quire-rs) | Rust engine that parses and validates Markdown documents against Quire modules. |
+| [quire-cli](https://github.com/agent-ix/quire-cli) | CLI distribution of the quire-rs engine used by the validation commands below. |
+| [Quoin](https://github.com/agent-ix/quoin) | Installs Quire modules and provides specification, evidence, and planning skills. |
+| [ix-flow](https://github.com/agent-ix/ix-flow) | Owns resumable workflow state, event history, and human gates. |
+| Engineering Assurance | Supplies assurance artifact schemas, skeletons, onboarding, and governed workflows. |
+
+Quire-rs validates the artifacts, Quoin installs and composes the modules, and
+ix-flow records the workflow lifecycle.
+
+This module uses the Rust `quire-rs` engine through `quire-cli`
+
+## Install
+
+### 1. Install the toolchain
+
+These are the versions recorded in
+[`engineering_assurance/compatibility-matrix.json`](engineering_assurance/compatibility-matrix.json):
+
+```bash
+npm install --global \
+  @agent-ix/quire-cli@0.31.0 \
+  @agent-ix/quoin@0.23.1 \
+  @agent-ix/ix-flow@0.2.3
+rustup toolchain install 1.98.1
+```
+
+Install the unpublished native CLI from the tagged source checkout:
+
+```bash
+cargo +1.98.1 install \
+  --git https://github.com/agent-ix/engineering-assurance \
+  --tag v0.3.1 \
+  --locked \
+  --bin engineering-assurance
+```
+
+### 2. Install the Quire module
+
+Install the module directory from the same tag. The `//engineering_assurance`
+suffix selects the module root inside this repository:
+
+```bash
+quoin module install \
+  github:agent-ix/engineering-assurance//engineering_assurance@v0.3.1
+```
+
+The installed module contains `manifest.yaml`, `schemas/`, and `skeletons/`.
+Quire-rs consumes those files when validating assurance artifacts.
+
+### 3. Install the agent skill
+
+The same `assurance-onboarding` skill is available to Claude Code, Codex,
+OpenCode, and GitHub Copilot. Use the section for your agent.
+
+<details>
+<summary><b>Claude Code</b></summary>
+
+```text
+/plugin marketplace add agent-ix/engineering-assurance
+/plugin install engineering-assurance@engineering-assurance
+```
+
+</details>
+
+<details>
+<summary><b>OpenAI Codex</b></summary>
+
+```bash
+codex plugin marketplace add agent-ix/engineering-assurance
+codex plugin add engineering-assurance@engineering-assurance
+```
+
+You can also install it from the Codex `/plugins` menu after adding the
+marketplace.
+
+</details>
+
+<details>
+<summary><b>OpenCode</b></summary>
+
+OpenCode discovers the Agent Skills layout. Install the canonical skill with
+GitHub CLI so it is available in every repository:
+
+```bash
+gh skill install agent-ix/engineering-assurance \
+  engineering_assurance/skills/assurance-onboarding \
+  --pin v0.3.1 \
+  --scope user \
+  --agent opencode
+```
+
+</details>
+
+<details>
+<summary><b>GitHub Copilot</b></summary>
+
+With Copilot CLI:
+
+```bash
+copilot plugin marketplace add agent-ix/engineering-assurance
+copilot plugin install engineering-assurance@engineering-assurance
+```
+
+If you want the skills-only route, use GitHub CLI instead:
+
+```bash
+gh skill install agent-ix/engineering-assurance \
+  engineering_assurance/skills/assurance-onboarding \
+  --pin v0.3.1 \
+  --scope user \
+  --agent github-copilot
+```
+
+</details>
+
+## What it provides
+
+### Artifact types
+
+The module supplies Quire schemas and Markdown skeletons for five artifact
+types:
+
+| Type | Purpose |
+| --- | --- |
+| `AssuranceProfile` | State a decision boundary, impacts, evidence policy, and exceptions. |
+| `MeasurementPlan` | Define a measure, its population, collection procedure, and interpretation. |
+| `ArchitectureDescription` | Record system boundaries, views, architecture decisions, and risks. |
+| `ComponentAssuranceContract` | State required component behavior, failure handling, controls, and replacement. |
+| `AssuranceArgument` | Record a claim, reasoning, sufficiency decision, and challenges. |
+
+### Agent skill and workflows
+
+Ask the agent to use `assurance-onboarding` and provide the repository root,
+exact decision boundary, and human decision owner. The skill inventories before
+proposing anything and preserves malformed or conflicting existing artifacts.
+
+It routes bounded work through these ix-flow definitions:
+
+| Workflow | Use it for | Terminal decisions |
+| --- | --- | --- |
+| `assurance-intake` | Decide which assurance artifacts a bounded subject needs. | `accepted` / `rejected` |
+| `architecture-evaluation` | Evaluate an architecture against declared scenarios. | `accepted` / `rejected` |
+| `measurement-promotion` | Decide whether a recorded measure advances one stage. | `promoted` / `not_promoted` |
+| `change-assurance` | Decide a bounded change from impact, review, and assurance records. | `approved` / `rejected` |
+
+Example prompt:
+
+```text
+Use assurance-onboarding for this repository. The decision boundary is the
+database migration in this change, and Jane Doe owns the terminal decision.
+Inventory the existing assurance context before proposing work.
+```
+
+Validate Markdown documents with quire-cli (the quire-rs-backed CLI):
 
 ```bash
 quire validate --scope . 'spec/**/*.md'
-ix-flow run change-assurance --path engineering_assurance/skills/assurance-onboarding
 ```
 
-The canonical onboarding skill is
-`engineering_assurance/skills/assurance-onboarding/SKILL.md`. Claude Code,
-Codex, opencode, and GitHub Copilot discovery surfaces all resolve that same
-tree.
+## Native CLI reference
 
-The former pilot path remains compatible for this release:
+The native CLI is primarily an automation boundary. Every stdin/stdout
+protocol is versioned and documented by the schemas under
+`engineering_assurance/schemas/`.
 
-```bash
-ix-flow run change-assurance --path pilots/assurance-workflows
-```
+| Command group | Purpose |
+| --- | --- |
+| `onboarding` | Inventory a repository and emit a bounded onboarding result. |
+| `workflow-host` | Coordinate a bound workflow lifecycle through ix-flow. |
+| `compatibility` / `compatibility-observe` | Classify explicit or locally observed toolchain versions. |
+| `manifest-validate` | Qualify the module against explicit repository and registry roots. |
+| `integration-evidence` | Verify Quire traceability and retained release evidence. |
+| `content-rights-tree` | Inspect a Git-selected repository tree for rights violations. |
+| `agent-evals` / `agent-evals-provider` | Run or serve the Engineering Assurance evaluation contract. |
+| `evaluation-aggregate` / `evaluation-aggregate-verify` | Build or re-check retained evaluation aggregates. |
+| `package-audit` / `package-lifecycle` | Audit private distributions and stage or refuse npm publication. |
+| `workflow-invariants` | Evaluate a closed workflow projection against named invariants. |
 
-The scoped Quire installation must include this module and the ecosystem's
-shared relation registry.
-
-The repository is public. Registry packages remain private and unpublished;
-changing their release posture requires fresh authorization of both content
-rights and distribution controls.
-
-## Native package
-
-The repository owns one unpublished Cargo package with the
-`engineering_assurance` library and `engineering-assurance` CLI. The exact
-Rust 1.98.1 toolchain is selected by `rust-toolchain.toml`.
-
-The additive boundary exposes package identity plus a pure compatibility
-classifier. Callers observe component versions outside the library and submit
-one strict request on stdin:
-
-```bash
-printf '%s\n' '{"protocol":"engineering-assurance.compatibility-request/v1","observed":[]}' \
-  | cargo run --quiet -- compatibility
-```
-
-Request, result, and error schemas live under
-`engineering_assurance/schemas/`. A compatible result exits 0, a valid but
-withheld result exits 1, and malformed or unsupported input exits 2. The
-executable Python lanes have been retired; `engineering_assurance/__init__.py`
-remains only as the configuration-package path provider.
-
-For the pre-stabilization v0.3.1 consumption contract, see
-[docs/consumption-boundary.md](docs/consumption-boundary.md).
-
-```bash
-make rust-foundation-gate
-```
+Run `engineering-assurance --help` or
+`engineering-assurance <command> --help` for argument details. Maintainer-only
+commands do not make a release decision and should not be invoked as a
+substitute for the human workflow gates.
 
 ## Development
 
@@ -69,26 +208,13 @@ make lint
 make test
 make package-audit
 make rust-foundation-gate
-make rust-deps
 make integration-gate
 ```
 
-`integration-gate` is reproducible from tracked repository content. It runs
-rights, Ruff, pytest, manifest, package, Quire document, and traceability checks.
+Read [CONTENT_RIGHTS.md](CONTENT_RIGHTS.md) before adding content. The
+repository is public. The repository is public. Registry packages remain private and unpublished
+until separate, explicit authorization is given.
 
-Real-agent reports are operational evidence and remain ignored under
-`evals/reports/`; do not commit workstation paths, session output, or transcripts.
-After producing and retaining a four-host aggregate in that directory, run the
-complete release gate through one stable target:
+## License
 
-```bash
-make release-gate \
-  EVAL_AGGREGATE_REPORT=evals/reports/aggregate-<revision>.json
-```
-
-The release gate additionally revalidates every supplied retained report and
-transcript, the 28/28 complete-only aggregate, current governing files, and
-current Quire, Quoin, ix-flow, and cli-evals executable identities. It fails
-closed when `EVAL_AGGREGATE_REPORT` is omitted.
-
-Read [CONTENT_RIGHTS.md](CONTENT_RIGHTS.md) before adding content.
+AGPL-3.0-or-later

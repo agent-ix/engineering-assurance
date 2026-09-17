@@ -1,6 +1,27 @@
 {
   "name": "engineering-assurance",
-  "version": "0.2.1",
+  "version": "0.3.1",
   "description": "Inventory assurance context and enter governed decision workflows.",
-  "skills": "./engineering_assurance/skills/"
+  "author": {
+    "name": "Agent IX",
+    "url": "https://github.com/agent-ix"
+  },
+  "homepage": "https://github.com/agent-ix/engineering-assurance",
+  "repository": "https://github.com/agent-ix/engineering-assurance",
+  "license": "AGPL-3.0-or-later",
+  "keywords": ["engineering-assurance", "quire-rs", "decision-workflows"],
+  "skills": "./engineering_assurance/skills/",
+  "interface": {
+    "displayName": "Engineering Assurance",
+    "shortDescription": "Decision-boundary and evidence-authoring workflows.",
+    "longDescription": "Inventory assurance context and prepare governed, human-owned engineering decisions.",
+    "developerName": "Agent IX",
+    "category": "Productivity",
+    "capabilities": ["Skills", "Planning", "Review", "Write"],
+    "defaultPrompt": [
+      "Inventory assurance needs for this repository.",
+      "Prepare a bounded change-assurance decision.",
+      "Review a measurement for promotion."
+    ]
+  }
 }

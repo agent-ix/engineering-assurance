@@ -105,7 +105,18 @@ pub enum SkillSourceShape {
 }
 
 /// Keys a plugin-style discovery manifest may carry.
-const PLUGIN_KEYS: &[&str] = &["name", "version", "description", "skills"];
+const PLUGIN_KEYS: &[&str] = &[
+    "name",
+    "version",
+    "description",
+    "author",
+    "homepage",
+    "repository",
+    "license",
+    "keywords",
+    "skills",
+    "interface",
+];
 
 /// Keys the opencode discovery manifest may carry.
 const OPENCODE_KEYS: &[&str] = &["$schema", "skills"];

@@ -232,7 +232,19 @@ impl HostSurface {
 
     fn validate_keys(&self, object: &Map<String, Value>) -> Result<(), InstalledError> {
         let allowed = match self.kind {
-            HostKind::Plugin => ["name", "version", "description", "skills"].as_slice(),
+            HostKind::Plugin => [
+                "name",
+                "version",
+                "description",
+                "author",
+                "homepage",
+                "repository",
+                "license",
+                "keywords",
+                "skills",
+                "interface",
+            ]
+            .as_slice(),
             HostKind::Opencode => ["$schema", "skills"].as_slice(),
         };
         if object.keys().any(|key| !allowed.contains(&key.as_str())) {

@@ -93,6 +93,9 @@ fn tc_015_npm_contract_declares_the_audited_payloads() {
     )
     .expect("package contract must be valid JSON");
     for required in [
+        ".claude-plugin/marketplace.json",
+        ".agents/plugins/marketplace.json",
+        ".github/plugin/marketplace.json",
         "engineering_assurance/skills/",
         "contracts/",
         "fixtures/",

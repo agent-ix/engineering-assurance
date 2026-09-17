@@ -1,0 +1,16 @@
+{
+  "name": "engineering-assurance",
+  "owner": {
+    "name": "Agent IX"
+  },
+  "metadata": {
+    "description": "Decision-boundary and evidence-authoring workflows for Agent IX."
+  },
+  "plugins": [
+    {
+      "name": "engineering-assurance",
+      "source": "./",
+      "description": "Inventory assurance context and enter governed decision workflows."
+    }
+  ]
+}
