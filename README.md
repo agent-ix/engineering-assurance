@@ -25,19 +25,11 @@ Engineering Assurance is a small part of the Agent IX documentation toolchain:
 | Engineering Assurance | Supplies assurance artifact schemas, skeletons, onboarding, and governed workflows. |
 
 Quire-rs validates the artifacts, Quoin installs and composes the modules, and
-ix-flow records the workflow lifecycle. These projects complement one another;
-Engineering Assurance does not duplicate their document engine or evidence
-store.
+ix-flow records the workflow lifecycle.
 
-This module uses the Rust `quire-rs` engine through `quire-cli`; it does not use
-the separate TypeScript Quire implementation.
+This module uses the Rust `quire-rs` engine through `quire-cli`
 
 ## Install
-
-The reviewed release is `v0.3.1`. Engineering Assurance is public source, but
-its Python and npm package artifacts are intentionally unpublished. Install the
-public toolchain first, then install this repository's module, CLI, and agent
-skill bundle.
 
 ### 1. Install the toolchain
 
@@ -177,19 +169,6 @@ Example prompt:
 Use assurance-onboarding for this repository. The decision boundary is the
 database migration in this change, and Jane Doe owns the terminal decision.
 Inventory the existing assurance context before proposing work.
-```
-
-For a source checkout, the workflow can also be loaded directly:
-
-```bash
-ix-flow run change-assurance \
-  --path engineering_assurance/skills/assurance-onboarding
-```
-
-The former pilot path remains available for compatibility:
-
-```bash
-ix-flow run change-assurance --path pilots/assurance-workflows
 ```
 
 Validate Markdown documents with quire-cli (the quire-rs-backed CLI):
