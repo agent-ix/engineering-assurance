@@ -23,6 +23,7 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
     let identifier = ["IS", "O 1234"].concat();
     let external_url = ["https:", "//example.invalid/source"].concat();
     let registry_url = ["https:", "//github.com/rust-lang/crates.io-index"].concat();
+    let git_dependency_url = ["https:", "//github.com/agent-ix/ix-trace-rs"].concat();
     let schema_url = ["http:", "//json-schema.org/draft-07/schema#"].concat();
     let license_url = ["https:", "//example.invalid/license"].concat();
     let protected = "Straße".to_owned();
@@ -67,6 +68,9 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
     for (path, text) in [
         ("Cargo.lock", registry_url.as_str()),
         ("deny.toml", registry_url.as_str()),
+        ("Cargo.toml", git_dependency_url.as_str()),
+        ("Cargo.lock", git_dependency_url.as_str()),
+        ("deny.toml", git_dependency_url.as_str()),
         ("candidate.json", schema_url.as_str()),
         ("LICENSE", license_url.as_str()),
         ("src/content_rights.rs", "clause inventory"),
@@ -80,6 +84,29 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
             "{path}"
         );
     }
+    // The git-dependency URL is approved only in the manifest/lock/policy
+    // files it can legitimately name, not in arbitrary content.
+    assert!(
+        !findings("candidate.md", git_dependency_url.as_bytes(), &tokens).is_empty(),
+        "an unqualified file must not inherit the manifest's git-dependency exemption"
+    );
+    // The manifest allowance is scoped to the exact root-level file names, not
+    // any path that happens to end with one of them. A `path.ends_with(...)`
+    // regression would wrongly exempt these.
+    for path in ["vendor/x/Cargo.toml", "crates/sub/Cargo.toml"] {
+        assert!(
+            !findings(path, git_dependency_url.as_bytes(), &tokens).is_empty(),
+            "{path} must not inherit the manifest exemption by suffix match"
+        );
+    }
+    // The manifest allowance is an exact match on the single approved
+    // dependency URL, not an org-wide prefix. A look-alike, squattable org
+    // (e.g. `agent-ix-evil`) must still be refused in Cargo.toml.
+    let look_alike_org_url = ["https:", "//github.com/agent-ix-evil/x"].concat();
+    assert!(
+        !findings("Cargo.toml", look_alike_org_url.as_bytes(), &tokens).is_empty(),
+        "a look-alike agent-ix org URL must not be admitted by the manifest exemption"
+    );
     assert_eq!(
         findings(
             "candidate.md",

@@ -554,13 +554,28 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
     );
     let discord_invite = concat!("https:", "//discord.gg/6qsdhSPE");
     let agent_ix = concat!("https:", "//github.com/agent-ix");
+    let ix_trace_rs = concat!("https:", "//github.com/agent-ix/ix-trace-rs");
     let project_metadata = path.ends_with("README.md")
         || path.ends_with(".claude-plugin/plugin.json")
         || path.ends_with(".codex-plugin/plugin.json")
         || path.ends_with(".github/plugin/plugin.json")
         || path.ends_with(".dist-info/METADATA");
+    // A first-party Agent-IX crate consumed as a rev-pinned git dependency
+    // (PLAT-853) names its own GitHub URL in the manifest and lockfile, same
+    // as the registry index URL already carried in Cargo.lock/deny.toml. This
+    // is an exact match on the single approved dependency URL, not an org
+    // prefix: an org prefix would also admit unrelated, squattable look-alike
+    // orgs such as `agent-ix-evil` or `agent-ix.attacker.invalid`. Cargo.lock
+    // renders the same URL with a `?rev=...#...` suffix, so a suffix starting
+    // with `?` or `#` right after the exact URL is also accepted; anything
+    // else immediately after (e.g. a `-evil` suffix) is not.
+    let is_ix_trace_rs_url = url
+        .strip_prefix(ix_trace_rs)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('?') || rest.starts_with('#'));
+    let cargo_manifest = matches!(path, "Cargo.toml" | "Cargo.lock" | "deny.toml");
     url.starts_with(schema_prefix)
-        || matches!(path, "Cargo.lock" | "deny.toml") && url == cargo_registry
+        || cargo_manifest && url == cargo_registry
+        || cargo_manifest && is_ix_trace_rs_url
         || project_metadata && (url == discord_badge || url == discord_invite)
         || project_metadata && url.starts_with(agent_ix)
 }
