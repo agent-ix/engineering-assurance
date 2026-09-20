@@ -12,5 +12,8 @@ node_modules/
 /manifest.yaml
 /schemas/
 /skeletons/
-/target/
+target/
+*-target/
+target-*/
+.worktrees/
 vendor/
