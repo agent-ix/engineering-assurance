@@ -15,4 +15,5 @@ node_modules/
 
 target/
 *-target/
+target-*/
 .worktrees/
