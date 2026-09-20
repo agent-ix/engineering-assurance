@@ -13,14 +13,6 @@ allow = [
   "Zlib",
 ]
 
-# Standing org exception (PLAT-853): ix-trace-rs is a first-party Agent-IX
-# crate reached as a git dependency rather than crates.io; the `allow` list
-# above stays permissive-only, so AGPL is admitted for this one dependency
-# and cannot arrive unnoticed in another.
-[[licenses.exceptions]]
-crate = "ix-trace-rs"
-allow = ["AGPL-3.0-or-later"]
-
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"

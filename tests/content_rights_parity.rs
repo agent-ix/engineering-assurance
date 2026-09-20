@@ -90,6 +90,23 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
         !findings("candidate.md", git_dependency_url.as_bytes(), &tokens).is_empty(),
         "an unqualified file must not inherit the manifest's git-dependency exemption"
     );
+    // The manifest allowance is scoped to the exact root-level file names, not
+    // any path that happens to end with one of them. A `path.ends_with(...)`
+    // regression would wrongly exempt these.
+    for path in ["vendor/x/Cargo.toml", "crates/sub/Cargo.toml"] {
+        assert!(
+            !findings(path, git_dependency_url.as_bytes(), &tokens).is_empty(),
+            "{path} must not inherit the manifest exemption by suffix match"
+        );
+    }
+    // The manifest allowance is an exact match on the single approved
+    // dependency URL, not an org-wide prefix. A look-alike, squattable org
+    // (e.g. `agent-ix-evil`) must still be refused in Cargo.toml.
+    let look_alike_org_url = ["https:", "//github.com/agent-ix-evil/x"].concat();
+    assert!(
+        !findings("Cargo.toml", look_alike_org_url.as_bytes(), &tokens).is_empty(),
+        "a look-alike agent-ix org URL must not be admitted by the manifest exemption"
+    );
     assert_eq!(
         findings(
             "candidate.md",
