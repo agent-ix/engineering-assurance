@@ -23,6 +23,7 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
     let identifier = ["IS", "O 1234"].concat();
     let external_url = ["https:", "//example.invalid/source"].concat();
     let registry_url = ["https:", "//github.com/rust-lang/crates.io-index"].concat();
+    let git_dependency_url = ["https:", "//github.com/agent-ix/ix-trace-rs"].concat();
     let schema_url = ["http:", "//json-schema.org/draft-07/schema#"].concat();
     let license_url = ["https:", "//example.invalid/license"].concat();
     let protected = "Straße".to_owned();
@@ -67,6 +68,9 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
     for (path, text) in [
         ("Cargo.lock", registry_url.as_str()),
         ("deny.toml", registry_url.as_str()),
+        ("Cargo.toml", git_dependency_url.as_str()),
+        ("Cargo.lock", git_dependency_url.as_str()),
+        ("deny.toml", git_dependency_url.as_str()),
         ("candidate.json", schema_url.as_str()),
         ("LICENSE", license_url.as_str()),
         ("src/content_rights.rs", "clause inventory"),
@@ -80,6 +84,12 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
             "{path}"
         );
     }
+    // The git-dependency URL is approved only in the manifest/lock/policy
+    // files it can legitimately name, not in arbitrary content.
+    assert!(
+        !findings("candidate.md", git_dependency_url.as_bytes(), &tokens).is_empty(),
+        "an unqualified file must not inherit the manifest's git-dependency exemption"
+    );
     assert_eq!(
         findings(
             "candidate.md",

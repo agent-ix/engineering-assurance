@@ -72,10 +72,11 @@ yaml_serde = { version = "0.10", optional = true }
 zip = { version = "8.6", default-features = false, features = ["deflate-flate2"], optional = true }
 
 [dev-dependencies]
-ix-trace-rs = { path = "vendor/ix-trace-rs", version = "=0.1.0" }
+# Public since 2026-09-20 (PLAT-853); pinned to the same rev the vendored
+# copy carried, matching the other Agent-IX repos that consume it.
+ix-trace-rs = { git = "https://github.com/agent-ix/ix-trace-rs", rev = "2ce4ebf47f726b9d76388220545cd0abda8a5cfb", version = "0.1.0" }
 
 [workspace]
-exclude = ["vendor/ix-trace-rs"]
 resolver = "2"
 
 [workspace.lints.rust]

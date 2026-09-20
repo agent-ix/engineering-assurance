@@ -559,8 +559,13 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         || path.ends_with(".codex-plugin/plugin.json")
         || path.ends_with(".github/plugin/plugin.json")
         || path.ends_with(".dist-info/METADATA");
+    // A first-party Agent-IX crate consumed as a rev-pinned git dependency
+    // (PLAT-853) names its own GitHub URL in the manifest and lockfile, same
+    // as the registry index URL already carried in Cargo.lock/deny.toml.
+    let cargo_manifest = matches!(path, "Cargo.toml" | "Cargo.lock" | "deny.toml");
     url.starts_with(schema_prefix)
-        || matches!(path, "Cargo.lock" | "deny.toml") && url == cargo_registry
+        || cargo_manifest && url == cargo_registry
+        || cargo_manifest && url.starts_with(agent_ix)
         || project_metadata && (url == discord_badge || url == discord_invite)
         || project_metadata && url.starts_with(agent_ix)
 }
