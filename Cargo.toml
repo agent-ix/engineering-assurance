@@ -35,15 +35,27 @@ producer-execution = [
   "dep:tempfile",
   "dep:thiserror",
 ]
+# `source_audit` (the syn-based "is this library half I/O-free" check) needs
+# no domain module full-only implies, so a consumer that wants only the
+# audit should not have to accept `serde_json/arbitrary_precision` -- a
+# global, workspace-wide change to serde_json's number representation --
+# just to reach it. Same shape as `producer-execution` above, one feature
+# below the modules it enables, gated in `lib.rs` on this name rather than
+# `full`.
+source-audit = [
+  "dep:serde",
+  "dep:syn",
+  "dep:thiserror",
+]
 full = [
   "producer-execution",
+  "source-audit",
   "serde_json/arbitrary_precision",
   "dep:cap-std",
   "dep:clap",
   "dep:flate2",
   "dep:jsonschema",
   "dep:regex",
-  "dep:syn",
   "dep:tar",
   "dep:time",
   "dep:unicode-casefold",

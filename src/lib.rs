@@ -37,7 +37,7 @@ pub mod package_membership;
 pub mod producer_execution;
 #[cfg(feature = "full")]
 pub mod semantics;
-#[cfg(feature = "full")]
+#[cfg(feature = "source-audit")]
 pub mod source_audit;
 #[cfg(feature = "full")]
 pub mod structured_yaml;
