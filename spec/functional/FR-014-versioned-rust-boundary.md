@@ -101,6 +101,7 @@ containment finding and cannot satisfy the corresponding static gate.
 | FR-014-AC-2 | Every machine-facing command emits exactly one declared-version JSON result on stdout and sends diagnostics only to stderr. | Test (TC-098) |
 | FR-014-AC-3 | Unknown versions, malformed inputs, escaping roots, unavailable hosts, and invalid host responses fail before a write or downstream action. | Test (TC-099) |
 | FR-014-AC-4 | An AST-based audit of every reusable-library module except the dedicated FR-019 producer-execution module finds no filesystem, environment, child-program, network, persistence, or arbitrary-stdout recovery capability named directly or through a lexical alias in that source; the dedicated module is separately checked against FR-019, comments and literals cannot manufacture a finding, and the audit does not claim cross-document compiler name resolution. | Test (TC-101, TC-127) |
+| FR-014-AC-5 | A minimal consumer compiles the existing crate with default features disabled, only `source-audit` enabled, and reaches the Rust source audit; that consumer activates no `serde_json` dependency at all, so it cannot inherit a `serde_json/arbitrary_precision` feature flip from elsewhere in a downstream workspace; the default `full` feature continues to expose the source audit unchanged. | Test (TC-138) |
 
 ## Dependencies
 

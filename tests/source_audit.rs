@@ -7,6 +7,7 @@ use std::{
     collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
+    process::Command,
 };
 
 use engineering_assurance::source_audit::{
@@ -684,5 +685,107 @@ fn tc_076_the_corpus_reader_holds_a_bounded_capability_contract() {
             .iter()
             .any(|identifier| mutating.0.contains(*identifier)),
         "a writing mutant escaped the identifier walk"
+    );
+}
+
+/// A consumer that wants only the source audit must not be forced to accept
+/// `serde_json/arbitrary_precision` -- a global, workspace-wide change to
+/// `serde_json`'s number representation -- just to reach `source_audit`.
+/// `source_audit` used to be reachable only through the `full` feature, which
+/// bundles `arbitrary_precision` in with it; this is the regression test for
+/// the narrower `source-audit` feature that splits them, mirroring the
+/// `producer-execution` minimal-consumer check this repository already runs
+/// (`tc_128_minimal_downstream_compiles_only_producer_execution_feature` in
+/// `tests/producer_execution.rs`) rather than inventing a second pattern for
+/// the same property.
+#[test]
+#[trace("TC-138", "FR-014-AC-5")]
+fn tc_138_a_minimal_downstream_compiles_only_the_source_audit_feature() {
+    let consumer = tempfile::tempdir().expect("consumer root");
+    fs::create_dir(consumer.path().join("src")).expect("consumer source directory");
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    fs::write(
+        consumer.path().join("Cargo.toml"),
+        format!(
+            "[package]\nname='source-audit-consumer-fixture'\nversion='0.0.0'\nedition='2024'\nrust-version='1.98.1'\n[dependencies]\nengineering-assurance={{path={manifest_dir:?},default-features=false,features=['source-audit']}}\n"
+        ),
+    )
+    .expect("consumer manifest");
+    fs::write(
+        consumer.path().join("src/main.rs"),
+        "use engineering_assurance::source_audit::audit_rust_source;\nfn main(){let _ = audit_rust_source;}\n",
+    )
+    .expect("consumer source");
+    let status = Command::new(env!("CARGO"))
+        .args(["check", "--offline", "--manifest-path"])
+        .arg(consumer.path().join("Cargo.toml"))
+        .env("CARGO_BUILD_JOBS", "2")
+        .env("CARGO_TARGET_DIR", consumer.path().join("target"))
+        .status()
+        .expect("consumer cargo check must launch");
+    assert!(
+        status.success(),
+        "minimal source-audit consumer must compile"
+    );
+
+    let metadata = Command::new(env!("CARGO"))
+        .args([
+            "metadata",
+            "--offline",
+            "--format-version",
+            "1",
+            "--manifest-path",
+        ])
+        .arg(consumer.path().join("Cargo.toml"))
+        .output()
+        .expect("consumer metadata must launch");
+    assert!(metadata.status.success());
+    let graph: serde_json::Value = serde_json::from_slice(&metadata.stdout).expect("metadata JSON");
+    let assurance_package = graph["packages"]
+        .as_array()
+        .expect("metadata packages")
+        .iter()
+        .find(|package| package["name"] == "engineering-assurance")
+        .expect("Engineering Assurance package");
+    let assurance_id = assurance_package["id"]
+        .as_str()
+        .expect("Engineering Assurance package id");
+    let direct_dependencies = graph["resolve"]["nodes"]
+        .as_array()
+        .expect("metadata resolve nodes")
+        .iter()
+        .find(|node| node["id"] == assurance_id)
+        .and_then(|node| node["deps"].as_array())
+        .expect("Engineering Assurance resolve node")
+        .iter()
+        .filter_map(|dependency| dependency["name"].as_str())
+        .collect::<BTreeSet<_>>();
+    for forbidden in [
+        "cap-std",
+        "clap",
+        "flate2",
+        "jsonschema",
+        "regex",
+        "rustix",
+        "serde_json",
+        "serde_json_canonicalizer",
+        "sha2",
+        "tar",
+        "tempfile",
+        "time",
+        "unicode-casefold",
+        "yaml_serde",
+        "zip",
+    ] {
+        assert!(
+            !direct_dependencies.contains(forbidden),
+            "unexpected activated direct dependency {forbidden}"
+        );
+    }
+    assert!(
+        !direct_dependencies.contains("serde_json"),
+        "a source-audit-only consumer must not activate serde_json at all, \
+         so it cannot inherit an `arbitrary_precision` flip from anywhere else \
+         in a downstream workspace's feature unification"
     );
 }
