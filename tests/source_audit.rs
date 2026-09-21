@@ -760,20 +760,21 @@ fn tc_138_a_minimal_downstream_compiles_only_the_source_audit_feature() {
         .iter()
         .filter_map(|dependency| dependency["name"].as_str())
         .collect::<BTreeSet<_>>();
+    // Cargo's resolve-node dependency names are the lib name (hyphens become
+    // underscores), not the crate name as written in Cargo.toml.
     for forbidden in [
-        "cap-std",
+        "cap_std",
         "clap",
         "flate2",
         "jsonschema",
         "regex",
         "rustix",
-        "serde_json",
         "serde_json_canonicalizer",
         "sha2",
         "tar",
         "tempfile",
         "time",
-        "unicode-casefold",
+        "unicode_casefold",
         "yaml_serde",
         "zip",
     ] {
@@ -782,10 +783,50 @@ fn tc_138_a_minimal_downstream_compiles_only_the_source_audit_feature() {
             "unexpected activated direct dependency {forbidden}"
         );
     }
+    // Whole-graph, not just direct: a source-audit-only consumer must not
+    // resolve `serde_json` at all, from any transitive path, so it cannot
+    // inherit an `arbitrary_precision` flip from anywhere else in a
+    // downstream workspace's feature unification.
+    let resolved_packages = graph["packages"]
+        .as_array()
+        .expect("metadata packages")
+        .iter()
+        .filter_map(|package| package["name"].as_str())
+        .collect::<BTreeSet<_>>();
     assert!(
-        !direct_dependencies.contains("serde_json"),
-        "a source-audit-only consumer must not activate serde_json at all, \
-         so it cannot inherit an `arbitrary_precision` flip from anywhere else \
-         in a downstream workspace's feature unification"
+        !resolved_packages.contains("serde_json"),
+        "a source-audit-only consumer must not resolve serde_json anywhere \
+         in its dependency graph: {resolved_packages:?}"
     );
+
+    // The default `full` feature must still expose `source_audit` and still
+    // carry `arbitrary_precision` unchanged -- this split must not weaken the
+    // existing consumer's guarantee while adding the narrow one.
+    let full_feature_tree = cargo_feature_tree(&manifest_dir.join("Cargo.toml"));
+    assert!(
+        full_feature_tree.contains("arbitrary_precision"),
+        "full Engineering Assurance feature set must retain serde_json arbitrary_precision"
+    );
+}
+
+fn cargo_feature_tree(manifest_path: &Path) -> String {
+    let feature_tree = Command::new(env!("CARGO"))
+        .args([
+            "tree",
+            "--offline",
+            "--edges",
+            "features",
+            "--invert",
+            "serde_json",
+            "--manifest-path",
+        ])
+        .arg(manifest_path)
+        .output()
+        .expect("feature tree must launch");
+    assert!(
+        feature_tree.status.success(),
+        "feature tree failed: {}",
+        String::from_utf8_lossy(&feature_tree.stderr)
+    );
+    String::from_utf8(feature_tree.stdout).expect("feature tree must be UTF-8")
 }

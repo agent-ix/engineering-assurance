@@ -112,6 +112,7 @@ implemented and reviewed.
 | FR-014 | FR-014-AC-2 | TC-098 | 🚧 Compatibility-command slice backed; aggregate pending |
 | FR-014 | FR-014-AC-3 | TC-099 | 🚧 Compatibility-command slice backed; aggregate pending |
 | FR-014 | FR-014-AC-4 | TC-101 | ✅ Parsed library-module audit, lexical-alias/comment adverse cases, and mutations passing |
+| FR-014 | FR-014-AC-5 | TC-138 | ✅ Isolated offline downstream resolution/compile and activated direct-dependency census passing; default full-package gate unaffected |
 | FR-015 | FR-015-AC-1 | TC-100 | 🚧 Compatibility, fixture-generation, PGM-01, and report slices are all backed against reference bytes captured once from the retired implementation and committed to this repository; no retained implementation is executed as a differential oracle in this row's qualification path; aggregate pending |
 | FR-015 | FR-015-AC-2 | TC-102 | 🚧 Evidence-availability and semantic-reference state vocabularies backed; aggregate pending |
 | FR-015 | FR-015-AC-3 | TC-103 | 🚧 Evidence, semantic, PGM, and per-failure accepted-corpus retention refusals plus bounded population/depth checks backed; aggregate pending |
