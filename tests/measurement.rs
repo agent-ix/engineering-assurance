@@ -235,6 +235,50 @@ fn tc_140_direction_all_covers_every_variant() {
     );
 }
 
+/// An edit from `before` to `after` changing exactly `changed` is a finding
+/// under an equal, absent, or cleared `definition_version`, and no finding
+/// under a genuine bump.
+fn assert_edit_is_reported_unless_versioned(
+    before: MeasurementDefinition,
+    after: MeasurementDefinition,
+    changed: &[DefinitionMember],
+) {
+    let plan = |version, definition| PlanDefinition {
+        definition_version: version,
+        definition,
+    };
+    let finding = |version: Option<&str>| {
+        Some(DefinitionChangedWithoutVersionBump {
+            definition_version: version.map(str::to_owned),
+            changed: changed.to_vec(),
+            before,
+            after,
+        })
+    };
+    // Unchanged version, absent version, and a cleared version (Some -> None,
+    // which is not a bump and carries the version that was cleared).
+    for (before_version, after_version, expected) in [
+        (
+            Some("retention-v1"),
+            Some("retention-v1"),
+            finding(Some("retention-v1")),
+        ),
+        (None, None, finding(None)),
+        (Some("retention-v1"), None, finding(Some("retention-v1"))),
+        (Some("retention-v1"), Some("retention-v2"), None),
+        (None, Some("retention-v1"), None),
+    ] {
+        assert_eq!(
+            definition_change_without_version_bump(
+                &plan(before_version, before),
+                &plan(after_version, after)
+            ),
+            expected,
+            "{before_version:?} -> {after_version:?}: {changed:?}"
+        );
+    }
+}
+
 #[test]
 #[trace("TC-141", "FR-020-AC-3", "FR-021-AC-8")]
 fn tc_141_definition_edit_without_a_version_bump_is_a_typed_finding_naming_the_member() {
@@ -315,57 +359,8 @@ fn tc_141_definition_edit_without_a_version_bump_is_a_typed_finding_naming_the_m
     for (edited, changed) in edits {
         // Both directions: an edit and its reversal, so additions and
         // removals are both covered.
-        for (before, after) in [(base, edited), (edited, base)] {
-            assert_eq!(
-                definition_change_without_version_bump(
-                    &plan(Some("retention-v1"), before),
-                    &plan(Some("retention-v1"), after)
-                ),
-                Some(DefinitionChangedWithoutVersionBump {
-                    definition_version: Some("retention-v1".to_owned()),
-                    changed: changed.clone(),
-                    before,
-                    after,
-                })
-            );
-            assert_eq!(
-                definition_change_without_version_bump(&plan(None, before), &plan(None, after)),
-                Some(DefinitionChangedWithoutVersionBump {
-                    definition_version: None,
-                    changed: changed.clone(),
-                    before,
-                    after,
-                })
-            );
-            assert_eq!(
-                definition_change_without_version_bump(
-                    &plan(Some("retention-v1"), before),
-                    &plan(Some("retention-v2"), after)
-                ),
-                None
-            );
-            assert_eq!(
-                definition_change_without_version_bump(
-                    &plan(None, before),
-                    &plan(Some("retention-v1"), after)
-                ),
-                None
-            );
-            // Clearing `definition_version` (Some -> None) is not a bump: it
-            // still yields a finding, carrying the version that was cleared.
-            assert_eq!(
-                definition_change_without_version_bump(
-                    &plan(Some("retention-v1"), before),
-                    &plan(None, after)
-                ),
-                Some(DefinitionChangedWithoutVersionBump {
-                    definition_version: Some("retention-v1".to_owned()),
-                    changed: changed.clone(),
-                    before,
-                    after,
-                })
-            );
-        }
+        assert_edit_is_reported_unless_versioned(base, edited, &changed);
+        assert_edit_is_reported_unless_versioned(edited, base, &changed);
     }
     for unchanged in [MeasurementDefinition::default(), base] {
         assert_eq!(
