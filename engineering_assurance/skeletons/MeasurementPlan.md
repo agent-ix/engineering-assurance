@@ -105,12 +105,17 @@ answer space, let `n_{f,i}` count every item where label `i` is the primary
 recorded reading *or* one of its recorded contested alternates (an item with
 more than one defensible answer counts toward each). That family's best
 constant score is `max_i(n_{f,i}) / n_f`. The whole population's baseline is
-the size-weighted sum across families:
+the size-weighted mean of the per-family rates — equivalently, total
+best-constant agreements over total items:
 
 ```
-baseline    = sum_f( max_i(n_{f,i}) ) / sum_f( n_f )
+baseline    = sum_f( max_i(n_{f,i}) ) / sum_f( n_f )     # both rates below are fractions in [0, 1]
 margin_pp   = 100 * (observed_agreement_rate - baseline)
 ```
+
+The observed agreement rate must credit contested alternates by the same
+rule used to build `n_{f,i}` above; a strict observed rate compared against a
+contested-inclusive baseline understates the margin.
 
 Compute this from the corpus at measurement time. Never hard-code the
 winning label or the resulting percentage: a corpus that changes moves the
