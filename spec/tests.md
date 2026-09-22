@@ -138,9 +138,9 @@ implemented and reviewed.
 | FR-020 | FR-020-AC-2 | TC-140 | ✅ Rust construction/deserialization refusals and schema/enum wire-set equality passing |
 | FR-020 | FR-020-AC-3 | TC-141 | ✅ Unversioned objective add/remove/change findings and versioned no-finding cases passing |
 | FR-020 | FR-020-AC-4 | TC-142 | ✅ Isolated offline downstream compile with only `measurement` and whole-graph `serde_json` absence passing |
-| FR-023 | FR-023-AC-1 | TC-139 | ✅ Passing |
-| FR-023 | FR-023-AC-2 | TC-139 | ✅ Passing |
-| FR-023 | FR-023-AC-3 | TC-139 | ✅ Passing |
+| FR-023 | FR-023-AC-1 | TC-143 | ✅ Passing |
+| FR-023 | FR-023-AC-2 | TC-143 | ✅ Passing |
+| FR-023 | FR-023-AC-3 | TC-143 | ✅ Passing |
 
 ### Non-Functional Requirement Coverage
 
@@ -322,7 +322,7 @@ implemented and reviewed.
 | TC-140 | The Rust Objective accepts every direction, refuses target without a bound and a non-finite bound with distinct typed errors through both construction and deserialization, refuses unknown directions and extra keys, and its Direction wire-name set equals the schema's direction enum | Unit | P0 | FR-020-AC-2 | ✅ construction, deserialization and wire-set parity cases passing |
 | TC-141 | An objective added, removed or changed under an equal definition_version yields one typed finding carrying that version and both objectives; the same edits under a changed definition_version, and an unchanged objective, yield no finding | Unit | P0 | FR-020-AC-3 | ✅ finding and no-finding cases passing |
 | TC-142 | A minimal downstream crate compiles Engineering Assurance with default features disabled and only `measurement`, reaches Objective and the definition-change check, and resolves no serde_json package anywhere in its dependency graph | Compile | P0 | FR-020-AC-4 | ✅ isolated offline downstream compile and whole-graph census passing |
-| TC-139 | The AssuranceArgument schema rejects a `supported` claim without `evidence_refs` and accepts it with one `ix://` reference; `open`, `challenged`, and `rejected` claims are accepted with or without references; empty, duplicated, and non-`ix://` reference lists are rejected | Unit | P0 | FR-023-AC-1, FR-023-AC-2, FR-023-AC-3 | ✅ `tests/test_module.py` |
+| TC-143 | The AssuranceArgument schema rejects a `supported` claim without `evidence_refs` and accepts it with one `ix://` reference; `open`, `challenged`, and `rejected` claims are accepted with or without references; empty, duplicated, and non-`ix://` reference lists are rejected | Unit | P0 | FR-023-AC-1, FR-023-AC-2, FR-023-AC-3 | ✅ `tests/test_module.py` |
 
 ## Option Permutation Matrix
 

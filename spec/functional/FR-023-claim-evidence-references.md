@@ -12,8 +12,8 @@ relationships:
 ## Description
 
 The AssuranceArgument frontmatter schema SHALL require every claim whose status
-is `supported` to reference at least one authoritative evidence record through
-its own `evidence_refs` list.
+is `supported` to carry at least one `ix://` evidence reference in its own
+`evidence_refs` list.
 
 ## Inputs
 
@@ -41,9 +41,9 @@ its own `evidence_refs` list.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-023-AC-1 | A `supported` claim without `evidence_refs` fails schema validation, and the same claim with one `ix://` evidence reference passes. | Test (TC-139) |
-| FR-023-AC-2 | An `open`, `challenged`, or `rejected` claim passes schema validation both with and without `evidence_refs`. | Test (TC-139) |
-| FR-023-AC-3 | An empty `evidence_refs` list, a duplicated reference, and a reference that is not an `ix://` URI each fail schema validation. | Test (TC-139) |
+| FR-023-AC-1 | A `supported` claim without `evidence_refs` fails schema validation, and the same claim with one `ix://` evidence reference passes. | Test (TC-143) |
+| FR-023-AC-2 | An `open`, `challenged`, or `rejected` claim passes schema validation both with and without `evidence_refs`. | Test (TC-143) |
+| FR-023-AC-3 | An empty `evidence_refs` list, a duplicated reference, and a reference that is not an `ix://` URI each fail schema validation. | Test (TC-143) |
 
 ## Dependencies
 

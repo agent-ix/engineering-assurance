@@ -65,11 +65,15 @@
           "items": { "type": "string", "pattern": "^ix://" }
         }
       },
-      "if": {
-        "required": ["status"],
-        "properties": { "status": { "const": "supported" } }
-      },
-      "then": { "required": ["evidence_refs"] }
+      "allOf": [
+        {
+          "if": {
+            "required": ["status"],
+            "properties": { "status": { "const": "supported" } }
+          },
+          "then": { "required": ["evidence_refs"] }
+        }
+      ]
     },
     "reasoning": {
       "type": "object",
