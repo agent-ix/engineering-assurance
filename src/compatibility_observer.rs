@@ -4,8 +4,8 @@
 //! Bounded host observation for the reviewed compatibility matrix.
 //!
 //! This is intentionally separate from `engineering_assurance::compatibility`:
-//! it reads the selected tree and invokes the four explicitly declared version
-//! commands, then hands only typed observations to the pure classifier.
+//! it validates the selected root and invokes the four explicitly declared
+//! version commands, then hands only typed observations to the pure classifier.
 
 use std::{ffi::OsStr, path::Path, time::Duration};
 
@@ -242,6 +242,34 @@ mod tests {
                 &["--version"]
             ),
             None
+        );
+    }
+
+    #[test]
+    #[trace("TC-130", "FR-012-AC-10", "FR-012-CON-1")]
+    fn the_observing_program_withholds_the_gate_when_nothing_was_observed() {
+        // Nothing in this test file previously drove `observe_with` to a
+        // withheld gate: every other test here pins the fixture runner to the
+        // matrix's exact reviewed versions. An empty runner leaves every
+        // component unobserved, so the pure classifier must call every one of
+        // them `unknown` and withhold, and the host adapter must report that
+        // verdict rather than opening the gate on its own.
+        let result = observe_with(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            &FixtureRunner {
+                outputs: BTreeMap::new(),
+            },
+        )
+        .expect("an observation with no tool output must still classify");
+        assert!(!result.classification.versions_compatible);
+        assert!(!result.gate_satisfied);
+
+        let encoded = to_json_line(&result).expect("the result must serialize");
+        let emitted: serde_json::Value =
+            serde_json::from_slice(&encoded).expect("the emitted line must be one JSON value");
+        assert_eq!(
+            emitted["gate_satisfied"], emitted["classification"]["gate_satisfied"],
+            "the observation result disagreed with the classifier it delegates to"
         );
     }
 

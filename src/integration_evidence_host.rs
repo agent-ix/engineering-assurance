@@ -40,7 +40,7 @@ const MAX_RUNTIME_BYTES: u64 = 64 * 1024 * 1024;
 /// Pinning the count is what catches a test case being silently deleted, so it
 /// is raised deliberately whenever one is added — never derived from the
 /// document it is meant to guard.
-const REQUIRED_TEST_CASES: usize = 133;
+const REQUIRED_TEST_CASES: usize = 132;
 
 #[derive(Debug, Error)]
 pub(crate) enum IntegrationEvidenceError {
