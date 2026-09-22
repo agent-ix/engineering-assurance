@@ -4,7 +4,7 @@ title: Juniper release decision profile
 type: AssuranceProfile
 status: proposed
 owner: juniper-release-owner
-profile_version: 0.2
+schema_version: 0.2
 profile_kind: production-ai
 scope: one candidate revision of the fictional Juniper service
 impact_assessments:

@@ -74,9 +74,9 @@ def test_every_schema_and_skeleton_is_valid() -> None:
             assert f"## {locator['after_heading']}" in body
 
 
-def test_profile_v02_is_advisory_and_legacy_compatible() -> None:
+def test_profile_schema_version_and_profile_kind_are_optional() -> None:
     contract = schema("assurance-profile-frontmatter.schema")
-    assert "profile_version" not in contract["required"]
+    assert "schema_version" not in contract["required"]
     assert "profile_kind" not in contract["required"]
     impact = contract["$defs"]["impact"]["properties"]
     assert impact["verifiability"]["type"] == "object"
