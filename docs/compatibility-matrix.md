@@ -141,4 +141,6 @@ both a named human and a date. The shape it rejects is a `state` that reads as
 accepted while nobody is on record as having accepted it.
 
 The acceptance condition is now satisfied. The gate still requires every
-observed component and retained artifact digest to match this exact matrix.
+observed component to match this exact matrix. The matrix's recorded artifact
+digests are an informational record of the reviewed release, not something the
+observer verifies against a working tree.
