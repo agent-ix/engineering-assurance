@@ -65,7 +65,10 @@ where
     for (wire, expected) in schema_values.iter().zip(all) {
         let decoded: T = serde_json::from_value(serde_json::Value::String(wire.clone()))
             .unwrap_or_else(|error| panic!("schema value {wire:?} must deserialize: {error}"));
-        assert_eq!(&decoded, expected, "schema value {wire:?} decodes to the wrong variant");
+        assert_eq!(
+            &decoded, expected,
+            "schema value {wire:?} decodes to the wrong variant"
+        );
     }
 }
 
@@ -370,12 +373,9 @@ fn tc_146_decision_rule_construction_and_deserialization_are_closed_and_validate
     let threshold = DecisionRule::against_threshold(Comparator::Ge, 0.99).expect("valid rule");
     assert_eq!(threshold.comparator(), Comparator::Ge);
     assert_eq!(threshold.reference(), RuleReference::Threshold(0.99));
-    let baseline = DecisionRule::against_baseline(
-        Comparator::Gt,
-        Baseline::ConstantPredictor,
-        Some(0.05),
-    )
-    .expect("valid rule");
+    let baseline =
+        DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, Some(0.05))
+            .expect("valid rule");
     assert_eq!(
         baseline.reference(),
         RuleReference::Baseline {
@@ -404,7 +404,10 @@ fn tc_146_decision_rule_construction_and_deserialization_are_closed_and_validate
         Err(DecisionRuleError::NonFiniteMargin { margin }) if margin.is_nan()
     ));
 
-    assert_eq!(parse_rule("comparator: ge\nthreshold: 0.99\n"), Ok(threshold));
+    assert_eq!(
+        parse_rule("comparator: ge\nthreshold: 0.99\n"),
+        Ok(threshold)
+    );
     assert_eq!(
         parse_rule("comparator: gt\nbaseline: constant-predictor\nmargin: 0.05\n"),
         Ok(baseline)
@@ -427,7 +430,10 @@ fn tc_146_decision_rule_construction_and_deserialization_are_closed_and_validate
     assert!(infinite.contains("is not a finite number"), "{infinite}");
     let nan_margin = parse_rule("comparator: ge\nbaseline: best-seen\nmargin: .nan\n")
         .expect_err("finite margin");
-    assert!(nan_margin.contains("is not a finite number"), "{nan_margin}");
+    assert!(
+        nan_margin.contains("is not a finite number"),
+        "{nan_margin}"
+    );
     for refused in [
         "comparator: approximately\nthreshold: 1\n",
         "threshold: 1\n",
@@ -470,7 +476,10 @@ fn tc_147_schema_estimator_comparator_and_baseline_enums_equal_the_rust_wire_nam
         "decision_rule must resolve to the $defs entry this test reads"
     );
     assert_wire_parity(
-        &schema_enum(&schema, "/$defs/statistical_design/properties/estimator/enum"),
+        &schema_enum(
+            &schema,
+            "/$defs/statistical_design/properties/estimator/enum",
+        ),
         &Estimator::ALL,
         |estimator| estimator.wire_name(),
     );
@@ -528,7 +537,11 @@ fn tc_147_all_constants_cover_every_variant() {
         assert_eq!(Baseline::ALL.get(index), Some(&baseline));
     }
     assert_eq!(
-        (Estimator::ALL.len(), Comparator::ALL.len(), Baseline::ALL.len()),
+        (
+            Estimator::ALL.len(),
+            Comparator::ALL.len(),
+            Baseline::ALL.len()
+        ),
         (5, 5, 3)
     );
 }
@@ -546,8 +559,16 @@ fn tc_148_decision_rule_evaluation_compares_the_estimate_with_its_reference() {
     ] {
         let rule = DecisionRule::against_threshold(comparator, 1.0).expect("valid rule");
         for (estimate, holds) in below_at_above.into_iter().zip(expected) {
-            assert_eq!(comparator.holds(estimate, 1.0), holds, "{comparator} {estimate}");
-            assert_eq!(rule.holds(estimate, None), Ok(holds), "{comparator} {estimate}");
+            assert_eq!(
+                comparator.holds(estimate, 1.0),
+                holds,
+                "{comparator} {estimate}"
+            );
+            assert_eq!(
+                rule.holds(estimate, None),
+                Ok(holds),
+                "{comparator} {estimate}"
+            );
         }
     }
 

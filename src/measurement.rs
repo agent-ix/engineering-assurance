@@ -324,7 +324,11 @@ pub enum Baseline {
 
 impl Baseline {
     /// Every baseline, in declaration order.
-    pub const ALL: [Self; 3] = [Self::ConstantPredictor, Self::PriorCollection, Self::BestSeen];
+    pub const ALL: [Self; 3] = [
+        Self::ConstantPredictor,
+        Self::PriorCollection,
+        Self::BestSeen,
+    ];
 
     /// The frontmatter wire name of this baseline.
     #[must_use]
