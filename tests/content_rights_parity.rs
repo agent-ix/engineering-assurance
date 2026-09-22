@@ -130,7 +130,7 @@ fn onboarding_report_url_exemption_is_scoped_to_its_exact_path() {
     // sibling first-party repos, by its exact path only.
     let tokens: Vec<String> = Vec::new();
     let onboarding_report_path =
-        "engineering_assurance/skills/assurance-onboarding/scripts/onboard.mjs";
+        "engineering_assurance/skills/assurance-onboarding/scripts/onboard.js";
     let sibling_repo_url = ["https:", "//github.com/agent-ix/qa-corpus/tree/main"].concat();
     assert!(
         findings(onboarding_report_path, sibling_repo_url.as_bytes(), &tokens).is_empty(),
@@ -141,7 +141,7 @@ fn onboarding_report_url_exemption_is_scoped_to_its_exact_path() {
         "an unqualified file must not inherit the onboarding report's exemption"
     );
     assert!(
-        !findings("other/onboard.mjs", sibling_repo_url.as_bytes(), &tokens).is_empty(),
+        !findings("other/onboard.js", sibling_repo_url.as_bytes(), &tokens).is_empty(),
         "a same-named file elsewhere must not inherit the exemption by suffix match"
     );
     // The exemption is an org-prefix match, not an exact single URL, but must

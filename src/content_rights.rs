@@ -570,7 +570,7 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
     // The `/` after `agent_ix` is required so an org-prefix match cannot admit
     // a look-alike org such as `agent-ix-evil`.
     let onboarding_report =
-        path == "engineering_assurance/skills/assurance-onboarding/scripts/onboard.mjs";
+        path == "engineering_assurance/skills/assurance-onboarding/scripts/onboard.js";
     let agent_ix_org_prefix = concat!("https:", "//github.com/agent-ix/");
     // A first-party Agent-IX crate consumed as a rev-pinned git dependency
     // (PLAT-853) names its own GitHub URL in the manifest and lockfile, same

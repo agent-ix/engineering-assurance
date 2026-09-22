@@ -17,7 +17,7 @@
 //      rejection?
 //
 // Usage:
-//   node engineering_assurance/skills/assurance-onboarding/scripts/onboard.mjs [--repo <path>] [--json]
+//   node engineering_assurance/skills/assurance-onboarding/scripts/onboard.js [--repo <path>] [--json]
 //
 // `--repo` is the consuming project's root (default: current directory).
 // `--json` emits the same report as machine-readable JSON instead of text.

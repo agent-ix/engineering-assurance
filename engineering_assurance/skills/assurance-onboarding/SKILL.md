@@ -18,7 +18,7 @@ Run this once, before authoring anything, the first time this skill is used in
 a repository:
 
 ```bash
-node <installed-module-root>/engineering_assurance/skills/assurance-onboarding/scripts/onboard.mjs --repo <repo_root>
+node <installed-module-root>/engineering_assurance/skills/assurance-onboarding/scripts/onboard.js --repo <repo_root>
 ```
 
 (`<installed-module-root>` is wherever the module was installed per
@@ -54,7 +54,7 @@ Re-run it any time the installed module version changes, or when onboarding a
 different repository. This is a separate, human/agent-facing orientation step
 from the native `engineering-assurance onboarding` command: that command reads
 one machine protocol request and returns a structured repository inventory for
-the "Inventory before proposing" step below; `onboard.mjs` is prose and links,
+the "Inventory before proposing" step below; `onboard.js` is prose and links,
 run once, to learn how this all fits together in the first place.
 
 ## Required inputs
