@@ -161,6 +161,8 @@ same canonical bundle and do not redefine these responsibilities.
   executable paths after local parity and direct-invocation cutover.
 - [FR-019](./functional/FR-019-bounded-producer-execution.md) — execute an exact
   caller-declared producer through one bounded public Rust library boundary.
+- [FR-020](./functional/FR-020-measurement-plan-objective.md) — declare a
+  MeasurementPlan's objective direction and bound as part of its definition.
 
 ### Non-Functional Requirements
 

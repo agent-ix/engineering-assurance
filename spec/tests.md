@@ -113,6 +113,10 @@ implemented and reviewed.
 | FR-014 | FR-014-AC-3 | TC-099 | 🚧 Compatibility-command slice backed; aggregate pending |
 | FR-014 | FR-014-AC-4 | TC-101 | ✅ Parsed library-module audit, lexical-alias/comment adverse cases, and mutations passing |
 | FR-014 | FR-014-AC-5 | TC-138 | ✅ Isolated offline downstream resolution/compile and activated direct-dependency census passing; default full-package gate unaffected |
+| TC-139 | The MeasurementPlan frontmatter schema accepts no objective, every direction with and without a numeric bound, and target with a bound; it rejects target without a bound, an unknown or missing direction, a non-numeric bound and an extra objective key; the skeleton's objective validates | Unit | P0 | FR-020-AC-1 | ✅ schema accept/refuse cases passing |
+| TC-140 | The Rust Objective accepts every direction, refuses target without a bound and a non-finite bound with distinct typed errors through both construction and deserialization, refuses unknown directions and extra keys, and its Direction wire-name set equals the schema's direction enum | Unit | P0 | FR-020-AC-2 | ✅ construction, deserialization and wire-set parity cases passing |
+| TC-141 | An objective added, removed or changed under an equal definition_version yields one typed finding carrying that version and both objectives; the same edits under a changed definition_version, and an unchanged objective, yield no finding | Unit | P0 | FR-020-AC-3 | ✅ finding and no-finding cases passing |
+| TC-142 | A minimal downstream crate compiles Engineering Assurance with default features disabled and only `measurement`, reaches Objective and the definition-change check, and resolves no serde_json package anywhere in its dependency graph | Compile | P0 | FR-020-AC-4 | ✅ isolated offline downstream compile and whole-graph census passing |
 | FR-015 | FR-015-AC-1 | TC-100 | 🚧 Compatibility, fixture-generation, PGM-01, and report slices are all backed against reference bytes captured once from the retired implementation and committed to this repository; no retained implementation is executed as a differential oracle in this row's qualification path; aggregate pending |
 | FR-015 | FR-015-AC-2 | TC-102 | 🚧 Evidence-availability and semantic-reference state vocabularies backed; aggregate pending |
 | FR-015 | FR-015-AC-3 | TC-103 | 🚧 Evidence, semantic, PGM, and per-failure accepted-corpus retention refusals plus bounded population/depth checks backed; aggregate pending |
@@ -134,6 +138,10 @@ implemented and reviewed.
 | FR-018 | FR-018-AC-2 | TC-113 | 🚧 Content-rights, package-audit, and compatibility/corpus/fixture-generation same-revision cutovers plus their deletion candidates backed; aggregate removal population pending |
 | FR-018 | FR-018-AC-3 | TC-114 | 🚧 Content-rights, package-audit, and compatibility/corpus dispatch rollback/reapplication backed; aggregate rollback population pending |
 | FR-018 | FR-018-AC-4 | TC-115 | 🚧 Pending implementation |
+| FR-020 | FR-020-AC-1 | TC-139 | ✅ Schema accept/refuse cases and skeleton validation passing |
+| FR-020 | FR-020-AC-2 | TC-140 | ✅ Rust construction/deserialization refusals and schema/enum wire-set equality passing |
+| FR-020 | FR-020-AC-3 | TC-141 | ✅ Unversioned objective add/remove/change findings and versioned no-finding cases passing |
+| FR-020 | FR-020-AC-4 | TC-142 | ✅ Isolated offline downstream compile with only `measurement` and whole-graph `serde_json` absence passing |
 
 ### Non-Functional Requirement Coverage
 
