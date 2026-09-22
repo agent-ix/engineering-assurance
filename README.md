@@ -29,6 +29,17 @@ ix-flow records the workflow lifecycle.
 
 This module uses the Rust `quire-rs` engine through `quire-cli`
 
+This repository is where the artifact **schemas and skeletons** are defined
+and shipped — it is not where any one project's own assurance artifacts live.
+Those live in that project's own repo, validated against the schemas this
+module ships as an installed Quire module. `agent-ix/quoin`'s
+[`spec/assurance/`](https://github.com/agent-ix/quoin/tree/main/spec/assurance)
+is a working example: quoin's own `AssuranceProfile` and `MeasurementPlan`
+instances. Whether quoin should also *consume* this module's evidence-accounting
+and measurement code, not just its schemas, is a separate, still-open question
+tracked at [`agent-ix/engineering-assurance#98`](https://github.com/agent-ix/engineering-assurance/issues/98) —
+not resolved here.
+
 ## Install
 
 ### 1. Install the toolchain

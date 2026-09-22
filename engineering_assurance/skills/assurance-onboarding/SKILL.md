@@ -32,7 +32,11 @@ report five separate collections:
 Reuse an applicable valid artifact. Preserve malformed or conflicting artifacts
 byte-for-byte and ask the decision owner to select or correct them. Do not create
 a generic AssuranceProfile or MeasurementPlan when the stated decision does not
-justify one.
+justify one. Do not create one MeasurementPlan per related quantity, either —
+two related quantities (e.g. cost and latency for the same subject) belong
+under one plan's observations, distinguished by `dimensions` (see the worked
+example in the `MeasurementPlan` skeleton); the duplicate-observation check
+keys on metric plus dimensions together, so this does not collide.
 
 When an artifact is justified, render it from the installed module skeleton,
 write a same-directory staging file, validate it with Quire, and expose it only
