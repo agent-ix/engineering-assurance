@@ -1064,13 +1064,15 @@ fn tc_156_protected_apparatus_is_a_non_empty_set_of_distinct_entries() {
             "protected apparatus path `../a.json` has a `..` segment".to_owned(),
         ),
         ("evals/harness.py\n", "invalid type".to_owned()),
-        ("- 7\n", "invalid type".to_owned()),
     ] {
         let error = yaml_serde::from_str::<ProtectedApparatus>(refused)
             .expect_err("must refuse")
             .to_string();
         assert!(error.contains(&message), "{refused:?}: {error}");
     }
+    // YAML reads an unquoted `7` as a string where one is expected, so the
+    // non-string refusal is checked on a JSON number.
+    assert!(serde_json::from_value::<ProtectedApparatus>(serde_json::json!([7])).is_err());
 }
 
 #[test]
