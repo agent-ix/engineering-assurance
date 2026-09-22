@@ -39,6 +39,19 @@
         "version": { "type": "string", "minLength": 1 }
       }
     },
+    "preregistration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bar_digest"],
+      "description": "Tamper evidence only, not an ordering proof (PLAT-936). `bar_digest` is a sha256 digest over the normalized text of this document's own \"Comparison and Enforcement\" section, checked at measurement intake against that section as the document reads at admission time. A mismatch means the section was edited after the digest was recorded, and the collection is refused. This does NOT prove the bar predates any result -- a commit's author-date and a collection's own timestamp are both self-reported strings nobody attests independently, which is why the ordering check originally proposed for this was found unbuildable (PLAT-935). It also does not stop an evaluator reporting only a favourable pre-registered variant, does not stop a repeated re-run until one passes, and does not stop editing an unprotected input such as the baseline instead of the bar text itself. Optional.",
+      "properties": {
+        "bar_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "sha256 of the \"Comparison and Enforcement\" section's text, normalized (CRLF to LF, each line's trailing whitespace trimmed, leading and trailing blank lines dropped) before hashing."
+        }
+      }
+    },
     "statistical_design": { "$ref": "#/$defs/statistical_design" },
     "relationships": {
       "type": "array",
