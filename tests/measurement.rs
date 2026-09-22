@@ -2,13 +2,15 @@
 // Copyright (C) 2026 Agent-IX
 
 //! FR-020 `MeasurementPlan` objective types, schema parity, the definition-change
-//! check, and the narrow `measurement` feature.
+//! check, and the narrow `measurement` feature; FR-021 decision-rule and
+//! estimator vocabulary, its schema parity, and rule evaluation.
 
 use std::{collections::BTreeSet, fs, path::Path, process::Command};
 
 use engineering_assurance::measurement::{
-    Direction, Objective, ObjectiveChangedWithoutVersionBump, ObjectiveError, PlanDefinition,
-    objective_change_without_version_bump,
+    Baseline, Comparator, DecisionRule, DecisionRuleError, Direction, Estimator, Objective,
+    ObjectiveChangedWithoutVersionBump, ObjectiveError, PlanDefinition, RuleEvaluationError,
+    RuleReference, objective_change_without_version_bump,
 };
 use ix_trace_rs::trace;
 
@@ -18,6 +20,53 @@ fn objective(direction: Direction, bound: Option<f64>) -> Objective {
 
 fn parse(yaml: &str) -> Result<Objective, String> {
     yaml_serde::from_str::<Objective>(yaml).map_err(|error| error.to_string())
+}
+
+fn parse_rule(yaml: &str) -> Result<DecisionRule, String> {
+    yaml_serde::from_str::<DecisionRule>(yaml).map_err(|error| error.to_string())
+}
+
+fn measurement_plan_schema() -> serde_json::Value {
+    let schema_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("engineering_assurance/schemas/measurement-plan-frontmatter.schema.json");
+    serde_json::from_slice(&fs::read(&schema_path).expect("schema readable"))
+        .expect("schema is JSON")
+}
+
+/// The schema enum at `pointer`, as owned strings, in schema order.
+fn schema_enum(schema: &serde_json::Value, pointer: &str) -> Vec<String> {
+    schema
+        .pointer(pointer)
+        .and_then(serde_json::Value::as_array)
+        .unwrap_or_else(|| panic!("schema enum at {pointer}"))
+        .iter()
+        .map(|value| value.as_str().expect("enum value is a string").to_owned())
+        .collect()
+}
+
+/// Assert a schema enum equals a Rust enum's wire names in order, and that
+/// every schema value round-trips through serde to the same variant.
+fn assert_wire_parity<T>(schema_values: &[String], all: &[T], wire_name: fn(&T) -> &'static str)
+where
+    T: serde::Serialize + serde::de::DeserializeOwned + PartialEq + std::fmt::Debug,
+{
+    let rust_values = all
+        .iter()
+        .map(|variant| {
+            assert_eq!(
+                serde_json::to_value(variant).expect("variant serializes"),
+                wire_name(variant),
+                "serde and wire_name agree for {variant:?}"
+            );
+            wire_name(variant).to_owned()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(schema_values, rust_values.as_slice());
+    for (wire, expected) in schema_values.iter().zip(all) {
+        let decoded: T = serde_json::from_value(serde_json::Value::String(wire.clone()))
+            .unwrap_or_else(|error| panic!("schema value {wire:?} must deserialize: {error}"));
+        assert_eq!(&decoded, expected, "schema value {wire:?} decodes to the wrong variant");
+    }
 }
 
 #[test]
@@ -256,7 +305,7 @@ fn tc_141_objective_edit_without_a_version_bump_is_a_typed_finding() {
 /// proves that consumer never resolves `serde_json`, so it cannot inherit the
 /// `arbitrary_precision` flip `full` carries.
 #[test]
-#[trace("TC-142", "FR-020-AC-4")]
+#[trace("TC-142", "FR-020-AC-4", "FR-021-AC-7")]
 fn tc_142_a_minimal_downstream_compiles_only_the_measurement_feature() {
     let consumer = tempfile::tempdir().expect("consumer root");
     fs::create_dir(consumer.path().join("src")).expect("consumer source directory");
@@ -270,7 +319,7 @@ fn tc_142_a_minimal_downstream_compiles_only_the_measurement_feature() {
     .expect("consumer manifest");
     fs::write(
         consumer.path().join("src/main.rs"),
-        "use engineering_assurance::measurement::{Direction, Objective, objective_change_without_version_bump};\nfn main(){let _ = (Objective::new(Direction::Target, Some(1.0)), objective_change_without_version_bump);}\n",
+        "use engineering_assurance::measurement::{Baseline, Comparator, DecisionRule, Direction, Estimator, Objective, objective_change_without_version_bump};\nfn main(){let _ = (Objective::new(Direction::Target, Some(1.0)), objective_change_without_version_bump, DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, None), Estimator::Proportion);}\n",
     )
     .expect("consumer source");
     let status = Command::new(env!("CARGO"))
@@ -312,5 +361,229 @@ fn tc_142_a_minimal_downstream_compiles_only_the_measurement_feature() {
         !resolved_packages.contains("serde_json"),
         "a measurement-only consumer must not resolve serde_json anywhere \
          in its dependency graph: {resolved_packages:?}"
+    );
+}
+
+#[test]
+#[trace("TC-146", "FR-021-AC-3")]
+fn tc_146_decision_rule_construction_and_deserialization_are_closed_and_validated() {
+    let threshold = DecisionRule::against_threshold(Comparator::Ge, 0.99).expect("valid rule");
+    assert_eq!(threshold.comparator(), Comparator::Ge);
+    assert_eq!(threshold.reference(), RuleReference::Threshold(0.99));
+    let baseline = DecisionRule::against_baseline(
+        Comparator::Gt,
+        Baseline::ConstantPredictor,
+        Some(0.05),
+    )
+    .expect("valid rule");
+    assert_eq!(
+        baseline.reference(),
+        RuleReference::Baseline {
+            baseline: Baseline::ConstantPredictor,
+            margin: 0.05
+        }
+    );
+    assert_eq!(
+        DecisionRule::against_baseline(Comparator::Ge, Baseline::BestSeen, None)
+            .expect("valid rule")
+            .reference(),
+        RuleReference::Baseline {
+            baseline: Baseline::BestSeen,
+            margin: 0.0
+        }
+    );
+
+    assert_eq!(
+        DecisionRule::against_threshold(Comparator::Ge, f64::INFINITY),
+        Err(DecisionRuleError::NonFiniteThreshold {
+            threshold: f64::INFINITY
+        })
+    );
+    assert!(matches!(
+        DecisionRule::against_baseline(Comparator::Ge, Baseline::BestSeen, Some(f64::NAN)),
+        Err(DecisionRuleError::NonFiniteMargin { margin }) if margin.is_nan()
+    ));
+
+    assert_eq!(parse_rule("comparator: ge\nthreshold: 0.99\n"), Ok(threshold));
+    assert_eq!(
+        parse_rule("comparator: gt\nbaseline: constant-predictor\nmargin: 0.05\n"),
+        Ok(baseline)
+    );
+    for (yaml, error) in [
+        ("comparator: ge\n", DecisionRuleError::MissingReference),
+        (
+            "comparator: ge\nthreshold: 1\nbaseline: best-seen\n",
+            DecisionRuleError::ThresholdAndBaseline,
+        ),
+        (
+            "comparator: ge\nthreshold: 1\nmargin: 0.1\n",
+            DecisionRuleError::MarginWithoutBaseline,
+        ),
+    ] {
+        let refused = parse_rule(yaml).expect_err(yaml);
+        assert!(refused.contains(&error.to_string()), "{yaml:?}: {refused}");
+    }
+    let infinite = parse_rule("comparator: ge\nthreshold: .inf\n").expect_err("finite threshold");
+    assert!(infinite.contains("is not a finite number"), "{infinite}");
+    let nan_margin = parse_rule("comparator: ge\nbaseline: best-seen\nmargin: .nan\n")
+        .expect_err("finite margin");
+    assert!(nan_margin.contains("is not a finite number"), "{nan_margin}");
+    for refused in [
+        "comparator: approximately\nthreshold: 1\n",
+        "threshold: 1\n",
+        "comparator: ge\nbaseline: vibes\n",
+        "comparator: ge\nthreshold: \"0.99\"\n",
+        "comparator: ge\nthreshold: 1\nrepetitions: 5\n",
+        "comparator: ge\nthreshold: 1\nminimum_n: 20\n",
+        "comparator: ge\nthreshold: 1\nmetric: retention\n",
+    ] {
+        assert!(parse_rule(refused).is_err(), "must refuse {refused:?}");
+    }
+    for estimator in ["retained-result proportion", "p90", ""] {
+        assert!(
+            yaml_serde::from_str::<Estimator>(estimator).is_err(),
+            "must refuse estimator {estimator:?}"
+        );
+    }
+
+    for rule in [threshold, baseline] {
+        let emitted = yaml_serde::to_string(&rule).expect("rule serializes");
+        assert_eq!(parse_rule(&emitted), Ok(rule), "{emitted}");
+    }
+    assert_eq!(
+        yaml_serde::to_string(
+            &DecisionRule::against_baseline(Comparator::Eq, Baseline::PriorCollection, None)
+                .expect("valid rule")
+        )
+        .expect("rule serializes"),
+        "comparator: eq\nbaseline: prior-collection\n"
+    );
+}
+
+#[test]
+#[trace("TC-147", "FR-021-AC-4")]
+fn tc_147_schema_estimator_comparator_and_baseline_enums_equal_the_rust_wire_names() {
+    let schema = measurement_plan_schema();
+    assert_eq!(
+        schema["$defs"]["statistical_design"]["properties"]["decision_rule"]["$ref"],
+        "#/$defs/decision_rule",
+        "decision_rule must resolve to the $defs entry this test reads"
+    );
+    assert_wire_parity(
+        &schema_enum(&schema, "/$defs/statistical_design/properties/estimator/enum"),
+        &Estimator::ALL,
+        |estimator| estimator.wire_name(),
+    );
+    assert_wire_parity(
+        &schema_enum(&schema, "/$defs/decision_rule/properties/comparator/enum"),
+        &Comparator::ALL,
+        |comparator| comparator.wire_name(),
+    );
+    assert_wire_parity(
+        &schema_enum(&schema, "/$defs/decision_rule/properties/baseline/enum"),
+        &Baseline::ALL,
+        |baseline| baseline.wire_name(),
+    );
+    for (value, name) in [
+        (Estimator::Ratio.to_string(), "ratio"),
+        (Comparator::Le.to_string(), "le"),
+        (Baseline::BestSeen.to_string(), "best-seen"),
+    ] {
+        assert_eq!(value, name);
+    }
+}
+
+#[test]
+#[trace("TC-147", "FR-021-AC-4")]
+fn tc_147_all_constants_cover_every_variant() {
+    // Exhaustive matches: a new variant fails to compile here until its
+    // expected `ALL` index is named, so it cannot silently drop out of the
+    // schema parity check above.
+    for estimator in Estimator::ALL {
+        let index = match estimator {
+            Estimator::Proportion => 0,
+            Estimator::Count => 1,
+            Estimator::Mean => 2,
+            Estimator::Median => 3,
+            Estimator::Ratio => 4,
+        };
+        assert_eq!(Estimator::ALL.get(index), Some(&estimator));
+    }
+    for comparator in Comparator::ALL {
+        let index = match comparator {
+            Comparator::Gt => 0,
+            Comparator::Ge => 1,
+            Comparator::Lt => 2,
+            Comparator::Le => 3,
+            Comparator::Eq => 4,
+        };
+        assert_eq!(Comparator::ALL.get(index), Some(&comparator));
+    }
+    for baseline in Baseline::ALL {
+        let index = match baseline {
+            Baseline::ConstantPredictor => 0,
+            Baseline::PriorCollection => 1,
+            Baseline::BestSeen => 2,
+        };
+        assert_eq!(Baseline::ALL.get(index), Some(&baseline));
+    }
+    assert_eq!(
+        (Estimator::ALL.len(), Comparator::ALL.len(), Baseline::ALL.len()),
+        (5, 5, 3)
+    );
+}
+
+#[test]
+#[trace("TC-148", "FR-021-AC-5")]
+fn tc_148_decision_rule_evaluation_compares_the_estimate_with_its_reference() {
+    let below_at_above = [0.5, 1.0, 1.5];
+    for (comparator, expected) in [
+        (Comparator::Gt, [false, false, true]),
+        (Comparator::Ge, [false, true, true]),
+        (Comparator::Lt, [true, false, false]),
+        (Comparator::Le, [true, true, false]),
+        (Comparator::Eq, [false, true, false]),
+    ] {
+        let rule = DecisionRule::against_threshold(comparator, 1.0).expect("valid rule");
+        for (estimate, holds) in below_at_above.into_iter().zip(expected) {
+            assert_eq!(comparator.holds(estimate, 1.0), holds, "{comparator} {estimate}");
+            assert_eq!(rule.holds(estimate, None), Ok(holds), "{comparator} {estimate}");
+        }
+    }
+
+    // reference = baseline value + margin: beating a 0.80 constant predictor
+    // by five points needs more than 0.85.
+    let margin_rule =
+        DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, Some(0.05))
+            .expect("valid rule");
+    assert_eq!(margin_rule.holds(0.86, Some(0.80)), Ok(true));
+    assert_eq!(margin_rule.holds(0.84, Some(0.80)), Ok(false));
+    // A negative margin tolerates a bounded regression against best-seen.
+    let tolerant = DecisionRule::against_baseline(Comparator::Ge, Baseline::BestSeen, Some(-0.25))
+        .expect("valid rule");
+    assert_eq!(tolerant.holds(0.75, Some(1.0)), Ok(true));
+    assert_eq!(tolerant.holds(0.5, Some(1.0)), Ok(false));
+
+    assert_eq!(
+        margin_rule.holds(0.9, None),
+        Err(RuleEvaluationError::MissingBaselineValue {
+            baseline: Baseline::ConstantPredictor
+        })
+    );
+    assert_eq!(
+        DecisionRule::against_threshold(Comparator::Eq, 0.0)
+            .expect("valid rule")
+            .holds(0.0, Some(0.0)),
+        Err(RuleEvaluationError::UnexpectedBaselineValue)
+    );
+    assert!(matches!(
+        margin_rule.holds(f64::NAN, Some(0.8)),
+        Err(RuleEvaluationError::NonFiniteEstimate { estimate }) if estimate.is_nan()
+    ));
+    assert_eq!(
+        margin_rule.holds(0.9, Some(f64::NEG_INFINITY)),
+        Err(RuleEvaluationError::NonFiniteBaselineValue {
+            value: f64::NEG_INFINITY
+        })
     );
 }

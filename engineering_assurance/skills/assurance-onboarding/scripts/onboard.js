@@ -124,17 +124,17 @@ if (moduleRoot) {
 //
 // This only understands the one shape every schema in this module uses today:
 // a flat `allOf` of `{ if: { properties, required }, then: { required } }`
-// branches — either at a schema's own top level, or one level down inside a
-// `$defs` entry a top-level property `$ref`s (directly, or as an array's
-// `items.$ref`; see `readNestedAllOf` below), or inside an inline nested
-// object (e.g. MeasurementPlan's `objective`; also handled by
-// `readNestedAllOf`). A schema that instead used a bare top-level `if`/`then`
-// (not wrapped in `allOf`), `else`, a nested `allOf`, `anyOf`, `oneOf`,
-// `dependentRequired`, or a `$ref`'d branch would silently produce no output
-// here rather than a wrong one — which is worse, because a silent gap looks
-// like "no conditional requirements" instead of "this reader doesn't
-// understand this schema". `readAllOf` below refuses to stay silent: anything
-// it does not recognize becomes a `warnings` entry the report prints loudly.
+// branches — either at a schema's own top level, or at any depth inside a
+// `$ref`'d (directly, or via an array's `items.$ref`) nested `$defs` entry;
+// see `resolveLocalRef` and `visit` below. A schema that instead used a bare
+// top-level `if`/`then` (not wrapped in `allOf`), `else`, a nested `allOf`,
+// an `anyOf`/`oneOf` that isn't a plain "exactly one field" choice, a
+// schema-valued `dependencies` entry, or a `$ref`'d branch would silently
+// produce no output here rather than a wrong one — which is worse, because a
+// silent gap looks like "no conditional requirements" instead of "this
+// reader doesn't understand this schema". `readAllOf` below refuses to stay
+// silent: anything it does not recognize becomes a `warnings` entry the
+// report prints loudly.
 const describeCondition = (condition, prefix = "") => {
   const clauses = Object.entries(condition?.properties ?? {}).map(([name, def]) => {
     const prop = `${prefix}${name}`;
@@ -145,13 +145,40 @@ const describeCondition = (condition, prefix = "") => {
   return clauses.length > 0 ? clauses.join(" and ") : "(unrecognized condition)";
 };
 
-const readAllOf = (schema, prefix = "") => {
+const readAllOf = (schema, prefix = "", present = "") => {
   const conditionalRequired = [];
+  const exactlyOneOf = [];
   const warnings = [];
   if (schema.dependentRequired) {
     warnings.push("schema uses `dependentRequired`, which this checklist does not read");
   }
-  if (schema.anyOf || schema.oneOf) {
+  // Draft-07 `dependencies` with array values: "when X is present, also
+  // require Y" -- the same shape as an `allOf` conditional requirement.
+  for (const [name, dependency] of Object.entries(schema.dependencies ?? {})) {
+    if (Array.isArray(dependency)) {
+      conditionalRequired.push({
+        when: `${prefix}${name} is present`,
+        required: dependency.map((required) => `${prefix}${required}`),
+      });
+    } else {
+      warnings.push("schema uses a schema-valued `dependencies` entry, which this checklist does not read");
+    }
+  }
+  // A `oneOf` whose every branch is only `{ required: [one field] }` means
+  // "exactly one of these fields" (a MeasurementPlan decision rule's
+  // `threshold` or `baseline`). Any other `oneOf`/`anyOf` shape stays a
+  // loud warning rather than a silent gap.
+  const oneOfFields = (schema.oneOf ?? []).map((branch) =>
+    Object.keys(branch).length === 1 && Array.isArray(branch.required) && branch.required.length === 1
+      ? branch.required[0]
+      : null,
+  );
+  if (schema.oneOf && oneOfFields.every((field) => field !== null)) {
+    exactlyOneOf.push({
+      when: present || "always",
+      fields: oneOfFields.map((field) => `${prefix}${field}`),
+    });
+  } else if (schema.anyOf || schema.oneOf) {
     warnings.push("schema uses a top-level `anyOf`/`oneOf`, which this checklist does not read");
   }
   if (schema.if || schema.then) {
@@ -184,59 +211,25 @@ const readAllOf = (schema, prefix = "") => {
       );
     }
   }
-  return { conditionalRequired, warnings };
+  return { conditionalRequired, exactlyOneOf, warnings };
 };
 
-// A conditional -- or an unconditional nested `required` -- can also sit
-// inside a `$defs` entry a top-level property `$ref`s: directly (e.g.
-// MeasurementPlan's `objective` points at `$defs/objective`, whose own
+// Resolve a same-document `#/$defs/<name>` reference: either a property's
+// own `$ref` (an object embedded directly, e.g. MeasurementPlan's
+// `objective` points at `$defs/objective`, whose own
 // `required: ["direction"]` lives there, not on the schema's own top-level
-// `required`), or as an array property's `items.$ref`. AssuranceArgument's
+// `required`), or an array property's `items.$ref` (e.g. AssuranceArgument's
+// `reasoning` array points at `$defs/reasoning`). AssuranceArgument's
 // `top_claim` similarly points at `$defs/claim`, whose own `evidence_refs`
 // requirement is conditional on `status`, sitting inside that $defs entry's
 // own `allOf`. Reading only `schema.required` and `schema.allOf` (as the
-// top-level walk above does) would silently omit both kinds. Follow one
-// level: a property's direct `$ref`, or an array property's `items.$ref`. No
-// deeper — a `$ref` found inside a `$defs` entry is left to the existing
-// `$ref`-in-`if` warning above, not chased further.
-const resolveDefRef = (schema, def) => {
+// top-level walk above does) would silently omit all of these. Anything
+// else is read as written; a `$ref` found inside a `$defs` entry is left to
+// the existing `$ref`-in-`if` warning above, not chased further.
+const resolveLocalRef = (schema, def) => {
   const ref = def?.$ref ?? def?.items?.$ref;
-  const match = typeof ref === "string" ? ref.match(/^#\/\$defs\/(.+)$/) : null;
-  return match ? schema.$defs?.[match[1]] : undefined;
-};
-
-const readNestedAllOf = (schema) => {
-  const conditionalRequired = [];
-  const warnings = [];
-  const enums = {};
-  for (const [prop, def] of Object.entries(schema.properties ?? {})) {
-    const nested = resolveDefRef(schema, def);
-    if (!nested) continue;
-    for (const [child, childDef] of Object.entries(nested.properties ?? {})) {
-      if (childDef.enum) enums[`${prop}.${child}`] = childDef.enum;
-    }
-    // The nested schema's own `required` (e.g. `objective.direction`) is not
-    // a top-level requirement of the parent — `objective` itself may be
-    // absent — but it rejects a document just as surely once that object IS
-    // present, so list it the same way as a conditional requirement.
-    if (Array.isArray(nested.required) && nested.required.length > 0) {
-      conditionalRequired.push({
-        when: `${prop} is present`,
-        required: nested.required.map((child) => `${prop}.${child}`),
-      });
-    }
-    const nestedResult = readAllOf(nested);
-    for (const entry of nestedResult.conditionalRequired) {
-      conditionalRequired.push({
-        when: `${prop}.${entry.when}`,
-        required: entry.required.map((field) => `${prop}.${field}`),
-      });
-    }
-    for (const warning of nestedResult.warnings) {
-      warnings.push(`${prop}: ${warning}`);
-    }
-  }
-  return { conditionalRequired, warnings, enums };
+  if (typeof ref !== "string" || !ref.startsWith("#/$defs/")) return def;
+  return schema.$defs?.[ref.slice("#/$defs/".length)] ?? def;
 };
 
 const artifactChecklists = {};
@@ -254,24 +247,46 @@ if (moduleRoot) {
       continue;
     }
     const enums = {};
-    for (const [prop, def] of Object.entries(schema.properties ?? {})) {
-      if (def.enum) enums[prop] = def.enum;
-    }
-    const topLevel = readAllOf(schema);
-    // One level down: a `$ref`'d (or array `items.$ref`'d) nested schema's
-    // own enums and conditional requirements — a MeasurementPlan's
+    const { conditionalRequired, exactlyOneOf, warnings } = readAllOf(schema);
+    // Walk object-valued fields (directly, or via a `$ref`/array
+    // `items.$ref` resolved above) at every depth: a nested field's enums
+    // and conditional requirements (a MeasurementPlan's
     // `objective.direction`, `objective.bound` when that direction is
-    // `target`, or an AssuranceArgument `top_claim.evidence_refs` when
-    // `top_claim.status` is `supported` — reject a document just as surely
-    // as top-level ones do.
-    const nested = readNestedAllOf(schema);
-    Object.assign(enums, nested.enums);
+    // `target`, `statistical_design.decision_rule.comparator`, or an
+    // AssuranceArgument `top_claim.evidence_refs` when `top_claim.status` is
+    // `supported`) reject a document just as surely as top-level ones do.
+    // `seen` stops a self-referencing `$ref`.
+    const visit = (properties, prefix, seen) => {
+      for (const [prop, rawDef] of Object.entries(properties ?? {})) {
+        const def = resolveLocalRef(schema, rawDef);
+        const path = `${prefix}${prop}`;
+        if (def.enum) enums[path] = def.enum;
+        if (def.type !== "object" || !def.properties || seen.has(def)) continue;
+        // The nested object's own `required` (e.g. `objective.direction`) is
+        // not a top-level requirement -- `objective` itself may be absent --
+        // but it rejects a document just as surely once that object IS
+        // present, so list it the same way as a conditional requirement.
+        if (Array.isArray(def.required) && def.required.length > 0) {
+          conditionalRequired.push({
+            when: `${path} is present`,
+            required: def.required.map((child) => `${path}.${child}`),
+          });
+        }
+        const nested = readAllOf(def, `${path}.`, `${path} is present`);
+        conditionalRequired.push(...nested.conditionalRequired);
+        exactlyOneOf.push(...nested.exactlyOneOf);
+        warnings.push(...nested.warnings.map((warning) => `${path}: ${warning}`));
+        visit(def.properties, `${path}.`, new Set([...seen, def]));
+      }
+    };
+    visit(schema.properties, "", new Set());
     artifactChecklists[type] = {
       schemaPath,
       required: schema.required ?? [],
-      conditionalRequired: [...topLevel.conditionalRequired, ...nested.conditionalRequired],
+      conditionalRequired,
+      exactlyOneOf,
       enums,
-      warnings: [...topLevel.warnings, ...nested.warnings],
+      warnings,
     };
   }
 }
@@ -502,6 +517,9 @@ if (Object.keys(artifactChecklists).length === 0) {
     }
     for (const condition of checklist.conditionalRequired) {
       line(`  when ${condition.when}: also required: ${condition.required.join(", ")}`);
+    }
+    for (const choice of checklist.exactlyOneOf ?? []) {
+      line(`  when ${choice.when}: exactly one of: ${choice.fields.join(", ")}`);
     }
     for (const warning of checklist.warnings ?? []) {
       line(`  WARNING: ${warning} — this checklist may be incomplete for ${type}`);

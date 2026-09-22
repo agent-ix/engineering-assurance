@@ -18,10 +18,12 @@ statistical_design:
   minimum_population: 200
   sampling: deterministic seeded sample across declared request classes
   repetitions: 5
-  estimator: retained-result proportion
+  estimator: proportion
   error_model: independent run variation and fixture selection
   uncertainty: report every run and a bootstrap interval
-  decision_rule: escalate when the lower interval bound is below the owned threshold
+  decision_rule:
+    comparator: ge
+    threshold: 0.99
 relationships:
   - target: ix://example/juniper/AP-001
     type: measures
@@ -45,6 +47,30 @@ names the threshold measured against; here, a retention rate of at least 0.99.
 The objective is part of the measurement definition. Adding, removing, or
 changing it requires a new `definition_version`, so results under the old and
 new objective are never compared as one series.
+
+## Decision Rule
+
+`statistical_design.estimator` names how the metric is computed from the
+population: `proportion`, `count`, `mean`, `median`, or `ratio`.
+`statistical_design.decision_rule` is the rule a checker applies to that
+estimate, computed over all `repetitions`: it holds when
+`estimate <comparator> reference`. `comparator` is one of `gt`, `ge`, `lt`,
+`le`, or `eq`. The reference is exactly one of:
+
+- `threshold`: a fixed number stated in the plan, as here (retention of at
+  least 0.99); or
+- `baseline`: a value computed at evaluation time, one of
+  `constant-predictor` (the best constant answer per answer family, see the
+  worked example below), `prior-collection` (the collection this result is
+  compared against), or `best-seen` (the best accepted value so far, for a
+  ratchet), plus an optional signed `margin` added to it.
+
+For example, a plan that must beat the constant predictor by five percentage
+points states `decision_rule: { comparator: gt, baseline: constant-predictor,
+margin: 0.05 }`. The rule does not restate `metric`, `repetitions`, or
+`minimum_population`: it applies to the plan's own `metric`, and a result over
+fewer than `minimum_population` items is refused before the rule is read.
+`population`, `sampling`, `error_model`, and `uncertainty` remain prose.
 
 ## Population
 

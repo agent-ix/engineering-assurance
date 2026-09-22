@@ -101,6 +101,19 @@ is part of the measurement definition: when you add, remove, or change it on an
 existing plan, also change `definition_version`, so results under the old and
 new objective are never compared as one series.
 
+A plan with a `statistical_design` states its bar as data a checker can
+evaluate, not as a sentence: `estimator` is one of `proportion`, `count`,
+`mean`, `median`, or `ratio`, and `decision_rule` is
+`{ comparator, threshold }` or `{ comparator, baseline, margin? }`, where
+`comparator` is one of `gt`, `ge`, `lt`, `le`, `eq` and `baseline` is one of
+`constant-predictor`, `prior-collection`, or `best-seen` (see the
+`MeasurementPlan` skeleton). The rule applies to the plan's own `metric`, which
+is then required; do not restate `metric`, `repetitions`, or
+`minimum_population` inside the rule. Gate on the constant-predictor margin as
+`{ comparator: gt, baseline: constant-predictor, margin: <owner's bar> }`, and
+do not invent a threshold or margin the owner has not stated. `population`,
+`sampling`, `error_model`, and `uncertainty` remain prose.
+
 When an artifact is justified, render it from the installed module skeleton,
 write a same-directory staging file, validate it with Quire, and expose it only
 with an atomic rename after validation succeeds. A failed validation must leave

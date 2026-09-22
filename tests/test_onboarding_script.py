@@ -56,3 +56,56 @@ def test_onboard_js_json_checklist_lists_nested_objective_requirements(
     assert any(
         "objective.direction" in entry["required"] for entry in objective_entries
     ), conditional
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_onboard_js_json_checklist_lists_the_decision_rule_vocabulary(
+    tmp_path: Path,
+) -> None:
+    """Trace: FR-021-AC-6, TC-149.
+
+    The structured decision rule sits two levels down
+    (`statistical_design.decision_rule`), and its "exactly one of threshold
+    or baseline" constraint is a `oneOf`. The §4 checklist must surface the
+    closed estimator, comparator and baseline sets, the one-of choice, and
+    `margin`'s dependency on `baseline`, without a WARNING.
+    """
+    report = run_onboard_json(tmp_path)
+    plan_checklist = report["artifactChecklists"]["MeasurementPlan"]
+    enums = plan_checklist["enums"]
+    assert enums["statistical_design.estimator"] == [
+        "proportion",
+        "count",
+        "mean",
+        "median",
+        "ratio",
+    ]
+    assert enums["statistical_design.decision_rule.comparator"] == [
+        "gt",
+        "ge",
+        "lt",
+        "le",
+        "eq",
+    ]
+    assert enums["statistical_design.decision_rule.baseline"] == [
+        "constant-predictor",
+        "prior-collection",
+        "best-seen",
+    ]
+    assert {
+        "when": "statistical_design.decision_rule is present",
+        "fields": [
+            "statistical_design.decision_rule.threshold",
+            "statistical_design.decision_rule.baseline",
+        ],
+    } in plan_checklist["exactlyOneOf"]
+    conditional = plan_checklist["conditionalRequired"]
+    assert {
+        "when": "statistical_design.decision_rule.margin is present",
+        "required": ["statistical_design.decision_rule.baseline"],
+    } in conditional
+    assert {
+        "when": "statistical_design is present",
+        "required": ["metric"],
+    } in conditional
+    assert plan_checklist["warnings"] == []

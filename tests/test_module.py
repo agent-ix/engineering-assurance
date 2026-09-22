@@ -246,6 +246,115 @@ def test_measurement_plan_skeleton_shows_a_valid_objective() -> None:
     assert list(validator.iter_errors(skeleton)) == []
 
 
+def _statistical_design(**overrides: object) -> dict:
+    design = {
+        "population": "p",
+        "sampling": "s",
+        "repetitions": 5,
+        "estimator": "proportion",
+        "error_model": "e",
+        "uncertainty": "u",
+        "decision_rule": {"comparator": "ge", "threshold": 0.99},
+    }
+    design.update(overrides)
+    return design
+
+
+def _statistical_design_errors(**overrides: object) -> list[str]:
+    validator = Draft7Validator(
+        schema("measurement-plan-frontmatter.schema"), format_checker=FormatChecker()
+    )
+    plan = _minimal_measurement_plan(
+        metric="request_retention_rate",
+        statistical_design=_statistical_design(**overrides),
+    )
+    return [error.message for error in validator.iter_errors(plan)]
+
+
+def test_decision_rule_is_a_closed_comparator_with_exactly_one_reference() -> None:
+    """Trace: FR-021-AC-1, TC-144."""
+    contract = schema("measurement-plan-frontmatter.schema")
+    rule = contract["$defs"]["decision_rule"]
+    assert rule["properties"]["comparator"]["enum"] == ["gt", "ge", "lt", "le", "eq"]
+    assert rule["properties"]["baseline"]["enum"] == [
+        "constant-predictor",
+        "prior-collection",
+        "best-seen",
+    ]
+    assert set(rule["properties"]) == {"comparator", "threshold", "baseline", "margin"}
+
+    for comparator in ("gt", "ge", "lt", "le", "eq"):
+        assert _statistical_design_errors(
+            decision_rule={"comparator": comparator, "threshold": 0}
+        ) == []
+    for baseline in ("constant-predictor", "prior-collection", "best-seen"):
+        assert _statistical_design_errors(
+            decision_rule={"comparator": "gt", "baseline": baseline}
+        ) == []
+        assert _statistical_design_errors(
+            decision_rule={"comparator": "ge", "baseline": baseline, "margin": -0.01}
+        ) == []
+
+    refused = {
+        "unknown comparator": {"comparator": "approximately", "threshold": 1},
+        "missing comparator": {"threshold": 1},
+        "neither threshold nor baseline": {"comparator": "ge"},
+        "both threshold and baseline": {
+            "comparator": "ge",
+            "threshold": 1,
+            "baseline": "best-seen",
+        },
+        "margin with a threshold": {"comparator": "ge", "threshold": 1, "margin": 0.1},
+        "unknown baseline": {"comparator": "ge", "baseline": "vibes"},
+        "non-numeric threshold": {"comparator": "ge", "threshold": "0.99"},
+        "duplicated repetitions": {"comparator": "ge", "threshold": 1, "repetitions": 5},
+        "duplicated minimum_n": {"comparator": "ge", "threshold": 1, "minimum_n": 20},
+    }
+    for case, decision_rule in refused.items():
+        assert _statistical_design_errors(decision_rule=decision_rule) != [], case
+    assert _statistical_design_errors(decision_rule="escalate when low") != []
+
+    validator = Draft7Validator(contract, format_checker=FormatChecker())
+    without_metric = _minimal_measurement_plan(statistical_design=_statistical_design())
+    assert "'metric' is a required property" in [
+        error.message for error in validator.iter_errors(without_metric)
+    ]
+
+
+def test_estimator_is_a_closed_vocabulary() -> None:
+    """Trace: FR-021-AC-2, TC-145."""
+    contract = schema("measurement-plan-frontmatter.schema")
+    assert contract["$defs"]["statistical_design"]["properties"]["estimator"]["enum"] == [
+        "proportion",
+        "count",
+        "mean",
+        "median",
+        "ratio",
+    ]
+    for estimator in ("proportion", "count", "mean", "median", "ratio"):
+        assert _statistical_design_errors(estimator=estimator) == []
+    for refused in ("retained-result proportion", "p90", "", 1):
+        assert _statistical_design_errors(estimator=refused) != [], refused
+    # Prose fields stay prose (FR-021): only estimator and decision_rule close.
+    for prose in ("population", "sampling", "error_model", "uncertainty"):
+        assert contract["$defs"]["statistical_design"]["properties"][prose] == {
+            "type": "string",
+            "minLength": 1,
+        }
+
+
+def test_measurement_plan_skeleton_shows_a_structured_decision_rule() -> None:
+    """Trace: FR-021-AC-2, TC-145."""
+    skeleton = frontmatter(package.PACKAGE_ROOT / "skeletons" / "MeasurementPlan.md")
+    design = skeleton["statistical_design"]
+    assert design["estimator"] == "proportion"
+    assert design["decision_rule"] == {"comparator": "ge", "threshold": 0.99}
+    validator = Draft7Validator(
+        schema("measurement-plan-frontmatter.schema"), format_checker=FormatChecker()
+    )
+    assert list(validator.iter_errors(skeleton)) == []
+
+
 def test_component_contract_exposes_failure_and_control_boundaries() -> None:
     contract = schema("component-assurance-contract-frontmatter.schema")
     assert {

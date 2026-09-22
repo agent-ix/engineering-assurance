@@ -69,6 +69,15 @@
       "then": {
         "required": ["ground_truth_kind"]
       }
+    },
+    {
+      "if": {
+        "properties": { "statistical_design": { "type": "object" } },
+        "required": ["statistical_design"]
+      },
+      "then": {
+        "required": ["metric"]
+      }
     }
   ],
   "$defs": {
@@ -134,12 +143,46 @@
         "repetitions": {
           "type": "integer",
           "minimum": 1,
-          "description": "How many repeat runs are required before a result counts. For a gate-stage plan this is the standard repeat-count (e.g. 'passes 3 of 5 tries' is expressed as repetitions: 5 plus the pass threshold in decision_rule) -- it is not a separate field, so do not add a parallel required_repeats."
+          "description": "How many repeat runs are required before a result counts. The estimator is computed over every repetition together and decision_rule is applied once to that estimate. For a gate-stage plan, 'passes 3 of 5 tries' is therefore expressed as repetitions: 5, a metric that is the proportion of passing tries, estimator: proportion, and decision_rule { comparator: ge, threshold: 0.6 } -- it is not a separate field, so do not add a parallel required_repeats here or in decision_rule."
         },
-        "estimator": { "type": "string", "minLength": 1 },
+        "estimator": {
+          "enum": ["proportion", "count", "mean", "median", "ratio"],
+          "description": "How the plan's metric is computed from the collected population (FR-021). `proportion`: matching items divided by examined items, in [0, 1]. `count`: the number of matching items. `mean`: the arithmetic mean of per-item or per-repetition values, including a weighted mean the plan's Measure Definition states. `median`: the middle per-item value. `ratio`: one total divided by another, unbounded (e.g. cost per confirmed finding)."
+        },
         "error_model": { "type": "string", "minLength": 1 },
         "uncertainty": { "type": "string", "minLength": 1 },
-        "decision_rule": { "type": "string", "minLength": 1 }
+        "decision_rule": { "$ref": "#/$defs/decision_rule" }
+      }
+    },
+    "decision_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["comparator"],
+      "description": "The mechanical rule a checker applies to the plan's `metric` (FR-021): it holds when `estimate <comparator> reference`, where the estimate is computed under `estimator` over all `repetitions` and the reference is either `threshold` or the `baseline` value plus `margin`. When `minimum_population` is set, a result over a smaller population is refused before the rule is evaluated. The rule does not restate `metric`, `repetitions`, or `minimum_population`.",
+      "properties": {
+        "comparator": {
+          "enum": ["gt", "ge", "lt", "le", "eq"],
+          "description": "`gt`: estimate > reference. `ge`: estimate >= reference. `lt`: estimate < reference. `le`: estimate <= reference. `eq`: estimate == reference (e.g. a count gated at exactly zero)."
+        },
+        "threshold": {
+          "type": "number",
+          "description": "A fixed reference value stated in the plan. Exactly one of `threshold` and `baseline` is present."
+        },
+        "baseline": {
+          "enum": ["constant-predictor", "prior-collection", "best-seen"],
+          "description": "A reference value computed at evaluation time, never written into the plan. `constant-predictor`: the score of the best constant answer per answer family, computed from the corpus (see the MeasurementPlan skeleton's worked example). `prior-collection`: the plan's metric in the collection this result is compared against under the same definition_version (a branch comparison's base, or a trend's previous point). `best-seen`: the best value of the plan's metric across every accepted collection under the same definition_version, which a ratchet refuses to regress below. Exactly one of `threshold` and `baseline` is present."
+        },
+        "margin": {
+          "type": "number",
+          "description": "A signed offset added to the baseline value: reference = baseline value + margin. Allowed only with `baseline`; absent means 0."
+        }
+      },
+      "oneOf": [
+        { "required": ["threshold"] },
+        { "required": ["baseline"] }
+      ],
+      "dependencies": {
+        "margin": ["baseline"]
       }
     }
   }
