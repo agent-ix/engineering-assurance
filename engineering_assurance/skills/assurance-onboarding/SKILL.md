@@ -83,6 +83,15 @@ under one plan's observations, distinguished by `dimensions` (see the worked
 example in the `MeasurementPlan` skeleton); the duplicate-observation check
 keys on metric plus dimensions together, so this does not collide.
 
+A plan that grades a tool against recorded ground-truth labels never reports
+a raw agreement/accuracy rate alone — state it next to the
+constant-predictor baseline (what a fixed, corpus-blind answer would score)
+and gate on the margin between them, per the worked example and formula in
+the `MeasurementPlan` skeleton. Compute the baseline from the corpus at
+measurement time; a hand-derived or previously-written percentage goes stale
+exactly like a hard-coded label would, and picking one constant across every
+answer-space family instead of one per family silently understates it.
+
 When an artifact is justified, render it from the installed module skeleton,
 write a same-directory staging file, validate it with Quire, and expose it only
 with an atomic rename after validation succeeds. A failed validation must leave
