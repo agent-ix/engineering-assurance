@@ -96,19 +96,48 @@ const artifactSchemaFiles = {
   AssuranceArgument: "assurance-argument-frontmatter.schema.json",
 };
 
+// A field required only in some cases (`allOf: [{ if, then: { required } }]`)
+// is as rejecting as an unconditional one — a gate-stage MeasurementPlan
+// without `ground_truth_kind` fails validation — so read those too. Without
+// them this checklist would under-report exactly the requirement an author is
+// most likely to miss.
+const describeCondition = (condition) => {
+  const clauses = Object.entries(condition?.properties ?? {}).map(([prop, def]) => {
+    if ("const" in def) return `${prop} = ${def.const}`;
+    if (def.enum) return `${prop} is one of ${def.enum.join(", ")}`;
+    return `${prop} is present`;
+  });
+  return clauses.length > 0 ? clauses.join(" and ") : "(unrecognized condition)";
+};
+
 const artifactChecklists = {};
 if (moduleRoot) {
   for (const [type, file] of Object.entries(artifactSchemaFiles)) {
     const schemaPath = path.join(moduleRoot, "schemas", file);
     if (!existsSync(schemaPath)) continue;
-    const schema = JSON.parse(readFileSync(schemaPath, "utf8"));
+    let schema;
+    try {
+      schema = JSON.parse(readFileSync(schemaPath, "utf8"));
+    } catch (error) {
+      // Degrade the report rather than abort it: the GitHub links and the
+      // other sections are still worth printing.
+      artifactChecklists[type] = { schemaPath, unreadable: String(error) };
+      continue;
+    }
     const enums = {};
     for (const [prop, def] of Object.entries(schema.properties ?? {})) {
       if (def.enum) enums[prop] = def.enum;
     }
+    const conditionalRequired = (schema.allOf ?? [])
+      .filter((branch) => Array.isArray(branch?.then?.required))
+      .map((branch) => ({
+        when: describeCondition(branch.if),
+        required: branch.then.required,
+      }));
     artifactChecklists[type] = {
       schemaPath,
       required: schema.required ?? [],
+      conditionalRequired,
       enums,
     };
   }
@@ -297,9 +326,17 @@ if (Object.keys(artifactChecklists).length === 0) {
 } else {
   for (const [type, checklist] of Object.entries(artifactChecklists)) {
     line(`${type} (${checklist.schemaPath}):`);
+    if (checklist.unreadable) {
+      line(`  (schema could not be parsed: ${checklist.unreadable})`);
+      line();
+      continue;
+    }
     line(`  required: ${checklist.required.join(", ")}`);
     for (const [prop, values] of Object.entries(checklist.enums)) {
       line(`  ${prop} must be one of: ${values.join(", ")}`);
+    }
+    for (const condition of checklist.conditionalRequired) {
+      line(`  when ${condition.when}: also required: ${condition.required.join(", ")}`);
     }
     line();
   }
