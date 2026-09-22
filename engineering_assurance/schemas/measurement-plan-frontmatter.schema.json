@@ -53,7 +53,7 @@
         "required": ["stage"]
       },
       "then": {
-        "required": ["ground_truth_kind", "statistical_design"]
+        "required": ["ground_truth_kind"]
       }
     }
   ],
