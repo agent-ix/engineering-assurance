@@ -553,7 +553,16 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         "//img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white"
     );
     let discord_invite = concat!("https:", "//discord.gg/6qsdhSPE");
-    let agent_ix = concat!("https:", "//github.com/agent-ix");
+    // `agent_ix_bare` admits the org's own root URL exactly (the plugin
+    // manifests' `author.url`); `agent_ix_org_prefix` admits anything under
+    // it. Both are needed: requiring the trailing `/` on the bare form would
+    // refuse the plugin manifests' own author URL, and dropping it from the
+    // prefix form would let an org-prefix match admit a look-alike org such
+    // as `agent-ix-evil` — that gap stood here for every `project_metadata`
+    // file until this fix; only the newer `onboarding_report` exemption below
+    // had the slash from the start.
+    let agent_ix_bare = concat!("https:", "//github.com/agent-ix");
+    let agent_ix_org_prefix = concat!("https:", "//github.com/agent-ix/");
     let ix_trace_rs = concat!("https:", "//github.com/agent-ix/ix-trace-rs");
     let project_metadata = path.ends_with("README.md")
         || path.ends_with(".claude-plugin/plugin.json")
@@ -567,11 +576,8 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
     // README.md. Named by its exact path, not a directory-wide suffix match,
     // for the same reason `cargo_manifest` below is exact: a suffix match
     // would let an unrelated file inherit the exemption by choosing its name.
-    // The `/` after `agent_ix` is required so an org-prefix match cannot admit
-    // a look-alike org such as `agent-ix-evil`.
     let onboarding_report =
         path == "engineering_assurance/skills/assurance-onboarding/scripts/onboard.js";
-    let agent_ix_org_prefix = concat!("https:", "//github.com/agent-ix/");
     // A first-party Agent-IX crate consumed as a rev-pinned git dependency
     // (PLAT-853) names its own GitHub URL in the manifest and lockfile, same
     // as the registry index URL already carried in Cargo.lock/deny.toml. This
@@ -589,7 +595,7 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         || cargo_manifest && url == cargo_registry
         || cargo_manifest && is_ix_trace_rs_url
         || project_metadata && (url == discord_badge || url == discord_invite)
-        || project_metadata && url.starts_with(agent_ix)
+        || project_metadata && (url == agent_ix_bare || url.starts_with(agent_ix_org_prefix))
         || onboarding_report && url.starts_with(agent_ix_org_prefix)
 }
 

@@ -28,9 +28,12 @@ import path from "node:path";
 
 const args = process.argv.slice(2);
 const repoFlagIndex = args.indexOf("--repo");
-const targetRepo = path.resolve(
-  repoFlagIndex >= 0 && args[repoFlagIndex + 1] ? args[repoFlagIndex + 1] : process.cwd(),
-);
+const repoFlagValue = repoFlagIndex >= 0 ? args[repoFlagIndex + 1] : undefined;
+if (repoFlagIndex >= 0 && (repoFlagValue === undefined || repoFlagValue.startsWith("--"))) {
+  console.error("--repo requires a path argument");
+  process.exit(1);
+}
+const targetRepo = path.resolve(repoFlagValue ?? process.cwd());
 const wantsJson = args.includes("--json");
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -52,18 +55,21 @@ const moduleRoot = candidateModuleRoots.find(
   (candidate) => existsSync(path.join(candidate, "schemas")) && existsSync(path.join(candidate, "skeletons")),
 );
 
+// Read the manifest from the SAME candidate moduleRoot resolved above, not by
+// re-scanning candidates independently — otherwise the reported version and
+// the schemas actually loaded could come from two different install layouts.
 let manifestVersion = null;
-for (const candidate of candidateModuleRoots) {
-  const manifestPath = path.join(candidate, "manifest.yaml");
+if (moduleRoot) {
+  const manifestPath = path.join(moduleRoot, "manifest.yaml");
   if (existsSync(manifestPath)) {
     const match = readFileSync(manifestPath, "utf8").match(/^version:\s*(\S+)/m);
-    if (match) {
-      manifestVersion = match[1];
-      break;
-    }
+    if (match) manifestVersion = match[1];
   }
 }
-const releaseTag = manifestVersion ? `v${manifestVersion}` : "main";
+// Informational only: this module's own installed version. It does NOT pin
+// the qa-corpus/quoin example links below — those are separate repositories
+// with their own, unrelated release cadence, so they always point at `main`.
+const installedModuleVersion = manifestVersion;
 
 // -- Find, or fail to find, the dev-only corpus of worked examples. --------
 //
@@ -87,20 +93,43 @@ if (moduleRoot) {
 
 // -- Derive each artifact type's required frontmatter fields straight from --
 // -- the schema files themselves, so this report can never drift from what --
-// -- Quire actually enforces. ------------------------------------------------
-const artifactSchemaFiles = {
-  AssuranceProfile: "assurance-profile-frontmatter.schema.json",
-  MeasurementPlan: "measurement-plan-frontmatter.schema.json",
-  ArchitectureDescription: "architecture-description-frontmatter.schema.json",
-  ComponentAssuranceContract: "component-assurance-contract-frontmatter.schema.json",
-  AssuranceArgument: "assurance-argument-frontmatter.schema.json",
-};
+// -- Quire actually enforces. Which schema file governs which type is read --
+// -- from manifest.yaml's own `artifact_types` list, rather than a second, --
+// -- hand-maintained copy of that mapping here. -----------------------------
+const artifactSchemaFiles = {};
+if (moduleRoot) {
+  const manifestPath = path.join(moduleRoot, "manifest.yaml");
+  if (existsSync(manifestPath)) {
+    const manifestText = readFileSync(manifestPath, "utf8");
+    // Each `artifact_types` entry starts with `- name: <Type>`; its
+    // `frontmatter_schema_ref` follows before the next such entry. The same
+    // `- name:` shape also opens each `grammars` entry, but those carry no
+    // `frontmatter_schema_ref`, so they fall out of the schemaMatch filter
+    // below rather than needing to be excluded up front.
+    const nameMatches = [...manifestText.matchAll(/-\s*name:\s*(\S+)/g)];
+    for (const [index, match] of nameMatches.entries()) {
+      const end = nameMatches[index + 1]?.index ?? manifestText.length;
+      const chunk = manifestText.slice(match.index, end);
+      const schemaMatch = chunk.match(/frontmatter_schema_ref:\s*schemas\/(\S+)/);
+      if (schemaMatch) artifactSchemaFiles[match[1]] = schemaMatch[1];
+    }
+  }
+}
 
 // A field required only in some cases (`allOf: [{ if, then: { required } }]`)
 // is as rejecting as an unconditional one — a gate-stage MeasurementPlan
 // without `ground_truth_kind` fails validation — so read those too. Without
 // them this checklist would under-report exactly the requirement an author is
 // most likely to miss.
+//
+// This only understands the one shape every schema in this module uses today:
+// a flat `allOf` of `{ if: { properties, required }, then: { required } }`
+// branches. A schema that instead used `else`, a nested `allOf`, `anyOf`,
+// `oneOf`, `dependentRequired`, or a `$ref`'d branch would silently produce no
+// output here rather than a wrong one — which is worse, because a silent gap
+// looks like "no conditional requirements" instead of "this reader doesn't
+// understand this schema". `readAllOf` below refuses to stay silent: anything
+// it does not recognize becomes a `warnings` entry the report prints loudly.
 const describeCondition = (condition) => {
   const clauses = Object.entries(condition?.properties ?? {}).map(([prop, def]) => {
     if ("const" in def) return `${prop} = ${def.const}`;
@@ -108,6 +137,40 @@ const describeCondition = (condition) => {
     return `${prop} is present`;
   });
   return clauses.length > 0 ? clauses.join(" and ") : "(unrecognized condition)";
+};
+
+const readAllOf = (schema) => {
+  const conditionalRequired = [];
+  const warnings = [];
+  if (schema.dependentRequired) {
+    warnings.push("schema uses `dependentRequired`, which this checklist does not read");
+  }
+  if (schema.anyOf || schema.oneOf) {
+    warnings.push("schema uses a top-level `anyOf`/`oneOf`, which this checklist does not read");
+  }
+  for (const branch of schema.allOf ?? []) {
+    const conditionShape = branch.if?.$ref || branch.if?.anyOf || branch.if?.oneOf || branch.if?.allOf;
+    if (conditionShape) {
+      warnings.push(
+        "an `allOf` branch's `if` uses $ref/anyOf/oneOf/allOf, which this checklist cannot describe",
+      );
+      continue;
+    }
+    if (branch.else) {
+      warnings.push("an `allOf` branch has an `else`, which this checklist does not read");
+    }
+    if (branch.then?.allOf) {
+      warnings.push("an `allOf` branch's `then` nests another `allOf`, which this checklist does not read");
+    }
+    if (Array.isArray(branch?.then?.required)) {
+      conditionalRequired.push({ when: describeCondition(branch.if), required: branch.then.required });
+    } else if (branch.then && Object.keys(branch.then).length > 0) {
+      warnings.push(
+        "an `allOf` branch's `then` has no `required` array this checklist reads, but does constrain something",
+      );
+    }
+  }
+  return { conditionalRequired, warnings };
 };
 
 const artifactChecklists = {};
@@ -128,72 +191,98 @@ if (moduleRoot) {
     for (const [prop, def] of Object.entries(schema.properties ?? {})) {
       if (def.enum) enums[prop] = def.enum;
     }
-    const conditionalRequired = (schema.allOf ?? [])
-      .filter((branch) => Array.isArray(branch?.then?.required))
-      .map((branch) => ({
-        when: describeCondition(branch.if),
-        required: branch.then.required,
-      }));
+    const { conditionalRequired, warnings } = readAllOf(schema);
     artifactChecklists[type] = {
       schemaPath,
       required: schema.required ?? [],
       conditionalRequired,
       enums,
+      warnings,
     };
   }
 }
 
 // -- Inventory the target repo's own spec/assurance/ directory. ------------
+//
+// Read each file's own frontmatter `type:` field — the same field Quire and
+// this module's native `onboarding` command key on — rather than guessing
+// from the filename prefix. A renamed file or a hand-edited `type:` would
+// otherwise report a type this report invented rather than the one on disk.
 const specAssuranceDir = path.join(targetRepo, "spec", "assurance");
-const idPrefixes = {
-  "AP-": "AssuranceProfile",
-  "MP-": "MeasurementPlan",
-  "AD-": "ArchitectureDescription",
-  "CAC-": "ComponentAssuranceContract",
-  "AA-": "AssuranceArgument",
+const frontmatterType = (filePath) => {
+  let text;
+  try {
+    text = readFileSync(filePath, "utf8");
+  } catch {
+    return "unreadable";
+  }
+  if (!text.startsWith("---")) return "no-frontmatter";
+  const end = text.indexOf("\n---", 3);
+  const frontmatter = end >= 0 ? text.slice(0, end) : text;
+  const match = frontmatter.match(/^type:\s*(\S+)/m);
+  return match ? match[1] : "unrecognized";
 };
 let existingArtifacts = [];
 const specAssuranceExists = existsSync(specAssuranceDir);
 if (specAssuranceExists) {
   existingArtifacts = readdirSync(specAssuranceDir)
     .filter((name) => name.endsWith(".md"))
-    .map((name) => {
-      const prefix = Object.keys(idPrefixes).find((candidate) => name.startsWith(candidate));
-      return { name, type: prefix ? idPrefixes[prefix] : "unrecognized" };
-    });
+    .map((name) => ({ name, type: frontmatterType(path.join(specAssuranceDir, name)) }));
 }
 
-// -- The measurement-record checklist is not schema-file-governed here: it --
-// -- is enforced by quoin-measurement's Rust validator (validate/mod.rs,   --
-// -- validate/stack.rs, types/collection.rs, types/observation.rs), and    --
-// -- restated here so nobody has to read that source to learn the shape.   --
-// -- Re-derive from that source if these crates change the contract.       --
+// -- The measurement-record checklist is NOT schema-file-governed like §4  --
+// -- above: it is a hand-restated copy of quoin-measurement's Rust         --
+// -- validator, with no mechanism here that would catch it drifting from   --
+// -- that source. Every line below cites the file it was read from; if     --
+// -- those crates change the contract, re-derive from the cited lines, not --
+// -- from memory of this list. Verified against agent-ix/quoin at the      --
+// -- revision current when PLAT-924 was authored:                         --
+// --   rust/crates/quoin-measurement/src/validate/mod.rs                  --
+// --   rust/crates/quoin-measurement/src/validate/stack.rs                --
+// --   rust/crates/quoin-measurement/src/types/{collection,observation,ids}.rs --
+// --   rust/crates/quoin-measurement/src/{discovery,store/publish}.rs     --
+// --   rust/crates/quoin-store/src/digest.rs                              --
 const measurementRecordChecklist = {
   collection: {
+    // Checked on every accepted collection, historical (schemaVersion 1) or
+    // current (2), whether it is merely being read or newly submitted.
+    // validate/mod.rs `stored_measurement_collection`.
     always: [
-      "schemaVersion — 1 (historical, read-only) or 2 (current)",
-      "collectionId — non-empty string; also the file name",
+      "schemaVersion — number, exactly 1 or 2 (mod.rs `schema_version()`)",
+      "collectionId — non-empty string here; also the file name, so it separately must match ^[A-Za-z0-9._-]+$ at PUBLISH time, not at validate time (types/ids.rs `CollectionId::parse`, store/publish.rs)",
       "subject — non-empty string, what was measured",
       "toolIdentity — non-empty string",
       "toolVersion — non-empty string",
       "configDigest — non-empty string",
-      "timestamp — non-empty string",
-      "sourceRevision — non-empty string",
+      "timestamp — non-empty string (no format is enforced beyond non-empty)",
+      "sourceRevision — non-empty string (no format is enforced here — this is NOT the same rule as verificationStack.sources.*.revision below)",
       "scope — present (any JSON value; producer-defined)",
       "environment — a JSON object",
       "rawEvidence — present (any JSON value; complete producer output)",
       "observations — non-empty array (see below)",
       "corpusRevision — optional string",
     ],
-    schemaVersion2Additional: [
-      "verificationStack — required object, schemaVersion \"verification-stack-attestation-v1\":",
-      "  lockDigest, executableDigest — sha256:<64 hex>",
-      "  buildProfile — must be \"release\" for a NEW collection",
-      "  toolchains — {node, rust, python}, all non-empty, all required for a NEW collection",
-      "  sources — non-empty map of {revision: <40-hex full SHA>, sourceState: \"clean\", remote}",
+    // Required, well-formed, whenever schemaVersion is 2 — for a STORED
+    // record as much as a new one. validate/stack.rs `verification_stack()`.
+    schemaVersion2VerificationStack: [
+      "verificationStack — required object when schemaVersion is 2",
+      "  schemaVersion — const \"verification-stack-attestation-v1\"",
+      "  lockDigest, executableDigest — sha256:<64 LOWERCASE hex>; uppercase is refused (quoin-store digest.rs)",
+      "  buildProfile — when present: \"debug\" or \"release\" (a stored record may omit it, or say \"debug\" — \"release\"-only is a NEW-collection-intake rule, below)",
+      "  toolchains — when present: must name all of {node, rust, python}, each non-empty (a stored record may omit toolchains entirely — requiring it is a NEW-collection-intake rule, below)",
+      "  sources — non-empty map; each entry: revision (exactly 40 LOWERCASE hex chars — a full, unabbreviated SHA, not the looser rule sourceRevision above gets), sourceState \"clean\", remote (non-empty)",
       "  capabilities — non-empty array of non-empty strings",
-      "  artifacts — non-empty map of name -> sha256:<64 hex> digest",
-      "each observation's metric must have an ACTIVE MeasurementPlan in spec/assurance/ at the same definitionVersion, and observation.planId must equal that plan's id",
+      "  artifacts — non-empty map of name -> sha256:<64 LOWERCASE hex> digest",
+    ],
+    // Enforced ONLY on the intake/publish path (`measurement_collection`,
+    // used by write_measurement_collection when actually submitting a new
+    // collection) — never by the read/stored path above. A collection
+    // someone already reads back off disk is not held to these.
+    newCollectionIntakeOnly: [
+      "schemaVersion must be exactly 2 — a schemaVersion-1 collection is accepted for reading only, never for new submission",
+      "verificationStack.buildProfile must be exactly \"release\"",
+      "verificationStack.toolchains must be present and name all of {node, rust, python}",
+      "each observation's metric must resolve to an ACTIVE MeasurementPlan discovered under spec/assurance/ OR assurance/ in the target repo (both are searched — discovery.rs), at the SAME definitionVersion, and observation.planId must equal that plan's id",
     ],
   },
   observation: [
@@ -203,14 +292,16 @@ const measurementRecordChecklist = {
     "unit — non-empty string",
     "shape — one of: scalar, ratio, count",
     "state — one of: measured, not_computed",
-    "value — required numeric when state=measured; must be null when state=not_computed",
-    "population — optional object: examined, matched, complete, identity (+ freeform extra fields, kept verbatim)",
-    "dimensions — optional object, freeform",
-    "reason — optional string; state why when not_computed",
+    "value — when state=measured: required numeric. When state=not_computed: the `value` KEY must be present and explicitly null — an ABSENT value key is refused, it is not treated as null (mod.rs `observation()`)",
+    "no two observations in one collection may share the same (metric, sorted dimensions) pair — a duplicate is refused (mod.rs `stored_measurement_collection`)",
+    "population — read only when it IS a JSON object: examined, matched, complete, identity (+ freeform extra fields, kept verbatim); a non-object population is silently treated as absent, not rejected",
+    "dimensions — same silent-if-not-an-object treatment as population",
+    "reason — free text; never required or format-checked by the validator, even when state=not_computed (a producer SHOULD still state one, but nothing will reject its absence)",
   ],
   sourceOfTruth:
     "agent-ix/quoin rust/crates/quoin-measurement: src/validate/mod.rs, src/validate/stack.rs, " +
-    "src/types/collection.rs, src/types/observation.rs — read this report instead of that source.",
+    "src/types/{collection,observation,ids}.rs, src/discovery.rs, src/store/publish.rs, and " +
+    "rust/crates/quoin-store/src/digest.rs — read this report instead of that source.",
 };
 
 // ---------------------------------------------------------------------------
@@ -220,7 +311,7 @@ const measurementRecordChecklist = {
 const report = {
   targetRepo,
   moduleRoot,
-  releaseTag,
+  installedModuleVersion,
   relationship: {
     module:
       "engineering-assurance is the SCHEMA/SKELETON SOURCE: it supplies manifest.yaml, " +
@@ -338,16 +429,24 @@ if (Object.keys(artifactChecklists).length === 0) {
     for (const condition of checklist.conditionalRequired) {
       line(`  when ${condition.when}: also required: ${condition.required.join(", ")}`);
     }
+    for (const warning of checklist.warnings ?? []) {
+      line(`  WARNING: ${warning} — this checklist may be incomplete for ${type}`);
+    }
     line();
   }
 }
 
 heading("5. What a measurement record actually requires");
-line("Every collection (schemaVersion 1 or 2):");
+line("(hand-restated from quoin-measurement's Rust validator, not schema-derived — see the source citation at the end of this section)");
+line();
+line("Every collection, read back or newly submitted (schemaVersion 1 or 2):");
 for (const item of measurementRecordChecklist.collection.always) line(`  - ${item}`);
 line();
-line("A NEW collection (schemaVersion 2) additionally requires:");
-for (const item of measurementRecordChecklist.collection.schemaVersion2Additional) line(`  - ${item}`);
+line("Whenever schemaVersion is 2 — read back or newly submitted:");
+for (const item of measurementRecordChecklist.collection.schemaVersion2VerificationStack) line(`  - ${item}`);
+line();
+line("A NEW collection being submitted (not a stored one being read) additionally requires:");
+for (const item of measurementRecordChecklist.collection.newCollectionIntakeOnly) line(`  - ${item}`);
 line();
 line("Each observation:");
 for (const item of measurementRecordChecklist.observation) line(`  - ${item}`);
