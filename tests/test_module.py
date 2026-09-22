@@ -211,6 +211,41 @@ def test_preregistration_is_optional_and_requires_a_sha256_bar_digest() -> None:
     assert list(validator.iter_errors(extra_field)) != []
 
 
+def test_objective_is_optional_and_target_requires_a_bound() -> None:
+    """Trace: FR-020-AC-1, TC-139."""
+    contract = schema("measurement-plan-frontmatter.schema")
+    assert "objective" not in contract["required"]
+    validator = Draft7Validator(contract, format_checker=FormatChecker())
+
+    def errors(**overrides: object) -> list[str]:
+        plan = _minimal_measurement_plan(**overrides)
+        return [error.message for error in validator.iter_errors(plan)]
+
+    assert errors() == []
+    for direction in ("higher", "lower", "zero"):
+        assert errors(objective={"direction": direction}) == []
+        assert errors(objective={"direction": direction, "bound": 0.95}) == []
+    assert errors(objective={"direction": "target", "bound": 250}) == []
+
+    assert "'bound' is a required property" in errors(
+        objective={"direction": "target"}
+    )
+    assert errors(objective={"direction": "sideways"}) != []
+    assert errors(objective={"bound": 1}) != []
+    assert errors(objective={"direction": "target", "bound": "250"}) != []
+    assert errors(objective={"direction": "higher", "epoch": 2}) != []
+
+
+def test_measurement_plan_skeleton_shows_a_valid_objective() -> None:
+    """Trace: FR-020-AC-1, TC-139."""
+    skeleton = frontmatter(package.PACKAGE_ROOT / "skeletons" / "MeasurementPlan.md")
+    assert skeleton["objective"]["direction"] in {"higher", "lower", "zero", "target"}
+    validator = Draft7Validator(
+        schema("measurement-plan-frontmatter.schema"), format_checker=FormatChecker()
+    )
+    assert list(validator.iter_errors(skeleton)) == []
+
+
 def test_component_contract_exposes_failure_and_control_boundaries() -> None:
     contract = schema("component-assurance-contract-frontmatter.schema")
     assert {
