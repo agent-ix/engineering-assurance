@@ -41,3 +41,46 @@ identities. Preserve per-run outcomes instead of only an aggregate.
 
 Report uncertainty, invalid runs, environmental differences, and plausible
 alternative explanations.
+
+## Example: tracking two related quantities on one plan
+
+A single MeasurementPlan can track more than one related quantity through its
+recorded observations' `dimensions` field, instead of being split into one
+plan per quantity. Two observations that differ only in `dimensions` are not
+duplicates: the duplicate-observation check (`quoin-measurement`'s
+`MeasurementObservation::identity()`) keys on the metric name *together with*
+the sorted dimension entries, so two different dimension values never collide
+even under the same metric and `planId`.
+
+For example, one plan measuring both cost and latency for the same subject
+records two observations under the same `metric` and `planId`, distinguished
+only by `dimensions.quantity`:
+
+```json
+{
+  "metric": "resource_usage",
+  "planId": "mp-cost-latency",
+  "dimensions": { "quantity": "cost" },
+  "shape": "scalar",
+  "unit": "usd",
+  "state": "measured",
+  "value": 4.12
+}
+```
+
+```json
+{
+  "metric": "resource_usage",
+  "planId": "mp-cost-latency",
+  "dimensions": { "quantity": "latency" },
+  "shape": "scalar",
+  "unit": "ms",
+  "state": "measured",
+  "value": 812
+}
+```
+
+Author one MeasurementPlan (`mp-cost-latency` above) whose Population,
+Collection Procedure, and Interpretation cover both quantities, rather than
+two separate plans that would duplicate everything except the quantity being
+measured.
