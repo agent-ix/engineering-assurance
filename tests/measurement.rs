@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-//! FR-020 MeasurementPlan objective types, schema parity, the definition-change
+//! FR-020 `MeasurementPlan` objective types, schema parity, the definition-change
 //! check, and the narrow `measurement` feature.
 
 use std::{collections::BTreeSet, fs, path::Path, process::Command};

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-//! MeasurementPlan definition types owned by Engineering Assurance (FR-020).
+//! `MeasurementPlan` definition types owned by Engineering Assurance (FR-020).
 //!
-//! This module owns the typed form of a MeasurementPlan's optional `objective`
+//! This module owns the typed form of a `MeasurementPlan`'s optional `objective`
 //! block and the check that an objective edit came with a new
 //! `definition_version`. It performs no filesystem, process, environment,
 //! network, clock, or persistence access: callers parse plan frontmatter and
@@ -18,7 +18,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-/// Which way a MeasurementPlan's metric is supposed to move.
+/// Which way a `MeasurementPlan`'s metric is supposed to move.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Direction {
@@ -79,7 +79,7 @@ pub enum ObjectiveError {
     },
 }
 
-/// A validated MeasurementPlan objective: a direction and an optional finite
+/// A validated `MeasurementPlan` objective: a direction and an optional finite
 /// bound, where a `target` direction always has a bound.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(try_from = "ObjectiveFields", into = "ObjectiveFields")]
@@ -147,7 +147,7 @@ impl From<Objective> for ObjectiveFields {
     }
 }
 
-/// The parts of one MeasurementPlan's frontmatter that identify its
+/// The parts of one `MeasurementPlan`'s frontmatter that identify its
 /// measurement definition for the objective check.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlanDefinition<'a> {
