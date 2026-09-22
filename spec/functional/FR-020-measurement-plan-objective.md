@@ -24,7 +24,9 @@ objective SHALL count as a change to the plan's measurement definition.
   - `direction`: exactly one of `higher`, `lower`, `zero`, or `target`;
   - `bound`: an optional finite number.
 - For the definition-change check: the plan's frontmatter before and after an
-  edit, each projected to its `definition_version` and `objective`.
+  edit, each projected to its `definition_version` and its measurement
+  definition (`objective`, and the FR-021 `statistical_design.estimator` and
+  `statistical_design.decision_rule`).
 
 ## Outputs
 
@@ -32,7 +34,8 @@ objective SHALL count as a change to the plan's measurement definition.
 - A typed Rust `Objective` value, or a typed refusal naming why the objective
   is invalid.
 - For the definition-change check: either no finding, or one typed finding
-  carrying the unchanged `definition_version` and both objectives.
+  carrying the unchanged `definition_version`, the changed definition members,
+  and both definitions.
 
 ## Behavior
 
@@ -42,8 +45,10 @@ objective SHALL count as a change to the plan's measurement definition.
   any non-zero value is a deviation.
 - `direction: target` SHALL mean the metric is expected to reach `bound`, and
   a `target` objective SHALL carry `bound`.
-- For `higher`, `lower`, and `zero`, `bound` SHALL be optional and, when
-  present, SHALL state the threshold the plan measures against.
+- For `higher`, `lower`, and `zero`, `bound` SHALL be optional.
+- `bound` SHALL state the goal the metric is meant to reach. It is
+  informational and never evaluated; only the FR-021 decision rule is
+  evaluated.
 - The MeasurementPlan frontmatter schema SHALL accept a plan with no
   `objective`.
 - The schema and the Rust `Objective` type SHALL refuse an unknown direction,
@@ -58,7 +63,8 @@ objective SHALL count as a change to the plan's measurement definition.
   `Direction` enum.
 - The `objective` SHALL be part of the plan's measurement definition: adding,
   removing, or changing it while `definition_version` stays the same SHALL be
-  reported as a typed definition-change finding. Adding, removing, or changing
+  reported as a typed definition-change finding naming `objective` among the
+  changed members. Adding, removing, or changing
   it together with a `definition_version` change SHALL produce no finding.
 - The Rust `Objective`, `Direction`, and definition-change check SHALL be
   reachable through a `measurement` Cargo feature that activates no
@@ -78,7 +84,7 @@ silently.
 | --- | --- | --- |
 | FR-020-AC-1 | The MeasurementPlan frontmatter schema accepts a plan without `objective`, every direction without `bound`, every direction with a numeric `bound`, and `target` with `bound`; it rejects `target` without `bound`, an unknown direction, a missing direction, a non-numeric `bound`, and an extra key in `objective`. The MeasurementPlan skeleton carries a valid `objective`. | Test (TC-139) |
 | FR-020-AC-2 | The Rust `Objective` accepts every direction and refuses `target` without `bound` and a non-finite `bound` with distinct typed errors, both when constructed and when deserialized; deserialization refuses unknown directions and extra keys; and the schema's `direction` enum equals the Rust `Direction` wire-name set. | Test (TC-140) |
-| FR-020-AC-3 | Given two plan definitions, an added, removed, or changed objective with an equal `definition_version` yields one typed finding carrying that version and both objectives; the same edit with a different `definition_version`, and an unchanged objective, yield no finding. | Test (TC-141) |
+| FR-020-AC-3 | Given two plan definitions, an added, removed, or changed objective with an equal `definition_version` yields one typed finding carrying that version, `objective` as a changed member, and both definitions; the same edit with a different `definition_version`, and an unchanged definition, yield no finding. | Test (TC-141) |
 | FR-020-AC-4 | A minimal consumer compiles the crate with default features disabled and only `measurement` enabled, reaches `Objective` and the definition-change check, and resolves no `serde_json` package anywhere in its dependency graph. | Test (TC-142) |
 
 ## Dependencies

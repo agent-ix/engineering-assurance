@@ -69,6 +69,83 @@
       "then": {
         "required": ["ground_truth_kind"]
       }
+    },
+    {
+      "if": {
+        "properties": { "statistical_design": { "type": "object" } },
+        "required": ["statistical_design"]
+      },
+      "then": {
+        "required": ["metric"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "objective": {
+            "properties": { "direction": { "const": "higher" } },
+            "required": ["direction"]
+          }
+        },
+        "required": ["objective"]
+      },
+      "then": {
+        "properties": {
+          "statistical_design": {
+            "properties": {
+              "decision_rule": { "properties": { "comparator": { "enum": ["gt", "ge"] } } }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "objective": {
+            "properties": { "direction": { "const": "lower" } },
+            "required": ["direction"]
+          }
+        },
+        "required": ["objective"]
+      },
+      "then": {
+        "properties": {
+          "statistical_design": {
+            "properties": {
+              "decision_rule": { "properties": { "comparator": { "enum": ["lt", "le"] } } }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "objective": {
+            "properties": { "direction": { "const": "zero" } },
+            "required": ["direction"]
+          }
+        },
+        "required": ["objective"]
+      },
+      "then": {
+        "properties": {
+          "statistical_design": {
+            "properties": {
+              "decision_rule": {
+                "anyOf": [
+                  { "properties": { "comparator": { "const": "eq" } } },
+                  {
+                    "properties": { "comparator": { "const": "le" }, "threshold": { "const": 0 } },
+                    "required": ["threshold"]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -76,7 +153,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["direction"],
-      "description": "Which way this plan's metric is supposed to move (FR-020). Part of the measurement definition: adding, removing, or changing it requires a new `definition_version`, so results under the old and new objective are never compared as one series. Optional.",
+      "description": "Which way this plan's metric is supposed to move (FR-020). When a `statistical_design.decision_rule` is also present, its comparator agrees with `direction` (FR-021): `higher` takes `gt` or `ge`, `lower` takes `lt` or `le`, `zero` takes `eq` or `le` against threshold 0, and `target` takes any comparator. Part of the measurement definition: adding, removing, or changing it requires a new `definition_version`, so results under the old and new objective are never compared as one series. Optional.",
       "properties": {
         "direction": {
           "enum": ["higher", "lower", "zero", "target"],
@@ -84,7 +161,7 @@
         },
         "bound": {
           "type": "number",
-          "description": "The threshold the plan measures against. Required when `direction` is `target`; optional otherwise."
+          "description": "The goal the metric should reach; informational, never evaluated. Only `statistical_design.decision_rule` is evaluated (FR-021). Required when `direction` is `target`; optional otherwise."
         }
       },
       "allOf": [
@@ -134,13 +211,77 @@
         "repetitions": {
           "type": "integer",
           "minimum": 1,
-          "description": "How many repeat runs are required before a result counts. For a gate-stage plan this is the standard repeat-count (e.g. 'passes 3 of 5 tries' is expressed as repetitions: 5 plus the pass threshold in decision_rule) -- it is not a separate field, so do not add a parallel required_repeats."
+          "description": "How many repeat runs are required before a result counts. The estimator is computed over every repetition together and decision_rule is applied once to that estimate. For a gate-stage plan, 'passes 3 of 5 tries' is therefore expressed as repetitions: 5, a metric that is the proportion of passing tries, estimator: proportion, and decision_rule { comparator: ge, threshold: 0.6 } -- it is not a separate field, so do not add a parallel required_repeats here or in decision_rule."
         },
-        "estimator": { "type": "string", "minLength": 1 },
+        "estimator": {
+          "enum": ["proportion", "count", "mean", "median", "ratio"],
+          "description": "How the plan's metric is computed from the collected population (FR-021). `proportion`: matching items divided by examined items, in [0, 1]. `count`: the number of matching items. `mean`: the arithmetic mean of per-item or per-repetition values, including a weighted mean whose weights the plan's body states. `eq` against a `mean` or `ratio` estimate is exact floating-point equality. `median`: the middle per-item value. `ratio`: one total divided by another, unbounded (e.g. cost per confirmed finding)."
+        },
         "error_model": { "type": "string", "minLength": 1 },
         "uncertainty": { "type": "string", "minLength": 1 },
-        "decision_rule": { "type": "string", "minLength": 1 }
-      }
+        "decision_rule": { "$ref": "#/$defs/decision_rule" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "decision_rule": {
+                "properties": { "baseline": { "const": "constant-predictor" } },
+                "required": ["baseline"]
+              }
+            },
+            "required": ["decision_rule"]
+          },
+          "then": {
+            "properties": { "estimator": { "const": "proportion" } }
+          }
+        }
+      ]
+    },
+    "decision_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["comparator"],
+      "description": "The mechanical rule a checker applies to the plan's `metric` (FR-021): it holds when `estimate <comparator> reference`, where the estimate is computed under `estimator` over all `repetitions` and the reference is either `threshold` or the `baseline` value moved by `margin`. The rule is the only part of a MeasurementPlan that is evaluated; `objective.bound` is informational. It is part of the measurement definition: changing it requires a new `definition_version`, so a rule edited after results were seen starts a new series that is never compared with the old one. When `minimum_population` is set, a result over a smaller population is refused before the rule is evaluated. The rule does not restate `metric`, `repetitions`, or `minimum_population`.",
+      "properties": {
+        "comparator": {
+          "enum": ["gt", "ge", "lt", "le", "eq"],
+          "description": "`gt`: estimate > reference. `ge`: estimate >= reference. `lt`: estimate < reference. `le`: estimate <= reference. `eq`: estimate == reference, exact floating-point equality (e.g. a count gated at exactly zero). None of them holds when either side is NaN."
+        },
+        "threshold": {
+          "type": "number",
+          "description": "A fixed reference value stated in the plan. Exactly one of `threshold` and `baseline` is present. JSON Schema has no finiteness keyword, so a YAML `.inf` or `.nan` threshold passes this schema; the Rust `DecisionRule` refuses it."
+        },
+        "baseline": {
+          "enum": ["constant-predictor", "prior-collection", "best-seen"],
+          "description": "A reference value computed at evaluation time, never written into the plan. `constant-predictor`: the agreement rate of the highest-scoring constant answer in each answer family, combined as the size-weighted mean over families (total best-constant agreements over total items), computed from the corpus (see the MeasurementPlan skeleton's worked example); allowed only with `estimator: proportion`. `prior-collection`: the plan's metric in the collection this result is compared against under the same definition_version (a branch comparison's base, or a trend's previous point). `best-seen`: over every accepted collection of the plan's metric under the same definition_version -- one the measurement intake admitted rather than refused -- the maximum value when `comparator` is `gt` or `ge`, and the minimum when it is `lt` or `le`; the value a ratchet refuses to regress past. `eq` against `best-seen` is refused. Exactly one of `threshold` and `baseline` is present."
+        },
+        "margin": {
+          "type": "number",
+          "description": "How far the result must improve on the baseline, in the metric's own units, signed in the direction of improvement: positive means the estimate must beat the baseline by at least this much, negative allows a regression of up to this much. reference = baseline value + margin for `gt` and `ge`, and baseline value - margin for `lt` and `le`. Allowed only with `baseline` and never with `eq`; absent means 0."
+        }
+      },
+      "oneOf": [
+        { "required": ["threshold"] },
+        { "required": ["baseline"] }
+      ],
+      "dependencies": {
+        "margin": ["baseline"]
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "comparator": { "const": "eq" } },
+            "required": ["comparator"]
+          },
+          "then": {
+            "properties": {
+              "baseline": { "not": { "const": "best-seen" } },
+              "margin": false
+            }
+          }
+        }
+      ]
     }
   }
 }

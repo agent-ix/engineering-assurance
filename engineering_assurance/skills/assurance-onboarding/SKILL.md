@@ -95,11 +95,32 @@ answer-space family instead of one per family silently understates it.
 When the decision owner states which way the metric should move, record it in
 the plan's optional `objective` block rather than only in prose:
 `direction` is one of `higher`, `lower`, `zero`, or `target`, and `bound` is
-the threshold, required when `direction` is `target` (see the `MeasurementPlan`
-skeleton). Do not invent an objective the owner has not stated. The objective
-is part of the measurement definition: when you add, remove, or change it on an
+the goal the metric should reach, required when `direction` is `target` (see
+the `MeasurementPlan` skeleton). `bound` is informational and never evaluated;
+only `decision_rule` is. Do not invent an objective the owner has not stated.
+
+A plan with a `statistical_design` states its bar as data a checker can
+evaluate, not as a sentence: `estimator` is one of `proportion`, `count`,
+`mean`, `median`, or `ratio`, and `decision_rule` is
+`{ comparator, threshold }` or `{ comparator, baseline, margin? }`, where
+`comparator` is one of `gt`, `ge`, `lt`, `le`, `eq` and `baseline` is one of
+`constant-predictor` (only with `estimator: proportion`), `prior-collection`,
+or `best-seen` (not with `eq`). `margin` is in the metric's own units and
+signed in the direction of improvement: positive demands the result beat the
+baseline by that much, negative allows a regression of up to that much; `eq`
+takes none. When `objective` is present, the comparator agrees with it:
+`higher` takes `gt`/`ge`, `lower` takes `lt`/`le`, `zero` takes `eq` or `le`
+against threshold 0. The rule applies to the plan's own `metric`, which is
+then required; do not restate `metric`, `repetitions`, or
+`minimum_population` inside the rule. Gate on the constant-predictor margin as
+`{ comparator: gt, baseline: constant-predictor, margin: <owner's bar> }`, and
+do not invent a threshold or margin the owner has not stated. `population`,
+`sampling`, `error_model`, and `uncertainty` remain prose.
+
+The objective, `estimator`, and `decision_rule` are all part of the
+measurement definition: when you add, remove, or change any of them on an
 existing plan, also change `definition_version`, so results under the old and
-new objective are never compared as one series.
+new definition are never compared as one series.
 
 When an artifact is justified, render it from the installed module skeleton,
 write a same-directory staging file, validate it with Quire, and expose it only
