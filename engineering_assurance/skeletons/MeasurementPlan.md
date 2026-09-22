@@ -88,3 +88,63 @@ Author one MeasurementPlan (`mp-cost-latency` above) whose Population,
 Collection Procedure, and Interpretation cover both quantities, rather than
 two separate plans that would duplicate everything except the quantity being
 measured.
+
+## Example: constant-predictor margin, not raw agreement, on a skewed population
+
+A plan that grades a tool's output against recorded ground-truth labels
+states its raw agreement/accuracy rate next to the **constant-predictor
+baseline** — what a fixed, corpus-blind answer would score — rather than the
+raw rate alone. A skewed population lets a tool that reads nothing score high
+purely because one label dominates; the number that says whether the tool did
+anything is the margin over this baseline, not the raw rate by itself.
+
+**Formula.** Group the population into the answer-space families the plan's
+own Population section already states — do not invent a new grouping here.
+For family `f` with `n_f` items, and for each label `i` in that family's
+answer space, let `n_{f,i}` count every item where label `i` is the primary
+recorded reading *or* one of its recorded contested alternates (an item with
+more than one defensible answer counts toward each). That family's best
+constant score is `max_i(n_{f,i}) / n_f`. The whole population's baseline is
+the size-weighted mean of the per-family rates — equivalently, total
+best-constant agreements over total items:
+
+```
+baseline    = sum_f( max_i(n_{f,i}) ) / sum_f( n_f )     # both rates below are fractions in [0, 1]
+margin_pp   = 100 * (observed_agreement_rate - baseline)
+```
+
+The observed agreement rate must credit contested alternates by the same
+rule used to build `n_{f,i}` above; a strict observed rate compared against a
+contested-inclusive baseline understates the margin.
+
+Compute this from the corpus at measurement time. Never hard-code the
+winning label or the resulting percentage: a corpus that changes moves the
+baseline, and a written-down number goes stale exactly like a written-down
+definition would.
+
+**A single constant answer across every family, instead of one per family,
+understates the baseline and lets a tool clear a bar it never actually beat.**
+Worked example, from a real 15-item corpus split into two families with
+different answer spaces (quoin's `criterion-strength-fixtures.json`, 11
+`weakness_kind` items and 4 `adverse_case_coverage` items):
+
+| family | items | best single global label (`sound`) | agrees | best per-family label |
+| --- | --- | --- | --- | --- |
+| `weakness_kind` | 11 | `sound` | 9 | `sound` (9/11) |
+| `adverse_case_coverage` | 4 | `sound` (not in this label space) | 0 | coverage level `2` (3/4) |
+
+A grader that answers `sound` to all 15 items scores 9/15 = **60.0%** — the
+family whose answer space does not even contain `sound` contributes nothing,
+and that gap is invisible in one blended global-constant number. Picking the
+best label *per family* instead scores (9 + 3)/15 = **80.0%**. **80.0%, not
+60.0%, is the bar a tool's own agreement rate has to clear** on this
+population — the lower number was an artifact of grading one family against
+another family's answer.
+
+State the observed rate, the baseline, and the margin together, and gate on
+the margin (not the raw rate) whenever the population is skewed enough that
+a constant answer scores high on its own. A gate plan that requires this
+margin to clear *together with* other metrics (recall, calibration, and
+similar) expresses each as a `relationships` entry of `type: references` in
+its own frontmatter — one per constituent MeasurementPlan — rather than only
+describing the dependency in prose.
