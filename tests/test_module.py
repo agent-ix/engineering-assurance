@@ -188,6 +188,29 @@ def test_subject_identity_is_optional_name_and_version() -> None:
     assert list(validator.iter_errors(incomplete)) != []
 
 
+def test_preregistration_is_optional_and_requires_a_sha256_bar_digest() -> None:
+    contract = schema("measurement-plan-frontmatter.schema")
+    preregistration = contract["properties"]["preregistration"]
+    assert preregistration["required"] == ["bar_digest"]
+    assert set(preregistration["properties"]) == {"bar_digest"}
+    assert "preregistration" not in contract["required"]
+
+    validator = Draft7Validator(contract, format_checker=FormatChecker())
+    digest = "sha256:" + "a" * 64
+    plan = _minimal_measurement_plan(preregistration={"bar_digest": digest})
+    assert list(validator.iter_errors(plan)) == []
+
+    malformed = _minimal_measurement_plan(
+        preregistration={"bar_digest": "not-a-digest"}
+    )
+    assert list(validator.iter_errors(malformed)) != []
+
+    extra_field = _minimal_measurement_plan(
+        preregistration={"bar_digest": digest, "bar_source": "elsewhere.rs"}
+    )
+    assert list(validator.iter_errors(extra_field)) != []
+
+
 def test_component_contract_exposes_failure_and_control_boundaries() -> None:
     contract = schema("component-assurance-contract-frontmatter.schema")
     assert {
