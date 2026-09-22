@@ -10,6 +10,8 @@ top_claim:
   statement: the identified candidate is acceptable for the bounded decision
   subject: fictional Juniper candidate revision
   status: open
+  evidence_refs:
+    - ix://example/juniper/evidence/request-loss-run
 reasoning:
   - id: reasoning-retention
     statement: evaluate the request-loss scenario using the declared measurement and monitor
@@ -54,7 +56,8 @@ decisions, controls, assumptions, and challenges.
 ## Sufficiency Decision
 
 An authorized participant records whether cited evidence supports, challenges,
-or leaves the claim open. A citation alone is not support.
+or leaves the claim open. A citation alone is not support, but a claim recorded
+as `supported` must list the evidence it rests on in `evidence_refs`.
 
 ## Challenges
 

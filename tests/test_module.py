@@ -271,6 +271,47 @@ def test_argument_has_authored_claims_and_no_score() -> None:
     assert "score" not in json.dumps(contract).casefold()
 
 
+def _argument_with_top_claim(**claim_overrides: object) -> dict:
+    skeleton = package.PACKAGE_ROOT / "skeletons" / "AssuranceArgument.md"
+    argument = frontmatter(skeleton)
+    claim = {
+        key: value
+        for key, value in argument["top_claim"].items()
+        if key != "evidence_refs"
+    }
+    claim.update(claim_overrides)
+    argument["top_claim"] = claim
+    return argument
+
+
+def test_supported_claim_must_reference_evidence() -> None:
+    """Trace: FR-023-AC-1, FR-023-AC-2, FR-023-AC-3, TC-139."""
+    validator = Draft7Validator(
+        schema("assurance-argument-frontmatter.schema"),
+        format_checker=FormatChecker(),
+    )
+    evidence = "ix://example/juniper/evidence/request-loss-run"
+
+    supported_without_refs = _argument_with_top_claim(status="supported")
+    errors = [e.message for e in validator.iter_errors(supported_without_refs)]
+    assert "'evidence_refs' is a required property" in errors
+
+    supported_with_refs = _argument_with_top_claim(
+        status="supported", evidence_refs=[evidence]
+    )
+    assert list(validator.iter_errors(supported_with_refs)) == []
+
+    for status in ("open", "challenged", "rejected"):
+        without_refs = _argument_with_top_claim(status=status)
+        assert list(validator.iter_errors(without_refs)) == []
+        with_refs = _argument_with_top_claim(status=status, evidence_refs=[evidence])
+        assert list(validator.iter_errors(with_refs)) == []
+
+    for refs in ([], [evidence, evidence], ["evidence/request-loss-run"], [""]):
+        malformed = _argument_with_top_claim(status="supported", evidence_refs=refs)
+        assert list(validator.iter_errors(malformed)) != [], refs
+
+
 def test_repository_has_only_governed_review_evidence() -> None:
     """Trace: StR-001-VC-1, TC-001; StR-003-VC-2, TC-097."""
     assert not (ROOT / "examples").exists()
