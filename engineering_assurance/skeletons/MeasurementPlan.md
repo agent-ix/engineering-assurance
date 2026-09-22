@@ -7,8 +7,12 @@ owner: juniper-observability-owner
 metric: request_retention_rate
 definition_version: juniper.request-retention-v1
 stage: baseline
+subject_identity:
+  name: juniper-classifier
+  version: 2026.09.1
 statistical_design:
   population: fictional valid requests accepted by the candidate service
+  minimum_population: 200
   sampling: deterministic seeded sample across declared request classes
   repetitions: 5
   estimator: retained-result proportion

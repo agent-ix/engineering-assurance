@@ -25,12 +25,38 @@
         "gate"
       ]
     },
+    "ground_truth_kind": {
+      "enum": ["human-labelled", "agent-labelled", "mechanical"],
+      "description": "How the correct answers this plan grades against were produced: labelled by a person, labelled by another AI/agent, or derived mechanically (e.g. a deterministic oracle or replay). Required when stage is gate; optional otherwise."
+    },
+    "subject_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "description": "The identity of the classifier or service actually graded by this plan's results -- its name and the exact version under evaluation (the counterpart, on the spec side, of quoin-measurement's MeasurementCollection subject/tool_version fields on the evidence side). Optional, but recommended on every plan and especially on gate-stage plans, so a pass/fail decision can be traced back to what was actually tested.",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
     "statistical_design": { "$ref": "#/$defs/statistical_design" },
     "relationships": {
       "type": "array",
+      "description": "Structural links to other spec artifacts. When a pass/fail decision genuinely depends on more than one metric succeeding together (a composite/AND gate), that composition MUST be expressed here as one `references` entry per constituent metric's MeasurementPlan -- never as a fabricated single `metric` id, and never only as prose. Do not add a separate constituent-metrics field for this; `references` is the one spelling of the edge.",
       "items": { "$ref": "#/$defs/relationship" }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "stage": { "const": "gate" } },
+        "required": ["stage"]
+      },
+      "then": {
+        "required": ["ground_truth_kind"]
+      }
+    }
+  ],
   "$defs": {
     "relationship": {
       "type": "object",
@@ -38,7 +64,10 @@
       "required": ["target", "type"],
       "properties": {
         "target": { "type": "string", "pattern": "^ix://" },
-        "type": { "enum": ["measures", "references"] }
+        "type": {
+          "enum": ["measures", "references"],
+          "description": "`measures`: this plan measures the target directly (e.g. the AssuranceProfile it informs). `references`: this plan points at a related artifact without measuring it, including -- for a composite/gate-stage decision -- each constituent metric's MeasurementPlan that the decision composes."
+        }
       }
     },
     "statistical_design": {
@@ -55,8 +84,17 @@
       ],
       "properties": {
         "population": { "type": "string", "minLength": 1 },
+        "minimum_population": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The smallest population size below which a result must not be trusted -- e.g. refuses the 'decided from two examples' failure mode. Optional; when set, a result collected against a smaller population is invalid and must be refused or flagged, not silently accepted."
+        },
         "sampling": { "type": "string", "minLength": 1 },
-        "repetitions": { "type": "integer", "minimum": 1 },
+        "repetitions": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "How many repeat runs are required before a result counts. For a gate-stage plan this is the standard repeat-count (e.g. 'passes 3 of 5 tries' is expressed as repetitions: 5 plus the pass threshold in decision_rule) -- it is not a separate field, so do not add a parallel required_repeats."
+        },
         "estimator": { "type": "string", "minLength": 1 },
         "error_model": { "type": "string", "minLength": 1 },
         "uncertainty": { "type": "string", "minLength": 1 },

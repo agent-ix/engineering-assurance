@@ -74,9 +74,9 @@ def test_every_schema_and_skeleton_is_valid() -> None:
             assert f"## {locator['after_heading']}" in body
 
 
-def test_profile_v02_is_advisory_and_legacy_compatible() -> None:
+def test_profile_schema_version_and_profile_kind_are_optional() -> None:
     contract = schema("assurance-profile-frontmatter.schema")
-    assert "profile_version" not in contract["required"]
+    assert "schema_version" not in contract["required"]
     assert "profile_kind" not in contract["required"]
     impact = contract["$defs"]["impact"]["properties"]
     assert impact["verifiability"]["type"] == "object"
@@ -114,6 +114,78 @@ def test_measurement_stages_and_statistical_design_are_explicit() -> None:
         "uncertainty",
         "decision_rule",
     ]
+    assert contract["$defs"]["statistical_design"]["properties"][
+        "minimum_population"
+    ] == {
+        "type": "integer",
+        "minimum": 1,
+        "description": (
+            "The smallest population size below which a result must not be "
+            "trusted -- e.g. refuses the 'decided from two examples' failure "
+            "mode. Optional; when set, a result collected against a smaller "
+            "population is invalid and must be refused or flagged, not "
+            "silently accepted."
+        ),
+    }
+    assert "minimum_population" not in required
+
+
+def _minimal_measurement_plan(**overrides: object) -> dict:
+    plan = {
+        "id": "MP-900",
+        "title": "t",
+        "type": "MeasurementPlan",
+        "status": "proposed",
+        "owner": "o",
+        "stage": "baseline",
+        "relationships": [],
+    }
+    plan.update(overrides)
+    return plan
+
+
+def test_ground_truth_kind_is_required_only_for_gate_stage() -> None:
+    contract = schema("measurement-plan-frontmatter.schema")
+    assert contract["properties"]["ground_truth_kind"]["enum"] == [
+        "human-labelled",
+        "agent-labelled",
+        "mechanical",
+    ]
+    validator = Draft7Validator(contract, format_checker=FormatChecker())
+
+    baseline = _minimal_measurement_plan(stage="baseline")
+    assert list(validator.iter_errors(baseline)) == []
+
+    gate_missing = _minimal_measurement_plan(stage="gate")
+    errors = [e.message for e in validator.iter_errors(gate_missing)]
+    assert "'ground_truth_kind' is a required property" in errors
+
+    gate_present = _minimal_measurement_plan(
+        stage="gate", ground_truth_kind="mechanical"
+    )
+    assert list(validator.iter_errors(gate_present)) == []
+
+    bad_enum = _minimal_measurement_plan(
+        stage="gate", ground_truth_kind="vibes-based"
+    )
+    assert list(validator.iter_errors(bad_enum)) != []
+
+
+def test_subject_identity_is_optional_name_and_version() -> None:
+    contract = schema("measurement-plan-frontmatter.schema")
+    subject_identity = contract["properties"]["subject_identity"]
+    assert subject_identity["required"] == ["name", "version"]
+    assert set(subject_identity["properties"]) == {"name", "version"}
+    assert "subject_identity" not in contract["required"]
+
+    validator = Draft7Validator(contract, format_checker=FormatChecker())
+    plan = _minimal_measurement_plan(
+        subject_identity={"name": "juniper-classifier", "version": "2026.09.1"}
+    )
+    assert list(validator.iter_errors(plan)) == []
+
+    incomplete = _minimal_measurement_plan(subject_identity={"name": "juniper"})
+    assert list(validator.iter_errors(incomplete)) != []
 
 
 def test_component_contract_exposes_failure_and_control_boundaries() -> None:
