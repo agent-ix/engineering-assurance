@@ -125,6 +125,41 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
 
 #[test]
 #[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
+fn onboarding_report_url_exemption_is_scoped_to_its_exact_path() {
+    // The assurance-onboarding skill's onboarding report (PLAT-924) may link
+    // sibling first-party repos, by its exact path only.
+    let tokens: Vec<String> = Vec::new();
+    let onboarding_report_path =
+        "engineering_assurance/skills/assurance-onboarding/scripts/onboard.mjs";
+    let sibling_repo_url = ["https:", "//github.com/agent-ix/qa-corpus/tree/main"].concat();
+    assert!(
+        findings(onboarding_report_path, sibling_repo_url.as_bytes(), &tokens).is_empty(),
+        "the onboarding report must be able to link a first-party sibling repository"
+    );
+    assert!(
+        !findings("candidate.md", sibling_repo_url.as_bytes(), &tokens).is_empty(),
+        "an unqualified file must not inherit the onboarding report's exemption"
+    );
+    assert!(
+        !findings("other/onboard.mjs", sibling_repo_url.as_bytes(), &tokens).is_empty(),
+        "a same-named file elsewhere must not inherit the exemption by suffix match"
+    );
+    // The exemption is an org-prefix match, not an exact single URL, but must
+    // still refuse a look-alike, squattable org such as `agent-ix-evil`.
+    let onboarding_look_alike_url = ["https:", "//github.com/agent-ix-evil/x"].concat();
+    assert!(
+        !findings(
+            onboarding_report_path,
+            onboarding_look_alike_url.as_bytes(),
+            &tokens
+        )
+        .is_empty(),
+        "a look-alike agent-ix org URL must not be admitted by the onboarding-report exemption"
+    );
+}
+
+#[test]
+#[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
 fn whole_file_boundaries_are_typed_and_short_circuit_content() {
     let cases = [
         (

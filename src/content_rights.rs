@@ -560,6 +560,18 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         || path.ends_with(".codex-plugin/plugin.json")
         || path.ends_with(".github/plugin/plugin.json")
         || path.ends_with(".dist-info/METADATA");
+    // The assurance-onboarding skill's one onboarding report (PLAT-924) points
+    // at the sibling first-party repos a decision boundary actually needs —
+    // the qa-corpus measurement examples and a live consumer's spec/assurance/
+    // — the same first-party-only linking `project_metadata` already grants
+    // README.md. Named by its exact path, not a directory-wide suffix match,
+    // for the same reason `cargo_manifest` below is exact: a suffix match
+    // would let an unrelated file inherit the exemption by choosing its name.
+    // The `/` after `agent_ix` is required so an org-prefix match cannot admit
+    // a look-alike org such as `agent-ix-evil`.
+    let onboarding_report =
+        path == "engineering_assurance/skills/assurance-onboarding/scripts/onboard.mjs";
+    let agent_ix_org_prefix = concat!("https:", "//github.com/agent-ix/");
     // A first-party Agent-IX crate consumed as a rev-pinned git dependency
     // (PLAT-853) names its own GitHub URL in the manifest and lockfile, same
     // as the registry index URL already carried in Cargo.lock/deny.toml. This
@@ -578,6 +590,7 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         || cargo_manifest && is_ix_trace_rs_url
         || project_metadata && (url == discord_badge || url == discord_invite)
         || project_metadata && url.starts_with(agent_ix)
+        || onboarding_report && url.starts_with(agent_ix_org_prefix)
 }
 
 fn contains_encoded_payload(line: &str) -> bool {
