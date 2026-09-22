@@ -399,6 +399,10 @@ fn tc_146_decision_rule_construction_and_deserialization_are_closed_and_validate
             threshold: f64::INFINITY
         })
     );
+    assert_eq!(
+        DecisionRule::against_baseline(Comparator::Eq, Baseline::BestSeen, None),
+        Err(DecisionRuleError::EqAgainstBestSeen)
+    );
     assert!(matches!(
         DecisionRule::against_baseline(Comparator::Ge, Baseline::BestSeen, Some(f64::NAN)),
         Err(DecisionRuleError::NonFiniteMargin { margin }) if margin.is_nan()
@@ -421,6 +425,10 @@ fn tc_146_decision_rule_construction_and_deserialization_are_closed_and_validate
         (
             "comparator: ge\nthreshold: 1\nmargin: 0.1\n",
             DecisionRuleError::MarginWithoutBaseline,
+        ),
+        (
+            "comparator: eq\nbaseline: best-seen\n",
+            DecisionRuleError::EqAgainstBestSeen,
         ),
     ] {
         let refused = parse_rule(yaml).expect_err(yaml);

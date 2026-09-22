@@ -148,6 +148,7 @@ const describeCondition = (condition, prefix = "") => {
 const readAllOf = (schema, prefix = "", present = "") => {
   const conditionalRequired = [];
   const exactlyOneOf = [];
+  const forbiddenValues = [];
   const warnings = [];
   if (schema.dependentRequired) {
     warnings.push("schema uses `dependentRequired`, which this checklist does not read");
@@ -200,7 +201,18 @@ const readAllOf = (schema, prefix = "", present = "") => {
     if (branch.then?.allOf) {
       warnings.push("an `allOf` branch's `then` nests another `allOf`, which this checklist does not read");
     }
-    if (Array.isArray(branch?.then?.required)) {
+    // `then: { properties: { X: { not: { const: v } } } }` forbids one value
+    // of X under the condition (a decision rule's `eq` against `best-seen`).
+    const forbidden = Object.entries(branch?.then?.properties ?? {}).map(([name, def]) =>
+      Object.keys(def).length === 1 && def.not && Object.keys(def.not).length === 1 && "const" in def.not
+        ? { field: `${prefix}${name}`, value: def.not.const }
+        : null,
+    );
+    const thenKeys = Object.keys(branch.then ?? {});
+    if (thenKeys.length === 1 && thenKeys[0] === "properties" && forbidden.length > 0 && forbidden.every(Boolean)) {
+      const when = describeCondition(branch.if, prefix);
+      forbiddenValues.push(...forbidden.map((entry) => ({ when, ...entry })));
+    } else if (Array.isArray(branch?.then?.required)) {
       conditionalRequired.push({
         when: describeCondition(branch.if, prefix),
         required: branch.then.required.map((name) => `${prefix}${name}`),
@@ -211,7 +223,7 @@ const readAllOf = (schema, prefix = "", present = "") => {
       );
     }
   }
-  return { conditionalRequired, exactlyOneOf, warnings };
+  return { conditionalRequired, exactlyOneOf, forbiddenValues, warnings };
 };
 
 // Resolve a same-document `#/$defs/<name>` reference: either a property's
@@ -247,7 +259,7 @@ if (moduleRoot) {
       continue;
     }
     const enums = {};
-    const { conditionalRequired, exactlyOneOf, warnings } = readAllOf(schema);
+    const { conditionalRequired, exactlyOneOf, forbiddenValues, warnings } = readAllOf(schema);
     // Walk object-valued fields (directly, or via a `$ref`/array
     // `items.$ref` resolved above) at every depth: a nested field's enums
     // and conditional requirements (a MeasurementPlan's
@@ -275,6 +287,7 @@ if (moduleRoot) {
         const nested = readAllOf(def, `${path}.`, `${path} is present`);
         conditionalRequired.push(...nested.conditionalRequired);
         exactlyOneOf.push(...nested.exactlyOneOf);
+        forbiddenValues.push(...nested.forbiddenValues);
         warnings.push(...nested.warnings.map((warning) => `${path}: ${warning}`));
         visit(def.properties, `${path}.`, new Set([...seen, def]));
       }
@@ -285,6 +298,7 @@ if (moduleRoot) {
       required: schema.required ?? [],
       conditionalRequired,
       exactlyOneOf,
+      forbiddenValues,
       enums,
       warnings,
     };
@@ -520,6 +534,9 @@ if (Object.keys(artifactChecklists).length === 0) {
     }
     for (const choice of checklist.exactlyOneOf ?? []) {
       line(`  when ${choice.when}: exactly one of: ${choice.fields.join(", ")}`);
+    }
+    for (const forbidden of checklist.forbiddenValues ?? []) {
+      line(`  when ${forbidden.when}: ${forbidden.field} must not be ${forbidden.value}`);
     }
     for (const warning of checklist.warnings ?? []) {
       line(`  WARNING: ${warning} — this checklist may be incomplete for ${type}`);

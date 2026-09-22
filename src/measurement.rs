@@ -317,8 +317,9 @@ pub enum Baseline {
     /// The plan's metric in the collection this result is compared against
     /// under the same `definition_version`.
     PriorCollection,
-    /// The best value of the plan's metric across every accepted collection
-    /// under the same `definition_version`.
+    /// The maximum accepted value of the plan's metric under the same
+    /// `definition_version` for a `gt`/`ge` rule, and the minimum for an
+    /// `lt`/`le` rule. An `eq` rule cannot use it.
     BestSeen,
 }
 
@@ -374,6 +375,9 @@ pub enum DecisionRuleError {
     /// A `margin` was stated without a `baseline`.
     #[error("decision rule `margin` is allowed only with `baseline`")]
     MarginWithoutBaseline,
+    /// An `eq` rule named `best-seen`, which has no best value to equal.
+    #[error("decision rule comparator `eq` cannot use baseline `best-seen`")]
+    EqAgainstBestSeen,
     /// The threshold was NaN or infinite.
     #[error("decision rule threshold {threshold} is not a finite number")]
     NonFiniteThreshold {
@@ -447,13 +451,18 @@ impl DecisionRule {
     ///
     /// # Errors
     ///
-    /// Returns [`DecisionRuleError::NonFiniteMargin`] when `margin` is NaN or
+    /// Returns [`DecisionRuleError::EqAgainstBestSeen`] for an `eq` rule
+    /// against [`Baseline::BestSeen`], and
+    /// [`DecisionRuleError::NonFiniteMargin`] when `margin` is NaN or
     /// infinite.
     pub fn against_baseline(
         comparator: Comparator,
         baseline: Baseline,
         margin: Option<f64>,
     ) -> Result<Self, DecisionRuleError> {
+        if comparator == Comparator::Eq && baseline == Baseline::BestSeen {
+            return Err(DecisionRuleError::EqAgainstBestSeen);
+        }
         let margin = margin.unwrap_or(0.0);
         if !margin.is_finite() {
             return Err(DecisionRuleError::NonFiniteMargin { margin });

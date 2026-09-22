@@ -50,19 +50,26 @@ structured rule a checker evaluates mechanically against the plan's `metric`.
 - The reference SHALL be the `threshold` when stated, and otherwise the
   baseline's value plus `margin`, with an absent `margin` meaning 0. `margin`
   is signed.
-- `baseline: constant-predictor` SHALL mean the score of the best constant
-  answer per answer family, computed from the corpus at evaluation time.
-  `baseline: prior-collection` SHALL mean the plan's metric in the collection
+- `baseline: constant-predictor` SHALL mean the highest agreement rate any
+  single constant answer per answer family scores on the corpus at evaluation
+  time.
+- `baseline: prior-collection` SHALL mean the plan's metric in the collection
   this result is compared against under the same `definition_version`.
-  `baseline: best-seen` SHALL mean the best value of the plan's metric across
-  every accepted collection under the same `definition_version`. The baseline
-  value SHALL be supplied by the caller; this repository does not compute it.
-- The rule SHALL apply to the plan's own `metric`, and the schema SHALL
-  require `metric` whenever `statistical_design` is present.
-- The estimate SHALL be computed over all `repetitions` together, and the rule
-  SHALL be applied once to it. When `minimum_population` is set, a result over
-  a smaller population SHALL be refused before the rule is evaluated. The rule
-  SHALL NOT restate `metric`, `repetitions`, or `minimum_population`.
+- `baseline: best-seen` SHALL mean the maximum accepted value of the plan's
+  metric under the same `definition_version` when `comparator` is `gt` or
+  `ge`, and the minimum when `comparator` is `lt` or `le`.
+- The schema and the Rust `DecisionRule` type SHALL refuse `comparator: eq`
+  with `baseline: best-seen`.
+- The calling checker SHALL supply the baseline value; this repository does
+  not compute it.
+- The rule SHALL apply to the plan's own `metric`.
+- The schema SHALL require `metric` whenever `statistical_design` is present.
+- The calling checker SHALL compute the estimate over all `repetitions`
+  together and apply the rule once to that estimate.
+- When `minimum_population` is set, the calling checker SHALL refuse a result
+  over a smaller population before it evaluates the rule.
+- The schema SHALL NOT accept `metric`, `repetitions`, or
+  `minimum_population` inside the rule.
 - The schema and the Rust `DecisionRule` type SHALL refuse an unknown
   comparator or baseline, a missing comparator, a rule with neither or both
   of `threshold` and `baseline`, a `margin` without `baseline`, a non-numeric
@@ -76,16 +83,16 @@ structured rule a checker evaluates mechanically against the plan's `metric`.
   exactly the wire names of the Rust `Estimator`, `Comparator`, and `Baseline`
   enums.
 - The onboarding checklist SHALL list the estimator, comparator, and baseline
-  sets, the one-of choice between `threshold` and `baseline`, and `margin`'s
-  dependency on `baseline`.
+  sets, the one-of choice between `threshold` and `baseline`, `margin`'s
+  dependency on `baseline`, and the refused `eq` against `best-seen`.
 - `Estimator`, `Comparator`, `Baseline`, and `DecisionRule` SHALL be reachable
   through the `measurement` Cargo feature.
 
 ## Error Conditions
 
 An unknown estimator, comparator, or baseline, a rule with no or two
-references, a `margin` without `baseline`, a non-numeric or non-finite
-`threshold` or `margin`, or an extra rule key fails validation or construction
+references, a `margin` without `baseline`, `eq` against `best-seen`, a
+non-numeric or non-finite `threshold` or `margin`, or an extra rule key fails validation or construction
 and is never read as a valid rule. Evaluating a baseline rule without a
 baseline value, a threshold rule with one, or a non-finite estimate or
 baseline value is refused rather than answered.
@@ -94,12 +101,12 @@ baseline value is refused rather than answered.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-021-AC-1 | The MeasurementPlan frontmatter schema accepts a decision rule with every comparator against a `threshold`, and every baseline with and without `margin`; it rejects an unknown or missing comparator, neither or both of `threshold` and `baseline`, `margin` with `threshold`, an unknown baseline, a non-numeric `threshold`, an extra rule key, and a prose rule; and it requires `metric` when `statistical_design` is present. | Test (TC-144) |
+| FR-021-AC-1 | The MeasurementPlan frontmatter schema accepts a decision rule with every comparator against a `threshold`, and every baseline with and without `margin`; it rejects an unknown or missing comparator, neither or both of `threshold` and `baseline`, `margin` with `threshold`, an unknown baseline, `eq` against `best-seen`, a non-numeric `threshold`, an extra rule key, and a prose rule; and it requires `metric` when `statistical_design` is present. | Test (TC-144) |
 | FR-021-AC-2 | The schema accepts each of the five estimators and rejects any other value; `population`, `sampling`, `error_model`, and `uncertainty` remain prose; the MeasurementPlan skeleton carries a valid structured estimator and decision rule. | Test (TC-145) |
-| FR-021-AC-3 | The Rust `DecisionRule` accepts threshold and baseline rules and refuses neither or both references, `margin` without `baseline`, and a non-finite `threshold` or `margin` with distinct typed errors, through construction and deserialization; deserialization refuses unknown comparators, baselines, estimators, and extra keys; a valid rule round-trips. | Test (TC-146) |
+| FR-021-AC-3 | The Rust `DecisionRule` accepts threshold and baseline rules and refuses neither or both references, `margin` without `baseline`, `eq` against `best-seen`, and a non-finite `threshold` or `margin` with distinct typed errors, through construction and deserialization; deserialization refuses unknown comparators, baselines, estimators, and extra keys; a valid rule round-trips. | Test (TC-146) |
 | FR-021-AC-4 | The schema's `estimator`, `comparator`, and `baseline` enums equal the Rust `Estimator`, `Comparator`, and `Baseline` wire-name sets, in order, and each `ALL` constant covers every variant. | Test (TC-147) |
 | FR-021-AC-5 | Each comparator holds exactly for the estimates below, at, or above the reference its symbol names; a baseline rule compares against the baseline value plus its signed margin; a missing or unexpected baseline value and a non-finite estimate or baseline value are typed refusals. | Test (TC-148) |
-| FR-021-AC-6 | The onboarding checklist lists the estimator, comparator, and baseline sets, the one-of choice between `threshold` and `baseline`, `margin`'s dependency on `baseline`, and `metric`'s dependency on `statistical_design`, with no warning. | Test (TC-149) |
+| FR-021-AC-6 | The onboarding checklist lists the estimator, comparator, and baseline sets, the one-of choice between `threshold` and `baseline`, `margin`'s dependency on `baseline`, `metric`'s dependency on `statistical_design`, and the refused `eq` against `best-seen`, with no warning. | Test (TC-149) |
 | FR-021-AC-7 | A minimal consumer with only the `measurement` feature reaches `Estimator`, `Comparator`, `Baseline`, and `DecisionRule` and resolves no `serde_json`. | Test (TC-142) |
 
 ## Dependencies

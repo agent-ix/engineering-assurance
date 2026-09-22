@@ -287,6 +287,9 @@ def test_decision_rule_is_a_closed_comparator_with_exactly_one_reference() -> No
         assert _statistical_design_errors(
             decision_rule={"comparator": comparator, "threshold": 0}
         ) == []
+    assert _statistical_design_errors(
+        decision_rule={"comparator": "eq", "baseline": "prior-collection"}
+    ) == []
     for baseline in ("constant-predictor", "prior-collection", "best-seen"):
         assert _statistical_design_errors(
             decision_rule={"comparator": "gt", "baseline": baseline}
@@ -306,6 +309,7 @@ def test_decision_rule_is_a_closed_comparator_with_exactly_one_reference() -> No
         },
         "margin with a threshold": {"comparator": "ge", "threshold": 1, "margin": 0.1},
         "unknown baseline": {"comparator": "ge", "baseline": "vibes"},
+        "eq against best-seen": {"comparator": "eq", "baseline": "best-seen"},
         "non-numeric threshold": {"comparator": "ge", "threshold": "0.99"},
         "duplicated repetitions": {"comparator": "ge", "threshold": 1, "repetitions": 5},
         "duplicated minimum_n": {"comparator": "ge", "threshold": 1, "minimum_n": 20},

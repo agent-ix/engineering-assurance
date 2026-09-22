@@ -62,8 +62,9 @@ estimate, computed over all `repetitions`: it holds when
 - `baseline`: a value computed at evaluation time, one of
   `constant-predictor` (the best constant answer per answer family, see the
   worked example below), `prior-collection` (the collection this result is
-  compared against), or `best-seen` (the best accepted value so far, for a
-  ratchet), plus an optional signed `margin` added to it.
+  compared against), or `best-seen` (for a ratchet: the maximum accepted value
+  so far under a `gt`/`ge` rule, the minimum under an `lt`/`le` rule; an `eq`
+  rule cannot use it), plus an optional signed `margin` added to it.
 
 For example, a plan that must beat the constant predictor by five percentage
 points states `decision_rule: { comparator: gt, baseline: constant-predictor,

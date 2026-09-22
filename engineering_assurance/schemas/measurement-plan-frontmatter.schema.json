@@ -170,7 +170,7 @@
         },
         "baseline": {
           "enum": ["constant-predictor", "prior-collection", "best-seen"],
-          "description": "A reference value computed at evaluation time, never written into the plan. `constant-predictor`: the score of the best constant answer per answer family, computed from the corpus (see the MeasurementPlan skeleton's worked example). `prior-collection`: the plan's metric in the collection this result is compared against under the same definition_version (a branch comparison's base, or a trend's previous point). `best-seen`: the best value of the plan's metric across every accepted collection under the same definition_version, which a ratchet refuses to regress below. Exactly one of `threshold` and `baseline` is present."
+          "description": "A reference value computed at evaluation time, never written into the plan. `constant-predictor`: the score of the best constant answer per answer family, computed from the corpus (see the MeasurementPlan skeleton's worked example). `prior-collection`: the plan's metric in the collection this result is compared against under the same definition_version (a branch comparison's base, or a trend's previous point). `best-seen`: the maximum accepted value of the plan's metric under the same definition_version when `comparator` is `gt` or `ge`, and the minimum when it is `lt` or `le` -- the value a ratchet refuses to regress past; `eq` against `best-seen` is refused. Exactly one of `threshold` and `baseline` is present."
         },
         "margin": {
           "type": "number",
@@ -183,7 +183,18 @@
       ],
       "dependencies": {
         "margin": ["baseline"]
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "comparator": { "const": "eq" } },
+            "required": ["comparator"]
+          },
+          "then": {
+            "properties": { "baseline": { "not": { "const": "best-seen" } } }
+          }
+        }
+      ]
     }
   }
 }

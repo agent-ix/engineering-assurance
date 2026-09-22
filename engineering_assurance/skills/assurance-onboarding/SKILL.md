@@ -106,8 +106,8 @@ evaluate, not as a sentence: `estimator` is one of `proportion`, `count`,
 `mean`, `median`, or `ratio`, and `decision_rule` is
 `{ comparator, threshold }` or `{ comparator, baseline, margin? }`, where
 `comparator` is one of `gt`, `ge`, `lt`, `le`, `eq` and `baseline` is one of
-`constant-predictor`, `prior-collection`, or `best-seen` (see the
-`MeasurementPlan` skeleton). The rule applies to the plan's own `metric`, which
+`constant-predictor`, `prior-collection`, or `best-seen` (not with `eq`; see
+the `MeasurementPlan` skeleton). The rule applies to the plan's own `metric`, which
 is then required; do not restate `metric`, `repetitions`, or
 `minimum_population` inside the rule. Gate on the constant-predictor margin as
 `{ comparator: gt, baseline: constant-predictor, margin: <owner's bar> }`, and

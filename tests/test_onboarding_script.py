@@ -67,8 +67,9 @@ def test_onboard_js_json_checklist_lists_the_decision_rule_vocabulary(
     The structured decision rule sits two levels down
     (`statistical_design.decision_rule`), and its "exactly one of threshold
     or baseline" constraint is a `oneOf`. The §4 checklist must surface the
-    closed estimator, comparator and baseline sets, the one-of choice, and
-    `margin`'s dependency on `baseline`, without a WARNING.
+    closed estimator, comparator and baseline sets, the one-of choice,
+    `margin`'s dependency on `baseline`, and the refused `eq` against
+    `best-seen`, without a WARNING.
     """
     report = run_onboard_json(tmp_path)
     plan_checklist = report["artifactChecklists"]["MeasurementPlan"]
@@ -108,4 +109,11 @@ def test_onboard_js_json_checklist_lists_the_decision_rule_vocabulary(
         "when": "statistical_design is present",
         "required": ["metric"],
     } in conditional
+    assert plan_checklist["forbiddenValues"] == [
+        {
+            "when": "statistical_design.decision_rule.comparator = eq",
+            "field": "statistical_design.decision_rule.baseline",
+            "value": "best-seen",
+        }
+    ]
     assert plan_checklist["warnings"] == []
