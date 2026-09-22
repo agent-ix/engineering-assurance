@@ -260,7 +260,9 @@ def _statistical_design(**overrides: object) -> dict:
     return design
 
 
-def _statistical_design_errors(**overrides: object) -> list[str]:
+def _statistical_design_errors(
+    objective: dict | None = None, **overrides: object
+) -> list[str]:
     validator = Draft7Validator(
         schema("measurement-plan-frontmatter.schema"), format_checker=FormatChecker()
     )
@@ -268,6 +270,8 @@ def _statistical_design_errors(**overrides: object) -> list[str]:
         metric="request_retention_rate",
         statistical_design=_statistical_design(**overrides),
     )
+    if objective is not None:
+        plan["objective"] = objective
     return [error.message for error in validator.iter_errors(plan)]
 
 
@@ -308,6 +312,16 @@ def test_decision_rule_is_a_closed_comparator_with_exactly_one_reference() -> No
             "baseline": "best-seen",
         },
         "margin with a threshold": {"comparator": "ge", "threshold": 1, "margin": 0.1},
+        "margin with eq": {
+            "comparator": "eq",
+            "baseline": "prior-collection",
+            "margin": 0.1,
+        },
+        "non-numeric margin": {
+            "comparator": "ge",
+            "baseline": "best-seen",
+            "margin": "0.05",
+        },
         "unknown baseline": {"comparator": "ge", "baseline": "vibes"},
         "eq against best-seen": {"comparator": "eq", "baseline": "best-seen"},
         "non-numeric threshold": {"comparator": "ge", "threshold": "0.99"},
@@ -318,11 +332,64 @@ def test_decision_rule_is_a_closed_comparator_with_exactly_one_reference() -> No
         assert _statistical_design_errors(decision_rule=decision_rule) != [], case
     assert _statistical_design_errors(decision_rule="escalate when low") != []
 
+    # JSON Schema has no finiteness keyword: a YAML `.inf` threshold passes
+    # the schema, and only the Rust DecisionRule refuses it (FR-021).
+    assert _statistical_design_errors(
+        decision_rule={"comparator": "ge", "threshold": float("inf")}
+    ) == []
+
     validator = Draft7Validator(contract, format_checker=FormatChecker())
     without_metric = _minimal_measurement_plan(statistical_design=_statistical_design())
     assert "'metric' is a required property" in [
         error.message for error in validator.iter_errors(without_metric)
     ]
+
+
+def test_decision_rule_agrees_with_objective_direction_and_estimator() -> None:
+    """Trace: FR-021-AC-9, TC-144."""
+    def rule(comparator: str, **reference: object) -> dict:
+        return {"comparator": comparator, **(reference or {"threshold": 0})}
+
+    agreeing = [
+        ("higher", rule("gt")),
+        ("higher", rule("ge")),
+        ("lower", rule("lt")),
+        ("lower", rule("le", baseline="best-seen")),
+        ("zero", rule("eq")),
+        ("zero", rule("eq", baseline="prior-collection")),
+        ("zero", rule("le", threshold=0)),
+        ("target", rule("lt", threshold=1)),
+        ("target", rule("eq", threshold=1)),
+    ]
+    for direction, decision_rule in agreeing:
+        objective = {"direction": direction, "bound": 1}
+        assert _statistical_design_errors(
+            objective=objective, decision_rule=decision_rule
+        ) == [], (direction, decision_rule)
+    disagreeing = [
+        ("higher", rule("le")),
+        ("higher", rule("eq")),
+        ("lower", rule("ge")),
+        ("lower", rule("gt", baseline="best-seen")),
+        ("zero", rule("le", threshold=0.5)),
+        ("zero", rule("le", baseline="prior-collection")),
+        ("zero", rule("lt", threshold=0)),
+    ]
+    for direction, decision_rule in disagreeing:
+        assert _statistical_design_errors(
+            objective={"direction": direction}, decision_rule=decision_rule
+        ) != [], (direction, decision_rule)
+
+    constant = {"comparator": "gt", "baseline": "constant-predictor", "margin": 0.05}
+    assert _statistical_design_errors(estimator="proportion", decision_rule=constant) == []
+    for estimator in ("count", "mean", "median", "ratio"):
+        assert _statistical_design_errors(
+            estimator=estimator, decision_rule=constant
+        ) != [], estimator
+        assert _statistical_design_errors(
+            estimator=estimator,
+            decision_rule={"comparator": "ge", "baseline": "best-seen"},
+        ) == [], estimator
 
 
 def test_estimator_is_a_closed_vocabulary() -> None:
@@ -353,6 +420,9 @@ def test_measurement_plan_skeleton_shows_a_structured_decision_rule() -> None:
     design = skeleton["statistical_design"]
     assert design["estimator"] == "proportion"
     assert design["decision_rule"] == {"comparator": "ge", "threshold": 0.99}
+    # The objective's bound is an informational goal, distinct from the
+    # evaluated threshold.
+    assert skeleton["objective"] == {"direction": "higher", "bound": 0.995}
     validator = Draft7Validator(
         schema("measurement-plan-frontmatter.schema"), format_checker=FormatChecker()
     )

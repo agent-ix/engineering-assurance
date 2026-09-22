@@ -136,18 +136,23 @@ implemented and reviewed.
 | FR-018 | FR-018-AC-4 | TC-115 | 🚧 Pending implementation |
 | FR-020 | FR-020-AC-1 | TC-139 | ✅ Schema accept/refuse cases and skeleton validation passing |
 | FR-020 | FR-020-AC-2 | TC-140 | ✅ Rust construction/deserialization refusals and schema/enum wire-set equality passing |
-| FR-020 | FR-020-AC-3 | TC-141 | ✅ Unversioned objective add/remove/change findings and versioned no-finding cases passing |
+| FR-020 | FR-020-AC-3 | TC-141 | ✅ Unversioned objective add/remove/change findings naming `objective`, and versioned no-finding cases passing |
 | FR-020 | FR-020-AC-4 | TC-142 | ✅ Isolated offline downstream compile with only `measurement` and whole-graph `serde_json` absence passing |
 | FR-021 | FR-021-AC-1 | TC-144 | ✅ Decision-rule schema accept/refuse cases and `metric` requirement passing |
 | FR-021 | FR-021-AC-2 | TC-145 | ✅ Closed estimator schema cases, prose fields, and skeleton validation passing |
 | FR-021 | FR-021-AC-3 | TC-146 | ✅ Rust decision-rule construction/deserialization refusals and round trip passing |
 | FR-021 | FR-021-AC-4 | TC-147 | ✅ Estimator, comparator, and baseline schema/enum wire-set equality passing |
 | FR-021 | FR-021-AC-5 | TC-148 | ✅ Comparator, margin, and evaluation-refusal cases passing |
-| FR-021 | FR-021-AC-6 | TC-149 | ✅ Onboarding checklist decision-rule vocabulary passing |
+| FR-021 | FR-021-AC-6 | TC-149 | ✅ Onboarding checklist decision-rule vocabulary and consistency rules passing |
 | FR-021 | FR-021-AC-7 | TC-142 | ✅ Minimal `measurement` consumer reaches the decision-rule types without `serde_json` |
+<<<<<<< HEAD
 | FR-023 | FR-023-AC-1 | TC-143 | ✅ Passing |
 | FR-023 | FR-023-AC-2 | TC-143 | ✅ Passing |
 | FR-023 | FR-023-AC-3 | TC-143 | ✅ Passing |
+=======
+| FR-021 | FR-021-AC-8 | TC-141 | ✅ Unversioned estimator and decision-rule edits yield findings naming each changed member |
+| FR-021 | FR-021-AC-9 | TC-144, TC-146 | ✅ Schema and Rust direction-agreement and constant-predictor/estimator cases passing |
+>>>>>>> 8fd7e51 (measurement: address PLAT-959 review (direction agreement, directional margin, generalized definition check))
 
 ### Non-Functional Requirement Coverage
 
@@ -327,15 +332,21 @@ implemented and reviewed.
 | TC-138 | A minimal downstream crate compiles Engineering Assurance with default features disabled, only `source-audit`, and reaches `source_audit`; that consumer activates no `serde_json` direct dependency at all, so it cannot inherit an `arbitrary_precision` feature flip from elsewhere in a downstream workspace's feature unification; the default full feature preserves the existing `source_audit` gate | Compile | P0 | FR-014-AC-5 | ✅ isolated offline downstream resolution/compile and activated direct-dependency census passing; default full-package gate unaffected |
 | TC-139 | The MeasurementPlan frontmatter schema accepts no objective, every direction with and without a numeric bound, and target with a bound; it rejects target without a bound, an unknown or missing direction, a non-numeric bound and an extra objective key; the skeleton's objective validates | Unit | P0 | FR-020-AC-1 | ✅ schema accept/refuse cases passing |
 | TC-140 | The Rust Objective accepts every direction, refuses target without a bound and a non-finite bound with distinct typed errors through both construction and deserialization, refuses unknown directions and extra keys, and its Direction wire-name set equals the schema's direction enum | Unit | P0 | FR-020-AC-2 | ✅ construction, deserialization and wire-set parity cases passing |
-| TC-141 | An objective added, removed or changed under an equal definition_version yields one typed finding carrying that version and both objectives; the same edits under a changed definition_version, and an unchanged objective, yield no finding | Unit | P0 | FR-020-AC-3 | ✅ finding and no-finding cases passing |
+| TC-141 | An objective, estimator or decision rule added, removed or changed under an equal definition_version yields one typed finding carrying that version, each changed member in order, and both definitions; the same edits under a changed definition_version, and an unchanged definition, yield no finding | Unit | P0 | FR-020-AC-3, FR-021-AC-8 | ✅ finding and no-finding cases passing |
 | TC-142 | A minimal downstream crate compiles Engineering Assurance with default features disabled and only `measurement`, reaches Objective, the definition-change check, Estimator, Comparator, Baseline and DecisionRule, and resolves no serde_json package anywhere in its dependency graph | Compile | P0 | FR-020-AC-4, FR-021-AC-7 | ✅ isolated offline downstream compile and whole-graph census passing |
+<<<<<<< HEAD
 | TC-143 | The AssuranceArgument schema rejects a `supported` claim without `evidence_refs` and accepts it with one `ix://` reference; `open`, `challenged`, and `rejected` claims are accepted with or without references; empty, duplicated, and non-`ix://` reference lists are rejected | Unit | P0 | FR-023-AC-1, FR-023-AC-2, FR-023-AC-3 | ✅ `tests/test_module.py` |
 | TC-144 | The MeasurementPlan frontmatter schema accepts a decision rule with every comparator against a threshold and every baseline with and without a margin; it rejects an unknown or missing comparator, neither or both of threshold and baseline, a margin with a threshold, an unknown baseline, eq against best-seen, a non-numeric threshold, an extra rule key and a prose rule; and it requires metric when statistical_design is present | Unit | P0 | FR-021-AC-1 | ✅ schema accept/refuse cases passing |
 | TC-145 | The schema accepts each of the five estimators and rejects any other value, keeps population, sampling, error_model and uncertainty as prose, and the skeleton's structured estimator and decision rule validate | Unit | P0 | FR-021-AC-2 | ✅ estimator, prose-field and skeleton cases passing |
 | TC-146 | The Rust DecisionRule accepts threshold and baseline rules, refuses neither or both references, a margin without a baseline, eq against best-seen and a non-finite threshold or margin with distinct typed errors through construction and deserialization, refuses unknown comparators, baselines, estimators and extra keys, and round-trips a valid rule | Unit | P0 | FR-021-AC-3 | ✅ construction, deserialization and round-trip cases passing |
+=======
+| TC-144 | The MeasurementPlan frontmatter schema accepts a decision rule with every comparator against a threshold and every baseline with and without a margin; it rejects an unknown or missing comparator, neither or both of threshold and baseline, a margin with a threshold or with eq, a non-numeric margin, an unknown baseline, eq against best-seen, a non-numeric threshold, an extra rule key and a prose rule; it accepts a non-finite threshold; it requires metric when statistical_design is present; it accepts comparators that agree with the objective direction and refuses those that disagree; and it allows constant-predictor only with estimator proportion | Unit | P0 | FR-021-AC-1, FR-021-AC-9 | ✅ schema accept/refuse and consistency cases passing |
+| TC-145 | The schema accepts each of the five estimators and rejects any other value, keeps population, sampling, error_model and uncertainty as prose, and the skeleton's structured estimator and decision rule validate with an objective bound distinct from the rule's threshold | Unit | P0 | FR-021-AC-2 | ✅ estimator, prose-field and skeleton cases passing |
+| TC-146 | The Rust DecisionRule accepts threshold and baseline rules, refuses neither or both references, a margin without a baseline or with eq, eq against best-seen and a non-finite threshold or margin with distinct typed errors through construction and deserialization, refuses unknown comparators, baselines, estimators, a non-numeric margin and extra keys, round-trips a valid rule, refuses a comparator that disagrees with the objective direction, and refuses constant-predictor with any estimator but proportion | Unit | P0 | FR-021-AC-3, FR-021-AC-9 | ✅ construction, deserialization, round-trip and consistency cases passing |
+>>>>>>> 8fd7e51 (measurement: address PLAT-959 review (direction agreement, directional margin, generalized definition check))
 | TC-147 | The schema's estimator, comparator and baseline enums equal the Rust Estimator, Comparator and Baseline wire-name sets in order, and each ALL constant covers every variant | Unit | P0 | FR-021-AC-4 | ✅ wire-set parity and variant-coverage cases passing |
-| TC-148 | Each comparator holds exactly for the estimates below, at or above the reference its symbol names; a baseline rule compares against the baseline value plus its signed margin; a missing or unexpected baseline value and a non-finite estimate or baseline value are typed refusals | Unit | P0 | FR-021-AC-5 | ✅ comparator, margin and refusal cases passing |
-| TC-149 | The onboarding checklist lists the estimator, comparator and baseline sets, the one-of choice between threshold and baseline, margin's dependency on baseline, metric's dependency on statistical_design and the refused eq against best-seen, with no warning | Unit | P0 | FR-021-AC-6 | ✅ onboarding JSON checklist case passing |
+| TC-148 | Each comparator holds exactly for the estimates below, at or above the reference its symbol names, and none holds against NaN; a baseline rule compares against the baseline value moved by its margin in the direction of improvement, for higher- and lower-is-better rules and positive and negative margins; a missing or unexpected baseline value, a non-finite estimate or baseline value, and an overflowing reference are typed refusals | Unit | P0 | FR-021-AC-5 | ✅ comparator, margin, overflow and refusal cases passing |
+| TC-149 | The onboarding checklist lists the estimator, comparator and baseline sets, the one-of choice between threshold and baseline, margin's dependency on baseline, metric's dependency on statistical_design, the direction and estimator consistency rules and the refused eq combinations, with no warning | Unit | P0 | FR-021-AC-6 | ✅ onboarding JSON checklist case passing |
 
 ## Option Permutation Matrix
 

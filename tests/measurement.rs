@@ -8,9 +8,9 @@
 use std::{collections::BTreeSet, fs, path::Path, process::Command};
 
 use engineering_assurance::measurement::{
-    Baseline, Comparator, DecisionRule, DecisionRuleError, Direction, Estimator, Objective,
-    ObjectiveChangedWithoutVersionBump, ObjectiveError, PlanDefinition, RuleEvaluationError,
-    RuleReference, objective_change_without_version_bump,
+    Baseline, Comparator, DecisionRule, DecisionRuleError, DefinitionChangedWithoutVersionBump,
+    DefinitionMember, Direction, Estimator, MeasurementDefinition, Objective, ObjectiveError,
+    PlanDefinition, RuleEvaluationError, RuleReference, definition_change_without_version_bump,
 };
 use ix_trace_rs::trace;
 
@@ -20,6 +20,14 @@ fn objective(direction: Direction, bound: Option<f64>) -> Objective {
 
 fn parse(yaml: &str) -> Result<Objective, String> {
     yaml_serde::from_str::<Objective>(yaml).map_err(|error| error.to_string())
+}
+
+fn rule_threshold(comparator: Comparator, threshold: f64) -> DecisionRule {
+    DecisionRule::against_threshold(comparator, threshold).expect("valid rule")
+}
+
+fn rule_baseline(comparator: Comparator, baseline: Baseline, margin: Option<f64>) -> DecisionRule {
+    DecisionRule::against_baseline(comparator, baseline, margin).expect("valid rule")
 }
 
 fn parse_rule(yaml: &str) -> Result<DecisionRule, String> {
@@ -228,78 +236,158 @@ fn tc_140_direction_all_covers_every_variant() {
 }
 
 #[test]
-#[trace("TC-141", "FR-020-AC-3")]
-fn tc_141_objective_edit_without_a_version_bump_is_a_typed_finding() {
-    let higher = Some(objective(Direction::Higher, Some(0.99)));
-    let lower = Some(objective(Direction::Lower, Some(0.99)));
-    let raised = Some(objective(Direction::Higher, Some(0.995)));
-    let plan = |version, objective| PlanDefinition {
+#[trace("TC-141", "FR-020-AC-3", "FR-021-AC-8")]
+fn tc_141_definition_edit_without_a_version_bump_is_a_typed_finding_naming_the_member() {
+    let higher = Some(objective(Direction::Higher, Some(0.995)));
+    let lower = Some(objective(Direction::Lower, Some(0.995)));
+    let raised = Some(objective(Direction::Higher, Some(0.999)));
+    let ge_099 = Some(rule_threshold(Comparator::Ge, 0.99));
+    let ge_095 = Some(rule_threshold(Comparator::Ge, 0.95));
+    let base = MeasurementDefinition {
+        objective: higher,
+        estimator: Some(Estimator::Proportion),
+        decision_rule: ge_099,
+    };
+    let plan = |version, definition| PlanDefinition {
         definition_version: version,
-        objective,
+        definition,
     };
 
-    for (before, after) in [
-        (higher, lower),
-        (higher, raised),
-        (None, higher),
-        (higher, None),
-    ] {
-        assert_eq!(
-            objective_change_without_version_bump(
-                &plan(Some("retention-v1"), before),
-                &plan(Some("retention-v1"), after)
-            ),
-            Some(ObjectiveChangedWithoutVersionBump {
-                definition_version: Some("retention-v1".to_owned()),
-                before,
-                after,
-            })
-        );
-        assert_eq!(
-            objective_change_without_version_bump(&plan(None, before), &plan(None, after)),
-            Some(ObjectiveChangedWithoutVersionBump {
-                definition_version: None,
-                before,
-                after,
-            })
-        );
-        assert_eq!(
-            objective_change_without_version_bump(
-                &plan(Some("retention-v1"), before),
-                &plan(Some("retention-v2"), after)
-            ),
-            None
-        );
-        assert_eq!(
-            objective_change_without_version_bump(
-                &plan(None, before),
-                &plan(Some("retention-v1"), after)
-            ),
-            None
-        );
-        // Clearing `definition_version` (Some -> None) is not a bump: it
-        // still yields a finding, carrying the version that was cleared.
-        assert_eq!(
-            objective_change_without_version_bump(
-                &plan(Some("retention-v1"), before),
-                &plan(None, after)
-            ),
-            Some(ObjectiveChangedWithoutVersionBump {
-                definition_version: Some("retention-v1".to_owned()),
-                before,
-                after,
-            })
-        );
+    let edits = [
+        (
+            MeasurementDefinition {
+                objective: lower,
+                ..base
+            },
+            vec![DefinitionMember::Objective],
+        ),
+        (
+            MeasurementDefinition {
+                objective: raised,
+                ..base
+            },
+            vec![DefinitionMember::Objective],
+        ),
+        (
+            MeasurementDefinition {
+                objective: None,
+                ..base
+            },
+            vec![DefinitionMember::Objective],
+        ),
+        (
+            MeasurementDefinition {
+                estimator: Some(Estimator::Mean),
+                ..base
+            },
+            vec![DefinitionMember::Estimator],
+        ),
+        (
+            MeasurementDefinition {
+                estimator: None,
+                ..base
+            },
+            vec![DefinitionMember::Estimator],
+        ),
+        (
+            MeasurementDefinition {
+                decision_rule: ge_095,
+                ..base
+            },
+            vec![DefinitionMember::DecisionRule],
+        ),
+        (
+            MeasurementDefinition {
+                decision_rule: None,
+                ..base
+            },
+            vec![DefinitionMember::DecisionRule],
+        ),
+        (
+            MeasurementDefinition {
+                objective: raised,
+                estimator: Some(Estimator::Mean),
+                decision_rule: ge_095,
+            },
+            DefinitionMember::ALL.to_vec(),
+        ),
+    ];
+    for (edited, changed) in edits {
+        // Both directions: an edit and its reversal, so additions and
+        // removals are both covered.
+        for (before, after) in [(base, edited), (edited, base)] {
+            assert_eq!(
+                definition_change_without_version_bump(
+                    &plan(Some("retention-v1"), before),
+                    &plan(Some("retention-v1"), after)
+                ),
+                Some(DefinitionChangedWithoutVersionBump {
+                    definition_version: Some("retention-v1".to_owned()),
+                    changed: changed.clone(),
+                    before,
+                    after,
+                })
+            );
+            assert_eq!(
+                definition_change_without_version_bump(&plan(None, before), &plan(None, after)),
+                Some(DefinitionChangedWithoutVersionBump {
+                    definition_version: None,
+                    changed: changed.clone(),
+                    before,
+                    after,
+                })
+            );
+            assert_eq!(
+                definition_change_without_version_bump(
+                    &plan(Some("retention-v1"), before),
+                    &plan(Some("retention-v2"), after)
+                ),
+                None
+            );
+            assert_eq!(
+                definition_change_without_version_bump(
+                    &plan(None, before),
+                    &plan(Some("retention-v1"), after)
+                ),
+                None
+            );
+            // Clearing `definition_version` (Some -> None) is not a bump: it
+            // still yields a finding, carrying the version that was cleared.
+            assert_eq!(
+                definition_change_without_version_bump(
+                    &plan(Some("retention-v1"), before),
+                    &plan(None, after)
+                ),
+                Some(DefinitionChangedWithoutVersionBump {
+                    definition_version: Some("retention-v1".to_owned()),
+                    changed: changed.clone(),
+                    before,
+                    after,
+                })
+            );
+        }
     }
-    for unchanged in [None, higher] {
+    for unchanged in [MeasurementDefinition::default(), base] {
         assert_eq!(
-            objective_change_without_version_bump(
+            definition_change_without_version_bump(
                 &plan(Some("retention-v1"), unchanged),
                 &plan(Some("retention-v1"), unchanged)
             ),
             None
         );
     }
+    let paths = DefinitionMember::ALL
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        paths,
+        [
+            "objective",
+            "statistical_design.estimator",
+            "statistical_design.decision_rule"
+        ]
+    );
 }
 
 /// Quoin's measurement intake imports these types with
@@ -322,7 +410,7 @@ fn tc_142_a_minimal_downstream_compiles_only_the_measurement_feature() {
     .expect("consumer manifest");
     fs::write(
         consumer.path().join("src/main.rs"),
-        "use engineering_assurance::measurement::{Baseline, Comparator, DecisionRule, Direction, Estimator, Objective, objective_change_without_version_bump};\nfn main(){let _ = (Objective::new(Direction::Target, Some(1.0)), objective_change_without_version_bump, DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, None), Estimator::Proportion);}\n",
+        "use engineering_assurance::measurement::{Baseline, Comparator, DecisionRule, Direction, Estimator, Objective, definition_change_without_version_bump};\nfn main(){let _ = (Objective::new(Direction::Target, Some(1.0)), definition_change_without_version_bump, DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, None), Estimator::Proportion);}\n",
     )
     .expect("consumer source");
     let status = Command::new(env!("CARGO"))
@@ -475,6 +563,103 @@ fn tc_146_decision_rule_construction_and_deserialization_are_closed_and_validate
 }
 
 #[test]
+#[trace("TC-146", "FR-021-AC-3")]
+fn tc_146_decision_rule_refuses_margin_misuse_and_non_numeric_margin() {
+    assert_eq!(
+        DecisionRule::against_baseline(Comparator::Eq, Baseline::PriorCollection, Some(0.1)),
+        Err(DecisionRuleError::MarginWithEq)
+    );
+    let eq_margin = parse_rule("comparator: eq\nbaseline: prior-collection\nmargin: 0.1\n")
+        .expect_err("eq takes no margin");
+    assert!(
+        eq_margin.contains(&DecisionRuleError::MarginWithEq.to_string()),
+        "{eq_margin}"
+    );
+    for refused in [
+        "comparator: ge\nbaseline: best-seen\nmargin: \"0.05\"\n",
+        "comparator: ge\nbaseline: best-seen\nmargin: [0.05]\n",
+    ] {
+        assert!(parse_rule(refused).is_err(), "must refuse {refused:?}");
+    }
+}
+
+#[test]
+#[trace("TC-146", "FR-021-AC-9")]
+fn tc_146_decision_rule_agrees_with_the_objective_direction_and_estimator() {
+    let agreeing = [
+        (Direction::Higher, rule_threshold(Comparator::Gt, 0.9)),
+        (Direction::Higher, rule_threshold(Comparator::Ge, 0.9)),
+        (Direction::Lower, rule_threshold(Comparator::Lt, 250.0)),
+        (
+            Direction::Lower,
+            rule_baseline(Comparator::Le, Baseline::BestSeen, None),
+        ),
+        (Direction::Zero, rule_threshold(Comparator::Eq, 0.0)),
+        (Direction::Zero, rule_threshold(Comparator::Le, 0.0)),
+        (Direction::Target, rule_threshold(Comparator::Lt, 1.0)),
+        (Direction::Target, rule_threshold(Comparator::Eq, 1.0)),
+    ];
+    for (direction, rule) in agreeing {
+        let objective = objective(direction, direction.requires_bound().then_some(1.0));
+        assert_eq!(
+            rule.check_against(&objective),
+            Ok(()),
+            "{direction} {rule:?}"
+        );
+    }
+    let disagreeing = [
+        (Direction::Higher, rule_threshold(Comparator::Le, 0.9)),
+        (Direction::Higher, rule_threshold(Comparator::Eq, 0.9)),
+        (Direction::Lower, rule_threshold(Comparator::Ge, 250.0)),
+        (
+            Direction::Lower,
+            rule_baseline(Comparator::Gt, Baseline::BestSeen, None),
+        ),
+        (Direction::Zero, rule_threshold(Comparator::Le, 0.5)),
+        (
+            Direction::Zero,
+            rule_baseline(Comparator::Le, Baseline::PriorCollection, None),
+        ),
+        (Direction::Zero, rule_threshold(Comparator::Lt, 0.0)),
+    ];
+    for (direction, rule) in disagreeing {
+        let objective = objective(direction, None);
+        assert_eq!(
+            rule.check_against(&objective),
+            Err(DecisionRuleError::DirectionMismatch {
+                direction,
+                comparator: rule.comparator(),
+            }),
+            "{direction} {rule:?}"
+        );
+    }
+
+    let constant = rule_baseline(Comparator::Gt, Baseline::ConstantPredictor, Some(0.05));
+    assert_eq!(constant.check_estimator(Estimator::Proportion), Ok(()));
+    for estimator in [
+        Estimator::Count,
+        Estimator::Mean,
+        Estimator::Median,
+        Estimator::Ratio,
+    ] {
+        assert_eq!(
+            constant.check_estimator(estimator),
+            Err(DecisionRuleError::ConstantPredictorRequiresProportion { estimator })
+        );
+    }
+    for estimator in Estimator::ALL {
+        assert_eq!(
+            rule_baseline(Comparator::Ge, Baseline::BestSeen, None).check_estimator(estimator),
+            Ok(())
+        );
+        assert_eq!(
+            rule_threshold(Comparator::Ge, 1.0).check_estimator(estimator),
+            Ok(())
+        );
+    }
+}
+
+#[test]
 #[trace("TC-147", "FR-021-AC-4")]
 fn tc_147_schema_estimator_comparator_and_baseline_enums_equal_the_rust_wire_names() {
     let schema = measurement_plan_schema();
@@ -588,10 +773,43 @@ fn tc_148_decision_rule_evaluation_compares_the_estimate_with_its_reference() {
     assert_eq!(margin_rule.holds(0.86, Some(0.80)), Ok(true));
     assert_eq!(margin_rule.holds(0.84, Some(0.80)), Ok(false));
     // A negative margin tolerates a bounded regression against best-seen.
-    let tolerant = DecisionRule::against_baseline(Comparator::Ge, Baseline::BestSeen, Some(-0.25))
-        .expect("valid rule");
+    let tolerant = rule_baseline(Comparator::Ge, Baseline::BestSeen, Some(-0.25));
     assert_eq!(tolerant.holds(0.75, Some(1.0)), Ok(true));
     assert_eq!(tolerant.holds(0.5, Some(1.0)), Ok(false));
+    // Lower is better: reference = baseline value - margin. Cutting a 200 ms
+    // prior latency by at least 20 ms needs 180 ms or less.
+    let faster = rule_baseline(Comparator::Le, Baseline::PriorCollection, Some(20.0));
+    assert_eq!(faster.holds(180.0, Some(200.0)), Ok(true));
+    assert_eq!(faster.holds(190.0, Some(200.0)), Ok(false));
+    // ...and a negative margin lets it regress by up to 10 ms.
+    let slack = rule_baseline(Comparator::Lt, Baseline::BestSeen, Some(-10.0));
+    assert_eq!(slack.holds(205.0, Some(200.0)), Ok(true));
+    assert_eq!(slack.holds(210.0, Some(200.0)), Ok(false));
+    // eq has no margin: the reference is the baseline value itself.
+    let unchanged = rule_baseline(Comparator::Eq, Baseline::PriorCollection, None);
+    assert_eq!(unchanged.holds(3.0, Some(3.0)), Ok(true));
+    assert_eq!(unchanged.holds(4.0, Some(3.0)), Ok(false));
+
+    // A finite baseline value and margin can still overflow the reference.
+    assert_eq!(
+        rule_baseline(Comparator::Ge, Baseline::BestSeen, Some(f64::MAX))
+            .holds(1.0, Some(f64::MAX)),
+        Err(RuleEvaluationError::NonFiniteReference {
+            reference: f64::INFINITY
+        })
+    );
+    assert_eq!(
+        rule_baseline(Comparator::Le, Baseline::BestSeen, Some(f64::MAX))
+            .holds(1.0, Some(f64::MIN)),
+        Err(RuleEvaluationError::NonFiniteReference {
+            reference: f64::NEG_INFINITY
+        })
+    );
+    // `Comparator::holds` itself does not guard NaN: every comparator is false.
+    for comparator in Comparator::ALL {
+        assert!(!comparator.holds(f64::NAN, 1.0), "{comparator}");
+        assert!(!comparator.holds(1.0, f64::NAN), "{comparator}");
+    }
 
     assert_eq!(
         margin_rule.holds(0.9, None),

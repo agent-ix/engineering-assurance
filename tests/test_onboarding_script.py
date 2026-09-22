@@ -68,8 +68,8 @@ def test_onboard_js_json_checklist_lists_the_decision_rule_vocabulary(
     (`statistical_design.decision_rule`), and its "exactly one of threshold
     or baseline" constraint is a `oneOf`. The §4 checklist must surface the
     closed estimator, comparator and baseline sets, the one-of choice,
-    `margin`'s dependency on `baseline`, and the refused `eq` against
-    `best-seen`, without a WARNING.
+    `margin`'s dependency on `baseline`, the direction and estimator
+    consistency rules, and the refused `eq` combinations, without a WARNING.
     """
     report = run_onboard_json(tmp_path)
     plan_checklist = report["artifactChecklists"]["MeasurementPlan"]
@@ -109,11 +109,94 @@ def test_onboard_js_json_checklist_lists_the_decision_rule_vocabulary(
         "when": "statistical_design is present",
         "required": ["metric"],
     } in conditional
-    assert plan_checklist["forbiddenValues"] == [
-        {
-            "when": "statistical_design.decision_rule.comparator = eq",
-            "field": "statistical_design.decision_rule.baseline",
-            "value": "best-seen",
-        }
-    ]
+    constraints = {
+        entry["when"]: entry["constraint"]
+        for entry in plan_checklist["conditionalConstraints"]
+    }
+    assert constraints == {
+        "objective.direction = higher": (
+            "statistical_design.decision_rule.comparator must be one of gt, ge"
+        ),
+        "objective.direction = lower": (
+            "statistical_design.decision_rule.comparator must be one of lt, le"
+        ),
+        "objective.direction = zero": (
+            "either (statistical_design.decision_rule.comparator must be eq) or "
+            "(statistical_design.decision_rule.threshold required and "
+            "statistical_design.decision_rule.comparator must be le and "
+            "statistical_design.decision_rule.threshold must be 0)"
+        ),
+        "statistical_design.decision_rule.baseline = constant-predictor": (
+            "statistical_design.estimator must be proportion"
+        ),
+        "statistical_design.decision_rule.comparator = eq": (
+            "statistical_design.decision_rule.baseline must not be best-seen and "
+            "statistical_design.decision_rule.margin must be absent"
+        ),
+    }
     assert plan_checklist["warnings"] == []
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_onboard_js_reports_combined_then_and_warns_on_an_empty_one_of(
+    tmp_path: Path,
+) -> None:
+    """Trace: FR-021-AC-6, TC-149.
+
+    A `then` that carries both `required` and a forbidden value reports both
+    halves, and an empty `oneOf` (unsatisfiable, and not an "exactly one of"
+    choice) is a loud warning rather than an empty exactly-one-of entry.
+    """
+    module = tmp_path / "engineering_assurance"
+    script_dir = module / "skills" / "assurance-onboarding" / "scripts"
+    script_dir.mkdir(parents=True)
+    shutil.copy(ONBOARD_JS, script_dir / "onboard.js")
+    (module / "skeletons").mkdir()
+    (module / "schemas").mkdir()
+    (module / "manifest.yaml").write_text(
+        "artifact_types:\n"
+        "  - name: Probe\n"
+        "    frontmatter_schema_ref: schemas/probe.schema.json\n"
+    )
+    (module / "schemas" / "probe.schema.json").write_text(
+        json.dumps(
+            {
+                "type": "object",
+                "properties": {
+                    "mode": {"enum": ["a", "b"]},
+                    "rule": {
+                        "type": "object",
+                        "properties": {"x": {"type": "number"}},
+                        "oneOf": [],
+                    },
+                },
+                "allOf": [
+                    {
+                        "if": {
+                            "properties": {"mode": {"const": "a"}},
+                            "required": ["mode"],
+                        },
+                        "then": {
+                            "required": ["rule"],
+                            "properties": {"kind": {"not": {"const": "z"}}},
+                        },
+                    }
+                ],
+            }
+        )
+    )
+    target_repo = tmp_path / "consumer"
+    target_repo.mkdir()
+    completed = subprocess.run(
+        [NODE, str(script_dir / "onboard.js"), "--repo", str(target_repo), "--json"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    probe = json.loads(completed.stdout)["artifactChecklists"]["Probe"]
+    assert {"when": "mode = a", "required": ["rule"]} in probe["conditionalRequired"]
+    assert probe["conditionalConstraints"] == [
+        {"when": "mode = a", "constraint": "kind must not be z"}
+    ]
+    assert probe["exactlyOneOf"] == []
+    assert any("oneOf" in warning for warning in probe["warnings"]), probe["warnings"]

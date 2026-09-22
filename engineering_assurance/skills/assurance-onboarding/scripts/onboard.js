@@ -116,45 +116,81 @@ if (moduleRoot) {
   }
 }
 
-// A field required only in some cases (`allOf: [{ if, then: { required } }]`)
-// is as rejecting as an unconditional one — a gate-stage MeasurementPlan
-// without `ground_truth_kind` fails validation — so read those too. Without
-// them this checklist would under-report exactly the requirement an author is
-// most likely to miss.
+// A field required only in some cases (`allOf: [{ if, then }]`) is as
+// rejecting as an unconditional one -- a gate-stage MeasurementPlan without
+// `ground_truth_kind` fails validation -- so read those too. Without them this
+// checklist would under-report exactly the requirement an author is most
+// likely to miss.
 //
-// This only understands the one shape every schema in this module uses today:
-// a flat `allOf` of `{ if: { properties, required }, then: { required } }`
-// branches — either at a schema's own top level, or at any depth inside a
-// `$ref`'d (directly, or via an array's `items.$ref`) nested `$defs` entry;
-// see `resolveLocalRef` and `visit` below. A schema that instead used a bare
-// top-level `if`/`then` (not wrapped in `allOf`), `else`, a nested `allOf`,
-// an `anyOf`/`oneOf` that isn't a plain "exactly one field" choice, a
-// schema-valued `dependencies` entry, or a `$ref`'d branch would silently
-// produce no output here rather than a wrong one — which is worse, because a
-// silent gap looks like "no conditional requirements" instead of "this
-// reader doesn't understand this schema". `readAllOf` below refuses to stay
-// silent: anything it does not recognize becomes a `warnings` entry the
-// report prints loudly.
+// `readAllOf` understands these shapes, and only these, at a schema's own
+// top level or at any depth inside a `$ref`'d (directly, or via an array's
+// `items.$ref`) nested `$defs` entry (see `resolveLocalRef` and `visit`
+// below):
+// - an `allOf` branch `{ if, then }` whose `if` is `properties` (at any
+//   depth, each leaf a `const`, an `enum`, or bare presence) plus `required`,
+//   and whose `then` is `required` and/or a describable constraint (see
+//   `describeConstraint`);
+// - draft-07 `dependencies` whose values are arrays of field names;
+// - a non-empty `oneOf` whose every branch is exactly `{ required: [field] }`,
+//   read as "exactly one of these fields".
+// Anything else -- `else`, a `$ref`/`anyOf`/`oneOf`/`allOf` condition, a
+// nested `allOf` in `then`, `dependentRequired`, an empty or other-shaped
+// `oneOf`/`anyOf`, or a constraint keyword `describeConstraint` does not know
+// -- becomes a `warnings` entry the report prints loudly. A silent gap would
+// look like "no conditional requirements" instead of "this reader does not
+// understand this schema".
 const describeCondition = (condition, prefix = "") => {
   const clauses = Object.entries(condition?.properties ?? {}).map(([name, def]) => {
     const prop = `${prefix}${name}`;
     if ("const" in def) return `${prop} = ${def.const}`;
     if (def.enum) return `${prop} is one of ${def.enum.join(", ")}`;
+    if (def.properties) return describeCondition(def, `${prop}.`);
     return `${prop} is present`;
   });
   return clauses.length > 0 ? clauses.join(" and ") : "(unrecognized condition)";
 };
 
+// Describe what a `then` (or one `anyOf` branch inside it) demands of the
+// fields under `prefix`, as clauses joined by "and". Returns null when the
+// constraint uses a keyword this reader does not know, so the caller warns
+// instead of printing a partial description.
+const DESCRIBABLE_KEYWORDS = new Set(["const", "enum", "not", "required", "properties", "anyOf", "type"]);
+const describeConstraint = (def, prefix, path) => {
+  if (def === false) return [`${path} must be absent`];
+  if (typeof def !== "object" || def === null) return null;
+  if (Object.keys(def).some((key) => !DESCRIBABLE_KEYWORDS.has(key))) return null;
+  const clauses = [];
+  if ("const" in def) clauses.push(`${path} must be ${def.const}`);
+  if (def.enum) clauses.push(`${path} must be one of ${def.enum.join(", ")}`);
+  if (def.not !== undefined) {
+    if (Object.keys(def.not).length !== 1 || !("const" in def.not)) return null;
+    clauses.push(`${path} must not be ${def.not.const}`);
+  }
+  if (Array.isArray(def.required) && def.required.length > 0) {
+    clauses.push(`${def.required.map((name) => `${prefix}${name}`).join(", ")} required`);
+  }
+  for (const [name, child] of Object.entries(def.properties ?? {})) {
+    const nested = describeConstraint(child, `${prefix}${name}.`, `${prefix}${name}`);
+    if (nested === null) return null;
+    clauses.push(...nested);
+  }
+  if (def.anyOf) {
+    if (def.anyOf.length === 0) return null;
+    const branches = def.anyOf.map((branch) => describeConstraint(branch, prefix, path));
+    if (branches.some((branch) => branch === null || branch.length === 0)) return null;
+    clauses.push(`either ${branches.map((branch) => `(${branch.join(" and ")})`).join(" or ")}`);
+  }
+  return clauses;
+};
+
 const readAllOf = (schema, prefix = "", present = "") => {
   const conditionalRequired = [];
   const exactlyOneOf = [];
-  const forbiddenValues = [];
+  const conditionalConstraints = [];
   const warnings = [];
   if (schema.dependentRequired) {
     warnings.push("schema uses `dependentRequired`, which this checklist does not read");
   }
-  // Draft-07 `dependencies` with array values: "when X is present, also
-  // require Y" -- the same shape as an `allOf` conditional requirement.
   for (const [name, dependency] of Object.entries(schema.dependencies ?? {})) {
     if (Array.isArray(dependency)) {
       conditionalRequired.push({
@@ -165,22 +201,22 @@ const readAllOf = (schema, prefix = "", present = "") => {
       warnings.push("schema uses a schema-valued `dependencies` entry, which this checklist does not read");
     }
   }
-  // A `oneOf` whose every branch is only `{ required: [one field] }` means
-  // "exactly one of these fields" (a MeasurementPlan decision rule's
-  // `threshold` or `baseline`). Any other `oneOf`/`anyOf` shape stays a
-  // loud warning rather than a silent gap.
   const oneOfFields = (schema.oneOf ?? []).map((branch) =>
     Object.keys(branch).length === 1 && Array.isArray(branch.required) && branch.required.length === 1
       ? branch.required[0]
       : null,
   );
-  if (schema.oneOf && oneOfFields.every((field) => field !== null)) {
+  const exactlyOneShape = oneOfFields.length > 0 && oneOfFields.every((field) => field !== null);
+  if (exactlyOneShape) {
     exactlyOneOf.push({
       when: present || "always",
       fields: oneOfFields.map((field) => `${prefix}${field}`),
     });
-  } else if (schema.anyOf || schema.oneOf) {
-    warnings.push("schema uses a top-level `anyOf`/`oneOf`, which this checklist does not read");
+  } else if (schema.oneOf) {
+    warnings.push("schema uses a `oneOf` that is empty or not one `required` field per branch, which this checklist does not read");
+  }
+  if (schema.anyOf) {
+    warnings.push("schema uses a top-level `anyOf`, which this checklist does not read");
   }
   if (schema.if || schema.then) {
     warnings.push(
@@ -200,30 +236,26 @@ const readAllOf = (schema, prefix = "", present = "") => {
     }
     if (branch.then?.allOf) {
       warnings.push("an `allOf` branch's `then` nests another `allOf`, which this checklist does not read");
+      continue;
     }
-    // `then: { properties: { X: { not: { const: v } } } }` forbids one value
-    // of X under the condition (a decision rule's `eq` against `best-seen`).
-    const forbidden = Object.entries(branch?.then?.properties ?? {}).map(([name, def]) =>
-      Object.keys(def).length === 1 && def.not && Object.keys(def.not).length === 1 && "const" in def.not
-        ? { field: `${prefix}${name}`, value: def.not.const }
-        : null,
-    );
-    const thenKeys = Object.keys(branch.then ?? {});
-    if (thenKeys.length === 1 && thenKeys[0] === "properties" && forbidden.length > 0 && forbidden.every(Boolean)) {
-      const when = describeCondition(branch.if, prefix);
-      forbiddenValues.push(...forbidden.map((entry) => ({ when, ...entry })));
-    } else if (Array.isArray(branch?.then?.required)) {
-      conditionalRequired.push({
-        when: describeCondition(branch.if, prefix),
-        required: branch.then.required.map((name) => `${prefix}${name}`),
-      });
-    } else if (branch.then && Object.keys(branch.then).length > 0) {
-      warnings.push(
-        "an `allOf` branch's `then` has no `required` array this checklist reads, but does constrain something",
-      );
+    const when = describeCondition(branch.if, prefix);
+    const { required, ...rest } = branch.then ?? {};
+    if (Array.isArray(required) && required.length > 0) {
+      conditionalRequired.push({ when, required: required.map((name) => `${prefix}${name}`) });
+    }
+    // Whatever the `then` demands beyond `required` -- a forbidden value, a
+    // restricted enum, an `anyOf` of alternatives -- is described alongside,
+    // so a `then` carrying both is reported in full.
+    if (Object.keys(rest).length > 0) {
+      const clauses = describeConstraint(rest, prefix, prefix.replace(/\.$/, ""));
+      if (clauses === null || clauses.length === 0) {
+        warnings.push("an `allOf` branch's `then` constrains something this checklist cannot describe");
+      } else {
+        conditionalConstraints.push({ when, constraint: clauses.join(" and ") });
+      }
     }
   }
-  return { conditionalRequired, exactlyOneOf, forbiddenValues, warnings };
+  return { conditionalRequired, exactlyOneOf, conditionalConstraints, warnings };
 };
 
 // Resolve a same-document `#/$defs/<name>` reference: either a property's
@@ -259,7 +291,7 @@ if (moduleRoot) {
       continue;
     }
     const enums = {};
-    const { conditionalRequired, exactlyOneOf, forbiddenValues, warnings } = readAllOf(schema);
+    const { conditionalRequired, exactlyOneOf, conditionalConstraints, warnings } = readAllOf(schema);
     // Walk object-valued fields (directly, or via a `$ref`/array
     // `items.$ref` resolved above) at every depth: a nested field's enums
     // and conditional requirements (a MeasurementPlan's
@@ -287,7 +319,7 @@ if (moduleRoot) {
         const nested = readAllOf(def, `${path}.`, `${path} is present`);
         conditionalRequired.push(...nested.conditionalRequired);
         exactlyOneOf.push(...nested.exactlyOneOf);
-        forbiddenValues.push(...nested.forbiddenValues);
+        conditionalConstraints.push(...nested.conditionalConstraints);
         warnings.push(...nested.warnings.map((warning) => `${path}: ${warning}`));
         visit(def.properties, `${path}.`, new Set([...seen, def]));
       }
@@ -298,7 +330,7 @@ if (moduleRoot) {
       required: schema.required ?? [],
       conditionalRequired,
       exactlyOneOf,
-      forbiddenValues,
+      conditionalConstraints,
       enums,
       warnings,
     };
@@ -535,8 +567,8 @@ if (Object.keys(artifactChecklists).length === 0) {
     for (const choice of checklist.exactlyOneOf ?? []) {
       line(`  when ${choice.when}: exactly one of: ${choice.fields.join(", ")}`);
     }
-    for (const forbidden of checklist.forbiddenValues ?? []) {
-      line(`  when ${forbidden.when}: ${forbidden.field} must not be ${forbidden.value}`);
+    for (const condition of checklist.conditionalConstraints ?? []) {
+      line(`  when ${condition.when}: ${condition.constraint}`);
     }
     for (const warning of checklist.warnings ?? []) {
       line(`  WARNING: ${warning} — this checklist may be incomplete for ${type}`);

@@ -9,7 +9,7 @@ definition_version: juniper.request-retention-v1
 stage: baseline
 objective:
   direction: higher
-  bound: 0.99
+  bound: 0.995
 subject_identity:
   name: juniper-classifier
   version: 2026.09.1
@@ -41,8 +41,10 @@ it does not approve a release.
 `objective.direction` states which way the metric should move: `higher` or
 `lower` when a larger or smaller value is better, `zero` when any non-zero
 value is a deviation, and `target` when the metric should reach `bound`
-(`bound` is then required). For the other directions `bound` is optional and
-names the threshold measured against; here, a retention rate of at least 0.99.
+(`bound` is then required). For the other directions `bound` is optional.
+`bound` is the goal the metric should reach -- here, retention of 0.995. It is
+informational and never evaluated: only `statistical_design.decision_rule` is
+evaluated, and its threshold (0.99 here) may sit below the goal.
 
 The objective is part of the measurement definition. Adding, removing, or
 changing it requires a new `definition_version`, so results under the old and
@@ -50,28 +52,49 @@ new objective are never compared as one series.
 
 ## Decision Rule
 
-`statistical_design.estimator` names how the metric is computed from the
-population: `proportion`, `count`, `mean`, `median`, or `ratio`.
-`statistical_design.decision_rule` is the rule a checker applies to that
-estimate, computed over all `repetitions`: it holds when
-`estimate <comparator> reference`. `comparator` is one of `gt`, `ge`, `lt`,
-`le`, or `eq`. The reference is exactly one of:
+`statistical_design.decision_rule` is the only part of the plan that is
+evaluated. `statistical_design.estimator` names how the metric is computed
+from the population: `proportion`, `count`, `mean`, `median`, or `ratio`. The
+rule is applied once to that estimate, computed over all `repetitions`: it
+holds when `estimate <comparator> reference`. `comparator` is one of `gt`,
+`ge`, `lt`, `le`, or `eq`; `eq` is exact equality, which for a `mean` or
+`ratio` estimate means exact floating-point equality. The reference is exactly
+one of:
 
 - `threshold`: a fixed number stated in the plan, as here (retention of at
   least 0.99); or
 - `baseline`: a value computed at evaluation time, one of
-  `constant-predictor` (the best constant answer per answer family, see the
-  worked example below), `prior-collection` (the collection this result is
-  compared against), or `best-seen` (for a ratchet: the maximum accepted value
-  so far under a `gt`/`ge` rule, the minimum under an `lt`/`le` rule; an `eq`
-  rule cannot use it), plus an optional signed `margin` added to it.
+  `constant-predictor` (the per-family best constant answers combined as a
+  size-weighted mean, see the worked example below; only with
+  `estimator: proportion`), `prior-collection` (the collection this result is
+  compared against), or `best-seen` (for a ratchet: over every collection the
+  measurement intake admitted under this `definition_version`, the maximum
+  under a `gt`/`ge` rule and the minimum under an `lt`/`le` rule; an `eq` rule
+  cannot use it).
 
-For example, a plan that must beat the constant predictor by five percentage
-points states `decision_rule: { comparator: gt, baseline: constant-predictor,
-margin: 0.05 }`. The rule does not restate `metric`, `repetitions`, or
-`minimum_population`: it applies to the plan's own `metric`, and a result over
-fewer than `minimum_population` items is refused before the rule is read.
-`population`, `sampling`, `error_model`, and `uncertainty` remain prose.
+A baseline rule may add a `margin`, in the metric's own units and signed in
+the direction of improvement: a positive margin means the result must beat the
+baseline by at least that much, a negative one allows a regression of up to
+that much. The reference is `baseline + margin` for `gt`/`ge` and
+`baseline - margin` for `lt`/`le`; `eq` takes no margin. For example:
+
+- higher is better -- beat the constant predictor by five percentage points of
+  agreement rate: `{ comparator: gt, baseline: constant-predictor, margin: 0.05 }`;
+- lower is better -- cut p50 latency by at least 20 ms against the compared
+  collection: `{ comparator: le, baseline: prior-collection, margin: 20 }`, so
+  a 200 ms prior needs 180 ms or less.
+
+When `objective` is present the comparator agrees with it: `higher` takes `gt`
+or `ge`, `lower` takes `lt` or `le`, `zero` takes `eq` or `le` against
+threshold 0, and `target` takes any comparator.
+
+The rule does not restate `metric`, `repetitions`, or `minimum_population`: it
+applies to the plan's own `metric`, and a result over fewer than
+`minimum_population` items is refused before the rule is read. `population`,
+`sampling`, `error_model`, and `uncertainty` remain prose. The estimator and
+rule are part of the measurement definition: changing either needs a new
+`definition_version`, so a rule edited after results were seen starts a new
+series rather than re-judging the old one.
 
 ## Population
 
@@ -151,8 +174,8 @@ the size-weighted mean of the per-family rates — equivalently, total
 best-constant agreements over total items:
 
 ```
-baseline    = sum_f( max_i(n_{f,i}) ) / sum_f( n_f )     # both rates below are fractions in [0, 1]
-margin_pp   = 100 * (observed_agreement_rate - baseline)
+baseline    = sum_f( max_i(n_{f,i}) ) / sum_f( n_f )     # a fraction in [0, 1]
+margin      = observed_agreement_rate - baseline         # same units: a fraction, not percentage points
 ```
 
 The observed agreement rate must credit contested alternates by the same
