@@ -134,6 +134,10 @@ implemented and reviewed.
 | FR-018 | FR-018-AC-2 | TC-113 | 🚧 Content-rights, package-audit, and compatibility/corpus/fixture-generation same-revision cutovers plus their deletion candidates backed; aggregate removal population pending |
 | FR-018 | FR-018-AC-3 | TC-114 | 🚧 Content-rights, package-audit, and compatibility/corpus dispatch rollback/reapplication backed; aggregate rollback population pending |
 | FR-018 | FR-018-AC-4 | TC-115 | 🚧 Pending implementation |
+| FR-020 | FR-020-AC-1 | TC-139 | ✅ Schema accept/refuse cases and skeleton validation passing |
+| FR-020 | FR-020-AC-2 | TC-140 | ✅ Rust construction/deserialization refusals and schema/enum wire-set equality passing |
+| FR-020 | FR-020-AC-3 | TC-141 | ✅ Unversioned objective add/remove/change findings and versioned no-finding cases passing |
+| FR-020 | FR-020-AC-4 | TC-142 | ✅ Isolated offline downstream compile with only `measurement` and whole-graph `serde_json` absence passing |
 
 ### Non-Functional Requirement Coverage
 
@@ -311,6 +315,10 @@ implemented and reviewed.
 | TC-130 | The Rust compatibility observer performs only the matrix-declared bounded tool observations, reports unavailable or malformed observations as unknown, and delegates compatible/incompatible/unknown classification to the I/O-free matrix classifier | Integration | P0 | FR-012-AC-10, FR-012-CON-1, FR-014-AC-2 | ✅ deterministic fixture host, unavailable-tool, and machine-boundary cases passing |
 | TC-131 | The Rust manifest host adapter accepts the retained module only from explicit safe repository and authoritative-module roots, delegates its closed resource bundle to the pure qualifier, emits one versioned result, and refuses unsafe roots or resources before qualification | Integration | P0 | FR-017-AC-8, FR-017-CON-3, FR-014-AC-2 | ✅ `src/manifest_host.rs`, `tests/manifest_host_cli.rs`; explicit `make manifest-validate` dispatch; obsolete wrapper removed |
 | TC-138 | A minimal downstream crate compiles Engineering Assurance with default features disabled, only `source-audit`, and reaches `source_audit`; that consumer activates no `serde_json` direct dependency at all, so it cannot inherit an `arbitrary_precision` feature flip from elsewhere in a downstream workspace's feature unification; the default full feature preserves the existing `source_audit` gate | Compile | P0 | FR-014-AC-5 | ✅ isolated offline downstream resolution/compile and activated direct-dependency census passing; default full-package gate unaffected |
+| TC-139 | The MeasurementPlan frontmatter schema accepts no objective, every direction with and without a numeric bound, and target with a bound; it rejects target without a bound, an unknown or missing direction, a non-numeric bound and an extra objective key; the skeleton's objective validates | Unit | P0 | FR-020-AC-1 | ✅ schema accept/refuse cases passing |
+| TC-140 | The Rust Objective accepts every direction, refuses target without a bound and a non-finite bound with distinct typed errors through both construction and deserialization, refuses unknown directions and extra keys, and its Direction wire-name set equals the schema's direction enum | Unit | P0 | FR-020-AC-2 | ✅ construction, deserialization and wire-set parity cases passing |
+| TC-141 | An objective added, removed or changed under an equal definition_version yields one typed finding carrying that version and both objectives; the same edits under a changed definition_version, and an unchanged objective, yield no finding | Unit | P0 | FR-020-AC-3 | ✅ finding and no-finding cases passing |
+| TC-142 | A minimal downstream crate compiles Engineering Assurance with default features disabled and only `measurement`, reaches Objective and the definition-change check, and resolves no serde_json package anywhere in its dependency graph | Compile | P0 | FR-020-AC-4 | ✅ isolated offline downstream compile and whole-graph census passing |
 
 ## Option Permutation Matrix
 

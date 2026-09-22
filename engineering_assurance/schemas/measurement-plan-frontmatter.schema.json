@@ -52,6 +52,7 @@
         }
       }
     },
+    "objective": { "$ref": "#/$defs/objective" },
     "statistical_design": { "$ref": "#/$defs/statistical_design" },
     "relationships": {
       "type": "array",
@@ -71,6 +72,33 @@
     }
   ],
   "$defs": {
+    "objective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["direction"],
+      "description": "Which way this plan's metric is supposed to move (FR-020). Part of the measurement definition: adding, removing, or changing it requires a new `definition_version`, so results under the old and new objective are never compared as one series. Optional.",
+      "properties": {
+        "direction": {
+          "enum": ["higher", "lower", "zero", "target"],
+          "description": "`higher`: a larger value is better. `lower`: a smaller value is better. `zero`: the metric is expected to be exactly zero; any non-zero value is a deviation. `target`: the metric is expected to reach `bound`, which is then required."
+        },
+        "bound": {
+          "type": "number",
+          "description": "The threshold the plan measures against. Required when `direction` is `target`; optional otherwise."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "direction": { "const": "target" } },
+            "required": ["direction"]
+          },
+          "then": {
+            "required": ["bound"]
+          }
+        }
+      ]
+    },
     "relationship": {
       "type": "object",
       "additionalProperties": false,

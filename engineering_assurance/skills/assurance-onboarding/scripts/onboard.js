@@ -130,8 +130,9 @@ if (moduleRoot) {
 // looks like "no conditional requirements" instead of "this reader doesn't
 // understand this schema". `readAllOf` below refuses to stay silent: anything
 // it does not recognize becomes a `warnings` entry the report prints loudly.
-const describeCondition = (condition) => {
-  const clauses = Object.entries(condition?.properties ?? {}).map(([prop, def]) => {
+const describeCondition = (condition, prefix = "") => {
+  const clauses = Object.entries(condition?.properties ?? {}).map(([name, def]) => {
+    const prop = `${prefix}${name}`;
     if ("const" in def) return `${prop} = ${def.const}`;
     if (def.enum) return `${prop} is one of ${def.enum.join(", ")}`;
     return `${prop} is present`;
@@ -139,7 +140,7 @@ const describeCondition = (condition) => {
   return clauses.length > 0 ? clauses.join(" and ") : "(unrecognized condition)";
 };
 
-const readAllOf = (schema) => {
+const readAllOf = (schema, prefix = "") => {
   const conditionalRequired = [];
   const warnings = [];
   if (schema.dependentRequired) {
@@ -163,7 +164,10 @@ const readAllOf = (schema) => {
       warnings.push("an `allOf` branch's `then` nests another `allOf`, which this checklist does not read");
     }
     if (Array.isArray(branch?.then?.required)) {
-      conditionalRequired.push({ when: describeCondition(branch.if), required: branch.then.required });
+      conditionalRequired.push({
+        when: describeCondition(branch.if, prefix),
+        required: branch.then.required.map((name) => `${prefix}${name}`),
+      });
     } else if (branch.then && Object.keys(branch.then).length > 0) {
       warnings.push(
         "an `allOf` branch's `then` has no `required` array this checklist reads, but does constrain something",
@@ -171,6 +175,14 @@ const readAllOf = (schema) => {
     }
   }
   return { conditionalRequired, warnings };
+};
+
+// Resolve a same-document `#/$defs/<name>` reference, the only `$ref` shape
+// these schemas use for a top-level field; anything else is read as written.
+const resolveLocalRef = (schema, def) => {
+  const ref = def?.$ref;
+  if (typeof ref !== "string" || !ref.startsWith("#/$defs/")) return def;
+  return schema.$defs?.[ref.slice("#/$defs/".length)] ?? def;
 };
 
 const artifactChecklists = {};
@@ -188,10 +200,33 @@ if (moduleRoot) {
       continue;
     }
     const enums = {};
-    for (const [prop, def] of Object.entries(schema.properties ?? {})) {
-      if (def.enum) enums[prop] = def.enum;
-    }
     const { conditionalRequired, warnings } = readAllOf(schema);
+    for (const [prop, rawDef] of Object.entries(schema.properties ?? {})) {
+      const def = resolveLocalRef(schema, rawDef);
+      if (def.enum) enums[prop] = def.enum;
+      // One level down: an object-valued field's own enums and conditional
+      // requirements (a MeasurementPlan's `objective.direction`, and
+      // `objective.bound` when that direction is `target`) reject a document
+      // just as surely as top-level ones do.
+      if (def.type === "object" && def.properties) {
+        for (const [child, childDef] of Object.entries(def.properties)) {
+          if (childDef.enum) enums[`${prop}.${child}`] = childDef.enum;
+        }
+        // The nested object's own `required` (e.g. `objective.direction`) is
+        // not a top-level requirement — `objective` itself may be absent —
+        // but it rejects a document just as surely once that object IS
+        // present, so list it the same way as a conditional requirement.
+        if (Array.isArray(def.required) && def.required.length > 0) {
+          conditionalRequired.push({
+            when: `${prop} is present`,
+            required: def.required.map((child) => `${prop}.${child}`),
+          });
+        }
+        const nested = readAllOf(def, `${prop}.`);
+        conditionalRequired.push(...nested.conditionalRequired);
+        warnings.push(...nested.warnings.map((warning) => `${prop}: ${warning}`));
+      }
+    }
     artifactChecklists[type] = {
       schemaPath,
       required: schema.required ?? [],

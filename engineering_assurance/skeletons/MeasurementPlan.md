@@ -7,6 +7,9 @@ owner: juniper-observability-owner
 metric: request_retention_rate
 definition_version: juniper.request-retention-v1
 stage: baseline
+objective:
+  direction: higher
+  bound: 0.99
 subject_identity:
   name: juniper-classifier
   version: 2026.09.1
@@ -30,6 +33,18 @@ relationships:
 
 The result informs whether the request-loss scenario needs more investigation;
 it does not approve a release.
+
+## Objective
+
+`objective.direction` states which way the metric should move: `higher` or
+`lower` when a larger or smaller value is better, `zero` when any non-zero
+value is a deviation, and `target` when the metric should reach `bound`
+(`bound` is then required). For the other directions `bound` is optional and
+names the threshold measured against; here, a retention rate of at least 0.99.
+
+The objective is part of the measurement definition. Adding, removing, or
+changing it requires a new `definition_version`, so results under the old and
+new objective are never compared as one series.
 
 ## Population
 

@@ -92,6 +92,15 @@ measurement time; a hand-derived or previously-written percentage goes stale
 exactly like a hard-coded label would, and picking one constant across every
 answer-space family instead of one per family silently understates it.
 
+When the decision owner states which way the metric should move, record it in
+the plan's optional `objective` block rather than only in prose:
+`direction` is one of `higher`, `lower`, `zero`, or `target`, and `bound` is
+the threshold, required when `direction` is `target` (see the `MeasurementPlan`
+skeleton). Do not invent an objective the owner has not stated. The objective
+is part of the measurement definition: when you add, remove, or change it on an
+existing plan, also change `definition_version`, so results under the old and
+new objective are never compared as one series.
+
 When an artifact is justified, render it from the installed module skeleton,
 write a same-directory staging file, validate it with Quire, and expose it only
 with an atomic rename after validation succeeds. A failed validation must leave

@@ -25,6 +25,8 @@ pub mod evaluation_reports;
 pub mod evidence;
 #[cfg(feature = "full")]
 pub mod manifest;
+#[cfg(feature = "measurement")]
+pub mod measurement;
 #[cfg(feature = "full")]
 pub mod onboarding;
 #[cfg(feature = "full")]

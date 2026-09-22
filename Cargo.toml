@@ -47,7 +47,16 @@ source-audit = [
   "dep:syn",
   "dep:thiserror",
 ]
+# `measurement` (FR-020's MeasurementPlan objective types and the
+# definition-change check) is the same shape as `source-audit` above: a
+# consumer such as Quoin's measurement intake needs only these types, and
+# must not inherit `serde_json/arbitrary_precision` from `full` to get them.
+measurement = [
+  "dep:serde",
+  "dep:thiserror",
+]
 full = [
+  "measurement",
   "producer-execution",
   "source-audit",
   "serde_json/arbitrary_precision",
