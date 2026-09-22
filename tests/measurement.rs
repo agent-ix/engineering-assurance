@@ -70,7 +70,10 @@ fn tc_140_objective_deserialization_is_closed_and_validated() {
     let infinite = parse("direction: higher\nbound: .inf\n").expect_err("bound must be finite");
     assert!(infinite.contains("is not a finite number"), "{infinite}");
     let not_a_number = parse("direction: higher\nbound: .nan\n").expect_err("bound must be finite");
-    assert!(not_a_number.contains("is not a finite number"), "{not_a_number}");
+    assert!(
+        not_a_number.contains("is not a finite number"),
+        "{not_a_number}"
+    );
     for refused in [
         "direction: sideways\n",
         "bound: 1\n",
@@ -122,11 +125,12 @@ fn tc_140_schema_direction_enum_equals_the_rust_wire_names() {
     // Parity is only proven if every schema enum value also round-trips
     // through serde back to the same `Direction` variant it named.
     for (index, wire_name) in schema_directions.iter().enumerate() {
-        let decoded: Direction =
-            serde_json::from_value(serde_json::Value::String(wire_name.clone()))
-                .unwrap_or_else(|error| {
-                    panic!("schema direction {wire_name:?} must deserialize as a Direction: {error}")
-                });
+        let decoded: Direction = serde_json::from_value(serde_json::Value::String(
+            wire_name.clone(),
+        ))
+        .unwrap_or_else(|error| {
+            panic!("schema direction {wire_name:?} must deserialize as a Direction: {error}")
+        });
         assert_eq!(
             decoded,
             Direction::ALL[index],
