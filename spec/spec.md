@@ -163,6 +163,8 @@ same canonical bundle and do not redefine these responsibilities.
   caller-declared producer through one bounded public Rust library boundary.
 - [FR-020](./functional/FR-020-measurement-plan-objective.md) — declare a
   MeasurementPlan's objective direction and bound as part of its definition.
+- [FR-023](./functional/FR-023-claim-evidence-references.md) — require a
+  `supported` assurance claim to reference its evidence records.
 
 ### Non-Functional Requirements
 

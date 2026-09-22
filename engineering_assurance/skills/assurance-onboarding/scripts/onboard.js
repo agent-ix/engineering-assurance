@@ -124,10 +124,15 @@ if (moduleRoot) {
 //
 // This only understands the one shape every schema in this module uses today:
 // a flat `allOf` of `{ if: { properties, required }, then: { required } }`
-// branches. A schema that instead used `else`, a nested `allOf`, `anyOf`,
-// `oneOf`, `dependentRequired`, or a `$ref`'d branch would silently produce no
-// output here rather than a wrong one — which is worse, because a silent gap
-// looks like "no conditional requirements" instead of "this reader doesn't
+// branches — either at a schema's own top level, or one level down inside a
+// `$defs` entry a top-level property `$ref`s (directly, or as an array's
+// `items.$ref`; see `readNestedAllOf` below), or inside an inline nested
+// object (e.g. MeasurementPlan's `objective`; also handled by
+// `readNestedAllOf`). A schema that instead used a bare top-level `if`/`then`
+// (not wrapped in `allOf`), `else`, a nested `allOf`, `anyOf`, `oneOf`,
+// `dependentRequired`, or a `$ref`'d branch would silently produce no output
+// here rather than a wrong one — which is worse, because a silent gap looks
+// like "no conditional requirements" instead of "this reader doesn't
 // understand this schema". `readAllOf` below refuses to stay silent: anything
 // it does not recognize becomes a `warnings` entry the report prints loudly.
 const describeCondition = (condition, prefix = "") => {
@@ -148,6 +153,11 @@ const readAllOf = (schema, prefix = "") => {
   }
   if (schema.anyOf || schema.oneOf) {
     warnings.push("schema uses a top-level `anyOf`/`oneOf`, which this checklist does not read");
+  }
+  if (schema.if || schema.then) {
+    warnings.push(
+      "schema uses a bare `if`/`then` not wrapped in `allOf`, which this checklist does not read",
+    );
   }
   for (const branch of schema.allOf ?? []) {
     const conditionShape = branch.if?.$ref || branch.if?.anyOf || branch.if?.oneOf || branch.if?.allOf;
@@ -177,12 +187,56 @@ const readAllOf = (schema, prefix = "") => {
   return { conditionalRequired, warnings };
 };
 
-// Resolve a same-document `#/$defs/<name>` reference, the only `$ref` shape
-// these schemas use for a top-level field; anything else is read as written.
-const resolveLocalRef = (schema, def) => {
-  const ref = def?.$ref;
-  if (typeof ref !== "string" || !ref.startsWith("#/$defs/")) return def;
-  return schema.$defs?.[ref.slice("#/$defs/".length)] ?? def;
+// A conditional -- or an unconditional nested `required` -- can also sit
+// inside a `$defs` entry a top-level property `$ref`s: directly (e.g.
+// MeasurementPlan's `objective` points at `$defs/objective`, whose own
+// `required: ["direction"]` lives there, not on the schema's own top-level
+// `required`), or as an array property's `items.$ref`. AssuranceArgument's
+// `top_claim` similarly points at `$defs/claim`, whose own `evidence_refs`
+// requirement is conditional on `status`, sitting inside that $defs entry's
+// own `allOf`. Reading only `schema.required` and `schema.allOf` (as the
+// top-level walk above does) would silently omit both kinds. Follow one
+// level: a property's direct `$ref`, or an array property's `items.$ref`. No
+// deeper — a `$ref` found inside a `$defs` entry is left to the existing
+// `$ref`-in-`if` warning above, not chased further.
+const resolveDefRef = (schema, def) => {
+  const ref = def?.$ref ?? def?.items?.$ref;
+  const match = typeof ref === "string" ? ref.match(/^#\/\$defs\/(.+)$/) : null;
+  return match ? schema.$defs?.[match[1]] : undefined;
+};
+
+const readNestedAllOf = (schema) => {
+  const conditionalRequired = [];
+  const warnings = [];
+  const enums = {};
+  for (const [prop, def] of Object.entries(schema.properties ?? {})) {
+    const nested = resolveDefRef(schema, def);
+    if (!nested) continue;
+    for (const [child, childDef] of Object.entries(nested.properties ?? {})) {
+      if (childDef.enum) enums[`${prop}.${child}`] = childDef.enum;
+    }
+    // The nested schema's own `required` (e.g. `objective.direction`) is not
+    // a top-level requirement of the parent — `objective` itself may be
+    // absent — but it rejects a document just as surely once that object IS
+    // present, so list it the same way as a conditional requirement.
+    if (Array.isArray(nested.required) && nested.required.length > 0) {
+      conditionalRequired.push({
+        when: `${prop} is present`,
+        required: nested.required.map((child) => `${prop}.${child}`),
+      });
+    }
+    const nestedResult = readAllOf(nested);
+    for (const entry of nestedResult.conditionalRequired) {
+      conditionalRequired.push({
+        when: `${prop}.${entry.when}`,
+        required: entry.required.map((field) => `${prop}.${field}`),
+      });
+    }
+    for (const warning of nestedResult.warnings) {
+      warnings.push(`${prop}: ${warning}`);
+    }
+  }
+  return { conditionalRequired, warnings, enums };
 };
 
 const artifactChecklists = {};
@@ -200,39 +254,24 @@ if (moduleRoot) {
       continue;
     }
     const enums = {};
-    const { conditionalRequired, warnings } = readAllOf(schema);
-    for (const [prop, rawDef] of Object.entries(schema.properties ?? {})) {
-      const def = resolveLocalRef(schema, rawDef);
+    for (const [prop, def] of Object.entries(schema.properties ?? {})) {
       if (def.enum) enums[prop] = def.enum;
-      // One level down: an object-valued field's own enums and conditional
-      // requirements (a MeasurementPlan's `objective.direction`, and
-      // `objective.bound` when that direction is `target`) reject a document
-      // just as surely as top-level ones do.
-      if (def.type === "object" && def.properties) {
-        for (const [child, childDef] of Object.entries(def.properties)) {
-          if (childDef.enum) enums[`${prop}.${child}`] = childDef.enum;
-        }
-        // The nested object's own `required` (e.g. `objective.direction`) is
-        // not a top-level requirement — `objective` itself may be absent —
-        // but it rejects a document just as surely once that object IS
-        // present, so list it the same way as a conditional requirement.
-        if (Array.isArray(def.required) && def.required.length > 0) {
-          conditionalRequired.push({
-            when: `${prop} is present`,
-            required: def.required.map((child) => `${prop}.${child}`),
-          });
-        }
-        const nested = readAllOf(def, `${prop}.`);
-        conditionalRequired.push(...nested.conditionalRequired);
-        warnings.push(...nested.warnings.map((warning) => `${prop}: ${warning}`));
-      }
     }
+    const topLevel = readAllOf(schema);
+    // One level down: a `$ref`'d (or array `items.$ref`'d) nested schema's
+    // own enums and conditional requirements — a MeasurementPlan's
+    // `objective.direction`, `objective.bound` when that direction is
+    // `target`, or an AssuranceArgument `top_claim.evidence_refs` when
+    // `top_claim.status` is `supported` — reject a document just as surely
+    // as top-level ones do.
+    const nested = readNestedAllOf(schema);
+    Object.assign(enums, nested.enums);
     artifactChecklists[type] = {
       schemaPath,
       required: schema.required ?? [],
-      conditionalRequired,
+      conditionalRequired: [...topLevel.conditionalRequired, ...nested.conditionalRequired],
       enums,
-      warnings,
+      warnings: [...topLevel.warnings, ...nested.warnings],
     };
   }
 }
