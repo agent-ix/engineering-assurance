@@ -125,6 +125,74 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
 
 #[test]
 #[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
+fn onboarding_report_url_exemption_is_scoped_to_its_exact_path() {
+    // The assurance-onboarding skill's onboarding report (PLAT-924) may link
+    // sibling first-party repos, by its exact path only.
+    let tokens: Vec<String> = Vec::new();
+    let onboarding_report_path =
+        "engineering_assurance/skills/assurance-onboarding/scripts/onboard.js";
+    let sibling_repo_url = ["https:", "//github.com/agent-ix/qa-corpus/tree/main"].concat();
+    assert!(
+        findings(onboarding_report_path, sibling_repo_url.as_bytes(), &tokens).is_empty(),
+        "the onboarding report must be able to link a first-party sibling repository"
+    );
+    assert!(
+        !findings("candidate.md", sibling_repo_url.as_bytes(), &tokens).is_empty(),
+        "an unqualified file must not inherit the onboarding report's exemption"
+    );
+    assert!(
+        !findings("other/onboard.js", sibling_repo_url.as_bytes(), &tokens).is_empty(),
+        "a same-named file elsewhere must not inherit the exemption by suffix match"
+    );
+    // The exemption is an org-prefix match, not an exact single URL, but must
+    // still refuse a look-alike, squattable org such as `agent-ix-evil`.
+    let onboarding_look_alike_url = ["https:", "//github.com/agent-ix-evil/x"].concat();
+    assert!(
+        !findings(
+            onboarding_report_path,
+            onboarding_look_alike_url.as_bytes(),
+            &tokens
+        )
+        .is_empty(),
+        "a look-alike agent-ix org URL must not be admitted by the onboarding-report exemption"
+    );
+}
+
+#[test]
+#[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
+fn project_metadata_agent_ix_exemption_refuses_look_alike_orgs() {
+    // No prior test exercised this branch at all. The bare org URL (the
+    // plugin manifests' own `author.url`) and any URL under it must both be
+    // admitted in project-metadata files, but a look-alike org must still be
+    // refused — the same property the onboarding-report exemption already
+    // had, that this one lacked until PLAT-924 added the sibling exemption
+    // next to it and exposed the gap.
+    let tokens: Vec<String> = Vec::new();
+    let bare_org_url = ["https:", "//github.com/agent-ix"].concat();
+    let org_prefixed_url = ["https:", "//github.com/agent-ix/quoin"].concat();
+    let look_alike_org_url = ["https:", "//github.com/agent-ix-evil/x"].concat();
+    for path in ["README.md", ".claude-plugin/plugin.json"] {
+        assert!(
+            findings(path, bare_org_url.as_bytes(), &tokens).is_empty(),
+            "{path} must admit the bare agent-ix org URL"
+        );
+        assert!(
+            findings(path, org_prefixed_url.as_bytes(), &tokens).is_empty(),
+            "{path} must admit a URL under the agent-ix org"
+        );
+        assert!(
+            !findings(path, look_alike_org_url.as_bytes(), &tokens).is_empty(),
+            "{path} must refuse a look-alike agent-ix org URL"
+        );
+    }
+    assert!(
+        !findings("candidate.md", bare_org_url.as_bytes(), &tokens).is_empty(),
+        "a non-project-metadata file must not inherit this exemption"
+    );
+}
+
+#[test]
+#[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
 fn whole_file_boundaries_are_typed_and_short_circuit_content() {
     let cases = [
         (

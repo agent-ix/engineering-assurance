@@ -161,9 +161,25 @@ types:
 
 ### Agent skill and workflows
 
-Ask the agent to use `assurance-onboarding` and provide the repository root,
-exact decision boundary, and human decision owner. The skill inventories before
-proposing anything and preserves malformed or conflicting existing artifacts.
+The first time `assurance-onboarding` is used in a repository, run its
+`onboard` report once:
+
+```bash
+node engineering_assurance/skills/assurance-onboarding/scripts/onboard.js --repo <repo_root>
+```
+
+It explains how this module's `schemas/`/`skeletons/` relate to the target
+repository's own `spec/assurance/`, links the real worked examples in
+`corpus/spec/evidence/measurements/` and `agent-ix/quoin`'s `spec/assurance/`
+instead of requiring a read of `quoin-measurement`'s Rust source, and lists the
+fields each artifact type actually requires — derived live, straight from the
+installed schemas — plus the measurement-record field contract, restated (not
+derived) from `quoin-measurement`'s Rust validator.
+
+After that, ask the agent to use `assurance-onboarding` and provide the
+repository root, exact decision boundary, and human decision owner. The skill
+inventories before proposing anything and preserves malformed or conflicting
+existing artifacts.
 
 It routes bounded work through these ix-flow definitions:
 

@@ -12,6 +12,51 @@ Use this skill when an operator asks what engineering-assurance work applies to
 an existing repository or wants to enter one of the governed assurance
 workflows.
 
+## First run in a new repository: `onboard`
+
+Run this once, before authoring anything, the first time this skill is used in
+a repository:
+
+```bash
+node <installed-module-root>/engineering_assurance/skills/assurance-onboarding/scripts/onboard.js --repo <repo_root>
+```
+
+(`<installed-module-root>` is wherever the module was installed per
+`engineering_assurance/INSTALL.md` — the same bundle root every host's plugin
+manifest resolves. Add `--json` for a machine-readable report.)
+
+It prints, in one place:
+
+1. **How the two homes relate.** This module (`engineering-assurance`) is the
+   schema/skeleton **source** — `manifest.yaml`, `schemas/*.schema.json`, and
+   `skeletons/*.md`. It holds no project's actual decisions. The target repo's
+   own `spec/assurance/` is the **instance home** — every `AssuranceProfile`
+   (`AP-*.md`), `MeasurementPlan` (`MP-*.md`), `ArchitectureDescription`
+   (`AD-*.md`), `ComponentAssuranceContract` (`CAC-*.md`), and
+   `AssuranceArgument` (`AA-*.md`) the project actually authors lives there,
+   validated against the schemas this module supplies. The report also
+   inventories what the target repo's `spec/assurance/` already has.
+2. **Working examples**, so nobody has to read `quoin-measurement`'s Rust
+   source (`validate/mod.rs`, `validate/stack.rs`, `types/collection.rs`,
+   `types/observation.rs`) to learn the measurement-record format: the real,
+   accepted measurement-collection JSON files under `corpus/spec/evidence/measurements/`
+   (local path when this module's `corpus` submodule is checked out, otherwise
+   a GitHub link to `agent-ix/qa-corpus`), plus a link to `agent-ix/quoin`'s own
+   `spec/assurance/` — a live consumer's real, validated `AssuranceProfile` and
+   `MeasurementPlan` instances, not just skeletons.
+3. **What each artifact actually requires**, derived live from the installed
+   `schemas/*.schema.json` (so it can never drift from what Quire enforces),
+   plus the measurement-collection and observation field checklist restated
+   from the Rust validator — the fields a valid record needs before it is
+   submitted, not after it is rejected.
+
+Re-run it any time the installed module version changes, or when onboarding a
+different repository. This is a separate, human/agent-facing orientation step
+from the native `engineering-assurance onboarding` command: that command reads
+one machine protocol request and returns a structured repository inventory for
+the "Inventory before proposing" step below; `onboard.js` is prose and links,
+run once, to learn how this all fits together in the first place.
+
 ## Required inputs
 
 Obtain the repository root, the exact decision boundary, and the human decision
