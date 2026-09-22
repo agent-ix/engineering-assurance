@@ -212,6 +212,16 @@ if (moduleRoot) {
         for (const [child, childDef] of Object.entries(def.properties)) {
           if (childDef.enum) enums[`${prop}.${child}`] = childDef.enum;
         }
+        // The nested object's own `required` (e.g. `objective.direction`) is
+        // not a top-level requirement — `objective` itself may be absent —
+        // but it rejects a document just as surely once that object IS
+        // present, so list it the same way as a conditional requirement.
+        if (Array.isArray(def.required) && def.required.length > 0) {
+          conditionalRequired.push({
+            when: `${prop} is present`,
+            required: def.required.map((child) => `${prop}.${child}`),
+          });
+        }
         const nested = readAllOf(def, `${prop}.`);
         conditionalRequired.push(...nested.conditionalRequired);
         warnings.push(...nested.warnings.map((warning) => `${prop}: ${warning}`));

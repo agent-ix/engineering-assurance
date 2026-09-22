@@ -170,17 +170,26 @@ pub struct ObjectiveChangedWithoutVersionBump {
 }
 
 /// Report an objective edit between two revisions of one plan that did not
-/// change `definition_version`.
+/// come with a genuine `definition_version` bump.
 ///
-/// Returns `None` when the objective is unchanged or when the
-/// `definition_version` differs between the revisions.
+/// Returns `None` when the objective is unchanged, or when `after`'s
+/// `definition_version` is present and differs from `before`'s (a genuine
+/// bump). Clearing `definition_version` (`after` is `None`) is not a bump:
+/// it is treated the same as leaving the version unchanged, so an objective
+/// edit alongside a removed `definition_version` still yields a finding.
 #[must_use]
 pub fn objective_change_without_version_bump(
     before: &PlanDefinition<'_>,
     after: &PlanDefinition<'_>,
 ) -> Option<ObjectiveChangedWithoutVersionBump> {
-    if before.objective == after.objective || before.definition_version != after.definition_version
-    {
+    if before.objective == after.objective {
+        return None;
+    }
+    let genuinely_bumped = match after.definition_version {
+        None => false,
+        Some(after_version) => Some(after_version) != before.definition_version,
+    };
+    if genuinely_bumped {
         return None;
     }
     Some(ObjectiveChangedWithoutVersionBump {

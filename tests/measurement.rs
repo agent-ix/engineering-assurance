@@ -69,6 +69,8 @@ fn tc_140_objective_deserialization_is_closed_and_validated() {
     );
     let infinite = parse("direction: higher\nbound: .inf\n").expect_err("bound must be finite");
     assert!(infinite.contains("is not a finite number"), "{infinite}");
+    let not_a_number = parse("direction: higher\nbound: .nan\n").expect_err("bound must be finite");
+    assert!(not_a_number.contains("is not a finite number"), "{not_a_number}");
     for refused in [
         "direction: sideways\n",
         "bound: 1\n",
@@ -115,6 +117,57 @@ fn tc_140_schema_direction_enum_equals_the_rust_wire_names() {
     assert_eq!(
         schema["$defs"]["objective"]["allOf"][0]["then"]["required"],
         serde_json::json!(["bound"])
+    );
+
+    // Parity is only proven if every schema enum value also round-trips
+    // through serde back to the same `Direction` variant it named.
+    for (index, wire_name) in schema_directions.iter().enumerate() {
+        let decoded: Direction =
+            serde_json::from_value(serde_json::Value::String(wire_name.clone()))
+                .unwrap_or_else(|error| {
+                    panic!("schema direction {wire_name:?} must deserialize as a Direction: {error}")
+                });
+        assert_eq!(
+            decoded,
+            Direction::ALL[index],
+            "schema direction {wire_name:?} round-trips to the wrong Direction variant"
+        );
+        let re_encoded = serde_json::to_value(decoded).expect("direction serializes");
+        assert_eq!(re_encoded, serde_json::Value::String(wire_name.clone()));
+    }
+}
+
+#[test]
+#[trace("TC-140", "FR-020-AC-2")]
+fn tc_140_direction_all_covers_every_variant() {
+    // Exhaustive match: if `Direction` gains a variant, this fails to
+    // compile until an arm naming that variant's expected `Direction::ALL`
+    // index is added below. Each variant is then checked against
+    // `Direction::ALL` at that position, so a variant added to the enum but
+    // left out of (or misordered in) `ALL` fails this test instead of
+    // silently dropping out of everywhere `ALL` is iterated.
+    for direction in [
+        Direction::Higher,
+        Direction::Lower,
+        Direction::Zero,
+        Direction::Target,
+    ] {
+        let expected_index = match direction {
+            Direction::Higher => 0,
+            Direction::Lower => 1,
+            Direction::Zero => 2,
+            Direction::Target => 3,
+        };
+        assert_eq!(
+            Direction::ALL.get(expected_index),
+            Some(&direction),
+            "Direction::ALL is missing {direction:?} at index {expected_index}"
+        );
+    }
+    assert_eq!(
+        Direction::ALL.len(),
+        4,
+        "Direction::ALL must list exactly one entry per Direction variant"
     );
 }
 
@@ -167,6 +220,19 @@ fn tc_141_objective_edit_without_a_version_bump_is_a_typed_finding() {
                 &plan(Some("retention-v1"), after)
             ),
             None
+        );
+        // Clearing `definition_version` (Some -> None) is not a bump: it
+        // still yields a finding, carrying the version that was cleared.
+        assert_eq!(
+            objective_change_without_version_bump(
+                &plan(Some("retention-v1"), before),
+                &plan(None, after)
+            ),
+            Some(ObjectiveChangedWithoutVersionBump {
+                definition_version: Some("retention-v1".to_owned()),
+                before,
+                after,
+            })
         );
     }
     for unchanged in [None, higher] {
