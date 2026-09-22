@@ -147,6 +147,11 @@ implemented and reviewed.
 | FR-021 | FR-021-AC-7 | TC-142 | ✅ Minimal `measurement` consumer reaches the decision-rule types without `serde_json` |
 | FR-021 | FR-021-AC-8 | TC-141 | ✅ Unversioned estimator and decision-rule edits yield findings naming each changed member |
 | FR-021 | FR-021-AC-9 | TC-144, TC-146 | ✅ Schema and Rust direction-agreement and constant-predictor/estimator cases passing |
+| FR-022 | FR-022-AC-1 | TC-150 | ✅ Wire spelling, rendering, parsing, and serde round trip backed |
+| FR-022 | FR-022-AC-2 | TC-151 | ✅ Exact-match typed refusal backed |
+| FR-022 | FR-022-AC-3 | TC-152 | ✅ Exhaustive listing, compile-time trait-absence probe, and downstream ordering refusals backed |
+| FR-022 | FR-022-AC-4 | TC-153 | ✅ Isolated offline claim-strength-only consumer compile and dependency census backed |
+| FR-022 | FR-022-AC-5 | TC-150 | ✅ Ownership-registry entry, misdeclaration refusals, and generated listings backed |
 | FR-023 | FR-023-AC-1 | TC-143 | ✅ Passing |
 | FR-023 | FR-023-AC-2 | TC-143 | ✅ Passing |
 | FR-023 | FR-023-AC-3 | TC-143 | ✅ Passing |
@@ -190,6 +195,7 @@ implemented and reviewed.
 | FR-018-CON-1 | TC-113 | 🚧 Pending implementation |
 | FR-018-CON-2 | TC-114 | 🚧 Pending implementation |
 | FR-018-CON-3 | TC-115 | 🚧 Pending implementation |
+| FR-022-CON-1 | TC-153 | ✅ Claim-strength-only consumer resolves no `serde_json` |
 
 ## Test Case Summary
 
@@ -338,6 +344,10 @@ implemented and reviewed.
 | TC-147 | The schema's estimator, comparator and baseline enums equal the Rust Estimator, Comparator and Baseline wire-name sets in order, and each ALL constant covers every variant | Unit | P0 | FR-021-AC-4 | ✅ wire-set parity and variant-coverage cases passing |
 | TC-148 | Each comparator holds exactly for the estimates below, at or above the reference its symbol names, and none holds against NaN; a baseline rule compares against the baseline value moved by its margin in the direction of improvement, for higher- and lower-is-better rules and positive and negative margins; a missing or unexpected baseline value, a non-finite estimate or baseline value, and an overflowing reference are typed refusals | Unit | P0 | FR-021-AC-5 | ✅ comparator, margin, overflow and refusal cases passing |
 | TC-149 | The onboarding checklist lists the estimator, comparator and baseline sets, the one-of choice between threshold and baseline, margin's dependency on baseline, metric's dependency on statistical_design, the direction and estimator consistency rules and the refused eq combinations, with no warning | Unit | P0 | FR-021-AC-6 | ✅ onboarding JSON checklist case passing |
+| TC-150 | Each claim strength renders, serializes, parses, and deserializes as exactly `proven`, `bounded-checked`, `tested`, or `observed`; the ownership registry declares exactly those values with Engineering Assurance ownership, one strength per advanced result, and no order, and refuses each misdeclared owner, type, cardinality, ordering, population, order, duplicate, unknown value, or absent entry; the generated Python, TypeScript, and Rust listings carry the same values | Unit | P0 | FR-022-AC-1, FR-022-AC-5 | ✅ wire spelling, registry entry, misdeclaration refusals, and generated listings backed |
+| TC-151 | Every label outside the claim-strength vocabulary, including case, separator, whitespace, unrelated, empty, numeric, and null values, is refused by parsing and deserialization with a typed error carrying the refused label | Unit | P0 | FR-022-AC-2 | ✅ exact-match typed refusal backed |
+| TC-152 | The listing of claim strengths names every variant exactly once; the library build fails if an ordering is derived, and a downstream consumer that compares, orders, takes a maximum of, collects into an ordered set, or defaults a strength fails to compile for that reason | Compile | P0 | FR-022-AC-3 | ✅ exhaustive listing, trait-absence probe, and downstream ordering refusals backed |
+| TC-153 | A minimal downstream crate compiles Engineering Assurance with default features disabled and only `claim-strength`, uses the type, and resolves no `serde_json` or other optional Engineering Assurance dependency anywhere in its graph | Compile | P0 | FR-022-AC-4, FR-022-CON-1 | ✅ isolated offline downstream compile and whole-graph dependency census backed |
 
 ## Option Permutation Matrix
 

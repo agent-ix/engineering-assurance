@@ -165,6 +165,8 @@ same canonical bundle and do not redefine these responsibilities.
   MeasurementPlan's objective direction and bound as part of its definition.
 - [FR-021](./functional/FR-021-measurement-plan-decision-rule.md) — declare a
   MeasurementPlan's estimator and decision rule as closed, checkable data.
+- [FR-022](./functional/FR-022-claim-strength-vocabulary.md) — own the unordered
+  claim-strength vocabulary for advanced verification results.
 - [FR-023](./functional/FR-023-claim-evidence-references.md) — require a
   `supported` assurance claim to reference its evidence records.
 
