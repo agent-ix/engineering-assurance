@@ -60,6 +60,13 @@
       "responsibility": "Retain an attributed human approval, rejection, or revision event."
     }
   ],
+  "claim_strength": {
+    "authority": "engineering_assurance",
+    "authoritative_type": "engineering_assurance::claim_strength::ClaimStrength",
+    "cardinality": "exactly_one_per_advanced_result",
+    "ordering": "unordered",
+    "values": ["proven", "bounded-checked", "tested", "observed"]
+  },
   "result_states": [
     "defined",
     "observed",

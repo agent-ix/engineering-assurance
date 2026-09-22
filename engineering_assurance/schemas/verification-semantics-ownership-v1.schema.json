@@ -3,7 +3,7 @@
   "title": "Verification semantics ownership registry v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "purpose", "non_executing", "concepts", "result_states"],
+  "required": ["schema_version", "purpose", "non_executing", "concepts", "claim_strength", "result_states"],
   "properties": {
     "schema_version": {"const": "engineering-assurance.verification-semantics-ownership/v1"},
     "purpose": {"const": "semantic_ownership_registry"},
@@ -14,6 +14,18 @@
       "maxItems": 8,
       "uniqueItems": true,
       "items": {"$ref": "#/definitions/concept"}
+    },
+    "claim_strength": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authority", "authoritative_type", "cardinality", "ordering", "values"],
+      "properties": {
+        "authority": {"const": "engineering_assurance"},
+        "authoritative_type": {"const": "engineering_assurance::claim_strength::ClaimStrength"},
+        "cardinality": {"const": "exactly_one_per_advanced_result"},
+        "ordering": {"const": "unordered"},
+        "values": {"const": ["proven", "bounded-checked", "tested", "observed"]}
+      }
     },
     "result_states": {
       "type": "array",

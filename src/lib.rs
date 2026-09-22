@@ -9,6 +9,8 @@
 
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "claim-strength")]
+pub mod claim_strength;
 #[cfg(feature = "full")]
 pub mod compatibility;
 #[cfg(feature = "full")]

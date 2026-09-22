@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
+use crate::claim_strength::ClaimStrength;
+
 mod fixtures;
 mod pgm01;
 mod report;
@@ -90,6 +92,8 @@ pub enum SemanticErrorKind {
     IncompleteOwnershipConceptSet,
     /// The ownership registry has an invalid result-state vocabulary.
     InvalidResultStateSet,
+    /// The ownership registry misdeclares the claim-strength vocabulary.
+    InvalidClaimStrengthVocabulary,
     /// A validated value could not be serialized.
     Serialization,
     /// A legacy PGM-01 field violates its declared shape.
@@ -709,7 +713,48 @@ struct OwnershipRegistry {
     purpose: String,
     non_executing: bool,
     concepts: Vec<OwnershipConcept>,
+    /// Absent decodes as `None` so a missing entry is refused with the
+    /// claim-strength reason rather than as an encoding failure.
+    #[serde(default)]
+    claim_strength: Option<ClaimStrengthEntry>,
     result_states: Vec<String>,
+}
+
+/// The registry's declaration of the FR-022 claim-strength vocabulary.
+///
+/// `values` decodes as plain strings and is then parsed through
+/// [`ClaimStrength`]'s `FromStr`, so an unknown spelling is refused by the same
+/// parser every consumer uses, with the claim-strength refusal reason rather
+/// than as an encoding failure.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ClaimStrengthEntry {
+    authority: String,
+    authoritative_type: String,
+    cardinality: String,
+    ordering: String,
+    values: Vec<String>,
+}
+
+fn validate_claim_strength_entry(entry: Option<&ClaimStrengthEntry>) -> Result<(), SemanticError> {
+    let declared = entry.is_some_and(|entry| {
+        let values: Result<Vec<ClaimStrength>, _> =
+            entry.values.iter().map(|value| value.parse()).collect();
+        entry.authority == "engineering_assurance"
+            && entry.authoritative_type == "engineering_assurance::claim_strength::ClaimStrength"
+            && entry.cardinality == "exactly_one_per_advanced_result"
+            && entry.ordering == "unordered"
+            && values.is_ok_and(|values| values == ClaimStrength::ALL)
+    });
+    if declared {
+        Ok(())
+    } else {
+        Err(SemanticError::new(
+            SemanticErrorKind::InvalidClaimStrengthVocabulary,
+            "ownership registry must declare exactly the unordered Engineering Assurance \
+             claim-strength vocabulary, one strength per advanced result",
+        ))
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -737,7 +782,8 @@ pub fn validate_embedded_ownership_registry() -> Result<(), SemanticError> {
 /// # Errors
 ///
 /// Returns [`SemanticError`] if its version, population, authority allocation,
-/// metadata, or non-executing boundary differs from the reviewed contract.
+/// metadata, claim-strength vocabulary, or non-executing boundary differs from
+/// the reviewed contract.
 pub fn validate_ownership_registry_bytes(raw: &[u8]) -> Result<(), SemanticError> {
     let registry: OwnershipRegistry = serde_json::from_slice(raw).map_err(|error| {
         SemanticError::new(
@@ -792,6 +838,7 @@ pub fn validate_ownership_registry_bytes(raw: &[u8]) -> Result<(), SemanticError
             "ownership registry has an incomplete concept set",
         ));
     }
+    validate_claim_strength_entry(registry.claim_strength.as_ref())?;
     let states: BTreeSet<_> = registry.result_states.iter().collect();
     if states.is_empty()
         || states.len() != registry.result_states.len()

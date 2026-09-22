@@ -11,6 +11,7 @@ use super::{
     CANONICAL_FIXTURE_BYTES, NON_SUCCESS_STATES_BYTES, SemanticError, SemanticErrorKind,
     SemanticFixture, validate_semantic_fixture_bytes,
 };
+use crate::claim_strength::ClaimStrength;
 use crate::compatibility_corpus::{CorpusCase, CorpusError, CorpusIndex};
 
 /// Translate an accepted-corpus refusal into the semantic refusal vocabulary.
@@ -126,6 +127,7 @@ pub fn render_generated_fixtures(
 
     let mut generated = BTreeMap::new();
     insert_state_fixtures(&mut generated, &states);
+    insert_claim_strength_fixtures(&mut generated);
     insert_canonical_fixtures(&mut generated, &canonical_json, &quoted_canonical);
     insert_compatibility_fixtures(&mut generated, &cases_json, &quoted_cases);
     Ok(generated)
@@ -151,6 +153,40 @@ fn insert_state_fixtures(generated: &mut BTreeMap<String, String>, states: &[Str
         format!(
             "// Generated fixture; semantic source is non-success-states.json.\npub const NON_SUCCESS_STATES: &[&str] = &[\n{}\n];\n",
             states.iter().map(|state| format!("    \"{state}\",")).collect::<Vec<_>>().join("\n")
+        ),
+    );
+}
+
+/// Project the FR-022 vocabulary from [`ClaimStrength::ALL`] itself, so the
+/// foreign-language copies cannot drift from the type every Rust consumer uses.
+/// The listing order is carried over for stable bytes; it is not a rank.
+fn insert_claim_strength_fixtures(generated: &mut BTreeMap<String, String>) {
+    let listed = |indent: &str| {
+        ClaimStrength::ALL
+            .iter()
+            .map(|strength| format!("{indent}\"{strength}\","))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    generated.insert(
+        "claim_strengths.py".to_owned(),
+        format!(
+            "\"\"\"Generated fixture; semantic source is engineering_assurance::claim_strength::ClaimStrength. Unordered.\"\"\"\n\nCLAIM_STRENGTHS = (\n{}\n)\n",
+            listed("    ")
+        ),
+    );
+    generated.insert(
+        "claim_strengths.ts".to_owned(),
+        format!(
+            "// Generated fixture; semantic source is engineering_assurance::claim_strength::ClaimStrength. Unordered.\nexport const CLAIM_STRENGTHS = [\n{}\n] as const;\n",
+            listed("  ")
+        ),
+    );
+    generated.insert(
+        "claim_strengths.rs".to_owned(),
+        format!(
+            "// Generated fixture; semantic source is engineering_assurance::claim_strength::ClaimStrength. Unordered.\npub const CLAIM_STRENGTHS: &[&str] = &[\n{}\n];\n",
+            listed("    ")
         ),
     );
 }

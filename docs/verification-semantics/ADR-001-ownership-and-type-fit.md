@@ -6,8 +6,9 @@ Status: accepted for specification and compatibility work
 
 Engineering Assurance owns the vocabulary that distinguishes a verification
 definition, an execution, a check result, retained evidence, a measurement,
-a diagnostic, and a report. It does not own a second persistence format for
-those concepts.
+a diagnostic, and a report, together with the claim-strength vocabulary that
+names the kind of support behind an advanced result. It does not own a second
+persistence format for those concepts.
 
 The implemented types fit that vocabulary as follows:
 
@@ -21,6 +22,7 @@ The implemented types fit that vocabulary as follows:
 | Diagnostic | Quire diagnostic or native producer diagnostic retained by Quoin when material | Explains inability, malformed input, or a finding; it is not evidence of success. |
 | Report | Quoin report view and `VerificationReceipt`, with ix-flow decision references | Presents claims, evidence, counterevidence, gaps, owner, and action without a trust score. |
 | Human decision | ix-flow retained decision event | Records approval, rejection, or revision against an exact subject; tools do not infer it. |
+| Claim strength | Engineering Assurance `ClaimStrength` (`proven`, `bounded-checked`, `tested`, `observed`) | Names the kind of support behind one advanced result, exactly one per result. The strengths are unordered: no rank, comparison, default, or automatic promotion, because an order would be a trust score. Other qualifiers of a result are not claim strengths. |
 
 ## Ownership consequences
 
@@ -35,6 +37,10 @@ The implemented types fit that vocabulary as follows:
 - Native project tools own execution, domain result schemas, oracles, corpora,
   and domain-specific failure behavior.
 - ix-flow owns human decision state and event history.
+- Engineering Assurance owns the claim-strength vocabulary and publishes it
+  as a Rust type behind a `serde`-only feature, in the ownership registry, and
+  as generated inert listings. A consumer that records a strength imports that
+  type instead of declaring its own.
 
 ## Compatibility decision
 

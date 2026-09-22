@@ -56,8 +56,16 @@ measurement = [
   "dep:serde",
   "dep:thiserror",
 ]
+# `claim_strength` is the FR-022 claim-strength vocabulary. It needs only
+# serde, so a consumer that records a strength (Quire, Quoin) must not have to
+# accept `full` and its `serde_json/arbitrary_precision` flip to reach it. Same
+# shape as `source-audit` above.
+claim-strength = [
+  "dep:serde",
+]
 full = [
   "measurement",
+  "claim-strength",
   "producer-execution",
   "source-audit",
   "serde_json/arbitrary_precision",
