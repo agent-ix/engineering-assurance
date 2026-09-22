@@ -276,6 +276,10 @@ const resolveLocalRef = (schema, def) => {
   return schema.$defs?.[ref.slice("#/$defs/".length)] ?? def;
 };
 
+// The list keywords `visit` below describes; any other keyword on an array
+// field becomes a warning.
+const ARRAY_KEYWORDS = new Set(["type", "items", "minItems", "uniqueItems", "description"]);
+
 const artifactChecklists = {};
 if (moduleRoot) {
   for (const [type, file] of Object.entries(artifactSchemaFiles)) {
@@ -291,6 +295,7 @@ if (moduleRoot) {
       continue;
     }
     const enums = {};
+    const arrays = {};
     const { conditionalRequired, exactlyOneOf, conditionalConstraints, warnings } = readAllOf(schema);
     // Walk object-valued fields (directly, or via a `$ref`/array
     // `items.$ref` resolved above) at every depth: a nested field's enums
@@ -304,6 +309,23 @@ if (moduleRoot) {
       for (const [prop, rawDef] of Object.entries(properties ?? {})) {
         const def = resolveLocalRef(schema, rawDef);
         const path = `${prefix}${prop}`;
+        // A list field's own shape (a MeasurementPlan's `protected_apparatus`
+        // or `negative_controls`): how many items, whether repeats are
+        // refused, and the pattern a string item must match. A list keyword
+        // this reader does not know is a warning, not a silent omission.
+        if (rawDef?.type === "array") {
+          const unknown = Object.keys(rawDef).filter((key) => !ARRAY_KEYWORDS.has(key));
+          if (unknown.length > 0) {
+            warnings.push(`${path}: list uses ${unknown.join(", ")}, which this checklist does not read`);
+          }
+          // `def` is already the resolved `items.$ref` target when there is one.
+          const itemDef = rawDef.items?.$ref ? def : rawDef.items;
+          arrays[path] = {
+            minItems: rawDef.minItems ?? 0,
+            uniqueItems: rawDef.uniqueItems === true,
+            ...(itemDef?.pattern ? { itemPattern: itemDef.pattern } : {}),
+          };
+        }
         if (def.enum) enums[path] = def.enum;
         if (def.type !== "object" || !def.properties || seen.has(def)) continue;
         // The nested object's own `required` (e.g. `objective.direction`) is
@@ -332,6 +354,7 @@ if (moduleRoot) {
       exactlyOneOf,
       conditionalConstraints,
       enums,
+      arrays,
       warnings,
     };
   }
@@ -560,6 +583,12 @@ if (Object.keys(artifactChecklists).length === 0) {
     line(`  required: ${checklist.required.join(", ")}`);
     for (const [prop, values] of Object.entries(checklist.enums)) {
       line(`  ${prop} must be one of: ${values.join(", ")}`);
+    }
+    for (const [prop, list] of Object.entries(checklist.arrays ?? {})) {
+      const clauses = [`at least ${list.minItems} item(s)`];
+      if (list.uniqueItems) clauses.push("no repeated item");
+      if (list.itemPattern) clauses.push(`each item matching ${list.itemPattern}`);
+      line(`  ${prop} is a list: ${clauses.join(", ")}`);
     }
     for (const condition of checklist.conditionalRequired) {
       line(`  when ${condition.when}: also required: ${condition.required.join(", ")}`);

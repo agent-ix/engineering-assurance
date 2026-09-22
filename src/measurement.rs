@@ -2,24 +2,27 @@
 // Copyright (C) 2026 Agent-IX
 
 //! `MeasurementPlan` definition types owned by Engineering Assurance (FR-020,
-//! FR-021).
+//! FR-021, FR-024).
 //!
 //! This module owns the typed form of a `MeasurementPlan`'s optional `objective`
 //! block, the closed `statistical_design.estimator` and
 //! `statistical_design.decision_rule` vocabulary with the rule's evaluation,
-//! and the check that an edit to any of those came with a new
-//! `definition_version`. Only the decision rule is evaluated; an objective's
+//! the `protected_apparatus` path list and the closed `negative_controls`
+//! vocabulary, and the check that an edit to the objective, estimator, rule,
+//! or protected list came with a new `definition_version`. Only the decision rule is evaluated; an objective's
 //! `bound` is informational.
 //! It performs no filesystem, process, environment, network, clock, or
 //! persistence access: callers parse plan frontmatter and pass the relevant
 //! fields in, and compute any baseline value themselves.
 //!
-//! The wire names of [`Direction`], [`Estimator`], [`Comparator`], and
-//! [`Baseline`] are the matching enums of
+//! The wire names of [`Direction`], [`Estimator`], [`Comparator`],
+//! [`Baseline`], and [`NegativeControlKind`] are the matching enums of
 //! `engineering_assurance/schemas/measurement-plan-frontmatter.schema.json`;
-//! tests assert each pair of sets is equal.
+//! tests assert each pair of sets is equal. The schema's `protected_apparatus`
+//! item pattern and [`ApparatusPath`] are checked against one shared case
+//! table.
 
-use std::fmt;
+use std::{collections::BTreeSet, fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -634,6 +637,425 @@ impl From<DecisionRule> for DecisionRuleFields {
     }
 }
 
+/// Why a `protected_apparatus` entry is not a safe repository-relative path or
+/// glob.
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+pub enum ApparatusPathError {
+    /// The entry was the empty string.
+    #[error("protected apparatus path is empty")]
+    Empty,
+    /// The entry started with `/`.
+    #[error("protected apparatus path `{path}` is absolute; it must be repository-relative")]
+    Absolute {
+        /// The refused entry.
+        path: String,
+    },
+    /// The entry contained a character outside the path and glob syntax: `\`,
+    /// `?`, `[`, `]`, `{`, `}`, `:`, or a control character.
+    #[error("protected apparatus path `{path}` contains the forbidden character {character:?}")]
+    ForbiddenCharacter {
+        /// The refused entry.
+        path: String,
+        /// The first forbidden character.
+        character: char,
+    },
+    /// The entry had an empty segment: `//`, or a trailing `/`.
+    #[error("protected apparatus path `{path}` has an empty segment")]
+    EmptySegment {
+        /// The refused entry.
+        path: String,
+    },
+    /// The entry had a `.` segment.
+    #[error("protected apparatus path `{path}` has a `.` segment")]
+    CurrentDirectorySegment {
+        /// The refused entry.
+        path: String,
+    },
+    /// The entry had a `..` segment.
+    #[error("protected apparatus path `{path}` has a `..` segment")]
+    ParentDirectorySegment {
+        /// The refused entry.
+        path: String,
+    },
+    /// A segment contained `**` without being exactly `**`.
+    #[error(
+        "protected apparatus path `{path}` uses `**` inside a segment; `**` must be a whole segment"
+    )]
+    PartialDoubleStar {
+        /// The refused entry.
+        path: String,
+    },
+}
+
+/// One `protected_apparatus` entry: a repository-relative file path or glob
+/// naming a file that produces the plan's number.
+///
+/// Segments are separated by `/`. A segment is either exactly `**` (zero or
+/// more whole directories) or a name in which each `*` matches zero or more
+/// characters other than `/`. Every other character is literal; `\`, `?`,
+/// `[`, `]`, `{`, `}`, `:`, and control characters are refused, as are an
+/// empty entry, a leading `/`, an empty segment, and a `.` or `..` segment.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct ApparatusPath(String);
+
+impl ApparatusPath {
+    /// Validate one entry.
+    ///
+    /// # Errors
+    ///
+    /// Returns the [`ApparatusPathError`] naming the first rule the entry
+    /// breaks, checked in the order: empty, absolute, forbidden character,
+    /// then per segment empty, `.`, `..`, and partial `**`.
+    pub fn new(path: impl Into<String>) -> Result<Self, ApparatusPathError> {
+        let path = path.into();
+        if path.is_empty() {
+            return Err(ApparatusPathError::Empty);
+        }
+        if path.starts_with('/') {
+            return Err(ApparatusPathError::Absolute { path });
+        }
+        if let Some(character) = path.chars().find(|character| {
+            u32::from(*character) < 0x20
+                || matches!(character, '\\' | '?' | '[' | ']' | '{' | '}' | ':')
+        }) {
+            return Err(ApparatusPathError::ForbiddenCharacter { path, character });
+        }
+        for segment in path.split('/') {
+            let refusal = match segment {
+                "" => ApparatusPathError::EmptySegment { path },
+                "." => ApparatusPathError::CurrentDirectorySegment { path },
+                ".." => ApparatusPathError::ParentDirectorySegment { path },
+                "**" => continue,
+                _ if segment.contains("**") => ApparatusPathError::PartialDoubleStar { path },
+                _ => continue,
+            };
+            return Err(refusal);
+        }
+        Ok(Self(path))
+    }
+
+    /// The entry as written.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Whether the entry is a glob (contains `*`) rather than one file path.
+    #[must_use]
+    pub fn is_glob(&self) -> bool {
+        self.0.contains('*')
+    }
+}
+
+impl fmt::Display for ApparatusPath {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl FromStr for ApparatusPath {
+    type Err = ApparatusPathError;
+
+    fn from_str(path: &str) -> Result<Self, Self::Err> {
+        Self::new(path)
+    }
+}
+
+impl TryFrom<String> for ApparatusPath {
+    type Error = ApparatusPathError;
+
+    fn try_from(path: String) -> Result<Self, Self::Error> {
+        Self::new(path)
+    }
+}
+
+impl From<ApparatusPath> for String {
+    fn from(path: ApparatusPath) -> Self {
+        path.0
+    }
+}
+
+/// Why a `protected_apparatus` list is invalid.
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+pub enum ProtectedApparatusError {
+    /// The list was empty.
+    #[error("protected_apparatus must name at least one path")]
+    Empty,
+    /// The same entry appeared twice.
+    #[error("protected_apparatus names `{path}` more than once")]
+    Duplicate {
+        /// The repeated entry.
+        path: ApparatusPath,
+    },
+}
+
+/// A validated `protected_apparatus`: a non-empty set of distinct
+/// [`ApparatusPath`] entries naming the files that produce the plan's number.
+///
+/// It is a set: two lists naming the same entries in a different order are
+/// equal, and it serializes in sorted order.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(try_from = "Vec<ApparatusPath>", into = "Vec<ApparatusPath>")]
+pub struct ProtectedApparatus(BTreeSet<ApparatusPath>);
+
+impl ProtectedApparatus {
+    /// Build the set from its entries.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ProtectedApparatusError::Empty`] for no entries and
+    /// [`ProtectedApparatusError::Duplicate`] naming the first repeated one.
+    pub fn new(
+        paths: impl IntoIterator<Item = ApparatusPath>,
+    ) -> Result<Self, ProtectedApparatusError> {
+        let mut set = BTreeSet::new();
+        for path in paths {
+            if set.contains(&path) {
+                return Err(ProtectedApparatusError::Duplicate { path });
+            }
+            set.insert(path);
+        }
+        if set.is_empty() {
+            return Err(ProtectedApparatusError::Empty);
+        }
+        Ok(Self(set))
+    }
+
+    /// The entries, in sorted order.
+    pub fn iter(&self) -> impl Iterator<Item = &ApparatusPath> {
+        self.0.iter()
+    }
+
+    /// How many entries the set holds; never zero.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Always `false`: a validated set is never empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Whether `path` is one of the entries, compared as written (a glob is
+    /// not expanded).
+    #[must_use]
+    pub fn contains(&self, path: &ApparatusPath) -> bool {
+        self.0.contains(path)
+    }
+}
+
+impl TryFrom<Vec<ApparatusPath>> for ProtectedApparatus {
+    type Error = ProtectedApparatusError;
+
+    fn try_from(paths: Vec<ApparatusPath>) -> Result<Self, Self::Error> {
+        Self::new(paths)
+    }
+}
+
+impl From<ProtectedApparatus> for Vec<ApparatusPath> {
+    fn from(apparatus: ProtectedApparatus) -> Self {
+        apparatus.0.into_iter().collect()
+    }
+}
+
+/// A gaming scenario a `MeasurementPlan`'s measurement must catch
+/// (`negative_controls[].kind`).
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NegativeControlKind {
+    /// An unfavourable item or run is left out of the collected population.
+    SuppressedObservation,
+    /// An improvement smaller than the plan's stated uncertainty is claimed
+    /// as a gain.
+    GainWithinNoise,
+    /// A result collected against an earlier subject version or apparatus
+    /// is presented as current.
+    StaleEvidence,
+    /// A protected-apparatus file, such as the harness, the answer key, or
+    /// the checker configuration, is edited alongside the change it grades.
+    ApparatusEdit,
+    /// Only a favourable run or variant is reported out of several tried.
+    SelectiveReporting,
+}
+
+impl NegativeControlKind {
+    /// Every kind, in declaration order.
+    pub const ALL: [Self; 5] = [
+        Self::SuppressedObservation,
+        Self::GainWithinNoise,
+        Self::StaleEvidence,
+        Self::ApparatusEdit,
+        Self::SelectiveReporting,
+    ];
+
+    /// The frontmatter wire name of this kind.
+    #[must_use]
+    pub const fn wire_name(self) -> &'static str {
+        match self {
+            Self::SuppressedObservation => "suppressed-observation",
+            Self::GainWithinNoise => "gain-within-noise",
+            Self::StaleEvidence => "stale-evidence",
+            Self::ApparatusEdit => "apparatus-edit",
+            Self::SelectiveReporting => "selective-reporting",
+        }
+    }
+}
+
+impl fmt::Display for NegativeControlKind {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.wire_name())
+    }
+}
+
+/// Why a negative control, or a `negative_controls` list, is invalid.
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+pub enum NegativeControlError {
+    /// A control had an empty `description`.
+    #[error("negative control `{kind}` has an empty description")]
+    EmptyDescription {
+        /// The control's kind.
+        kind: NegativeControlKind,
+    },
+    /// The list was empty.
+    #[error("negative_controls must name at least one control")]
+    Empty,
+    /// The same control (kind and description) appeared twice.
+    #[error("negative_controls lists the `{kind}` control `{description}` more than once")]
+    Duplicate {
+        /// The repeated control's kind.
+        kind: NegativeControlKind,
+        /// The repeated control's description.
+        description: String,
+    },
+}
+
+/// One `negative_controls` entry: a gaming scenario and how this plan's
+/// measurement catches it.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(try_from = "NegativeControlFields", into = "NegativeControlFields")]
+pub struct NegativeControl {
+    kind: NegativeControlKind,
+    description: String,
+}
+
+impl NegativeControl {
+    /// Build a control from its kind and description.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NegativeControlError::EmptyDescription`] when `description`
+    /// is empty.
+    pub fn new(
+        kind: NegativeControlKind,
+        description: impl Into<String>,
+    ) -> Result<Self, NegativeControlError> {
+        let description = description.into();
+        if description.is_empty() {
+            return Err(NegativeControlError::EmptyDescription { kind });
+        }
+        Ok(Self { kind, description })
+    }
+
+    /// The gaming scenario.
+    #[must_use]
+    pub const fn kind(&self) -> NegativeControlKind {
+        self.kind
+    }
+
+    /// How this plan's measurement catches the scenario.
+    #[must_use]
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+}
+
+/// The closed wire shape of a `negative_controls` entry, before validation.
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct NegativeControlFields {
+    kind: NegativeControlKind,
+    description: String,
+}
+
+impl TryFrom<NegativeControlFields> for NegativeControl {
+    type Error = NegativeControlError;
+
+    fn try_from(fields: NegativeControlFields) -> Result<Self, Self::Error> {
+        Self::new(fields.kind, fields.description)
+    }
+}
+
+impl From<NegativeControl> for NegativeControlFields {
+    fn from(control: NegativeControl) -> Self {
+        Self {
+            kind: control.kind,
+            description: control.description,
+        }
+    }
+}
+
+/// A validated `negative_controls` list: at least one control, no two
+/// identical, in the order written.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(try_from = "Vec<NegativeControl>", into = "Vec<NegativeControl>")]
+pub struct NegativeControls(Vec<NegativeControl>);
+
+impl NegativeControls {
+    /// Build the list from its controls.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NegativeControlError::Empty`] for no controls and
+    /// [`NegativeControlError::Duplicate`] naming the first repeated one.
+    pub fn new(
+        controls: impl IntoIterator<Item = NegativeControl>,
+    ) -> Result<Self, NegativeControlError> {
+        let mut list: Vec<NegativeControl> = Vec::new();
+        for control in controls {
+            if list.contains(&control) {
+                return Err(NegativeControlError::Duplicate {
+                    kind: control.kind,
+                    description: control.description,
+                });
+            }
+            list.push(control);
+        }
+        if list.is_empty() {
+            return Err(NegativeControlError::Empty);
+        }
+        Ok(Self(list))
+    }
+
+    /// The controls, in the order written.
+    #[must_use]
+    pub fn as_slice(&self) -> &[NegativeControl] {
+        &self.0
+    }
+
+    /// Whether any control is of `kind`.
+    #[must_use]
+    pub fn covers(&self, kind: NegativeControlKind) -> bool {
+        self.0.iter().any(|control| control.kind == kind)
+    }
+}
+
+impl TryFrom<Vec<NegativeControl>> for NegativeControls {
+    type Error = NegativeControlError;
+
+    fn try_from(controls: Vec<NegativeControl>) -> Result<Self, Self::Error> {
+        Self::new(controls)
+    }
+}
+
+impl From<NegativeControls> for Vec<NegativeControl> {
+    fn from(controls: NegativeControls) -> Self {
+        controls.0
+    }
+}
+
 /// One member of a `MeasurementPlan`'s measurement definition whose edit
 /// requires a new `definition_version`.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -644,11 +1066,19 @@ pub enum DefinitionMember {
     Estimator,
     /// `statistical_design.decision_rule`.
     DecisionRule,
+    /// The `protected_apparatus` list (the entries, not the content of the
+    /// files they name).
+    ProtectedApparatus,
 }
 
 impl DefinitionMember {
     /// Every member, in declaration order.
-    pub const ALL: [Self; 3] = [Self::Objective, Self::Estimator, Self::DecisionRule];
+    pub const ALL: [Self; 4] = [
+        Self::Objective,
+        Self::Estimator,
+        Self::DecisionRule,
+        Self::ProtectedApparatus,
+    ];
 
     /// The frontmatter path of this member.
     #[must_use]
@@ -657,6 +1087,7 @@ impl DefinitionMember {
             Self::Objective => "objective",
             Self::Estimator => "statistical_design.estimator",
             Self::DecisionRule => "statistical_design.decision_rule",
+            Self::ProtectedApparatus => "protected_apparatus",
         }
     }
 }
@@ -668,7 +1099,7 @@ impl fmt::Display for DefinitionMember {
 }
 
 /// The versioned members of one `MeasurementPlan`'s measurement definition.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct MeasurementDefinition {
     /// The plan's `objective`, when present.
     pub objective: Option<Objective>,
@@ -676,6 +1107,10 @@ pub struct MeasurementDefinition {
     pub estimator: Option<Estimator>,
     /// The plan's `statistical_design.decision_rule`, when present.
     pub decision_rule: Option<DecisionRule>,
+    /// The plan's `protected_apparatus`, when present. Compared as a set of
+    /// entries: reordering the list is not a change, and an edit to a file an
+    /// entry names is not visible here (Quoin's intake digests the files).
+    pub protected_apparatus: Option<ProtectedApparatus>,
 }
 
 impl MeasurementDefinition {
@@ -689,6 +1124,9 @@ impl MeasurementDefinition {
                 DefinitionMember::Objective => self.objective != other.objective,
                 DefinitionMember::Estimator => self.estimator != other.estimator,
                 DefinitionMember::DecisionRule => self.decision_rule != other.decision_rule,
+                DefinitionMember::ProtectedApparatus => {
+                    self.protected_apparatus != other.protected_apparatus
+                }
             })
             .collect()
     }
@@ -696,7 +1134,7 @@ impl MeasurementDefinition {
 
 /// The parts of one `MeasurementPlan`'s frontmatter that identify its
 /// measurement definition for the definition-change check.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PlanDefinition<'a> {
     /// The plan's `definition_version`, when present.
     pub definition_version: Option<&'a str>,
@@ -718,9 +1156,9 @@ pub struct DefinitionChangedWithoutVersionBump {
     pub after: MeasurementDefinition,
 }
 
-/// Report an edit to the objective, estimator, or decision rule between two
-/// revisions of one plan that did not come with a genuine
-/// `definition_version` bump.
+/// Report an edit to the objective, estimator, decision rule, or protected
+/// apparatus list between two revisions of one plan that did not come with a
+/// genuine `definition_version` bump.
 ///
 /// Returns `None` when no member changed, or when `after`'s
 /// `definition_version` is present and differs from `before`'s (a genuine
@@ -746,7 +1184,7 @@ pub fn definition_change_without_version_bump(
     Some(DefinitionChangedWithoutVersionBump {
         definition_version: before.definition_version.map(str::to_owned),
         changed,
-        before: before.definition,
-        after: after.definition,
+        before: before.definition.clone(),
+        after: after.definition.clone(),
     })
 }

@@ -200,3 +200,54 @@ def test_onboard_js_reports_combined_then_and_warns_on_an_empty_one_of(
     ]
     assert probe["exactlyOneOf"] == []
     assert any("oneOf" in warning for warning in probe["warnings"]), probe["warnings"]
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_onboard_js_json_checklist_lists_protected_apparatus_and_negative_controls(
+    tmp_path: Path,
+) -> None:
+    """Trace: FR-024-AC-6, TC-159.
+
+    `protected_apparatus` is a list of pattern-checked strings and
+    `negative_controls` a list of `{kind, description}` objects required at
+    gate stage. The §4 checklist must surface both lists' shape, the item
+    pattern, the closed control kinds, and the gate-stage requirement, with no
+    WARNING.
+    """
+    schema_path = (
+        ROOT
+        / "engineering_assurance"
+        / "schemas"
+        / "measurement-plan-frontmatter.schema.json"
+    )
+    item_pattern = json.loads(schema_path.read_text())["$defs"]["apparatus_path"][
+        "pattern"
+    ]
+    report = run_onboard_json(tmp_path)
+    plan_checklist = report["artifactChecklists"]["MeasurementPlan"]
+    assert plan_checklist["arrays"]["protected_apparatus"] == {
+        "minItems": 1,
+        "uniqueItems": True,
+        "itemPattern": item_pattern,
+    }
+    assert plan_checklist["arrays"]["negative_controls"] == {
+        "minItems": 1,
+        "uniqueItems": True,
+    }
+    assert plan_checklist["enums"]["negative_controls.kind"] == [
+        "suppressed-observation",
+        "gain-within-noise",
+        "stale-evidence",
+        "apparatus-edit",
+        "selective-reporting",
+    ]
+    conditional = plan_checklist["conditionalRequired"]
+    assert {
+        "when": "stage = gate",
+        "required": ["ground_truth_kind", "negative_controls"],
+    } in conditional
+    assert {
+        "when": "negative_controls is present",
+        "required": ["negative_controls.kind", "negative_controls.description"],
+    } in conditional
+    assert plan_checklist["warnings"] == []

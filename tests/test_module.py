@@ -144,6 +144,12 @@ def _minimal_measurement_plan(**overrides: object) -> dict:
     return plan
 
 
+_NEGATIVE_CONTROL = {
+    "kind": "suppressed-observation",
+    "description": "a dropped failing item lowers examined below the corpus size",
+}
+
+
 def test_ground_truth_kind_is_required_only_for_gate_stage() -> None:
     contract = schema("measurement-plan-frontmatter.schema")
     assert contract["properties"]["ground_truth_kind"]["enum"] == [
@@ -161,7 +167,9 @@ def test_ground_truth_kind_is_required_only_for_gate_stage() -> None:
     assert "'ground_truth_kind' is a required property" in errors
 
     gate_present = _minimal_measurement_plan(
-        stage="gate", ground_truth_kind="mechanical"
+        stage="gate",
+        ground_truth_kind="mechanical",
+        negative_controls=[_NEGATIVE_CONTROL],
     )
     assert list(validator.iter_errors(gate_present)) == []
 
@@ -427,6 +435,131 @@ def test_measurement_plan_skeleton_shows_a_structured_decision_rule() -> None:
         schema("measurement-plan-frontmatter.schema"), format_checker=FormatChecker()
     )
     assert list(validator.iter_errors(skeleton)) == []
+
+
+# One case table for the `protected_apparatus` item syntax (FR-024). The Rust
+# `ApparatusPath` tests in tests/measurement.rs carry the same table, so the
+# schema pattern and the Rust type are checked against the same entries.
+APPARATUS_PATHS_ACCEPTED = (
+    "tests/fixtures/labels.json",
+    "evals/harness.py",
+    "corpus/*.json",
+    "corpus/**/*.yaml",
+    "**/checker.toml",
+    "**",
+    "*",
+    ".github/checker.toml",
+    "labels/.answers",
+    "a/...",
+    "src/a*b*c.rs",
+    "population select.sql",
+)
+APPARATUS_PATHS_REFUSED = (
+    "",
+    "/etc/passwd",
+    "a//b",
+    "a/",
+    "./a",
+    "a/./b",
+    "../outside",
+    "a/../b",
+    "a/..",
+    "a\\b",
+    "a/b?.json",
+    "a/[ab].json",
+    "a/{x,y}.json",
+    "C:/labels.json",
+    "a**",
+    "a/***/b",
+    "**.json",
+    "a\x01b",
+)
+
+
+def _apparatus_errors(**overrides: object) -> list[str]:
+    validator = Draft7Validator(
+        schema("measurement-plan-frontmatter.schema"), format_checker=FormatChecker()
+    )
+    plan = _minimal_measurement_plan(**overrides)
+    return [error.message for error in validator.iter_errors(plan)]
+
+
+def test_protected_apparatus_is_a_unique_list_of_safe_relative_paths() -> None:
+    """Trace: FR-024-AC-1, TC-154."""
+    contract = schema("measurement-plan-frontmatter.schema")
+    assert "protected_apparatus" not in contract["required"]
+    assert _apparatus_errors() == []
+    assert _apparatus_errors(protected_apparatus=list(APPARATUS_PATHS_ACCEPTED)) == []
+    for path in APPARATUS_PATHS_ACCEPTED:
+        assert _apparatus_errors(protected_apparatus=[path]) == [], path
+    for path in APPARATUS_PATHS_REFUSED:
+        assert _apparatus_errors(protected_apparatus=[path]) != [], repr(path)
+    assert _apparatus_errors(protected_apparatus=[]) != []
+    assert _apparatus_errors(protected_apparatus=["a.json", "a.json"]) != []
+    assert _apparatus_errors(protected_apparatus="corpus/*.json") != []
+    assert _apparatus_errors(protected_apparatus=[7]) != []
+
+
+def test_negative_controls_are_closed_and_required_at_gate_stage() -> None:
+    """Trace: FR-024-AC-2, TC-155."""
+    contract = schema("measurement-plan-frontmatter.schema")
+    kinds = contract["$defs"]["negative_control"]["properties"]["kind"]["enum"]
+    assert kinds == [
+        "suppressed-observation",
+        "gain-within-noise",
+        "stale-evidence",
+        "apparatus-edit",
+        "selective-reporting",
+    ]
+    for kind in kinds:
+        control = {"kind": kind, "description": "caught by the intake check"}
+        assert _apparatus_errors(negative_controls=[control]) == [], kind
+        assert _apparatus_errors(
+            stage="gate", ground_truth_kind="mechanical", negative_controls=[control]
+        ) == [], kind
+    # Optional below gate stage.
+    for stage in ("observe", "baseline", "branch-comparison", "trend", "ratchet", "target"):
+        assert _apparatus_errors(stage=stage) == [], stage
+
+    gate_without = _apparatus_errors(stage="gate", ground_truth_kind="mechanical")
+    assert "'negative_controls' is a required property" in gate_without
+    refused = {
+        "empty list": [],
+        "unknown kind": [{"kind": "vibes", "description": "d"}],
+        "missing kind": [{"description": "d"}],
+        "missing description": [{"kind": "stale-evidence"}],
+        "empty description": [{"kind": "stale-evidence", "description": ""}],
+        "extra key": [{**_NEGATIVE_CONTROL, "severity": "high"}],
+        "duplicate": [_NEGATIVE_CONTROL, _NEGATIVE_CONTROL],
+        "bare kind": ["stale-evidence"],
+    }
+    for case, controls in refused.items():
+        assert _apparatus_errors(
+            stage="gate", ground_truth_kind="mechanical", negative_controls=controls
+        ) != [], case
+
+
+def test_measurement_plan_skeleton_shows_apparatus_and_negative_controls() -> None:
+    """Trace: FR-024-AC-6, TC-159."""
+    skeleton = frontmatter(package.PACKAGE_ROOT / "skeletons" / "MeasurementPlan.md")
+    assert skeleton["protected_apparatus"], skeleton
+    assert skeleton["negative_controls"], skeleton
+    kinds = {control["kind"] for control in skeleton["negative_controls"]}
+    assert "apparatus-edit" in kinds
+    validator = Draft7Validator(
+        schema("measurement-plan-frontmatter.schema"), format_checker=FormatChecker()
+    )
+    assert list(validator.iter_errors(skeleton)) == []
+    body = (package.PACKAGE_ROOT / "skeletons" / "MeasurementPlan.md").read_text()
+    assert "## Protected Apparatus" in body
+    assert "## Negative Controls" in body
+    skill = (
+        package.PACKAGE_ROOT / "skills" / "assurance-onboarding" / "SKILL.md"
+    ).read_text()
+    assert "`protected_apparatus`" in skill
+    assert "`negative_controls`" in skill
+    for kind in kinds | {"gain-within-noise", "stale-evidence", "selective-reporting"}:
+        assert f"`{kind}`" in skill, kind
 
 
 def test_component_contract_exposes_failure_and_control_boundaries() -> None:

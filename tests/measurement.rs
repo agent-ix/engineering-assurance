@@ -3,14 +3,19 @@
 
 //! FR-020 `MeasurementPlan` objective types, schema parity, the definition-change
 //! check, and the narrow `measurement` feature; FR-021 decision-rule and
-//! estimator vocabulary, its schema parity, and rule evaluation.
+//! estimator vocabulary, its schema parity, and rule evaluation; FR-024
+//! protected apparatus and negative controls, their schema parity, and
+//! protected-list edits in the definition-change check.
 
 use std::{collections::BTreeSet, fs, path::Path, process::Command};
 
 use engineering_assurance::measurement::{
-    Baseline, Comparator, DecisionRule, DecisionRuleError, DefinitionChangedWithoutVersionBump,
-    DefinitionMember, Direction, Estimator, MeasurementDefinition, Objective, ObjectiveError,
-    PlanDefinition, RuleEvaluationError, RuleReference, definition_change_without_version_bump,
+    ApparatusPath, ApparatusPathError, Baseline, Comparator, DecisionRule, DecisionRuleError,
+    DefinitionChangedWithoutVersionBump, DefinitionMember, Direction, Estimator,
+    MeasurementDefinition, NegativeControl, NegativeControlError, NegativeControlKind,
+    NegativeControls, Objective, ObjectiveError, PlanDefinition, ProtectedApparatus,
+    ProtectedApparatusError, RuleEvaluationError, RuleReference,
+    definition_change_without_version_bump,
 };
 use ix_trace_rs::trace;
 
@@ -28,6 +33,15 @@ fn rule_threshold(comparator: Comparator, threshold: f64) -> DecisionRule {
 
 fn rule_baseline(comparator: Comparator, baseline: Baseline, margin: Option<f64>) -> DecisionRule {
     DecisionRule::against_baseline(comparator, baseline, margin).expect("valid rule")
+}
+
+fn apparatus(paths: &[&str]) -> ProtectedApparatus {
+    ProtectedApparatus::new(
+        paths
+            .iter()
+            .map(|path| ApparatusPath::new(*path).expect("valid apparatus path")),
+    )
+    .expect("valid protected apparatus")
 }
 
 fn parse_rule(yaml: &str) -> Result<DecisionRule, String> {
@@ -239,20 +253,20 @@ fn tc_140_direction_all_covers_every_variant() {
 /// under an equal, absent, or cleared `definition_version`, and no finding
 /// under a genuine bump.
 fn assert_edit_is_reported_unless_versioned(
-    before: MeasurementDefinition,
-    after: MeasurementDefinition,
+    before: &MeasurementDefinition,
+    after: &MeasurementDefinition,
     changed: &[DefinitionMember],
 ) {
-    let plan = |version, definition| PlanDefinition {
+    let plan = |version, definition: &MeasurementDefinition| PlanDefinition {
         definition_version: version,
-        definition,
+        definition: definition.clone(),
     };
     let finding = |version: Option<&str>| {
         Some(DefinitionChangedWithoutVersionBump {
             definition_version: version.map(str::to_owned),
             changed: changed.to_vec(),
-            before,
-            after,
+            before: before.clone(),
+            after: after.clone(),
         })
     };
     // Unchanged version, absent version, and a cleared version (Some -> None,
@@ -280,7 +294,7 @@ fn assert_edit_is_reported_unless_versioned(
 }
 
 #[test]
-#[trace("TC-141", "FR-020-AC-3", "FR-021-AC-8")]
+#[trace("TC-141", "FR-020-AC-3", "FR-021-AC-8", "FR-024-AC-5")]
 fn tc_141_definition_edit_without_a_version_bump_is_a_typed_finding_naming_the_member() {
     let higher = Some(objective(Direction::Higher, Some(0.995)));
     let lower = Some(objective(Direction::Lower, Some(0.995)));
@@ -291,6 +305,7 @@ fn tc_141_definition_edit_without_a_version_bump_is_a_typed_finding_naming_the_m
         objective: higher,
         estimator: Some(Estimator::Proportion),
         decision_rule: ge_099,
+        protected_apparatus: Some(apparatus(&["evals/harness.py", "labels/*.json"])),
     };
     let plan = |version, definition| PlanDefinition {
         definition_version: version,
@@ -301,49 +316,49 @@ fn tc_141_definition_edit_without_a_version_bump_is_a_typed_finding_naming_the_m
         (
             MeasurementDefinition {
                 objective: lower,
-                ..base
+                ..base.clone()
             },
             vec![DefinitionMember::Objective],
         ),
         (
             MeasurementDefinition {
                 objective: raised,
-                ..base
+                ..base.clone()
             },
             vec![DefinitionMember::Objective],
         ),
         (
             MeasurementDefinition {
                 objective: None,
-                ..base
+                ..base.clone()
             },
             vec![DefinitionMember::Objective],
         ),
         (
             MeasurementDefinition {
                 estimator: Some(Estimator::Mean),
-                ..base
+                ..base.clone()
             },
             vec![DefinitionMember::Estimator],
         ),
         (
             MeasurementDefinition {
                 estimator: None,
-                ..base
+                ..base.clone()
             },
             vec![DefinitionMember::Estimator],
         ),
         (
             MeasurementDefinition {
                 decision_rule: ge_095,
-                ..base
+                ..base.clone()
             },
             vec![DefinitionMember::DecisionRule],
         ),
         (
             MeasurementDefinition {
                 decision_rule: None,
-                ..base
+                ..base.clone()
             },
             vec![DefinitionMember::DecisionRule],
         ),
@@ -352,6 +367,7 @@ fn tc_141_definition_edit_without_a_version_bump_is_a_typed_finding_naming_the_m
                 objective: raised,
                 estimator: Some(Estimator::Mean),
                 decision_rule: ge_095,
+                protected_apparatus: None,
             },
             DefinitionMember::ALL.to_vec(),
         ),
@@ -359,13 +375,13 @@ fn tc_141_definition_edit_without_a_version_bump_is_a_typed_finding_naming_the_m
     for (edited, changed) in edits {
         // Both directions: an edit and its reversal, so additions and
         // removals are both covered.
-        assert_edit_is_reported_unless_versioned(base, edited, &changed);
-        assert_edit_is_reported_unless_versioned(edited, base, &changed);
+        assert_edit_is_reported_unless_versioned(&base, &edited, &changed);
+        assert_edit_is_reported_unless_versioned(&edited, &base, &changed);
     }
     for unchanged in [MeasurementDefinition::default(), base] {
         assert_eq!(
             definition_change_without_version_bump(
-                &plan(Some("retention-v1"), unchanged),
+                &plan(Some("retention-v1"), unchanged.clone()),
                 &plan(Some("retention-v1"), unchanged)
             ),
             None
@@ -380,7 +396,8 @@ fn tc_141_definition_edit_without_a_version_bump_is_a_typed_finding_naming_the_m
         [
             "objective",
             "statistical_design.estimator",
-            "statistical_design.decision_rule"
+            "statistical_design.decision_rule",
+            "protected_apparatus"
         ]
     );
 }
@@ -391,7 +408,7 @@ fn tc_141_definition_edit_without_a_version_bump_is_a_typed_finding_naming_the_m
 /// proves that consumer never resolves `serde_json`, so it cannot inherit the
 /// `arbitrary_precision` flip `full` carries.
 #[test]
-#[trace("TC-142", "FR-020-AC-4", "FR-021-AC-7")]
+#[trace("TC-142", "FR-020-AC-4", "FR-021-AC-7", "FR-024-AC-7")]
 fn tc_142_a_minimal_downstream_compiles_only_the_measurement_feature() {
     let consumer = tempfile::tempdir().expect("consumer root");
     fs::create_dir(consumer.path().join("src")).expect("consumer source directory");
@@ -405,7 +422,7 @@ fn tc_142_a_minimal_downstream_compiles_only_the_measurement_feature() {
     .expect("consumer manifest");
     fs::write(
         consumer.path().join("src/main.rs"),
-        "use engineering_assurance::measurement::{Baseline, Comparator, DecisionRule, Direction, Estimator, Objective, definition_change_without_version_bump};\nfn main(){let _ = (Objective::new(Direction::Target, Some(1.0)), definition_change_without_version_bump, DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, None), Estimator::Proportion);}\n",
+        "use engineering_assurance::measurement::{ApparatusPath, Baseline, Comparator, DecisionRule, Direction, Estimator, NegativeControl, NegativeControlKind, NegativeControls, Objective, ProtectedApparatus, definition_change_without_version_bump};\nfn main(){let _ = (Objective::new(Direction::Target, Some(1.0)), definition_change_without_version_bump, DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, None), Estimator::Proportion, ApparatusPath::new(\"evals/**/*.json\").map(|path| ProtectedApparatus::new([path])), NegativeControl::new(NegativeControlKind::ApparatusEdit, \"digest\").map(|control| NegativeControls::new([control])));}\n",
     )
     .expect("consumer source");
     let status = Command::new(env!("CARGO"))
@@ -827,5 +844,362 @@ fn tc_148_decision_rule_evaluation_compares_the_estimate_with_its_reference() {
         Err(RuleEvaluationError::NonFiniteBaselineValue {
             value: f64::NEG_INFINITY
         })
+    );
+}
+
+/// One case table for the `protected_apparatus` item syntax (FR-024), the
+/// same entries `tests/test_module.py` runs through the schema.
+const APPARATUS_PATHS_ACCEPTED: [&str; 12] = [
+    "tests/fixtures/labels.json",
+    "evals/harness.py",
+    "corpus/*.json",
+    "corpus/**/*.yaml",
+    "**/checker.toml",
+    "**",
+    "*",
+    ".github/checker.toml",
+    "labels/.answers",
+    "a/...",
+    "src/a*b*c.rs",
+    "population select.sql",
+];
+
+/// Refused entries, each with the typed refusal the Rust type gives.
+fn apparatus_paths_refused() -> Vec<(&'static str, ApparatusPathError)> {
+    let path = |refused: &str| refused.to_owned();
+    vec![
+        ("", ApparatusPathError::Empty),
+        (
+            "/etc/passwd",
+            ApparatusPathError::Absolute {
+                path: path("/etc/passwd"),
+            },
+        ),
+        (
+            "a//b",
+            ApparatusPathError::EmptySegment { path: path("a//b") },
+        ),
+        ("a/", ApparatusPathError::EmptySegment { path: path("a/") }),
+        (
+            "./a",
+            ApparatusPathError::CurrentDirectorySegment { path: path("./a") },
+        ),
+        (
+            "a/./b",
+            ApparatusPathError::CurrentDirectorySegment {
+                path: path("a/./b"),
+            },
+        ),
+        (
+            "../outside",
+            ApparatusPathError::ParentDirectorySegment {
+                path: path("../outside"),
+            },
+        ),
+        (
+            "a/../b",
+            ApparatusPathError::ParentDirectorySegment {
+                path: path("a/../b"),
+            },
+        ),
+        (
+            "a/..",
+            ApparatusPathError::ParentDirectorySegment { path: path("a/..") },
+        ),
+        (
+            "a\\b",
+            ApparatusPathError::ForbiddenCharacter {
+                path: path("a\\b"),
+                character: '\\',
+            },
+        ),
+        (
+            "a/b?.json",
+            ApparatusPathError::ForbiddenCharacter {
+                path: path("a/b?.json"),
+                character: '?',
+            },
+        ),
+        (
+            "a/[ab].json",
+            ApparatusPathError::ForbiddenCharacter {
+                path: path("a/[ab].json"),
+                character: '[',
+            },
+        ),
+        (
+            "a/{x,y}.json",
+            ApparatusPathError::ForbiddenCharacter {
+                path: path("a/{x,y}.json"),
+                character: '{',
+            },
+        ),
+        (
+            "C:/labels.json",
+            ApparatusPathError::ForbiddenCharacter {
+                path: path("C:/labels.json"),
+                character: ':',
+            },
+        ),
+        (
+            "a**",
+            ApparatusPathError::PartialDoubleStar { path: path("a**") },
+        ),
+        (
+            "a/***/b",
+            ApparatusPathError::PartialDoubleStar {
+                path: path("a/***/b"),
+            },
+        ),
+        (
+            "**.json",
+            ApparatusPathError::PartialDoubleStar {
+                path: path("**.json"),
+            },
+        ),
+        (
+            "a\u{1}b",
+            ApparatusPathError::ForbiddenCharacter {
+                path: path("a\u{1}b"),
+                character: '\u{1}',
+            },
+        ),
+    ]
+}
+
+#[test]
+#[trace("TC-156", "FR-024-AC-3")]
+fn tc_156_apparatus_path_accepts_safe_relative_globs_and_refuses_the_rest() {
+    let schema = measurement_plan_schema();
+    let pattern = schema
+        .pointer("/$defs/apparatus_path/pattern")
+        .and_then(serde_json::Value::as_str)
+        .expect("apparatus_path pattern");
+    assert_eq!(
+        schema["properties"]["protected_apparatus"]["items"]["$ref"], "#/$defs/apparatus_path",
+        "protected_apparatus items must resolve to the pattern this test reads"
+    );
+    let schema_pattern = regex::Regex::new(pattern).expect("schema pattern compiles");
+
+    for accepted in APPARATUS_PATHS_ACCEPTED {
+        let path = ApparatusPath::new(accepted)
+            .unwrap_or_else(|error| panic!("{accepted:?} must be accepted: {error}"));
+        assert_eq!(path.as_str(), accepted);
+        assert_eq!(path.is_glob(), accepted.contains('*'), "{accepted:?}");
+        assert!(
+            schema_pattern.is_match(accepted),
+            "schema refuses {accepted:?}"
+        );
+        assert_eq!(accepted.parse::<ApparatusPath>(), Ok(path.clone()));
+        let decoded: ApparatusPath =
+            yaml_serde::from_str(&format!("{accepted:?}")).expect("path deserializes");
+        assert_eq!(decoded, path);
+    }
+    for (refused, error) in apparatus_paths_refused() {
+        assert_eq!(
+            ApparatusPath::new(refused),
+            Err(error.clone()),
+            "{refused:?}"
+        );
+        assert!(
+            !schema_pattern.is_match(refused),
+            "schema accepts {refused:?}"
+        );
+        let decoded =
+            serde_json::from_value::<ApparatusPath>(serde_json::Value::String(refused.to_owned()))
+                .expect_err("deserialization refuses");
+        assert!(
+            decoded.to_string().contains(&error.to_string()),
+            "{decoded}"
+        );
+    }
+}
+
+#[test]
+#[trace("TC-156", "FR-024-AC-3")]
+fn tc_156_protected_apparatus_is_a_non_empty_set_of_distinct_entries() {
+    let paths = |entries: &[&str]| {
+        entries
+            .iter()
+            .map(|entry| ApparatusPath::new(*entry).expect("valid path"))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        ProtectedApparatus::new(Vec::new()),
+        Err(ProtectedApparatusError::Empty)
+    );
+    assert_eq!(
+        ProtectedApparatus::new(paths(&["b.json", "a.json", "b.json"])),
+        Err(ProtectedApparatusError::Duplicate {
+            path: ApparatusPath::new("b.json").expect("valid path")
+        })
+    );
+
+    let built = apparatus(&["labels/*.json", "evals/harness.py"]);
+    assert_eq!(built.len(), 2);
+    assert!(!built.is_empty());
+    assert!(built.contains(&ApparatusPath::new("labels/*.json").expect("valid path")));
+    assert!(!built.contains(&ApparatusPath::new("labels/a.json").expect("valid path")));
+    // A set: order does not matter, and it serializes sorted.
+    assert_eq!(built, apparatus(&["evals/harness.py", "labels/*.json"]));
+    assert_eq!(
+        built.iter().map(ApparatusPath::as_str).collect::<Vec<_>>(),
+        ["evals/harness.py", "labels/*.json"]
+    );
+    let emitted = yaml_serde::to_string(&built).expect("apparatus serializes");
+    assert_eq!(emitted, "- evals/harness.py\n- labels/*.json\n");
+    assert_eq!(
+        yaml_serde::from_str::<ProtectedApparatus>(&emitted).expect("round trip"),
+        built
+    );
+
+    for (refused, message) in [
+        ("[]\n", ProtectedApparatusError::Empty.to_string()),
+        (
+            "- a.json\n- a.json\n",
+            "protected_apparatus names `a.json` more than once".to_owned(),
+        ),
+        (
+            "- ../a.json\n",
+            "protected apparatus path `../a.json` has a `..` segment".to_owned(),
+        ),
+        ("evals/harness.py\n", "invalid type".to_owned()),
+        ("- 7\n", "invalid type".to_owned()),
+    ] {
+        let error = yaml_serde::from_str::<ProtectedApparatus>(refused)
+            .expect_err("must refuse")
+            .to_string();
+        assert!(error.contains(&message), "{refused:?}: {error}");
+    }
+}
+
+#[test]
+#[trace("TC-157", "FR-024-AC-4")]
+fn tc_157_negative_controls_are_closed_non_empty_and_distinct() {
+    let schema = measurement_plan_schema();
+    assert_eq!(
+        schema["properties"]["negative_controls"]["items"]["$ref"],
+        "#/$defs/negative_control"
+    );
+    assert_wire_parity(
+        &schema_enum(&schema, "/$defs/negative_control/properties/kind/enum"),
+        &NegativeControlKind::ALL,
+        |kind| kind.wire_name(),
+    );
+    for kind in NegativeControlKind::ALL {
+        let expected_index = match kind {
+            NegativeControlKind::SuppressedObservation => 0,
+            NegativeControlKind::GainWithinNoise => 1,
+            NegativeControlKind::StaleEvidence => 2,
+            NegativeControlKind::ApparatusEdit => 3,
+            NegativeControlKind::SelectiveReporting => 4,
+        };
+        assert_eq!(NegativeControlKind::ALL.get(expected_index), Some(&kind));
+        assert_eq!(kind.to_string(), kind.wire_name());
+    }
+    assert_eq!(NegativeControlKind::ALL.len(), 5);
+    assert_eq!(
+        schema["allOf"][0]["then"]["required"],
+        serde_json::json!(["ground_truth_kind", "negative_controls"]),
+        "a gate-stage plan requires negative_controls"
+    );
+
+    let control = NegativeControl::new(NegativeControlKind::StaleEvidence, "subject version")
+        .expect("valid control");
+    assert_eq!(control.kind(), NegativeControlKind::StaleEvidence);
+    assert_eq!(control.description(), "subject version");
+    assert_eq!(
+        NegativeControl::new(NegativeControlKind::GainWithinNoise, ""),
+        Err(NegativeControlError::EmptyDescription {
+            kind: NegativeControlKind::GainWithinNoise
+        })
+    );
+    assert_eq!(
+        NegativeControls::new(Vec::new()),
+        Err(NegativeControlError::Empty)
+    );
+    assert_eq!(
+        NegativeControls::new([control.clone(), control.clone()]),
+        Err(NegativeControlError::Duplicate {
+            kind: NegativeControlKind::StaleEvidence,
+            description: "subject version".to_owned()
+        })
+    );
+    let edit =
+        NegativeControl::new(NegativeControlKind::ApparatusEdit, "digest").expect("valid control");
+    let controls = NegativeControls::new([edit.clone(), control.clone()]).expect("valid list");
+    assert_eq!(controls.as_slice(), [edit, control]);
+    assert!(controls.covers(NegativeControlKind::ApparatusEdit));
+    assert!(!controls.covers(NegativeControlKind::SelectiveReporting));
+
+    let yaml = "- kind: apparatus-edit\n  description: digest\n- kind: stale-evidence\n  description: subject version\n";
+    let decoded: NegativeControls = yaml_serde::from_str(yaml).expect("controls deserialize");
+    assert_eq!(decoded, controls);
+    assert_eq!(yaml_serde::to_string(&decoded).expect("serializes"), yaml);
+    for refused in [
+        "[]\n",
+        "- kind: vibes\n  description: d\n",
+        "- description: d\n",
+        "- kind: stale-evidence\n",
+        "- kind: stale-evidence\n  description: ''\n",
+        "- kind: stale-evidence\n  description: d\n  severity: high\n",
+        "- kind: stale-evidence\n  description: d\n- kind: stale-evidence\n  description: d\n",
+        "- stale-evidence\n",
+    ] {
+        assert!(
+            yaml_serde::from_str::<NegativeControls>(refused).is_err(),
+            "must refuse {refused:?}"
+        );
+    }
+}
+
+#[test]
+#[trace("TC-158", "FR-024-AC-5")]
+fn tc_158_a_protected_apparatus_edit_without_a_version_bump_is_a_finding() {
+    let base = MeasurementDefinition {
+        objective: Some(objective(Direction::Higher, None)),
+        estimator: Some(Estimator::Proportion),
+        decision_rule: Some(rule_threshold(Comparator::Ge, 0.99)),
+        protected_apparatus: Some(apparatus(&["evals/harness.py", "labels/*.json"])),
+    };
+    let with = |protected_apparatus| MeasurementDefinition {
+        protected_apparatus,
+        ..base.clone()
+    };
+    for edited in [
+        // An entry added, one removed, one changed, and the list removed.
+        with(Some(apparatus(&[
+            "evals/harness.py",
+            "labels/*.json",
+            "evals/checker.toml",
+        ]))),
+        with(Some(apparatus(&["evals/harness.py"]))),
+        with(Some(apparatus(&["evals/harness.py", "labels/**/*.json"]))),
+        with(None),
+    ] {
+        assert_edit_is_reported_unless_versioned(
+            &base,
+            &edited,
+            &[DefinitionMember::ProtectedApparatus],
+        );
+        assert_edit_is_reported_unless_versioned(
+            &edited,
+            &base,
+            &[DefinitionMember::ProtectedApparatus],
+        );
+    }
+    // Reordering the list is not a change.
+    let reordered = with(Some(apparatus(&["labels/*.json", "evals/harness.py"])));
+    let plan = |definition: &MeasurementDefinition| PlanDefinition {
+        definition_version: Some("retention-v1"),
+        definition: definition.clone(),
+    };
+    assert_eq!(
+        definition_change_without_version_bump(&plan(&base), &plan(&reordered)),
+        None
+    );
+    assert_eq!(
+        DefinitionMember::ProtectedApparatus.to_string(),
+        "protected_apparatus"
     );
 }

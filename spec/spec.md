@@ -169,6 +169,9 @@ same canonical bundle and do not redefine these responsibilities.
   claim-strength vocabulary for advanced verification results.
 - [FR-023](./functional/FR-023-claim-evidence-references.md) — require a
   `supported` assurance claim to reference its evidence records.
+- [FR-024](./functional/FR-024-measurement-plan-protected-apparatus.md) — declare
+  a MeasurementPlan's protected apparatus and the negative controls a gate
+  plan must catch.
 
 ### Non-Functional Requirements
 

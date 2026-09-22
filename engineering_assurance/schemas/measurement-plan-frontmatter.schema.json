@@ -53,6 +53,20 @@
       }
     },
     "objective": { "$ref": "#/$defs/objective" },
+    "protected_apparatus": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "The files that produce this plan's number (FR-024): the measurement harness, the labels, corpus, or answer key, the file that selects the population, and the checker configuration. Each entry is a repository-relative path or glob; every entry must resolve to at least one real file, and each file it names is digested when a measurement collection is written -- Quoin's intake refuses a collection whose protected entry names no file. Part of the measurement definition: adding, removing, or changing an entry requires a new `definition_version`, and so does editing a protected file, which Quoin detects by its digest. Optional.",
+      "items": { "$ref": "#/$defs/apparatus_path" }
+    },
+    "negative_controls": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "Gaming scenarios this plan's measurement must catch (FR-024), each a closed `kind` plus a `description` of how the measurement catches it. Required, with at least one entry, when `stage` is `gate`; optional otherwise.",
+      "items": { "$ref": "#/$defs/negative_control" }
+    },
     "statistical_design": { "$ref": "#/$defs/statistical_design" },
     "relationships": {
       "type": "array",
@@ -67,7 +81,7 @@
         "required": ["stage"]
       },
       "then": {
-        "required": ["ground_truth_kind"]
+        "required": ["ground_truth_kind", "negative_controls"]
       }
     },
     {
@@ -149,6 +163,33 @@
     }
   ],
   "$defs": {
+    "apparatus_path": {
+      "type": "string",
+      "pattern": "^(?:\\*\\*|[^/\\\\*?\\[\\]{}:\\x00-\\x1f]*\\*(?:[^/\\\\*?\\[\\]{}:\\x00-\\x1f]+\\*)*[^/\\\\*?\\[\\]{}:\\x00-\\x1f]*|[^/\\\\*?\\[\\]{}:\\x00-\\x1f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f]*|\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f]*|\\.\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f]+)(?:/(?:\\*\\*|[^/\\\\*?\\[\\]{}:\\x00-\\x1f]*\\*(?:[^/\\\\*?\\[\\]{}:\\x00-\\x1f]+\\*)*[^/\\\\*?\\[\\]{}:\\x00-\\x1f]*|[^/\\\\*?\\[\\]{}:\\x00-\\x1f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f]*|\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f]*|\\.\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f]+))*$",
+      "description": "A repository-relative file path or glob (FR-024). Segments are separated by `/`. A segment is either exactly `**`, matching zero or more whole directories, or a name in which each `*` matches zero or more characters other than `/`; every other character is literal. Refused: an empty entry, a leading `/`, an empty segment (`//` or a trailing `/`), a `.` or `..` segment, `**` inside a longer segment, and the characters `\\`, `?`, `[`, `]`, `{`, `}`, `:` and control characters."
+    },
+    "negative_control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "description"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "suppressed-observation",
+            "gain-within-noise",
+            "stale-evidence",
+            "apparatus-edit",
+            "selective-reporting"
+          ],
+          "description": "`suppressed-observation`: an unfavourable item or run is left out of the collected population. `gain-within-noise`: an improvement smaller than the plan's stated uncertainty is claimed as a gain. `stale-evidence`: a result collected against an earlier subject version or apparatus is presented as current. `apparatus-edit`: a protected-apparatus file is edited alongside the change it grades. `selective-reporting`: only a favourable run or variant is reported out of several tried."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "How this plan's measurement catches the scenario."
+        }
+      }
+    },
     "objective": {
       "type": "object",
       "additionalProperties": false,

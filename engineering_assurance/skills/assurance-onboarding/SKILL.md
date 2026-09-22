@@ -117,10 +117,30 @@ then required; do not restate `metric`, `repetitions`, or
 do not invent a threshold or margin the owner has not stated. `population`,
 `sampling`, `error_model`, and `uncertainty` remain prose.
 
-The objective, `estimator`, and `decision_rule` are all part of the
-measurement definition: when you add, remove, or change any of them on an
-existing plan, also change `definition_version`, so results under the old and
-new definition are never compared as one series.
+List the files that produce the plan's number in `protected_apparatus`: the
+harness, the labels, corpus, or answer key, the file that selects the
+population, and the checker configuration. Each entry is a repository-relative
+path or glob (`*` within one segment, `**` as a whole segment for any depth);
+absolute paths, `.`/`..` segments, empty segments, and `\ ? [ ] { } :` are
+refused, and the list is non-empty with no repeats. Every entry must name a
+real file: Quoin's intake digests each protected file when it writes a
+collection and refuses one whose entry names nothing. A change that edits a
+protected file changed the measurement, not the thing measured, and earns no
+credit. Protect the population through the file that selects it;
+`statistical_design.population` stays prose.
+
+A gate-stage plan also lists at least one `negative_controls` entry,
+`{ kind, description }`: a gaming scenario the measurement must catch and how
+it catches it. `kind` is one of `suppressed-observation`, `gain-within-noise`,
+`stale-evidence`, `apparatus-edit`, or `selective-reporting`. Name the controls
+the owner's measurement actually catches; do not list one it does not.
+
+The objective, `estimator`, `decision_rule`, and `protected_apparatus` list
+are all part of the measurement definition: when you add, remove, or change
+any of them on an existing plan, also change `definition_version`, so results
+under the old and new definition are never compared as one series. Editing a
+protected file needs a new `definition_version` too; Quoin detects that edit
+through the file's digest.
 
 When an artifact is justified, render it from the installed module skeleton,
 write a same-directory staging file, validate it with Quire, and expose it only
