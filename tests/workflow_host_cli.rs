@@ -767,6 +767,289 @@ fn tc_107_incompatible_unavailable_and_malformed_inputs_fail_before_state() {
     assert_eq!(production.matches("fs::canonicalize(").count(), 1);
 }
 
+/// The `measurement-promotion` binding for one fictional promotion run.
+fn promotion_binding(run_id: &str) -> Value {
+    json!({
+        "run_id": run_id,
+        "repository_id": "fictional-repository@revision-1",
+        "workflow": "measurement-promotion",
+        "workflow_version": "0.1.0",
+        "decision_boundary": "one fictional measurement promotion",
+        "decision_owner": "measurement-owner"
+    })
+}
+
+fn promotion_request(
+    state_dir: &Path,
+    run_id: &str,
+    operation: &str,
+    choice: Option<&str>,
+) -> Value {
+    let mut request = json!({
+        "protocol": REQUEST_PROTOCOL,
+        "operation": operation,
+        "state_dir": state_dir,
+        "skill_root": skill_root(),
+        "ix_flow_executable": "ix-flow",
+        "binding": promotion_binding(run_id)
+    });
+    if let Some(choice) = choice {
+        request["choice"] = Value::String(choice.to_owned());
+    }
+    request
+}
+
+/// Answer the `promotion` interview and record the matching evidence and
+/// operator observation, leaving the run at `evidence_ready` with everything
+/// `measurement.promotion_ready` needs except a policy or checker result.
+///
+/// `plan_id` `MP-001`, definition `v1`, candidate `collection-2`, proposing
+/// `observe -> baseline` -- the same evidence shape
+/// `workflow_invariants_parity.rs`'s `promotion()` fixture models, so a
+/// checker result built with matching fields is read by the Rust invariant.
+fn promotion_populate_evidence_ready(state_dir: &Path, run_id: &str) {
+    ix_flow(
+        state_dir,
+        &[
+            "record-answers",
+            run_id,
+            "promotion",
+            "--answers",
+            r#"{"plan_path":"spec/measurement-plan.md","definition_version":"v1","prior_stage":"observe","proposed_stage":"baseline","decision_use":"promotion gate","owner":"measurement-owner","exceptions_expected":false}"#,
+        ],
+    );
+    ix_flow(state_dir, &["advance", run_id, "evidence_ready"]);
+    add_item(
+        state_dir,
+        run_id,
+        "promotion_evidence",
+        &json!({
+            "id": "evidence-1",
+            "plan_path": "spec/measurement-plan.md",
+            "definition_version": "v1",
+            "prior_stage": "observe",
+            "proposed_stage": "baseline",
+            "stability": "stable",
+            "decision_yield": "sufficient",
+            "limitations": "documented",
+            "owner": "measurement-owner",
+            "plan_id": "MP-001",
+            "candidate": "collection-2"
+        }),
+    );
+    add_item(
+        state_dir,
+        run_id,
+        "operator_observation",
+        &json!({"id": "observation-1", "elapsed_minutes": 3, "command_count": 4}),
+    );
+}
+
+fn promotion_policy_item(mode: &str) -> Value {
+    json!({
+        "id": "policy-1",
+        "profile_path": "spec/assurance/AP-001.md",
+        "mode": mode,
+        "stages": ["baseline", "gate"]
+    })
+}
+
+fn promotion_verdict_item() -> Value {
+    json!({
+        "id": "verdict-1",
+        "schema": "quoin.measurement-verdict.v1",
+        "planId": "MP-001",
+        "definitionVersion": "v1",
+        "verdict": "accept",
+        "reasons": [],
+        "claimed": null,
+        "candidate": "collection-2",
+        "decisions": [
+            {
+                "dimensions": {},
+                "estimate": 0.9,
+                "estimateBasis": "recomputed",
+                "baseline": 0.8,
+                "holds": true
+            }
+        ],
+        "findings": [],
+        "regressedRuns": [],
+        "orderSource": "git-first-parent-add",
+        "counts": {
+            "collectionsConsidered": 2,
+            "regressedRuns": 0,
+            "observationsRecomputed": 2,
+            "observationsAsserted": 0,
+            "orderAttested": 2,
+            "orderUnattested": 0
+        }
+    })
+}
+
+fn promotion_exception_item() -> Value {
+    json!({
+        "id": "exception-1",
+        "owner": "measurement-owner",
+        "expires_at": "2099-01-01T00:00:00Z",
+        "rationale": "owner accepts the rejected candidate for this gate",
+        "impact": "the promoted stage rests on a rejected measurement"
+    })
+}
+
+/// Advisory by default: no `measurement_policy` item at all, so the
+/// `evidence_ready -> decision_ready` auto-transition is never refused, even
+/// with no checker result recorded.
+fn promotion_recommend_mode_never_refuses() {
+    let advisory = TestDirectory::new("promotion-advisory");
+    let run_id = "advisory-run";
+    let started = run_host(&promotion_request(
+        advisory.path(),
+        run_id,
+        "start_or_resume",
+        None,
+    ));
+    assert!(
+        started.status.success(),
+        "{}",
+        String::from_utf8_lossy(&started.stderr)
+    );
+    promotion_populate_evidence_ready(advisory.path(), run_id);
+    let ready = ix_flow(advisory.path(), &["advance", run_id, "decision_ready"]);
+    assert_eq!(ready["state"], "ok");
+    let resumed = run_host(&promotion_request(
+        advisory.path(),
+        run_id,
+        "start_or_resume",
+        None,
+    ));
+    assert!(resumed.status.success());
+    assert_eq!(result(&resumed)["snapshot"]["phase"], "decision_ready");
+}
+
+/// A `require` policy that lists the proposed stage blocks
+/// `evidence_ready -> decision_ready` with no checker result recorded,
+/// mutating nothing, and an accepted attested checker result added
+/// afterwards unblocks the same run through to a `decide`d completion.
+fn promotion_require_mode_blocks_then_accept_unblocks() {
+    let blocked_run = TestDirectory::new("promotion-blocked");
+    let run_id = "blocked-run";
+    let started = run_host(&promotion_request(
+        blocked_run.path(),
+        run_id,
+        "start_or_resume",
+        None,
+    ));
+    assert!(started.status.success());
+    promotion_populate_evidence_ready(blocked_run.path(), run_id);
+    add_item(
+        blocked_run.path(),
+        run_id,
+        "measurement_policy",
+        &promotion_policy_item("require"),
+    );
+    let before = tree_digest(blocked_run.path());
+    let blocked = ix_flow_raw(blocked_run.path(), &["advance", run_id, "decision_ready"]);
+    assert_eq!(blocked["state"], "invariant_failed");
+    assert_eq!(
+        blocked["error"]["details"]["invariantCode"],
+        "promotion_checker_missing"
+    );
+    assert_eq!(tree_digest(blocked_run.path()), before);
+    assert_eq!(
+        ix_flow(blocked_run.path(), &["status", run_id])["data"]["phase"],
+        "evidence_ready"
+    );
+
+    // Adding an accepted, attested checker result for the same evidence
+    // unblocks the same run: the invariant re-reads live state rather than
+    // caching the earlier refusal.
+    add_item(
+        blocked_run.path(),
+        run_id,
+        "measurement_verdict",
+        &promotion_verdict_item(),
+    );
+    let unblocked = ix_flow(blocked_run.path(), &["advance", run_id, "decision_ready"]);
+    assert_eq!(unblocked["state"], "ok");
+    let resumed = run_host(&promotion_request(
+        blocked_run.path(),
+        run_id,
+        "start_or_resume",
+        None,
+    ));
+    assert!(resumed.status.success());
+    assert_eq!(result(&resumed)["snapshot"]["phase"], "decision_ready");
+    let decided = run_host(&promotion_request(
+        blocked_run.path(),
+        run_id,
+        "decide",
+        Some("accept"),
+    ));
+    assert!(
+        decided.status.success(),
+        "{}",
+        String::from_utf8_lossy(&decided.stderr)
+    );
+    assert_eq!(result(&decided)["decision"]["outcome"], "promoted");
+}
+
+/// A separate run with the same `require` policy and no checker result at
+/// all still reaches `decision_ready` when a current owned exception is
+/// recorded instead: an exception overrides a missing checker result the
+/// same way it overrides a rejected one.
+fn promotion_require_mode_exception_unblocks() {
+    let excepted = TestDirectory::new("promotion-exception");
+    let run_id = "exception-run";
+    let started = run_host(&promotion_request(
+        excepted.path(),
+        run_id,
+        "start_or_resume",
+        None,
+    ));
+    assert!(started.status.success());
+    promotion_populate_evidence_ready(excepted.path(), run_id);
+    add_item(
+        excepted.path(),
+        run_id,
+        "measurement_policy",
+        &promotion_policy_item("require"),
+    );
+    add_item(
+        excepted.path(),
+        run_id,
+        "exception",
+        &promotion_exception_item(),
+    );
+    let excepted_ready = ix_flow(excepted.path(), &["advance", run_id, "decision_ready"]);
+    assert_eq!(excepted_ready["state"], "ok");
+    assert_eq!(
+        ix_flow(excepted.path(), &["status", run_id])["data"]["phase"],
+        "decision_ready"
+    );
+}
+
+/// The workflow-host boundary gates a second, policy-bearing workflow
+/// (`measurement-promotion`) the same way it gates `architecture-evaluation`
+/// elsewhere in this file, driven through a real `ix-flow` subprocess rather
+/// than the Rust-vs-JavaScript-reference parity check in
+/// `workflow_invariants_parity.rs`. It also exercises the measurement-stage
+/// promotion checker policy's three `measurement.promotion_ready` behaviors
+/// along the way: advisory-by-default, blocked without an accepted checker
+/// result under a `require` policy, and unblocked by either an accepted
+/// attested checker result or a current owned exception.
+#[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-5")]
+#[test]
+fn tc_107_measurement_promotion_policy_modes_gate_the_real_ix_flow_subprocess() {
+    // Previously verified only by workflow_invariants_parity.rs's
+    // Rust-vs-JavaScript parity checks, not a real ix-flow subprocess drive:
+    // Phase 4's acceptance scenario e ran this by hand once, but that live
+    // coverage was never captured as a permanent automated test until now.
+    promotion_recommend_mode_never_refuses();
+    promotion_require_mode_blocks_then_accept_unblocks();
+    promotion_require_mode_exception_unblocks();
+}
+
 #[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-5")]
 #[trace("TC-030", "FR-005-AC-5")]
 #[test]
