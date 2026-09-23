@@ -15,11 +15,6 @@ jobs:
           submodules: recursive
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          repository: agent-ix/spec-artifacts-iso
-          ref: 3d871962b66db99a1854f40466e94ebabc7a6115
-          path: .deps/spec-artifacts-iso
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
           repository: agent-ix/ix-flow
           ref: 4befa70deff1cd38bf3a61624ca9835affd3d24b
           path: .deps/ix-flow
@@ -38,7 +33,7 @@ jobs:
           components: rustfmt, clippy
       - uses: taiki-e/install-action@37f7c5781271959fb65b6b35224e28652ff2b63d
         with:
-          tool: cargo-deny@0.19.8
+          tool: cargo-deny@0.20.2
       - uses: taiki-e/install-action@37f7c5781271959fb65b6b35224e28652ff2b63d
         with:
           tool: cargo-audit@0.22.2
@@ -52,6 +47,5 @@ jobs:
           REQUIRE_QUIRE: "1"
           REQUIRE_IX_FLOW: "1"
           IX_FLOW_BIN: ${{ github.workspace }}/.deps/ix-flow/bin/ix-flow.js
-          MODULE_MANIFEST_SCHEMA: ${{ github.workspace }}/.deps/spec-artifacts-iso/spec_artifacts_iso/module-manifest.schema.json
       - run: make package-audit
       - run: make rust-foundation-gate

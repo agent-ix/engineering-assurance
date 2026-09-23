@@ -2,8 +2,37 @@
 // Copyright (C) 2026 Agent-IX
 
 //! Pure qualification and adverse coverage for module manifests.
-
-use std::path::{Path, PathBuf};
+//!
+//! The pure classifier under test (`qualify_manifest`) never discovers or
+//! copies a schema; FR-017-AC-7 requires only that it *consume* whatever
+//! module-manifest schema and edge registry a caller supplies. This file
+//! used to source that "caller-supplied" schema from an installed copy of
+//! `spec-artifacts-iso`'s `module-manifest.schema.json` — a redistribution of
+//! filament-core-service's FR-035 schema that `spec-artifacts-iso` retired in
+//! PLAT-902 (agent-ix/spec-artifacts-iso#42, commit dffc449) specifically
+//! because shipping that copy let downstream repositories compare their
+//! manifests to bytes maintained by the redistributor instead of to
+//! filament-core-service's real contract. EA does not restore, vendor, or
+//! otherwise recreate that copy anywhere (repo policy: no exceptions).
+//!
+//! Real conformance to the authoritative FR-035 schema is not this pure
+//! classifier's job: per this module's Ownership Boundaries (spec/spec.md),
+//! Quire is the installed validator of assurance artifacts, and
+//! `tests/test_module.py::test_quire_accepts_every_skeleton_without_diagnostics`
+//! already exercises the real `quire validate` engine against this module's
+//! real manifest and skeletons. An operator gets the same real-schema check
+//! for the outer manifest itself through the `manifest-validate` host adapter
+//! (FR-017-AC-8, `src/manifest_host.rs`) pointed at an explicit authoritative
+//! module root (`make manifest-validate MANIFEST_MODULE_ROOT=...`) — never by
+//! this crate searching a sibling checkout, an installed cache, or the
+//! network for one (FR-017 Behavior).
+//!
+//! So the fixtures below supply a minimal, locally authored module-manifest
+//! schema and edge registry that exist only to exercise `qualify_manifest`'s
+//! own typed-finding behavior (malformed YAML, schema mismatch, resource
+//! matching, skeleton frontmatter/heading rules, resource ceilings, and
+//! result-order invariance). They are not claimed to be authoritative and are
+//! not a copy of any other repository's schema or registry.
 
 use engineering_assurance::manifest::{
     MAX_MANIFEST_ARTIFACTS, MAX_MANIFEST_DOCUMENT_BYTES, MAX_MANIFEST_RESOURCE_BYTES,
@@ -11,6 +40,29 @@ use engineering_assurance::manifest::{
     ManifestQualificationInput, ManifestQualificationOutcome, qualify_manifest,
 };
 use ix_trace_rs::trace;
+use std::path::Path;
+
+/// Minimal locally authored module-manifest schema fixture.
+///
+/// This is deliberately permissive (`{"type": "object"}`): the pure
+/// classifier's identity, edge, and resource checks run against the parsed
+/// manifest projection regardless of how strict the caller-supplied schema
+/// is, so a permissive fixture is sufficient to exercise every typed finding
+/// in this file while making no claim to be, or resemble, an authoritative
+/// schema owned by another repository.
+const MANIFEST_SCHEMA_FIXTURE: &[u8] = br#"{"type": "object"}"#;
+
+/// Minimal locally authored edge registry fixture.
+///
+/// Lists exactly the link verbs `engineering_assurance/manifest.yaml`
+/// declares today (`governs`, `references`, `measures`, `realizes`,
+/// `supports`), not the full cross-ecosystem edge-type vocabulary that
+/// `spec-artifacts-iso` FR-004 owns. That vocabulary is a real, still-shipped
+/// registry, but reading it here would still make this pure-function test
+/// depend on another repository's checkout for no benefit: adding a link verb
+/// this module doesn't use, or removing one it does, cannot change what this
+/// file exercises.
+const EDGE_REGISTRY_FIXTURE: &[u8] = b"edge_types:\n  governs: {}\n  references: {}\n  measures: {}\n  realizes: {}\n  supports: {}\n";
 
 #[derive(Clone)]
 struct OwnedResource {
@@ -41,22 +93,9 @@ impl OwnedBundle {
     }
 }
 
-fn installed_iso_root(repository: &Path) -> PathBuf {
-    let sibling = repository
-        .parent()
-        .expect("repository has a parent")
-        .join("spec-artifacts-iso/spec_artifacts_iso");
-    if sibling.join("module-manifest.schema.json").is_file() {
-        return sibling;
-    }
-    let home = std::env::var_os("HOME").expect("HOME must locate installed test schemas");
-    PathBuf::from(home).join(".ix/filament/modules/spec-artifacts-iso")
-}
-
 fn retained_bundle() -> OwnedBundle {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
     let package = repository.join("engineering_assurance");
-    let iso = installed_iso_root(repository);
     let artifacts = [
         (
             "AssuranceProfile",
@@ -82,10 +121,8 @@ fn retained_bundle() -> OwnedBundle {
     OwnedBundle {
         manifest_yaml: std::fs::read(package.join("manifest.yaml"))
             .expect("retained manifest must be readable"),
-        manifest_schema_json: std::fs::read(iso.join("module-manifest.schema.json"))
-            .expect("authoritative manifest schema must be installed"),
-        edge_registry_yaml: std::fs::read(iso.join("manifest.yaml"))
-            .expect("authoritative edge registry must be installed"),
+        manifest_schema_json: MANIFEST_SCHEMA_FIXTURE.to_vec(),
+        edge_registry_yaml: EDGE_REGISTRY_FIXTURE.to_vec(),
         resources: artifacts
             .into_iter()
             .map(|(name, reference)| OwnedResource {

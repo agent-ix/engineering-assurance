@@ -44,7 +44,18 @@ checking, manifest validation, and qualification assertions to Rust.
 - For the pure module-manifest boundary, the expected module name and version,
   module-manifest YAML bytes, authoritative module-manifest JSON Schema bytes,
   edge-registry manifest YAML bytes, and one supplied schema/skeleton resource
-  pair for each declared artifact type.
+  pair for each declared artifact type. The pure boundary consumes whatever
+  schema and registry bytes its caller supplies rather than discovering,
+  fetching, or embedding one; this module does not ship a redistributed copy
+  of the module-manifest schema `filament-core-service` owns (FR-035), the
+  way `spec-artifacts-iso` briefly did before retiring that copy (PLAT-902,
+  agent-ix/spec-artifacts-iso#42). The `manifest-validate` host adapter
+  (AC-8) reads a real authoritative schema only from an explicit operator-
+  supplied module root; `tests/manifest_parity.rs` exercises the pure
+  classifier itself with a small locally authored fixture schema, and real
+  conformance to the authoritative schema is Quire's job (Ownership
+  Boundaries) — verified today by the real `quire validate` engine in
+  `tests/test_module.py::test_quire_accepts_every_skeleton_without_diagnostics`.
 - For the pure aggregation boundary, one
   `engineering-assurance.evaluation-aggregate-request/v1` document containing
   evaluation envelopes for the closed host and scenario populations. Each
