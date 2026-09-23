@@ -187,14 +187,14 @@ MeasurementPlan stages. In a `measurement-promotion` run:
   collection id the checker decided). The verdict must be for the evidence's
   `definition_version`.
 - `recommend`, and any stage the policy does not list: `measurement.promotion_ready`
-  reports the checker's status, verdict and reasons and never refuses on them,
-  including when no result was recorded. Tell the decision owner what it says.
+  never refuses on the checker, including when no result was recorded. Tell
+  the decision owner what the recorded verdict says.
 - `require` for the proposed stage: the promotion is refused unless the bound
   result says `accept` and its `orderSource` is `git-first-parent-add`.
   The codes are `promotion_checker_missing`, `promotion_checker_mismatch`,
   `promotion_checker_not_accepted`, and `promotion_checker_order_unattested`.
 - The owner overrides a refusal only with a current `exception` item (owner,
-  expiry, rationale, impact); the outcome then reports `exception_override`.
-  Never record an exception the owner has not stated.
+  expiry, rationale, impact), which stays in the run as the record of the
+  override. Never record an exception the owner has not stated.
 - An accepted verdict does not promote. The owner still decides at the
   human-gated terminal transition. Recommend `require` at `gate` only.

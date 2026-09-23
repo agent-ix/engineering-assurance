@@ -52,10 +52,12 @@ choice ([FR-005](./FR-005-resumable-human-decisions.md)).
 
 - A schema validation result for the profile.
 - For `measurement.promotion_ready`, once the stage step and evidence
-  checks pass: an outcome carrying a `checker` report `{ mode, status,
-  verdict, reasons, exception_override }` whether it passes or fails, where
-  `status` is `accepted`, `order_unattested`, `not_accepted`, `mismatch`, or
-  `missing`.
+  checks pass: a failed outcome in `require` mode carries a `checker` report
+  `{ status, verdict, reasons }` in its details, where `status` is
+  `order_unattested`, `not_accepted`, `mismatch`, or `missing`. A passed
+  outcome carries only `invariant` and `status`, the shape ix-flow's external
+  invariant-provider result admits; the checker's verdict stays visible as the
+  recorded `measurement_verdict` item.
 
 ## Behavior
 
@@ -72,11 +74,17 @@ choice ([FR-005](./FR-005-resumable-human-decisions.md)).
   including when no policy is recorded.
 - A checker result SHALL be read only when its `schema` is
   `quoin.measurement-verdict.v1` and its `planId` equals the evidence's
-  `plan_id`. When the evidence has no `plan_id`, or no result is read, the
-  status SHALL be `missing`.
+  `plan_id`. The evaluator SHALL ignore an item of any other `schema`,
+  whatever its other members, and SHALL NOT refuse the request for it. When
+  the evidence has no
+  `plan_id`, or no result is read, the status SHALL be `missing`.
 - A read result SHALL match when its `definitionVersion` equals the
   evidence's `definition_version` and its `candidate` equals the evidence's
   non-empty `candidate`.
+- The checker's document names the candidate by collection id and carries no
+  collection digest, so the collection id SHALL be the binding between the
+  result and the evidence; the evaluator SHALL NOT recompute collection
+  content.
 - When results are read but none matches, the invariant SHALL report the
   status `mismatch`.
 - A matching result SHALL have status `accepted` when its `verdict` is
@@ -87,8 +95,8 @@ choice ([FR-005](./FR-005-resumable-human-decisions.md)).
   win (`not_accepted`, then `order_unattested`, then `accepted`).
 - The report SHALL carry the selected result's `verdict` and `reasons`, and
   `null` and an empty list when no result matches.
-- In `recommend` mode the invariant SHALL pass whatever the status, carrying
-  the report.
+- In `recommend` mode the invariant SHALL pass whatever the status, without
+  reading the checker result.
 - In `require` mode the invariant SHALL fail with
   `promotion_checker_missing`, `promotion_checker_mismatch`,
   `promotion_checker_not_accepted`, or `promotion_checker_order_unattested`
@@ -97,12 +105,15 @@ choice ([FR-005](./FR-005-resumable-human-decisions.md)).
 - A current exception SHALL be one with a non-blank owner, rationale, and
   impact and an RFC 3339 expiry later than the evaluation instant, the same
   test `shared.exceptions_ready` applies. When one exists and `require` mode
-  would fail, the invariant SHALL pass with `exception_override: true`. The
-  flag SHALL be false in every other case.
+  would fail, the invariant SHALL pass. The override stays visible as the
+  recorded `exception` item, which `shared.exceptions_ready` checks on the
+  same transition.
 - The Rust evaluator and the retained JavaScript provider SHALL produce the
   same outcome for every valid projection. The Rust evaluator SHALL refuse a
-  projection whose checker or policy item has an unknown member, an unknown
-  `verdict` or `mode`, or a mistyped member.
+  projection whose policy item, or whose checker item carrying the
+  `quoin.measurement-verdict.v1` schema, has an unknown member, an unknown
+  `verdict` or `mode`, or a mistyped member, and one whose checker item is not
+  an object.
 - The workflow's terminal transitions SHALL remain human-gated. A passing
   `measurement.promotion_ready` SHALL only let the run reach `decision_ready`.
 - Engineering Assurance SHALL own the checker-result item schema it accepts.
@@ -123,10 +134,10 @@ recorded.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-025-AC-1 | The AssuranceProfile schema accepts no `measurement_policy` and a policy with either mode and a non-empty list of distinct MeasurementPlan stages; it refuses a missing mode or stage list, an unknown mode, an empty, repeated, unknown, or non-list stage list, an extra member, and a non-object policy; its stage values equal the MeasurementPlan `stage` enum and its modes equal `review_policy`'s. | Test (TC-163) |
-| FR-025-AC-2 | With no policy, a `recommend` policy, or a `require` policy that does not list the proposed stage, `measurement.promotion_ready` passes for a missing, mismatched, rejected, order-unattested, and accepted checker result, carrying a `recommend` report with the matching status, verdict, and reasons. | Test (TC-160) |
+| FR-025-AC-2 | With no policy, a `recommend` policy, or a `require` policy that does not list the proposed stage, `measurement.promotion_ready` passes, with no details, for a missing, mismatched, rejected, order-unattested, accepted, and later-schema checker result, including one with members v1 does not declare. | Test (TC-160) |
 | FR-025-AC-3 | With a `require` policy listing the proposed stage, an attested accept passes; a missing result, evidence with no or another plan id, another schema, a reject, an inconclusive, another definition version, another or null candidate, evidence with no candidate, and a `caller-supplied`, `none`, or `git-shallow` order fail with the typed code and report; conflicting matching results fail as `not_accepted` in either order. | Test (TC-161, TC-164) |
-| FR-025-AC-4 | With a `require` policy, a current owned exception lets a rejected or missing result pass with `exception_override: true`; an exception expiring at the evaluation instant or without an owner does not; the flag is false for an accepted result and in `recommend` mode. | Test (TC-162) |
-| FR-025-AC-5 | For every case of AC-2 to AC-4 the Rust evaluator and the retained JavaScript provider produce the same outcome bytes, and the Rust evaluator refuses an unknown verdict or mode, a mistyped reasons or stages member, and an unknown member on either item. | Test (TC-160, TC-161, TC-162) |
+| FR-025-AC-4 | With a `require` policy, a current owned exception lets a rejected or missing result pass; an exception expiring at the evaluation instant or without an owner does not. | Test (TC-162) |
+| FR-025-AC-5 | For every case of AC-2 to AC-4 the Rust evaluator and the retained JavaScript provider produce the same outcome bytes, and the Rust evaluator refuses an unknown verdict or mode, a mistyped reasons or stages member, an unknown member on the policy item or a v1 checker item, and a non-object checker item. | Test (TC-160, TC-161, TC-162) |
 | FR-025-AC-6 | The canonical and pilot `measurement-promotion` definitions are equal, declare `measurement_verdict` and `measurement_policy` item schemas with every document member required, gate `evidence_ready -> decision_ready` on `measurement.promotion_ready` and `shared.exceptions_ready`, and keep both terminal transitions `hitl`. | Test (TC-164) |
 | FR-025-AC-7 | The AssuranceProfile skeleton carries a valid `measurement_policy` and a section explaining it, the onboarding skill describes the policy, the run items, the attested order, the failure codes, and the override, and the onboarding checklist lists the policy's modes, closed stage values, list shape, and required members with no warning. | Test (TC-165) |
 

@@ -120,16 +120,7 @@ def test_adjacent_measurement_promotion_passes(tmp_path: Path) -> None:
             },
         },
     )
-    assert result == {
-        "ok": True,
-        "checker": {
-            "mode": "recommend",
-            "status": "missing",
-            "verdict": None,
-            "reasons": [],
-            "exception_override": False,
-        },
-    }
+    assert result is True
 
 
 def test_non_adjacent_measurement_promotion_fails(tmp_path: Path) -> None:

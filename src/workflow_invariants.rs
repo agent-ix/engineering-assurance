@@ -234,7 +234,7 @@ pub struct InvariantFailureDetails {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MeasurementPolicyMode {
-    /// The checker result is reported and never refuses a promotion.
+    /// The checker result never refuses a promotion.
     Recommend,
     /// The promotion needs an accepted, attested checker result or a current
     /// owned exception.
@@ -288,20 +288,20 @@ impl CheckerStatus {
     }
 }
 
-/// The checker result as a measurement promotion reports it, in both modes.
+/// The checker result a refused `require` promotion reports in its details.
+///
+/// A passing outcome carries no details: ix-flow's external-provider result
+/// contract admits only `invariant` and `status` on a passed outcome. The
+/// checker's verdict stays visible through the recorded `measurement_verdict`
+/// item, and an owner override through the recorded `exception` item.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct CheckerReport {
-    /// The policy mode in force for the proposed stage.
-    pub mode: MeasurementPolicyMode,
     /// What the promotion found.
     pub status: CheckerStatus,
     /// The matching result's verdict; `null` when no result matches.
     pub verdict: Option<CheckerVerdict>,
     /// The matching result's reason codes; empty when no result matches.
     pub reasons: Vec<String>,
-    /// Whether a current owned exception let a required promotion pass
-    /// without an accepted result.
-    pub exception_override: bool,
 }
 
 /// The verdict for one requested invariant.
@@ -309,12 +309,7 @@ pub struct CheckerReport {
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum InvariantVerdict {
     /// The invariant holds.
-    Passed {
-        /// The checker report of a measurement promotion; absent for every
-        /// other invariant.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        checker: Option<CheckerReport>,
-    },
+    Passed,
     /// The invariant does not hold.
     Failed {
         /// Stable machine-readable reason.
@@ -453,7 +448,7 @@ struct Items {
     review_validation: Vec<ReviewValidation>,
     promotion_evidence: Vec<PromotionEvidence>,
     measurement_policy: Vec<MeasurementPolicy>,
-    measurement_verdict: Vec<MeasurementVerdict>,
+    measurement_verdict: Vec<VerdictItem>,
     impact_snapshot: Vec<ImpactSnapshot>,
     assurance_snapshot: Vec<AssuranceSnapshot>,
     exception: Vec<ExceptionItem>,
@@ -598,13 +593,42 @@ const VERDICT_SCHEMA: &str = "quoin.measurement-verdict.v1";
 /// The only order source a producer cannot choose after the fact.
 const ATTESTED_ORDER_SOURCE: &str = "git-first-parent-add";
 
+/// One recorded `measurement_verdict` item.
+///
+/// Only a document carrying [`VERDICT_SCHEMA`] is read, and it is read
+/// strictly. A document of any other schema is kept opaque and never read, so
+/// a later checker schema neither refuses the request nor blocks a
+/// `recommend` promotion.
+/// `None` holds a document of another schema.
+#[derive(Clone, Debug, PartialEq)]
+struct VerdictItem(Option<MeasurementVerdict>);
+
+impl<'de> Deserialize<'de> for VerdictItem {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::Error as _;
+        let value = Value::deserialize(deserializer)?;
+        let Some(object) = value.as_object() else {
+            return Err(D::Error::custom(
+                "a measurement_verdict item must be an object",
+            ));
+        };
+        if object.get("schema").and_then(Value::as_str) != Some(VERDICT_SCHEMA) {
+            return Ok(Self(None));
+        }
+        MeasurementVerdict::deserialize(value)
+            .map(|verdict| Self(Some(verdict)))
+            .map_err(D::Error::custom)
+    }
+}
+
 /// One `quoin.measurement-verdict.v1` document recorded as a run item.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields, rename_all = "camelCase")]
 struct MeasurementVerdict {
     #[serde(rename = "id")]
     _id: Option<String>,
-    schema: Option<String>,
+    #[serde(rename = "schema")]
+    _schema: Option<String>,
     plan_id: Option<String>,
     definition_version: Option<String>,
     verdict: Option<CheckerVerdict>,
@@ -768,15 +792,13 @@ fn evaluate_one(
         InvariantName::IntakeArtifactsReady => intake_artifacts_ready(instance),
         InvariantName::ArchitectureScenariosReady => architecture_scenarios_ready(instance),
         InvariantName::ArchitectureReviewReady => architecture_review_ready(instance),
-        InvariantName::MeasurementPromotionReady => {
-            return promotion_ready(instance, evaluated_at);
-        }
+        InvariantName::MeasurementPromotionReady => promotion_ready(instance, evaluated_at),
         InvariantName::ChangeImpactReady => change_impact_ready(instance),
         InvariantName::ChangeSnapshotReady => change_snapshot_ready(instance, evaluated_at),
         InvariantName::ChangeReviewReady => change_review_ready(instance),
     };
     match failure {
-        None => InvariantVerdict::Passed { checker: None },
+        None => InvariantVerdict::Passed,
         Some((code, details)) => InvariantVerdict::Failed { code, details },
     }
 }
@@ -974,24 +996,17 @@ fn architecture_review_ready(instance: &InvariantProjection) -> Option<Failure> 
     ))
 }
 
-fn failed(code: InvariantFailureCode) -> InvariantVerdict {
-    InvariantVerdict::Failed {
-        code,
-        details: InvariantFailureDetails::default(),
-    }
-}
-
 fn promotion_ready(
     instance: &InvariantProjection,
     evaluated_at: OffsetDateTime,
-) -> InvariantVerdict {
+) -> Option<Failure> {
     let request = instance
         .items
         .promotion_request
         .iter()
         .find(|item| nonempty(item.interview_id.as_deref()));
     let Some(request) = request else {
-        return failed(InvariantFailureCode::PromotionMustAdvanceOneStage);
+        return Some(failure(InvariantFailureCode::PromotionMustAdvanceOneStage));
     };
     let prior = request.prior_stage.as_deref().and_then(stage_index);
     let proposed = request.proposed_stage.as_deref().and_then(stage_index);
@@ -999,7 +1014,7 @@ fn promotion_ready(
         .zip(proposed)
         .is_none_or(|(prior, proposed)| prior.checked_add(1) != Some(proposed))
     {
-        return failed(InvariantFailureCode::PromotionMustAdvanceOneStage);
+        return Some(failure(InvariantFailureCode::PromotionMustAdvanceOneStage));
     }
     let evidence = instance.items.promotion_evidence.iter().find(|item| {
         item.plan_path == request.plan_path
@@ -1017,41 +1032,38 @@ fn promotion_ready(
             && nonempty(item.limitations.as_deref())
             && nonempty(item.owner.as_deref())
     }) else {
-        return failed(InvariantFailureCode::PromotionEvidenceIncomplete);
+        return Some(failure(InvariantFailureCode::PromotionEvidenceIncomplete));
     };
-    let mode = policy_mode(instance, request.proposed_stage.as_deref());
+    // `recommend` never refuses: the checker result is not even read.
+    if policy_mode(instance, request.proposed_stage.as_deref()) == MeasurementPolicyMode::Recommend
+    {
+        return None;
+    }
     let (status, selected) = checker_status(instance, evidence);
-    let required_code = match mode {
-        MeasurementPolicyMode::Require => status.failure_code(),
-        MeasurementPolicyMode::Recommend => None,
-    };
-    let exception_override = required_code.is_some()
-        && instance
-            .items
-            .exception
-            .iter()
-            .any(|item| exception_is_current(item, evaluated_at));
+    let code = status.failure_code()?;
+    // An owner override passes; the `exception` item stays in the run.
+    if instance
+        .items
+        .exception
+        .iter()
+        .any(|item| exception_is_current(item, evaluated_at))
+    {
+        return None;
+    }
     let checker = CheckerReport {
-        mode,
         status,
         verdict: selected.and_then(|item| item.verdict),
         reasons: selected
             .and_then(|item| item.reasons.clone())
             .unwrap_or_default(),
-        exception_override,
     };
-    match required_code {
-        Some(code) if !exception_override => InvariantVerdict::Failed {
-            code,
-            details: InvariantFailureDetails {
-                checker: Some(checker),
-                ..InvariantFailureDetails::default()
-            },
-        },
-        _ => InvariantVerdict::Passed {
+    Some((
+        code,
+        InvariantFailureDetails {
             checker: Some(checker),
+            ..InvariantFailureDetails::default()
         },
-    }
+    ))
 }
 
 /// Position of a measurement-maturity stage, in `MeasurementPlan` `stage` order.
@@ -1108,10 +1120,8 @@ fn checker_status<'a>(
         .items
         .measurement_verdict
         .iter()
-        .filter(|item| {
-            item.schema.as_deref() == Some(VERDICT_SCHEMA)
-                && item.plan_id.as_deref() == Some(plan_id)
-        })
+        .filter_map(|item| item.0.as_ref())
+        .filter(|item| item.plan_id.as_deref() == Some(plan_id))
         .peekable();
     if for_plan.peek().is_none() {
         return (CheckerStatus::Missing, None);

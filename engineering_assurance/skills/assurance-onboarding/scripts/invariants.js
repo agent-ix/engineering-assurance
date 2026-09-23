@@ -241,22 +241,21 @@ const promotionReady = ({ instance }) => {
   if (!evidence || missing(evidence, required).length > 0) {
     return failure("promotion_evidence_incomplete");
   }
-  const mode = policyMode(instance, request.proposed_stage);
+  // `recommend` never refuses: the checker result is not even read.
+  if (policyMode(instance, request.proposed_stage) === "recommend") return true;
   const { status, item } = checkerStatus(instance, evidence);
   const code = checkerFailureCodes[status] ?? null;
-  const refused = mode === "require" && code !== null;
-  const exceptionOverride =
-    refused && values(instance, "exception").some(exceptionCurrent);
-  const checker = {
-    mode,
-    status,
-    verdict: item?.verdict ?? null,
-    reasons: Array.isArray(item?.reasons) ? item.reasons : [],
-    exception_override: exceptionOverride,
-  };
-  return refused && !exceptionOverride
-    ? failure(code, { checker })
-    : { ok: true, checker };
+  // An owner override passes; the `exception` item stays in the run.
+  if (code === null || values(instance, "exception").some(exceptionCurrent)) {
+    return true;
+  }
+  return failure(code, {
+    checker: {
+      status,
+      verdict: item?.verdict ?? null,
+      reasons: Array.isArray(item?.reasons) ? item.reasons : [],
+    },
+  });
 };
 
 const changeImpactReady = ({ instance }) => {

@@ -28,9 +28,8 @@ const provider = pathToFileURL(path.resolve(
 const { invariants } = await import(provider);
 const outcomes = request.invariants.map((name) => {
   const verdict = invariants[name]({ instance: request.instance });
-  if (verdict === true) return { invariant: name, status: "passed" };
-  return verdict.ok === true
-    ? { invariant: name, status: "passed", checker: verdict.checker }
+  return verdict === true
+    ? { invariant: name, status: "passed" }
     : {
         invariant: name,
         status: "failed",
@@ -450,27 +449,15 @@ fn with_exception(mut projection: Value, expires_at: &str) -> Value {
     projection
 }
 
-fn checker(
-    mode: &str,
-    status: &str,
-    verdict: &Value,
-    reasons: &[&str],
-    exception_override: bool,
-) -> Value {
-    json!({
-        "mode": mode,
-        "status": status,
-        "verdict": verdict,
-        "reasons": reasons,
-        "exception_override": exception_override,
-    })
+fn checker(status: &str, verdict: &Value, reasons: &[&str]) -> Value {
+    json!({"status": status, "verdict": verdict, "reasons": reasons})
 }
 
-fn passed(checker: &Value) -> Value {
+/// A passed promotion outcome: a pass carries no details on the wire.
+fn passed() -> Value {
     json!([{
         "invariant": "measurement.promotion_ready",
         "status": "passed",
-        "checker": checker,
     }])
 }
 
@@ -498,79 +485,44 @@ fn assert_promotion(case: &str, projection: &Value, expected: &Value) {
 
 #[trace("TC-160", "FR-025-AC-2", "FR-025-AC-5")]
 #[test]
-fn tc_160_recommend_mode_reports_the_checker_and_never_refuses() {
+fn tc_160_recommend_mode_never_refuses() {
     let recommend = without(promotion(), "measurement_policy");
-    let reject = json!("reject");
+    let mut other_schema = recommend.clone();
+    other_schema["items"]["measurement_verdict"][0]["schema"] =
+        json!("quoin.measurement-verdict.v2");
+    other_schema["items"]["measurement_verdict"][0]["addedInV2"] = json!(true);
+    let mut unlisted = rejected(promotion());
+    unlisted["items"]["measurement_policy"][0]["stages"] = json!(["gate"]);
+    let mut recommend_policy = rejected(promotion());
+    recommend_policy["items"]["measurement_policy"][0]["mode"] = json!("recommend");
     let cases = [
         (
             "no policy, no checker result",
             without(recommend.clone(), "measurement_verdict"),
-            checker("recommend", "missing", &Value::Null, &[], false),
         ),
-        (
-            "no policy, rejected",
-            rejected(recommend.clone()),
-            checker(
-                "recommend",
-                "not_accepted",
-                &reject,
-                &["rule_not_met"],
-                false,
-            ),
-        ),
+        ("no policy, rejected", rejected(recommend.clone())),
         (
             "no policy, other definition version",
             with_verdict(recommend.clone(), "definitionVersion", json!("v0")),
-            checker("recommend", "mismatch", &Value::Null, &[], false),
         ),
         (
             "no policy, caller-supplied order",
             with_verdict(recommend.clone(), "orderSource", json!("caller-supplied")),
-            checker(
-                "recommend",
-                "order_unattested",
-                &json!("accept"),
-                &[],
-                false,
-            ),
         ),
+        // A later checker schema is ignored, never refused, even with members
+        // v1 does not know.
+        ("no policy, result of a later schema", other_schema),
+        ("no policy, accepted", recommend),
+        // A require policy that does not list the proposed stage is recommend.
+        ("require policy, stage not listed, rejected", unlisted),
         (
-            "no policy, accepted",
-            recommend,
-            checker("recommend", "accepted", &json!("accept"), &[], false),
+            "recommend policy listing the stage, rejected",
+            recommend_policy,
         ),
     ];
-    for (case, projection, report) in cases {
-        assert_promotion(case, &projection, &passed(&report));
+    for (case, projection) in cases {
+        assert_promotion(case, &projection, &passed());
     }
-
-    // A require policy that does not list the proposed stage is recommend.
-    let mut unlisted = rejected(promotion());
-    unlisted["items"]["measurement_policy"][0]["stages"] = json!(["gate"]);
-    assert_promotion(
-        "require policy, stage not listed, rejected",
-        &unlisted,
-        &passed(&checker(
-            "recommend",
-            "not_accepted",
-            &reject,
-            &["rule_not_met"],
-            false,
-        )),
-    );
-    let mut recommend_policy = rejected(promotion());
-    recommend_policy["items"]["measurement_policy"][0]["mode"] = json!("recommend");
-    assert_promotion(
-        "recommend policy listing the stage, rejected",
-        &recommend_policy,
-        &passed(&checker(
-            "recommend",
-            "not_accepted",
-            &reject,
-            &["rule_not_met"],
-            false,
-        )),
-    );
 }
 
 /// Each `require` case that must refuse, with its expected outcome.
@@ -582,7 +534,7 @@ fn require_refusal_cases() -> Vec<(&'static str, Value, Value)> {
         .remove("plan_id");
     let mut other_plan = promotion();
     other_plan["items"]["promotion_evidence"][0]["plan_id"] = json!("MP-002");
-    let missing = checker("require", "missing", &Value::Null, &[], false);
+    let missing = checker("missing", &Value::Null, &[]);
     let mut cases = vec![
         (
             "require, no checker result",
@@ -616,21 +568,15 @@ fn verdict_refusal_cases() -> Vec<(&'static str, Value, Value)> {
         .as_object_mut()
         .expect("evidence must be an object")
         .remove("candidate");
-    let mismatch = checker("require", "mismatch", &Value::Null, &[], false);
-    let unattested = checker("require", "order_unattested", &json!("accept"), &[], false);
+    let mismatch = checker("mismatch", &Value::Null, &[]);
+    let unattested = checker("order_unattested", &json!("accept"), &[]);
     vec![
         (
             "require, rejected",
             rejected(promotion()),
             refused(
                 "promotion_checker_not_accepted",
-                &checker(
-                    "require",
-                    "not_accepted",
-                    &json!("reject"),
-                    &["rule_not_met"],
-                    false,
-                ),
+                &checker("not_accepted", &json!("reject"), &["rule_not_met"]),
             ),
         ),
         (
@@ -643,11 +589,9 @@ fn verdict_refusal_cases() -> Vec<(&'static str, Value, Value)> {
             refused(
                 "promotion_checker_not_accepted",
                 &checker(
-                    "require",
                     "not_accepted",
                     &json!("inconclusive"),
                     &["population_too_small"],
-                    false,
                 ),
             ),
         ),
@@ -695,13 +639,7 @@ fn tc_161_require_mode_refuses_without_an_attested_accept() {
     assert_promotion(
         "require, accepted over an attested order",
         &promotion(),
-        &passed(&checker(
-            "require",
-            "accepted",
-            &json!("accept"),
-            &[],
-            false,
-        )),
+        &passed(),
     );
 
     for (case, projection, expected) in require_refusal_cases() {
@@ -725,13 +663,7 @@ fn tc_161_conflicting_results_policies_and_stages_resolve_conservatively() {
             &conflicting,
             &refused(
                 "promotion_checker_not_accepted",
-                &checker(
-                    "require",
-                    "not_accepted",
-                    &json!("reject"),
-                    &["rule_not_met"],
-                    false,
-                ),
+                &checker("not_accepted", &json!("reject"), &["rule_not_met"]),
             ),
         );
     }
@@ -762,84 +694,47 @@ fn tc_161_conflicting_results_policies_and_stages_resolve_conservatively() {
         &rejected(both),
         &refused(
             "promotion_checker_not_accepted",
-            &checker(
-                "require",
-                "not_accepted",
-                &json!("reject"),
-                &["rule_not_met"],
-                false,
-            ),
+            &checker("not_accepted", &json!("reject"), &["rule_not_met"]),
         ),
     );
 }
 
 #[trace("TC-162", "FR-025-AC-4", "FR-025-AC-5")]
 #[test]
-fn tc_162_a_current_owned_exception_overrides_a_required_checker_visibly() {
-    let reject = json!("reject");
-    assert_promotion(
-        "require, rejected, current exception",
-        &with_exception(rejected(promotion()), "2026-09-10T12:00:01Z"),
-        &passed(&checker(
-            "require",
-            "not_accepted",
-            &reject,
-            &["rule_not_met"],
-            true,
-        )),
+fn tc_162_a_current_owned_exception_overrides_a_required_checker() {
+    let refused_reject = refused(
+        "promotion_checker_not_accepted",
+        &checker("not_accepted", &json!("reject"), &["rule_not_met"]),
     );
-    assert_promotion(
-        "require, no checker result, current exception",
-        &with_exception(
-            without(promotion(), "measurement_verdict"),
-            "2026-09-10T12:00:01Z",
+    let cases = [
+        (
+            "require, rejected, current exception",
+            with_exception(rejected(promotion()), "2026-09-10T12:00:01Z"),
+            passed(),
         ),
-        &passed(&checker("require", "missing", &Value::Null, &[], true)),
-    );
-    assert_promotion(
-        "require, rejected, exception expiring at the evaluation instant",
-        &with_exception(rejected(promotion()), EVALUATED_AT),
-        &refused(
-            "promotion_checker_not_accepted",
-            &checker("require", "not_accepted", &reject, &["rule_not_met"], false),
+        (
+            "require, no checker result, current exception",
+            with_exception(
+                without(promotion(), "measurement_verdict"),
+                "2026-09-10T12:00:01Z",
+            ),
+            passed(),
         ),
-    );
+        (
+            "require, rejected, exception expiring at the evaluation instant",
+            with_exception(rejected(promotion()), EVALUATED_AT),
+            refused_reject.clone(),
+        ),
+    ];
+    for (case, projection, expected) in cases {
+        assert_promotion(case, &projection, &expected);
+    }
     let mut ownerless = with_exception(rejected(promotion()), "2026-09-10T12:00:01Z");
     ownerless["items"]["exception"][0]["owner"] = json!(" ");
     assert_promotion(
         "require, rejected, exception without an owner",
         &ownerless,
-        &refused(
-            "promotion_checker_not_accepted",
-            &checker("require", "not_accepted", &reject, &["rule_not_met"], false),
-        ),
-    );
-    // An exception is never needed, and never reported as used, when the
-    // checker accepted or the policy only recommends.
-    assert_promotion(
-        "require, accepted, current exception",
-        &with_exception(promotion(), "2026-09-10T12:00:01Z"),
-        &passed(&checker(
-            "require",
-            "accepted",
-            &json!("accept"),
-            &[],
-            false,
-        )),
-    );
-    assert_promotion(
-        "recommend, rejected, current exception",
-        &with_exception(
-            rejected(without(promotion(), "measurement_policy")),
-            "2026-09-10T12:00:01Z",
-        ),
-        &passed(&checker(
-            "recommend",
-            "not_accepted",
-            &reject,
-            &["rule_not_met"],
-            false,
-        )),
+        &refused_reject,
     );
 }
 
@@ -867,4 +762,14 @@ fn tc_162_malformed_checker_and_policy_items_are_refused_before_outcomes() {
             "{kind}.{member}"
         );
     }
+    let mut scalar = promotion();
+    scalar["items"]["measurement_verdict"][0] = json!("quoin.measurement-verdict.v1");
+    assert!(
+        evaluate_request_bytes(
+            &serde_json::to_vec(&request(&scalar, &["measurement.promotion_ready"]))
+                .expect("request fixture must serialize"),
+        )
+        .is_err(),
+        "a non-object checker item must be refused"
+    );
 }

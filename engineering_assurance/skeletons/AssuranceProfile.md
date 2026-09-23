@@ -48,7 +48,7 @@ and limitations. A measurement is not a decision by itself.
 A promotion into a listed stage needs the independent checker's accepted
 verdict for the plan's definition version and candidate collection, over an
 intake order the producer could not choose, or a current owned exception. Any
-other stage only reports the checker's verdict. An accepted verdict informs the
+other stage never refuses on the checker's verdict. An accepted verdict informs the
 owner's promotion decision and never makes it.
 
 ## Exceptions

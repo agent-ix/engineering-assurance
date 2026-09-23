@@ -342,6 +342,6 @@ def test_onboard_js_lists_the_profile_measurement_policy(tmp_path: Path) -> None
         "promotion_checker_mismatch",
         "promotion_checker_not_accepted",
         "promotion_checker_order_unattested",
-        "exception_override",
+        "current `exception` item",
     ]:
         assert phrase in skill, phrase
