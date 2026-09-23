@@ -108,10 +108,13 @@ one of:
   `constant-predictor` (the per-family best constant answers combined as a
   size-weighted mean, see the worked example below; only with
   `estimator: proportion`), `prior-collection` (the collection this result is
-  compared against), or `best-seen` (for a ratchet: over every collection the
+  compared against), `best-seen` (for a ratchet: over every collection the
   measurement intake admitted under this `definition_version`, the maximum
   under a `gt`/`ge` rule and the minimum under an `lt`/`le` rule; an `eq` rule
-  cannot use it).
+  cannot use it), or `external-reference` (a per-dimension value the calling
+  checker resolves from a source outside the plan, e.g. an owner-declared
+  budget read from a qualification profile; no estimator restriction, and an
+  `eq` rule can use it).
 
 A baseline rule may add a `margin`, in the metric's own units and signed in
 the direction of improvement: a positive margin means the result must beat the

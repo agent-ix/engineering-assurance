@@ -436,6 +436,7 @@ def test_decision_rule_is_a_closed_comparator_with_exactly_one_reference() -> No
         "constant-predictor",
         "prior-collection",
         "best-seen",
+        "external-reference",
     ]
     assert set(rule["properties"]) == {"comparator", "threshold", "baseline", "margin"}
 
@@ -446,7 +447,12 @@ def test_decision_rule_is_a_closed_comparator_with_exactly_one_reference() -> No
     assert _statistical_design_errors(
         decision_rule={"comparator": "eq", "baseline": "prior-collection"}
     ) == []
-    for baseline in ("constant-predictor", "prior-collection", "best-seen"):
+    for baseline in (
+        "constant-predictor",
+        "prior-collection",
+        "best-seen",
+        "external-reference",
+    ):
         assert _statistical_design_errors(
             decision_rule={"comparator": "gt", "baseline": baseline}
         ) == []
@@ -542,6 +548,31 @@ def test_decision_rule_agrees_with_objective_direction_and_estimator() -> None:
             estimator=estimator,
             decision_rule={"comparator": "ge", "baseline": "best-seen"},
         ) == [], estimator
+
+
+def test_decision_rule_external_reference_baseline_has_no_estimator_restriction() -> None:
+    """Trace: FR-021-AC-10, TC-171.
+
+    `external-reference` is a checker-resolved value from outside the plan
+    (PLAT-1009), not a corpus computation like `constant-predictor`, so it
+    carries no estimator restriction, and, unlike `best-seen`, its value does
+    not depend on the comparator's direction, so `eq` is allowed.
+    """
+    for estimator in ("proportion", "count", "mean", "median", "ratio"):
+        assert _statistical_design_errors(
+            estimator=estimator,
+            decision_rule={"comparator": "gt", "baseline": "external-reference"},
+        ) == [], estimator
+    assert _statistical_design_errors(
+        decision_rule={"comparator": "eq", "baseline": "external-reference"}
+    ) == []
+    assert _statistical_design_errors(
+        decision_rule={
+            "comparator": "ge",
+            "baseline": "external-reference",
+            "margin": 0.02,
+        }
+    ) == []
 
 
 def test_estimator_is_a_closed_vocabulary() -> None:

@@ -147,6 +147,7 @@ implemented and reviewed.
 | FR-021 | FR-021-AC-7 | TC-142 | ✅ Minimal `measurement` consumer reaches the decision-rule types without `serde_json` |
 | FR-021 | FR-021-AC-8 | TC-141 | ✅ Unversioned estimator and decision-rule edits yield findings naming each changed member |
 | FR-021 | FR-021-AC-9 | TC-144, TC-146 | ✅ Schema and Rust direction-agreement and constant-predictor/estimator cases passing |
+| FR-021 | FR-021-AC-10 | TC-171 | ✅ Schema and Rust external-reference baseline estimator-agnostic and eq cases passing |
 | FR-022 | FR-022-AC-1 | TC-150 | ✅ Wire spelling, rendering, parsing, and serde round trip backed |
 | FR-022 | FR-022-AC-2 | TC-151 | ✅ Exact-match typed refusal backed |
 | FR-022 | FR-022-AC-3 | TC-152 | ✅ Exhaustive listing, compile-time trait-absence probe, and downstream ordering refusals backed |
@@ -386,6 +387,7 @@ implemented and reviewed.
 | TC-168 | An objective edit that changes only weight, value_half_life or budget under an equal definition_version yields no definition-change finding in either direction; the same MeasurementDefinition pair with a bound change alongside unchanged steering fields still yields one finding naming objective | Unit | P0 | FR-026-AC-3 | ✅ steering-exclusion and bound-still-reported cases passing |
 | TC-169 | Independently-parsed MeasurementPlan frontmatter documents (objective plus statistical_design.decision_rule) with no steering fields, the smallest accepted values (weight 0, smallest positive value_half_life, budget 0), and the largest finite values parse to equal decision rules and equal definitional objectives, agree on direction/comparator consistency, and produce the expected identical holds() verdict for a threshold rule and a baseline rule at every probed estimate including each exact boundary | Unit | P0 | FR-026-AC-4 | ✅ adversarial-vs-plain verdict-parity cases passing |
 | TC-170 | The MeasurementPlan skeleton carries a valid objective with weight, value_half_life and budget, a "Steering Fields" section stating they are advisory only, and validates against the schema; the onboarding skill names the three fields and says they never gate; the onboarding checklist reports no MeasurementPlan warning | Unit | P0 | FR-026-AC-5 | ✅ `tests/test_module.py` skeleton case passing |
+| TC-171 | The schema and the Rust DecisionRule accept baseline external-reference with every estimator, including proportion, and with comparator eq, unlike constant-predictor's proportion-only restriction and best-seen's eq refusal; the Rust Baseline type round-trips external-reference through construction, serialization and deserialization | Unit | P0 | FR-021-AC-10 | ✅ external-reference acceptance, estimator-agnostic and eq-compatible cases passing |
 
 ## Option Permutation Matrix
 

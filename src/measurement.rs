@@ -439,14 +439,24 @@ pub enum Baseline {
     /// refused): the maximum for a `gt`/`ge` rule, and the minimum for an
     /// `lt`/`le` rule. An `eq` rule cannot use it.
     BestSeen,
+    /// A per-dimension value the calling checker resolves from a source
+    /// outside the plan at evaluation time -- neither a fixed number written
+    /// into the plan, nor derived from a prior collection, the corpus, or a
+    /// running best-seen (e.g. an owner-declared per-phase budget read from a
+    /// qualification profile). Unlike [`Self::ConstantPredictor`] it carries
+    /// no estimator restriction, and unlike [`Self::BestSeen`] it is allowed
+    /// with `eq`, because its value does not depend on the comparator's
+    /// direction.
+    ExternalReference,
 }
 
 impl Baseline {
     /// Every baseline, in declaration order.
-    pub const ALL: [Self; 3] = [
+    pub const ALL: [Self; 4] = [
         Self::ConstantPredictor,
         Self::PriorCollection,
         Self::BestSeen,
+        Self::ExternalReference,
     ];
 
     /// The frontmatter wire name of this baseline.
@@ -456,6 +466,7 @@ impl Baseline {
             Self::ConstantPredictor => "constant-predictor",
             Self::PriorCollection => "prior-collection",
             Self::BestSeen => "best-seen",
+            Self::ExternalReference => "external-reference",
         }
     }
 }
