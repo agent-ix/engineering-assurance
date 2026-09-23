@@ -87,7 +87,7 @@ OpenCode, and GitHub Copilot. Use the section for your agent.
 <summary><b>Claude Code</b></summary>
 
 ```text
-/plugin marketplace add agent-ix/engineering-assurance
+/plugin marketplace add agent-ix/engineering-assurance@v0.3.2
 /plugin install engineering-assurance@engineering-assurance
 ```
 
@@ -97,7 +97,7 @@ OpenCode, and GitHub Copilot. Use the section for your agent.
 <summary><b>OpenAI Codex</b></summary>
 
 ```bash
-codex plugin marketplace add agent-ix/engineering-assurance
+codex plugin marketplace add agent-ix/engineering-assurance --ref v0.3.2
 codex plugin add engineering-assurance@engineering-assurance
 ```
 
