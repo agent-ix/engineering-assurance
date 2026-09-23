@@ -178,6 +178,22 @@ fn request(root: &Path, arguments: &[&str]) -> ProducerExecutionRequest {
     }
 }
 
+/// Blocks until `path` exists, as a rendezvous signal that a fixture
+/// subprocess has reached a known point (not a performance or timeout
+/// assertion under test). The bound is deliberately generous — process
+/// spawn and scheduling latency on a loaded, shared CI runner can run
+/// into seconds even though the fixture itself does almost no work — so
+/// this only fails the test when the fixture genuinely never signals,
+/// not when the host happens to be busy. See PLAT-996: a fixed 2s
+/// deadline here flaked under concurrent test load.
+fn await_ready(path: &Path, message: &str) {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !path.exists() {
+        assert!(Instant::now() < deadline, "{message}");
+        thread::sleep(Duration::from_millis(1));
+    }
+}
+
 fn adapter() -> TextAdapter {
     TextAdapter {
         binding: binding(),
@@ -699,11 +715,7 @@ fn tc_123_staged_projection_excludes_extra_and_freezes_declared_input() {
     ];
     let unbound = request(root.path(), &arguments);
     let unbound_worker = thread::spawn(move || execute(&unbound, &adapter()));
-    let deadline = Instant::now() + Duration::from_secs(2);
-    while !ready.exists() {
-        assert!(Instant::now() < deadline, "fixture did not reach launch");
-        thread::yield_now();
-    }
+    await_ready(&ready, "fixture did not reach launch");
     fs::write(root.path().join("extra.txt"), b"changed-unbound").expect("unbound mutation");
     fs::write(&release, b"release").expect("release fixture");
     assert!(matches!(
@@ -727,11 +739,7 @@ fn tc_123_staged_projection_excludes_extra_and_freezes_declared_input() {
         digest: ContentDigest::of_bytes(b"original"),
     });
     let worker = thread::spawn(move || execute(&frozen, &adapter()));
-    let deadline = Instant::now() + Duration::from_secs(2);
-    while !ready.exists() {
-        assert!(Instant::now() < deadline, "fixture did not reach launch");
-        thread::yield_now();
-    }
+    await_ready(&ready, "fixture did not reach launch");
     fs::write(root.path().join("selected.txt"), b"replacement").expect("source mutation");
     fs::write(&release, b"release").expect("release fixture");
     let result = worker.join().expect("worker must terminate");
@@ -984,6 +992,16 @@ fn tc_125_cancellation_reaps_group_and_escape_mutant_fails_containment() {
         completed.to_str().expect("UTF-8 path"),
     ];
     let mut running_request = request(root.path(), &arguments);
+    // This test exercises cancellation, not the request timeout: the
+    // fixture process is meant to stay alive until `cancellation.cancel()`
+    // below, across a readiness rendezvous and a concurrency check. The
+    // default 2s budget is tuned for fast-completing fixtures and can
+    // legitimately be exceeded here on a loaded host before the test gets
+    // to cancel, releasing the concurrency slot early and failing the
+    // concurrency assertion below for reasons unrelated to cancellation
+    // behavior (PLAT-996). Use a timeout well beyond any realistic
+    // scheduling delay between the steps in this test.
+    running_request.budget.timeout_millis = 30_000;
     running_request.environment.insert(
         "EA_FIXTURE_EXECUTABLE".to_owned(),
         fixture_executable().display().to_string(),
@@ -1003,11 +1021,7 @@ fn tc_125_cancellation_reaps_group_and_escape_mutant_fails_containment() {
                 .expect("valid request")
         })
     };
-    let deadline = Instant::now() + Duration::from_secs(2);
-    while !ready.exists() {
-        assert!(Instant::now() < deadline, "fixture producer did not start");
-        thread::yield_now();
-    }
+    await_ready(&ready, "fixture producer did not start");
     let concurrent = request(root.path(), &["emit", "concurrent"]);
     assert!(matches!(
         executor
