@@ -17,6 +17,7 @@
       "items": { "$ref": "#/$defs/impact" }
     },
     "review_policy": { "$ref": "#/$defs/review_policy" },
+    "measurement_policy": { "$ref": "#/$defs/measurement_policy" },
     "relationships": {
       "type": "array",
       "items": { "$ref": "#/$defs/relationship" }
@@ -76,6 +77,31 @@
           "uniqueItems": true,
           "items": {
             "enum": ["spec-review", "code-review", "gap-analysis"]
+          }
+        }
+      }
+    },
+    "measurement_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "stages"],
+      "description": "How a measurement promotion into one of `stages` treats the independent checker's verdict (FR-025). `recommend` reports the verdict and never refuses; `require` refuses the promotion unless the checker accepted the candidate over an attested order, or a current owned exception is recorded. A stage not listed, and a profile with no measurement_policy, is `recommend`. An accepted verdict never promotes by itself: the decision owner still decides. `require` is recommended at `gate` only.",
+      "properties": {
+        "mode": { "enum": ["recommend", "require"] },
+        "stages": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "observe",
+              "baseline",
+              "branch-comparison",
+              "trend",
+              "ratchet",
+              "target",
+              "gate"
+            ]
           }
         }
       }

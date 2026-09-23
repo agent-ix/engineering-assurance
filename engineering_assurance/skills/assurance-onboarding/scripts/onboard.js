@@ -333,6 +333,10 @@ if (moduleRoot) {
             ...(itemDef?.pattern && itemDef.description ? { itemDescription: itemDef.description } : {}),
           };
           if (list.minItems > 0 || list.uniqueItems || list.itemPattern) arrays[path] = list;
+          // A list of closed values (an AssuranceProfile's
+          // `measurement_policy.stages` or `review_policy.operations`): each
+          // item must be one of them.
+          if (!rawDef.items?.$ref && Array.isArray(itemDef?.enum)) enums[path] = itemDef.enum;
         }
         if (def.enum) enums[path] = def.enum;
         if (def.type !== "object" || !def.properties || seen.has(def)) continue;

@@ -28,8 +28,9 @@ const provider = pathToFileURL(path.resolve(
 const { invariants } = await import(provider);
 const outcomes = request.invariants.map((name) => {
   const verdict = invariants[name]({ instance: request.instance });
-  return verdict === true
-    ? { invariant: name, status: "passed" }
+  if (verdict === true) return { invariant: name, status: "passed" };
+  return verdict.ok === true
+    ? { invariant: name, status: "passed", checker: verdict.checker }
     : {
         invariant: name,
         status: "failed",
@@ -187,6 +188,8 @@ fn passing_workflow_cases() -> Vec<(Value, Vec<&'static str>)> {
                 &[
                     "promotion_request",
                     "promotion_evidence",
+                    "measurement_policy",
+                    "measurement_verdict",
                     "operator_observation",
                 ],
             ),
@@ -399,4 +402,426 @@ fn tc_106_malformed_unknown_and_duplicate_requests_refuse_before_outcomes() {
     });
     assert!(evaluate_request_bytes(&serde_json::to_vec(&extended).unwrap()).is_err());
     assert!(evaluate_request_bytes(b"{not-json").is_err());
+}
+
+/// A measurement-promotion projection with complete evidence bound to plan
+/// `MP-001`, definition `v1`, and candidate `collection-2`, proposing
+/// `observe -> baseline`. The fixture's policy requires `baseline`; the
+/// fixture's checker result accepts over an attested order.
+fn promotion() -> Value {
+    workflow_projection(
+        "measurement-promotion",
+        &["decision_ready->promoted", "decision_ready->not_promoted"],
+        &[
+            "promotion_request",
+            "promotion_evidence",
+            "measurement_policy",
+            "measurement_verdict",
+            "operator_observation",
+        ],
+    )
+}
+
+fn without(mut projection: Value, kind: &str) -> Value {
+    projection["items"]
+        .as_object_mut()
+        .expect("items must be an object")
+        .remove(kind);
+    projection
+}
+
+fn with_verdict(mut projection: Value, member: &str, value: Value) -> Value {
+    projection["items"]["measurement_verdict"][0][member] = value;
+    projection
+}
+
+fn rejected(projection: Value) -> Value {
+    let projection = with_verdict(projection, "verdict", json!("reject"));
+    with_verdict(projection, "reasons", json!(["rule_not_met"]))
+}
+
+fn with_exception(mut projection: Value, expires_at: &str) -> Value {
+    projection["items"]["exception"] = json!([{
+        "owner": "assurance-owner",
+        "expires_at": expires_at,
+        "rationale": "owner accepts the rejected candidate for this gate",
+        "impact": "the promoted stage rests on a rejected measurement",
+    }]);
+    projection
+}
+
+fn checker(
+    mode: &str,
+    status: &str,
+    verdict: &Value,
+    reasons: &[&str],
+    exception_override: bool,
+) -> Value {
+    json!({
+        "mode": mode,
+        "status": status,
+        "verdict": verdict,
+        "reasons": reasons,
+        "exception_override": exception_override,
+    })
+}
+
+fn passed(checker: Value) -> Value {
+    json!([{
+        "invariant": "measurement.promotion_ready",
+        "status": "passed",
+        "checker": checker,
+    }])
+}
+
+fn refused(code: &str, checker: Value) -> Value {
+    json!([{
+        "invariant": "measurement.promotion_ready",
+        "status": "failed",
+        "code": code,
+        "details": {"checker": checker},
+    }])
+}
+
+/// Assert the Rust outcome equals `expected` and the retained JavaScript
+/// provider produces the same bytes.
+fn assert_promotion(case: &str, projection: &Value, expected: &Value) {
+    let request = request(projection, &["measurement.promotion_ready"]);
+    let rust = evaluate_request_bytes(
+        &serde_json::to_vec(&request).expect("request fixture must serialize"),
+    )
+    .unwrap_or_else(|error| panic!("{case}: Rust must accept the request: {error}"));
+    let outcomes = serde_json::to_value(&rust.outcomes).expect("outcomes must serialize");
+    assert_eq!(&outcomes, expected, "{case}");
+    assert_parity(&request);
+}
+
+#[trace("TC-160", "FR-025-AC-2", "FR-025-AC-5")]
+#[test]
+fn tc_160_recommend_mode_reports_the_checker_and_never_refuses() {
+    let recommend = without(promotion(), "measurement_policy");
+    let reject = json!("reject");
+    let cases = [
+        (
+            "no policy, no checker result",
+            without(recommend.clone(), "measurement_verdict"),
+            checker("recommend", "missing", &Value::Null, &[], false),
+        ),
+        (
+            "no policy, rejected",
+            rejected(recommend.clone()),
+            checker(
+                "recommend",
+                "not_accepted",
+                &reject,
+                &["rule_not_met"],
+                false,
+            ),
+        ),
+        (
+            "no policy, other definition version",
+            with_verdict(recommend.clone(), "definitionVersion", json!("v0")),
+            checker("recommend", "mismatch", &Value::Null, &[], false),
+        ),
+        (
+            "no policy, caller-supplied order",
+            with_verdict(recommend.clone(), "orderSource", json!("caller-supplied")),
+            checker(
+                "recommend",
+                "order_unattested",
+                &json!("accept"),
+                &[],
+                false,
+            ),
+        ),
+        (
+            "no policy, accepted",
+            recommend,
+            checker("recommend", "accepted", &json!("accept"), &[], false),
+        ),
+    ];
+    for (case, projection, report) in cases {
+        assert_promotion(case, &projection, &passed(report));
+    }
+
+    // A require policy that does not list the proposed stage is recommend.
+    let mut unlisted = rejected(promotion());
+    unlisted["items"]["measurement_policy"][0]["stages"] = json!(["gate"]);
+    assert_promotion(
+        "require policy, stage not listed, rejected",
+        &unlisted,
+        &passed(checker(
+            "recommend",
+            "not_accepted",
+            &reject,
+            &["rule_not_met"],
+            false,
+        )),
+    );
+    let mut recommend_policy = rejected(promotion());
+    recommend_policy["items"]["measurement_policy"][0]["mode"] = json!("recommend");
+    assert_promotion(
+        "recommend policy listing the stage, rejected",
+        &recommend_policy,
+        &passed(checker(
+            "recommend",
+            "not_accepted",
+            &reject,
+            &["rule_not_met"],
+            false,
+        )),
+    );
+}
+
+#[trace("TC-161", "FR-025-AC-3", "FR-025-AC-5")]
+#[test]
+fn tc_161_require_mode_refuses_without_an_attested_accept() {
+    assert_promotion(
+        "require, accepted over an attested order",
+        &promotion(),
+        &passed(checker("require", "accepted", &json!("accept"), &[], false)),
+    );
+
+    let mut unbound = promotion();
+    unbound["items"]["promotion_evidence"][0]
+        .as_object_mut()
+        .expect("evidence must be an object")
+        .remove("plan_id");
+    let mut other_plan = promotion();
+    other_plan["items"]["promotion_evidence"][0]["plan_id"] = json!("MP-002");
+    let mut no_candidate = promotion();
+    no_candidate["items"]["promotion_evidence"][0]
+        .as_object_mut()
+        .expect("evidence must be an object")
+        .remove("candidate");
+    let missing = checker("require", "missing", &Value::Null, &[], false);
+    let mismatch = checker("require", "mismatch", &Value::Null, &[], false);
+    let unattested = checker("require", "order_unattested", &json!("accept"), &[], false);
+    let cases = [
+        (
+            "require, no checker result",
+            without(promotion(), "measurement_verdict"),
+            refused("promotion_checker_missing", missing.clone()),
+        ),
+        (
+            "require, evidence names no plan id",
+            unbound,
+            refused("promotion_checker_missing", missing.clone()),
+        ),
+        (
+            "require, result for another plan",
+            other_plan,
+            refused("promotion_checker_missing", missing.clone()),
+        ),
+        (
+            "require, result of another schema",
+            with_verdict(promotion(), "schema", json!("quoin.measurement-verdict.v0")),
+            refused("promotion_checker_missing", missing),
+        ),
+        (
+            "require, rejected",
+            rejected(promotion()),
+            refused(
+                "promotion_checker_not_accepted",
+                checker(
+                    "require",
+                    "not_accepted",
+                    &json!("reject"),
+                    &["rule_not_met"],
+                    false,
+                ),
+            ),
+        ),
+        (
+            "require, inconclusive",
+            with_verdict(
+                with_verdict(promotion(), "verdict", json!("inconclusive")),
+                "reasons",
+                json!(["population_too_small"]),
+            ),
+            refused(
+                "promotion_checker_not_accepted",
+                checker(
+                    "require",
+                    "not_accepted",
+                    &json!("inconclusive"),
+                    &["population_too_small"],
+                    false,
+                ),
+            ),
+        ),
+        (
+            "require, other definition version",
+            with_verdict(promotion(), "definitionVersion", json!("v0")),
+            refused("promotion_checker_mismatch", mismatch.clone()),
+        ),
+        (
+            "require, other candidate collection",
+            with_verdict(promotion(), "candidate", json!("collection-1")),
+            refused("promotion_checker_mismatch", mismatch.clone()),
+        ),
+        (
+            "require, checker decided no candidate",
+            with_verdict(promotion(), "candidate", Value::Null),
+            refused("promotion_checker_mismatch", mismatch.clone()),
+        ),
+        (
+            "require, evidence names no candidate",
+            no_candidate,
+            refused("promotion_checker_mismatch", mismatch),
+        ),
+        (
+            "require, caller-supplied order",
+            with_verdict(promotion(), "orderSource", json!("caller-supplied")),
+            refused("promotion_checker_order_unattested", unattested.clone()),
+        ),
+        (
+            "require, no order",
+            with_verdict(promotion(), "orderSource", json!("none")),
+            refused("promotion_checker_order_unattested", unattested.clone()),
+        ),
+        (
+            "require, shallow-clone order",
+            with_verdict(promotion(), "orderSource", json!("git-shallow")),
+            refused("promotion_checker_order_unattested", unattested),
+        ),
+    ];
+    for (case, projection, expected) in cases {
+        assert_promotion(case, &projection, &expected);
+    }
+
+    // Two matching results: the least favourable wins, whichever comes first.
+    for order in [[0, 1], [1, 0]] {
+        let accepted = promotion()["items"]["measurement_verdict"][0].clone();
+        let reject = rejected(promotion())["items"]["measurement_verdict"][0].clone();
+        let pair = [accepted, reject];
+        let mut conflicting = promotion();
+        conflicting["items"]["measurement_verdict"] =
+            json!([pair[order[0]].clone(), pair[order[1]].clone()]);
+        assert_promotion(
+            "require, accepted and rejected results for one candidate",
+            &conflicting,
+            &refused(
+                "promotion_checker_not_accepted",
+                checker(
+                    "require",
+                    "not_accepted",
+                    &json!("reject"),
+                    &["rule_not_met"],
+                    false,
+                ),
+            ),
+        );
+    }
+
+    // A policy listing the stage wins over a recommend policy beside it.
+    let mut both = promotion();
+    both["items"]["measurement_policy"] = json!([
+        {"mode": "recommend", "stages": ["baseline"]},
+        {"mode": "require", "stages": ["baseline"]},
+    ]);
+    assert_promotion(
+        "recommend and require policies, rejected",
+        &rejected(both),
+        &refused(
+            "promotion_checker_not_accepted",
+            checker(
+                "require",
+                "not_accepted",
+                &json!("reject"),
+                &["rule_not_met"],
+                false,
+            ),
+        ),
+    );
+}
+
+#[trace("TC-162", "FR-025-AC-4", "FR-025-AC-5")]
+#[test]
+fn tc_162_a_current_owned_exception_overrides_a_required_checker_visibly() {
+    let reject = json!("reject");
+    assert_promotion(
+        "require, rejected, current exception",
+        &with_exception(rejected(promotion()), "2026-09-10T12:00:01Z"),
+        &passed(checker(
+            "require",
+            "not_accepted",
+            &reject,
+            &["rule_not_met"],
+            true,
+        )),
+    );
+    assert_promotion(
+        "require, no checker result, current exception",
+        &with_exception(
+            without(promotion(), "measurement_verdict"),
+            "2026-09-10T12:00:01Z",
+        ),
+        &passed(checker("require", "missing", &Value::Null, &[], true)),
+    );
+    assert_promotion(
+        "require, rejected, exception expiring at the evaluation instant",
+        &with_exception(rejected(promotion()), EVALUATED_AT),
+        &refused(
+            "promotion_checker_not_accepted",
+            checker("require", "not_accepted", &reject, &["rule_not_met"], false),
+        ),
+    );
+    let mut ownerless = with_exception(rejected(promotion()), "2026-09-10T12:00:01Z");
+    ownerless["items"]["exception"][0]["owner"] = json!(" ");
+    assert_promotion(
+        "require, rejected, exception without an owner",
+        &ownerless,
+        &refused(
+            "promotion_checker_not_accepted",
+            checker("require", "not_accepted", &reject, &["rule_not_met"], false),
+        ),
+    );
+    // An exception is never needed, and never reported as used, when the
+    // checker accepted or the policy only recommends.
+    assert_promotion(
+        "require, accepted, current exception",
+        &with_exception(promotion(), "2026-09-10T12:00:01Z"),
+        &passed(checker("require", "accepted", &json!("accept"), &[], false)),
+    );
+    assert_promotion(
+        "recommend, rejected, current exception",
+        &with_exception(
+            rejected(without(promotion(), "measurement_policy")),
+            "2026-09-10T12:00:01Z",
+        ),
+        &passed(checker(
+            "recommend",
+            "not_accepted",
+            &reject,
+            &["rule_not_met"],
+            false,
+        )),
+    );
+}
+
+#[trace("TC-162", "FR-025-AC-5")]
+#[test]
+fn tc_162_malformed_checker_and_policy_items_are_refused_before_outcomes() {
+    for (kind, member, value) in [
+        ("measurement_verdict", "verdict", json!("accepted")),
+        ("measurement_verdict", "reasons", json!("rule_not_met")),
+        ("measurement_verdict", "unexpected", json!(true)),
+        ("measurement_policy", "mode", json!("enforced")),
+        ("measurement_policy", "stages", json!("baseline")),
+        ("measurement_policy", "unexpected", json!(true)),
+    ] {
+        let mut projection = promotion();
+        projection["items"][kind][0][member] = value;
+        let error = evaluate_request_bytes(
+            &serde_json::to_vec(&request(&projection, &["measurement.promotion_ready"]))
+                .expect("request fixture must serialize"),
+        )
+        .expect_err("a malformed checker or policy item must be refused");
+        assert_eq!(
+            error.code(),
+            "workflow_invariant_request_invalid",
+            "{kind}.{member}"
+        );
+    }
 }

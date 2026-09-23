@@ -67,7 +67,41 @@
       "stability": "stable",
       "decision_yield": "sufficient",
       "limitations": "documented",
-      "owner": "assurance-owner"
+      "owner": "assurance-owner",
+      "plan_id": "MP-001",
+      "candidate": "collection-2"
+    }],
+    "measurement_policy": [{
+      "profile_path": "spec/assurance/AP-001.md",
+      "mode": "require",
+      "stages": ["baseline", "gate"]
+    }],
+    "measurement_verdict": [{
+      "schema": "quoin.measurement-verdict.v1",
+      "planId": "MP-001",
+      "definitionVersion": "v1",
+      "verdict": "accept",
+      "reasons": [],
+      "claimed": null,
+      "candidate": "collection-2",
+      "decisions": [{
+        "dimensions": {},
+        "estimate": 0.9,
+        "estimateBasis": "recomputed",
+        "baseline": 0.8,
+        "holds": true
+      }],
+      "findings": [],
+      "regressedRuns": [],
+      "orderSource": "git-first-parent-add",
+      "counts": {
+        "collectionsConsidered": 2,
+        "regressedRuns": 0,
+        "observationsRecomputed": 2,
+        "observationsAsserted": 0,
+        "orderAttested": 2,
+        "orderUnattested": 0
+      }
     }],
     "impact_snapshot": [{
       "source_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

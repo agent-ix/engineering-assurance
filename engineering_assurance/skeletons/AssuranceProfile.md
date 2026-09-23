@@ -20,6 +20,9 @@ impact_assessments:
 review_policy:
   mode: require
   operations: [code-review, gap-analysis]
+measurement_policy:
+  mode: require
+  stages: [gate]
 relationships: []
 ---
 
@@ -39,6 +42,14 @@ of evidence capable of reducing uncertainty about it.
 
 Evidence must identify its producer, subject revision, collection conditions,
 and limitations. A measurement is not a decision by itself.
+
+## Measurement Policy
+
+A promotion into a listed stage needs the independent checker's accepted
+verdict for the plan's definition version and candidate collection, over an
+intake order the producer could not choose, or a current owned exception. Any
+other stage only reports the checker's verdict. An accepted verdict informs the
+owner's promotion decision and never makes it.
 
 ## Exceptions
 
