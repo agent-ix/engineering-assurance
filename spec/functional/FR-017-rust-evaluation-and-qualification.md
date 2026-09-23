@@ -50,12 +50,17 @@ checking, manifest validation, and qualification assertions to Rust.
   of the module-manifest schema `filament-core-service` owns (FR-035), the
   way `spec-artifacts-iso` briefly did before retiring that copy (PLAT-902,
   agent-ix/spec-artifacts-iso#42). The `manifest-validate` host adapter
-  (AC-8) reads a real authoritative schema only from an explicit operator-
-  supplied module root; `tests/manifest_parity.rs` exercises the pure
-  classifier itself with a small locally authored fixture schema, and real
-  conformance to the authoritative schema is Quire's job (Ownership
-  Boundaries) — verified today by the real `quire validate` engine in
-  `tests/test_module.py::test_quire_accepts_every_skeleton_without_diagnostics`.
+  (AC-8) reads the schema and edge registry from one explicit operator-
+  supplied module root; since that retirement no single upstream module root
+  holds both files, so the adapter cannot currently be pointed at the real
+  contract without an assembled root. `tests/manifest_parity.rs` exercises
+  the pure classifier with a small locally authored, non-authoritative
+  fixture schema and registry, so TC-121 does not assert that this module's
+  own manifest conforms to the FR-035 schema or to the upstream edge
+  registry. No test in this repository asserts full FR-035 conformance of
+  this module's manifest: the `quire validate --module` run in
+  `tests/test_module.py::test_quire_accepts_every_skeleton_without_diagnostics`
+  loads the manifest with typed fields but does not enforce the full schema.
 - For the pure aggregation boundary, one
   `engineering-assurance.evaluation-aggregate-request/v1` document containing
   evaluation envelopes for the closed host and scenario populations. Each
