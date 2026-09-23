@@ -25,8 +25,8 @@ structured rule a checker evaluates mechanically against the plan's `metric`.
     `ratio`;
   - `decision_rule`: an object with `comparator` (exactly one of `gt`, `ge`,
     `lt`, `le`, or `eq`) and exactly one reference: a numeric `threshold`, or a
-    `baseline` (exactly one of `constant-predictor`, `prior-collection`, or
-    `best-seen`) with an optional numeric `margin`.
+    `baseline` (exactly one of `constant-predictor`, `prior-collection`,
+    `best-seen`, or `external-reference`) with an optional numeric `margin`.
 - For the consistency checks: a validated rule with the plan's `objective` or
   `estimator`.
 - For rule evaluation: a validated rule, the estimate, and, for a baseline
@@ -84,6 +84,19 @@ structured rule a checker evaluates mechanically against the plan's `metric`.
   plan's metric under the same `definition_version`, the maximum value when
   `comparator` is `gt` or `ge`, and the minimum when `comparator` is `lt` or
   `le`.
+- `baseline: external-reference` SHALL mean a per-dimension reference value
+  the calling checker resolves from a source outside the plan at evaluation
+  time -- neither a fixed number written into the plan, nor the plan's metric
+  in a prior collection, nor a corpus-computed constant-predictor rate, nor a
+  maximum or minimum over prior collections. This repository does not resolve
+  it, exactly as it does not compute any other baseline value: the calling
+  checker supplies it the same way it supplies every other baseline value.
+- The schema and the Rust `DecisionRule` type SHALL accept
+  `baseline: external-reference` with every `estimator`, carrying no
+  estimator restriction.
+- The schema and the Rust `DecisionRule` type SHALL accept `comparator: eq`
+  with `baseline: external-reference`, unlike `baseline: best-seen`, because
+  its value does not depend on `comparator`'s direction.
 - The schema and the Rust `DecisionRule` type SHALL refuse `comparator: eq`
   with `baseline: best-seen`, and `comparator: eq` with a `margin`.
 - The schema and the Rust `DecisionRule` type SHALL refuse
@@ -170,6 +183,7 @@ change produces a finding rather than being accepted silently.
 | FR-021-AC-7 | A minimal consumer with only the `measurement` feature reaches `Estimator`, `Comparator`, `Baseline`, `DecisionRule`, and the definition-change check, and resolves no `serde_json`. | Test (TC-142) |
 | FR-021-AC-8 | Given two plan definitions with an equal `definition_version`, an added, removed, or changed estimator or decision rule yields one typed finding naming each changed member; the same edit with a different `definition_version`, and an unchanged definition, yield no finding. | Test (TC-141) |
 | FR-021-AC-9 | The schema and the Rust `DecisionRule` accept a comparator that agrees with the objective's direction and refuse one that disagrees, with a typed error naming both; they accept `constant-predictor` only with `estimator: proportion`, with a typed error naming the estimator. | Test (TC-144, TC-146) |
+| FR-021-AC-10 | The schema and the Rust `DecisionRule` accept `baseline: external-reference` with every estimator and, unlike `best-seen`, with `comparator: eq`, and refuse it with `eq` plus a `margin` and with a comparator that disagrees with the objective's direction, with the same typed errors as every other baseline; evaluating it without a supplied value is a typed refusal naming `external-reference`, and a supplied value is moved by the margin in the direction of improvement; the Rust `Baseline` type round-trips `external-reference` through construction, serialization, and deserialization. | Test (TC-171) |
 
 ## Dependencies
 

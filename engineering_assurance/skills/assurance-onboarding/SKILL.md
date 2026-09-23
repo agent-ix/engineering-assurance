@@ -111,7 +111,10 @@ evaluate, not as a sentence: `estimator` is one of `proportion`, `count`,
 `{ comparator, threshold }` or `{ comparator, baseline, margin? }`, where
 `comparator` is one of `gt`, `ge`, `lt`, `le`, `eq` and `baseline` is one of
 `constant-predictor` (only with `estimator: proportion`), `prior-collection`,
-or `best-seen` (not with `eq`). `margin` is in the metric's own units and
+`best-seen` (not with `eq`), or `external-reference` (a value the calling
+checker resolves from a source outside the plan, e.g. an owner-declared
+budget; no estimator restriction, and usable with `eq`). `margin` is in the
+metric's own units and
 signed in the direction of improvement: positive demands the result beat the
 baseline by that much, negative allows a regression of up to that much; `eq`
 takes none. When `objective` is present, the comparator agrees with it:

@@ -92,6 +92,7 @@ def test_onboard_js_json_checklist_lists_the_decision_rule_vocabulary(
         "constant-predictor",
         "prior-collection",
         "best-seen",
+        "external-reference",
     ]
     assert {
         "when": "statistical_design.decision_rule is present",

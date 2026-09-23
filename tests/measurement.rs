@@ -1092,6 +1092,7 @@ fn tc_147_all_constants_cover_every_variant() {
             Baseline::ConstantPredictor => 0,
             Baseline::PriorCollection => 1,
             Baseline::BestSeen => 2,
+            Baseline::ExternalReference => 3,
         };
         assert_eq!(Baseline::ALL.get(index), Some(&baseline));
     }
@@ -1101,7 +1102,7 @@ fn tc_147_all_constants_cover_every_variant() {
             Comparator::ALL.len(),
             Baseline::ALL.len()
         ),
-        (5, 5, 3)
+        (5, 5, 4)
     );
 }
 
@@ -1198,6 +1199,90 @@ fn tc_148_decision_rule_evaluation_compares_the_estimate_with_its_reference() {
         Err(RuleEvaluationError::NonFiniteBaselineValue {
             value: f64::NEG_INFINITY
         })
+    );
+}
+
+#[test]
+#[trace("TC-171", "FR-021-AC-10")]
+fn tc_171_external_reference_baseline_has_no_estimator_restriction_and_allows_eq() {
+    // Unlike `constant-predictor`, `external-reference` is accepted with
+    // every estimator: it is a checker-resolved value from outside the plan
+    // (PLAT-1009), not a corpus computation.
+    for estimator in Estimator::ALL {
+        assert_eq!(
+            rule_baseline(Comparator::Ge, Baseline::ExternalReference, None)
+                .check_estimator(estimator),
+            Ok(())
+        );
+    }
+    // Unlike `best-seen`, `external-reference` is accepted with `eq`: its
+    // value does not depend on the comparator's direction.
+    let equal = DecisionRule::against_baseline(Comparator::Eq, Baseline::ExternalReference, None)
+        .expect("eq against external-reference is valid");
+    assert_eq!(equal.holds(30.0, Some(30.0)), Ok(true));
+    assert_eq!(equal.holds(31.0, Some(30.0)), Ok(false));
+    // `eq` still takes no margin, exactly as for every other baseline.
+    assert_eq!(
+        DecisionRule::against_baseline(Comparator::Eq, Baseline::ExternalReference, Some(0.1)),
+        Err(DecisionRuleError::MarginWithEq)
+    );
+    assert!(
+        parse_rule("comparator: eq\nbaseline: external-reference\nmargin: 0.1\n")
+            .expect_err("eq with a margin is refused")
+            .contains(&DecisionRuleError::MarginWithEq.to_string())
+    );
+
+    // The direction check applies unchanged: a lower-is-better budget takes
+    // `le`, and refuses `ge` with a typed error naming both.
+    let budget = rule_baseline(Comparator::Le, Baseline::ExternalReference, Some(5.0));
+    assert_eq!(
+        budget.check_against(&objective(Direction::Lower, None)),
+        Ok(())
+    );
+    assert_eq!(
+        rule_baseline(Comparator::Ge, Baseline::ExternalReference, None)
+            .check_against(&objective(Direction::Lower, None)),
+        Err(DecisionRuleError::DirectionMismatch {
+            direction: Direction::Lower,
+            comparator: Comparator::Ge,
+        })
+    );
+
+    // Evaluation: the checker must supply the resolved value, which the
+    // margin moves in the direction of improvement (30 - 5 = 25 for `le`).
+    assert_eq!(
+        budget.holds(25.0, None),
+        Err(RuleEvaluationError::MissingBaselineValue {
+            baseline: Baseline::ExternalReference
+        })
+    );
+    assert_eq!(budget.holds(25.0, Some(30.0)), Ok(true));
+    assert_eq!(budget.holds(26.0, Some(30.0)), Ok(false));
+
+    // Construction, serialization, deserialization, and round trip.
+    let rule =
+        DecisionRule::against_baseline(Comparator::Le, Baseline::ExternalReference, Some(5.0))
+            .expect("valid rule");
+    assert_eq!(
+        rule.reference(),
+        RuleReference::Baseline {
+            baseline: Baseline::ExternalReference,
+            margin: 5.0
+        }
+    );
+    assert_eq!(
+        parse_rule("comparator: le\nbaseline: external-reference\nmargin: 5\n"),
+        Ok(rule)
+    );
+    let emitted = yaml_serde::to_string(&rule).expect("rule serializes");
+    assert_eq!(parse_rule(&emitted), Ok(rule), "{emitted}");
+    assert_eq!(
+        Baseline::ExternalReference.to_string(),
+        "external-reference"
+    );
+    assert_eq!(
+        yaml_serde::from_str::<Baseline>("external-reference").expect("valid baseline"),
+        Baseline::ExternalReference
     );
 }
 
