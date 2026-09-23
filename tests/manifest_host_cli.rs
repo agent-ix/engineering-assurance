@@ -119,13 +119,19 @@ fn tc_131_make_target_requires_and_forwards_the_explicit_schema_and_registry_roo
 }
 
 /// Real conformance of this repository's own `engineering_assurance/manifest.yaml`
-/// against filament-core-service's authoritative FR-035 schema and
-/// spec-artifacts-iso's real edge registry — the assertion PLAT-994 found
-/// missing (agent-ix/engineering-assurance#123's PLAT-992 review). This CLI
-/// takes only explicit operator-supplied roots (FR-017 Behavior); it never
-/// discovers, fetches, or vendors a copy of either file, so this test needs
-/// an operator (or a CI job wired separately from this one) to supply both
-/// roots explicitly:
+/// against filament-core-service's authoritative module-manifest schema and
+/// spec-artifacts-iso's real edge registry. The fixture-backed parity suite
+/// cannot assert this, because its schema and registry are locally authored.
+/// This CLI takes only explicit operator-supplied roots; it never discovers,
+/// fetches, or vendors a copy of either file, so this test needs an operator
+/// (or a CI job wired separately from this one) to supply both roots
+/// explicitly:
+//
+// Keep requirement and ticket ids out of this doc comment and the ignore
+// reason: Quire reads id-shaped tokens here as trace tags, and the Rust
+// marker reconciliation in tests/traceability_reconciliation.rs then refuses
+// them as unbound. The trace attribute below is
+// the only binding.
 ///
 /// - `EA_MANIFEST_SCHEMA_ROOT`: a directory containing
 ///   `module-manifest.schema.json` (e.g. `filament-core-service`'s
@@ -135,11 +141,10 @@ fn tc_131_make_target_requires_and_forwards_the_explicit_schema_and_registry_roo
 ///   root, `spec_artifacts_iso/`).
 ///
 /// Run with `cargo test --test manifest_host_cli -- --ignored` after
-/// exporting both. Measured 2026-09-23 against a local filament-core-service
-/// and spec-artifacts-iso checkout: this repository's manifest conforms.
+/// exporting both.
 #[test]
 #[ignore = "requires EA_MANIFEST_SCHEMA_ROOT and EA_MANIFEST_REGISTRY_ROOT pointed at real, \
-            operator-supplied checkouts; see the doc comment above (PLAT-994)"]
+            operator-supplied checkouts; see the doc comment above"]
 #[trace("TC-121", "FR-017-AC-7", "FR-017-AC-8")]
 fn tc_121_real_manifest_conforms_to_the_authoritative_schema_and_edge_registry() {
     let schema_root = env::var("EA_MANIFEST_SCHEMA_ROOT").expect(

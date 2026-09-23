@@ -24,7 +24,9 @@ runtime and neither is defaulted.
 
 ## Verdict
 
-**CONDITIONAL** — only low findings. The dead CI environment variable
+**CONDITIONAL** — FND-005 was high, because the PR as submitted failed
+TC-118 in `make rust-foundation-gate`. It is fixed in this review, so only
+low findings remain open. The dead CI environment variable
 (FND-001) and the unused CI checkout (FND-002) still need a follow-up that
 can edit workflow files.
 
@@ -32,6 +34,7 @@ can edit workflow files.
 
 | ID      | Severity | Summary                                                                                                                                                                                                  | Refs                              |
 | ------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| FND-005 | high     | The new ignored test's doc comment and `#[ignore]` reason contained FR-035, FR-017, PLAT-992 and PLAT-994. Quire read these as trace tags it could not bind, so TC-118 (`tc_118_quire_reconciles_every_rust_marker…`) failed. Fixed: the ids were removed and a comment now explains why they must stay out. | tests/manifest_host_cli.rs:121 |
 | FND-001 | low      | `MODULE_MANIFEST_SCHEMA` has had no reader since a02e555 retired the Python wrapper. It also names a file PLAT-902 deleted, so it suggests CI checks a schema when it does not. Left open because a workflow-file change could not be pushed with the available token. | .github/workflows/ci.yml:55       |
 | FND-002 | low      | The CI `.deps/spec-artifacts-iso` checkout now has no consumer in the repository. It was left in place as out of scope and flagged for follow-up.                                                        | .github/workflows/ci.yml:16       |
 | FND-003 | low      | The make-target test named "requires_and_forwards" checks forwarding only. It does not check refusal when only one of `MANIFEST_SCHEMA_ROOT`/`MANIFEST_REGISTRY_ROOT` is set. This gap existed before this PR. | tests/manifest_host_cli.rs:105    |
