@@ -63,10 +63,10 @@ choice ([FR-005](./FR-005-resumable-human-decisions.md)).
   `mode` and `stages`, `mode` from the same `recommend`/`require` vocabulary
   as `review_policy`, and `stages` a non-empty list of distinct values from
   the MeasurementPlan `stage` enum.
-- The policy SHALL be recorded into the run as a `measurement_policy` item.
-  The invariant evaluator reads only the run projection
-  ([FR-016-CON-3](./FR-016-rust-onboarding-and-workflow.md)), so it SHALL NOT
-  read the profile file.
+- The onboarding skill SHALL record the governing profile's policy into the
+  run as a `measurement_policy` item.
+- The invariant evaluator SHALL NOT read the profile file: it reads only the
+  run projection ([FR-016-CON-3](./FR-016-rust-onboarding-and-workflow.md)).
 - The mode in force SHALL be `require` when any recorded policy has mode
   `require` and lists the proposed stage, and `recommend` otherwise,
   including when no policy is recorded.
@@ -76,8 +76,9 @@ choice ([FR-005](./FR-005-resumable-human-decisions.md)).
   status SHALL be `missing`.
 - A read result SHALL match when its `definitionVersion` equals the
   evidence's `definition_version` and its `candidate` equals the evidence's
-  non-empty `candidate`. When results are read but none matches, the status
-  SHALL be `mismatch`.
+  non-empty `candidate`.
+- When results are read but none matches, the invariant SHALL report the
+  status `mismatch`.
 - A matching result SHALL have status `accepted` when its `verdict` is
   `accept` and its `orderSource` is `git-first-parent-add`, the only intake
   order the producer cannot choose after the fact; `order_unattested` when
@@ -104,8 +105,9 @@ choice ([FR-005](./FR-005-resumable-human-decisions.md)).
   `verdict` or `mode`, or a mistyped member.
 - The workflow's terminal transitions SHALL remain human-gated. A passing
   `measurement.promotion_ready` SHALL only let the run reach `decision_ready`.
-- Engineering Assurance SHALL own the item schema it accepts and SHALL NOT
-  depend on Quoin code.
+- Engineering Assurance SHALL own the checker-result item schema it accepts.
+- Engineering Assurance SHALL NOT depend on Quoin code to read a checker
+  result.
 
 ## Error Conditions
 
