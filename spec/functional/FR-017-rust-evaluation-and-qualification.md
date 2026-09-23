@@ -50,15 +50,22 @@ checking, manifest validation, and qualification assertions to Rust.
   of the module-manifest schema `filament-core-service` owns (FR-035), the
   way `spec-artifacts-iso` briefly did before retiring that copy (PLAT-902,
   agent-ix/spec-artifacts-iso#42). The `manifest-validate` host adapter
-  (AC-8) reads the schema and edge registry from one explicit operator-
-  supplied module root; since that retirement no single upstream module root
-  holds both files, so the adapter cannot currently be pointed at the real
-  contract without an assembled root. `tests/manifest_parity.rs` exercises
-  the pure classifier with a small locally authored, non-authoritative
-  fixture schema and registry, so TC-121 does not assert that this module's
-  own manifest conforms to the FR-035 schema or to the upstream edge
-  registry. No test in this repository asserts full FR-035 conformance of
-  this module's manifest: the `quire validate --module` run in
+  (AC-8) reads the schema and edge registry from two explicit operator-
+  supplied roots — a schema root and a registry root — rather than one
+  shared module root; since that retirement no single upstream module root
+  holds both files, so the adapter takes them separately instead of
+  assembling one. `tests/manifest_parity.rs` exercises the pure classifier
+  with a small locally authored, non-authoritative fixture schema and
+  registry, so TC-121's default-run coverage does not assert that this
+  module's own manifest conforms to the FR-035 schema or to the upstream
+  edge registry. `tests/manifest_host_cli.rs` additionally carries an
+  `#[ignore]`d real-conformance case (PLAT-994) that runs the
+  `manifest-validate` adapter against this module's real manifest and
+  explicit, operator-supplied schema and registry roots (for example a
+  `filament-core-service` checkout and an installed `spec-artifacts-iso`
+  module); it is not part of the default gate because this public
+  repository's default CI cannot assume access to the private schema root.
+  The `quire validate --module` run in
   `tests/test_module.py::test_quire_accepts_every_skeleton_without_diagnostics`
   loads the manifest with typed fields but does not enforce the full schema.
 - For the pure aggregation boundary, one
@@ -153,15 +160,17 @@ checking, manifest validation, and qualification assertions to Rust.
   after same-revision parity with the retained Python loader and script. The
   cutover SHALL be reversible before the replaced Python paths are deleted.
 - The native manifest host adapter SHALL accept one explicit non-symbolic-link
-  repository root and one explicit non-symbolic-link authoritative module root.
-  It SHALL read only the declared module manifest, authoritative manifest
-  schema and edge registry, and manifest-declared schema/skeleton resource
-  pairs beneath those roots before delegating qualification to the pure Rust
-  manifest boundary.
+  repository root, one explicit non-symbolic-link authoritative schema root,
+  and one explicit non-symbolic-link authoritative edge-registry root.
+- The native manifest host adapter SHALL read only the declared module
+  manifest beneath the repository root, the authoritative manifest schema
+  beneath the schema root, the edge registry beneath the registry root, and
+  manifest-declared schema/skeleton resource pairs beneath the repository
+  root before delegating qualification to the pure Rust manifest boundary.
 - The native manifest host adapter SHALL reject missing, linked, special,
   escaping, duplicate, or over-limit resources before qualification. It SHALL
   NOT search environment variables, parent directories, home directories, or
-  network locations for an authoritative schema.
+  network locations for an authoritative schema or edge registry.
 - Treat the supported host population as `claude`, `codex`, `opencode`, and
   `copilot`, and the scenario population as `existing-profile`, `no-profile`,
   `malformed-producer`, `unavailable-producer`, `interruption-resume`,
@@ -549,7 +558,7 @@ byte mismatch refuses the package audit without a success result.
 | FR-017-AC-5 | The pure Rust content-rights classifier matches every retained finding class and exception, rejects unsafe paths without echoing them, preserves Unicode protected-token matching, emits no matched content, and returns deterministic typed findings without filesystem, environment, child-program, network, or clock access. | Test (TC-119) |
 | FR-017-AC-6 | For every caller-supplied expected allowlist and observed file-member sequence within the declared ceilings, the pure Rust membership classifier matches retained extra/missing behavior on the shared safe unique domain, additionally rejects unsafe or duplicate membership without disclosing unsafe paths, remains permutation-invariant, and performs no filesystem, environment, child-program, network, clock, archive-decoding, or package-format selection. | Test (TC-120) |
 | FR-017-AC-7 | For the retained valid module and every declared malformed-manifest, schema, registry, resource, frontmatter, and heading case within the declared ceilings, the pure Rust manifest classifier accepts or fails closed through typed deterministic findings, consumes rather than copies authoritative schemas, and performs no filesystem, environment, child-program, network, or clock access. | Test (TC-121) |
-| FR-017-AC-8 | The native manifest host adapter validates the retained module through explicit repository and authoritative-module roots, emits one versioned result, and refuses invalid roots or unsafe/missing/linked/special/escaping/over-limit resources before the pure qualifier runs. | Test (TC-131) |
+| FR-017-AC-8 | The native manifest host adapter validates the retained module through explicit repository, authoritative-schema, and authoritative-registry roots, emits one versioned result, and refuses invalid roots or unsafe/missing/linked/special/escaping/over-limit resources before the pure qualifier runs. | Test (TC-131) |
 | FR-017-AC-9 | Every `cli-agent-evals.external-provider-result/v1` response the native provider emits carries only the optional scenario metadata it holds; an absent use case, title, or canary flag is omitted from the response bytes rather than serialized as a null, so the consuming host accepts the described catalogue. | Test (TC-136) |
 | FR-017-AC-10 | An integration-evidence coverage refusal reports every failing condition rather than stopping at the first, gives each one its own condition code and the authored document and line of each offending row, and carries the first condition in a fixed severity order as the result code; a repository coverage gap is never reported as a coverage-tool failure, and a status classification the tool reports as skipped is itself a refusal rather than an empty result accepted as a pass. | Test (TC-137) |
 

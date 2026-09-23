@@ -229,9 +229,13 @@ fn integration_evidence_command() -> Command {
 
 fn manifest_validate_command() -> Command {
     Command::new(MANIFEST_VALIDATE_CAPABILITY)
-        .about("Qualify the Engineering Assurance module against an explicit module root")
+        .about(
+            "Qualify the Engineering Assurance module against explicit schema and \
+             edge-registry roots",
+        )
         .arg(required_path_arg("root"))
-        .arg(required_path_arg("module-root"))
+        .arg(required_path_arg("schema-root"))
+        .arg(required_path_arg("registry-root"))
 }
 
 fn package_root_command(name: &'static str, about: &'static str) -> Command {
@@ -278,17 +282,18 @@ fn main() -> ExitCode {
 }
 
 fn run_manifest_validate(arguments: &ArgMatches) -> ExitCode {
-    let (Some(root), Some(module_root)) = (
+    let (Some(root), Some(schema_root), Some(registry_root)) = (
         arguments.get_one::<PathBuf>("root"),
-        arguments.get_one::<PathBuf>("module-root"),
+        arguments.get_one::<PathBuf>("schema-root"),
+        arguments.get_one::<PathBuf>("registry-root"),
     ) else {
         return emit_error(
             MANIFEST_VALIDATE_CAPABILITY,
             "manifest_validate_arguments_invalid",
-            "manifest-validate requires repository and module roots",
+            "manifest-validate requires repository, schema, and registry roots",
         );
     };
-    let result = match manifest_host::execute(root, module_root) {
+    let result = match manifest_host::execute(root, schema_root, registry_root) {
         Ok(result) => result,
         Err(error) => {
             return emit_error(

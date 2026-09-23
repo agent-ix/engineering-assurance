@@ -10,7 +10,8 @@ EVAL_REPORTS ?=
 EVAL_AGGREGATE_REPORT ?=
 EVAL_WORKSPACE_ROOT ?=
 EVAL_SOURCE_REVISION ?= $(shell git rev-parse HEAD)
-MANIFEST_MODULE_ROOT ?=
+MANIFEST_SCHEMA_ROOT ?=
+MANIFEST_REGISTRY_ROOT ?=
 PYTHON ?= python3
 QUIRE ?= quire
 CARGO ?= cargo
@@ -23,13 +24,18 @@ test:
 	$(PYTHON) -m pytest
 
 manifest-validate:
-	@test -n "$(strip $(MANIFEST_MODULE_ROOT))" || { \
-		echo "MANIFEST_MODULE_ROOT is required for explicit manifest validation" >&2; \
+	@test -n "$(strip $(MANIFEST_SCHEMA_ROOT))" || { \
+		echo "MANIFEST_SCHEMA_ROOT is required for explicit manifest validation" >&2; \
+		exit 2; \
+	}
+	@test -n "$(strip $(MANIFEST_REGISTRY_ROOT))" || { \
+		echo "MANIFEST_REGISTRY_ROOT is required for explicit manifest validation" >&2; \
 		exit 2; \
 	}
 	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet -- manifest-validate \
 		--root . \
-		--module-root "$(MANIFEST_MODULE_ROOT)"
+		--schema-root "$(MANIFEST_SCHEMA_ROOT)" \
+		--registry-root "$(MANIFEST_REGISTRY_ROOT)"
 
 # Classify the toolchain on this machine against the reviewed compatibility
 # matrix. This is a manual command, deliberately not part of `integration-gate`
