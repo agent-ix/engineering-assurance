@@ -568,6 +568,21 @@ def test_decision_rule_external_reference_baseline_has_no_estimator_restriction(
     ) == []
     assert _statistical_design_errors(
         decision_rule={
+            "comparator": "eq",
+            "baseline": "external-reference",
+            "margin": 0.1,
+        }
+    ) != []
+    assert _statistical_design_errors(
+        objective={"direction": "lower"},
+        decision_rule={"comparator": "le", "baseline": "external-reference"},
+    ) == []
+    assert _statistical_design_errors(
+        objective={"direction": "lower"},
+        decision_rule={"comparator": "ge", "baseline": "external-reference"},
+    ) != []
+    assert _statistical_design_errors(
+        decision_rule={
             "comparator": "ge",
             "baseline": "external-reference",
             "margin": 0.02,
