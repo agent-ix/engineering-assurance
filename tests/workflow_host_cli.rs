@@ -785,17 +785,8 @@ fn promotion_request(
     operation: &str,
     choice: Option<&str>,
 ) -> Value {
-    let mut request = json!({
-        "protocol": REQUEST_PROTOCOL,
-        "operation": operation,
-        "state_dir": state_dir,
-        "skill_root": skill_root(),
-        "ix_flow_executable": "ix-flow",
-        "binding": promotion_binding(run_id)
-    });
-    if let Some(choice) = choice {
-        request["choice"] = Value::String(choice.to_owned());
-    }
+    let mut request = request(state_dir, run_id, operation, choice);
+    request["binding"] = promotion_binding(run_id);
     request
 }
 
@@ -805,8 +796,10 @@ fn promotion_request(
 ///
 /// `plan_id` `MP-001`, definition `v1`, candidate `collection-2`, proposing
 /// `observe -> baseline` -- the same evidence shape
-/// `workflow_invariants_parity.rs`'s `promotion()` fixture models, so a
-/// checker result built with matching fields is read by the Rust invariant.
+/// `workflow_invariants_parity.rs`'s `promotion()` fixture models. Under
+/// ix-flow the invariant is the skill's `scripts/invariants.js` provider, which
+/// that parity test holds byte-equal to the Rust evaluator, so a checker result
+/// built with matching fields binds to this evidence on both.
 fn promotion_populate_evidence_ready(state_dir: &Path, run_id: &str) {
     ix_flow(
         state_dir,
@@ -1014,6 +1007,13 @@ fn promotion_require_mode_exception_unblocks() {
         run_id,
         "measurement_policy",
         &promotion_policy_item("require"),
+    );
+    // Refused first, so the exception below is what unblocks this run.
+    let blocked = ix_flow_raw(excepted.path(), &["advance", run_id, "decision_ready"]);
+    assert_eq!(blocked["state"], "invariant_failed");
+    assert_eq!(
+        blocked["error"]["details"]["invariantCode"],
+        "promotion_checker_missing"
     );
     add_item(
         excepted.path(),
