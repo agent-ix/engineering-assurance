@@ -101,8 +101,10 @@ fn wait(arguments: &mut impl Iterator<Item = OsString>) {
 fn spawn_child(arguments: &mut impl Iterator<Item = OsString>) {
     let ready = argument(arguments);
     let completed = argument(arguments);
+    // Outlives the caller's rendezvous timeout (30s): the child must only end
+    // by the caller cancelling or timing out the request, never on its own.
     let mut child = Command::new(fixture_executable())
-        .args(["wait", "10000"])
+        .args(["wait", "60000"])
         .spawn()
         .unwrap_or_else(|_| fail("cannot spawn fixture child"));
     fs::write(ready, b"ready").unwrap_or_else(|_| fail("cannot write ready marker"));

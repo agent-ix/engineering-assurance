@@ -12,7 +12,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
-    thread,
+    thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
 
@@ -175,6 +175,39 @@ fn request(root: &Path, arguments: &[&str]) -> ProducerExecutionRequest {
             max_concurrency: 1,
         },
         response: binding(),
+    }
+}
+
+/// Bound for tests whose fixture is held open across a test-driven
+/// rendezvous (a ready marker, then a test action, then a release or a
+/// cancellation). Those tests exercise staging and cancellation, not the
+/// timeout, so both the readiness wait and the request's own timeout use
+/// a bound well past any realistic scheduling delay on a loaded, shared
+/// runner. Under the default 2s budget the request could time out before
+/// the test acted, failing for reasons unrelated to the behavior under
+/// test (PLAT-996). The happy path never waits this long.
+const RENDEZVOUS_MILLIS: u64 = 30_000;
+
+/// A request whose fixture waits on the test: see [`RENDEZVOUS_MILLIS`].
+fn rendezvous_request(root: &Path, arguments: &[&str]) -> ProducerExecutionRequest {
+    let mut request = request(root, arguments);
+    request.budget.timeout_millis = RENDEZVOUS_MILLIS;
+    request
+}
+
+/// Blocks until the fixture run by `worker` creates `path`. Fails at once
+/// if `worker` finishes without creating it (the fixture died or was
+/// refused), so the generous [`RENDEZVOUS_MILLIS`] bound only applies to
+/// a fixture that is still running but has not yet signalled.
+fn await_ready<T>(path: &Path, worker: &JoinHandle<T>, message: &str) {
+    let deadline = Instant::now() + Duration::from_millis(RENDEZVOUS_MILLIS);
+    while !path.exists() {
+        assert!(
+            !worker.is_finished() || path.exists(),
+            "{message}: worker finished without signalling ready"
+        );
+        assert!(Instant::now() < deadline, "{message}: timed out");
+        thread::sleep(Duration::from_millis(1));
     }
 }
 
@@ -697,13 +730,9 @@ fn tc_123_staged_projection_excludes_extra_and_freezes_declared_input() {
         release.to_str().expect("UTF-8 path"),
         "extra.txt",
     ];
-    let unbound = request(root.path(), &arguments);
+    let unbound = rendezvous_request(root.path(), &arguments);
     let unbound_worker = thread::spawn(move || execute(&unbound, &adapter()));
-    let deadline = Instant::now() + Duration::from_secs(2);
-    while !ready.exists() {
-        assert!(Instant::now() < deadline, "fixture did not reach launch");
-        thread::yield_now();
-    }
+    await_ready(&ready, &unbound_worker, "fixture did not reach launch");
     fs::write(root.path().join("extra.txt"), b"changed-unbound").expect("unbound mutation");
     fs::write(&release, b"release").expect("release fixture");
     assert!(matches!(
@@ -720,18 +749,14 @@ fn tc_123_staged_projection_excludes_extra_and_freezes_declared_input() {
         release.to_str().expect("UTF-8 path"),
         "selected.txt",
     ];
-    let mut frozen = request(root.path(), &arguments);
+    let mut frozen = rendezvous_request(root.path(), &arguments);
     frozen.inputs.push(InputBinding {
         role: "selected".to_owned(),
         path: "selected.txt".to_owned(),
         digest: ContentDigest::of_bytes(b"original"),
     });
     let worker = thread::spawn(move || execute(&frozen, &adapter()));
-    let deadline = Instant::now() + Duration::from_secs(2);
-    while !ready.exists() {
-        assert!(Instant::now() < deadline, "fixture did not reach launch");
-        thread::yield_now();
-    }
+    await_ready(&ready, &worker, "fixture did not reach launch");
     fs::write(root.path().join("selected.txt"), b"replacement").expect("source mutation");
     fs::write(&release, b"release").expect("release fixture");
     let result = worker.join().expect("worker must terminate");
@@ -983,7 +1008,11 @@ fn tc_125_cancellation_reaps_group_and_escape_mutant_fails_containment() {
         ready.to_str().expect("UTF-8 path"),
         completed.to_str().expect("UTF-8 path"),
     ];
-    let mut running_request = request(root.path(), &arguments);
+    // The fixture must stay alive until `cancellation.cancel()` below, across
+    // the readiness rendezvous and the concurrency check; its child outlives
+    // this request's timeout, so only cancellation (or, on failure, the
+    // timeout) ends it.
+    let mut running_request = rendezvous_request(root.path(), &arguments);
     running_request.environment.insert(
         "EA_FIXTURE_EXECUTABLE".to_owned(),
         fixture_executable().display().to_string(),
@@ -1003,28 +1032,32 @@ fn tc_125_cancellation_reaps_group_and_escape_mutant_fails_containment() {
                 .expect("valid request")
         })
     };
-    let deadline = Instant::now() + Duration::from_secs(2);
-    while !ready.exists() {
-        assert!(Instant::now() < deadline, "fixture producer did not start");
-        thread::yield_now();
-    }
+    await_ready(&ready, &worker, "fixture producer did not start");
     let concurrent = request(root.path(), &["emit", "concurrent"]);
-    assert!(matches!(
-        executor
-            .execute(
-                &concurrent,
-                &CancellationToken::new(concurrent.cancellation.clone()),
-                &adapter()
-            )
-            .expect("valid concurrent request")
-            .state,
-        ProducerExecutionState::Refused {
-            reason: ExecutionRefusal::Concurrency
-        }
-    ));
+    let concurrent_state = executor
+        .execute(
+            &concurrent,
+            &CancellationToken::new(concurrent.cancellation.clone()),
+            &adapter(),
+        )
+        .expect("valid concurrent request")
+        .state;
+    assert!(
+        matches!(
+            concurrent_state,
+            ProducerExecutionState::Refused {
+                reason: ExecutionRefusal::Concurrency
+            }
+        ),
+        "concurrent request must be refused while the first runs: {concurrent_state:?}"
+    );
     assert!(cancellation.cancel());
     let result = worker.join().expect("executor thread must terminate");
-    assert!(matches!(result.state, ProducerExecutionState::Cancelled));
+    assert!(
+        matches!(result.state, ProducerExecutionState::Cancelled),
+        "running request must end by cancellation: {:?}",
+        result.state
+    );
     assert!(result.process.is_some());
     assert!(!completed.exists());
     let escaped_pid = controls.path().join("escaped.pid");
