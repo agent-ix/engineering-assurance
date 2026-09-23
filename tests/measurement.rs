@@ -5,7 +5,10 @@
 //! check, and the narrow `measurement` feature; FR-021 decision-rule and
 //! estimator vocabulary, its schema parity, and rule evaluation; FR-024
 //! protected apparatus and negative controls, their schema parity, and
-//! protected-list edits in the definition-change check.
+//! protected-list edits in the definition-change check; FR-026 objective
+//! steering fields (`weight`, `value_half_life`, `budget`), their exclusion
+//! from the measurement definition, and their absence from any decision-rule
+//! verdict.
 
 use std::{collections::BTreeSet, fs, path::Path, process::Command};
 
@@ -402,13 +405,364 @@ fn tc_141_definition_edit_without_a_version_bump_is_a_typed_finding_naming_the_m
     );
 }
 
+#[test]
+#[trace("TC-167", "FR-026-AC-2")]
+fn tc_167_objective_steering_fields_construction_and_deserialization_are_validated() {
+    let built = Objective::with_steering(
+        Direction::Higher,
+        Some(0.9),
+        Some(2.0),
+        Some(30.0),
+        Some(50.0),
+    )
+    .expect("valid steering fields");
+    assert_eq!(built.weight(), Some(2.0));
+    assert_eq!(built.value_half_life(), Some(30.0));
+    assert_eq!(built.budget(), Some(50.0));
+
+    // Zero weight and zero budget are valid edge cases: an objective may
+    // carry no relative value and no attempt budget (PLAT-967).
+    let zeroed = Objective::with_steering(
+        Direction::Higher,
+        Some(0.9),
+        Some(0.0),
+        Some(1.0),
+        Some(0.0),
+    )
+    .expect("weight and budget may be zero");
+    assert_eq!(zeroed.weight(), Some(0.0));
+    assert_eq!(zeroed.budget(), Some(0.0));
+
+    assert_eq!(
+        Objective::with_steering(Direction::Higher, None, Some(-1.0), None, None),
+        Err(ObjectiveError::NegativeWeight { weight: -1.0 })
+    );
+    assert!(matches!(
+        Objective::with_steering(Direction::Higher, None, Some(f64::NAN), None, None),
+        Err(ObjectiveError::NonFiniteWeight { weight }) if weight.is_nan()
+    ));
+    assert_eq!(
+        Objective::with_steering(Direction::Higher, None, None, Some(f64::INFINITY), None),
+        Err(ObjectiveError::NonFiniteValueHalfLife {
+            value_half_life: f64::INFINITY
+        })
+    );
+    assert_eq!(
+        Objective::with_steering(Direction::Higher, None, None, Some(0.0), None),
+        Err(ObjectiveError::NonPositiveValueHalfLife {
+            value_half_life: 0.0
+        })
+    );
+    assert_eq!(
+        Objective::with_steering(Direction::Higher, None, None, Some(-5.0), None),
+        Err(ObjectiveError::NonPositiveValueHalfLife {
+            value_half_life: -5.0
+        })
+    );
+    assert_eq!(
+        Objective::with_steering(Direction::Higher, None, None, None, Some(-0.01)),
+        Err(ObjectiveError::NegativeBudget { budget: -0.01 })
+    );
+    assert!(matches!(
+        Objective::with_steering(Direction::Higher, None, None, None, Some(f64::NAN)),
+        Err(ObjectiveError::NonFiniteBudget { budget }) if budget.is_nan()
+    ));
+
+    assert_eq!(
+        parse("direction: higher\nbound: 0.9\nweight: 2\nvalue_half_life: 30\nbudget: 50\n"),
+        Ok(built)
+    );
+    let negative_weight =
+        parse("direction: higher\nweight: -1\n").expect_err("weight must be non-negative");
+    assert!(
+        negative_weight.contains(&ObjectiveError::NegativeWeight { weight: -1.0 }.to_string()),
+        "{negative_weight}"
+    );
+    let zero_half_life =
+        parse("direction: higher\nvalue_half_life: 0\n").expect_err("half-life must be positive");
+    assert!(
+        zero_half_life.contains(
+            &ObjectiveError::NonPositiveValueHalfLife {
+                value_half_life: 0.0
+            }
+            .to_string()
+        ),
+        "{zero_half_life}"
+    );
+    let negative_budget =
+        parse("direction: higher\nbudget: -5\n").expect_err("budget must be non-negative");
+    assert!(
+        negative_budget.contains(&ObjectiveError::NegativeBudget { budget: -5.0 }.to_string()),
+        "{negative_budget}"
+    );
+    assert!(
+        parse("direction: higher\nweight: \"heavy\"\n").is_err(),
+        "weight must be numeric"
+    );
+    assert!(
+        parse("direction: higher\nbudget: [1]\n").is_err(),
+        "budget must be numeric"
+    );
+
+    let emitted = yaml_serde::to_string(&built).expect("objective serializes");
+    assert_eq!(parse(&emitted), Ok(built));
+}
+
+#[test]
+#[trace("TC-167", "FR-026-AC-2")]
+fn tc_167_non_finite_and_non_positive_steering_fields_are_refused_on_deserialization() {
+    // Every non-finite refusal, and a negative half-life, also holds through deserialization, where a
+    // YAML `.inf`/`.nan` passes the schema's `type: number` (FR-026).
+    for (yaml, refusal) in [
+        (
+            "direction: higher\nweight: .inf\n",
+            ObjectiveError::NonFiniteWeight {
+                weight: f64::INFINITY,
+            }
+            .to_string(),
+        ),
+        (
+            "direction: higher\nvalue_half_life: -.inf\n",
+            ObjectiveError::NonFiniteValueHalfLife {
+                value_half_life: f64::NEG_INFINITY,
+            }
+            .to_string(),
+        ),
+        (
+            "direction: higher\nvalue_half_life: -2\n",
+            ObjectiveError::NonPositiveValueHalfLife {
+                value_half_life: -2.0,
+            }
+            .to_string(),
+        ),
+        (
+            "direction: higher\nbudget: .inf\n",
+            ObjectiveError::NonFiniteBudget {
+                budget: f64::INFINITY,
+            }
+            .to_string(),
+        ),
+    ] {
+        let refused = parse(yaml).expect_err(yaml);
+        assert!(refused.contains(&refusal), "{yaml}: {refused}");
+    }
+    for field in ["weight", "value_half_life", "budget"] {
+        let yaml = format!("direction: higher\n{field}: .nan\n");
+        let refused = parse(&yaml).expect_err(&yaml);
+        assert!(
+            refused.contains("is not a finite number"),
+            "{yaml}: {refused}"
+        );
+    }
+}
+
+#[test]
+#[trace("TC-168", "FR-026-AC-3")]
+fn tc_168_objective_steering_fields_are_excluded_from_the_measurement_definition() {
+    let base_objective = objective(Direction::Higher, Some(0.995));
+    let with_steering = Objective::with_steering(
+        Direction::Higher,
+        Some(0.995),
+        Some(1.0),
+        Some(30.0),
+        Some(50.0),
+    )
+    .expect("valid steering fields");
+    let base = MeasurementDefinition {
+        objective: Some(base_objective),
+        estimator: Some(Estimator::Proportion),
+        decision_rule: Some(rule_threshold(Comparator::Ge, 0.99)),
+        protected_apparatus: None,
+    };
+    let steered = MeasurementDefinition {
+        objective: Some(with_steering),
+        ..base.clone()
+    };
+
+    // All three steering fields differ between `base` and `steered`;
+    // `direction`/`bound` do not. Neither direction of the edit is a
+    // definition change.
+    assert_eq!(
+        base.changed_members(&steered),
+        Vec::<DefinitionMember>::new()
+    );
+    assert_eq!(
+        steered.changed_members(&base),
+        Vec::<DefinitionMember>::new()
+    );
+
+    let plan = |version, definition: &MeasurementDefinition| PlanDefinition {
+        definition_version: version,
+        definition: definition.clone(),
+    };
+    assert_eq!(
+        definition_change_without_version_bump(
+            &plan(Some("retention-v1"), &base),
+            &plan(Some("retention-v1"), &steered)
+        ),
+        None,
+        "a steering-only edit must not require a definition_version bump"
+    );
+
+    // A `bound` change alongside unchanged steering fields is still
+    // reported, so the exclusion is specific to the steering fields.
+    let raised = Objective::with_steering(
+        Direction::Higher,
+        Some(0.999),
+        Some(1.0),
+        Some(30.0),
+        Some(50.0),
+    )
+    .expect("valid steering fields");
+    let raised_definition = MeasurementDefinition {
+        objective: Some(raised),
+        ..steered.clone()
+    };
+    assert_eq!(
+        steered.changed_members(&raised_definition),
+        vec![DefinitionMember::Objective]
+    );
+}
+
+/// A test-local `MeasurementPlan` frontmatter shape carrying only the
+/// `objective` block and `statistical_design.decision_rule`, so TC-169 parses
+/// both from one document the way a consumer would, rather than parsing the
+/// rule in isolation.
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SteeringProbePlan {
+    objective: Objective,
+    statistical_design: SteeringProbeDesign,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SteeringProbeDesign {
+    decision_rule: DecisionRule,
+}
+
+fn steering_probe_plan(steering: &str, rule: &str) -> SteeringProbePlan {
+    let frontmatter = format!(
+        "objective:\n  direction: higher\n  bound: 0.995\n{steering}statistical_design:\n  decision_rule:\n{rule}"
+    );
+    yaml_serde::from_str(&frontmatter).unwrap_or_else(|error| panic!("{frontmatter}: {error}"))
+}
+
+/// One `holds` probe: estimate, baseline value, expected verdict.
+type VerdictProbe = (f64, Option<f64>, bool);
+
+/// Assert that `steered` -- the same frontmatter as `plain` plus steering
+/// fields -- parses to the same rule and definitional objective as `plain`,
+/// agrees on direction/comparator consistency, and reaches every expected
+/// `holds` verdict in `probes`.
+fn assert_steering_is_inert(
+    label: &str,
+    plain: &SteeringProbePlan,
+    steered: &SteeringProbePlan,
+    probes: &[VerdictProbe],
+) {
+    assert_eq!(
+        plain.objective.definitional(),
+        steered.objective.definitional(),
+        "{label}"
+    );
+    let plain_rule = &plain.statistical_design.decision_rule;
+    let steered_rule = &steered.statistical_design.decision_rule;
+    assert_eq!(
+        plain_rule, steered_rule,
+        "{label}: steering fields must not change the parsed rule"
+    );
+    assert_eq!(
+        plain_rule.check_against(&plain.objective),
+        steered_rule.check_against(&steered.objective),
+        "{label}: direction/comparator agreement must not depend on steering"
+    );
+    for &(estimate, baseline_value, expected) in probes {
+        let verdict = steered_rule
+            .holds(estimate, baseline_value)
+            .expect("finite estimate and baseline");
+        assert_eq!(
+            verdict, expected,
+            "{label}: estimate {estimate} against baseline {baseline_value:?}"
+        );
+    }
+}
+
+#[test]
+#[trace("TC-169", "FR-026-AC-4")]
+fn tc_169_steering_fields_never_change_a_decision_rules_verdict() {
+    // Three otherwise-identical frontmatter documents per rule: one with no
+    // steering fields, one at the smallest accepted magnitudes (weight 0, the
+    // smallest positive f64 half-life, budget 0), and one at the largest
+    // finite magnitudes. Each is parsed independently, and every one must
+    // yield the same decision rule, the same direction/comparator agreement,
+    // and the same `holds` verdict on every probed estimate, including the
+    // exact boundary. Values the fields refuse (negative, zero half-life,
+    // non-finite) never reach this point: TC-167 asserts their refusal.
+    let steering_variants = [
+        ("none", ""),
+        (
+            "smallest",
+            "  weight: 0\n  value_half_life: 5e-324\n  budget: 0\n",
+        ),
+        (
+            "largest",
+            "  weight: 1.7976931348623157e308\n  value_half_life: 1.7976931348623157e308\n  budget: 1.7976931348623157e308\n",
+        ),
+    ];
+    let rules: [(&str, &[VerdictProbe]); 2] = [
+        (
+            "    comparator: ge\n    threshold: 0.99\n",
+            &[
+                (0.999, None, true),
+                (0.99, None, true), // exactly at the threshold: `ge` holds
+                (0.989_999, None, false),
+                (0.0, None, false),
+            ],
+        ),
+        (
+            "    comparator: gt\n    baseline: prior-collection\n    margin: 0.5\n",
+            &[
+                (1.75, Some(1.0), true),
+                (1.5, Some(1.0), false), // exactly baseline + margin: `gt` fails
+                (0.25, Some(1.0), false),
+            ],
+        ),
+    ];
+
+    for (rule, probes) in rules {
+        let plain = steering_probe_plan("", rule);
+        assert_eq!(plain.objective.weight(), None);
+        for (label, steering) in steering_variants {
+            let steered = steering_probe_plan(steering, rule);
+            if !steering.is_empty() {
+                assert_ne!(
+                    plain.objective, steered.objective,
+                    "{label}: the fixture must actually carry steering fields"
+                );
+                assert!(steered.objective.weight().is_some(), "{label}");
+                assert!(steered.objective.value_half_life().is_some(), "{label}");
+                assert!(steered.objective.budget().is_some(), "{label}");
+            }
+            assert_steering_is_inert(label, &plain, &steered, probes);
+        }
+    }
+    assert_eq!(
+        steering_probe_plan(steering_variants[1].1, rules[0].0)
+            .objective
+            .value_half_life(),
+        Some(5e-324),
+        "the smallest positive half-life must survive parsing unrounded"
+    );
+}
+
 /// Quoin's measurement intake imports these types with
 /// `default-features = false, features = ["measurement"]`; like
 /// `tc_138_a_minimal_downstream_compiles_only_the_source_audit_feature`, this
 /// proves that consumer never resolves `serde_json`, so it cannot inherit the
 /// `arbitrary_precision` flip `full` carries.
 #[test]
-#[trace("TC-142", "FR-020-AC-4", "FR-021-AC-7", "FR-024-AC-7")]
+#[trace("TC-142", "FR-020-AC-4", "FR-021-AC-7", "FR-024-AC-7", "FR-026-AC-6")]
 fn tc_142_a_minimal_downstream_compiles_only_the_measurement_feature() {
     let consumer = tempfile::tempdir().expect("consumer root");
     fs::create_dir(consumer.path().join("src")).expect("consumer source directory");
@@ -422,7 +776,7 @@ fn tc_142_a_minimal_downstream_compiles_only_the_measurement_feature() {
     .expect("consumer manifest");
     fs::write(
         consumer.path().join("src/main.rs"),
-        "use engineering_assurance::measurement::{ApparatusPath, Baseline, Comparator, DecisionRule, Direction, Estimator, NegativeControl, NegativeControlKind, NegativeControls, Objective, ProtectedApparatus, definition_change_without_version_bump};\nfn main(){let _ = (Objective::new(Direction::Target, Some(1.0)), definition_change_without_version_bump, DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, None), Estimator::Proportion, ApparatusPath::new(\"evals/**\").map(|path| ProtectedApparatus::new([path])), NegativeControl::new(NegativeControlKind::ApparatusEdit, \"digest\").map(|control| NegativeControls::new([control])));}\n",
+        "use engineering_assurance::measurement::{ApparatusPath, Baseline, Comparator, DecisionRule, Direction, Estimator, NegativeControl, NegativeControlKind, NegativeControls, Objective, ProtectedApparatus, definition_change_without_version_bump};\nfn main(){let steered = Objective::with_steering(Direction::Target, Some(1.0), Some(1.0), Some(30.0), Some(50.0)).expect(\"valid\"); let _ = (steered.weight(), steered.value_half_life(), steered.budget(), steered.definitional(), definition_change_without_version_bump, DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, None), Estimator::Proportion, ApparatusPath::new(\"evals/**\").map(|path| ProtectedApparatus::new([path])), NegativeControl::new(NegativeControlKind::ApparatusEdit, \"digest\").map(|control| NegativeControls::new([control])));}\n",
     )
     .expect("consumer source");
     let status = Command::new(env!("CARGO"))

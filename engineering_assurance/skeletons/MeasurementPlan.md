@@ -10,6 +10,9 @@ stage: baseline
 objective:
   direction: higher
   bound: 0.995
+  weight: 1.0
+  value_half_life: 30
+  budget: 50
 subject_identity:
   name: juniper-classifier
   version: 2026.09.1
@@ -61,8 +64,32 @@ informational and never evaluated: only `statistical_design.decision_rule` is
 evaluated, and its threshold (0.99 here) may sit below the goal.
 
 The objective is part of the measurement definition. Adding, removing, or
-changing it requires a new `definition_version`, so results under the old and
-new objective are never compared as one series.
+changing `direction` or `bound` requires a new `definition_version`, so
+results under the old and new objective are never compared as one series.
+
+## Steering Fields
+
+`objective.weight`, `objective.value_half_life`, and `objective.budget` are
+optional steering fields (FR-026), in units this plan's body states:
+
+- `weight` -- this objective's relative value against the project's other
+  objectives (here, 1.0 -- an arbitrary baseline weight; only meaningful
+  relative to the weights of other objectives in the same project);
+- `value_half_life` -- how quickly the value of improving this objective
+  decays, so a sooner improvement ranks higher than an equally-sized later
+  one (here, 30 days: an improvement realized after one half-life is worth
+  about half of one realized immediately);
+- `budget` -- time, tokens, or compute allowed per attempt at this objective
+  (here, 50 -- e.g. agent-minutes), used only to normalize comparisons across
+  objectives with different costs per attempt.
+
+**All three are advisory only. They are never evaluated, never gate anything,
+and never feed `statistical_design.decision_rule`** -- the rule in the next
+section is the only part of this plan that is evaluated, and it is computed
+without reading the objective at all. They are also excluded from the
+measurement definition: changing only a steering field is not a definition
+change and needs no `definition_version` bump, unlike a `direction` or
+`bound` edit.
 
 ## Decision Rule
 

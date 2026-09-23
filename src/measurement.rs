@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Agent-IX
 
 //! `MeasurementPlan` definition types owned by Engineering Assurance (FR-020,
-//! FR-021, FR-024).
+//! FR-021, FR-024, FR-026).
 //!
 //! This module owns the typed form of a `MeasurementPlan`'s optional `objective`
 //! block, the closed `statistical_design.estimator` and
@@ -10,7 +10,10 @@
 //! the `protected_apparatus` path list and the closed `negative_controls`
 //! vocabulary, and the check that an edit to the objective, estimator, rule,
 //! or protected list came with a new `definition_version`. Only the decision rule is evaluated; an objective's
-//! `bound` is informational.
+//! `bound` is informational. The objective's `weight`, `value_half_life`, and
+//! `budget` steering fields (FR-026) are advisory only: they are excluded
+//! from the definition-change check, and no decision rule evaluation ever
+//! reads them.
 //! It performs no filesystem, process, environment, network, clock, or
 //! persistence access: callers parse plan frontmatter and pass the relevant
 //! fields in, and compute any baseline value themselves.
@@ -86,20 +89,68 @@ pub enum ObjectiveError {
         /// The refused bound.
         bound: f64,
     },
+    /// `weight` was NaN or infinite.
+    #[error("objective weight {weight} is not a finite number")]
+    NonFiniteWeight {
+        /// The refused weight.
+        weight: f64,
+    },
+    /// `weight` was negative.
+    #[error("objective weight {weight} must not be negative")]
+    NegativeWeight {
+        /// The refused weight.
+        weight: f64,
+    },
+    /// `value_half_life` was NaN or infinite.
+    #[error("objective value_half_life {value_half_life} is not a finite number")]
+    NonFiniteValueHalfLife {
+        /// The refused half-life.
+        value_half_life: f64,
+    },
+    /// `value_half_life` was zero or negative.
+    #[error("objective value_half_life {value_half_life} must be positive")]
+    NonPositiveValueHalfLife {
+        /// The refused half-life.
+        value_half_life: f64,
+    },
+    /// `budget` was NaN or infinite.
+    #[error("objective budget {budget} is not a finite number")]
+    NonFiniteBudget {
+        /// The refused budget.
+        budget: f64,
+    },
+    /// `budget` was negative.
+    #[error("objective budget {budget} must not be negative")]
+    NegativeBudget {
+        /// The refused budget.
+        budget: f64,
+    },
 }
 
 /// A validated `MeasurementPlan` objective: a direction and an optional finite
 /// bound, where a `target` direction always has a bound. The bound is the goal
 /// the metric should reach; it is informational and never evaluated.
+///
+/// `weight`, `value_half_life`, and `budget` are steering fields (FR-026):
+/// relative value against the project's other objectives, how quickly the
+/// value of improving decays, and the time/token/compute budget per attempt.
+/// They are advisory only -- they are excluded from [`Objective::definitional`]
+/// and so never require a `definition_version` bump on their own, and no
+/// function in this module ever reads them to compute a [`DecisionRule`]'s
+/// verdict; [`DecisionRule::holds`] never takes an `Objective` at all.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(try_from = "ObjectiveFields", into = "ObjectiveFields")]
 pub struct Objective {
     direction: Direction,
     bound: Option<f64>,
+    weight: Option<f64>,
+    value_half_life: Option<f64>,
+    budget: Option<f64>,
 }
 
 impl Objective {
-    /// Build an objective from its direction and optional bound.
+    /// Build an objective from its direction and optional bound, with no
+    /// steering fields.
     ///
     /// # Errors
     ///
@@ -107,6 +158,29 @@ impl Objective {
     /// [`Direction::Target`] and `bound` is absent, and
     /// [`ObjectiveError::NonFiniteBound`] when `bound` is NaN or infinite.
     pub fn new(direction: Direction, bound: Option<f64>) -> Result<Self, ObjectiveError> {
+        Self::with_steering(direction, bound, None, None, None)
+    }
+
+    /// Build an objective from its direction, optional bound, and optional
+    /// steering fields (`weight`, `value_half_life`, `budget`; FR-026). The
+    /// steering fields are advisory only: see the type documentation.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ObjectiveError::TargetWithoutBound`] and
+    /// [`ObjectiveError::NonFiniteBound`] as [`Objective::new`] does, and:
+    /// [`ObjectiveError::NonFiniteWeight`] or [`ObjectiveError::NegativeWeight`]
+    /// for an invalid `weight`; [`ObjectiveError::NonFiniteValueHalfLife`] or
+    /// [`ObjectiveError::NonPositiveValueHalfLife`] for an invalid
+    /// `value_half_life`; and [`ObjectiveError::NonFiniteBudget`] or
+    /// [`ObjectiveError::NegativeBudget`] for an invalid `budget`.
+    pub fn with_steering(
+        direction: Direction,
+        bound: Option<f64>,
+        weight: Option<f64>,
+        value_half_life: Option<f64>,
+        budget: Option<f64>,
+    ) -> Result<Self, ObjectiveError> {
         if let Some(value) = bound
             && !value.is_finite()
         {
@@ -115,7 +189,37 @@ impl Objective {
         if direction.requires_bound() && bound.is_none() {
             return Err(ObjectiveError::TargetWithoutBound);
         }
-        Ok(Self { direction, bound })
+        if let Some(weight) = weight {
+            if !weight.is_finite() {
+                return Err(ObjectiveError::NonFiniteWeight { weight });
+            }
+            if weight < 0.0 {
+                return Err(ObjectiveError::NegativeWeight { weight });
+            }
+        }
+        if let Some(value_half_life) = value_half_life {
+            if !value_half_life.is_finite() {
+                return Err(ObjectiveError::NonFiniteValueHalfLife { value_half_life });
+            }
+            if value_half_life <= 0.0 {
+                return Err(ObjectiveError::NonPositiveValueHalfLife { value_half_life });
+            }
+        }
+        if let Some(budget) = budget {
+            if !budget.is_finite() {
+                return Err(ObjectiveError::NonFiniteBudget { budget });
+            }
+            if budget < 0.0 {
+                return Err(ObjectiveError::NegativeBudget { budget });
+            }
+        }
+        Ok(Self {
+            direction,
+            bound,
+            weight,
+            value_half_life,
+            budget,
+        })
     }
 
     /// The direction the metric is supposed to move.
@@ -130,6 +234,40 @@ impl Objective {
     pub const fn bound(&self) -> Option<f64> {
         self.bound
     }
+
+    /// This objective's relative value against the project's other
+    /// objectives, when stated. Steering only (FR-026): advisory, never
+    /// evaluated.
+    #[must_use]
+    pub const fn weight(&self) -> Option<f64> {
+        self.weight
+    }
+
+    /// How quickly the value of improving this objective decays, when
+    /// stated. Steering only (FR-026): advisory, never evaluated.
+    #[must_use]
+    pub const fn value_half_life(&self) -> Option<f64> {
+        self.value_half_life
+    }
+
+    /// The time, token, or compute budget per attempt, when stated. Steering
+    /// only (FR-026): advisory, never evaluated.
+    #[must_use]
+    pub const fn budget(&self) -> Option<f64> {
+        self.budget
+    }
+
+    /// The parts of this objective that are part of the plan's measurement
+    /// definition (FR-020): `direction` and `bound`. The steering fields
+    /// (`weight`, `value_half_life`, `budget`; FR-026) are excluded, so
+    /// adding, removing, or changing them alone is not a definition change
+    /// and needs no `definition_version` bump -- they are declarations about
+    /// priority, not about how the number is computed, the same rationale
+    /// FR-024 uses to exclude `negative_controls`.
+    #[must_use]
+    pub const fn definitional(&self) -> (Direction, Option<f64>) {
+        (self.direction, self.bound)
+    }
 }
 
 /// The closed wire shape of an `objective` block, before validation.
@@ -139,13 +277,25 @@ struct ObjectiveFields {
     direction: Direction,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     bound: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    weight: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    value_half_life: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    budget: Option<f64>,
 }
 
 impl TryFrom<ObjectiveFields> for Objective {
     type Error = ObjectiveError;
 
     fn try_from(fields: ObjectiveFields) -> Result<Self, Self::Error> {
-        Self::new(fields.direction, fields.bound)
+        Self::with_steering(
+            fields.direction,
+            fields.bound,
+            fields.weight,
+            fields.value_half_life,
+            fields.budget,
+        )
     }
 }
 
@@ -154,6 +304,9 @@ impl From<Objective> for ObjectiveFields {
         Self {
             direction: objective.direction,
             bound: objective.bound,
+            weight: objective.weight,
+            value_half_life: objective.value_half_life,
+            budget: objective.budget,
         }
     }
 }
@@ -1136,7 +1289,10 @@ impl MeasurementDefinition {
         DefinitionMember::ALL
             .into_iter()
             .filter(|member| match member {
-                DefinitionMember::Objective => self.objective != other.objective,
+                DefinitionMember::Objective => {
+                    self.objective.map(|objective| objective.definitional())
+                        != other.objective.map(|objective| objective.definitional())
+                }
                 DefinitionMember::Estimator => self.estimator != other.estimator,
                 DefinitionMember::DecisionRule => self.decision_rule != other.decision_rule,
                 DefinitionMember::ProtectedApparatus => {

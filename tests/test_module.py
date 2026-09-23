@@ -311,6 +311,93 @@ def test_measurement_plan_skeleton_shows_a_valid_objective() -> None:
     assert list(validator.iter_errors(skeleton)) == []
 
 
+def test_objective_steering_fields_are_optional_advisory_and_range_checked() -> None:
+    """Trace: FR-026-AC-1, TC-166."""
+    contract = schema("measurement-plan-frontmatter.schema")
+    objective_schema = contract["$defs"]["objective"]
+    assert set(objective_schema["properties"]) == {
+        "direction",
+        "bound",
+        "weight",
+        "value_half_life",
+        "budget",
+    }
+    assert objective_schema["required"] == ["direction"]
+    validator = Draft7Validator(contract, format_checker=FormatChecker())
+
+    def errors(**objective_overrides: object) -> list[str]:
+        plan = _minimal_measurement_plan(
+            objective={"direction": "higher", **objective_overrides}
+        )
+        return [error.message for error in validator.iter_errors(plan)]
+
+    # No steering fields at all, and every field present together.
+    assert errors() == []
+    assert (
+        errors(weight=1.0, value_half_life=30, budget=50) == []
+    )
+    # Each field independently, including the advisory-only edge cases named
+    # by PLAT-967: weight and budget may be exactly zero.
+    assert errors(weight=0) == []
+    assert errors(weight=2.5) == []
+    assert errors(budget=0) == []
+    assert errors(budget=1000) == []
+    assert errors(value_half_life=0.001) == []
+    assert errors(value_half_life=365) == []
+
+    # Negative weight, negative budget, and a non-positive half-life are
+    # rejected.
+    assert errors(weight=-0.01) != []
+    assert errors(budget=-1) != []
+    assert errors(value_half_life=0) != []
+    assert errors(value_half_life=-1) != []
+
+    # Non-numeric values are rejected for every field.
+    for field in ("weight", "value_half_life", "budget"):
+        assert errors(**{field: "a lot"}) != []
+        assert errors(**{field: True}) != []
+        assert errors(**{field: [1]}) != []
+        assert errors(**{field: None}) != []
+
+
+def test_measurement_plan_skeleton_shows_the_steering_fields() -> None:
+    """Trace: FR-026-AC-5, TC-170."""
+    skeleton = frontmatter(package.PACKAGE_ROOT / "skeletons" / "MeasurementPlan.md")
+    objective = skeleton["objective"]
+    assert objective["weight"] > 0
+    assert objective["value_half_life"] > 0
+    assert objective["budget"] >= 0
+    validator = Draft7Validator(
+        schema("measurement-plan-frontmatter.schema"), format_checker=FormatChecker()
+    )
+    assert list(validator.iter_errors(skeleton)) == []
+    body = (package.PACKAGE_ROOT / "skeletons" / "MeasurementPlan.md").read_text(
+        encoding="utf-8"
+    )
+    assert "## Steering Fields" in body
+    assert "advisory only" in body.lower()
+    skill = (
+        package.PACKAGE_ROOT / "skills" / "assurance-onboarding" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    for field in ("`weight`", "`value_half_life`", "`budget`"):
+        assert field in skill, field
+    assert "never gate" in skill
+    completed = subprocess.run(
+        [
+            "node",
+            str(package.PACKAGE_ROOT / "skills" / "assurance-onboarding" / "scripts" / "onboard.js"),
+            "--repo",
+            str(ROOT),
+            "--json",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    plan_checklist = json.loads(completed.stdout)["artifactChecklists"]["MeasurementPlan"]
+    assert plan_checklist["warnings"] == []
+
+
 def _statistical_design(**overrides: object) -> dict:
     design = {
         "population": "p",
@@ -486,8 +573,11 @@ def test_measurement_plan_skeleton_shows_a_structured_decision_rule() -> None:
     assert design["estimator"] == "proportion"
     assert design["decision_rule"] == {"comparator": "ge", "threshold": 0.99}
     # The objective's bound is an informational goal, distinct from the
-    # evaluated threshold.
-    assert skeleton["objective"] == {"direction": "higher", "bound": 0.995}
+    # evaluated threshold. weight/value_half_life/budget are advisory
+    # steering fields (FR-026), asserted separately in
+    # test_measurement_plan_skeleton_shows_the_steering_fields.
+    assert skeleton["objective"]["direction"] == "higher"
+    assert skeleton["objective"]["bound"] == 0.995
     validator = Draft7Validator(
         schema("measurement-plan-frontmatter.schema"), format_checker=FormatChecker()
     )

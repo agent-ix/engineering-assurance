@@ -53,7 +53,8 @@ objective SHALL count as a change to the plan's measurement definition.
   `objective`.
 - The schema and the Rust `Objective` type SHALL refuse an unknown direction,
   a `target` objective without `bound`, a non-numeric `bound`, and any key in
-  `objective` other than `direction` and `bound`.
+  `objective` other than `direction`, `bound`, and the FR-026 steering fields
+  (`weight`, `value_half_life`, `budget`).
 - The Rust `Objective` type SHALL refuse a non-finite `bound`. JSON Schema has
   no finiteness keyword, and a YAML `.inf` or `.nan` value satisfies
   `type: number`, so the frontmatter schema accepts a non-finite `bound`;
@@ -62,7 +63,8 @@ objective SHALL count as a change to the plan's measurement definition.
 - The schema's `direction` values SHALL be exactly the wire names of the Rust
   `Direction` enum.
 - The `objective` SHALL be part of the plan's measurement definition: adding,
-  removing, or changing it while `definition_version` stays the same SHALL be
+  removing, or changing it (its `direction` or `bound`; the FR-026 steering
+  fields are excluded from the definition) while `definition_version` stays the same SHALL be
   reported as a typed definition-change finding naming `objective` among the
   changed members. Adding, removing, or changing
   it together with a `definition_version` change SHALL produce no finding.

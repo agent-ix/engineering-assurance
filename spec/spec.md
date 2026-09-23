@@ -175,6 +175,9 @@ same canonical bundle and do not redefine these responsibilities.
 - [FR-025](./functional/FR-025-measurement-promotion-checker-policy.md) — read
   the independent checker's result when promoting a measurement, advisory or
   required per AssuranceProfile `measurement_policy`.
+- [FR-026](./functional/FR-026-measurement-plan-objective-steering-fields.md) —
+  declare optional `weight`, `value_half_life`, and `budget` steering fields
+  on a MeasurementPlan objective, advisory only and never a gate.
 
 ### Non-Functional Requirements
 
