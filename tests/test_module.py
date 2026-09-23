@@ -763,7 +763,7 @@ def test_manual_verification_workflow_runs_the_rust_foundation_gate() -> None:
         for step in steps
         if str(step.get("uses", "")).startswith("taiki-e/install-action@")
     }
-    assert installed_tools == {"cargo-deny@0.19.8", "cargo-audit@0.22.2"}
+    assert installed_tools == {"cargo-deny@0.20.2", "cargo-audit@0.22.2"}
     assert any(step.get("run") == "make rust-foundation-gate" for step in steps)
 
     makefile = (ROOT / "Makefile").read_text()
