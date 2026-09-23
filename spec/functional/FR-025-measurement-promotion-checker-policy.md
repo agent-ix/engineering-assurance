@@ -65,6 +65,9 @@ choice ([FR-005](./FR-005-resumable-human-decisions.md)).
   `mode` and `stages`, `mode` from the same `recommend`/`require` vocabulary
   as `review_policy`, and `stages` a non-empty list of distinct values from
   the MeasurementPlan `stage` enum.
+- A retired AssuranceProfile MAY retain the historical `profile_version: 0.2`
+  field. Proposed and active profiles SHALL refuse that spelling, and no
+  profile SHALL declare both `profile_version` and `schema_version`.
 - The onboarding skill SHALL record the governing profile's policy into the
   run as a `measurement_policy` item.
 - The invariant evaluator SHALL NOT read the profile file: it reads only the
@@ -140,6 +143,7 @@ recorded.
 | FR-025-AC-5 | For every case of AC-2 to AC-4 the Rust evaluator and the retained JavaScript provider produce the same outcome bytes, and the Rust evaluator refuses an unknown verdict or mode, a mistyped reasons or stages member, an unknown member on the policy item or a v1 checker item, and a non-object checker item. | Test (TC-160, TC-161, TC-162) |
 | FR-025-AC-6 | The canonical and pilot `measurement-promotion` definitions are equal, declare `measurement_verdict` and `measurement_policy` item schemas with every document member required, gate `evidence_ready -> decision_ready` on `measurement.promotion_ready` and `shared.exceptions_ready`, and keep both terminal transitions `hitl`. | Test (TC-164) |
 | FR-025-AC-7 | The AssuranceProfile skeleton carries a valid `measurement_policy` and a section explaining it, the onboarding skill describes the policy, the run items, the attested order, the failure codes, and the override, and the onboarding checklist lists the policy's modes, closed stage values, list shape, and required members with no warning. | Test (TC-165) |
+| FR-025-AC-8 | A retired AssuranceProfile with historical `profile_version: 0.2` remains readable, but proposed and active profiles must use the current `schema_version` spelling; a retired profile cannot declare both version fields, and any declared version must equal 0.2. | Test (TC-173) |
 
 ## Dependencies
 

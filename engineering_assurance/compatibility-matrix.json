@@ -80,7 +80,7 @@
         },
         {
           "path": "engineering_assurance/schemas/assurance-profile-frontmatter.schema.json",
-          "sha256": "a76c426d2984fe4f4293c127c0a215fbd182fef6232be36b5f235993e913d53c"
+          "sha256": "78680c79250a7d0b12949da19cd7b900dc05e2b33206cb0098839003ed183dd5"
         },
         {
           "path": "engineering_assurance/schemas/assurance-report-projection-v1.schema.json",
@@ -92,7 +92,7 @@
         },
         {
           "path": "engineering_assurance/schemas/measurement-plan-frontmatter.schema.json",
-          "sha256": "df6f9de7d401fcd0e74471b88546c46fd8ab09e7d7873ac6066f980965b85e75"
+          "sha256": "cb04124535f4ed7444418efea76c7032459d2e56125d5dfe61e06bf64d694ae7"
         },
         {
           "path": "engineering_assurance/schemas/pgm01-compatibility-view-v1.schema.json",
