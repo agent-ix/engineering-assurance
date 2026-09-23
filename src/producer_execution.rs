@@ -12,26 +12,29 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::File,
-    io::{self, Read, Seek, SeekFrom, Write},
+    io::{self, Read, Seek, SeekFrom},
     path::{Component, Path},
     process::ExitStatus,
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicBool, Ordering},
     },
     time::Duration,
 };
 
 #[cfg(unix)]
-use std::{
-    os::unix::process::{CommandExt, ExitStatusExt},
-    process::{Command, Stdio},
-    thread,
-    time::Instant,
-};
+use std::{process::Command, thread, time::Instant};
 
 #[cfg(target_os = "linux")]
-use std::os::fd::AsRawFd;
+use std::{
+    io::Write,
+    os::{
+        fd::AsRawFd,
+        unix::process::{CommandExt, ExitStatusExt},
+    },
+    process::Stdio,
+    sync::Mutex,
+};
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -714,6 +717,7 @@ pub enum ExecutorConfigurationError {
 /// Shared bounded executor whose clones share one concurrency ceiling.
 pub struct ProducerExecutor {
     maximum_concurrency: usize,
+    #[cfg(target_os = "linux")]
     active: Mutex<usize>,
 }
 
@@ -730,6 +734,7 @@ impl ProducerExecutor {
         }
         Ok(Self {
             maximum_concurrency,
+            #[cfg(target_os = "linux")]
             active: Mutex::new(0),
         })
     }
@@ -795,13 +800,13 @@ impl ProducerExecutor {
         #[cfg(not(target_os = "linux"))]
         {
             let _ = (adapter, cancellation);
-            return Ok(prelaunch_result(
+            Ok(prelaunch_result(
                 call_started,
                 request_identity,
                 producer,
                 None,
                 ProducerExecutionState::ContainmentFailure,
-            ));
+            ))
         }
 
         #[cfg(target_os = "linux")]
@@ -875,6 +880,7 @@ impl ProducerExecutor {
         }
     }
 
+    #[cfg(target_os = "linux")]
     fn try_acquire(&self) -> Result<ExecutionSlot<'_>, AcquireFailure> {
         let mut active = self.active.lock().map_err(|_| AcquireFailure::Poisoned)?;
         if *active >= self.maximum_concurrency {
@@ -885,10 +891,12 @@ impl ProducerExecutor {
     }
 }
 
+#[cfg(target_os = "linux")]
 struct ExecutionSlot<'a> {
     executor: &'a ProducerExecutor,
 }
 
+#[cfg(target_os = "linux")]
 impl Drop for ExecutionSlot<'_> {
     fn drop(&mut self) {
         if let Ok(mut active) = self.executor.active.lock() {
@@ -897,6 +905,7 @@ impl Drop for ExecutionSlot<'_> {
     }
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Clone, Copy)]
 enum AcquireFailure {
     Full,
@@ -1012,7 +1021,10 @@ struct KernelBudget {
 #[derive(Clone, Copy)]
 enum DescendantPolicy {
     ProcessGroup,
-    Observed { maximum: usize },
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    Observed {
+        maximum: usize,
+    },
 }
 
 #[cfg(unix)]
@@ -1033,6 +1045,7 @@ enum KernelConclusion {
 #[cfg(unix)]
 struct KernelCapture {
     conclusion: KernelConclusion,
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     terminal_status: Option<ExitStatus>,
     stdout: Option<CapturedBytes>,
     stderr: Option<CapturedBytes>,
@@ -1740,7 +1753,10 @@ fn supervise_child(
     cancellation: Option<&CancellationToken>,
 ) -> (KernelConclusion, Option<ExitStatus>) {
     let started = Instant::now();
+    #[cfg(target_os = "linux")]
     let mut tracked_descendants = BTreeSet::new();
+    #[cfg(not(target_os = "linux"))]
+    let tracked_descendants = BTreeSet::new();
     loop {
         if cancellation.is_some_and(CancellationToken::is_cancelled) {
             let status = terminate_group(child, &tracked_descendants);
@@ -2261,6 +2277,7 @@ enum DigestOutcome {
     Unreadable,
 }
 
+#[cfg(target_os = "linux")]
 fn exit_code_accepted(binding: &ExitCodeBinding, code: i32) -> bool {
     match binding {
         ExitCodeBinding::Any => true,

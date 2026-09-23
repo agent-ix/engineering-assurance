@@ -49,8 +49,8 @@ These are the versions recorded in
 
 ```bash
 npm install --global \
-  @agent-ix/quire-cli@0.31.0 \
-  @agent-ix/quoin@0.23.1 \
+  @agent-ix/quire-cli@0.33.0 \
+  @agent-ix/quoin@0.24.1 \
   @agent-ix/ix-flow@0.2.3
 rustup toolchain install 1.98.1
 ```
@@ -60,7 +60,7 @@ Install the unpublished native CLI from the tagged source checkout:
 ```bash
 cargo +1.98.1 install \
   --git https://github.com/agent-ix/engineering-assurance \
-  --tag v0.4.0 \
+  --tag v0.4.1 \
   --locked \
   --bin engineering-assurance
 ```
@@ -72,7 +72,7 @@ suffix selects the module root inside this repository:
 
 ```bash
 quoin module install \
-  github:agent-ix/engineering-assurance//engineering_assurance@v0.4.0
+  github:agent-ix/engineering-assurance//engineering_assurance@v0.4.1
 ```
 
 The installed module contains `manifest.yaml`, `schemas/`, and `skeletons/`.
@@ -87,7 +87,7 @@ OpenCode, and GitHub Copilot. Use the section for your agent.
 <summary><b>Claude Code</b></summary>
 
 ```text
-/plugin marketplace add agent-ix/engineering-assurance
+/plugin marketplace add agent-ix/engineering-assurance@v0.4.1
 /plugin install engineering-assurance@engineering-assurance
 ```
 
@@ -97,7 +97,7 @@ OpenCode, and GitHub Copilot. Use the section for your agent.
 <summary><b>OpenAI Codex</b></summary>
 
 ```bash
-codex plugin marketplace add agent-ix/engineering-assurance
+codex plugin marketplace add agent-ix/engineering-assurance --ref v0.4.1
 codex plugin add engineering-assurance@engineering-assurance
 ```
 
@@ -115,7 +115,7 @@ GitHub CLI so it is available in every repository:
 ```bash
 gh skill install agent-ix/engineering-assurance \
   engineering_assurance/skills/assurance-onboarding \
-  --pin v0.4.0 \
+  --pin v0.4.1 \
   --scope user \
   --agent opencode
 ```
@@ -137,7 +137,7 @@ If you want the skills-only route, use GitHub CLI instead:
 ```bash
 gh skill install agent-ix/engineering-assurance \
   engineering_assurance/skills/assurance-onboarding \
-  --pin v0.4.0 \
+  --pin v0.4.1 \
   --scope user \
   --agent github-copilot
 ```

@@ -1,7 +1,7 @@
 # Shared assurance compatibility matrix
 
-The reviewed set of component versions that work together for the contract
-campaign. Answers `agent-ix/engineering-assurance#8`.
+The proposed component set for the current assurance toolchain. This matrix
+remains pending human acceptance until its exact candidate and gates are reviewed.
 
 `engineering_assurance/compatibility-matrix.json` is the machine-readable
 source; this document is what a human reads before accepting it.
@@ -10,14 +10,14 @@ source; this document is what a human reads before accepting it.
 
 | Component | Version | Release | Provides |
 | --- | --- | --- | --- |
-| quire-cli | 0.31.0 | npm `@agent-ix/quire-cli@0.31.0` | Static assurance export consumed by Quoin intake |
-| quire-rs (engine) | 0.46.0 | inside quire-cli 0.31.0 | The export the CLI delegates to |
-| quoin | 0.23.1 | npm `@agent-ix/quoin@0.23.1` | Evidence, measurements, change-assurance records, attestations, intake, audit, receipts |
+| quire-cli | 0.33.0 | npm `@agent-ix/quire-cli@0.33.0` | Static assurance export consumed by Quoin intake |
+| quire-rs (engine) | 0.47.1 | inside quire-cli 0.33.0 | The export the CLI delegates to |
+| quoin | 0.24.1 | npm `@agent-ix/quoin@0.24.1` | Evidence, measurements, change-assurance records, attestations, intake, audit, receipts |
 | ix-flow | 0.2.3 | npm `@agent-ix/ix-flow@0.2.3` | Human decision events as an integrity-verified chain |
-| engineering-assurance | 0.4.0 | git tag `v0.4.0` | Rust-native shared semantics, PGM-01 compatibility mapping, the accepted corpus gate, the Rust classifier, and the ix-flow lifecycle host |
+| engineering-assurance | 0.4.1 | planned git tag `v0.4.1` | Rust-native shared semantics, PGM-01 compatibility mapping, the accepted corpus gate, the Rust classifier, and the ix-flow lifecycle host |
 
-Every one is a released artifact. No pin is a branch head, a bare revision, or
-a floating tag — that is `FR-012-AC-1`, and TC-079 enforces it.
+The three external tools are released artifacts. EA v0.4.1 becomes one when
+the candidate is tagged. No pin is a branch head or floating reference.
 
 `engineering-assurance` ships as a source distribution only: its
 `prepublishOnly` hook refuses npm publication by design, so its release is the
@@ -70,15 +70,16 @@ publish against the public registry.
 
 ## Cross-component fixtures
 
-The accepted compatibility corpus (`FR-011`) is the cross-component fixture
-set, pinned as the `corpus` submodule gitlink. Its chain carries one Quire
-static export through Quoin seal, intake, and audit to a verification receipt,
-and every artifact is retained with its digest.
+The content-addressed compatibility corpus (`FR-011`) is pinned as the `corpus`
+submodule gitlink. Its chain retains a historical Quire 0.31.0 and Quoin 0.23.1
+case. It does not assert that the new releases produced those old bytes. The
+current toolchain is checked separately by the installed-tool observation and
+integration gates.
 
 ## Upgrade
 
-Order: **quire-cli → quoin → ix-flow → this repository's tag → the corpus gitlink.** Each
-step is independently verifiable, and only the last moves the gate.
+Order: **quire-cli → quoin → ix-flow → this repository's tag.** The historical
+corpus gitlink stays fixed and is verified independently.
 
 After each step:
 
@@ -97,15 +98,15 @@ is accepted.
 
 ## Rollback
 
-Every pin is a released artifact, so rolling back is installing the previous
+At release, every pin resolves to a released artifact, so rollback uses the previous
 release. Nothing here requires a rebuild from source to undo.
 
 | Component | Rollback | What is lost |
 | --- | --- | --- |
-| quoin | install `@agent-ix/quoin@0.22.5` | the `change-assurance` commands; retained records, attestations, and receipts are unaffected, because 0.23.x added a surface over existing contracts rather than changing the stored layout |
-| quire-cli | install `@agent-ix/quire-cli@0.30.2` | the `provenance` command; exports produced by 0.31.0 remain readable |
+| quoin | install `@agent-ix/quoin@0.23.1` | current-version change-assurance behavior; retained records remain Quoin-owned |
+| quire-cli | install `@agent-ix/quire-cli@0.31.0` | the 0.33.0 export and engine behavior |
 | ix-flow | install `@agent-ix/ix-flow@0.0.4` after restoring the prior invocation | the additive Rust lifecycle adapter; ix-flow-owned run state and event history remain intact |
-| engineering-assurance | check out the previous tag `v0.2.1` | the Rust-native port and semantic boundary; retained external evidence and ix-flow state are unchanged |
+| engineering-assurance | check out the previous tag `v0.4.0` | the current-toolchain matrix and new schema contracts; retained external evidence and ix-flow state are unchanged |
 | corpus | move the gitlink to the earlier commit and re-run the FR-011 gate | nothing; the corpus is content-addressed, so an earlier pin is a complete self-verifying set |
 
 **Nothing in this matrix is irreversible.** No pin migrates data, rewrites
@@ -121,26 +122,22 @@ workflow that published quoin 0.23.1.
 
 ```json
 "accepted": {
-  "state": "accepted",
-  "accepted_by": "Peter Krenesky",
-  "accepted_at": "2026-09-10"
+  "state": "pending_human_acceptance",
+  "accepted_by": null,
+  "accepted_at": null
 }
 ```
 
-**Accepted 2026-09-10.** The previously accepted matrix changed when ix-flow
-moved from 0.0.4 to the current public 0.2.3 release, so that acceptance did
-not silently carry over. Public registry metadata binds the accepted release to source revision
-`8b6cf8287db828b4db2df814bc7c1ef10362db24` and its recorded SHA-512 integrity.
-Peter Krenesky accepted the complete revised matrix after all eight local
-TC-107 lifecycle cases passed against that exact public release, and directed
-an agent to transcribe the decision here.
+The 2026-09-10 acceptance covered the earlier pins and does not carry over to
+this candidate. A named human must accept these exact versions after reviewing
+the release checks. The classifier reports the version match independently of
+that decision; a pending decision keeps the overall gate withheld.
 
 TC-082 no longer asserts the fields are unset — it now asserts acceptance is in
 one of its two honest shapes: pending with nothing filled in, or accepted with
 both a named human and a date. The shape it rejects is a `state` that reads as
 accepted while nobody is on record as having accepted it.
 
-The acceptance condition is now satisfied. The gate still requires every
-observed component to match this exact matrix. The matrix's recorded artifact
-digests are an informational record of the reviewed release, not something the
-observer verifies against a working tree.
+The matrix's recorded EA schema digests identify the candidate release bytes.
+They are informational until the v0.4.1 tag is cut; the observer no longer
+compares a working tree with release digests.

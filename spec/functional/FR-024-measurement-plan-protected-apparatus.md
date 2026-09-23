@@ -18,7 +18,7 @@ relationships:
 The MeasurementPlan schema SHALL accept a `protected_apparatus` naming the
 files that produce the plan's number, and SHALL require it, together with
 `negative_controls` declaring at least one gaming scenario the plan guards
-against, when the plan's `stage` is `gate`. A change that edits the apparatus
+against, when a non-retired plan's `stage` is `gate`. A change that edits the apparatus
 has changed the measurement rather than the thing measured, so it earns no
 credit toward the plan's objective.
 
@@ -48,7 +48,8 @@ credit toward the plan's objective.
   selects the population, and the checker configuration.
 - `protected_apparatus` SHALL be a non-empty list with no repeated entry when
   present.
-- The schema SHALL require `protected_apparatus` when `stage` is `gate`, and,
+- The schema SHALL require `protected_apparatus` when `stage` is `gate`
+  and `status` is not `retired`, and,
   at every stage, when any `negative_controls` entry has kind
   `apparatus-edit`: an apparatus-edit control over no declared apparatus
   guards nothing.
@@ -119,7 +120,8 @@ credit toward the plan's objective.
   apparatus is presented as current; `apparatus-edit`, a protected file is
   edited alongside the change it grades; and `selective-reporting`, only a
   favourable run or variant is reported out of several tried.
-- The schema SHALL require `negative_controls` when `stage` is `gate`, as it
+- The schema SHALL require `negative_controls` when `stage` is `gate`
+  and `status` is not `retired`, as it
   requires `ground_truth_kind`. The Rust types carry no stage; the gate-stage
   requirement is enforced by the schema.
 - `negative_controls` SHALL NOT be part of the measurement definition: the
@@ -157,11 +159,12 @@ rather than being accepted silently.
 | FR-024-AC-1 | The MeasurementPlan frontmatter schema accepts no `protected_apparatus` below gate stage and a list of the shared case table's accepted file paths and directory entries; it rejects an empty list, a repeated entry, a non-list, a non-string entry, and every unsafe entry in the shared case table. | Test (TC-154) |
 | FR-024-AC-2 | The schema accepts each control kind at every stage, leaves `negative_controls` optional below `gate`, and requires it at `gate`; it rejects an empty list, an unknown or missing kind, a missing or empty description, an extra key, a repeated control, and a bare kind string. | Test (TC-155) |
 | FR-024-AC-3 | The Rust `ApparatusPath` accepts every accepted entry of the shared case table, reporting its directory for a directory entry, and refuses every refused entry with the typed error the table names, through construction, parsing, and deserialization, and the schema's entry pattern agrees on every case; `ProtectedApparatus` refuses an empty or repeated list, compares as a set, and round-trips in sorted order. | Test (TC-156) |
-| FR-024-AC-4 | The schema's control kinds equal the Rust `NegativeControlKind` wire names in order, `ALL` covers every variant, and the gate-stage `then` requires `negative_controls`; `NegativeControl` and `NegativeControls` refuse an empty description, an empty list, and a repeated control with typed errors, refuse unknown kinds and extra keys on deserialization, and round-trip. | Test (TC-157) |
+| FR-024-AC-4 | The schema's control kinds equal the Rust `NegativeControlKind` wire names in order, `ALL` covers every variant, and the non-retired gate-stage `then` requires `negative_controls`; `NegativeControl` and `NegativeControls` refuse an empty description, an empty list, and a repeated control with typed errors, refuse unknown kinds and extra keys on deserialization, and round-trip. | Test (TC-157) |
 | FR-024-AC-5 | Given two plan definitions with an equal `definition_version`, a protected entry added, removed, or changed, or the list added or removed, yields one typed finding naming `protected_apparatus`; the same edit with a different `definition_version`, and a reordered list, yield no finding. | Test (TC-158, TC-141) |
 | FR-024-AC-6 | The MeasurementPlan skeleton carries a valid `protected_apparatus` and `negative_controls` with sections explaining both, the onboarding skill describes both, and the onboarding checklist lists both lists' shape, the entry description rather than the raw pattern, the control kinds, and the gate-stage and apparatus-edit requirements; it omits lists with nothing to say, and no artifact type has a warning. | Test (TC-159) |
 | FR-024-AC-7 | A minimal consumer with only the `measurement` feature reaches `ApparatusPath`, `ProtectedApparatus`, `NegativeControlKind`, `NegativeControl`, and `NegativeControls`, and resolves no `serde_json`. | Test (TC-142) |
-| FR-024-AC-8 | The schema refuses a gate-stage plan without `protected_apparatus`, and a plan at any stage with an `apparatus-edit` negative control but no `protected_apparatus`; it accepts both with a protected list, and a below-gate plan whose controls are of other kinds without one. | Test (TC-155) |
+| FR-024-AC-8 | The schema refuses a non-retired gate-stage plan without `protected_apparatus`, and a plan at any stage with an `apparatus-edit` negative control but no `protected_apparatus`; it accepts both with a protected list, and a below-gate plan whose controls are of other kinds without one. | Test (TC-155) |
+| FR-024-AC-9 | A retired gate-stage plan under the v0.2.1 prose contract remains valid without fields added later for new gate plans; the same omission is refused for a proposed or active gate-stage plan, and a retired current-shape plan remains valid. | Test (TC-172) |
 
 ## Dependencies
 

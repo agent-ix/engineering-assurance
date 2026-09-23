@@ -203,11 +203,11 @@ mod tests {
             outputs: BTreeMap::from([
                 (
                     ("quire".to_owned(), vec!["provenance".to_owned()]),
-                    br#"{"cli":{"version":"0.31.0"}}"#.to_vec(),
+                    br#"{"cli":{"version":"0.33.0"}}"#.to_vec(),
                 ),
                 (
                     ("quoin".to_owned(), vec!["--version".to_owned()]),
-                    b"quoin 0.23.1\n".to_vec(),
+                    b"quoin 0.24.1\n".to_vec(),
                 ),
                 (
                     ("ix-flow".to_owned(), vec!["--version".to_owned()]),
@@ -224,7 +224,7 @@ mod tests {
                             "--abbrev=0".to_owned(),
                         ],
                     ),
-                    b"v0.4.0\n".to_vec(),
+                    b"v0.4.1\n".to_vec(),
                 ),
             ]),
         }
@@ -279,7 +279,7 @@ mod tests {
         let result = observe_with(Path::new(env!("CARGO_MANIFEST_DIR")), &fixture_runner())
             .expect("fully pinned fixture observation must classify");
         assert!(result.classification.versions_compatible);
-        assert!(result.gate_satisfied);
+        assert!(!result.gate_satisfied);
     }
 
     #[test]
