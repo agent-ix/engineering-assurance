@@ -714,6 +714,21 @@ fn tc_161_require_mode_refuses_without_an_attested_accept() {
         );
     }
 
+    // An unknown prior stage never counts as the stage before `observe`.
+    let mut unknown_prior = promotion();
+    unknown_prior["items"]["promotion_request"][0]["prior_stage"] = json!("draft");
+    unknown_prior["items"]["promotion_request"][0]["proposed_stage"] = json!("observe");
+    assert_promotion(
+        "unknown prior stage",
+        &unknown_prior,
+        &json!([{
+            "invariant": "measurement.promotion_ready",
+            "status": "failed",
+            "code": "promotion_must_advance_one_stage",
+            "details": {},
+        }]),
+    );
+
     // A policy listing the stage wins over a recommend policy beside it.
     let mut both = promotion();
     both["items"]["measurement_policy"] = json!([
