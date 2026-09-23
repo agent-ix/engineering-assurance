@@ -466,7 +466,7 @@ fn checker(
     })
 }
 
-fn passed(checker: Value) -> Value {
+fn passed(checker: &Value) -> Value {
     json!([{
         "invariant": "measurement.promotion_ready",
         "status": "passed",
@@ -474,7 +474,7 @@ fn passed(checker: Value) -> Value {
     }])
 }
 
-fn refused(code: &str, checker: Value) -> Value {
+fn refused(code: &str, checker: &Value) -> Value {
     json!([{
         "invariant": "measurement.promotion_ready",
         "status": "failed",
@@ -541,7 +541,7 @@ fn tc_160_recommend_mode_reports_the_checker_and_never_refuses() {
         ),
     ];
     for (case, projection, report) in cases {
-        assert_promotion(case, &projection, &passed(report));
+        assert_promotion(case, &projection, &passed(&report));
     }
 
     // A require policy that does not list the proposed stage is recommend.
@@ -550,7 +550,7 @@ fn tc_160_recommend_mode_reports_the_checker_and_never_refuses() {
     assert_promotion(
         "require policy, stage not listed, rejected",
         &unlisted,
-        &passed(checker(
+        &passed(&checker(
             "recommend",
             "not_accepted",
             &reject,
@@ -563,7 +563,7 @@ fn tc_160_recommend_mode_reports_the_checker_and_never_refuses() {
     assert_promotion(
         "recommend policy listing the stage, rejected",
         &recommend_policy,
-        &passed(checker(
+        &passed(&checker(
             "recommend",
             "not_accepted",
             &reject,
@@ -573,15 +573,8 @@ fn tc_160_recommend_mode_reports_the_checker_and_never_refuses() {
     );
 }
 
-#[trace("TC-161", "FR-025-AC-3", "FR-025-AC-5")]
-#[test]
-fn tc_161_require_mode_refuses_without_an_attested_accept() {
-    assert_promotion(
-        "require, accepted over an attested order",
-        &promotion(),
-        &passed(checker("require", "accepted", &json!("accept"), &[], false)),
-    );
-
+/// Each `require` case that must refuse, with its expected outcome.
+fn require_refusal_cases() -> Vec<(&'static str, Value, Value)> {
     let mut unbound = promotion();
     unbound["items"]["promotion_evidence"][0]
         .as_object_mut()
@@ -597,33 +590,33 @@ fn tc_161_require_mode_refuses_without_an_attested_accept() {
     let missing = checker("require", "missing", &Value::Null, &[], false);
     let mismatch = checker("require", "mismatch", &Value::Null, &[], false);
     let unattested = checker("require", "order_unattested", &json!("accept"), &[], false);
-    let cases = [
+    vec![
         (
             "require, no checker result",
             without(promotion(), "measurement_verdict"),
-            refused("promotion_checker_missing", missing.clone()),
+            refused("promotion_checker_missing", &missing),
         ),
         (
             "require, evidence names no plan id",
             unbound,
-            refused("promotion_checker_missing", missing.clone()),
+            refused("promotion_checker_missing", &missing),
         ),
         (
             "require, result for another plan",
             other_plan,
-            refused("promotion_checker_missing", missing.clone()),
+            refused("promotion_checker_missing", &missing),
         ),
         (
             "require, result of another schema",
             with_verdict(promotion(), "schema", json!("quoin.measurement-verdict.v0")),
-            refused("promotion_checker_missing", missing),
+            refused("promotion_checker_missing", &missing),
         ),
         (
             "require, rejected",
             rejected(promotion()),
             refused(
                 "promotion_checker_not_accepted",
-                checker(
+                &checker(
                     "require",
                     "not_accepted",
                     &json!("reject"),
@@ -641,7 +634,7 @@ fn tc_161_require_mode_refuses_without_an_attested_accept() {
             ),
             refused(
                 "promotion_checker_not_accepted",
-                checker(
+                &checker(
                     "require",
                     "not_accepted",
                     &json!("inconclusive"),
@@ -653,43 +646,64 @@ fn tc_161_require_mode_refuses_without_an_attested_accept() {
         (
             "require, other definition version",
             with_verdict(promotion(), "definitionVersion", json!("v0")),
-            refused("promotion_checker_mismatch", mismatch.clone()),
+            refused("promotion_checker_mismatch", &mismatch),
         ),
         (
             "require, other candidate collection",
             with_verdict(promotion(), "candidate", json!("collection-1")),
-            refused("promotion_checker_mismatch", mismatch.clone()),
+            refused("promotion_checker_mismatch", &mismatch),
         ),
         (
             "require, checker decided no candidate",
             with_verdict(promotion(), "candidate", Value::Null),
-            refused("promotion_checker_mismatch", mismatch.clone()),
+            refused("promotion_checker_mismatch", &mismatch),
         ),
         (
             "require, evidence names no candidate",
             no_candidate,
-            refused("promotion_checker_mismatch", mismatch),
+            refused("promotion_checker_mismatch", &mismatch),
         ),
         (
             "require, caller-supplied order",
             with_verdict(promotion(), "orderSource", json!("caller-supplied")),
-            refused("promotion_checker_order_unattested", unattested.clone()),
+            refused("promotion_checker_order_unattested", &unattested),
         ),
         (
             "require, no order",
             with_verdict(promotion(), "orderSource", json!("none")),
-            refused("promotion_checker_order_unattested", unattested.clone()),
+            refused("promotion_checker_order_unattested", &unattested),
         ),
         (
             "require, shallow-clone order",
             with_verdict(promotion(), "orderSource", json!("git-shallow")),
-            refused("promotion_checker_order_unattested", unattested),
+            refused("promotion_checker_order_unattested", &unattested),
         ),
-    ];
-    for (case, projection, expected) in cases {
+    ]
+}
+
+#[trace("TC-161", "FR-025-AC-3", "FR-025-AC-5")]
+#[test]
+fn tc_161_require_mode_refuses_without_an_attested_accept() {
+    assert_promotion(
+        "require, accepted over an attested order",
+        &promotion(),
+        &passed(&checker(
+            "require",
+            "accepted",
+            &json!("accept"),
+            &[],
+            false,
+        )),
+    );
+
+    for (case, projection, expected) in require_refusal_cases() {
         assert_promotion(case, &projection, &expected);
     }
+}
 
+#[trace("TC-161", "FR-025-AC-3", "FR-025-AC-5")]
+#[test]
+fn tc_161_conflicting_results_policies_and_stages_resolve_conservatively() {
     // Two matching results: the least favourable wins, whichever comes first.
     for order in [[0, 1], [1, 0]] {
         let accepted = promotion()["items"]["measurement_verdict"][0].clone();
@@ -703,7 +717,7 @@ fn tc_161_require_mode_refuses_without_an_attested_accept() {
             &conflicting,
             &refused(
                 "promotion_checker_not_accepted",
-                checker(
+                &checker(
                     "require",
                     "not_accepted",
                     &json!("reject"),
@@ -740,7 +754,7 @@ fn tc_161_require_mode_refuses_without_an_attested_accept() {
         &rejected(both),
         &refused(
             "promotion_checker_not_accepted",
-            checker(
+            &checker(
                 "require",
                 "not_accepted",
                 &json!("reject"),
@@ -758,7 +772,7 @@ fn tc_162_a_current_owned_exception_overrides_a_required_checker_visibly() {
     assert_promotion(
         "require, rejected, current exception",
         &with_exception(rejected(promotion()), "2026-09-10T12:00:01Z"),
-        &passed(checker(
+        &passed(&checker(
             "require",
             "not_accepted",
             &reject,
@@ -772,14 +786,14 @@ fn tc_162_a_current_owned_exception_overrides_a_required_checker_visibly() {
             without(promotion(), "measurement_verdict"),
             "2026-09-10T12:00:01Z",
         ),
-        &passed(checker("require", "missing", &Value::Null, &[], true)),
+        &passed(&checker("require", "missing", &Value::Null, &[], true)),
     );
     assert_promotion(
         "require, rejected, exception expiring at the evaluation instant",
         &with_exception(rejected(promotion()), EVALUATED_AT),
         &refused(
             "promotion_checker_not_accepted",
-            checker("require", "not_accepted", &reject, &["rule_not_met"], false),
+            &checker("require", "not_accepted", &reject, &["rule_not_met"], false),
         ),
     );
     let mut ownerless = with_exception(rejected(promotion()), "2026-09-10T12:00:01Z");
@@ -789,7 +803,7 @@ fn tc_162_a_current_owned_exception_overrides_a_required_checker_visibly() {
         &ownerless,
         &refused(
             "promotion_checker_not_accepted",
-            checker("require", "not_accepted", &reject, &["rule_not_met"], false),
+            &checker("require", "not_accepted", &reject, &["rule_not_met"], false),
         ),
     );
     // An exception is never needed, and never reported as used, when the
@@ -797,7 +811,13 @@ fn tc_162_a_current_owned_exception_overrides_a_required_checker_visibly() {
     assert_promotion(
         "require, accepted, current exception",
         &with_exception(promotion(), "2026-09-10T12:00:01Z"),
-        &passed(checker("require", "accepted", &json!("accept"), &[], false)),
+        &passed(&checker(
+            "require",
+            "accepted",
+            &json!("accept"),
+            &[],
+            false,
+        )),
     );
     assert_promotion(
         "recommend, rejected, current exception",
@@ -805,7 +825,7 @@ fn tc_162_a_current_owned_exception_overrides_a_required_checker_visibly() {
             rejected(without(promotion(), "measurement_policy")),
             "2026-09-10T12:00:01Z",
         ),
-        &passed(checker(
+        &passed(&checker(
             "recommend",
             "not_accepted",
             &reject,
