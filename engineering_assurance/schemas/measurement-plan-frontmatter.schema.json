@@ -57,14 +57,14 @@
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "description": "The files that produce this plan's number (FR-024): the measurement harness, the labels, corpus, or answer key, the file that selects the population, and the checker configuration. Each entry is a repository-relative path or glob; every entry must resolve to at least one real file, and each file it names is digested when a measurement collection is written -- Quoin's intake refuses a collection whose protected entry names no file. Part of the measurement definition: adding, removing, or changing an entry requires a new `definition_version`, and so does editing a protected file, which Quoin detects by its digest. Optional.",
+      "description": "The files that produce this plan's number (FR-024): the measurement harness, the labels, corpus, or answer key, the file that selects the population, and the checker configuration. Each entry is a repository-relative file path or a directory entry `<directory>/**`. Quoin's intake resolves the entries to files (case-sensitive, dotfiles included, symlinks refused and never followed, a directory entry must contain at least one file, an entry that names no file refuses the collection) and records the resolved set of (path, digest) pairs; a different set between collections -- a file added, removed, or edited under an entry -- is an apparatus change. Required when `stage` is `gate`, and whenever a `negative_controls` entry has kind `apparatus-edit`. Part of the measurement definition: adding, removing, or changing an entry, or any change to the resolved set, requires a new `definition_version`.",
       "items": { "$ref": "#/$defs/apparatus_path" }
     },
     "negative_controls": {
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "description": "Gaming scenarios this plan's measurement must catch (FR-024), each a closed `kind` plus a `description` of how the measurement catches it. Required, with at least one entry, when `stage` is `gate`; optional otherwise.",
+      "description": "Gaming scenarios this plan declares it guards against (FR-024), each a closed `kind` plus a `description` of how the plan guards against it. A declaration only: Engineering Assurance checks its shape, and Quoin's checker exercises the kinds it can detect. Required, with at least one entry, when `stage` is `gate`; optional otherwise.",
       "items": { "$ref": "#/$defs/negative_control" }
     },
     "statistical_design": { "$ref": "#/$defs/statistical_design" },
@@ -81,7 +81,23 @@
         "required": ["stage"]
       },
       "then": {
-        "required": ["ground_truth_kind", "negative_controls"]
+        "required": ["ground_truth_kind", "negative_controls", "protected_apparatus"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "negative_controls": {
+            "contains": {
+              "properties": { "kind": { "const": "apparatus-edit" } },
+              "required": ["kind"]
+            }
+          }
+        },
+        "required": ["negative_controls"]
+      },
+      "then": {
+        "required": ["protected_apparatus"]
       }
     },
     {
@@ -165,8 +181,11 @@
   "$defs": {
     "apparatus_path": {
       "type": "string",
-      "pattern": "^(?:\\*\\*|[^/\\\\*?\\[\\]{}:\\x00-\\x1f]*\\*(?:[^/\\\\*?\\[\\]{}:\\x00-\\x1f]+\\*)*[^/\\\\*?\\[\\]{}:\\x00-\\x1f]*|[^/\\\\*?\\[\\]{}:\\x00-\\x1f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f]*|\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f]*|\\.\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f]+)(?:/(?:\\*\\*|[^/\\\\*?\\[\\]{}:\\x00-\\x1f]*\\*(?:[^/\\\\*?\\[\\]{}:\\x00-\\x1f]+\\*)*[^/\\\\*?\\[\\]{}:\\x00-\\x1f]*|[^/\\\\*?\\[\\]{}:\\x00-\\x1f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f]*|\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f]*|\\.\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f]+))*$",
-      "description": "A repository-relative file path or glob (FR-024). Segments are separated by `/`. A segment is either exactly `**`, matching zero or more whole directories, or a name in which each `*` matches zero or more characters other than `/`; every other character is literal. Refused: an empty entry, a leading `/`, an empty segment (`//` or a trailing `/`), a `.` or `..` segment, `**` inside a longer segment, and the characters `\\`, `?`, `[`, `]`, `{`, `}`, `:` and control characters."
+      "pattern": "^(?:[^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f]*|\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f]*|\\.\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f]+)(?:/(?:[^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f]*|\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f]*|\\.\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f]+))*(?:/\\*\\*)?$",
+      "not": {
+        "pattern": "[\\x00-\\x1f\\x7f-\\x9f]"
+      },
+      "description": "A repository-relative file path, or a directory entry `<directory>/**` naming every file under that directory, recursively (FR-024). Segments are separated by `/`; `*` appears only in a final `/**` segment, and `**` alone is refused, so the whole repository cannot be protected. Also refused: an empty entry, a leading `/`, an empty segment (`//` or a trailing `/`), a `.` or `..` segment, control characters (C0, DEL, C1), and `\\`, `?`, `[`, `]`, `{`, `}`, `:`."
     },
     "negative_control": {
       "type": "object",
@@ -186,7 +205,7 @@
         "description": {
           "type": "string",
           "minLength": 1,
-          "description": "How this plan's measurement catches the scenario."
+          "description": "How the plan says it guards against the scenario."
         }
       }
     },

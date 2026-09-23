@@ -305,7 +305,7 @@ fn tc_141_definition_edit_without_a_version_bump_is_a_typed_finding_naming_the_m
         objective: higher,
         estimator: Some(Estimator::Proportion),
         decision_rule: ge_099,
-        protected_apparatus: Some(apparatus(&["evals/harness.py", "labels/*.json"])),
+        protected_apparatus: Some(apparatus(&["evals/harness.py", "labels/**"])),
     };
     let plan = |version, definition| PlanDefinition {
         definition_version: version,
@@ -422,7 +422,7 @@ fn tc_142_a_minimal_downstream_compiles_only_the_measurement_feature() {
     .expect("consumer manifest");
     fs::write(
         consumer.path().join("src/main.rs"),
-        "use engineering_assurance::measurement::{ApparatusPath, Baseline, Comparator, DecisionRule, Direction, Estimator, NegativeControl, NegativeControlKind, NegativeControls, Objective, ProtectedApparatus, definition_change_without_version_bump};\nfn main(){let _ = (Objective::new(Direction::Target, Some(1.0)), definition_change_without_version_bump, DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, None), Estimator::Proportion, ApparatusPath::new(\"evals/**/*.json\").map(|path| ProtectedApparatus::new([path])), NegativeControl::new(NegativeControlKind::ApparatusEdit, \"digest\").map(|control| NegativeControls::new([control])));}\n",
+        "use engineering_assurance::measurement::{ApparatusPath, Baseline, Comparator, DecisionRule, Direction, Estimator, NegativeControl, NegativeControlKind, NegativeControls, Objective, ProtectedApparatus, definition_change_without_version_bump};\nfn main(){let _ = (Objective::new(Direction::Target, Some(1.0)), definition_change_without_version_bump, DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, None), Estimator::Proportion, ApparatusPath::new(\"evals/**\").map(|path| ProtectedApparatus::new([path])), NegativeControl::new(NegativeControlKind::ApparatusEdit, \"digest\").map(|control| NegativeControls::new([control])));}\n",
     )
     .expect("consumer source");
     let status = Command::new(env!("CARGO"))
@@ -847,164 +847,100 @@ fn tc_148_decision_rule_evaluation_compares_the_estimate_with_its_reference() {
     );
 }
 
-/// One case table for the `protected_apparatus` item syntax (FR-024), the
-/// same entries `tests/test_module.py` runs through the schema.
-const APPARATUS_PATHS_ACCEPTED: [&str; 12] = [
-    "tests/fixtures/labels.json",
-    "evals/harness.py",
-    "corpus/*.json",
-    "corpus/**/*.yaml",
-    "**/checker.toml",
-    "**",
-    "*",
-    ".github/checker.toml",
-    "labels/.answers",
-    "a/...",
-    "src/a*b*c.rs",
-    "population select.sql",
-];
+/// One case from `tests/fixtures/apparatus-paths.json`, the shared
+/// `protected_apparatus` entry table `tests/test_module.py` also reads.
+#[derive(serde::Deserialize)]
+struct ApparatusCase {
+    path: String,
+    /// For an accepted case: the directory a directory entry names.
+    #[serde(default)]
+    directory: Option<String>,
+    /// For a refused case: the `ApparatusPathError` variant name.
+    #[serde(default)]
+    error: Option<String>,
+    /// For a `ForbiddenCharacter` case: the character reported.
+    #[serde(default)]
+    character: Option<char>,
+}
 
-/// Refused entries, each with the typed refusal the Rust type gives.
-fn apparatus_paths_refused() -> Vec<(&'static str, ApparatusPathError)> {
-    let path = |refused: &str| refused.to_owned();
-    vec![
-        ("", ApparatusPathError::Empty),
-        (
-            "/etc/passwd",
-            ApparatusPathError::Absolute {
-                path: path("/etc/passwd"),
-            },
-        ),
-        (
-            "a//b",
-            ApparatusPathError::EmptySegment { path: path("a//b") },
-        ),
-        ("a/", ApparatusPathError::EmptySegment { path: path("a/") }),
-        (
-            "./a",
-            ApparatusPathError::CurrentDirectorySegment { path: path("./a") },
-        ),
-        (
-            "a/./b",
-            ApparatusPathError::CurrentDirectorySegment {
-                path: path("a/./b"),
-            },
-        ),
-        (
-            "../outside",
-            ApparatusPathError::ParentDirectorySegment {
-                path: path("../outside"),
-            },
-        ),
-        (
-            "a/../b",
-            ApparatusPathError::ParentDirectorySegment {
-                path: path("a/../b"),
-            },
-        ),
-        (
-            "a/..",
-            ApparatusPathError::ParentDirectorySegment { path: path("a/..") },
-        ),
-        (
-            "a\\b",
-            ApparatusPathError::ForbiddenCharacter {
-                path: path("a\\b"),
-                character: '\\',
-            },
-        ),
-        (
-            "a/b?.json",
-            ApparatusPathError::ForbiddenCharacter {
-                path: path("a/b?.json"),
-                character: '?',
-            },
-        ),
-        (
-            "a/[ab].json",
-            ApparatusPathError::ForbiddenCharacter {
-                path: path("a/[ab].json"),
-                character: '[',
-            },
-        ),
-        (
-            "a/{x,y}.json",
-            ApparatusPathError::ForbiddenCharacter {
-                path: path("a/{x,y}.json"),
-                character: '{',
-            },
-        ),
-        (
-            "C:/labels.json",
-            ApparatusPathError::ForbiddenCharacter {
-                path: path("C:/labels.json"),
-                character: ':',
-            },
-        ),
-        (
-            "a**",
-            ApparatusPathError::PartialDoubleStar { path: path("a**") },
-        ),
-        (
-            "a/***/b",
-            ApparatusPathError::PartialDoubleStar {
-                path: path("a/***/b"),
-            },
-        ),
-        (
-            "**.json",
-            ApparatusPathError::PartialDoubleStar {
-                path: path("**.json"),
-            },
-        ),
-        (
-            "a\u{1}b",
-            ApparatusPathError::ForbiddenCharacter {
-                path: path("a\u{1}b"),
-                character: '\u{1}',
-            },
-        ),
-    ]
+#[derive(serde::Deserialize)]
+struct ApparatusCases {
+    accepted: Vec<ApparatusCase>,
+    refused: Vec<ApparatusCase>,
+}
+
+fn apparatus_cases() -> ApparatusCases {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/apparatus-paths.json");
+    serde_json::from_slice(&fs::read(&fixture).expect("fixture readable"))
+        .expect("fixture is the case-table shape")
+}
+
+/// The typed refusal a refused case names.
+fn expected_refusal(case: &ApparatusCase) -> ApparatusPathError {
+    let path = case.path.clone();
+    let variant = case.error.as_deref().expect("refused case names its error");
+    match variant {
+        "Empty" => ApparatusPathError::Empty,
+        "Absolute" => ApparatusPathError::Absolute { path },
+        "ForbiddenCharacter" => ApparatusPathError::ForbiddenCharacter {
+            path,
+            character: case.character.expect("ForbiddenCharacter case names it"),
+        },
+        "WholeRepository" => ApparatusPathError::WholeRepository,
+        "MisplacedWildcard" => ApparatusPathError::MisplacedWildcard { path },
+        "EmptySegment" => ApparatusPathError::EmptySegment { path },
+        "CurrentDirectorySegment" => ApparatusPathError::CurrentDirectorySegment { path },
+        "ParentDirectorySegment" => ApparatusPathError::ParentDirectorySegment { path },
+        other => panic!("fixture names unknown ApparatusPathError variant {other:?}"),
+    }
 }
 
 #[test]
 #[trace("TC-156", "FR-024-AC-3")]
-fn tc_156_apparatus_path_accepts_safe_relative_globs_and_refuses_the_rest() {
+fn tc_156_apparatus_path_accepts_and_refuses_the_shared_case_table() {
     let schema = measurement_plan_schema();
-    let pattern = schema
-        .pointer("/$defs/apparatus_path/pattern")
-        .and_then(serde_json::Value::as_str)
-        .expect("apparatus_path pattern");
     assert_eq!(
         schema["properties"]["protected_apparatus"]["items"]["$ref"], "#/$defs/apparatus_path",
         "protected_apparatus items must resolve to the pattern this test reads"
     );
-    let schema_pattern = regex::Regex::new(pattern).expect("schema pattern compiles");
+    let pattern = |pointer: &str| {
+        let source = schema
+            .pointer(pointer)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_else(|| panic!("schema pattern at {pointer}"));
+        regex::Regex::new(source).expect("schema pattern compiles")
+    };
+    let entry_pattern = pattern("/$defs/apparatus_path/pattern");
+    let control_pattern = pattern("/$defs/apparatus_path/not/pattern");
+    let schema_accepts =
+        |path: &str| entry_pattern.is_match(path) && !control_pattern.is_match(path);
 
-    for accepted in APPARATUS_PATHS_ACCEPTED {
+    let cases = apparatus_cases();
+    assert!(!cases.accepted.is_empty() && !cases.refused.is_empty());
+    let mut variants = BTreeSet::new();
+    for case in &cases.accepted {
+        let accepted = case.path.as_str();
         let path = ApparatusPath::new(accepted)
             .unwrap_or_else(|error| panic!("{accepted:?} must be accepted: {error}"));
         assert_eq!(path.as_str(), accepted);
-        assert_eq!(path.is_glob(), accepted.contains('*'), "{accepted:?}");
-        assert!(
-            schema_pattern.is_match(accepted),
-            "schema refuses {accepted:?}"
-        );
+        assert_eq!(path.directory(), case.directory.as_deref(), "{accepted:?}");
+        assert!(schema_accepts(accepted), "schema refuses {accepted:?}");
         assert_eq!(accepted.parse::<ApparatusPath>(), Ok(path.clone()));
         let decoded: ApparatusPath =
-            yaml_serde::from_str(&format!("{accepted:?}")).expect("path deserializes");
+            serde_json::from_value(serde_json::Value::String(accepted.to_owned()))
+                .expect("path deserializes");
         assert_eq!(decoded, path);
     }
-    for (refused, error) in apparatus_paths_refused() {
+    for case in &cases.refused {
+        let refused = case.path.as_str();
+        let error = expected_refusal(case);
+        variants.insert(case.error.clone().expect("named"));
         assert_eq!(
             ApparatusPath::new(refused),
             Err(error.clone()),
             "{refused:?}"
         );
-        assert!(
-            !schema_pattern.is_match(refused),
-            "schema accepts {refused:?}"
-        );
+        assert!(!schema_accepts(refused), "schema accepts {refused:?}");
         let decoded =
             serde_json::from_value::<ApparatusPath>(serde_json::Value::String(refused.to_owned()))
                 .expect_err("deserialization refuses");
@@ -1013,6 +949,23 @@ fn tc_156_apparatus_path_accepts_safe_relative_globs_and_refuses_the_rest() {
             "{decoded}"
         );
     }
+    // The table exercises every refusal the type has.
+    assert_eq!(
+        variants,
+        [
+            "Absolute",
+            "CurrentDirectorySegment",
+            "Empty",
+            "EmptySegment",
+            "ForbiddenCharacter",
+            "MisplacedWildcard",
+            "ParentDirectorySegment",
+            "WholeRepository",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>()
+    );
 }
 
 #[test]
@@ -1035,19 +988,19 @@ fn tc_156_protected_apparatus_is_a_non_empty_set_of_distinct_entries() {
         })
     );
 
-    let built = apparatus(&["labels/*.json", "evals/harness.py"]);
+    let built = apparatus(&["labels/**", "evals/harness.py"]);
     assert_eq!(built.len(), 2);
     assert!(!built.is_empty());
-    assert!(built.contains(&ApparatusPath::new("labels/*.json").expect("valid path")));
+    assert!(built.contains(&ApparatusPath::new("labels/**").expect("valid path")));
     assert!(!built.contains(&ApparatusPath::new("labels/a.json").expect("valid path")));
     // A set: order does not matter, and it serializes sorted.
-    assert_eq!(built, apparatus(&["evals/harness.py", "labels/*.json"]));
+    assert_eq!(built, apparatus(&["evals/harness.py", "labels/**"]));
     assert_eq!(
         built.iter().map(ApparatusPath::as_str).collect::<Vec<_>>(),
-        ["evals/harness.py", "labels/*.json"]
+        ["evals/harness.py", "labels/**"]
     );
     let emitted = yaml_serde::to_string(&built).expect("apparatus serializes");
-    assert_eq!(emitted, "- evals/harness.py\n- labels/*.json\n");
+    assert_eq!(emitted, "- evals/harness.py\n- labels/**\n");
     assert_eq!(
         yaml_serde::from_str::<ProtectedApparatus>(&emitted).expect("round trip"),
         built
@@ -1102,7 +1055,11 @@ fn tc_157_negative_controls_are_closed_non_empty_and_distinct() {
     assert_eq!(NegativeControlKind::ALL.len(), 5);
     assert_eq!(
         schema["allOf"][0]["then"]["required"],
-        serde_json::json!(["ground_truth_kind", "negative_controls"]),
+        serde_json::json!([
+            "ground_truth_kind",
+            "negative_controls",
+            "protected_apparatus"
+        ]),
         "a gate-stage plan requires negative_controls"
     );
 
@@ -1162,7 +1119,7 @@ fn tc_158_a_protected_apparatus_edit_without_a_version_bump_is_a_finding() {
         objective: Some(objective(Direction::Higher, None)),
         estimator: Some(Estimator::Proportion),
         decision_rule: Some(rule_threshold(Comparator::Ge, 0.99)),
-        protected_apparatus: Some(apparatus(&["evals/harness.py", "labels/*.json"])),
+        protected_apparatus: Some(apparatus(&["evals/harness.py", "labels/**"])),
     };
     let with = |protected_apparatus| MeasurementDefinition {
         protected_apparatus,
@@ -1172,11 +1129,11 @@ fn tc_158_a_protected_apparatus_edit_without_a_version_bump_is_a_finding() {
         // An entry added, one removed, one changed, and the list removed.
         with(Some(apparatus(&[
             "evals/harness.py",
-            "labels/*.json",
+            "labels/**",
             "evals/checker.toml",
         ]))),
         with(Some(apparatus(&["evals/harness.py"]))),
-        with(Some(apparatus(&["evals/harness.py", "labels/**/*.json"]))),
+        with(Some(apparatus(&["evals/harness.py", "labels/answers/**"]))),
         with(None),
     ] {
         assert_edit_is_reported_unless_versioned(
@@ -1191,7 +1148,7 @@ fn tc_158_a_protected_apparatus_edit_without_a_version_bump_is_a_finding() {
         );
     }
     // Reordering the list is not a change.
-    let reordered = with(Some(apparatus(&["labels/*.json", "evals/harness.py"])));
+    let reordered = with(Some(apparatus(&["labels/**", "evals/harness.py"])));
     let plan = |definition: &MeasurementDefinition| PlanDefinition {
         definition_version: Some("retention-v1"),
         definition: definition.clone(),

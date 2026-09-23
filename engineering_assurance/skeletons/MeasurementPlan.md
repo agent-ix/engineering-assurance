@@ -27,17 +27,17 @@ statistical_design:
 protected_apparatus:
   - evals/juniper/retention_harness.py
   - evals/juniper/checker.toml
-  - fixtures/juniper/requests/**/*.json
+  - fixtures/juniper/requests/**
   - fixtures/juniper/population.yaml
 negative_controls:
   - kind: suppressed-observation
     description: >-
-      the harness records every request in population.yaml; examined below
-      the listed count refuses the collection
+      the harness records every request in population.yaml, so a collection
+      that examined fewer than the listed count is visible
   - kind: apparatus-edit
     description: >-
-      a change that also edits a protected file lands under a new
-      definition_version and is never compared with the old series
+      the harness, checker configuration, request fixtures and population
+      file are protected, so editing one changes the recorded digests
 relationships:
   - target: ix://example/juniper/AP-001
     type: measures
@@ -116,19 +116,27 @@ series rather than re-judging the old one.
 labels, corpus, or answer key, the file that selects the population, and the
 checker configuration. A change that edits one of them changed the
 measurement, not the thing measured, and earns no credit toward the objective.
+A gate-stage plan must list them, and so must any plan that declares an
+`apparatus-edit` negative control.
 
-Each entry is a repository-relative path or glob. `*` matches any characters
-within one path segment and `**`, as a whole segment, matches any number of
-directories; nothing else is special. Absolute paths, `.` and `..` segments,
-empty segments, and the characters `\ ? [ ] { } :` are refused. Every entry
-must name at least one real file: Quoin's measurement intake digests each
-protected file when it writes a collection, and refuses a collection whose
-entry names no file.
+Each entry is either a repository-relative file path or a directory entry
+ending in `/**`, which names every file under that directory, recursively
+(`fixtures/juniper/requests/**` here). No other wildcard is allowed, and `**`
+on its own is refused: the whole repository cannot be protected. Absolute
+paths, `.` and `..` segments, empty segments, control characters, and
+`\ ? [ ] { } :` are refused too.
+
+Quoin's measurement intake resolves the entries when it writes a collection:
+paths are case-sensitive, dotfiles are included, a symlink is refused rather
+than followed, a directory entry must contain at least one file, and an entry
+that names no file refuses the collection. It records the resolved set of
+(path, digest) pairs. Any difference in that set -- a file edited, or a file
+added or removed under a directory entry -- is an apparatus change.
 
 The list is part of the measurement definition. Adding, removing, or changing
-an entry needs a new `definition_version`, and so does editing a protected
-file -- Quoin sees that edit through the file's digest, not through this plan.
-Reordering the list is not a change.
+an entry needs a new `definition_version`, and so does any change to the
+resolved files, which Quoin sees through their digests rather than through
+this plan. Reordering the list is not a change.
 
 The population is protected through the file that selects it
 (`fixtures/juniper/population.yaml` here), not through
@@ -137,9 +145,12 @@ the file decides which items are counted.
 
 ## Negative Controls
 
-`negative_controls` names the gaming scenarios this measurement must catch,
-each a `kind` and a `description` of how the plan catches it. A gate-stage plan
-names at least one. `kind` is one of:
+`negative_controls` declares the gaming scenarios the plan says it guards
+against, each a `kind` and a `description` of how. A gate-stage plan declares
+at least one. The declaration is checked for shape only; Quoin's checker
+(Linear PLAT-961) exercises the kinds it can detect -- `selective-reporting`
+through its rerun-until-pass rule, and `apparatus-edit` through the digest
+comparison (Linear PLAT-975). `kind` is one of:
 
 - `suppressed-observation` -- an unfavourable item or run is left out;
 - `gain-within-noise` -- an improvement smaller than the stated uncertainty is
@@ -147,7 +158,7 @@ names at least one. `kind` is one of:
 - `stale-evidence` -- a result collected against an earlier subject version or
   apparatus is presented as current;
 - `apparatus-edit` -- a protected file is edited alongside the change it
-  grades;
+  grades (requires `protected_apparatus`);
 - `selective-reporting` -- only a favourable run or variant is reported out of
   several tried.
 

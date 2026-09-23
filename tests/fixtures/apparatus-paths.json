@@ -1,0 +1,185 @@
+{
+  "_comment": "Shared protected_apparatus entry cases (FR-024). tests/measurement.rs runs them through the Rust ApparatusPath and the schema pattern; tests/test_module.py runs them through the schema. `error` names the ApparatusPathError variant; `character` is the forbidden character it reports.",
+  "accepted": [
+    {
+      "path": "tests/fixtures/labels.json",
+      "directory": null
+    },
+    {
+      "path": "evals/harness.py",
+      "directory": null
+    },
+    {
+      "path": "corpus/labels/**",
+      "directory": "corpus/labels"
+    },
+    {
+      "path": "evals/**",
+      "directory": "evals"
+    },
+    {
+      "path": ".github/checker.toml",
+      "directory": null
+    },
+    {
+      "path": "labels/.answers",
+      "directory": null
+    },
+    {
+      "path": ".config/**",
+      "directory": ".config"
+    },
+    {
+      "path": "a/...",
+      "directory": null
+    },
+    {
+      "path": "population select.sql",
+      "directory": null
+    },
+    {
+      "path": "Labels/Answer-Key.JSON",
+      "directory": null
+    }
+  ],
+  "refused": [
+    {
+      "path": "",
+      "error": "Empty"
+    },
+    {
+      "path": "/etc/passwd",
+      "error": "Absolute"
+    },
+    {
+      "path": "/**",
+      "error": "Absolute"
+    },
+    {
+      "path": "a//b",
+      "error": "EmptySegment"
+    },
+    {
+      "path": "a/",
+      "error": "EmptySegment"
+    },
+    {
+      "path": "a//**",
+      "error": "EmptySegment"
+    },
+    {
+      "path": "./a",
+      "error": "CurrentDirectorySegment"
+    },
+    {
+      "path": "a/./b",
+      "error": "CurrentDirectorySegment"
+    },
+    {
+      "path": "./**",
+      "error": "CurrentDirectorySegment"
+    },
+    {
+      "path": "../outside",
+      "error": "ParentDirectorySegment"
+    },
+    {
+      "path": "a/../b",
+      "error": "ParentDirectorySegment"
+    },
+    {
+      "path": "a/..",
+      "error": "ParentDirectorySegment"
+    },
+    {
+      "path": "../**",
+      "error": "ParentDirectorySegment"
+    },
+    {
+      "path": "**",
+      "error": "WholeRepository"
+    },
+    {
+      "path": "*",
+      "error": "MisplacedWildcard"
+    },
+    {
+      "path": "corpus/*.json",
+      "error": "MisplacedWildcard"
+    },
+    {
+      "path": "corpus/**/*.yaml",
+      "error": "MisplacedWildcard"
+    },
+    {
+      "path": "**/checker.toml",
+      "error": "MisplacedWildcard"
+    },
+    {
+      "path": "a**",
+      "error": "MisplacedWildcard"
+    },
+    {
+      "path": "a/***",
+      "error": "MisplacedWildcard"
+    },
+    {
+      "path": "a/**/**",
+      "error": "MisplacedWildcard"
+    },
+    {
+      "path": "a/b*",
+      "error": "MisplacedWildcard"
+    },
+    {
+      "path": "a\\b",
+      "error": "ForbiddenCharacter",
+      "character": "\\"
+    },
+    {
+      "path": "a/b?.json",
+      "error": "ForbiddenCharacter",
+      "character": "?"
+    },
+    {
+      "path": "a/[ab].json",
+      "error": "ForbiddenCharacter",
+      "character": "["
+    },
+    {
+      "path": "a/{x,y}.json",
+      "error": "ForbiddenCharacter",
+      "character": "{"
+    },
+    {
+      "path": "C:/labels.json",
+      "error": "ForbiddenCharacter",
+      "character": ":"
+    },
+    {
+      "path": "a\u0001b",
+      "error": "ForbiddenCharacter",
+      "character": "\u0001"
+    },
+    {
+      "path": "a.json\n",
+      "error": "ForbiddenCharacter",
+      "character": "\n"
+    },
+    {
+      "path": "a\u007fb",
+      "error": "ForbiddenCharacter",
+      "character": "\u007f"
+    },
+    {
+      "path": "a\u0085b",
+      "error": "ForbiddenCharacter",
+      "character": "\u0085"
+    },
+    {
+      "path": "a\u009fb",
+      "error": "ForbiddenCharacter",
+      "character": "\u009f"
+    }
+  ]
+}

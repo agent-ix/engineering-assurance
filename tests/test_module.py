@@ -170,6 +170,7 @@ def test_ground_truth_kind_is_required_only_for_gate_stage() -> None:
         stage="gate",
         ground_truth_kind="mechanical",
         negative_controls=[_NEGATIVE_CONTROL],
+        protected_apparatus=["evals/harness.py"],
     )
     assert list(validator.iter_errors(gate_present)) == []
 
@@ -437,42 +438,10 @@ def test_measurement_plan_skeleton_shows_a_structured_decision_rule() -> None:
     assert list(validator.iter_errors(skeleton)) == []
 
 
-# One case table for the `protected_apparatus` item syntax (FR-024). The Rust
-# `ApparatusPath` tests in tests/measurement.rs carry the same table, so the
-# schema pattern and the Rust type are checked against the same entries.
-APPARATUS_PATHS_ACCEPTED = (
-    "tests/fixtures/labels.json",
-    "evals/harness.py",
-    "corpus/*.json",
-    "corpus/**/*.yaml",
-    "**/checker.toml",
-    "**",
-    "*",
-    ".github/checker.toml",
-    "labels/.answers",
-    "a/...",
-    "src/a*b*c.rs",
-    "population select.sql",
-)
-APPARATUS_PATHS_REFUSED = (
-    "",
-    "/etc/passwd",
-    "a//b",
-    "a/",
-    "./a",
-    "a/./b",
-    "../outside",
-    "a/../b",
-    "a/..",
-    "a\\b",
-    "a/b?.json",
-    "a/[ab].json",
-    "a/{x,y}.json",
-    "C:/labels.json",
-    "a**",
-    "a/***/b",
-    "**.json",
-    "a\x01b",
+# One case table for the `protected_apparatus` entry syntax (FR-024), shared
+# with the Rust `ApparatusPath` tests in tests/measurement.rs.
+APPARATUS_PATH_CASES = json.loads(
+    (ROOT / "tests" / "fixtures" / "apparatus-paths.json").read_text()
 )
 
 
@@ -488,11 +457,14 @@ def test_protected_apparatus_is_a_unique_list_of_safe_relative_paths() -> None:
     """Trace: FR-024-AC-1, TC-154."""
     contract = schema("measurement-plan-frontmatter.schema")
     assert "protected_apparatus" not in contract["required"]
+    accepted = [case["path"] for case in APPARATUS_PATH_CASES["accepted"]]
+    refused = [case["path"] for case in APPARATUS_PATH_CASES["refused"]]
+    assert accepted and refused
     assert _apparatus_errors() == []
-    assert _apparatus_errors(protected_apparatus=list(APPARATUS_PATHS_ACCEPTED)) == []
-    for path in APPARATUS_PATHS_ACCEPTED:
+    assert _apparatus_errors(protected_apparatus=accepted) == []
+    for path in accepted:
         assert _apparatus_errors(protected_apparatus=[path]) == [], path
-    for path in APPARATUS_PATHS_REFUSED:
+    for path in refused:
         assert _apparatus_errors(protected_apparatus=[path]) != [], repr(path)
     assert _apparatus_errors(protected_apparatus=[]) != []
     assert _apparatus_errors(protected_apparatus=["a.json", "a.json"]) != []
@@ -511,18 +483,24 @@ def test_negative_controls_are_closed_and_required_at_gate_stage() -> None:
         "apparatus-edit",
         "selective-reporting",
     ]
+    gate = {
+        "stage": "gate",
+        "ground_truth_kind": "mechanical",
+        "protected_apparatus": ["evals/harness.py"],
+    }
     for kind in kinds:
-        control = {"kind": kind, "description": "caught by the intake check"}
-        assert _apparatus_errors(negative_controls=[control]) == [], kind
+        control = {"kind": kind, "description": "declared guard"}
         assert _apparatus_errors(
-            stage="gate", ground_truth_kind="mechanical", negative_controls=[control]
+            negative_controls=[control], protected_apparatus=["evals/harness.py"]
         ) == [], kind
+        assert _apparatus_errors(negative_controls=[control], **gate) == [], kind
     # Optional below gate stage.
     for stage in ("observe", "baseline", "branch-comparison", "trend", "ratchet", "target"):
         assert _apparatus_errors(stage=stage) == [], stage
 
     gate_without = _apparatus_errors(stage="gate", ground_truth_kind="mechanical")
     assert "'negative_controls' is a required property" in gate_without
+    assert "'protected_apparatus' is a required property" in gate_without
     refused = {
         "empty list": [],
         "unknown kind": [{"kind": "vibes", "description": "d"}],
@@ -534,9 +512,34 @@ def test_negative_controls_are_closed_and_required_at_gate_stage() -> None:
         "bare kind": ["stale-evidence"],
     }
     for case, controls in refused.items():
+        assert _apparatus_errors(negative_controls=controls, **gate) != [], case
+
+
+def test_gate_and_apparatus_edit_plans_require_protected_apparatus() -> None:
+    """Trace: FR-024-AC-8, TC-155."""
+    control = {"kind": "suppressed-observation", "description": "d"}
+    edit = {"kind": "apparatus-edit", "description": "d"}
+    gate = {"stage": "gate", "ground_truth_kind": "mechanical"}
+
+    assert "'protected_apparatus' is a required property" in _apparatus_errors(
+        negative_controls=[control], **gate
+    )
+    assert _apparatus_errors(
+        negative_controls=[control], protected_apparatus=["evals/**"], **gate
+    ) == []
+    # An apparatus-edit control needs a protected list at every stage.
+    for stage in ("observe", "baseline", "trend", "gate"):
+        extra = gate if stage == "gate" else {"stage": stage}
+        assert "'protected_apparatus' is a required property" in _apparatus_errors(
+            negative_controls=[control, edit], **extra
+        ), stage
         assert _apparatus_errors(
-            stage="gate", ground_truth_kind="mechanical", negative_controls=controls
-        ) != [], case
+            negative_controls=[control, edit],
+            protected_apparatus=["evals/harness.py"],
+            **extra,
+        ) == [], stage
+    # Other kinds below gate stage do not require it.
+    assert _apparatus_errors(negative_controls=[control]) == []
 
 
 def test_measurement_plan_skeleton_shows_apparatus_and_negative_controls() -> None:

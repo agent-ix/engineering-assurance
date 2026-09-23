@@ -20,7 +20,7 @@
 //! `engineering_assurance/schemas/measurement-plan-frontmatter.schema.json`;
 //! tests assert each pair of sets is equal. The schema's `protected_apparatus`
 //! item pattern and [`ApparatusPath`] are checked against one shared case
-//! table.
+//! table, `tests/fixtures/apparatus-paths.json`.
 
 use std::{collections::BTreeSet, fmt, str::FromStr};
 
@@ -637,8 +637,11 @@ impl From<DecisionRule> for DecisionRuleFields {
     }
 }
 
-/// Why a `protected_apparatus` entry is not a safe repository-relative path or
-/// glob.
+/// The suffix that makes a `protected_apparatus` entry a directory entry.
+const DIRECTORY_SUFFIX: &str = "/**";
+
+/// Why a `protected_apparatus` entry is not a safe repository-relative file
+/// path or directory entry.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum ApparatusPathError {
     /// The entry was the empty string.
@@ -650,14 +653,25 @@ pub enum ApparatusPathError {
         /// The refused entry.
         path: String,
     },
-    /// The entry contained a character outside the path and glob syntax: `\`,
-    /// `?`, `[`, `]`, `{`, `}`, `:`, or a control character.
+    /// The entry contained a control character (C0, DEL, or C1) or one of
+    /// `\`, `?`, `[`, `]`, `{`, `}`, `:`.
     #[error("protected apparatus path `{path}` contains the forbidden character {character:?}")]
     ForbiddenCharacter {
         /// The refused entry.
         path: String,
         /// The first forbidden character.
         character: char,
+    },
+    /// The entry was `**` alone, which would protect the whole repository.
+    #[error(
+        "protected apparatus path `**` names the whole repository; name a directory before `/**`"
+    )]
+    WholeRepository,
+    /// The entry contained `*` anywhere other than a final `/**` segment.
+    #[error("protected apparatus path `{path}` uses `*` outside a final `/**` segment")]
+    MisplacedWildcard {
+        /// The refused entry.
+        path: String,
     },
     /// The entry had an empty segment: `//`, or a trailing `/`.
     #[error("protected apparatus path `{path}` has an empty segment")]
@@ -677,24 +691,17 @@ pub enum ApparatusPathError {
         /// The refused entry.
         path: String,
     },
-    /// A segment contained `**` without being exactly `**`.
-    #[error(
-        "protected apparatus path `{path}` uses `**` inside a segment; `**` must be a whole segment"
-    )]
-    PartialDoubleStar {
-        /// The refused entry.
-        path: String,
-    },
 }
 
-/// One `protected_apparatus` entry: a repository-relative file path or glob
-/// naming a file that produces the plan's number.
+/// One `protected_apparatus` entry: a repository-relative file path, or a
+/// directory entry `<directory>/**` naming every file under that directory,
+/// recursively.
 ///
-/// Segments are separated by `/`. A segment is either exactly `**` (zero or
-/// more whole directories) or a name in which each `*` matches zero or more
-/// characters other than `/`. Every other character is literal; `\`, `?`,
-/// `[`, `]`, `{`, `}`, `:`, and control characters are refused, as are an
-/// empty entry, a leading `/`, an empty segment, and a `.` or `..` segment.
+/// Segments are separated by `/`. `*` appears only in a final `/**` segment,
+/// and a directory entry names at least one directory before it, so `**`
+/// alone is refused. An empty entry, a leading `/`, an empty segment, a `.` or
+/// `..` segment, control characters, and `\`, `?`, `[`, `]`, `{`, `}`, `:` are
+/// refused.
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct ApparatusPath(String);
@@ -706,7 +713,7 @@ impl ApparatusPath {
     ///
     /// Returns the [`ApparatusPathError`] naming the first rule the entry
     /// breaks, checked in the order: empty, absolute, forbidden character,
-    /// then per segment empty, `.`, `..`, and partial `**`.
+    /// whole repository, misplaced `*`, then per segment empty, `.`, and `..`.
     pub fn new(path: impl Into<String>) -> Result<Self, ApparatusPathError> {
         let path = path.into();
         if path.is_empty() {
@@ -716,18 +723,22 @@ impl ApparatusPath {
             return Err(ApparatusPathError::Absolute { path });
         }
         if let Some(character) = path.chars().find(|character| {
-            u32::from(*character) < 0x20
-                || matches!(character, '\\' | '?' | '[' | ']' | '{' | '}' | ':')
+            character.is_control() || matches!(character, '\\' | '?' | '[' | ']' | '{' | '}' | ':')
         }) {
             return Err(ApparatusPathError::ForbiddenCharacter { path, character });
         }
-        for segment in path.split('/') {
+        if path == "**" {
+            return Err(ApparatusPathError::WholeRepository);
+        }
+        let base = path.strip_suffix(DIRECTORY_SUFFIX).unwrap_or(&path);
+        if base.contains('*') {
+            return Err(ApparatusPathError::MisplacedWildcard { path });
+        }
+        for segment in base.split('/') {
             let refusal = match segment {
                 "" => ApparatusPathError::EmptySegment { path },
                 "." => ApparatusPathError::CurrentDirectorySegment { path },
                 ".." => ApparatusPathError::ParentDirectorySegment { path },
-                "**" => continue,
-                _ if segment.contains("**") => ApparatusPathError::PartialDoubleStar { path },
                 _ => continue,
             };
             return Err(refusal);
@@ -741,10 +752,11 @@ impl ApparatusPath {
         &self.0
     }
 
-    /// Whether the entry is a glob (contains `*`) rather than one file path.
+    /// For a directory entry (`<directory>/**`), the directory whose files it
+    /// names; `None` for a file entry.
     #[must_use]
-    pub fn is_glob(&self) -> bool {
-        self.0.contains('*')
+    pub fn directory(&self) -> Option<&str> {
+        self.0.strip_suffix(DIRECTORY_SUFFIX)
     }
 }
 
@@ -792,6 +804,8 @@ pub enum ProtectedApparatusError {
 
 /// A validated `protected_apparatus`: a non-empty set of distinct
 /// [`ApparatusPath`] entries naming the files that produce the plan's number.
+/// Only the entries are compared here; the files they resolve to, and their
+/// digests, are compared by Quoin's intake.
 ///
 /// It is a set: two lists naming the same entries in a different order are
 /// equal, and it serializes in sorted order.
@@ -839,8 +853,8 @@ impl ProtectedApparatus {
         self.0.is_empty()
     }
 
-    /// Whether `path` is one of the entries, compared as written (a glob is
-    /// not expanded).
+    /// Whether `path` is one of the entries, compared as written (a
+    /// directory entry is not expanded).
     #[must_use]
     pub fn contains(&self, path: &ApparatusPath) -> bool {
         self.0.contains(path)
@@ -861,8 +875,9 @@ impl From<ProtectedApparatus> for Vec<ApparatusPath> {
     }
 }
 
-/// A gaming scenario a `MeasurementPlan`'s measurement must catch
-/// (`negative_controls[].kind`).
+/// A gaming scenario a `MeasurementPlan` declares it guards against
+/// (`negative_controls[].kind`). The declaration is checked for shape only;
+/// Quoin's checker exercises the kinds it can detect.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NegativeControlKind {
@@ -932,8 +947,8 @@ pub enum NegativeControlError {
     },
 }
 
-/// One `negative_controls` entry: a gaming scenario and how this plan's
-/// measurement catches it.
+/// One `negative_controls` entry: a declared gaming scenario and how the plan
+/// says it guards against it.
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(try_from = "NegativeControlFields", into = "NegativeControlFields")]
 pub struct NegativeControl {
@@ -965,7 +980,7 @@ impl NegativeControl {
         self.kind
     }
 
-    /// How this plan's measurement catches the scenario.
+    /// How the plan says it guards against the scenario.
     #[must_use]
     pub fn description(&self) -> &str {
         &self.description

@@ -120,20 +120,25 @@ do not invent a threshold or margin the owner has not stated. `population`,
 List the files that produce the plan's number in `protected_apparatus`: the
 harness, the labels, corpus, or answer key, the file that selects the
 population, and the checker configuration. Each entry is a repository-relative
-path or glob (`*` within one segment, `**` as a whole segment for any depth);
-absolute paths, `.`/`..` segments, empty segments, and `\ ? [ ] { } :` are
-refused, and the list is non-empty with no repeats. Every entry must name a
-real file: Quoin's intake digests each protected file when it writes a
-collection and refuses one whose entry names nothing. A change that edits a
+file path or a directory entry ending in `/**` (every file under that
+directory, recursively); no other wildcard is allowed, `**` alone is refused,
+and so are absolute paths, `.`/`..` segments, empty segments, control
+characters, and `\ ? [ ] { } :`. The list is non-empty with no repeats, and a
+gate-stage plan, or any plan declaring an `apparatus-edit` control, must have
+one. Quoin's intake resolves each entry (case-sensitive, dotfiles included,
+symlinks refused, a directory entry must hold at least one file, an entry that
+names nothing refuses the collection) and records the (path, digest) set; any
+difference in that set is an apparatus change. A change that edits a
 protected file changed the measurement, not the thing measured, and earns no
 credit. Protect the population through the file that selects it;
 `statistical_design.population` stays prose.
 
-A gate-stage plan also lists at least one `negative_controls` entry,
-`{ kind, description }`: a gaming scenario the measurement must catch and how
-it catches it. `kind` is one of `suppressed-observation`, `gain-within-noise`,
-`stale-evidence`, `apparatus-edit`, or `selective-reporting`. Name the controls
-the owner's measurement actually catches; do not list one it does not.
+A gate-stage plan also declares at least one `negative_controls` entry,
+`{ kind, description }`: a gaming scenario the plan says it guards against and
+how. `kind` is one of `suppressed-observation`, `gain-within-noise`,
+`stale-evidence`, `apparatus-edit`, or `selective-reporting`. The declaration
+is checked for shape only; Quoin's checker exercises the kinds it can detect.
+Declare only controls the owner has stated.
 
 The objective, `estimator`, `decision_rule`, and `protected_apparatus` list
 are all part of the measurement definition: when you add, remove, or change

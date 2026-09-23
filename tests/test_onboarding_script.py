@@ -220,16 +220,18 @@ def test_onboard_js_json_checklist_lists_protected_apparatus_and_negative_contro
         / "schemas"
         / "measurement-plan-frontmatter.schema.json"
     )
-    item_pattern = json.loads(schema_path.read_text())["$defs"]["apparatus_path"][
-        "pattern"
-    ]
+    apparatus_path = json.loads(schema_path.read_text())["$defs"]["apparatus_path"]
     report = run_onboard_json(tmp_path)
     plan_checklist = report["artifactChecklists"]["MeasurementPlan"]
     assert plan_checklist["arrays"]["protected_apparatus"] == {
         "minItems": 1,
         "uniqueItems": True,
-        "itemPattern": item_pattern,
+        "itemPattern": apparatus_path["pattern"],
+        "itemDescription": apparatus_path["description"],
     }
+    # A list with nothing to say (no minimum, no uniqueness, no pattern) is
+    # left out rather than printed as "at least 0 item(s)".
+    assert "relationships" not in plan_checklist["arrays"]
     assert plan_checklist["arrays"]["negative_controls"] == {
         "minItems": 1,
         "uniqueItems": True,
@@ -244,10 +246,52 @@ def test_onboard_js_json_checklist_lists_protected_apparatus_and_negative_contro
     conditional = plan_checklist["conditionalRequired"]
     assert {
         "when": "stage = gate",
-        "required": ["ground_truth_kind", "negative_controls"],
+        "required": ["ground_truth_kind", "negative_controls", "protected_apparatus"],
+    } in conditional
+    assert {
+        "when": "negative_controls has an item where kind = apparatus-edit",
+        "required": ["protected_apparatus"],
     } in conditional
     assert {
         "when": "negative_controls is present",
         "required": ["negative_controls.kind", "negative_controls.description"],
     } in conditional
     assert plan_checklist["warnings"] == []
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_onboard_js_reports_no_warning_for_any_artifact_type(tmp_path: Path) -> None:
+    """Trace: FR-024-AC-6, TC-159.
+
+    Every shipped artifact schema is fully described by the checklist: a
+    warning for any type means the reader skipped something that rejects a
+    document. The text report prints each list's item description, never a
+    raw regex, and no "at least 0" line.
+    """
+    report = run_onboard_json(tmp_path)
+    checklists = report["artifactChecklists"]
+    assert "MeasurementPlan" in checklists
+    for artifact_type, checklist in checklists.items():
+        assert "unreadable" not in checklist, artifact_type
+        assert checklist["warnings"] == [], (artifact_type, checklist["warnings"])
+        for path, shape in checklist["arrays"].items():
+            assert shape["minItems"] > 0 or shape["uniqueItems"] or "itemPattern" in shape, (
+                artifact_type,
+                path,
+            )
+
+    target_repo = tmp_path / "text-consumer"
+    target_repo.mkdir()
+    text = subprocess.run(
+        [NODE, str(ONBOARD_JS), "--repo", str(target_repo)],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert "WARNING" not in text
+    assert "at least 0 item(s)" not in text
+    protected_line = next(
+        line for line in text.splitlines() if "protected_apparatus is a list" in line
+    )
+    assert "directory entry `<directory>/**`" in protected_line
+    assert "\\x00" not in protected_line and "(?:" not in protected_line

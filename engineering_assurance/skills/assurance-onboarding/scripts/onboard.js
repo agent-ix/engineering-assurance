@@ -144,6 +144,9 @@ const describeCondition = (condition, prefix = "") => {
     const prop = `${prefix}${name}`;
     if ("const" in def) return `${prop} = ${def.const}`;
     if (def.enum) return `${prop} is one of ${def.enum.join(", ")}`;
+    // A list condition (`contains`): some item of the list satisfies it, e.g.
+    // a MeasurementPlan whose `negative_controls` has an `apparatus-edit` item.
+    if (def.contains) return `${prop} has an item where ${describeCondition(def.contains)}`;
     if (def.properties) return describeCondition(def, `${prop}.`);
     return `${prop} is present`;
   });
@@ -311,8 +314,11 @@ if (moduleRoot) {
         const path = `${prefix}${prop}`;
         // A list field's own shape (a MeasurementPlan's `protected_apparatus`
         // or `negative_controls`): how many items, whether repeats are
-        // refused, and the pattern a string item must match. A list keyword
-        // this reader does not know is a warning, not a silent omission.
+        // refused, and what a string item must match -- its schema
+        // `description` for the reader, the raw `pattern` in JSON only. A list
+        // with no minimum, no uniqueness and no item pattern says nothing and
+        // is left out. A list keyword this reader does not know is a warning,
+        // not a silent omission.
         if (rawDef?.type === "array") {
           const unknown = Object.keys(rawDef).filter((key) => !ARRAY_KEYWORDS.has(key));
           if (unknown.length > 0) {
@@ -320,11 +326,13 @@ if (moduleRoot) {
           }
           // `def` is already the resolved `items.$ref` target when there is one.
           const itemDef = rawDef.items?.$ref ? def : rawDef.items;
-          arrays[path] = {
+          const list = {
             minItems: rawDef.minItems ?? 0,
             uniqueItems: rawDef.uniqueItems === true,
             ...(itemDef?.pattern ? { itemPattern: itemDef.pattern } : {}),
+            ...(itemDef?.pattern && itemDef.description ? { itemDescription: itemDef.description } : {}),
           };
+          if (list.minItems > 0 || list.uniqueItems || list.itemPattern) arrays[path] = list;
         }
         if (def.enum) enums[path] = def.enum;
         if (def.type !== "object" || !def.properties || seen.has(def)) continue;
@@ -585,9 +593,11 @@ if (Object.keys(artifactChecklists).length === 0) {
       line(`  ${prop} must be one of: ${values.join(", ")}`);
     }
     for (const [prop, list] of Object.entries(checklist.arrays ?? {})) {
-      const clauses = [`at least ${list.minItems} item(s)`];
+      const clauses = list.minItems > 0 ? [`at least ${list.minItems} item(s)`] : [];
       if (list.uniqueItems) clauses.push("no repeated item");
-      if (list.itemPattern) clauses.push(`each item matching ${list.itemPattern}`);
+      if (list.itemPattern) {
+        clauses.push(`each item: ${list.itemDescription ?? `matching ${list.itemPattern}`}`);
+      }
       line(`  ${prop} is a list: ${clauses.join(", ")}`);
     }
     for (const condition of checklist.conditionalRequired) {
