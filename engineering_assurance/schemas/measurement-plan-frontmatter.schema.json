@@ -222,6 +222,21 @@
         "bound": {
           "type": "number",
           "description": "The goal the metric should reach; informational, never evaluated. Only `statistical_design.decision_rule` is evaluated (FR-021). Required when `direction` is `target`; optional otherwise."
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0,
+          "description": "This objective's relative value against the project's other objectives, in units the plan's body states. Steering only (FR-026): it is never evaluated, never gates, and never feeds `statistical_design.decision_rule`. Optional."
+        },
+        "value_half_life": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "How quickly the value of improving this objective decays, so that a sooner improvement ranks higher than an equally-sized later one, in units (e.g. days) the plan's body states. Steering only (FR-026): it is never evaluated, never gates, and never feeds `statistical_design.decision_rule`. Optional."
+        },
+        "budget": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Time, tokens, or compute allowed per attempt at this objective, in units the plan's body states, used only to normalize comparisons across objectives. Steering only (FR-026): it is never evaluated, never gates, and never feeds `statistical_design.decision_rule`. Optional."
         }
       },
       "allOf": [
