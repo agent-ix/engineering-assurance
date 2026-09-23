@@ -20,7 +20,7 @@ fn fixture() -> (TempDir, TempDir, TempDir) {
         .expect("skeleton fixture directory must be creatable");
     fs::write(
         package.join("manifest.yaml"),
-        "name: engineering-assurance\nversion: 0.3.1\nartifact_types:\n  - name: sample\n    frontmatter_schema_ref: schemas/sample.schema.json\n    allowed_links: [supports]\n    body_extraction:\n      yield_pattern:\n        match:\n          body:\n            after_heading: Required\n            required: true\n",
+        "name: engineering-assurance\nversion: 0.3.2\nartifact_types:\n  - name: sample\n    frontmatter_schema_ref: schemas/sample.schema.json\n    allowed_links: [supports]\n    body_extraction:\n      yield_pattern:\n        match:\n          body:\n            after_heading: Required\n            required: true\n",
     )
     .expect("manifest fixture must be writable");
     fs::write(
@@ -113,9 +113,19 @@ fn tc_131_make_target_requires_and_forwards_the_explicit_schema_and_registry_roo
     );
     let stdout = String::from_utf8(output.stdout).expect("make output must be UTF-8");
     assert!(!stdout.contains("scripts/validate_manifest.py"));
-    assert!(stdout.contains(
-        "manifest-validate \\\n\t--root . \\\n\t--schema-root \"/schema-root\" \\\n\t--registry-root \"/registry-root\""
-    ));
+    // GNU make and BSD make print continuation indentation differently in
+    // dry-run output. The contract is the command and its forwarded values.
+    for expected in [
+        "manifest-validate",
+        "--root .",
+        "--schema-root \"/schema-root\"",
+        "--registry-root \"/registry-root\"",
+    ] {
+        assert!(
+            stdout.contains(expected),
+            "make omitted {expected:?}: {stdout}"
+        );
+    }
 }
 
 /// Real conformance of this repository's own `engineering_assurance/manifest.yaml`

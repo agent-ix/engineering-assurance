@@ -321,7 +321,12 @@ impl Matrix {
                     detail: "matrix contains a blank component identity or version".to_owned(),
                 });
             }
-            if !component.released {
+            // This repository must describe its own release candidate before
+            // the tag exists. Only the pending self pin may be unreleased; an
+            // accepted matrix can never open on a prospective artifact.
+            let pending_self_candidate = self.accepted.state == "pending_human_acceptance"
+                && component.name == "engineering-assurance";
+            if !component.released && !pending_self_candidate {
                 return Err(CompatibilityError::InvalidMatrix {
                     detail: format!("component {:?} is not released", component.name),
                 });
@@ -596,10 +601,10 @@ mod tests {
 
     fn exact_observations() -> Vec<(&'static str, Option<&'static str>)> {
         vec![
-            ("quire-cli", Some("0.31.0")),
-            ("quoin", Some("0.23.1")),
+            ("quire-cli", Some("0.33.0")),
+            ("quoin", Some("0.24.1")),
             ("ix-flow", Some("0.2.3")),
-            ("engineering-assurance", Some("0.3.1")),
+            ("engineering-assurance", Some("0.3.2")),
         ]
     }
 
@@ -660,7 +665,8 @@ mod tests {
         let exact = evaluate_request_bytes(&request(&exact_observations()))
             .expect("exact request must evaluate");
         assert!(exact.versions_compatible);
-        assert_eq!(exact.outcome, CompatibilityOutcome::Compatible);
+        assert_eq!(exact.outcome, CompatibilityOutcome::Withheld);
+        assert!(!exact.human_acceptance_recorded);
 
         // One unobserved component is enough to withhold the gate, and it has to
         // be true of every component rather than only the one a slice happens to
@@ -789,20 +795,19 @@ mod tests {
         let result =
             evaluate_request_bytes(&request(&exact_observations())).expect("request must evaluate");
         assert!(result.versions_compatible);
-        assert!(result.human_acceptance_recorded);
-        assert!(result.gate_satisfied);
+        assert!(!result.human_acceptance_recorded);
+        assert!(!result.gate_satisfied);
 
         assert_acceptance_is_honest(&matrix_value()["accepted"]);
 
-        // The embedded matrix is currently `accepted`, so its pending branch is
-        // never reached above. Exercising a pending record keeps the rule that
-        // pending carries no attribution from rotting unobserved until the day
-        // somebody sets the state back.
+        // The release candidate remains pending until a human accepts these
+        // exact pins. The accepted branch is still checked with an independent
+        // attributed fixture.
         assert_acceptance_is_honest(&serde_json::json!({
-            "state": "pending_human_acceptance",
-            "accepted_by": serde_json::Value::Null,
-            "accepted_at": serde_json::Value::Null,
-            "note": "An agent may prepare the matrix; only a human may accept it.",
+            "state": "accepted",
+            "accepted_by": "Fictional Owner",
+            "accepted_at": "2026-09-23",
+            "note": "Accepted by a named human for this fixture; an agent may prepare it.",
         }));
     }
 
@@ -856,6 +861,20 @@ mod tests {
         assert!(
             refusal_detail(&blank_release).contains("names no release"),
             "a component with no release was not refused"
+        );
+
+        let mut premature_acceptance = matrix_value();
+        premature_acceptance["accepted"]["state"] = serde_json::json!("accepted");
+        assert!(
+            refusal_detail(&premature_acceptance).contains("not released"),
+            "an accepted matrix named an unreleased EA candidate"
+        );
+
+        let mut unreleased_external = matrix_value();
+        unreleased_external["components"][0]["released"] = serde_json::json!(false);
+        assert!(
+            refusal_detail(&unreleased_external).contains("not released"),
+            "a pending matrix named an unreleased external tool"
         );
     }
 
@@ -988,6 +1007,9 @@ mod tests {
             let mut matrix: serde_json::Value =
                 serde_json::from_slice(MATRIX_BYTES).expect("the embedded matrix must be JSON");
             matrix["accepted"] = acceptance;
+            // This fixture isolates attribution from release readiness: the
+            // candidate self pin becomes released before any accepted state.
+            matrix["components"][3]["released"] = serde_json::json!(true);
             serde_json::to_vec(&matrix).expect("the mutated matrix must serialize")
         };
 
@@ -1078,8 +1100,8 @@ mod tests {
         );
         assert_eq!(
             evaluate_request_bytes(&request(&[
-                ("quoin", Some("0.23.1")),
-                ("quoin", Some("0.23.1")),
+                ("quoin", Some("0.24.1")),
+                ("quoin", Some("0.24.1")),
             ]))
             .expect_err("duplicate component must fail")
             .code(),
@@ -1092,7 +1114,7 @@ mod tests {
         // either one: a caller repairing its request could not learn whether it
         // had failed to say what was observed or failed to say which version.
         assert_eq!(
-            evaluate_request_bytes(&request(&[("   ", Some("0.23.1"))]))
+            evaluate_request_bytes(&request(&[("   ", Some("0.24.1"))]))
                 .expect_err("a blank component identity must fail")
                 .code(),
             "blank_compatibility_observation_component"

@@ -3,17 +3,16 @@
 
 //! Compatibility-classification parity against checked-in reference bytes.
 //!
-//! The reference is a file, not a process. It was captured once from the
-//! retained Python classifier at the candidate revision that cut this capability
-//! over, and it is committed here so the cutover could delete that classifier
-//! without deleting the evidence that Rust reproduces it. Executing the retained
-//! implementation as an oracle would have made the two inseparable.
+//! The reference is a file, not a process. Its classification pattern was
+//! captured from the retained Python classifier when this capability moved to
+//! Rust. Expected-version fields were refreshed for the current matrix; its
+//! three distinct verdicts and reasons remain independently recorded here.
 
 use engineering_assurance::compatibility::{REQUEST_PROTOCOL, evaluate_request_bytes};
 use ix_trace_rs::trace;
 
-/// Classifications the retained Python implementation produced for the request
-/// below, captured verbatim and compared byte for byte.
+/// Classification reference adapted to the current matrix pins and compared
+/// byte for byte.
 const REFERENCE_CLASSIFICATIONS: &[u8] =
     include_bytes!("fixtures/compatibility-classifications.json");
 
@@ -23,7 +22,7 @@ fn tc_100_compatibility_classifications_match_the_retained_reference_bytes() {
     let request = serde_json::json!({
         "protocol": REQUEST_PROTOCOL,
         "observed": [
-            {"component": "quire-cli", "version": "0.31.0"},
+            {"component": "quire-cli", "version": "0.33.0"},
             {"component": "quoin", "version": "0.22.5"},
             {"component": "ix-flow", "version": "99.0.0"},
             {"component": "engineering-assurance", "version": null}
