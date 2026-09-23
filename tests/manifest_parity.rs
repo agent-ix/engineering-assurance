@@ -26,19 +26,25 @@
 //! What this file therefore does NOT assert: that EA's real
 //! `engineering_assurance/manifest.yaml` conforms to filament-core-service's
 //! authoritative FR-035 schema, or that its link verbs appear in
-//! spec-artifacts-iso's real edge registry. Nothing in this repository
-//! asserts full FR-035 conformance today.
+//! spec-artifacts-iso's real edge registry. That real-conformance assertion
+//! belongs to `tests/manifest_host_cli.rs`'s
+//! `tc_121_real_manifest_conforms_to_the_authoritative_schema_and_edge_registry`
+//! (PLAT-994), which runs the `manifest-validate` host adapter — the only
+//! part of this repository with filesystem access — against explicit,
+//! operator-supplied schema and registry roots. It is `#[ignore]`d by
+//! default because no root is discovered or defaulted (FR-017 Behavior) and
+//! the schema root is a private-repo checkout this public repository's
+//! default CI cannot assume.
 //! `tests/test_module.py::test_quire_accepts_every_skeleton_without_diagnostics`
 //! runs the real `quire validate --module` engine, whose module load rejects
 //! a mistyped manifest field but is not a full FR-035 schema check (it
 //! accepts an unknown top-level key the schema forbids) and reports every
 //! link verb as `UnknownEdgeType`. The `manifest-validate` host adapter
 //! (FR-017-AC-8, `src/manifest_host.rs`) reads the schema and edge registry
-//! from one explicit module root, but since PLAT-902 no single upstream
-//! module root holds both files, so it cannot currently be pointed at the
-//! real contract without assembling one. This crate never searches a sibling
-//! checkout, an installed cache, or the network for a schema (FR-017
-//! Behavior).
+//! from two explicit roots — since PLAT-902 no single upstream module root
+//! holds both files, so the adapter takes them separately instead of
+//! assembling one. This crate never searches a sibling checkout, an
+//! installed cache, or the network for a schema (FR-017 Behavior).
 
 use engineering_assurance::manifest::{
     MAX_MANIFEST_ARTIFACTS, MAX_MANIFEST_DOCUMENT_BYTES, MAX_MANIFEST_RESOURCE_BYTES,

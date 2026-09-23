@@ -3,15 +3,16 @@
 
 //! Black-box coverage for the explicit-root manifest qualification command.
 
-use std::{fs, path::Path, process::Command};
+use std::{env, fs, path::Path, process::Command};
 
 use ix_trace_rs::trace;
 use serde_json::Value;
 use tempfile::TempDir;
 
-fn fixture() -> (TempDir, TempDir) {
+fn fixture() -> (TempDir, TempDir, TempDir) {
     let repository = TempDir::new().expect("repository fixture must be creatable");
-    let module = TempDir::new().expect("module fixture must be creatable");
+    let schema_root = TempDir::new().expect("schema fixture must be creatable");
+    let registry_root = TempDir::new().expect("registry fixture must be creatable");
     let package = repository.path().join("engineering_assurance");
     fs::create_dir_all(package.join("schemas"))
         .expect("schema fixture directory must be creatable");
@@ -33,22 +34,22 @@ fn fixture() -> (TempDir, TempDir) {
     )
     .expect("skeleton fixture must be writable");
     fs::write(
-        module.path().join("module-manifest.schema.json"),
+        schema_root.path().join("module-manifest.schema.json"),
         b"{\"type\":\"object\"}",
     )
     .expect("module schema fixture must be writable");
     fs::write(
-        module.path().join("manifest.yaml"),
+        registry_root.path().join("manifest.yaml"),
         "edge_types:\n  supports: {}\n",
     )
     .expect("edge registry fixture must be writable");
-    (repository, module)
+    (repository, schema_root, registry_root)
 }
 
 #[test]
 #[trace("TC-131", "FR-017-AC-8", "FR-014-AC-2")]
 fn tc_131_cli_emits_one_versioned_machine_result_for_explicit_roots() {
-    let (repository, module) = fixture();
+    let (repository, schema_root, registry_root) = fixture();
     let output = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
         .args([
             "manifest-validate",
@@ -57,8 +58,16 @@ fn tc_131_cli_emits_one_versioned_machine_result_for_explicit_roots() {
                 .path()
                 .to_str()
                 .expect("fixture root must be UTF-8"),
-            "--module-root",
-            module.path().to_str().expect("module root must be UTF-8"),
+            "--schema-root",
+            schema_root
+                .path()
+                .to_str()
+                .expect("schema root must be UTF-8"),
+            "--registry-root",
+            registry_root
+                .path()
+                .to_str()
+                .expect("registry root must be UTF-8"),
         ])
         .output()
         .expect("manifest command must be runnable");
@@ -84,14 +93,15 @@ fn tc_131_cli_emits_one_versioned_machine_result_for_explicit_roots() {
 
 #[test]
 #[trace("TC-131", "FR-017-AC-8", "FR-017-CON-3")]
-fn tc_131_make_target_requires_and_forwards_the_explicit_module_root() {
+fn tc_131_make_target_requires_and_forwards_the_explicit_schema_and_registry_roots() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let output = Command::new("make")
         .args([
             "--no-print-directory",
             "-n",
             "manifest-validate",
-            "MANIFEST_MODULE_ROOT=/module-root",
+            "MANIFEST_SCHEMA_ROOT=/schema-root",
+            "MANIFEST_REGISTRY_ROOT=/registry-root",
         ])
         .current_dir(root)
         .output()
@@ -103,7 +113,69 @@ fn tc_131_make_target_requires_and_forwards_the_explicit_module_root() {
     );
     let stdout = String::from_utf8(output.stdout).expect("make output must be UTF-8");
     assert!(!stdout.contains("scripts/validate_manifest.py"));
+    assert!(stdout.contains(
+        "manifest-validate \\\n\t--root . \\\n\t--schema-root \"/schema-root\" \\\n\t--registry-root \"/registry-root\""
+    ));
+}
+
+/// Real conformance of this repository's own `engineering_assurance/manifest.yaml`
+/// against filament-core-service's authoritative module-manifest schema and
+/// spec-artifacts-iso's real edge registry. The fixture-backed parity suite
+/// cannot assert this, because its schema and registry are locally authored.
+/// This CLI takes only explicit operator-supplied roots; it never discovers,
+/// fetches, or vendors a copy of either file, so this test needs an operator
+/// (or a CI job wired separately from this one) to supply both roots
+/// explicitly:
+//
+// Keep requirement and ticket ids out of this doc comment and the ignore
+// reason: Quire reads id-shaped tokens here as trace tags, and the Rust
+// marker reconciliation in tests/traceability_reconciliation.rs then refuses
+// them as unbound. The trace attribute below is
+// the only binding.
+///
+/// - `EA_MANIFEST_SCHEMA_ROOT`: a directory containing
+///   `module-manifest.schema.json` (e.g. `filament-core-service`'s
+///   `filament_core_service/schemas/`).
+/// - `EA_MANIFEST_REGISTRY_ROOT`: a directory containing `manifest.yaml` with
+///   the `edge_types` registry (e.g. spec-artifacts-iso's installed module
+///   root, `spec_artifacts_iso/`).
+///
+/// Run with `cargo test --test manifest_host_cli -- --ignored` after
+/// exporting both.
+#[test]
+#[ignore = "requires EA_MANIFEST_SCHEMA_ROOT and EA_MANIFEST_REGISTRY_ROOT pointed at real, \
+            operator-supplied checkouts; see the doc comment above"]
+#[trace("TC-121", "FR-017-AC-7", "FR-017-AC-8")]
+fn tc_121_real_manifest_conforms_to_the_authoritative_schema_and_edge_registry() {
+    let schema_root = env::var("EA_MANIFEST_SCHEMA_ROOT").expect(
+        "EA_MANIFEST_SCHEMA_ROOT must name a directory holding module-manifest.schema.json",
+    );
+    let registry_root = env::var("EA_MANIFEST_REGISTRY_ROOT").expect(
+        "EA_MANIFEST_REGISTRY_ROOT must name a directory holding the edge-registry manifest.yaml",
+    );
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let output = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
+        .args([
+            "manifest-validate",
+            "--root",
+            root.to_str().expect("repository root must be UTF-8"),
+            "--schema-root",
+            &schema_root,
+            "--registry-root",
+            &registry_root,
+        ])
+        .output()
+        .expect("manifest command must be runnable");
+    let stdout = std::str::from_utf8(&output.stdout).expect("result must be UTF-8");
     assert!(
-        stdout.contains("manifest-validate \\\n\t--root . \\\n\t--module-root \"/module-root\"")
+        output.status.success(),
+        "manifest-validate refused the real manifest against the real schema and registry: {stdout} {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result: Value = serde_json::from_str(stdout).expect("result must be JSON");
+    assert_eq!(
+        result.get("outcome").and_then(Value::as_str),
+        Some("accepted"),
+        "engineering_assurance/manifest.yaml does not conform to FR-035: {result}"
     );
 }

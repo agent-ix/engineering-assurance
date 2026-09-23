@@ -35,8 +35,10 @@ const MAX_ARTIFACT_NAME_BYTES: usize = 256;
 pub(crate) enum ManifestHostError {
     #[error("manifest repository root is invalid")]
     RepositoryRootInvalid,
-    #[error("authoritative module root is invalid")]
-    ModuleRootInvalid,
+    #[error("authoritative schema root is invalid")]
+    SchemaRootInvalid,
+    #[error("authoritative edge-registry root is invalid")]
+    RegistryRootInvalid,
     #[error("manifest resource is invalid")]
     ResourceInvalid,
     #[error("manifest resource is missing or unreadable")]
@@ -53,7 +55,8 @@ impl ManifestHostError {
     pub(crate) const fn code(self) -> &'static str {
         match self {
             Self::RepositoryRootInvalid => "manifest_repository_root_invalid",
-            Self::ModuleRootInvalid => "manifest_module_root_invalid",
+            Self::SchemaRootInvalid => "manifest_schema_root_invalid",
+            Self::RegistryRootInvalid => "manifest_registry_root_invalid",
             Self::ResourceInvalid => "manifest_resource_invalid",
             Self::ResourceUnavailable => "manifest_resource_unavailable",
             Self::ResourceTooLarge => "manifest_resource_too_large",
@@ -100,24 +103,33 @@ struct LoadedResource {
 }
 
 /// Read the fixed module bundle through explicit roots and delegate its meaning to the pure library.
+///
+/// The schema and edge-registry roots are explicit and independent because,
+/// since PLAT-902 (agent-ix/spec-artifacts-iso#42), no single upstream module
+/// root holds both files: `filament-core-service` owns the FR-035 schema and
+/// no longer redistributes it through `spec-artifacts-iso`, which continues
+/// to own the edge registry. Neither root is discovered or defaulted; the
+/// caller supplies both.
 pub(crate) fn execute(
     repository_root: &Path,
-    module_root: &Path,
+    schema_root: &Path,
+    registry_root: &Path,
 ) -> Result<ManifestHostResult, ManifestHostError> {
     let repository = open_root(repository_root, ManifestHostError::RepositoryRootInvalid)?;
-    let module = open_root(module_root, ManifestHostError::ModuleRootInvalid)?;
+    let schema = open_root(schema_root, ManifestHostError::SchemaRootInvalid)?;
+    let registry = open_root(registry_root, ManifestHostError::RegistryRootInvalid)?;
     let manifest_yaml = read_file(
         &repository,
         Path::new(MANIFEST_PATH),
         MAX_MANIFEST_DOCUMENT_BYTES,
     )?;
     let manifest_schema_json = read_file(
-        &module,
+        &schema,
         Path::new(MODULE_SCHEMA_PATH),
         MAX_MANIFEST_DOCUMENT_BYTES,
     )?;
     let edge_registry_yaml = read_file(
-        &module,
+        &registry,
         Path::new(EDGE_REGISTRY_PATH),
         MAX_MANIFEST_DOCUMENT_BYTES,
     )?;
@@ -313,9 +325,10 @@ mod tests {
 
     use super::*;
 
-    fn fixture() -> (TempDir, TempDir) {
+    fn fixture() -> (TempDir, TempDir, TempDir) {
         let repository = TempDir::new().expect("repository fixture must be creatable");
-        let module = TempDir::new().expect("module fixture must be creatable");
+        let schema_root = TempDir::new().expect("schema fixture must be creatable");
+        let registry_root = TempDir::new().expect("registry fixture must be creatable");
         let package = repository.path().join(PACKAGE_DIRECTORY);
         fs::create_dir_all(package.join("schemas"))
             .expect("schema fixture directory must be creatable");
@@ -337,22 +350,22 @@ mod tests {
         )
         .expect("skeleton fixture must be writable");
         fs::write(
-            module.path().join(MODULE_SCHEMA_PATH),
+            schema_root.path().join(MODULE_SCHEMA_PATH),
             b"{\"type\":\"object\"}",
         )
         .expect("module schema fixture must be writable");
         fs::write(
-            module.path().join(EDGE_REGISTRY_PATH),
+            registry_root.path().join(EDGE_REGISTRY_PATH),
             "edge_types:\n  supports: {}\n",
         )
         .expect("edge registry fixture must be writable");
-        (repository, module)
+        (repository, schema_root, registry_root)
     }
 
     #[test]
     #[trace("TC-016", "FR-003-AC-3")]
     fn tc_016_local_source_installation_resolves_from_the_installed_tree() {
-        let (repository, module) = fixture();
+        let (repository, schema_root, registry_root) = fixture();
 
         // A copy inside the repository tree must never stand in for the
         // authoritative installed module bundle.
@@ -366,22 +379,22 @@ mod tests {
             "edge_types:\n  supports: {}\n",
         )
         .expect("repository decoy registry must be writable");
-        fs::remove_file(module.path().join(MODULE_SCHEMA_PATH))
+        fs::remove_file(schema_root.path().join(MODULE_SCHEMA_PATH))
             .expect("installed schema must be removable");
 
         assert!(
-            execute(repository.path(), module.path()).is_err(),
+            execute(repository.path(), schema_root.path(), registry_root.path()).is_err(),
             "the repository copy must not satisfy the installed module bundle"
         );
 
         // Restoring it in the installed tree — and only there — qualifies.
         fs::write(
-            module.path().join(MODULE_SCHEMA_PATH),
+            schema_root.path().join(MODULE_SCHEMA_PATH),
             b"{\"type\":\"object\"}",
         )
         .expect("installed schema must be restorable");
-        let result =
-            execute(repository.path(), module.path()).expect("installed bundle must qualify");
+        let result = execute(repository.path(), schema_root.path(), registry_root.path())
+            .expect("installed bundle must qualify");
         assert_eq!(
             result.qualification.outcome,
             ManifestQualificationOutcome::Accepted
@@ -391,8 +404,9 @@ mod tests {
     #[test]
     #[trace("TC-131", "FR-017-AC-8", "FR-017-CON-3", "FR-014-AC-2")]
     fn tc_131_qualifies_the_explicit_module_bundle() {
-        let (repository, module) = fixture();
-        let result = execute(repository.path(), module.path()).expect("fixture must qualify");
+        let (repository, schema_root, registry_root) = fixture();
+        let result = execute(repository.path(), schema_root.path(), registry_root.path())
+            .expect("fixture must qualify");
         assert_eq!(
             result.qualification.outcome,
             ManifestQualificationOutcome::Accepted
@@ -407,7 +421,7 @@ mod tests {
     #[test]
     #[trace("TC-131", "FR-017-AC-8", "FR-017-CON-3")]
     fn tc_131_refuses_an_escaping_declared_resource() {
-        let (repository, module) = fixture();
+        let (repository, schema_root, registry_root) = fixture();
         let manifest = repository.path().join(MANIFEST_PATH);
         let text = fs::read_to_string(&manifest).expect("manifest must be readable");
         fs::write(
@@ -416,7 +430,7 @@ mod tests {
         )
         .expect("manifest fixture must be writable");
         assert!(matches!(
-            execute(repository.path(), module.path()),
+            execute(repository.path(), schema_root.path(), registry_root.path()),
             Err(ManifestHostError::ResourceInvalid)
         ));
     }
@@ -424,20 +438,20 @@ mod tests {
     #[test]
     #[trace("TC-131", "FR-017-AC-8", "FR-017-CON-3")]
     fn tc_131_refuses_missing_special_and_over_limit_resources() {
-        let (repository, module) = fixture();
+        let (repository, schema_root, registry_root) = fixture();
         let schema = repository
             .path()
             .join(PACKAGE_DIRECTORY)
             .join("schemas/sample.schema.json");
         fs::remove_file(&schema).expect("fixture schema must be removable");
         assert!(matches!(
-            execute(repository.path(), module.path()),
+            execute(repository.path(), schema_root.path(), registry_root.path()),
             Err(ManifestHostError::ResourceUnavailable)
         ));
 
         fs::create_dir(&schema).expect("fixture special resource must be creatable");
         assert!(matches!(
-            execute(repository.path(), module.path()),
+            execute(repository.path(), schema_root.path(), registry_root.path()),
             Err(ManifestHostError::ResourceInvalid)
         ));
 
@@ -448,7 +462,7 @@ mod tests {
         )
         .expect("over-limit fixture resource must be writable");
         assert!(matches!(
-            execute(repository.path(), module.path()),
+            execute(repository.path(), schema_root.path(), registry_root.path()),
             Err(ManifestHostError::ResourceTooLarge)
         ));
     }
@@ -459,7 +473,7 @@ mod tests {
     fn tc_131_refuses_a_linked_schema_before_opening_it() {
         use std::os::unix::fs::symlink;
 
-        let (repository, module) = fixture();
+        let (repository, schema_root, registry_root) = fixture();
         let schema = repository
             .path()
             .join(PACKAGE_DIRECTORY)
@@ -467,7 +481,7 @@ mod tests {
         fs::remove_file(&schema).expect("fixture schema must be removable");
         symlink("/dev/null", schema).expect("fixture schema link must be creatable");
         assert!(matches!(
-            execute(repository.path(), module.path()),
+            execute(repository.path(), schema_root.path(), registry_root.path()),
             Err(ManifestHostError::ResourceInvalid)
         ));
     }
@@ -475,22 +489,28 @@ mod tests {
     #[cfg(unix)]
     #[test]
     #[trace("TC-131", "FR-017-AC-8", "FR-017-CON-3")]
-    fn tc_131_refuses_linked_repository_and_module_roots() {
+    fn tc_131_refuses_linked_repository_schema_and_registry_roots() {
         use std::os::unix::fs::symlink;
 
-        let (repository, module) = fixture();
+        let (repository, schema_root, registry_root) = fixture();
         let aliases = TempDir::new().expect("alias fixture directory must be creatable");
         let root_alias = aliases.path().join("repository");
-        let module_alias = aliases.path().join("module");
+        let schema_alias = aliases.path().join("schema");
+        let registry_alias = aliases.path().join("registry");
         symlink(repository.path(), &root_alias).expect("repository alias must be creatable");
-        symlink(module.path(), &module_alias).expect("module alias must be creatable");
+        symlink(schema_root.path(), &schema_alias).expect("schema alias must be creatable");
+        symlink(registry_root.path(), &registry_alias).expect("registry alias must be creatable");
         assert!(matches!(
-            execute(&root_alias, module.path()),
+            execute(&root_alias, schema_root.path(), registry_root.path()),
             Err(ManifestHostError::RepositoryRootInvalid)
         ));
         assert!(matches!(
-            execute(repository.path(), &module_alias),
-            Err(ManifestHostError::ModuleRootInvalid)
+            execute(repository.path(), &schema_alias, registry_root.path()),
+            Err(ManifestHostError::SchemaRootInvalid)
+        ));
+        assert!(matches!(
+            execute(repository.path(), schema_root.path(), &registry_alias),
+            Err(ManifestHostError::RegistryRootInvalid)
         ));
     }
 }
