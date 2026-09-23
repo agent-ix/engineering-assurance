@@ -229,7 +229,7 @@ pub struct InvariantFailureDetails {
 
 /// The measurement-policy mode in force for one promotion.
 ///
-/// The AssuranceProfile `measurement_policy` names the stages its mode
+/// The `AssuranceProfile` `measurement_policy` names the stages its mode
 /// governs; every other stage, and a run with no policy, is `recommend`.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -580,7 +580,7 @@ struct PromotionEvidence {
     candidate: Option<String>,
 }
 
-/// The AssuranceProfile `measurement_policy`, recorded into the run.
+/// The `AssuranceProfile` `measurement_policy`, recorded into the run.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 struct MeasurementPolicy {
@@ -1054,7 +1054,7 @@ fn promotion_ready(
     }
 }
 
-/// Position of a measurement-maturity stage, in MeasurementPlan `stage` order.
+/// Position of a measurement-maturity stage, in `MeasurementPlan` `stage` order.
 fn stage_index(stage: &str) -> Option<usize> {
     const STAGES: [&str; 7] = [
         "observe",
