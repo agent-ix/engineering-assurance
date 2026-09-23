@@ -1021,14 +1021,17 @@ fn promotion_ready(
     };
     let mode = policy_mode(instance, request.proposed_stage.as_deref());
     let (status, selected) = checker_status(instance, evidence);
-    let refused = mode == MeasurementPolicyMode::Require && status.failure_code().is_some();
-    let exception_override = refused
+    let required_code = match mode {
+        MeasurementPolicyMode::Require => status.failure_code(),
+        MeasurementPolicyMode::Recommend => None,
+    };
+    let exception_override = required_code.is_some()
         && instance
             .items
             .exception
             .iter()
             .any(|item| exception_is_current(item, evaluated_at));
-    let report = CheckerReport {
+    let checker = CheckerReport {
         mode,
         status,
         verdict: selected.and_then(|item| item.verdict),
@@ -1037,16 +1040,16 @@ fn promotion_ready(
             .unwrap_or_default(),
         exception_override,
     };
-    match status.failure_code() {
-        Some(code) if refused && !exception_override => InvariantVerdict::Failed {
+    match required_code {
+        Some(code) if !exception_override => InvariantVerdict::Failed {
             code,
             details: InvariantFailureDetails {
-                checker: Some(report),
+                checker: Some(checker),
                 ..InvariantFailureDetails::default()
             },
         },
         _ => InvariantVerdict::Passed {
-            checker: Some(report),
+            checker: Some(checker),
         },
     }
 }
