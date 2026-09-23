@@ -12,13 +12,18 @@ forever. EA had no way to say which improvement matters more, or sooner: a
 `MeasurementPlan`'s `objective` stated only a direction and an optional bound
 (FR-020), with no notion of relative priority, urgency, or cost.
 
-quoin's `MP-227` establishes the pattern this decision follows: a plan whose
-whole `Comparison and Enforcement` section reads "This plan assigns no
-verdict and no bar" and whose `Interpretation` states "A measure only. A slow
-run must never fail a gate." MP-227 measures Jev lens cost, latency, and
-throughput to decide *which lenses run on every commit versus on demand* --
-a steering decision made by a human or a scheduler reading the numbers, never
-a decision the measurement itself enforces.
+quoin's `MP-227` is the nearest precedent: a plan whose whole `Comparison
+and Enforcement` section reads "This plan assigns no verdict and no bar" and
+whose `Interpretation` states "A measure only. A slow run must never fail a
+gate." MP-227 measures Jev lens cost, latency, and throughput to decide
+*whether a lens runs on every commit, every PR, or on demand* -- a steering
+decision made by a human or a scheduler reading the numbers, never a
+decision the measurement itself enforces. The precedent is the principle
+(cost and priority inform scheduling, never a verdict), not the mechanism:
+MP-227 is a whole plan with no verdict and relies on its prose, whereas the
+steering fields here sit inside plans that may carry an evaluated decision
+rule, so their exclusion from every verdict has to be structural rather than
+stated.
 
 ## Decision
 
@@ -43,10 +48,11 @@ convention:
    `Objective` and does not gain one now. A decision rule's verdict is
    therefore structurally unable to read the steering fields, whatever they
    contain -- including adversarial values such as `weight: 0` or
-   `budget: 0`. `FR-026-AC-4` / `TC-169` checks this directly: two otherwise
-   identical plans, one carrying extreme steering values and one carrying
-   none, are asserted to reach the identical Gate/Ratchet/Target verdict
-   for the same estimate.
+   `budget: 0`. `FR-026-AC-4` / `TC-169` checks this directly: otherwise
+   identical frontmatter documents carrying the smallest accepted, the
+   largest finite, and no steering values are asserted to parse to the same
+   decision rule and to reach the identical `DecisionRule::holds` verdict
+   for the same estimate, including the exact boundary.
 2. The steering fields are excluded from the plan's measurement definition.
    `direction` and `bound` remain part of it (an edit to either still
    requires a new `definition_version`, per FR-020), but `weight`,
@@ -61,13 +67,20 @@ convention:
 
 ## Consequences
 
+- The structural guarantee covers Engineering Assurance's own evaluation.
+  A downstream consumer that receives the whole `Objective` -- quoin's
+  ratchet and target stage verdicts read its `direction` and `bound` -- is
+  bound by this decision to read only those two, through
+  `Objective::definitional()` or the `direction()`/`bound()` accessors; this
+  crate cannot stop such a consumer from calling `weight()`, so the rule is
+  stated here and in FR-026 and must be honoured, and reviewed, there.
+
 - A future portfolio-ranking consumer may read `weight`, `value_half_life`,
   and `budget` to order objectives across a project's several
   `MeasurementPlan`s -- e.g. to decide which improvement to attempt next.
   That consumer is out of scope for FR-026 and would be specified
-  separately under PLAT-956; this decision only fixes that such a consumer
-  can never turn these fields into a pass/fail signal, because no gate
-  computation reads them.
+  separately under PLAT-956; this decision fixes that such a consumer must
+  never turn these fields into a pass/fail signal.
 - Because the fields are excluded from the measurement definition, a plan
   author can retune priority (raise a `weight`, shorten a `value_half_life`
   as a deadline approaches) without bumping `definition_version` and without

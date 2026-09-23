@@ -509,6 +509,54 @@ fn tc_167_objective_steering_fields_construction_and_deserialization_are_validat
 }
 
 #[test]
+#[trace("TC-167", "FR-026-AC-2")]
+fn tc_167_non_finite_and_non_positive_steering_fields_are_refused_on_deserialization() {
+    // Every non-finite refusal, and a negative half-life, also holds through deserialization, where a
+    // YAML `.inf`/`.nan` passes the schema's `type: number` (FR-026).
+    for (yaml, refusal) in [
+        (
+            "direction: higher\nweight: .inf\n",
+            ObjectiveError::NonFiniteWeight {
+                weight: f64::INFINITY,
+            }
+            .to_string(),
+        ),
+        (
+            "direction: higher\nvalue_half_life: -.inf\n",
+            ObjectiveError::NonFiniteValueHalfLife {
+                value_half_life: f64::NEG_INFINITY,
+            }
+            .to_string(),
+        ),
+        (
+            "direction: higher\nvalue_half_life: -2\n",
+            ObjectiveError::NonPositiveValueHalfLife {
+                value_half_life: -2.0,
+            }
+            .to_string(),
+        ),
+        (
+            "direction: higher\nbudget: .inf\n",
+            ObjectiveError::NonFiniteBudget {
+                budget: f64::INFINITY,
+            }
+            .to_string(),
+        ),
+    ] {
+        let refused = parse(yaml).expect_err(yaml);
+        assert!(refused.contains(&refusal), "{yaml}: {refused}");
+    }
+    for field in ["weight", "value_half_life", "budget"] {
+        let yaml = format!("direction: higher\n{field}: .nan\n");
+        let refused = parse(&yaml).expect_err(&yaml);
+        assert!(
+            refused.contains("is not a finite number"),
+            "{yaml}: {refused}"
+        );
+    }
+}
+
+#[test]
 #[trace("TC-168", "FR-026-AC-3")]
 fn tc_168_objective_steering_fields_are_excluded_from_the_measurement_definition() {
     let base_objective = objective(Direction::Higher, Some(0.995));
@@ -576,62 +624,136 @@ fn tc_168_objective_steering_fields_are_excluded_from_the_measurement_definition
     );
 }
 
+/// A test-local `MeasurementPlan` frontmatter shape carrying only the
+/// `objective` block and `statistical_design.decision_rule`, so TC-169 parses
+/// both from one document the way a consumer would, rather than parsing the
+/// rule in isolation.
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SteeringProbePlan {
+    objective: Objective,
+    statistical_design: SteeringProbeDesign,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SteeringProbeDesign {
+    decision_rule: DecisionRule,
+}
+
+fn steering_probe_plan(steering: &str, rule: &str) -> SteeringProbePlan {
+    let frontmatter = format!(
+        "objective:\n  direction: higher\n  bound: 0.995\n{steering}statistical_design:\n  decision_rule:\n{rule}"
+    );
+    yaml_serde::from_str(&frontmatter).unwrap_or_else(|error| panic!("{frontmatter}: {error}"))
+}
+
+/// One `holds` probe: estimate, baseline value, expected verdict.
+type VerdictProbe = (f64, Option<f64>, bool);
+
+/// Assert that `steered` -- the same frontmatter as `plain` plus steering
+/// fields -- parses to the same rule and definitional objective as `plain`,
+/// agrees on direction/comparator consistency, and reaches every expected
+/// `holds` verdict in `probes`.
+fn assert_steering_is_inert(
+    label: &str,
+    plain: &SteeringProbePlan,
+    steered: &SteeringProbePlan,
+    probes: &[VerdictProbe],
+) {
+    assert_eq!(
+        plain.objective.definitional(),
+        steered.objective.definitional(),
+        "{label}"
+    );
+    let plain_rule = &plain.statistical_design.decision_rule;
+    let steered_rule = &steered.statistical_design.decision_rule;
+    assert_eq!(
+        plain_rule, steered_rule,
+        "{label}: steering fields must not change the parsed rule"
+    );
+    assert_eq!(
+        plain_rule.check_against(&plain.objective),
+        steered_rule.check_against(&steered.objective),
+        "{label}: direction/comparator agreement must not depend on steering"
+    );
+    for &(estimate, baseline_value, expected) in probes {
+        let verdict = steered_rule
+            .holds(estimate, baseline_value)
+            .expect("finite estimate and baseline");
+        assert_eq!(
+            verdict, expected,
+            "{label}: estimate {estimate} against baseline {baseline_value:?}"
+        );
+    }
+}
+
 #[test]
 #[trace("TC-169", "FR-026-AC-4")]
 fn tc_169_steering_fields_never_change_a_decision_rules_verdict() {
-    // Two otherwise-identical MeasurementPlan objective blocks -- one with no
-    // steering fields, the other with adversarial ones (weight: 0, a
-    // near-zero value_half_life, budget: 0) -- parsed independently and
-    // checked against the same decision rule. If a regression ever threaded
-    // a steering field into `check_against` or a verdict, this fails; today
-    // `DecisionRule::holds` never even takes an `Objective`, so the only way
-    // steering fields could reach a verdict is exactly the path this test
-    // exercises end to end, from raw frontmatter YAML.
-    let rule_yaml = "comparator: ge\nthreshold: 0.99\n";
-    let plain_objective_yaml = "direction: higher\nbound: 0.995\n";
-    let adversarial_objective_yaml =
-        "direction: higher\nbound: 0.995\nweight: 0\nvalue_half_life: 0.0001\nbudget: 0\n";
+    // Three otherwise-identical frontmatter documents per rule: one with no
+    // steering fields, one at the smallest accepted magnitudes (weight 0, the
+    // smallest positive f64 half-life, budget 0), and one at the largest
+    // finite magnitudes. Each is parsed independently, and every one must
+    // yield the same decision rule, the same direction/comparator agreement,
+    // and the same `holds` verdict on every probed estimate, including the
+    // exact boundary. Values the fields refuse (negative, zero half-life,
+    // non-finite) never reach this point: TC-167 asserts their refusal.
+    let steering_variants = [
+        ("none", ""),
+        (
+            "smallest",
+            "  weight: 0\n  value_half_life: 5e-324\n  budget: 0\n",
+        ),
+        (
+            "largest",
+            "  weight: 1.7976931348623157e308\n  value_half_life: 1.7976931348623157e308\n  budget: 1.7976931348623157e308\n",
+        ),
+    ];
+    let rules: [(&str, &[VerdictProbe]); 2] = [
+        (
+            "    comparator: ge\n    threshold: 0.99\n",
+            &[
+                (0.999, None, true),
+                (0.99, None, true), // exactly at the threshold: `ge` holds
+                (0.989_999, None, false),
+                (0.0, None, false),
+            ],
+        ),
+        (
+            "    comparator: gt\n    baseline: prior-collection\n    margin: 0.5\n",
+            &[
+                (1.75, Some(1.0), true),
+                (1.5, Some(1.0), false), // exactly baseline + margin: `gt` fails
+                (0.25, Some(1.0), false),
+            ],
+        ),
+    ];
 
-    let plain_objective = parse(plain_objective_yaml).expect("valid objective");
-    let adversarial_objective = parse(adversarial_objective_yaml).expect("valid objective");
-    assert_ne!(
-        plain_objective, adversarial_objective,
-        "the fixtures must actually differ in their steering fields"
-    );
-    assert_eq!(plain_objective.weight(), None);
-    assert_eq!(adversarial_objective.weight(), Some(0.0));
-    assert_eq!(adversarial_objective.value_half_life(), Some(0.0001));
-    assert_eq!(adversarial_objective.budget(), Some(0.0));
-
-    let plain_rule = parse_rule(rule_yaml).expect("valid rule");
-    let adversarial_rule = parse_rule(rule_yaml).expect("valid rule");
-    assert_eq!(
-        plain_rule, adversarial_rule,
-        "parsing the decision rule alongside an adversarial-steering objective must not change it"
-    );
-
-    assert_eq!(
-        plain_rule.check_against(&plain_objective),
-        adversarial_rule.check_against(&adversarial_objective),
-        "direction/comparator agreement must not depend on the steering fields"
-    );
-
-    for (estimate, expected_holds) in [
-        (0.999, true), // above threshold: gate/ratchet/target-style rules pass
-        (0.99, true),  // exactly at threshold: `ge` passes
-        (0.9, false),  // below threshold: fails
-        (0.0, false),
-    ] {
-        let plain_verdict = plain_rule.holds(estimate, None).expect("finite estimate");
-        let adversarial_verdict = adversarial_rule
-            .holds(estimate, None)
-            .expect("finite estimate");
-        assert_eq!(plain_verdict, expected_holds, "estimate {estimate}");
-        assert_eq!(
-            adversarial_verdict, expected_holds,
-            "adversarial steering fields (weight: 0, budget: 0) must not change the verdict for estimate {estimate}"
-        );
+    for (rule, probes) in rules {
+        let plain = steering_probe_plan("", rule);
+        assert_eq!(plain.objective.weight(), None);
+        for (label, steering) in steering_variants {
+            let steered = steering_probe_plan(steering, rule);
+            if !steering.is_empty() {
+                assert_ne!(
+                    plain.objective, steered.objective,
+                    "{label}: the fixture must actually carry steering fields"
+                );
+                assert!(steered.objective.weight().is_some(), "{label}");
+                assert!(steered.objective.value_half_life().is_some(), "{label}");
+                assert!(steered.objective.budget().is_some(), "{label}");
+            }
+            assert_steering_is_inert(label, &plain, &steered, probes);
+        }
     }
+    assert_eq!(
+        steering_probe_plan(steering_variants[1].1, rules[0].0)
+            .objective
+            .value_half_life(),
+        Some(5e-324),
+        "the smallest positive half-life must survive parsing unrounded"
+    );
 }
 
 /// Quoin's measurement intake imports these types with

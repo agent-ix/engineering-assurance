@@ -84,7 +84,8 @@ that is evaluated (FR-021).
   are declarations about priority, not about how the number is computed --
   the same rationale FR-024 uses to exclude `negative_controls`.
 - The MeasurementPlan skeleton SHALL show all three steering fields with a
-  section explaining that they are advisory only and never gate.
+  section explaining that they are advisory only and never gate, and the
+  onboarding skill SHALL describe them as advisory.
 - The steering fields SHALL be reachable through the `measurement` Cargo
   feature that activates no `serde_json` dependency, as `Objective` already
   is under FR-020.
@@ -105,8 +106,8 @@ definition.
 | FR-026-AC-1 | The MeasurementPlan frontmatter schema accepts an `objective` with any combination of `weight`, `value_half_life`, and `budget` present or absent, `weight: 0` and `budget: 0`, and large finite values; it rejects a negative `weight`, a negative `budget`, a zero or negative `value_half_life`, and a non-numeric value for any of the three (a string, a boolean, an array). | Test (TC-166) |
 | FR-026-AC-2 | The Rust `Objective::with_steering` accepts every valid combination of steering fields and refuses a non-finite or negative `weight`, a non-finite, zero, or negative `value_half_life`, and a non-finite or negative `budget`, each with a distinct typed `ObjectiveError` variant, both when constructed and when deserialized from YAML. | Test (TC-167) |
 | FR-026-AC-3 | Given two otherwise-identical plan definitions whose `objective` differs only in `weight`, `value_half_life`, or `budget` (added, removed, or changed) under an unchanged `definition_version`, the FR-020 definition-change check reports no finding; the same is true when all three change at once. A `direction` or `bound` change alongside an unchanged steering field is still reported, naming `objective`. | Test (TC-168) |
-| FR-026-AC-4 | Two otherwise-identical MeasurementPlan frontmatter documents -- one carrying adversarial steering-field values (`weight: 0`, `value_half_life` at its smallest accepted magnitude, `budget: 0`), the other carrying none -- parse to the same `statistical_design.decision_rule`, and evaluating that rule against the same estimate and baseline value via `DecisionRule::holds` produces an identical verdict in both cases. | Test (TC-169) |
-| FR-026-AC-5 | The MeasurementPlan skeleton carries a valid `objective` with all three steering fields and a section stating they are advisory only and never gate; the schema and skeleton changes carry no warning from the onboarding checklist generator. | Test (TC-170) |
+| FR-026-AC-4 | Otherwise-identical MeasurementPlan frontmatter documents -- one carrying the smallest accepted steering-field values (`weight: 0`, `value_half_life` at its smallest accepted magnitude, `budget: 0`), one carrying the largest finite values, and one carrying none -- parse to the same `statistical_design.decision_rule`, and evaluating that rule against the same estimate and baseline value via `DecisionRule::holds` produces an identical verdict in every case, for a threshold rule and a baseline rule, including each rule's exact boundary. | Test (TC-169) |
+| FR-026-AC-5 | The MeasurementPlan skeleton carries a valid `objective` with all three steering fields and a section stating they are advisory only and never gate; the onboarding skill describes the three fields as advisory; the schema and skeleton changes carry no warning from the onboarding checklist generator. | Test (TC-170) |
 | FR-026-AC-6 | A minimal consumer that compiles the crate with default features disabled and only `measurement` enabled reaches `Objective::with_steering`, `Objective::weight`, `Objective::value_half_life`, and `Objective::budget`, and resolves no `serde_json` package anywhere in its dependency graph. | Test (TC-142) |
 
 ## Dependencies

@@ -376,6 +376,26 @@ def test_measurement_plan_skeleton_shows_the_steering_fields() -> None:
     )
     assert "## Steering Fields" in body
     assert "advisory only" in body.lower()
+    skill = (
+        package.PACKAGE_ROOT / "skills" / "assurance-onboarding" / "SKILL.md"
+    ).read_text(encoding="utf-8")
+    for field in ("`weight`", "`value_half_life`", "`budget`"):
+        assert field in skill, field
+    assert "never gate" in skill
+    completed = subprocess.run(
+        [
+            "node",
+            str(package.PACKAGE_ROOT / "skills" / "assurance-onboarding" / "scripts" / "onboard.js"),
+            "--repo",
+            str(ROOT),
+            "--json",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    plan_checklist = json.loads(completed.stdout)["artifactChecklists"]["MeasurementPlan"]
+    assert plan_checklist["warnings"] == []
 
 
 def _statistical_design(**overrides: object) -> dict:

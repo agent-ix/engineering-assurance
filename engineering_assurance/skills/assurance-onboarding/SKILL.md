@@ -98,6 +98,12 @@ the plan's optional `objective` block rather than only in prose:
 the goal the metric should reach, required when `direction` is `target` (see
 the `MeasurementPlan` skeleton). `bound` is informational and never evaluated;
 only `decision_rule` is. Do not invent an objective the owner has not stated.
+The objective may also carry optional steering fields, in units the plan's
+body states: `weight` (relative value, non-negative), `value_half_life` (how
+fast the value of improving decays, strictly positive), and `budget` (time,
+tokens, or compute per attempt, non-negative). They are advisory only: they
+never gate and never feed `decision_rule`. Record them only when the owner
+states them.
 
 A plan with a `statistical_design` states its bar as data a checker can
 evaluate, not as a sentence: `estimator` is one of `proportion`, `count`,
@@ -140,8 +146,9 @@ how. `kind` is one of `suppressed-observation`, `gain-within-noise`,
 is checked for shape only; Quoin's checker exercises the kinds it can detect.
 Declare only controls the owner has stated.
 
-The objective, `estimator`, `decision_rule`, and `protected_apparatus` list
-are all part of the measurement definition: when you add, remove, or change
+The objective's `direction` and `bound`, `estimator`, `decision_rule`, and
+`protected_apparatus` list are all part of the measurement definition (the
+objective's steering fields are not; retuning them needs no new version): when you add, remove, or change
 any of them on an existing plan, also change `definition_version`, so results
 under the old and new definition are never compared as one series. Editing a
 protected file needs a new `definition_version` too; Quoin detects that edit
