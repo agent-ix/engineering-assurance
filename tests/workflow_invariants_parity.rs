@@ -582,15 +582,8 @@ fn require_refusal_cases() -> Vec<(&'static str, Value, Value)> {
         .remove("plan_id");
     let mut other_plan = promotion();
     other_plan["items"]["promotion_evidence"][0]["plan_id"] = json!("MP-002");
-    let mut no_candidate = promotion();
-    no_candidate["items"]["promotion_evidence"][0]
-        .as_object_mut()
-        .expect("evidence must be an object")
-        .remove("candidate");
     let missing = checker("require", "missing", &Value::Null, &[], false);
-    let mismatch = checker("require", "mismatch", &Value::Null, &[], false);
-    let unattested = checker("require", "order_unattested", &json!("accept"), &[], false);
-    vec![
+    let mut cases = vec![
         (
             "require, no checker result",
             without(promotion(), "measurement_verdict"),
@@ -611,6 +604,21 @@ fn require_refusal_cases() -> Vec<(&'static str, Value, Value)> {
             with_verdict(promotion(), "schema", json!("quoin.measurement-verdict.v0")),
             refused("promotion_checker_missing", &missing),
         ),
+    ];
+    cases.extend(verdict_refusal_cases());
+    cases
+}
+
+/// The `require` cases whose checker result exists for the plan.
+fn verdict_refusal_cases() -> Vec<(&'static str, Value, Value)> {
+    let mut no_candidate = promotion();
+    no_candidate["items"]["promotion_evidence"][0]
+        .as_object_mut()
+        .expect("evidence must be an object")
+        .remove("candidate");
+    let mismatch = checker("require", "mismatch", &Value::Null, &[], false);
+    let unattested = checker("require", "order_unattested", &json!("accept"), &[], false);
+    vec![
         (
             "require, rejected",
             rejected(promotion()),
