@@ -53,6 +53,20 @@
       }
     },
     "objective": { "$ref": "#/$defs/objective" },
+    "protected_apparatus": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "The files that produce this plan's number (FR-024): the measurement harness, the labels, corpus, or answer key, the file that selects the population, and the checker configuration. Each entry is a repository-relative file path or a directory entry `<directory>/**`. Quoin's intake resolves the entries to files (case-sensitive, dotfiles included, symlinks refused and never followed, a directory entry must contain at least one file, an entry that names no file refuses the collection) and records the resolved set of (path, digest) pairs; a different set between collections -- a file added, removed, or edited under an entry -- is an apparatus change. Required when `stage` is `gate`, and whenever a `negative_controls` entry has kind `apparatus-edit`. Part of the measurement definition: adding, removing, or changing an entry, or any change to the resolved set, requires a new `definition_version`.",
+      "items": { "$ref": "#/$defs/apparatus_path" }
+    },
+    "negative_controls": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "Gaming scenarios this plan declares it guards against (FR-024), each a closed `kind` plus a `description` of how the plan guards against it. A declaration only: Engineering Assurance checks its shape, and Quoin's checker exercises the kinds it can detect. Required, with at least one entry, when `stage` is `gate`; optional otherwise.",
+      "items": { "$ref": "#/$defs/negative_control" }
+    },
     "statistical_design": { "$ref": "#/$defs/statistical_design" },
     "relationships": {
       "type": "array",
@@ -67,7 +81,23 @@
         "required": ["stage"]
       },
       "then": {
-        "required": ["ground_truth_kind"]
+        "required": ["ground_truth_kind", "negative_controls", "protected_apparatus"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "negative_controls": {
+            "contains": {
+              "properties": { "kind": { "const": "apparatus-edit" } },
+              "required": ["kind"]
+            }
+          }
+        },
+        "required": ["negative_controls"]
+      },
+      "then": {
+        "required": ["protected_apparatus"]
       }
     },
     {
@@ -149,6 +179,36 @@
     }
   ],
   "$defs": {
+    "apparatus_path": {
+      "type": "string",
+      "pattern": "^(?:[^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f]*|\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f]*|\\.\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f]+)(?:/(?:[^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f]*|\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f]*|\\.\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f]+))*(?:/\\*\\*)?$",
+      "not": {
+        "pattern": "[\\x00-\\x1f\\x7f-\\x9f]"
+      },
+      "description": "A repository-relative file path, or a directory entry `<directory>/**` naming every file under that directory, recursively (FR-024). Segments are separated by `/`; `*` appears only in a final `/**` segment, and `**` alone is refused, so the whole repository cannot be protected. Also refused: an empty entry, a leading `/`, an empty segment (`//` or a trailing `/`), a `.` or `..` segment, control characters (C0, DEL, C1), and `\\`, `?`, `[`, `]`, `{`, `}`, `:`."
+    },
+    "negative_control": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "description"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "suppressed-observation",
+            "gain-within-noise",
+            "stale-evidence",
+            "apparatus-edit",
+            "selective-reporting"
+          ],
+          "description": "`suppressed-observation`: an unfavourable item or run is left out of the collected population. `gain-within-noise`: an improvement smaller than the plan's stated uncertainty is claimed as a gain. `stale-evidence`: a result collected against an earlier subject version or apparatus is presented as current. `apparatus-edit`: a protected-apparatus file is edited alongside the change it grades. `selective-reporting`: only a favourable run or variant is reported out of several tried."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "How the plan says it guards against the scenario."
+        }
+      }
+    },
     "objective": {
       "type": "object",
       "additionalProperties": false,

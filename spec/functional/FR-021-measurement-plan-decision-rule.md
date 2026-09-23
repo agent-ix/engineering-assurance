@@ -123,8 +123,10 @@ structured rule a checker evaluates mechanically against the plan's `metric`.
 - The schema's `estimator`, `comparator`, and `baseline` values SHALL be
   exactly the wire names of the Rust `Estimator`, `Comparator`, and `Baseline`
   enums.
-- The plan's measurement definition SHALL comprise `objective`,
-  `statistical_design.estimator`, and `statistical_design.decision_rule`.
+- The plan's measurement definition SHALL include `objective`,
+  `statistical_design.estimator`, and `statistical_design.decision_rule`;
+  [FR-024](./FR-024-measurement-plan-protected-apparatus.md) adds
+  `protected_apparatus`.
 - When any of them is added, removed, or changed while `definition_version`
   stays the same, the definition-change check SHALL return one typed finding
   naming each changed member. The same edit with a `definition_version`

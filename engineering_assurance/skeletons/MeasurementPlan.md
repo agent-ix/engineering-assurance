@@ -24,6 +24,20 @@ statistical_design:
   decision_rule:
     comparator: ge
     threshold: 0.99
+protected_apparatus:
+  - evals/juniper/retention_harness.py
+  - evals/juniper/checker.toml
+  - fixtures/juniper/requests/**
+  - fixtures/juniper/population.yaml
+negative_controls:
+  - kind: suppressed-observation
+    description: >-
+      the harness records every request in population.yaml, so a collection
+      that examined fewer than the listed count is visible
+  - kind: apparatus-edit
+    description: >-
+      the harness, checker configuration, request fixtures and population
+      file are protected, so editing one changes the recorded digests
 relationships:
   - target: ix://example/juniper/AP-001
     type: measures
@@ -95,6 +109,58 @@ applies to the plan's own `metric`, and a result over fewer than
 rule are part of the measurement definition: changing either needs a new
 `definition_version`, so a rule edited after results were seen starts a new
 series rather than re-judging the old one.
+
+## Protected Apparatus
+
+`protected_apparatus` lists the files that produce the number: the harness, the
+labels, corpus, or answer key, the file that selects the population, and the
+checker configuration. A change that edits one of them changed the
+measurement, not the thing measured, and earns no credit toward the objective.
+A gate-stage plan must list them, and so must any plan that declares an
+`apparatus-edit` negative control.
+
+Each entry is either a repository-relative file path or a directory entry
+ending in `/**`, which names every file under that directory, recursively
+(`fixtures/juniper/requests/**` here). No other wildcard is allowed, and `**`
+on its own is refused: the whole repository cannot be protected. Absolute
+paths, `.` and `..` segments, empty segments, control characters, and
+`\ ? [ ] { } :` are refused too.
+
+Quoin's measurement intake resolves the entries when it writes a collection:
+paths are case-sensitive, dotfiles are included, a symlink is refused rather
+than followed, a directory entry must contain at least one file, and an entry
+that names no file refuses the collection. It records the resolved set of
+(path, digest) pairs. Any difference in that set -- a file edited, or a file
+added or removed under a directory entry -- is an apparatus change.
+
+The list is part of the measurement definition. Adding, removing, or changing
+an entry needs a new `definition_version`, and so does any change to the
+resolved files, which Quoin sees through their digests rather than through
+this plan. Reordering the list is not a change.
+
+The population is protected through the file that selects it
+(`fixtures/juniper/population.yaml` here), not through
+`statistical_design.population`: that field is prose a reader relies on, while
+the file decides which items are counted.
+
+## Negative Controls
+
+`negative_controls` declares the gaming scenarios the plan says it guards
+against, each a `kind` and a `description` of how. A gate-stage plan declares
+at least one. The declaration is checked for shape only; Quoin's checker
+(Linear PLAT-961) exercises the kinds it can detect -- `selective-reporting`
+through its rerun-until-pass rule, and `apparatus-edit` through the digest
+comparison (Linear PLAT-975). `kind` is one of:
+
+- `suppressed-observation` -- an unfavourable item or run is left out;
+- `gain-within-noise` -- an improvement smaller than the stated uncertainty is
+  claimed as a gain;
+- `stale-evidence` -- a result collected against an earlier subject version or
+  apparatus is presented as current;
+- `apparatus-edit` -- a protected file is edited alongside the change it
+  grades (requires `protected_apparatus`);
+- `selective-reporting` -- only a favourable run or variant is reported out of
+  several tried.
 
 ## Population
 
