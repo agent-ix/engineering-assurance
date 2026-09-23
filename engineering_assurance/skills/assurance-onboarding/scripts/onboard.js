@@ -126,14 +126,14 @@ if (moduleRoot) {
 // top level or at any depth inside a `$ref`'d (directly, or via an array's
 // `items.$ref`) nested `$defs` entry (see `resolveLocalRef` and `visit`
 // below):
-// - an `allOf` branch `{ if, then }` whose `if` is `properties` (at any
+// - an `allOf` branch `{ if, then, else? }` whose `if` is `properties` (at any
 //   depth, each leaf a `const`, an `enum`, or bare presence) plus `required`,
 //   and whose `then` is `required` and/or a describable constraint (see
 //   `describeConstraint`);
 // - draft-07 `dependencies` whose values are arrays of field names;
 // - a non-empty `oneOf` whose every branch is exactly `{ required: [field] }`,
 //   read as "exactly one of these fields".
-// Anything else -- `else`, a `$ref`/`anyOf`/`oneOf`/`allOf` condition, a
+// Anything else -- a `$ref`/`anyOf`/`oneOf`/`allOf` condition, a
 // nested `allOf` in `then`, `dependentRequired`, an empty or other-shaped
 // `oneOf`/`anyOf`, or a constraint keyword `describeConstraint` does not know
 // -- becomes a `warnings` entry the report prints loudly. A silent gap would
@@ -144,6 +144,7 @@ const describeCondition = (condition, prefix = "") => {
     const prop = `${prefix}${name}`;
     if ("const" in def) return `${prop} = ${def.const}`;
     if (def.enum) return `${prop} is one of ${def.enum.join(", ")}`;
+    if (def.not && "const" in def.not) return `${prop} is not ${def.not.const}`;
     // A list condition (`contains`): some item of the list satisfies it, e.g.
     // a MeasurementPlan whose `negative_controls` has an `apparatus-edit` item.
     if (def.contains) return `${prop} has an item where ${describeCondition(def.contains)}`;
@@ -157,17 +158,34 @@ const describeCondition = (condition, prefix = "") => {
 // fields under `prefix`, as clauses joined by "and". Returns null when the
 // constraint uses a keyword this reader does not know, so the caller warns
 // instead of printing a partial description.
-const DESCRIBABLE_KEYWORDS = new Set(["const", "enum", "not", "required", "properties", "anyOf", "type"]);
+const DESCRIBABLE_KEYWORDS = new Set(["$ref", "const", "enum", "not", "required", "properties", "anyOf", "type"]);
 const describeConstraint = (def, prefix, path) => {
   if (def === false) return [`${path} must be absent`];
   if (typeof def !== "object" || def === null) return null;
   if (Object.keys(def).some((key) => !DESCRIBABLE_KEYWORDS.has(key))) return null;
   const clauses = [];
+  if (def.$ref) {
+    if (typeof def.$ref !== "string" || !def.$ref.startsWith("#/$defs/")) return null;
+    clauses.push(`${path} must match ${def.$ref.slice("#/$defs/".length)}`);
+  }
   if ("const" in def) clauses.push(`${path} must be ${def.const}`);
   if (def.enum) clauses.push(`${path} must be one of ${def.enum.join(", ")}`);
   if (def.not !== undefined) {
-    if (Object.keys(def.not).length !== 1 || !("const" in def.not)) return null;
-    clauses.push(`${path} must not be ${def.not.const}`);
+    if (Object.keys(def.not).length !== 1) return null;
+    if ("const" in def.not) {
+      clauses.push(`${path} must not be ${def.not.const}`);
+    } else if (Array.isArray(def.not.required) && def.not.required.length > 0) {
+      const fields = def.not.required.map((name) => `${prefix}${name}`);
+      clauses.push(fields.length === 1
+        ? `${fields[0]} must be absent`
+        : `${fields.join(" and ")} must not appear together`);
+    } else if (Array.isArray(def.not.anyOf) && def.not.anyOf.length > 0 &&
+               def.not.anyOf.every((branch) => Object.keys(branch).length === 1 &&
+                 Array.isArray(branch.required) && branch.required.length === 1)) {
+      clauses.push(`${def.not.anyOf.map((branch) => `${prefix}${branch.required[0]}`).join(", ")} must be absent`);
+    } else {
+      return null;
+    }
   }
   if (Array.isArray(def.required) && def.required.length > 0) {
     clauses.push(`${def.required.map((name) => `${prefix}${name}`).join(", ")} required`);
@@ -234,9 +252,6 @@ const readAllOf = (schema, prefix = "", present = "") => {
       );
       continue;
     }
-    if (branch.else) {
-      warnings.push("an `allOf` branch has an `else`, which this checklist does not read");
-    }
     if (branch.then?.allOf) {
       warnings.push("an `allOf` branch's `then` nests another `allOf`, which this checklist does not read");
       continue;
@@ -255,6 +270,14 @@ const readAllOf = (schema, prefix = "", present = "") => {
         warnings.push("an `allOf` branch's `then` constrains something this checklist cannot describe");
       } else {
         conditionalConstraints.push({ when, constraint: clauses.join(" and ") });
+      }
+    }
+    if (branch.else) {
+      const clauses = describeConstraint(branch.else, prefix, prefix.replace(/\.$/, ""));
+      if (clauses === null || clauses.length === 0) {
+        warnings.push("an `allOf` branch's `else` constrains something this checklist cannot describe");
+      } else {
+        conditionalConstraints.push({ when: `otherwise (${when} does not hold)`, constraint: clauses.join(" and ") });
       }
     }
   }
@@ -277,6 +300,17 @@ const resolveLocalRef = (schema, def) => {
   const ref = def?.$ref ?? def?.items?.$ref;
   if (typeof ref !== "string" || !ref.startsWith("#/$defs/")) return def;
   return schema.$defs?.[ref.slice("#/$defs/".length)] ?? def;
+};
+
+// When a field has a retired-only legacy shape, its unconditional property
+// remains broad. Read the non-retired branch's ref for the current authoring
+// checklist; the legacy branch is separately described by readAllOf above.
+const resolveCurrentConditionalRef = (schema, name, def) => {
+  if (def?.properties || def?.$ref) return def;
+  const ref = (schema.allOf ?? [])
+    .map((branch) => branch.else?.properties?.[name]?.$ref)
+    .find((value) => typeof value === "string" && value.startsWith("#/$defs/"));
+  return ref ? schema.$defs?.[ref.slice("#/$defs/".length)] ?? def : def;
 };
 
 // The list keywords `visit` below describes; any other keyword on an array
@@ -310,7 +344,7 @@ if (moduleRoot) {
     // `seen` stops a self-referencing `$ref`.
     const visit = (properties, prefix, seen) => {
       for (const [prop, rawDef] of Object.entries(properties ?? {})) {
-        const def = resolveLocalRef(schema, rawDef);
+        const def = resolveLocalRef(schema, resolveCurrentConditionalRef(schema, prop, rawDef));
         const path = `${prefix}${prop}`;
         // A list field's own shape (a MeasurementPlan's `protected_apparatus`
         // or `negative_controls`): how many items, whether repeats are

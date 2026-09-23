@@ -114,7 +114,7 @@ def test_onboard_js_json_checklist_lists_the_decision_rule_vocabulary(
         entry["when"]: entry["constraint"]
         for entry in plan_checklist["conditionalConstraints"]
     }
-    assert constraints == {
+    expected_current_constraints = {
         "objective.direction = higher": (
             "statistical_design.decision_rule.comparator must be one of gt, ge"
         ),
@@ -135,6 +135,12 @@ def test_onboard_js_json_checklist_lists_the_decision_rule_vocabulary(
             "statistical_design.decision_rule.margin must be absent"
         ),
     }
+    for when, constraint in expected_current_constraints.items():
+        assert constraints[when] == constraint
+    assert "legacy_retired_statistical_design" in constraints["status = retired"]
+    assert constraints["otherwise (status = retired does not hold)"] == (
+        "statistical_design must match statistical_design"
+    )
     assert plan_checklist["warnings"] == []
 
 
@@ -246,7 +252,7 @@ def test_onboard_js_json_checklist_lists_protected_apparatus_and_negative_contro
     ]
     conditional = plan_checklist["conditionalRequired"]
     assert {
-        "when": "stage = gate",
+            "when": "stage = gate and status is not retired",
         "required": ["ground_truth_kind", "negative_controls", "protected_apparatus"],
     } in conditional
     assert {
