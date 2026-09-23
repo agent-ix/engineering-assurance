@@ -295,3 +295,53 @@ def test_onboard_js_reports_no_warning_for_any_artifact_type(tmp_path: Path) -> 
     )
     assert "directory entry `<directory>/**`" in protected_line
     assert "\\x00" not in protected_line and "(?:" not in protected_line
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_onboard_js_lists_the_profile_measurement_policy(tmp_path: Path) -> None:
+    """Trace: FR-025-AC-7, TC-165.
+
+    The checklist shows `measurement_policy`'s modes, its closed stage list,
+    the list's shape and its required members; the skeleton carries a policy
+    and a section explaining it, and the onboarding skill describes the
+    promotion run items and failure codes.
+    """
+    report = run_onboard_json(tmp_path)
+    profile = report["artifactChecklists"]["AssuranceProfile"]
+    assert profile["enums"]["measurement_policy.mode"] == ["recommend", "require"]
+    assert profile["enums"]["measurement_policy.stages"] == [
+        "observe",
+        "baseline",
+        "branch-comparison",
+        "trend",
+        "ratchet",
+        "target",
+        "gate",
+    ]
+    assert profile["arrays"]["measurement_policy.stages"] == {
+        "minItems": 1,
+        "uniqueItems": True,
+    }
+    assert {
+        "when": "measurement_policy is present",
+        "required": ["measurement_policy.mode", "measurement_policy.stages"],
+    } in profile["conditionalRequired"]
+    assert profile["warnings"] == []
+
+    module = ROOT / "engineering_assurance"
+    skeleton = (module / "skeletons" / "AssuranceProfile.md").read_text()
+    assert "measurement_policy:\n  mode: require\n  stages: [gate]\n" in skeleton
+    assert "## Measurement Policy" in skeleton
+    skill = (module / "skills" / "assurance-onboarding" / "SKILL.md").read_text()
+    for phrase in [
+        "measurement_policy",
+        "measurement_verdict",
+        "quoin.measurement-verdict.v1",
+        "git-first-parent-add",
+        "promotion_checker_missing",
+        "promotion_checker_mismatch",
+        "promotion_checker_not_accepted",
+        "promotion_checker_order_unattested",
+        "current `exception` item",
+    ]:
+        assert phrase in skill, phrase

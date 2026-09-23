@@ -172,6 +172,9 @@ same canonical bundle and do not redefine these responsibilities.
 - [FR-024](./functional/FR-024-measurement-plan-protected-apparatus.md) — declare
   a MeasurementPlan's protected apparatus and the negative controls a gate
   plan must catch.
+- [FR-025](./functional/FR-025-measurement-promotion-checker-policy.md) — read
+  the independent checker's result when promoting a measurement, advisory or
+  required per AssuranceProfile `measurement_policy`.
 
 ### Non-Functional Requirements
 

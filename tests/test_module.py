@@ -88,6 +88,62 @@ def test_profile_schema_version_and_profile_kind_are_optional() -> None:
     assert classes == ["cheap-conclusive", "probabilistic", "proxy-only"]
 
 
+def _minimal_profile(**overrides: object) -> dict:
+    profile = {
+        "id": "AP-900",
+        "title": "t",
+        "type": "AssuranceProfile",
+        "status": "proposed",
+        "owner": "o",
+        "relationships": [],
+    }
+    profile.update(overrides)
+    return profile
+
+
+def test_profile_measurement_policy_is_closed_and_uses_plan_stages() -> None:
+    """Trace: FR-025-AC-1, TC-163."""
+    contract = schema("assurance-profile-frontmatter.schema")
+    plan = schema("measurement-plan-frontmatter.schema")
+    policy = contract["$defs"]["measurement_policy"]
+    assert policy["properties"]["stages"]["items"]["enum"] == plan["properties"][
+        "stage"
+    ]["enum"]
+    assert policy["properties"]["mode"]["enum"] == contract["$defs"][
+        "review_policy"
+    ]["properties"]["mode"]["enum"]
+    assert "measurement_policy" not in contract["required"]
+    validator = Draft7Validator(contract)
+    accepted = [
+        None,
+        {"mode": "recommend", "stages": ["observe"]},
+        {"mode": "require", "stages": ["gate"]},
+        {"mode": "require", "stages": ["target", "gate"]},
+    ]
+    for value in accepted:
+        document = (
+            _minimal_profile()
+            if value is None
+            else _minimal_profile(measurement_policy=value)
+        )
+        assert list(validator.iter_errors(document)) == [], value
+    refused = [
+        {"mode": "require"},
+        {"stages": ["gate"]},
+        {"mode": "enforced", "stages": ["gate"]},
+        {"mode": "advisory", "stages": ["gate"]},
+        {"mode": "require", "stages": []},
+        {"mode": "require", "stages": ["gate", "gate"]},
+        {"mode": "require", "stages": ["release"]},
+        {"mode": "require", "stages": "gate"},
+        {"mode": "require", "stages": ["gate"], "exceptions": []},
+        "require",
+    ]
+    for value in refused:
+        errors = list(validator.iter_errors(_minimal_profile(measurement_policy=value)))
+        assert errors != [], value
+
+
 def test_measurement_stages_and_statistical_design_are_explicit() -> None:
     contract = schema("measurement-plan-frontmatter.schema")
     assert contract["properties"]["metric"]["pattern"] == "^[a-z][a-z0-9_.-]*$"

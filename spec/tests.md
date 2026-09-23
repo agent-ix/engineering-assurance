@@ -163,6 +163,13 @@ implemented and reviewed.
 | FR-024 | FR-024-AC-6 | TC-159 | ✅ Skeleton, onboarding skill, entry-description checklist, and warning-free checklists for every type passing |
 | FR-024 | FR-024-AC-7 | TC-142 | ✅ Minimal `measurement` consumer reaches the apparatus and control types without `serde_json` |
 | FR-024 | FR-024-AC-8 | TC-155 | ✅ Gate-stage and apparatus-edit `protected_apparatus` requirements passing |
+| FR-025 | FR-025-AC-1 | TC-163 | ✅ Profile `measurement_policy` schema accept/refuse cases and stage-enum parity passing |
+| FR-025 | FR-025-AC-2 | TC-160 | ✅ Recommend-mode pass for every checker status passing |
+| FR-025 | FR-025-AC-3 | TC-161, TC-164 | ✅ Require-mode accept and typed refusals passing |
+| FR-025 | FR-025-AC-4 | TC-162 | ✅ Exception override, expiry and ownership cases passing |
+| FR-025 | FR-025-AC-5 | TC-160, TC-161, TC-162 | ✅ Rust/JavaScript outcome parity and malformed-item refusals passing |
+| FR-025 | FR-025-AC-6 | TC-164 | ✅ Workflow item schemas, canonical/pilot equality and human-gated terminals passing |
+| FR-025 | FR-025-AC-7 | TC-165 | ✅ Skeleton, onboarding skill and warning-free checklist passing |
 
 ### Non-Functional Requirement Coverage
 
@@ -362,6 +369,12 @@ implemented and reviewed.
 | TC-157 | The schema's negative-control kinds equal the Rust NegativeControlKind wire names in order, ALL covers every variant, the gate-stage then requires negative_controls, and NegativeControl and NegativeControls refuse an empty description, an empty list, a repeated control, unknown kinds and extra keys, and round-trip | Unit | P0 | FR-024-AC-4 | ✅ wire parity, refusal and round-trip cases passing |
 | TC-158 | A protected entry added, removed or changed, or the list added or removed, under an equal definition_version yields one typed finding naming protected_apparatus; the same edits under a changed definition_version, and a reordered list, yield no finding | Unit | P0 | FR-024-AC-5 | ✅ finding, versioned and reorder cases passing |
 | TC-159 | The MeasurementPlan skeleton carries a valid protected_apparatus and negative_controls with a section for each, the onboarding skill describes both, the onboarding checklist lists both lists' shape, the entry description rather than the raw pattern, the control kinds and the gate-stage and apparatus-edit requirements, omits lists with nothing to say, and reports no warning for any artifact type | Unit | P0 | FR-024-AC-6 | ✅ skeleton, skill, onboarding JSON and text checklist cases passing |
+| TC-160 | With no policy, a recommend policy, or a require policy not listing the proposed stage, measurement.promotion_ready passes with no details for a missing, mismatched, rejected, order-unattested, accepted and later-schema checker result, and the JavaScript provider emits the same bytes | Unit | P0 | FR-025-AC-2, FR-025-AC-5 | ✅ recommend-mode pass and parity cases passing |
+| TC-161 | With a require policy listing the proposed stage, an attested accept passes; a missing result, unbound or other-plan evidence, another schema, reject, inconclusive, another definition version or candidate, a null or absent candidate, and a caller-supplied, none or git-shallow order each fail with their promotion_checker_* code and report; conflicting results fail as not_accepted in either order; the JavaScript provider emits the same bytes | Unit | P0 | FR-025-AC-3, FR-025-AC-5 | ✅ require-mode accept, refusal and parity cases passing |
+| TC-162 | With a require policy, a current owned exception lets a rejected or missing result pass; an exception expiring at the evaluation instant or without an owner does not; an unknown verdict or mode, mistyped reasons or stages, an unknown member on either item, and a non-object checker item are refused before outcomes | Unit | P0 | FR-025-AC-4, FR-025-AC-5 | ✅ override, expiry, ownership, parity and malformed-item cases passing |
+| TC-163 | The AssuranceProfile schema accepts no measurement_policy and either mode over a non-empty list of distinct MeasurementPlan stages, refuses a missing mode or stage list, unknown mode, empty, repeated, unknown or non-list stages, an extra member and a non-object policy, and its stage and mode values equal the MeasurementPlan stage enum and review_policy modes | Unit | P0 | FR-025-AC-1 | ✅ schema accept/refuse and vocabulary parity cases passing |
+| TC-164 | The canonical and pilot measurement-promotion definitions are equal, declare measurement_verdict and measurement_policy item schemas, gate evidence_ready to decision_ready on promotion_ready and exceptions_ready, keep both terminals hitl, and the pilot provider refuses a rejected result under a require policy for gate | Integration | P0 | FR-025-AC-3, FR-025-AC-6 | ✅ definition, terminal-gate and pilot-provider cases passing |
+| TC-165 | The AssuranceProfile skeleton carries a valid measurement_policy and a section explaining it, the onboarding skill names the run items, attested order, failure codes and override, and the onboarding checklist lists the policy's modes, stage values, list shape and required members with no warning | Unit | P0 | FR-025-AC-7 | ✅ skeleton, skill and onboarding checklist cases passing |
 
 ## Option Permutation Matrix
 

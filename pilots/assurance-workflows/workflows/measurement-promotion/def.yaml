@@ -27,8 +27,19 @@ itemSchemas:
   run_binding:
     required: [id, repository_id, workflow, workflow_version, decision_boundary, decision_owner]
   promotion_request: {}
+  # `plan_id` and `candidate` bind the evidence to one measurement_verdict
+  # (the plan's frontmatter id and the collection id the checker decided).
+  # They are optional so a `recommend` promotion is never refused for lacking
+  # a checker result.
   promotion_evidence:
     required: [id, plan_path, definition_version, prior_stage, proposed_stage, stability, decision_yield, limitations, owner]
+  # The governing AssuranceProfile's `measurement_policy`, recorded once at
+  # capture. With none recorded every stage is `recommend`.
+  measurement_policy:
+    required: [id, profile_path, mode, stages]
+  # One quoin.measurement-verdict.v1 document from the independent checker.
+  measurement_verdict:
+    required: [id, schema, planId, definitionVersion, verdict, reasons, claimed, candidate, decisions, findings, regressedRuns, orderSource, counts]
   exception:
     required: [id, owner, expires_at, rationale, impact]
   operator_observation:

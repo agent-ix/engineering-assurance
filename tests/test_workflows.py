@@ -109,20 +109,18 @@ def test_adjacent_measurement_promotion_passes(tmp_path: Path) -> None:
         "limitations": "fictional sample",
         "owner": "measurement-owner",
     }
-    assert (
-        run_invariant(
-            tmp_path,
-            "measurement.promotion_ready",
-            {
-                "defName": "measurement-promotion",
-                "items": {
-                    "promotion_request": [request],
-                    "promotion_evidence": [evidence],
-                },
+    result = run_invariant(
+        tmp_path,
+        "measurement.promotion_ready",
+        {
+            "defName": "measurement-promotion",
+            "items": {
+                "promotion_request": [request],
+                "promotion_evidence": [evidence],
             },
-        )
-        is True
+        },
     )
+    assert result is True
 
 
 def test_non_adjacent_measurement_promotion_fails(tmp_path: Path) -> None:
@@ -336,3 +334,119 @@ def test_ix_flow_can_load_every_canonical_definition(tmp_path: Path) -> None:
         )
         assert completed.returncode == 0, completed.stderr
         assert json.loads(completed.stdout)["data"]["defName"] == name
+
+
+def test_measurement_promotion_declares_checker_and_policy_items() -> None:
+    """Trace: FR-025-AC-6, TC-164.
+
+    The promotion workflow accepts a typed checker result and the profile's
+    policy as run items, and an accepted verdict still reaches `promoted`
+    only through the human-gated terminal transition (FR-005).
+    """
+    definition = definitions()["measurement-promotion"]
+    schemas = definition["itemSchemas"]
+    assert schemas["measurement_verdict"]["required"] == [
+        "id",
+        "schema",
+        "planId",
+        "definitionVersion",
+        "verdict",
+        "reasons",
+        "claimed",
+        "candidate",
+        "decisions",
+        "findings",
+        "regressedRuns",
+        "orderSource",
+        "counts",
+    ]
+    assert schemas["measurement_policy"]["required"] == [
+        "id",
+        "profile_path",
+        "mode",
+        "stages",
+    ]
+    evidence_ready = [
+        transition
+        for transition in definition["transitions"]
+        if transition["from"] == "evidence_ready"
+    ]
+    assert [item["to"] for item in evidence_ready] == ["decision_ready"]
+    assert "measurement.promotion_ready" in evidence_ready[0]["invariants"]
+    assert "shared.exceptions_ready" in evidence_ready[0]["invariants"]
+    terminal = {
+        transition["to"]: transition
+        for transition in definition["transitions"]
+        if transition["from"] == "decision_ready"
+    }
+    assert set(terminal) == {"promoted", "not_promoted"}
+    assert all(item["defaultGate"] == "hitl" for item in terminal.values())
+    canonical = yaml.safe_load(
+        (CANONICAL_DEFINITIONS / "measurement-promotion" / "def.yaml").read_text()
+    )
+    assert canonical == definition
+
+
+def test_required_checker_refuses_rejected_promotion(tmp_path: Path) -> None:
+    """Trace: FR-025-AC-3, TC-164.
+
+    Through the pilot surface ix-flow loads, a `require` policy for the
+    proposed stage refuses a rejected checker result with a typed code.
+    """
+    evidence = {
+        "plan_path": "fixtures/MP-001.md",
+        "definition_version": "v1",
+        "prior_stage": "target",
+        "proposed_stage": "gate",
+        "stability": "fixed fixture",
+        "decision_yield": "one changed decision",
+        "limitations": "fictional sample",
+        "owner": "measurement-owner",
+        "plan_id": "MP-001",
+        "candidate": "collection-2",
+    }
+    result = run_invariant(
+        tmp_path,
+        "measurement.promotion_ready",
+        {
+            "defName": "measurement-promotion",
+            "items": {
+                "promotion_request": [
+                    {
+                        "interviewId": "promotion",
+                        "plan_path": "fixtures/MP-001.md",
+                        "definition_version": "v1",
+                        "prior_stage": "target",
+                        "proposed_stage": "gate",
+                    }
+                ],
+                "promotion_evidence": [evidence],
+                "measurement_policy": [
+                    {
+                        "profile_path": "fixtures/AP-001.md",
+                        "mode": "require",
+                        "stages": ["gate"],
+                    }
+                ],
+                "measurement_verdict": [
+                    {
+                        "schema": "quoin.measurement-verdict.v1",
+                        "planId": "MP-001",
+                        "definitionVersion": "v1",
+                        "verdict": "reject",
+                        "reasons": ["rule_not_met"],
+                        "claimed": None,
+                        "candidate": "collection-2",
+                        "decisions": [],
+                        "findings": [],
+                        "regressedRuns": [],
+                        "orderSource": "git-first-parent-add",
+                        "counts": {},
+                    }
+                ],
+            },
+        },
+    )
+    assert result["ok"] is False
+    assert result["code"] == "promotion_checker_not_accepted"
+    assert result["details"]["checker"]["verdict"] == "reject"

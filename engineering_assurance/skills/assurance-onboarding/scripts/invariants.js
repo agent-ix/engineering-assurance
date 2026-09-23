@@ -62,18 +62,19 @@ const terminalGates = ({ instance }) => {
     : failure("terminal_gate_override", { transitions: changed });
 };
 
+// An exception is complete, owned, and unexpired now.
+const exceptionCurrent = (item) =>
+  missing(item, ["owner", "expires_at", "rationale", "impact"]).length === 0 &&
+  Number.isFinite(Date.parse(item.expires_at)) &&
+  Date.parse(item.expires_at) > Date.now();
+
 const exceptionsReady = ({ instance }) => {
   const request =
     interviewItem(instance, "intake_request") ??
     interviewItem(instance, "promotion_request") ??
     interviewItem(instance, "change_request");
   const exceptions = values(instance, "exception");
-  const invalid = exceptions.filter(
-    (item) =>
-      missing(item, ["owner", "expires_at", "rationale", "impact"]).length > 0 ||
-      !Number.isFinite(Date.parse(item.expires_at)) ||
-      Date.parse(item.expires_at) <= Date.now(),
-  );
+  const invalid = exceptions.filter((item) => !exceptionCurrent(item));
   const required = request?.exceptions_expected === true;
   return invalid.length === 0 && (!required || exceptions.length > 0)
     ? true
@@ -144,10 +145,77 @@ const stages = [
   "gate",
 ];
 
+const VERDICT_SCHEMA = "quoin.measurement-verdict.v1";
+const ATTESTED_ORDER_SOURCE = "git-first-parent-add";
+
+// Checker statuses, least to most severe; the index orders them.
+const checkerStatuses = [
+  "accepted",
+  "order_unattested",
+  "not_accepted",
+  "mismatch",
+  "missing",
+];
+
+const checkerFailureCodes = {
+  order_unattested: "promotion_checker_order_unattested",
+  not_accepted: "promotion_checker_not_accepted",
+  mismatch: "promotion_checker_mismatch",
+  missing: "promotion_checker_missing",
+};
+
+// `require` when any recorded AssuranceProfile measurement_policy requires
+// the proposed stage; otherwise, including with no policy, `recommend`.
+const policyMode = (instance, stage) =>
+  values(instance, "measurement_policy").some(
+    (policy) =>
+      policy.mode === "require" &&
+      Array.isArray(policy.stages) &&
+      policy.stages.includes(stage),
+  )
+    ? "require"
+    : "recommend";
+
+// Select the checker result bound to the evidence: same schema and plan id,
+// then same definition version and candidate collection. The least
+// favourable matching status wins, the earliest result on a tie.
+const checkerStatus = (instance, evidence) => {
+  if (!nonempty(evidence.plan_id)) return { status: "missing", item: null };
+  const forPlan = values(instance, "measurement_verdict").filter(
+    (item) => item.schema === VERDICT_SCHEMA && item.planId === evidence.plan_id,
+  );
+  if (forPlan.length === 0) return { status: "missing", item: null };
+  const candidate = nonempty(evidence.candidate) ? evidence.candidate : null;
+  let worst = null;
+  for (const item of forPlan) {
+    if (
+      candidate === null ||
+      item.definitionVersion !== evidence.definition_version ||
+      item.candidate !== candidate
+    ) {
+      continue;
+    }
+    const status =
+      item.verdict !== "accept"
+        ? "not_accepted"
+        : item.orderSource === ATTESTED_ORDER_SOURCE
+          ? "accepted"
+          : "order_unattested";
+    if (
+      worst === null ||
+      checkerStatuses.indexOf(status) > checkerStatuses.indexOf(worst.status)
+    ) {
+      worst = { status, item };
+    }
+  }
+  return worst ?? { status: "mismatch", item: null };
+};
+
 const promotionReady = ({ instance }) => {
   const request = interviewItem(instance, "promotion_request");
   if (
     !request ||
+    stages.indexOf(request.prior_stage) === -1 ||
     stages.indexOf(request.proposed_stage) !==
       stages.indexOf(request.prior_stage) + 1
   ) {
@@ -170,9 +238,24 @@ const promotionReady = ({ instance }) => {
       item.prior_stage === request.prior_stage &&
       item.proposed_stage === request.proposed_stage,
   );
-  return evidence && missing(evidence, required).length === 0
-    ? true
-    : failure("promotion_evidence_incomplete");
+  if (!evidence || missing(evidence, required).length > 0) {
+    return failure("promotion_evidence_incomplete");
+  }
+  // `recommend` never refuses: the checker result is not even read.
+  if (policyMode(instance, request.proposed_stage) === "recommend") return true;
+  const { status, item } = checkerStatus(instance, evidence);
+  const code = checkerFailureCodes[status] ?? null;
+  // An owner override passes; the `exception` item stays in the run.
+  if (code === null || values(instance, "exception").some(exceptionCurrent)) {
+    return true;
+  }
+  return failure(code, {
+    checker: {
+      status,
+      verdict: item?.verdict ?? null,
+      reasons: Array.isArray(item?.reasons) ? item.reasons : [],
+    },
+  });
 };
 
 const changeImpactReady = ({ instance }) => {
