@@ -37,23 +37,29 @@ if (args.includes("--help") || args.includes("-h")) {
   process.stdout.write(USAGE);
   process.exit(0);
 }
-// Every argument is either a known flag or the path following `--repo`, so a
-// mistyped flag stops here instead of silently printing a full report.
-const unknown = args.filter(
-  (arg, index) => !["--repo", "--json"].includes(arg) && args[index - 1] !== "--repo",
-);
-if (unknown.length > 0) {
-  process.stderr.write(`unknown argument: ${unknown.join(" ")}\n\n${USAGE}`);
+// Any usage error -- an unknown argument, a `--repo` with no path, or a
+// second `--repo` -- prints usage and exits 2 instead of printing a report.
+const usageError = (message) => {
+  process.stderr.write(`${message}\n\n${USAGE}`);
   process.exit(2);
-}
-const repoFlagIndex = args.indexOf("--repo");
-const repoFlagValue = repoFlagIndex >= 0 ? args[repoFlagIndex + 1] : undefined;
-if (repoFlagIndex >= 0 && (repoFlagValue === undefined || repoFlagValue.startsWith("--"))) {
-  console.error("--repo requires a path argument");
-  process.exit(1);
+};
+let repoFlagValue;
+let wantsJson = false;
+for (let index = 0; index < args.length; index += 1) {
+  const arg = args[index];
+  if (arg === "--json") {
+    wantsJson = true;
+  } else if (arg === "--repo") {
+    const value = args[index + 1];
+    if (value === undefined || value.startsWith("-")) usageError("--repo requires a path argument");
+    if (repoFlagValue !== undefined) usageError("--repo may be given only once");
+    repoFlagValue = value;
+    index += 1;
+  } else {
+    usageError(`unknown argument: ${arg}`);
+  }
 }
 const targetRepo = path.resolve(repoFlagValue ?? process.cwd());
-const wantsJson = args.includes("--json");
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 

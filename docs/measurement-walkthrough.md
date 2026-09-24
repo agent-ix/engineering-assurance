@@ -219,7 +219,8 @@ Other views:
 
 To decide whether a recorded measure moves the plan to its next `stage`, use
 the `measurement-promotion` workflow through the `assurance-onboarding` skill.
-A profile that sets that stage to `require` also needs a verdict from
+When the governing profile's `measurement_policy` has `mode: require` and
+lists that stage, the promotion also needs a verdict from
 `quoin measurement verify`: check that `quoin measurement --help` lists
-`verify`. Without it the workflow refuses the
-promotion with `promotion_checker_missing`.
+`verify`. Without a verdict the workflow refuses the promotion with
+`promotion_checker_missing` unless the owner records a current exception.

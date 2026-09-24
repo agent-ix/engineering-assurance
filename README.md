@@ -178,8 +178,10 @@ module.
 | Claude Code plugin | `claude plugin list` (or `/plugin` in a session) | `engineering-assurance@engineering-assurance` is listed as enabled at the same version. |
 | Codex plugin | `codex plugin list \| grep engineering-assurance` | `engineering-assurance@engineering-assurance` shows `installed, enabled` at the same version. |
 
-Check the plugin row for each agent you use. An agent finds a newly installed
-plugin's skill only in a new session, so restart it after installing.
+Check the row for each of Claude Code and Codex that you use. For OpenCode or
+GitHub Copilot, confirm the skill appears in that agent's skill list. An agent
+finds a newly installed plugin's skill only in a new session, so restart it
+after installing.
 
 The `@v0.4.1` suffix on `marketplace add` pins the plugin to that tag. Without
 it, the marketplace follows this repository's default branch and can move past
@@ -218,8 +220,8 @@ Documents written against v0.3.x or earlier can fail the current schemas.
 - **Validating with `--module`.** `quire validate --module <path>` replaces
   module discovery rather than adding to it. Pass every module your documents
   use, for example this module plus `spec-artifacts-iso` and
-  `spec-artifacts-process`. With this module alone, the link types its
-  artifacts declare are reported as unknown.
+  `spec-artifacts-process`. `spec-artifacts-iso` supplies the link types this
+  module's artifacts declare; without it they are reported as unknown.
 
 ## What it provides
 
