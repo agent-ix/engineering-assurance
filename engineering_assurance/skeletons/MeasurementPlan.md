@@ -53,6 +53,18 @@ relationships:
 The result informs whether the request-loss scenario needs more investigation;
 it does not approve a release.
 
+## Status and Location
+
+This skeleton starts at `status: proposed`. Quoin records measurements only
+against an `active` plan, so `quoin measurement record` refuses an observation
+for this plan until its `owner` sets `status: active`. Setting a plan to
+`retired` stops new records against it.
+
+Save the plan under `spec/assurance/` or `assurance/` in the repository being
+measured; Quoin looks for plans nowhere else. Keep one plan per `metric`. When
+two plans share a metric, Quoin uses the one with the higher `id`, whatever its
+`status`, and does not warn.
+
 ## Objective
 
 `objective.direction` states which way the metric should move: `higher` or

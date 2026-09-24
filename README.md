@@ -212,6 +212,20 @@ Documents written against v0.3.x or earlier can fail the current schemas.
   Only a `status: retired` profile may keep `profile_version`. On any other
   profile Quire reports `{"required":["profile_version"]} is not allowed`;
   rename the field to fix it.
+- **MeasurementPlan fields.** From v0.3.1 to v0.4.x:
+  - `statistical_design.estimator` changed from free text to one of
+    `proportion`, `count`, `mean`, `median`, `ratio`;
+  - `statistical_design.decision_rule` changed from a string to an object:
+    a `comparator` plus either a `threshold` or a `baseline`, and an optional
+    `margin`;
+  - a plan with a `statistical_design` must state its `metric`;
+  - a `gate`-stage plan that is not retired must have `ground_truth_kind`,
+    `negative_controls`, and `protected_apparatus`;
+  - `objective`, `subject_identity`, and `preregistration` are new and
+    optional.
+
+  The [MeasurementPlan skeleton](engineering_assurance/skeletons/MeasurementPlan.md)
+  shows every field in its current shape.
 - **MeasurementPlan with a prose `statistical_design`.** Current plans need
   the typed estimator and decision rule. When the old design cannot be
   expressed in them faithfully, set the plan to `status: retired`, which keeps
