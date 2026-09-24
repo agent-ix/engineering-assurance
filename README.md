@@ -177,16 +177,25 @@ module.
 | Native CLI | `engineering-assurance --version` | It prints the same version. `command not found` means `~/.cargo/bin` is not on `PATH`. |
 | Agent plugin | `claude plugin list` (or `/plugin` in a session) | `engineering-assurance@engineering-assurance` is listed as enabled at the same version. |
 
+The plugin marketplace follows this repository's default branch, not a tag.
+The version check above catches a plugin that has moved to a newer release.
+
 Then classify the toolchain against the compatibility matrix:
 
 ```bash
-engineering-assurance compatibility-observe --root .
+engineering-assurance compatibility-observe --root <engineering-assurance-checkout>
 ```
 
 It prints one verdict per component and exits non-zero unless every component
 is `compatible`. A component on a newer, unlisted version reports `unknown`
 with the reason "not approved and not rejected". That is expected when you run
 newer toolchain releases. It is not an install failure.
+
+The `engineering-assurance` row is read from the Git tag of the `--root`
+directory, not from the installed binary. Point `--root` at a checkout of this
+repository at the tag you installed. Run from any other directory, that row is
+unobserved, or reports that directory's own tag. Use
+`engineering-assurance --version` for the installed CLI instead.
 
 ## What it provides
 

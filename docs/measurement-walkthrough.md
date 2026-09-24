@@ -5,8 +5,11 @@ it back. It uses Quoin's `quoin measurement record` and `quoin report`
 commands. Engineering Assurance supplies the `MeasurementPlan` type; Quoin owns
 the collection format and the measurement store.
 
-Every file below was run with quoin 0.24.1 and quire-cli 0.33.0, and both
-commands succeeded. The service, harness, and digests are fictional.
+Every file below was recorded and reported with quoin 0.23.1 (the version the
+[compatibility matrix](../engineering_assurance/compatibility-matrix.json)
+pins) and with quoin 0.24.1, and validated with quire-cli 0.33.0 against the
+v0.4.0 module. The service, harness, and digests are fictional. Run the
+commands from the repository root, or pass `--repo <repo_root>`.
 
 ## 1. Write the plan
 
@@ -70,12 +73,16 @@ Validate it:
 quire validate --scope . 'spec/**/*.md'
 ```
 
+This needs the module installed from v0.4.0. A module installed from an older
+commit refuses `statistical_design.decision_rule` and `minimum_population`;
+`quoin module list` shows which `ref` you have.
+
 The full field list, including `objective`, `protected_apparatus`, and
 `negative_controls`, is in
 [`engineering_assurance/skeletons/MeasurementPlan.md`](../engineering_assurance/skeletons/MeasurementPlan.md).
 
-Keep one plan per `metric`. Quoin keys plans by metric, so a second plan with
-the same metric replaces the first when records are matched.
+Keep one plan per `metric`. Quoin keys plans by metric, and when two plans
+share one, the plan with the higher `id` is used, whatever its `status`.
 
 ## 2. Write the collection JSON
 
@@ -99,7 +106,7 @@ A collection is one complete run of the tool that produces the number.
     "lockDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
     "executableDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
     "buildProfile": "release",
-    "toolchains": { "rust": "1.98.1" },
+    "toolchains": { "node": "22.12.0", "rust": "1.98.1", "python": "3.12.8" },
     "sources": {
       "juniper": {
         "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -138,34 +145,25 @@ Each observation must match a plan on three fields:
 | `observations[].planId` | `id` | Must equal the plan's id. |
 | `observations[].definitionVersion` | `definition_version` | Must be equal. |
 
-The plan's `statistical_design` is also checked. `repetitions: 5` in the plan
-requires `population.repetitions: 5` in the observation. Without it the record
-is refused with `QM-POPULATION-UNSTATED`.
+From quoin 0.24.0, a `measured` observation is also checked against the plan's
+`statistical_design`. This is why the example states `population.examined`
+and `population.repetitions`:
 
-### Rules that catch most first attempts
+| Plan field | Observation needs | Refusal |
+| --- | --- | --- |
+| `minimum_population: 200` | `population.examined` of at least 200 | `QM-POPULATION-UNSTATED` if absent, `QM-POPULATION-BELOW-MINIMUM` if smaller |
+| `repetitions: 5` | `population.repetitions` of at least 5 (required whenever the plan's value is above 1) | `QM-POPULATION-UNSTATED` if absent, `QM-REPETITIONS-SHORT` if smaller |
 
-- `schemaVersion` is `2`. Version 1 is read-only history.
-- `collectionId` becomes the file name. Use letters, digits, `.`, `_`, and `-`.
-- `configDigest`, `lockDigest`, `executableDigest`, and every `artifacts`
-  value are `sha256:` followed by 64 lowercase hex characters.
-- `verificationStack.buildProfile` is `release`.
-- `verificationStack.toolchains` names at least one of `node`, `rust`, or
-  `python`.
-- Each `sources` entry has a 40-character lowercase hex `revision` and
-  `sourceState: clean`.
-- `state` is `measured` or `not_computed`. With `not_computed`, write
-  `"value": null`. Leaving `value` out is refused.
-- `shape` is `scalar`, `ratio`, or `count`.
-- Two observations with the same `metric` and `dimensions` are refused.
-- If an `artifacts` key names a file that exists in the repository, its digest
-  must match that file. `quoin measurement record --digest-from-file
-  artifacts.<name>=<path>` fills or checks a digest from a file.
-
-The onboarding report lists the full field contract:
+Quoin owns the rest of the collection format and names the failing field when
+it refuses a record. The onboarding report restates the full field contract:
 
 ```bash
 node engineering_assurance/skills/assurance-onboarding/scripts/onboard.js --repo <repo_root>
 ```
+
+Quoin 0.23.1 requires `verificationStack.toolchains` to name all three of
+`node`, `rust`, and `python`, and it cannot read back a record that names
+fewer, so the example sets all three. Quoin 0.24.0 accepts any one.
 
 ## 3. Record it
 
@@ -176,8 +174,10 @@ quoin measurement record --input collection.json
 On success it prints the stored path:
 
 ```text
-<repo_root>/spec/evidence/measurements/juniper-retention-2026-09-23-run1.json
+spec/evidence/measurements/juniper-retention-2026-09-23-run1.json
 ```
+
+The printed path is relative to `--repo`, which defaults to `.`.
 
 Records are write-once. Recording the same bytes again succeeds and changes
 nothing. Different content under an existing `collectionId` is refused, so use
@@ -197,6 +197,16 @@ quoin report
 | Metric | Plan | Stage | Current |
 | --- | --- | --- | --- |
 | request_retention_rate | MP-001 (spec/assurance/MP-001-request-retention.md) | baseline | 0.994 fraction |
+
+## Current evidence
+
+Corpus gaps: not_computed
+
+- 2026-09-23T12:00:00.000Z — juniper retention harness 1.0.0; source aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; corpus n/a; config sha256:3333333333333333333333333333333333333333333333333333333333333333
+
+## Attention
+
+No factual attention items.
 ```
 
 Other views:
@@ -204,7 +214,7 @@ Other views:
 | Command | Shows |
 | --- | --- |
 | `quoin report --series request_retention_rate` | Every recorded value of one metric. |
-| `quoin report --since <revision>` | Changes since a Git revision. |
+| `quoin report --since <sourceRevision>` | The latest record compared with the record whose `sourceRevision` equals the argument. The string is matched as recorded, not resolved through Git, so `HEAD` or a short SHA finds nothing. |
 | `quoin report --format json` | The same data as JSON. |
 
 To decide whether a recorded measure moves the plan to its next `stage`, use
