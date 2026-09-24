@@ -29,7 +29,7 @@ def errors(value: dict) -> list:
 
 
 def test_procedure_path_is_optional_and_safe_json_files_are_valid() -> None:
-    """Trace: campaign MeasurementPlan procedure binding."""
+    """Trace: FR-024-AC-10, TC-185."""
     Draft7Validator.check_schema(SCHEMA)
     candidate = plan()
     assert errors(candidate) == []
@@ -65,14 +65,14 @@ def test_procedure_path_is_optional_and_safe_json_files_are_valid() -> None:
     ],
 )
 def test_procedure_path_refuses_unsafe_or_non_json_values(path: object) -> None:
-    """Trace: campaign MeasurementPlan procedure binding."""
+    """Trace: FR-024-AC-10, TC-185."""
     candidate = plan()
     candidate["execution_procedure"] = path
     assert errors(candidate) != [], path
 
 
 def test_procedure_path_requires_protected_apparatus_declaration() -> None:
-    """The schema requires the list; Quoin checks exact path coverage."""
+    """Trace: FR-024-AC-10, TC-185; Quoin checks exact path coverage."""
     candidate = plan()
     candidate["execution_procedure"] = "campaign/procedures/probe.json"
     candidate.pop("protected_apparatus")

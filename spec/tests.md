@@ -165,6 +165,7 @@ implemented and reviewed.
 | FR-024 | FR-024-AC-6 | TC-159 | ✅ Skeleton, onboarding skill, entry-description checklist, and warning-free checklists for every type passing |
 | FR-024 | FR-024-AC-7 | TC-142 | ✅ Minimal `measurement` consumer reaches the apparatus and control types without `serde_json` |
 | FR-024 | FR-024-AC-8 | TC-155 | ✅ Gate-stage and apparatus-edit `protected_apparatus` requirements passing |
+| FR-024 | FR-024-AC-10 | TC-185 | ✅ Candidate `execution_procedure` path and protected-list schema cases passing; Quoin checks exact membership and source bytes |
 | FR-025 | FR-025-AC-1 | TC-163 | ✅ Profile `measurement_policy` schema accept/refuse cases and stage-enum parity passing |
 | FR-025 | FR-025-AC-2 | TC-160 | ✅ Recommend-mode pass for every checker status passing |
 | FR-025 | FR-025-AC-3 | TC-161, TC-164 | ✅ Require-mode accept and typed refusals passing |
@@ -402,6 +403,7 @@ implemented and reviewed.
 | TC-182 | A complete Git tree manifest binds tracked regular files, executable mode, and omitted symlink targets by Git blob OID and SHA-256; tampering or unsupported modes refuse source projection | Integration | P0 | FR-019-AC-11, VO-005 | ✅ `tests/campaign.rs` real temporary Git repository cases passing |
 | TC-183 | Dynamic dependency input role prefixes accept only declared path components, require a matching sealed input when marked required, and reject undeclared near matches or malformed prefixes | Unit | P0 | FR-019-AC-10, VO-011 | ✅ `tests/campaign.rs` prefix binding cases passing |
 | TC-184 | A declared producer input origin names a campaign source or declared member and output artifact, matches the selected runtime role and exact origin, and rejects an undeclared dynamic input | Integration | P0 | FR-019-AC-10, VO-012, EN-006 | ✅ `tests/campaign.rs` origin context and binding cases passing; independent Quoin byte replay pending |
+| TC-185 | The 0.5.0 MeasurementPlan schema accepts a missing or safe repository-relative JSON `execution_procedure` with `protected_apparatus` declared, refuses unsafe or non-JSON paths and a missing protected list, and leaves exact protected-path membership and source-byte checks to Quoin | Unit | P0 | FR-024-AC-10 | ✅ `tests/test_campaign_measurement_plan_module.py` schema cases passing |
 
 ## Option Permutation Matrix
 
