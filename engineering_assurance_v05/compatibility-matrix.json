@@ -192,7 +192,7 @@
         },
         {
           "path": "engineering_assurance_v05/schemas/measurement-plan-frontmatter.schema.json",
-          "sha256": "e4cae3eceb15bdf52baf5af14c8a48849dfe23933acb3969a0347ae5ccc9b90c"
+          "sha256": "e54443a0fb07aeea474791448b49f3981e7ae84f33bf05902343f5bfff72409a"
         },
         {
           "path": "engineering_assurance_v05/schemas/pgm01-compatibility-view-v1.schema.json",
