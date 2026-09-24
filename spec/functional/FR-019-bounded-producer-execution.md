@@ -63,7 +63,13 @@ unique within their respective request collections.
   provenance, observed executable digest when available, monotonic timing,
   cancellation binding/event, optional bounded raw process evidence, exact
   output-artifact references/digests with immutable retained-byte readers, and
-  one closed execution state.
+  one closed execution state. A launched Linux result also carries the
+  executor-observed host context when every required host field can be sampled:
+  an opaque domain-separated digest of the host's high-entropy machine ID,
+  operating system, kernel release, architecture, CPU model, available CPU
+  count, physical memory and runtime class. Raw machine IDs are never exposed.
+  An unavailable field makes the complete context absent; consumers cannot
+  infer same-host comparability from caller-supplied values.
 - Every launched-process state may carry bounded raw process evidence and
   validated output-artifact references. Only `completed` carries the caller
   adapter's typed domain observation.
@@ -176,6 +182,10 @@ unique within their respective request collections.
 | FR-019-AC-4 | Exact wall-clock, stream, input-byte, output-count/byte and concurrency boundaries are admitted while the next value is structurally invalid or terminated; an admitted non-zero exit reaches the adapter; ordinary descendants are reaped and an escaping-descendant mutant produces `containment_failure`. | Test (TC-125) |
 | FR-019-AC-5 | A caller-owned typed response adapter receives the exact bound terminal evidence without requiring the consumer to parse CLI stdout, and Engineering Assurance contains no domain oracle, qualification verdict, evidence store, or Quoin record clone. | Test (TC-127) |
 | FR-019-AC-7 | A minimal consumer compiles the existing crate with default features disabled, only `producer-execution` enabled, and an exact semver-compatible shared-dependency version older than Engineering Assurance's locked version; every normal Engineering Assurance dependency declares a compatible range rather than an exact `=` requirement; Engineering Assurance activates no direct dependency used solely for package/archive, onboarding, CLI, YAML, regex, or source-audit behavior, while dependencies shared with the producer API remain admissible and the default full feature preserves the existing package library and CLI gates. | Test (TC-128) |
+| FR-019-AC-8 | For a launched Linux invocation, the executor samples a complete, bounded host context before launch and binds it into canonical result identity; the same host identity is represented only by a domain-separated digest, while unavailable host context is explicit and cannot substantiate comparability. | Test (TC-175) |
+| FR-019-AC-9 | The 0.5.0 candidate's FCD-generated procedure and campaign records have closed wire fields; procedures validate roles and bounds, campaign plans resolve at exact versions, and dependency graphs are finite and acyclic. | Test (TC-177, TC-179) |
+| FR-019-AC-10 | Declared fixed and tree output roles, dynamic input prefixes, executable identity, arguments, environment, and response adapter bind to one exact FR-019 request identity; near-match undeclared roles refuse. | Test (TC-178, TC-180, TC-183) |
+| FR-019-AC-11 | A campaign run binds its definition and source graph and refuses stale or unknown attempts; a source projection verifies the complete Git tree inventory and every staged file or omitted symlink blob before request creation. | Test (TC-181, TC-182) |
 
 ## Dependencies
 

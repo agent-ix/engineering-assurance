@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Bounded assurance report projection v1",
+  "description": "A read-only view over authoritative records; never an overall assurance verdict.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["projection_type", "report_id", "subject", "claims", "evidence", "counterevidence", "gaps", "owner", "actions"],
+  "properties": {
+    "projection_type": {"const": "engineering-assurance.assurance-report-projection/v1"},
+    "report_id": {"$ref": "#/definitions/identity"},
+    "subject": {"type": "string", "minLength": 1},
+    "claims": {"type": "array", "items": {"$ref": "#/definitions/claim"}},
+    "evidence": {"type": "array", "items": {"$ref": "#/definitions/reference"}},
+    "counterevidence": {"type": "array", "items": {"$ref": "#/definitions/reference"}},
+    "gaps": {"type": "array", "items": {"$ref": "#/definitions/gap"}},
+    "owner": {"type": "string", "minLength": 1},
+    "actions": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "decision_ref": {"$ref": "#/definitions/identity"}
+  },
+  "definitions": {
+    "identity": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"},
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim_id", "statement", "status"],
+      "properties": {
+        "claim_id": {"$ref": "#/definitions/identity"},
+        "statement": {"type": "string", "minLength": 1},
+        "status": {"enum": ["open", "supported", "challenged"]}
+      }
+    },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["semantic_ref", "relation"],
+      "properties": {
+        "semantic_ref": {"$ref": "#/definitions/identity"},
+        "relation": {"enum": ["supports", "challenges", "context"]}
+      }
+    },
+    "gap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gap_id", "summary", "owner", "action"],
+      "properties": {
+        "gap_id": {"$ref": "#/definitions/identity"},
+        "summary": {"type": "string", "minLength": 1},
+        "owner": {"type": "string", "minLength": 1},
+        "action": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}

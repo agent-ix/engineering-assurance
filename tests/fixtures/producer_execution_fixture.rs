@@ -60,6 +60,21 @@ fn copy_stdin(arguments: &mut impl Iterator<Item = OsString>) {
     write_stdout(&bytes);
 }
 
+fn emit_tree(arguments: &mut impl Iterator<Item = OsString>) {
+    let root = argument(arguments);
+    let nested = Path::new(&root).join("nested");
+    fs::create_dir_all(&nested).unwrap_or_else(|_| fail("cannot create output tree"));
+    fs::write(nested.join("report.json"), b"{\"passed\":true}\n")
+        .unwrap_or_else(|_| fail("cannot write tree output"));
+}
+
+#[cfg(unix)]
+fn emit_tree_link(arguments: &mut impl Iterator<Item = OsString>) {
+    let root = argument(arguments);
+    std::os::unix::fs::symlink("/etc/passwd", Path::new(&root).join("external"))
+        .unwrap_or_else(|_| fail("cannot create output symlink"));
+}
+
 fn observation(path: &Path) -> &'static [u8] {
     if path.exists() { b"present" } else { b"absent" }
 }
@@ -134,6 +149,9 @@ fn main() {
     match text(argument(&mut arguments)).as_str() {
         "emit" => write_stdout(argument(&mut arguments).as_encoded_bytes()),
         "copy-stdin" => copy_stdin(&mut arguments),
+        "emit-tree" => emit_tree(&mut arguments),
+        #[cfg(unix)]
+        "emit-tree-link" => emit_tree_link(&mut arguments),
         "environment" => println!(
             "ONLY={}",
             env::var("ONLY").unwrap_or_else(|_| fail("missing ONLY environment"))

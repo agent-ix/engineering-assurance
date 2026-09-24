@@ -221,6 +221,14 @@ pub struct InputBinding {
     pub path: String,
     /// Expected identity of the selected input bytes.
     pub digest: ContentDigest,
+    /// Stage this sealed input with its owner execute bit.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub executable: bool,
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde skip predicate requires a reference.
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// Closed stdin source.
@@ -243,6 +251,18 @@ pub struct OutputBinding {
     /// Caller-owned unique role of the output.
     pub role: String,
     /// Normal relative path beneath the capability root.
+    pub path: String,
+    /// Whether absence after execution is an executor failure.
+    pub required: bool,
+}
+
+/// One bounded directory of dynamic regular-file outputs.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutputTreeBinding {
+    /// Caller-owned unique role; observed file roles append `/relative/path`.
+    pub role: String,
+    /// Normal relative directory path beneath the staged working root.
     pub path: String,
     /// Whether absence after execution is an executor failure.
     pub required: bool,
@@ -342,6 +362,9 @@ pub struct ProducerExecutionRequest {
     pub stdin: StdinBinding,
     /// Ordered output-artifact bindings.
     pub outputs: Vec<OutputBinding>,
+    /// Dynamic output trees, whose files are individually sealed and hashed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub output_trees: Vec<OutputTreeBinding>,
     /// Explicit cooperative confinement contract.
     pub containment: ContainmentBinding,
     /// Exact cancellation authority and event.
@@ -638,6 +661,31 @@ pub struct ExecutionTiming {
     pub total_nanos: u64,
 }
 
+/// Executor-observed host class for comparable native measurements.
+///
+/// The machine identifier is never serialized. Its digest is domain-separated
+/// from other uses of the host's high-entropy identifier.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObservedHostContext {
+    /// Opaque stable identity of the execution host.
+    pub machine_digest: ContentDigest,
+    /// Operating-system class.
+    pub os: String,
+    /// Running kernel release.
+    pub kernel_release: String,
+    /// Native architecture class.
+    pub architecture: String,
+    /// Kernel-reported processor model.
+    pub cpu_model: String,
+    /// CPUs available to this process at sampling time.
+    pub logical_cpus: u32,
+    /// Kernel-reported total physical memory in bytes.
+    pub memory_bytes: u64,
+    /// Executor runtime and confinement class.
+    pub runtime_class: String,
+}
+
 /// Identity-bound result of one structurally valid producer-execution attempt.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -654,6 +702,8 @@ pub struct ProducerExecutionResult<T> {
     pub cancellation_event: Option<CancellationBinding>,
     /// Measured monotonic durations.
     pub timing: ExecutionTiming,
+    /// Execution-host context observed by the executor before launch, if complete.
+    pub observed_host: Option<ObservedHostContext>,
     /// Bounded raw process evidence when a launch was observable.
     pub process: Option<ProcessEvidence>,
     /// Safely observed output artifact references.
@@ -858,6 +908,7 @@ impl ProducerExecutor {
             }
         };
         let preflight_nanos = elapsed_nanos(call_started);
+        let observed_host = observe_host_context();
         let launched = monotonic_now();
         let outcome = run_process(request, &validated, cancellation);
         let execution_nanos = elapsed_nanos(launched);
@@ -874,6 +925,7 @@ impl ProducerExecutor {
                 execution_nanos: Some(execution_nanos),
                 total_nanos: elapsed_nanos(call_started),
             },
+            observed_host,
             process,
             artifacts,
             state,
@@ -925,6 +977,7 @@ struct ValidatedExecution {
 struct ValidatedInput {
     role: String,
     path: String,
+    executable: bool,
     file: File,
 }
 
@@ -1159,11 +1212,46 @@ fn validate_structure(request: &ProducerExecutionRequest) -> Result<(), InvalidE
     {
         return Err(InvalidExecutionRequest::Environment);
     }
+    let (input_roles, fixed_output_roles) = validate_artifact_bindings(request)?;
+    if request.arguments.len() > MAX_ARGUMENTS {
+        return Err(InvalidExecutionRequest::Argument);
+    }
+    for argument in &request.arguments {
+        let valid = match argument {
+            ArgumentBinding::Literal { value } => validate_text(value).is_ok(),
+            ArgumentBinding::InputArtifact { role } => input_roles.contains(role.as_str()),
+            ArgumentBinding::OutputArtifact { role } => fixed_output_roles.contains(role.as_str()),
+        };
+        if !valid {
+            return Err(InvalidExecutionRequest::Argument);
+        }
+    }
+    if let StdinBinding::InputArtifact { role } = &request.stdin
+        && !input_roles.contains(role.as_str())
+    {
+        return Err(InvalidExecutionRequest::Stdin);
+    }
+    match &request.cancellation {
+        CancellationBinding::Disabled => {}
+        CancellationBinding::Event {
+            authority,
+            event_id,
+        } => {
+            validate_text(authority).map_err(|()| InvalidExecutionRequest::Cancellation)?;
+            validate_text(event_id).map_err(|()| InvalidExecutionRequest::Cancellation)?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_artifact_bindings(
+    request: &ProducerExecutionRequest,
+) -> Result<(BTreeSet<&str>, BTreeSet<&str>), InvalidExecutionRequest> {
     if request.inputs.len() > MAX_ARTIFACTS {
         return Err(InvalidExecutionRequest::Input);
     }
     if request.outputs.len() > request.budget.max_output_artifacts
-        || request.outputs.len() > MAX_ARTIFACTS
+        || request.outputs.len() + request.output_trees.len() > MAX_ARTIFACTS
     {
         return Err(InvalidExecutionRequest::Output);
     }
@@ -1187,35 +1275,28 @@ fn validate_structure(request: &ProducerExecutionRequest) -> Result<(), InvalidE
             return Err(InvalidExecutionRequest::Output);
         }
     }
-    if request.arguments.len() > MAX_ARGUMENTS {
-        return Err(InvalidExecutionRequest::Argument);
-    }
-    for argument in &request.arguments {
-        let valid = match argument {
-            ArgumentBinding::Literal { value } => validate_text(value).is_ok(),
-            ArgumentBinding::InputArtifact { role } => input_roles.contains(role.as_str()),
-            ArgumentBinding::OutputArtifact { role } => output_roles.contains(role.as_str()),
-        };
-        if !valid {
-            return Err(InvalidExecutionRequest::Argument);
+    let fixed_output_roles = output_roles.clone();
+    for tree in &request.output_trees {
+        if validate_text(&tree.role).is_err()
+            || validate_relative_normal_path(&tree.path).is_err()
+            || !output_roles.insert(tree.role.as_str())
+            || request
+                .inputs
+                .iter()
+                .any(|input| paths_overlap(&input.path, &tree.path))
+            || request
+                .outputs
+                .iter()
+                .any(|output| paths_overlap(&output.path, &tree.path))
+            || request
+                .output_trees
+                .iter()
+                .any(|other| other.role != tree.role && paths_overlap(&other.path, &tree.path))
+        {
+            return Err(InvalidExecutionRequest::Output);
         }
     }
-    if let StdinBinding::InputArtifact { role } = &request.stdin
-        && !input_roles.contains(role.as_str())
-    {
-        return Err(InvalidExecutionRequest::Stdin);
-    }
-    match &request.cancellation {
-        CancellationBinding::Disabled => {}
-        CancellationBinding::Event {
-            authority,
-            event_id,
-        } => {
-            validate_text(authority).map_err(|()| InvalidExecutionRequest::Cancellation)?;
-            validate_text(event_id).map_err(|()| InvalidExecutionRequest::Cancellation)?;
-        }
-    }
-    Ok(())
+    Ok((input_roles, fixed_output_roles))
 }
 
 fn validate_contract(binding: &ContractBinding) -> Result<(), InvalidExecutionRequest> {
@@ -1276,6 +1357,16 @@ fn validate_relative_normal_path(value: &str) -> Result<(), InvalidExecutionRequ
         return Err(InvalidExecutionRequest::Path);
     }
     Ok(())
+}
+
+fn paths_overlap(left: &str, right: &str) -> bool {
+    left == right
+        || left
+            .strip_prefix(right)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+        || right
+            .strip_prefix(left)
+            .is_some_and(|suffix| suffix.starts_with('/'))
 }
 
 #[cfg(target_os = "linux")]
@@ -1380,6 +1471,7 @@ fn open_inputs(
         inputs.push(ValidatedInput {
             role: input.role.clone(),
             path: input.path.clone(),
+            executable: input.executable,
             file,
         });
     }
@@ -1506,7 +1598,11 @@ fn stage_working_projection(
             .map_err(|_| refused())?;
         io::copy(&mut source, &mut staged).map_err(|_| refused())?;
         staged.flush().map_err(|_| refused())?;
-        std::fs::set_permissions(&destination, std::fs::Permissions::from_mode(0o400))
+        // A campaign's sealed Git projection names tracked 100755 files with
+        // the `source-exec/` role. Preserve only that execute bit; all other
+        // selected inputs remain read-only. The role is part of request ID.
+        let mode = if input.executable { 0o500 } else { 0o400 };
+        std::fs::set_permissions(&destination, std::fs::Permissions::from_mode(mode))
             .map_err(|_| refused())?;
     }
 
@@ -1531,6 +1627,14 @@ fn stage_working_projection(
                 Some(executable_digest.clone()),
             ));
         }
+    }
+    for tree in &request.output_trees {
+        if cancellation.is_cancelled() {
+            return Err(PreflightFailure::Cancelled(Some(executable_digest.clone())));
+        }
+        std::fs::create_dir_all(working_tree.path().join(&tree.path)).map_err(|_| {
+            PreflightFailure::Refused(ExecutionRefusal::Output, Some(executable_digest.clone()))
+        })?;
     }
     let root = File::open(working_tree.path()).map_err(|_| {
         PreflightFailure::Refused(
@@ -1877,6 +1981,97 @@ fn observe_outputs(
             snapshot: Arc::new(snapshot),
         });
     }
+    let mut directories = 0_usize;
+    for tree in &request.output_trees {
+        let mut pending = vec![tree.path.clone()];
+        while let Some(path) = pending.pop() {
+            if cancellation.is_cancelled() || directories >= MAX_ARTIFACTS {
+                return (artifacts, true);
+            }
+            directories += 1;
+            let directory = match openat2(
+                root,
+                &path,
+                OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC,
+                Mode::empty(),
+                ResolveFlags::BENEATH | ResolveFlags::NO_MAGICLINKS | ResolveFlags::NO_SYMLINKS,
+            ) {
+                Ok(value) => File::from(value),
+                Err(rustix::io::Errno::NOENT) if path == tree.path && !tree.required => break,
+                Err(_) => return (artifacts, true),
+            };
+            let entries = match std::fs::read_dir(descriptor_path(&directory)) {
+                Ok(value) => value,
+                Err(_) => return (artifacts, true),
+            };
+            let mut children = Vec::new();
+            for entry in entries {
+                if children.len() + pending.len() + directories + artifacts.len() >= MAX_ARTIFACTS {
+                    return (artifacts, true);
+                }
+                let Ok(entry) = entry else {
+                    return (artifacts, true);
+                };
+                let Ok(name) = entry.file_name().into_string() else {
+                    return (artifacts, true);
+                };
+                if validate_relative_normal_path(&name).is_err() {
+                    return (artifacts, true);
+                }
+                children.push(format!("{path}/{name}"));
+            }
+            children.sort();
+            for child in children {
+                let descriptor = match openat2(
+                    root,
+                    &child,
+                    OFlags::RDONLY | OFlags::CLOEXEC,
+                    Mode::empty(),
+                    ResolveFlags::BENEATH | ResolveFlags::NO_MAGICLINKS | ResolveFlags::NO_SYMLINKS,
+                ) {
+                    Ok(value) => value,
+                    Err(_) => return (artifacts, true),
+                };
+                let mut file = File::from(descriptor);
+                let Ok(metadata) = file.metadata() else {
+                    return (artifacts, true);
+                };
+                if metadata.is_dir() {
+                    pending.push(child);
+                    continue;
+                }
+                if !metadata.is_file() || artifacts.len() >= request.budget.max_output_artifacts {
+                    return (artifacts, true);
+                }
+                let Ok((snapshot, digest)) =
+                    snapshot_reader(&mut file, remaining, cancellation, "producer-output-tree")
+                else {
+                    return (artifacts, true);
+                };
+                let Ok(snapshot_metadata) = snapshot.metadata() else {
+                    return (artifacts, true);
+                };
+                let Some(next_remaining) = remaining.checked_sub(snapshot_metadata.len()) else {
+                    return (artifacts, true);
+                };
+                remaining = next_remaining;
+                let Some(relative) = child
+                    .strip_prefix(&tree.path)
+                    .and_then(|p| p.strip_prefix('/'))
+                else {
+                    return (artifacts, true);
+                };
+                artifacts.push(OutputArtifact {
+                    role: format!("{}/{relative}", tree.role),
+                    path: child,
+                    byte_length: snapshot_metadata.len(),
+                    digest,
+                    snapshot: Arc::new(snapshot),
+                });
+            }
+        }
+    }
+    artifacts.sort_by(|left, right| left.role.cmp(&right.role));
     (artifacts, false)
 }
 
@@ -2299,6 +2494,77 @@ fn elapsed_nanos(started: std::time::Instant) -> u64 {
     u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
 
+#[cfg(target_os = "linux")]
+fn read_host_text(path: &str, maximum: u64) -> Option<String> {
+    let file = File::open(path).ok()?;
+    let mut text = String::new();
+    file.take(maximum.checked_add(1)?)
+        .read_to_string(&mut text)
+        .ok()?;
+    (u64::try_from(text.len()).ok()? <= maximum).then_some(text)
+}
+
+#[cfg(target_os = "linux")]
+fn observe_host_context() -> Option<ObservedHostContext> {
+    let machine_id = read_host_text("/etc/machine-id", 128)?;
+    let kernel_release = read_host_text("/proc/sys/kernel/osrelease", 256)?;
+    let cpuinfo = read_host_text("/proc/cpuinfo", 1_048_576)?;
+    let logical_cpus = u32::try_from(std::thread::available_parallelism().ok()?.get()).ok()?;
+    let meminfo = read_host_text("/proc/meminfo", 65_536)?;
+    parse_host_context(
+        &machine_id,
+        &kernel_release,
+        &cpuinfo,
+        &meminfo,
+        logical_cpus,
+    )
+}
+
+#[cfg(any(test, target_os = "linux"))]
+fn parse_host_context(
+    machine_id: &str,
+    kernel_release: &str,
+    cpuinfo: &str,
+    meminfo: &str,
+    logical_cpus: u32,
+) -> Option<ObservedHostContext> {
+    let machine_id = machine_id.trim();
+    if machine_id.len() != 32 || !machine_id.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    let mut identity_bytes = b"engineering-assurance.observed-host/v1\0".to_vec();
+    identity_bytes.extend_from_slice(machine_id.as_bytes());
+    let kernel_release = kernel_release.trim().to_owned();
+    let cpu_model = cpuinfo.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        matches!(name.trim(), "model name" | "Processor" | "Hardware")
+            .then(|| value.trim().to_owned())
+    })?;
+    let memory_kib = meminfo.lines().find_map(|line| {
+        let value = line.strip_prefix("MemTotal:")?;
+        value.split_whitespace().next()?.parse::<u64>().ok()
+    })?;
+    let memory_bytes = memory_kib.checked_mul(1024)?;
+    if kernel_release.is_empty()
+        || cpu_model.is_empty()
+        || cpu_model.len() > 256
+        || logical_cpus == 0
+        || memory_bytes == 0
+    {
+        return None;
+    }
+    Some(ObservedHostContext {
+        machine_digest: ContentDigest::of_bytes(&identity_bytes),
+        os: "linux".to_owned(),
+        kernel_release,
+        architecture: std::env::consts::ARCH.to_owned(),
+        cpu_model,
+        logical_cpus,
+        memory_bytes,
+        runtime_class: "linux-process-group-v1".to_owned(),
+    })
+}
+
 fn prelaunch_result<T>(
     started: std::time::Instant,
     request_identity: RequestIdentity,
@@ -2318,6 +2584,7 @@ fn prelaunch_result<T>(
             execution_nanos: None,
             total_nanos,
         },
+        observed_host: None,
         process: None,
         artifacts: Vec::new(),
         state,
@@ -2365,3 +2632,341 @@ fn hex_digest(bytes: &[u8]) -> String {
     }
     encoded
 }
+
+#[cfg(test)]
+mod host_context_tests {
+    use super::parse_host_context;
+    use ix_trace_rs::trace;
+
+    #[test]
+    #[trace("TC-175", "FR-019-AC-8")]
+    fn tc_175_host_context_is_complete_stable_and_opaque() {
+        let machine = "0123456789abcdef0123456789abcdef";
+        let cpu = "processor : 0\nmodel name : Fictional CPU\n";
+        let memory = "MemTotal: 32768 kB\n";
+        let first = parse_host_context(machine, "6.1.0", cpu, memory, 4)
+            .expect("complete synthetic host context");
+        let second = parse_host_context(machine, "6.1.0", cpu, memory, 4)
+            .expect("stable synthetic host context");
+        assert_eq!(first, second);
+        assert_eq!(first.memory_bytes, 33_554_432);
+        assert_eq!(first.cpu_model, "Fictional CPU");
+        assert_ne!(first.machine_digest.as_str(), machine);
+        assert!(
+            !serde_json::to_string(&first)
+                .expect("serialize")
+                .contains(machine)
+        );
+        assert!(parse_host_context("bad", "6.1.0", cpu, memory, 4).is_none());
+        assert!(parse_host_context(machine, "6.1.0", cpu, "", 4).is_none());
+        assert!(parse_host_context(machine, "6.1.0", cpu, memory, 0).is_none());
+    }
+}
+
+#[cfg(feature = "campaign")]
+mod campaign_source_projection {
+    use super::{
+        BTreeSet, Component, ContentDigest, Digest, File, InputBinding, MAX_ARTIFACTS,
+        MAX_INPUT_BYTES, Path, Read, Sha256,
+    };
+    use crate::campaign::{CampaignError, CampaignSource, OmittedSourceLink, SourceTreeBinding};
+    use sha1::{Digest as Sha1Digest, Sha1};
+    use std::{fs, io::Cursor};
+
+    fn lowercase_hex(bytes: &[u8]) -> String {
+        const HEX: &[u8; 16] = b"0123456789abcdef";
+        let mut result = String::with_capacity(bytes.len() * 2);
+        for byte in bytes {
+            result.push(char::from(HEX[usize::from(byte >> 4)]));
+            result.push(char::from(HEX[usize::from(byte & 0x0f)]));
+        }
+        result
+    }
+
+    /// Expands and verifies an exact Git tree into FR-019 regular-file inputs.
+    /// The executor repeats the SHA-256 check against sealed descriptors before
+    /// staging, so a mutation between resolution and execution is refused.
+    pub(crate) fn validate_source_tree(
+        tree: &SourceTreeBinding,
+        source: &CampaignSource,
+        root: &str,
+    ) -> Result<(Vec<InputBinding>, Vec<OmittedSourceLink>), CampaignError> {
+        if tree.repository != source.repository {
+            return Err(CampaignError::Binding {
+                field: "sourceTree.repository",
+            });
+        }
+        if tree.manifest.is_empty()
+            || tree.manifest.len() > 8 * 1024 * 1024
+            || !tree.manifest.ends_with(&[0])
+        {
+            return Err(CampaignError::SourceTree { field: "manifest" });
+        }
+        if ContentDigest::of_bytes(&tree.manifest).as_str() != source.digest {
+            return Err(CampaignError::Binding {
+                field: "sourceTree.manifestDigest",
+            });
+        }
+        let root = Path::new(root);
+        if !root.is_absolute() {
+            return Err(CampaignError::SourceTree {
+                field: "capability root",
+            });
+        }
+        let mut seen = BTreeSet::new();
+        let mut inputs = Vec::new();
+        let mut omitted_links = Vec::new();
+        let mut total = 0_u64;
+        for record in tree.manifest[..tree.manifest.len() - 1].split(|byte| *byte == 0) {
+            let (mode, oid, path) = parse_source_record(record)?;
+            if !seen.insert(path) {
+                return Err(CampaignError::Duplicate {
+                    kind: "source path",
+                    name: path.to_owned(),
+                });
+            }
+            if inputs.len() + omitted_links.len() >= MAX_ARTIFACTS {
+                return Err(CampaignError::Limit {
+                    field: "source file population",
+                });
+            }
+            if mode == "120000" {
+                omitted_links.push(verify_source_link(root, path, oid, &mut total)?);
+                continue;
+            }
+            inputs.push(verify_source_file(
+                root,
+                path,
+                oid,
+                mode == "100755",
+                &mut total,
+            )?);
+        }
+        if inputs.is_empty() {
+            return Err(CampaignError::NoEntries {
+                field: "source tree files",
+            });
+        }
+        Ok((inputs, omitted_links))
+    }
+
+    fn parse_source_record(record: &[u8]) -> Result<(&str, &str, &str), CampaignError> {
+        let separator =
+            record
+                .iter()
+                .position(|byte| *byte == b'\t')
+                .ok_or(CampaignError::SourceTree {
+                    field: "manifest record",
+                })?;
+        let (header, path_with_tab) = record.split_at(separator);
+        let header = std::str::from_utf8(header).map_err(|_| CampaignError::SourceTree {
+            field: "manifest header",
+        })?;
+        let mut tokens = header.split(' ');
+        let (Some(mode), Some(kind), Some(oid), None) =
+            (tokens.next(), tokens.next(), tokens.next(), tokens.next())
+        else {
+            return Err(CampaignError::SourceTree {
+                field: "manifest header",
+            });
+        };
+        if kind != "blob" || !matches!(mode, "100644" | "100755" | "120000") {
+            return Err(CampaignError::SourceTree {
+                field: "unsupported Git mode",
+            });
+        }
+        if !matches!(oid.len(), 40 | 64)
+            || !oid
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(CampaignError::SourceTree {
+                field: "Git blob OID",
+            });
+        }
+        let path =
+            std::str::from_utf8(&path_with_tab[1..]).map_err(|_| CampaignError::SourceTree {
+                field: "source path encoding",
+            })?;
+        let relative = Path::new(path);
+        if path.is_empty()
+            || relative.is_absolute()
+            || relative
+                .components()
+                .any(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err(CampaignError::SourceTree {
+                field: "source path",
+            });
+        }
+        Ok((mode, oid, path))
+    }
+
+    fn verify_source_link(
+        root: &Path,
+        path: &str,
+        oid: &str,
+        total: &mut u64,
+    ) -> Result<OmittedSourceLink, CampaignError> {
+        let mut selected = root.to_path_buf();
+        let mut components = Path::new(path).components().peekable();
+        while let Some(component) = components.next() {
+            selected.push(component.as_os_str());
+            let metadata =
+                fs::symlink_metadata(&selected).map_err(|_| CampaignError::SourceTree {
+                    field: "source link missing",
+                })?;
+            let correct_type = if components.peek().is_some() {
+                metadata.is_dir()
+            } else {
+                metadata.file_type().is_symlink()
+            };
+            if !correct_type {
+                return Err(CampaignError::SourceTree {
+                    field: "source link type",
+                });
+            }
+        }
+        let target = fs::read_link(&selected).map_err(|_| CampaignError::SourceTree {
+            field: "source link read",
+        })?;
+        let target = target.to_str().ok_or(CampaignError::SourceTree {
+            field: "source link encoding",
+        })?;
+        let length = u64::try_from(target.len()).map_err(|_| CampaignError::Limit {
+            field: "source byte population",
+        })?;
+        *total = total.checked_add(length).ok_or(CampaignError::Limit {
+            field: "source byte population",
+        })?;
+        if *total > MAX_INPUT_BYTES {
+            return Err(CampaignError::Limit {
+                field: "source byte population",
+            });
+        }
+        let digest = hash_source_blob(&mut Cursor::new(target.as_bytes()), length, oid)?;
+        Ok(OmittedSourceLink {
+            path: path.to_owned(),
+            digest,
+        })
+    }
+
+    fn verify_source_file(
+        root: &Path,
+        path: &str,
+        oid: &str,
+        executable: bool,
+        total: &mut u64,
+    ) -> Result<InputBinding, CampaignError> {
+        // Reject links at every path component; FR-019 rechecks with openat2.
+        let mut selected = root.to_path_buf();
+        for component in Path::new(path).components() {
+            selected.push(component.as_os_str());
+            let metadata =
+                fs::symlink_metadata(&selected).map_err(|_| CampaignError::SourceTree {
+                    field: "source file missing",
+                })?;
+            if metadata.file_type().is_symlink() {
+                return Err(CampaignError::SourceTree {
+                    field: "source symlink",
+                });
+            }
+        }
+        let metadata = fs::metadata(&selected).map_err(|_| CampaignError::SourceTree {
+            field: "source file metadata",
+        })?;
+        if !metadata.is_file() {
+            return Err(CampaignError::SourceTree {
+                field: "source file type",
+            });
+        }
+        *total = total
+            .checked_add(metadata.len())
+            .ok_or(CampaignError::Limit {
+                field: "source byte population",
+            })?;
+        if *total > MAX_INPUT_BYTES {
+            return Err(CampaignError::Limit {
+                field: "source byte population",
+            });
+        }
+        let mut file = File::open(&selected).map_err(|_| CampaignError::SourceTree {
+            field: "source file open",
+        })?;
+        let digest = hash_source_blob(&mut file, metadata.len(), oid)?;
+        let role = if executable {
+            format!("source-exec/{path}")
+        } else {
+            format!("source/{path}")
+        };
+        Ok(InputBinding {
+            role,
+            path: path.to_owned(),
+            digest,
+            executable,
+        })
+    }
+
+    fn hash_source_blob<R: Read>(
+        file: &mut R,
+        length: u64,
+        oid: &str,
+    ) -> Result<ContentDigest, CampaignError> {
+        let header = format!("blob {length}\0");
+        let mut git_sha1 = Sha1::new();
+        let mut git_sha256 = Sha256::new();
+        git_sha1.update(header.as_bytes());
+        git_sha256.update(header.as_bytes());
+        let mut content_sha256 = Sha256::new();
+        let mut read_total = 0_u64;
+        let mut buffer = [0_u8; 16 * 1024];
+        loop {
+            let count = file
+                .read(&mut buffer)
+                .map_err(|_| CampaignError::SourceTree {
+                    field: "source file read",
+                })?;
+            if count == 0 {
+                break;
+            }
+            read_total = read_total
+                .checked_add(u64::try_from(count).map_err(|_| CampaignError::Limit {
+                    field: "source byte population",
+                })?)
+                .ok_or(CampaignError::Limit {
+                    field: "source byte population",
+                })?;
+            if read_total > length {
+                return Err(CampaignError::SourceTree {
+                    field: "source file changed",
+                });
+            }
+            git_sha1.update(&buffer[..count]);
+            git_sha256.update(&buffer[..count]);
+            content_sha256.update(&buffer[..count]);
+        }
+        if read_total != length {
+            return Err(CampaignError::SourceTree {
+                field: "source file changed",
+            });
+        }
+        let observed_oid = if oid.len() == 40 {
+            lowercase_hex(&git_sha1.finalize())
+        } else {
+            lowercase_hex(&git_sha256.finalize())
+        };
+        if observed_oid != oid {
+            return Err(CampaignError::SourceTree {
+                field: "Git blob mismatch",
+            });
+        }
+        ContentDigest::parse(&lowercase_hex(&content_sha256.finalize())).map_err(|_| {
+            CampaignError::SourceTree {
+                field: "source digest",
+            }
+        })
+    }
+}
+
+#[cfg(feature = "campaign")]
+pub(crate) use campaign_source_projection::validate_source_tree;

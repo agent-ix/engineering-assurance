@@ -19,11 +19,12 @@ use std::{
 use engineering_assurance::producer_execution::{
     ArgumentBinding, CancellationBinding, CancellationToken, ContainmentBinding, ContentDigest,
     ContractBinding, ExecutionBudget, ExecutionFailure, ExecutionProcedure, ExecutionRefusal,
-    ExitCodeBinding, InputBinding, InvalidExecutionRequest, MalformedResponse, OutputArtifact,
-    OutputBinding, PRODUCER_EXECUTION_REQUEST_PROTOCOL, PRODUCER_EXECUTION_RESULT_PROTOCOL,
-    ProcessEvidence, ProducerDescriptor, ProducerExecutionRequest, ProducerExecutionResult,
-    ProducerExecutionState, ProducerExecutor, ProducerResponseAdapter, REQUEST_IDENTITY_SCHEME,
-    RESULT_IDENTITY_SCHEME, ResponseBinding, StdinBinding, TerminalStatus,
+    ExitCodeBinding, InputBinding, InvalidExecutionRequest, MalformedResponse, ObservedHostContext,
+    OutputArtifact, OutputBinding, OutputTreeBinding, PRODUCER_EXECUTION_REQUEST_PROTOCOL,
+    PRODUCER_EXECUTION_RESULT_PROTOCOL, ProcessEvidence, ProducerDescriptor,
+    ProducerExecutionRequest, ProducerExecutionResult, ProducerExecutionState, ProducerExecutor,
+    ProducerResponseAdapter, REQUEST_IDENTITY_SCHEME, RESULT_IDENTITY_SCHEME, ResponseBinding,
+    StdinBinding, TerminalStatus,
 };
 use ix_trace_rs::trace;
 use serde::{Serialize, Serializer};
@@ -160,6 +161,7 @@ fn request(root: &Path, arguments: &[&str]) -> ProducerExecutionRequest {
         inputs: Vec::new(),
         stdin: StdinBinding::Null,
         outputs: Vec::new(),
+        output_trees: Vec::new(),
         containment: ContainmentBinding::ProcessGroupV1 {
             contract: contract("fixture.cooperative-confinement"),
         },
@@ -276,11 +278,13 @@ fn identity_request(root: &Path) -> ProducerExecutionRequest {
             role: "input-1".to_owned(),
             path: "input-1".to_owned(),
             digest: ContentDigest::of_bytes(b"input-1"),
+            executable: false,
         },
         InputBinding {
             role: "input-2".to_owned(),
             path: "input-2".to_owned(),
             digest: ContentDigest::of_bytes(b"input-2"),
+            executable: false,
         },
     ];
     request.arguments.push(ArgumentBinding::InputArtifact {
@@ -350,6 +354,7 @@ fn assert_io_identity(base: &ProducerExecutionRequest) {
     assert_identity_changes(base, |value| {
         value.inputs[0].digest = ContentDigest::of_bytes(b"other input");
     });
+    assert_identity_changes(base, |value| value.inputs[0].executable = true);
     assert_identity_changes(base, |value| value.inputs.swap(0, 1));
     assert_identity_changes(base, |value| value.stdin = StdinBinding::Null);
     assert_identity_changes(base, |value| value.outputs[1].role.push('x'));
@@ -420,6 +425,83 @@ fn assert_result_identity_changes(
 }
 
 #[test]
+#[trace("TC-176", "FR-019-AC-4")]
+fn tc_176_output_tree_binding_is_bounded_in_request_identity() {
+    let root = tempfile::tempdir().expect("temporary root");
+    let mut base = request(root.path(), &["emit"]);
+    base.budget.max_output_artifacts = 2;
+    base.budget.max_output_bytes = 1024;
+    base.output_trees.push(OutputTreeBinding {
+        role: "mutants".to_owned(),
+        path: "mutants.out".to_owned(),
+        required: true,
+    });
+    assert_identity_changes(&base, |value| {
+        value.output_trees[0].path = "other.out".to_owned();
+    });
+    assert_identity_changes(&base, |value| value.output_trees[0].required = false);
+    let mut overlapping = base.clone();
+    overlapping.outputs.push(OutputBinding {
+        role: "nested".to_owned(),
+        path: "mutants.out/result.json".to_owned(),
+        required: true,
+    });
+    assert_eq!(overlapping.identity(), Err(InvalidExecutionRequest::Output));
+    let mut duplicate = base;
+    duplicate.output_trees.push(OutputTreeBinding {
+        role: "other".to_owned(),
+        path: "mutants.out/nested".to_owned(),
+        required: true,
+    });
+    assert_eq!(duplicate.identity(), Err(InvalidExecutionRequest::Output));
+}
+
+#[test]
+#[trace("TC-176", "FR-019-AC-4")]
+fn tc_176_live_output_tree_is_sealed_and_symlinks_refuse() {
+    let root = tempfile::tempdir().expect("temporary root");
+    let mut request = request(root.path(), &["emit-tree", "mutants.out"]);
+    request.output_trees.push(OutputTreeBinding {
+        role: "mutants".to_owned(),
+        path: "mutants.out".to_owned(),
+        required: true,
+    });
+    request.budget.max_output_artifacts = 2;
+    request.budget.max_output_bytes = 1024;
+    let result = execute(&request, &adapter());
+    assert!(matches!(
+        result.state,
+        ProducerExecutionState::Completed { .. }
+    ));
+    assert_eq!(result.artifacts.len(), 1);
+    assert_eq!(result.artifacts[0].role, "mutants/nested/report.json");
+    assert_eq!(
+        result.artifacts[0].digest,
+        ContentDigest::of_bytes(b"{\"passed\":true}\n")
+    );
+    assert!(
+        result.observed_host.is_some(),
+        "Linux host context must be sampled"
+    );
+    let mut retained = Vec::new();
+    result.artifacts[0]
+        .try_reader()
+        .expect("sealed tree output")
+        .read_to_end(&mut retained)
+        .expect("retained bytes");
+    assert_eq!(retained, b"{\"passed\":true}\n");
+
+    request.arguments[0] = ArgumentBinding::Literal {
+        value: "emit-tree-link".to_owned(),
+    };
+    let refused = execute(&request, &adapter());
+    assert!(matches!(
+        refused.state,
+        ProducerExecutionState::Failed { .. }
+    ));
+}
+
+#[test]
 #[trace("TC-122", "FR-019-AC-1")]
 fn tc_122_completed_result_retains_canonical_identity_evidence_and_output_snapshot() {
     let root = tempfile::tempdir().expect("temporary root must be available");
@@ -429,6 +511,7 @@ fn tc_122_completed_result_retains_canonical_identity_evidence_and_output_snapsh
         role: "stdin".to_owned(),
         path: "input.txt".to_owned(),
         digest: ContentDigest::of_bytes(b"accepted"),
+        executable: false,
     });
     request.stdin = StdinBinding::InputArtifact {
         role: "stdin".to_owned(),
@@ -508,6 +591,18 @@ fn assert_result_metadata_identity(result: &ProducerExecutionResult<String>) {
     assert_result_identity_changes(result, |value| value.timing.preflight_nanos += 1);
     assert_result_identity_changes(result, |value| value.timing.execution_nanos = None);
     assert_result_identity_changes(result, |value| value.timing.total_nanos += 1);
+    assert_result_identity_changes(result, |value| {
+        value.observed_host = Some(ObservedHostContext {
+            machine_digest: ContentDigest::of_bytes(b"fictional host"),
+            os: "fictional-os".to_owned(),
+            kernel_release: "1".to_owned(),
+            architecture: "fictional-arch".to_owned(),
+            cpu_model: "fictional-cpu".to_owned(),
+            logical_cpus: 4,
+            memory_bytes: 1_024,
+            runtime_class: "fixture-runtime".to_owned(),
+        });
+    });
 }
 
 fn assert_result_process_identity(result: &ProducerExecutionResult<String>) {
@@ -598,6 +693,7 @@ fn tc_122_every_portable_result_field_changes_canonical_identity() {
         role: "input".to_owned(),
         path: "input".to_owned(),
         digest: ContentDigest::of_bytes(b"x"),
+        executable: false,
     });
     request.stdin = StdinBinding::InputArtifact {
         role: "input".to_owned(),
@@ -700,6 +796,7 @@ fn tc_123_invalid_and_mismatched_requests_refuse_without_launch() {
         role: "candidate".to_owned(),
         path: "selected".to_owned(),
         digest: ContentDigest::of_bytes(b"wrong"),
+        executable: false,
     });
     assert!(matches!(
         execute(&refused, &adapter()).state,
@@ -754,6 +851,7 @@ fn tc_123_staged_projection_excludes_extra_and_freezes_declared_input() {
         role: "selected".to_owned(),
         path: "selected.txt".to_owned(),
         digest: ContentDigest::of_bytes(b"original"),
+        executable: false,
     });
     let worker = thread::spawn(move || execute(&frozen, &adapter()));
     await_ready(&ready, &worker, "fixture did not reach launch");
@@ -944,6 +1042,7 @@ fn tc_125_exact_input_stream_output_and_nonzero_exit_boundaries_are_enforced() {
         role: "stdin".to_owned(),
         path: "input".to_owned(),
         digest: ContentDigest::of_bytes(b"x"),
+        executable: false,
     });
     exact.stdin = StdinBinding::InputArtifact {
         role: "stdin".to_owned(),

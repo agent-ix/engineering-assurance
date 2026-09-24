@@ -1,0 +1,102 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"x-agent-ix-package": "agent-ix/engineering-assurance-campaign",
+	"schemas": [
+		{
+			"path": "ProcedureArgumentKind.json",
+			"digest": "sha256:26dd94d516ae911716a53185cab1ba34095650d76f4209637f7cbd3a12c91944",
+			"identity": "ix://agent-ix/engineering-assurance-campaign/EN-001",
+			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/ProcedureArgumentKind.json"
+		},
+		{
+			"path": "CampaignCompletionRule.json",
+			"digest": "sha256:0ae7f016c15cf327a0cc1ca6759614f0a5b6c3bc2c8c727565432c0e040db484",
+			"identity": "ix://agent-ix/engineering-assurance-campaign/EN-002",
+			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/CampaignCompletionRule.json"
+		},
+		{
+			"path": "CampaignVerdict.json",
+			"digest": "sha256:0a0ac7c7d2ee69b34c9da9086142c8812f562a05aacf6d4a0c9b4ef55dae9ea3",
+			"identity": "ix://agent-ix/engineering-assurance-campaign/EN-003",
+			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/CampaignVerdict.json"
+		},
+		{
+			"path": "CampaignAttemptStatus.json",
+			"digest": "sha256:208037277e6527c34f776bab522d6b7e4d3649ff22ec8c7c9f8aa54e819be385",
+			"identity": "ix://agent-ix/engineering-assurance-campaign/EN-004",
+			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/CampaignAttemptStatus.json"
+		},
+		{
+			"path": "ProcedureEnvironmentKind.json",
+			"digest": "sha256:9ed7e89fd01efb0d455b945e82cfbe21830cb65df9d7dc7544706bb8148f8ac8",
+			"identity": "ix://agent-ix/engineering-assurance-campaign/EN-005",
+			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/ProcedureEnvironmentKind.json"
+		},
+		{
+			"path": "MeasurementProcedure.json",
+			"digest": "sha256:20ef5e5b4cbf105c62a3df75250f4bd077de32611593127132dbdaef5e0980c4",
+			"identity": "ix://agent-ix/engineering-assurance-campaign/VO-001",
+			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/MeasurementProcedure.json"
+		},
+		{
+			"path": "ProcedureArgument.json",
+			"digest": "sha256:dd58edd01f871213122ea77adc941b81dcf4a9621bdfe851b63890249a302a7e",
+			"identity": "ix://agent-ix/engineering-assurance-campaign/VO-002",
+			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/ProcedureArgument.json"
+		},
+		{
+			"path": "ProcedureArtifact.json",
+			"digest": "sha256:1cfff947b5a9a2d3b12dba8e74a228f717706318cc056d5f773075328b20d9c3",
+			"identity": "ix://agent-ix/engineering-assurance-campaign/VO-003",
+			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/ProcedureArtifact.json"
+		},
+		{
+			"path": "CampaignDefinition.json",
+			"digest": "sha256:b4747133d724c005b448d7ec46d47b42958b3c3510020145a4d0b7da5649e642",
+			"identity": "ix://agent-ix/engineering-assurance-campaign/VO-004",
+			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/CampaignDefinition.json"
+		},
+		{
+			"path": "CampaignSource.json",
+			"digest": "sha256:867e9c1f31495b9ef3672a341f44aed3c5c9b984068025f369d3fa8f05286e43",
+			"identity": "ix://agent-ix/engineering-assurance-campaign/VO-005",
+			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/CampaignSource.json"
+		},
+		{
+			"path": "CampaignMember.json",
+			"digest": "sha256:65d2bc464bfb89be9f9c07825f495517ba637206ddb8dc79f55d3d2f14603054",
+			"identity": "ix://agent-ix/engineering-assurance-campaign/VO-006",
+			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/CampaignMember.json"
+		},
+		{
+			"path": "CampaignRun.json",
+			"digest": "sha256:c44ad4f78bc15b025c405d7811617b84d14143f4c9f76fa3d0046b1d074101f8",
+			"identity": "ix://agent-ix/engineering-assurance-campaign/VO-007",
+			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/CampaignRun.json"
+		},
+		{
+			"path": "CampaignAttempt.json",
+			"digest": "sha256:ee81486ec393d6f24824bfdd5b7de1755edff06227b5b707877b4021dfb48a16",
+			"identity": "ix://agent-ix/engineering-assurance-campaign/VO-008",
+			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/CampaignAttempt.json"
+		},
+		{
+			"path": "CampaignRawArtifact.json",
+			"digest": "sha256:7f69a07b86859979004058ef564c85e0d650689c99e30bd9d4eb24ca9d342da6",
+			"identity": "ix://agent-ix/engineering-assurance-campaign/VO-009",
+			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/CampaignRawArtifact.json"
+		},
+		{
+			"path": "ProcedureEnvironment.json",
+			"digest": "sha256:6f8d1e37398907327a364b8f0f57c8ff1289ed1295f1da38b87a7973a5d301d9",
+			"identity": "ix://agent-ix/engineering-assurance-campaign/VO-010",
+			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/ProcedureEnvironment.json"
+		},
+		{
+			"path": "ProcedureInputPrefix.json",
+			"digest": "sha256:d969d6ccab068def69e9bd237d5b9edb4f183f4370a673b55d8c7667d3dffe12",
+			"identity": "ix://agent-ix/engineering-assurance-campaign/VO-011",
+			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/ProcedureInputPrefix.json"
+		}
+	]
+}

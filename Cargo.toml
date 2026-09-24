@@ -56,6 +56,12 @@ measurement = [
   "dep:serde",
   "dep:thiserror",
 ]
+campaign = [
+  "measurement",
+  "producer-execution",
+  "dep:agent-ix-engineering-assurance-campaign",
+  "dep:sha1",
+]
 # `claim_strength` is the FR-022 claim-strength vocabulary. It needs only
 # serde, so a consumer that records a strength (Quire, Quoin) must not have to
 # accept `full` and its `serde_json/arbitrary_precision` flip to reach it. Same
@@ -64,6 +70,7 @@ claim-strength = [
   "dep:serde",
 ]
 full = [
+  "campaign",
   "measurement",
   "claim-strength",
   "producer-execution",
@@ -82,6 +89,8 @@ full = [
 ]
 
 [dependencies]
+agent-ix-engineering-assurance-campaign = { path = "engineering_assurance_v05/generated/campaign/rust", optional = true }
+sha1 = { version = "0.10", default-features = false, optional = true }
 cap-std = { version = "4", optional = true }
 clap = { version = "4.5", default-features = false, features = ["error-context", "help", "std", "usage"], optional = true }
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"], optional = true }
@@ -108,6 +117,7 @@ ix-trace-rs = { git = "https://github.com/agent-ix/ix-trace-rs", rev = "2ce4ebf4
 
 [workspace]
 resolver = "2"
+exclude = ["engineering_assurance_v05/generated/campaign/rust"]
 
 [workspace.lints.rust]
 missing_docs = "deny"

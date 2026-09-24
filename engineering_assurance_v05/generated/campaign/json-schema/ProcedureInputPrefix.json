@@ -1,0 +1,68 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/ProcedureInputPrefix.json",
+	"title": "ProcedureInputPrefix",
+	"type": "object",
+	"properties": {
+		"prefix": {
+			"type": "string",
+			"minLength": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-011/prefix",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-011-procedure-input-prefix.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 15
+				}
+			},
+			"x-agent-ix-constraints": [
+				{
+					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-011/prefix",
+					"diagnosticCode": "agent-ix.engineering-assurance-campaign.PROCEDUREINPUTPREFIX_PREFIX_NONEMPTY",
+					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-011-prefix-nonEmpty",
+					"keyword": "nonEmpty",
+					"operands": {},
+					"origin": {
+						"source": {
+							"path": "spec/functional/VO-011-procedure-input-prefix.md",
+							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+							"startColumn": 3,
+							"startLine": 15
+						}
+					}
+				}
+			]
+		},
+		"required": {
+			"type": "boolean",
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-011/required",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-011-procedure-input-prefix.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 16
+				}
+			}
+		}
+	},
+	"required": [
+		"prefix",
+		"required"
+	],
+	"additionalProperties": false,
+	"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-011",
+	"x-agent-ix-unknown-policy": "reject",
+	"x-agent-ix-roles": [
+		"engineering-assurance:campaign_value"
+	],
+	"x-agent-ix-origin": {
+		"source": {
+			"path": "spec/functional/VO-011-procedure-input-prefix.md",
+			"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+			"startColumn": 1,
+			"startLine": 1
+		}
+	}
+}

@@ -1,0 +1,397 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/MeasurementProcedure.json",
+	"title": "MeasurementProcedure",
+	"type": "object",
+	"properties": {
+		"arguments": {
+			"type": "array",
+			"items": {
+				"$ref": "./ProcedureArgument.json"
+			},
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-001/arguments",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-001-measurement-procedure.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 19
+				}
+			}
+		},
+		"environment": {
+			"type": "array",
+			"items": {
+				"$ref": "./ProcedureEnvironment.json"
+			},
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-001/environment",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-001-measurement-procedure.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 20
+				}
+			}
+		},
+		"inputRolePrefixes": {
+			"type": "array",
+			"items": {
+				"$ref": "./ProcedureInputPrefix.json"
+			},
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-001/inputRolePrefixes",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-001-measurement-procedure.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 22
+				}
+			}
+		},
+		"inputs": {
+			"type": "array",
+			"items": {
+				"$ref": "./ProcedureArtifact.json"
+			},
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-001/inputs",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-001-measurement-procedure.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 21
+				}
+			}
+		},
+		"outputTrees": {
+			"type": "array",
+			"items": {
+				"$ref": "./ProcedureArtifact.json"
+			},
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-001/outputTrees",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-001-measurement-procedure.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 24
+				}
+			}
+		},
+		"outputs": {
+			"type": "array",
+			"items": {
+				"$ref": "./ProcedureArtifact.json"
+			},
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-001/outputs",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-001-measurement-procedure.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 23
+				}
+			}
+		},
+		"producerName": {
+			"type": "string",
+			"minLength": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-001/producerName",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-001-measurement-procedure.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 16
+				}
+			},
+			"x-agent-ix-constraints": [
+				{
+					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-001/producerName",
+					"diagnosticCode": "agent-ix.engineering-assurance-campaign.MEASUREMENTPROCEDURE_PRODUCERNAME_NONEMPTY",
+					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-001-producerName-nonEmpty",
+					"keyword": "nonEmpty",
+					"operands": {},
+					"origin": {
+						"source": {
+							"path": "spec/functional/VO-001-measurement-procedure.md",
+							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+							"startColumn": 3,
+							"startLine": 16
+						}
+					}
+				}
+			]
+		},
+		"producerVersion": {
+			"type": "string",
+			"minLength": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-001/producerVersion",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-001-measurement-procedure.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 17
+				}
+			},
+			"x-agent-ix-constraints": [
+				{
+					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-001/producerVersion",
+					"diagnosticCode": "agent-ix.engineering-assurance-campaign.MEASUREMENTPROCEDURE_PRODUCERVERSION_NONEMPTY",
+					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-001-producerVersion-nonEmpty",
+					"keyword": "nonEmpty",
+					"operands": {},
+					"origin": {
+						"source": {
+							"path": "spec/functional/VO-001-measurement-procedure.md",
+							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+							"startColumn": 3,
+							"startLine": 17
+						}
+					}
+				}
+			]
+		},
+		"repetitions": {
+			"type": "integer",
+			"minimum": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-001/repetitions",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-001-measurement-procedure.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 28
+				}
+			},
+			"x-agent-ix-constraints": [
+				{
+					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-001/repetitions",
+					"diagnosticCode": "agent-ix.engineering-assurance-campaign.MEASUREMENTPROCEDURE_REPETITIONS_MIN",
+					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-001-repetitions-min",
+					"keyword": "min",
+					"operands": {
+						"value": 1
+					},
+					"origin": {
+						"source": {
+							"path": "spec/functional/VO-001-measurement-procedure.md",
+							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+							"startColumn": 3,
+							"startLine": 28
+						}
+					}
+				}
+			]
+		},
+		"responseAdapter": {
+			"type": "string",
+			"minLength": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-001/responseAdapter",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-001-measurement-procedure.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 26
+				}
+			},
+			"x-agent-ix-constraints": [
+				{
+					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-001/responseAdapter",
+					"diagnosticCode": "agent-ix.engineering-assurance-campaign.MEASUREMENTPROCEDURE_RESPONSEADAPTER_NONEMPTY",
+					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-001-responseAdapter-nonEmpty",
+					"keyword": "nonEmpty",
+					"operands": {},
+					"origin": {
+						"source": {
+							"path": "spec/functional/VO-001-measurement-procedure.md",
+							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+							"startColumn": 3,
+							"startLine": 26
+						}
+					}
+				}
+			]
+		},
+		"responseAdapterVersion": {
+			"type": "string",
+			"minLength": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-001/responseAdapterVersion",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-001-measurement-procedure.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 27
+				}
+			},
+			"x-agent-ix-constraints": [
+				{
+					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-001/responseAdapterVersion",
+					"diagnosticCode": "agent-ix.engineering-assurance-campaign.MEASUREMENTPROCEDURE_RESPONSEADAPTERVERSION_NONEMPTY",
+					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-001-responseAdapterVersion-nonEmpty",
+					"keyword": "nonEmpty",
+					"operands": {},
+					"origin": {
+						"source": {
+							"path": "spec/functional/VO-001-measurement-procedure.md",
+							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+							"startColumn": 3,
+							"startLine": 27
+						}
+					}
+				}
+			]
+		},
+		"responseProtocol": {
+			"type": "string",
+			"minLength": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-001/responseProtocol",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-001-measurement-procedure.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 25
+				}
+			},
+			"x-agent-ix-constraints": [
+				{
+					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-001/responseProtocol",
+					"diagnosticCode": "agent-ix.engineering-assurance-campaign.MEASUREMENTPROCEDURE_RESPONSEPROTOCOL_NONEMPTY",
+					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-001-responseProtocol-nonEmpty",
+					"keyword": "nonEmpty",
+					"operands": {},
+					"origin": {
+						"source": {
+							"path": "spec/functional/VO-001-measurement-procedure.md",
+							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+							"startColumn": 3,
+							"startLine": 25
+						}
+					}
+				}
+			]
+		},
+		"schemaVersion": {
+			"type": "string",
+			"minLength": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-001/schemaVersion",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-001-measurement-procedure.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 15
+				}
+			},
+			"x-agent-ix-constraints": [
+				{
+					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-001/schemaVersion",
+					"diagnosticCode": "agent-ix.engineering-assurance-campaign.MEASUREMENTPROCEDURE_SCHEMAVERSION_NONEMPTY",
+					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-001-schemaVersion-nonEmpty",
+					"keyword": "nonEmpty",
+					"operands": {},
+					"origin": {
+						"source": {
+							"path": "spec/functional/VO-001-measurement-procedure.md",
+							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+							"startColumn": 3,
+							"startLine": 15
+						}
+					}
+				}
+			]
+		},
+		"sourceRepository": {
+			"type": "string",
+			"minLength": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-001/sourceRepository",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-001-measurement-procedure.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 18
+				}
+			},
+			"x-agent-ix-constraints": [
+				{
+					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-001/sourceRepository",
+					"diagnosticCode": "agent-ix.engineering-assurance-campaign.MEASUREMENTPROCEDURE_SOURCEREPOSITORY_NONEMPTY",
+					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-001-sourceRepository-nonEmpty",
+					"keyword": "nonEmpty",
+					"operands": {},
+					"origin": {
+						"source": {
+							"path": "spec/functional/VO-001-measurement-procedure.md",
+							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+							"startColumn": 3,
+							"startLine": 18
+						}
+					}
+				}
+			]
+		},
+		"timeoutMillis": {
+			"type": "integer",
+			"minimum": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-001/timeoutMillis",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-001-measurement-procedure.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 29
+				}
+			},
+			"x-agent-ix-constraints": [
+				{
+					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-001/timeoutMillis",
+					"diagnosticCode": "agent-ix.engineering-assurance-campaign.MEASUREMENTPROCEDURE_TIMEOUTMILLIS_MIN",
+					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-001-timeoutMillis-min",
+					"keyword": "min",
+					"operands": {
+						"value": 1
+					},
+					"origin": {
+						"source": {
+							"path": "spec/functional/VO-001-measurement-procedure.md",
+							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+							"startColumn": 3,
+							"startLine": 29
+						}
+					}
+				}
+			]
+		}
+	},
+	"required": [
+		"producerName",
+		"producerVersion",
+		"repetitions",
+		"responseAdapter",
+		"responseAdapterVersion",
+		"responseProtocol",
+		"schemaVersion",
+		"sourceRepository",
+		"timeoutMillis"
+	],
+	"additionalProperties": false,
+	"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-001",
+	"x-agent-ix-unknown-policy": "reject",
+	"x-agent-ix-roles": [
+		"engineering-assurance:campaign_value"
+	],
+	"x-agent-ix-origin": {
+		"source": {
+			"path": "spec/functional/VO-001-measurement-procedure.md",
+			"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+			"startColumn": 1,
+			"startLine": 1
+		}
+	}
+}

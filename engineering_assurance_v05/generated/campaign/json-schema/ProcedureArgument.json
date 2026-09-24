@@ -1,0 +1,68 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/ProcedureArgument.json",
+	"title": "ProcedureArgument",
+	"type": "object",
+	"properties": {
+		"kind": {
+			"$ref": "./ProcedureArgumentKind.json",
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-002/kind",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-002-procedure-argument.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 15
+				}
+			}
+		},
+		"value": {
+			"type": "string",
+			"minLength": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-002/value",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-002-procedure-argument.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 16
+				}
+			},
+			"x-agent-ix-constraints": [
+				{
+					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-002/value",
+					"diagnosticCode": "agent-ix.engineering-assurance-campaign.PROCEDUREARGUMENT_VALUE_NONEMPTY",
+					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-002-value-nonEmpty",
+					"keyword": "nonEmpty",
+					"operands": {},
+					"origin": {
+						"source": {
+							"path": "spec/functional/VO-002-procedure-argument.md",
+							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+							"startColumn": 3,
+							"startLine": 16
+						}
+					}
+				}
+			]
+		}
+	},
+	"required": [
+		"kind",
+		"value"
+	],
+	"additionalProperties": false,
+	"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-002",
+	"x-agent-ix-unknown-policy": "reject",
+	"x-agent-ix-roles": [
+		"engineering-assurance:campaign_value"
+	],
+	"x-agent-ix-origin": {
+		"source": {
+			"path": "spec/functional/VO-002-procedure-argument.md",
+			"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+			"startColumn": 1,
+			"startLine": 1
+		}
+	}
+}
