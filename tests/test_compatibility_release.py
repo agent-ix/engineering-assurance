@@ -47,10 +47,12 @@ def staged_root(tmp_path: Path) -> Path:
 
 
 def test_exact_accepted_matrix_and_release_surfaces_pass(tmp_path: Path) -> None:
+    """Trace: FR-012-AC-1, FR-012-AC-4, TC-079, TC-082."""
     qualify(staged_root(tmp_path))
 
 
 def test_changed_component_pin_refuses_prior_human_acceptance(tmp_path: Path) -> None:
+    """Trace: FR-012-AC-1, FR-012-AC-4, TC-079, TC-082."""
     root = staged_root(tmp_path)
     matrix = json.loads((root / MATRIX).read_text())
     matrix["components"][1]["version"] = "0.24.2"
@@ -60,6 +62,7 @@ def test_changed_component_pin_refuses_prior_human_acceptance(tmp_path: Path) ->
 
 
 def test_changed_schema_bytes_refuse_release(tmp_path: Path) -> None:
+    """Trace: FR-012-AC-1, TC-079."""
     root = staged_root(tmp_path)
     schema = root / "engineering_assurance/schemas/measurement-plan-frontmatter.schema.json"
     schema.write_bytes(schema.read_bytes() + b"\n")
@@ -68,6 +71,7 @@ def test_changed_schema_bytes_refuse_release(tmp_path: Path) -> None:
 
 
 def test_plugin_version_and_install_reference_must_match_tag(tmp_path: Path) -> None:
+    """Trace: FR-007-AC-3, TC-037; FR-012-AC-1, TC-079."""
     root = staged_root(tmp_path)
     plugin = root / ".codex-plugin/plugin.json"
     data = json.loads(plugin.read_text())
