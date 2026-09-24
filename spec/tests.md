@@ -401,7 +401,7 @@ implemented and reviewed.
 | TC-181 | A run rejects stale definition/source digests, unknown members, and malformed attempt inventories | Unit | P0 | FR-019-AC-11, VO-007 | ✅ `tests/campaign.rs` run-shape cases passing |
 | TC-182 | A complete Git tree manifest binds tracked regular files, executable mode, and omitted symlink targets by Git blob OID and SHA-256; tampering or unsupported modes refuse source projection | Integration | P0 | FR-019-AC-11, VO-005 | ✅ `tests/campaign.rs` real temporary Git repository cases passing |
 | TC-183 | Dynamic dependency input role prefixes accept only declared path components, require a matching sealed input when marked required, and reject undeclared near matches or malformed prefixes | Unit | P0 | FR-019-AC-10, VO-011 | ✅ `tests/campaign.rs` prefix binding cases passing |
-| TC-184 | A declared producer input origin names a campaign source or declared member dependency, matches the selected runtime role and exact origin, and rejects an undeclared dynamic input | Integration | P0 | FR-019-AC-10, VO-012, EN-006 | ✅ `tests/campaign.rs` origin context and binding cases passing; independent Quoin byte replay pending |
+| TC-184 | A declared producer input origin names a campaign source or declared member and output artifact, matches the selected runtime role and exact origin, and rejects an undeclared dynamic input | Integration | P0 | FR-019-AC-10, VO-012, EN-006 | ✅ `tests/campaign.rs` origin context and binding cases passing; independent Quoin byte replay pending |
 
 ## Option Permutation Matrix
 

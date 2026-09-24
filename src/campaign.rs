@@ -553,6 +553,87 @@ pub fn validate_definition(
         }
     }
     validate_member_dependencies(&members)?;
+    validate_origin_artifact_roles(&members, &registrations)?;
+    Ok(())
+}
+
+fn validate_origin_artifact_roles(
+    members: &BTreeMap<&str, &CampaignMember>,
+    registrations: &BTreeMap<&str, &PlanRegistration<'_>>,
+) -> Result<(), CampaignError> {
+    for member in members.values() {
+        let plan = registrations.get(member.plan_id.as_str()).ok_or_else(|| {
+            CampaignError::Unresolved {
+                kind: "measurement plan",
+                name: member.plan_id.clone(),
+            }
+        })?;
+        for procedure in [plan.procedure, member.checker_procedure.as_ref()]
+            .into_iter()
+            .flatten()
+        {
+            for origin in procedure.input_origins.as_deref().unwrap_or(&[]) {
+                if !matches!(origin.kind, ProcedureInputOriginKind::Dependency) {
+                    continue;
+                }
+                let dependency =
+                    origin
+                        .dependency_member
+                        .as_deref()
+                        .ok_or(CampaignError::Binding {
+                            field: "inputOrigins.kind",
+                        })?;
+                let role =
+                    origin
+                        .dependency_artifact_role
+                        .as_deref()
+                        .ok_or(CampaignError::Binding {
+                            field: "inputOrigins.kind",
+                        })?;
+                let upstream =
+                    members
+                        .get(dependency)
+                        .ok_or_else(|| CampaignError::Unresolved {
+                            kind: "dependency",
+                            name: dependency.to_owned(),
+                        })?;
+                let upstream_plan =
+                    registrations
+                        .get(upstream.plan_id.as_str())
+                        .ok_or_else(|| CampaignError::Unresolved {
+                            kind: "measurement plan",
+                            name: upstream.plan_id.clone(),
+                        })?;
+                let upstream_procedure =
+                    upstream_plan
+                        .procedure
+                        .ok_or_else(|| CampaignError::MissingProcedure {
+                            plan: upstream.plan_id.clone(),
+                        })?;
+                let fixed = upstream_procedure
+                    .outputs
+                    .as_deref()
+                    .unwrap_or(&[])
+                    .iter()
+                    .any(|output| output.role == role);
+                let in_tree = upstream_procedure
+                    .output_trees
+                    .as_deref()
+                    .unwrap_or(&[])
+                    .iter()
+                    .any(|tree| {
+                        role.strip_prefix(&tree.role)
+                            .and_then(|suffix| suffix.strip_prefix('/'))
+                            .is_some_and(valid_source_path)
+                    });
+                if !fixed && !in_tree {
+                    return Err(CampaignError::Binding {
+                        field: "inputOrigins.dependencyArtifactRole",
+                    });
+                }
+            }
+        }
+    }
     Ok(())
 }
 

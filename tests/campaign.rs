@@ -83,6 +83,24 @@ fn plans(procedure: &MeasurementProcedure) -> [PlanRegistration<'_>; 2] {
     ]
 }
 
+fn staged_plans<'a>(
+    upstream: &'a MeasurementProcedure,
+    downstream: &'a MeasurementProcedure,
+) -> [PlanRegistration<'a>; 2] {
+    [
+        PlanRegistration {
+            id: "MP-001",
+            definition_version: "v1",
+            procedure: Some(upstream),
+        },
+        PlanRegistration {
+            id: "MP-002",
+            definition_version: "v1",
+            procedure: Some(downstream),
+        },
+    ]
+}
+
 fn contract(kind: &str) -> ContractBinding {
     ContractBinding {
         kind: kind.to_owned(),
@@ -418,6 +436,31 @@ fn tc_184_dependency_origin_binds_declared_member_and_refuses_extra_input() {
     );
     dependent.input_origins.as_mut().expect("origins")[0].dependency_member =
         Some("build".to_owned());
+    let invalid_role = dependent.clone();
+    let registrations = [
+        PlanRegistration {
+            id: "MP-001",
+            definition_version: "v1",
+            procedure: Some(&base),
+        },
+        PlanRegistration {
+            id: "MP-002",
+            definition_version: "v1",
+            procedure: Some(&invalid_role),
+        },
+    ];
+    assert_eq!(
+        validate_definition(&definition, &registrations),
+        Err(CampaignError::Binding {
+            field: "inputOrigins.dependencyArtifactRole"
+        })
+    );
+    dependent.input_origins.as_mut().expect("origins")[0].dependency_artifact_role =
+        Some("report".to_owned());
+    dependent.input_role_prefixes = Some(vec![
+        serde_json::from_value(json!({"prefix":"dependency/","required":false}))
+            .expect("runtime prefix"),
+    ]);
     let registrations = [
         PlanRegistration {
             id: "MP-001",
@@ -444,6 +487,34 @@ fn tc_184_dependency_origin_binds_declared_member_and_refuses_extra_input() {
         resolve_procedure(&dependent, &definition.source_graph, selected).err(),
         Some(CampaignError::Binding {
             field: "inputOrigins.binding"
+        })
+    );
+}
+
+#[test]
+#[trace("TC-184", "FR-019-AC-10", "VO-012", "EN-006")]
+fn tc_184_dependency_origin_accepts_only_declared_output_tree_child() {
+    let definition = sample_definition();
+    let mut upstream = procedure();
+    upstream.output_trees = Some(vec![
+        serde_json::from_value(json!({"role":"mutants","required":false})).expect("output tree"),
+    ]);
+    let mut downstream = procedure();
+    downstream.input_origins = Some(
+        serde_json::from_value(json!([{
+            "role":"fixture", "kind":"dependency", "dependencyMember":"build",
+            "dependencyArtifactRole":"mutants/case.txt"
+        }]))
+        .expect("tree child origin"),
+    );
+    validate_definition(&definition, &staged_plans(&upstream, &downstream))
+        .expect("declared tree child");
+    downstream.input_origins.as_mut().expect("origins")[0].dependency_artifact_role =
+        Some("mutants/../escape".to_owned());
+    assert_eq!(
+        validate_definition(&definition, &staged_plans(&upstream, &downstream)),
+        Err(CampaignError::Binding {
+            field: "inputOrigins.dependencyArtifactRole"
         })
     );
 }
