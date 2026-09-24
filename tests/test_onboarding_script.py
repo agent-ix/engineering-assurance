@@ -352,3 +352,47 @@ def test_onboard_js_lists_the_profile_measurement_policy(tmp_path: Path) -> None
         "current `exception` item",
     ]:
         assert phrase in skill, phrase
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+@pytest.mark.parametrize("flag", ["--help", "-h"])
+def test_onboard_js_help_prints_usage_not_a_report(tmp_path: Path, flag: str) -> None:
+    """Trace: FR-001-AC-8, TC-174."""
+    completed = subprocess.run(
+        [NODE, str(ONBOARD_JS), flag],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0
+    assert completed.stdout.startswith("Usage: ")
+    assert "--repo <path>" in completed.stdout
+    assert "onboarding report" not in completed.stdout
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (["--repo", "{repo}", "--bogus"], "unknown argument: --bogus"),
+        (["--repo"], "--repo requires a path argument"),
+        (["--repo", "--json"], "--repo requires a path argument"),
+        (["--repo", "{repo}", "--repo", "{repo}"], "--repo may be given only once"),
+    ],
+)
+def test_onboard_js_refuses_a_usage_error(
+    tmp_path: Path, arguments: list[str], message: str
+) -> None:
+    """Trace: FR-001-AC-8, TC-174."""
+    completed = subprocess.run(
+        [NODE, str(ONBOARD_JS), *(arg.format(repo=tmp_path) for arg in arguments)],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 2
+    assert completed.stdout == ""
+    assert message in completed.stderr
+    assert "Usage: " in completed.stderr

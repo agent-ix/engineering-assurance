@@ -196,6 +196,11 @@ MeasurementPlan stages. In a `measurement-promotion` run:
   item to it with `plan_id` (the plan's frontmatter `id`) and `candidate` (the
   collection id the checker decided). The verdict must be for the evidence's
   `definition_version`.
+- The verdict comes from `quoin measurement verify`. Before planning a
+  `require` stage, check that `quoin measurement --help` lists `verify`.
+  Without it no verdict can be recorded, so a `require`
+  stage refuses with `promotion_checker_missing`. Tell the owner, and offer
+  `recommend` or an owner-stated `exception` instead.
 - `recommend`, and any stage the policy does not list: `measurement.promotion_ready`
   never refuses on the checker, including when no result was recorded. Tell
   the decision owner what the recorded verdict says.

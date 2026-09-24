@@ -175,7 +175,13 @@ module.
 | --- | --- | --- |
 | Quire module | `quoin module list` | `engineering-assurance` is listed with `ref` set to the tag you installed, such as `v0.4.1`. A bare commit SHA means it came from an untagged commit. |
 | Native CLI | `engineering-assurance --version` | It prints the same version. `command not found` means `~/.cargo/bin` is not on `PATH`. |
-| Agent plugin | `claude plugin list` (or `/plugin` in a session) | `engineering-assurance@engineering-assurance` is listed as enabled at the same version. |
+| Claude Code plugin | `claude plugin list` (or `/plugin` in a session) | `engineering-assurance@engineering-assurance` is listed as enabled at the same version. |
+| Codex plugin | `codex plugin list \| grep engineering-assurance` | `engineering-assurance@engineering-assurance` shows `installed, enabled` at the same version. |
+
+Check the row for each of Claude Code and Codex that you use. For OpenCode or
+GitHub Copilot, confirm the skill appears in that agent's skill list. An agent
+finds a newly installed plugin's skill only in a new session, so restart it
+after installing.
 
 The `@v0.4.1` suffix on `marketplace add` pins the plugin to that tag. Without
 it, the marketplace follows this repository's default branch and can move past
@@ -197,6 +203,25 @@ directory, not from the installed binary. Point `--root` at a checkout of this
 repository at the tag you installed. Run from any other directory, that row is
 unobserved, or reports that directory's own tag. Use
 `engineering-assurance --version` for the installed CLI instead.
+
+## Upgrading artifacts from an earlier release
+
+Documents written against v0.3.x or earlier can fail the current schemas.
+
+- **AssuranceProfile `profile_version`.** The field is now `schema_version`.
+  Only a `status: retired` profile may keep `profile_version`. On any other
+  profile Quire reports `{"required":["profile_version"]} is not allowed`;
+  rename the field to fix it.
+- **MeasurementPlan with a prose `statistical_design`.** Current plans need
+  the typed estimator and decision rule. When the old design cannot be
+  expressed in them faithfully, set the plan to `status: retired`, which keeps
+  the prose valid, and author a current plan as its successor. Do not invent
+  numeric thresholds to convert an old categorical plan.
+- **Validating with `--module`.** `quire validate --module <path>` replaces
+  module discovery rather than adding to it. Pass every module your documents
+  use, for example this module plus `spec-artifacts-iso` and
+  `spec-artifacts-process`. `spec-artifacts-iso` supplies the link types this
+  module's artifacts declare; without it they are reported as unknown.
 
 ## What it provides
 

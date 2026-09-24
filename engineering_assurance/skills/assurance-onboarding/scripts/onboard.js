@@ -26,15 +26,40 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
+const USAGE =
+  "Usage: node engineering_assurance/skills/assurance-onboarding/scripts/onboard.js [--repo <path>] [--json]\n\n" +
+  "  --repo <path>  the consuming project's root (default: current directory)\n" +
+  "  --json         emit the report as JSON instead of text\n" +
+  "  -h, --help     print this message\n";
+
 const args = process.argv.slice(2);
-const repoFlagIndex = args.indexOf("--repo");
-const repoFlagValue = repoFlagIndex >= 0 ? args[repoFlagIndex + 1] : undefined;
-if (repoFlagIndex >= 0 && (repoFlagValue === undefined || repoFlagValue.startsWith("--"))) {
-  console.error("--repo requires a path argument");
-  process.exit(1);
+if (args.includes("--help") || args.includes("-h")) {
+  process.stdout.write(USAGE);
+  process.exit(0);
+}
+// Any usage error -- an unknown argument, a `--repo` with no path, or a
+// second `--repo` -- prints usage and exits 2 instead of printing a report.
+const usageError = (message) => {
+  process.stderr.write(`${message}\n\n${USAGE}`);
+  process.exit(2);
+};
+let repoFlagValue;
+let wantsJson = false;
+for (let index = 0; index < args.length; index += 1) {
+  const arg = args[index];
+  if (arg === "--json") {
+    wantsJson = true;
+  } else if (arg === "--repo") {
+    const value = args[index + 1];
+    if (value === undefined || value.startsWith("-")) usageError("--repo requires a path argument");
+    if (repoFlagValue !== undefined) usageError("--repo may be given only once");
+    repoFlagValue = value;
+    index += 1;
+  } else {
+    usageError(`unknown argument: ${arg}`);
+  }
 }
 const targetRepo = path.resolve(repoFlagValue ?? process.cwd());
-const wantsJson = args.includes("--json");
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 
