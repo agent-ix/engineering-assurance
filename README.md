@@ -58,6 +58,15 @@ npm install --global \
 rustup toolchain install 1.98.1
 ```
 
+The matrix is the live source for supported versions. A newer release that the
+matrix has not seen is classified `unknown`: untested, not rejected. It may
+work, but it has not been checked against this module. See
+[Verify your install](#4-verify-your-install) to classify what you have.
+
+Versions are published as Git tags. GitHub Releases are not cut for every tag,
+so use `git tag` or the repository's tags page, not the Releases page, to find
+the newest version.
+
 Install the native CLI from the tagged source checkout:
 
 ```bash
@@ -92,6 +101,13 @@ OpenCode, and GitHub Copilot. Use the section for your agent.
 ```text
 /plugin marketplace add agent-ix/engineering-assurance@v0.4.1
 /plugin install engineering-assurance@engineering-assurance
+```
+
+From a shell or a script:
+
+```bash
+claude plugin marketplace add agent-ix/engineering-assurance
+claude plugin install engineering-assurance@engineering-assurance
 ```
 
 </details>
@@ -147,6 +163,31 @@ gh skill install agent-ix/engineering-assurance \
 
 </details>
 
+### 4. Verify your install
+
+Engineering Assurance has three installed pieces: the Quire module, the native
+CLI, and the agent plugin or skill. Install all three from the same tag. A
+module from one tag and a CLI from another is not detected for you, and the
+skill will drive workflows through a CLI whose schemas do not match the
+module.
+
+| Piece | Check | Ready when |
+| --- | --- | --- |
+| Quire module | `quoin module list` | `engineering-assurance` is listed with `ref` set to the tag you installed, such as `v0.4.0`. A bare commit SHA means it came from an untagged commit. |
+| Native CLI | `engineering-assurance --version` | It prints the same version. `command not found` means `~/.cargo/bin` is not on `PATH`. |
+| Agent plugin | `claude plugin list` (or `/plugin` in a session) | `engineering-assurance@engineering-assurance` is listed as enabled at the same version. |
+
+Then classify the toolchain against the compatibility matrix:
+
+```bash
+engineering-assurance compatibility-observe --root .
+```
+
+It prints one verdict per component and exits non-zero unless every component
+is `compatible`. A component on a newer, unlisted version reports `unknown`
+with the reason "not approved and not rejected". That is expected when you run
+newer toolchain releases. It is not an install failure.
+
 ## What it provides
 
 ### Artifact types
@@ -201,6 +242,10 @@ database migration in this change, and Jane Doe owns the terminal decision.
 Inventory the existing assurance context before proposing work.
 ```
 
+To record a measurement against a `MeasurementPlan` with `quoin measurement
+record` and read it back with `quoin report`, follow the
+[measurement walkthrough](docs/measurement-walkthrough.md).
+
 Validate Markdown documents with quire-cli (the quire-rs-backed CLI):
 
 ```bash
@@ -242,7 +287,7 @@ make integration-gate
 ```
 
 Read [CONTENT_RIGHTS.md](CONTENT_RIGHTS.md) before adding content. The
-repository is public. The repository is public. Registry packages remain private and unpublished
+repository is public. Registry packages remain private and unpublished
 until separate, explicit authorization is given.
 
 ## License
