@@ -55,9 +55,13 @@ read at `origin/main`.
 | `run_feature_matrix.py` | runtime | **KEEP** | Runtime-owned feature and compilation matrix over its public crate surface. |
 | `check_upstream_pins.py` | codegen | **KEEP** | Codegen-owned check that its declared IR/runtime revisions match the dependencies and generated manifests it ships. |
 | `check_default_dependencies.py` | tl-syntax | **KEEP** | Syntax-owned no-std dependency and feature-boundary qualification. |
+| `check_spec_id_uniqueness.py`, `test_check_spec_id_uniqueness.py` | tl-syntax | **KEEP** | Syntax-owned requirement-identity check and its regression test. |
 | `test_corpus_gate.py`, `validate_corpus.py` | tl-syntax | **KEEP** | Syntax-owned corpus schema, horizon, semantic-oracle, and mutation checks. |
 | `check_checksum_manifest.py`, `run_fuzz_smoke.sh` | tl-parse | **KEEP** | Parser-owned fuzz-corpus integrity and native fuzz execution. |
+| `check_make_execution_control.sh` | tl-parse | **KEEP** | Parser-owned check that the Make entrypoints execute their declared gates. |
 | `check_provenance.py` | tl-rewrite | **KEEP** | Rewrite-owned corpus and compiled-dependency provenance producer. |
+| `test_check_unsafe_comments.sh` | contract-codegen | **KEEP** | Regression test for the repository's unsafe-comment audit. |
+| `README.md`, `char_quote.rs`, `compliant_with_safety.rs`, `escaped_quote.rs`, `mention_only_negative.rs`, `mention_then_block.rs`, `multiline_string.rs`, `raw_string.rs`, `trivial_positive.rs` under `scripts/fixtures/unsafe_audit/` | contract-codegen | **KEEP** | Fictional positive and negative inputs for the unsafe-comment audit; these are test data, not evidence collectors. |
 
 A family not in this table is domain logic until somebody argues otherwise, in
 writing, on the migration issue.

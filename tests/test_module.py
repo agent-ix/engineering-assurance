@@ -33,7 +33,7 @@ def schema(name: str) -> dict:
 
 def test_module_inventory_is_exact() -> None:
     data = manifest()
-    assert data["version"] == "0.4.0"
+    assert data["version"] == "0.4.1"
     assert [item["name"] for item in data["artifact_types"]] == [
         "AssuranceProfile",
         "MeasurementPlan",
@@ -882,6 +882,7 @@ def test_repository_has_only_governed_review_evidence() -> None:
     }
     assert {path.name for path in (ROOT / "docs").iterdir()} == {
         "compatibility-matrix.md",
+        "compatibility-release-gate.md",
         "consumption-boundary.md",
         "migration-contract.md",
         "structural-coverage.md",

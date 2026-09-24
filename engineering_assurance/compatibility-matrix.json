@@ -1,11 +1,11 @@
 {
   "matrix_version": "engineering-assurance.compatibility-matrix/v1",
-  "purpose": "One reviewed set of shared-assurance component versions known to work together, with the digests that identify what those versions ship. Answers agent-ix/engineering-assurance#8.",
+  "purpose": "Candidate shared-assurance component pins and exact release artifacts for the v0.4.1 acceptance decision.",
   "accepted": {
     "state": "accepted",
     "accepted_by": "Peter Krenesky",
-    "accepted_at": "2026-09-10",
-    "note": "Accepted by the named human after the local TC-107 gate passed against public ix-flow 0.2.3. The human explicitly directed an agent to transcribe this decision; the agent did not make it. An agent may prepare the matrix and may not accept it."
+    "accepted_at": "2026-09-23",
+    "note": "Peter Krenesky, the named human, accepted the exact v0.4.1 candidate matrix on 2026-09-23 America/Los_Angeles after review of PR #131; the pre-decision candidate SHA-256 was 26fb2ea02d8a9bc3cb97d0e43914be00dbcc57eee927267cba6c3ab139a22cc3. An agent may prepare and transcribe the decision but may not accept it."
   },
   "gate": {
     "rule": "Every component must classify as compatible before an enforcing migration begins.",
@@ -15,14 +15,14 @@
   "components": [
     {
       "name": "quire-cli",
-      "version": "0.31.0",
+      "version": "0.33.0",
       "released": true,
-      "release": "npm @agent-ix/quire-cli@0.31.0 (public registry)",
-      "source_revision": "4f6ed024cf27298b2dc49c7051941571197fddff",
+      "release": "npm @agent-ix/quire-cli@0.33.0 (public registry)",
+      "source_revision": "5d027b057c8976a29175b3f3ebfc91088bc837d9",
       "engine": {
         "name": "quire-rs",
-        "version": "0.46.0",
-        "source_revision": "ca7362d4dacecb96f01d74d1d971327118c25917"
+        "version": "0.47.1",
+        "source_revision": "92dbebc49f354f7a3d5050b94cd2d57d9084d99f"
       },
       "provides": "Static assurance export consumed by Quoin intake (quire-cli#74).",
       "observe": "quire provenance",
@@ -32,9 +32,9 @@
     },
     {
       "name": "quoin",
-      "version": "0.23.1",
+      "version": "0.24.1",
       "released": true,
-      "release": "npm @agent-ix/quoin@0.23.1 (public registry)",
+      "release": "npm @agent-ix/quoin@0.24.1 (public registry)",
       "provides": "Evidence transcription and retention, measurements, change-assurance records, proof attestations, intake, audit, and verification receipts (FR-068, FR-069).",
       "observe": "quoin --version",
       "incompatible": [
@@ -45,13 +45,7 @@
         "0.22.5": "predates the `quoin change-assurance` surface; seal, intake, and receipt commands do not exist",
         "0.23.0": "tagged but never published; its release run failed at the test leg on quoin#329, where an adapter accepted an inherited property name as a declared status"
       },
-      "artifacts": [
-        {
-          "path": "corpus/compatibility/chain/quoin-verification-receipt-v1.schema.json",
-          "sha256": "3df283fd66266ed9257a0f50dc915ea8e3787a8f992a8d40d0cdffbd7e12b6eb",
-          "note": "Quoin's packaged receipt schema, retained beside the receipt it validates."
-        }
-      ]
+      "artifacts": []
     },
     {
       "name": "ix-flow",
@@ -68,9 +62,9 @@
     },
     {
       "name": "engineering-assurance",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "released": true,
-      "release": "git tag v0.4.0 \u2014 pre-stabilization source distribution; npm publication is refused by design",
+      "release": "git tag v0.4.1 \u2014 pre-stabilization source distribution; npm publication is refused by design",
       "provides": "Shared verification semantics, the PGM-01 read-only compatibility mapping, the accepted compatibility corpus gate, and the Rust compatibility classifier and ix-flow lifecycle host (FR-008..FR-012, FR-016-AC-3).",
       "observe": "git describe --tags",
       "incompatible": [],
@@ -82,11 +76,11 @@
         },
         {
           "path": "engineering_assurance/schemas/assurance-argument-frontmatter.schema.json",
-          "sha256": "341316377a75f2a23111552b9ef969296a2afca7939a1a89d4192ab24c31ff89"
+          "sha256": "a6898fdfceb83c9aaf6b6383e2b53324a708e7796ca5871f28a8d771be469148"
         },
         {
           "path": "engineering_assurance/schemas/assurance-profile-frontmatter.schema.json",
-          "sha256": "070f8802e62b8c38701b03445f86a008f77191baa8c0c4358147fb5126cf3535"
+          "sha256": "78680c79250a7d0b12949da19cd7b900dc05e2b33206cb0098839003ed183dd5"
         },
         {
           "path": "engineering_assurance/schemas/assurance-report-projection-v1.schema.json",
@@ -98,7 +92,7 @@
         },
         {
           "path": "engineering_assurance/schemas/measurement-plan-frontmatter.schema.json",
-          "sha256": "aae266f2cefd706548dd25d7c232f0cf5d1ac04fe99ad540244be5f72bcfd05a"
+          "sha256": "cb04124535f4ed7444418efea76c7032459d2e56125d5dfe61e06bf64d694ae7"
         },
         {
           "path": "engineering_assurance/schemas/pgm01-compatibility-view-v1.schema.json",
@@ -114,28 +108,28 @@
         },
         {
           "path": "engineering_assurance/schemas/verification-semantics-ownership-v1.schema.json",
-          "sha256": "a1674b7be43ee4e00a51a84bc384f5090ee71ed58a807429dd1023667c4dd3a5"
+          "sha256": "93ef9b5d51e659cdb39c452a45c43f34fd3a033a19ae8e118bb396f93a663c6b"
         }
       ]
     }
   ],
   "fixtures": {
     "corpus": "agent-ix/qa-corpus",
-    "note": "The accepted compatibility corpus is pinned as the `corpus` submodule and enforced by FR-011. Its chain artifacts are the cross-component fixtures this matrix claims pass.",
+    "note": "The pinned corpus remains a content-addressed historical cross-component fixture made by Quire 0.31.0 and Quoin 0.23.1. Current-version compatibility is separately qualified by the CLI and integration gates.",
     "gitlink_is_the_pin": "The corpus revision is whatever gitlink this repository records; FR-011 TC-078 asserts the checked-out commit equals it."
   },
   "rollback": {
-    "principle": "Every pin here is a released artifact, so rolling back is installing the previous release. Nothing in this matrix requires a rebuild from source to undo.",
-    "quoin": "Reinstall @agent-ix/quoin@0.22.5. The `change-assurance` commands disappear; retained records, attestations, and receipts are unaffected, because 0.23.x added a surface over existing contracts rather than changing the stored layout.",
-    "quire-cli": "Reinstall @agent-ix/quire-cli@0.30.2. Exports produced by 0.31.0 remain readable; the provenance command is not present.",
+    "principle": "At release, every pin resolves to a released artifact, so rollback installs the previous release. No pin here requires a data migration.",
+    "quoin": "Reinstall @agent-ix/quoin@0.23.1. Current-version change-assurance behavior is unavailable; retained records remain owned by Quoin.",
+    "quire-cli": "Reinstall @agent-ix/quire-cli@0.31.0. The 0.33.0 export and engine behavior is then unavailable.",
     "ix-flow": "Reinstall @agent-ix/ix-flow@0.0.4. Existing run-state and event-chain files remain owned by ix-flow; the Rust adapter is additive and must be removed from invocation before the package downgrade.",
-    "engineering-assurance": "Check out the previous tag v0.2.1. The Rust port and its native semantic boundary are then unavailable; retained external evidence and ix-flow state are unchanged.",
+    "engineering-assurance": "Check out the previous tag v0.4.0. The new schema contracts and current-toolchain matrix are then unavailable; retained external evidence and ix-flow state are unchanged.",
     "corpus": "Move the `corpus` gitlink to the earlier commit and re-run the FR-011 gate. The corpus is content-addressed, so an earlier pin is a complete, self-verifying set.",
     "irreversible": "None of the above. No pin here migrates data, rewrites evidence, or changes a stored schema."
   },
   "upgrade": {
-    "order": "quire-cli, then quoin, then ix-flow, then this repository's tag, then the corpus gitlink. Each step is independently verifiable, and only the last one moves the gate.",
-    "verification": "After each step run `engineering-assurance compatibility-observe --root .`, which classifies the declared local toolchain against these pins and exits non-zero unless every component is compatible.",
+    "order": "Install quire-cli, then quoin, then ix-flow, then the v0.4.1 EA tag after acceptance. The historical corpus gitlink remains fixed and is verified independently.",
+    "verification": "After each tool upgrade, classify with `engineering-assurance compatibility-observe --root .`. It exits zero only after this matrix is accepted and the matching EA v0.4.1 tag is installed.",
     "what_does_not_change": "No campaign repository is touched by an upgrade of these components. Migrations are agent-ix/engineering-assurance#10 and begin only after this matrix is accepted."
   },
   "hosted_ci": "Publication does not enable automatic hosted CI in any campaign repository. Every workflow in this campaign remains manual-dispatch only.",

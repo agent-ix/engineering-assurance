@@ -67,7 +67,7 @@
       "description": "Gaming scenarios this plan declares it guards against (FR-024), each a closed `kind` plus a `description` of how the plan guards against it. A declaration only: Engineering Assurance checks its shape, and Quoin's checker exercises the kinds it can detect. Required, with at least one entry, when `stage` is `gate`; optional otherwise.",
       "items": { "$ref": "#/$defs/negative_control" }
     },
-    "statistical_design": { "$ref": "#/$defs/statistical_design" },
+    "statistical_design": { "type": "object" },
     "relationships": {
       "type": "array",
       "description": "Structural links to other spec artifacts. When a pass/fail decision genuinely depends on more than one metric succeeding together (a composite/AND gate), that composition MUST be expressed here as one `references` entry per constituent metric's MeasurementPlan -- never as a fabricated single `metric` id, and never only as prose. Do not add a separate constituent-metrics field for this; `references` is the one spelling of the edge.",
@@ -77,11 +77,45 @@
   "allOf": [
     {
       "if": {
-        "properties": { "stage": { "const": "gate" } },
-        "required": ["stage"]
+        "properties": {
+          "stage": { "const": "gate" },
+          "status": { "not": { "const": "retired" } }
+        },
+        "required": ["stage", "status"]
       },
       "then": {
         "required": ["ground_truth_kind", "negative_controls", "protected_apparatus"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "retired" } },
+        "required": ["status"]
+      },
+      "then": {
+        "anyOf": [
+          { "properties": { "statistical_design": { "$ref": "#/$defs/statistical_design" } } },
+          {
+            "not": {
+              "anyOf": [
+                { "required": ["ground_truth_kind"] },
+                { "required": ["subject_identity"] },
+                { "required": ["preregistration"] },
+                { "required": ["objective"] },
+                { "required": ["protected_apparatus"] },
+                { "required": ["negative_controls"] }
+              ]
+            },
+            "properties": {
+              "statistical_design": { "$ref": "#/$defs/legacy_retired_statistical_design" }
+            }
+          }
+        ]
+      },
+      "else": {
+        "properties": {
+          "statistical_design": { "$ref": "#/$defs/statistical_design" }
+        }
       }
     },
     {
@@ -261,6 +295,21 @@
           "enum": ["measures", "references"],
           "description": "`measures`: this plan measures the target directly (e.g. the AssuranceProfile it informs). `references`: this plan points at a related artifact without measuring it, including -- for a composite/gate-stage decision -- each constituent metric's MeasurementPlan that the decision composes."
         }
+      }
+    },
+    "legacy_retired_statistical_design": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Historical prose design from the v0.2.1 schema. Valid only for retired plans; it is not a mechanical decision rule and cannot govern a new collection.",
+      "required": ["population", "sampling", "repetitions", "estimator", "error_model", "uncertainty", "decision_rule"],
+      "properties": {
+        "population": { "type": "string", "minLength": 1 },
+        "sampling": { "type": "string", "minLength": 1 },
+        "repetitions": { "type": "integer", "minimum": 1 },
+        "estimator": { "type": "string", "minLength": 1 },
+        "error_model": { "type": "string", "minLength": 1 },
+        "uncertainty": { "type": "string", "minLength": 1 },
+        "decision_rule": { "type": "string", "minLength": 1 }
       }
     },
     "statistical_design": {

@@ -13,9 +13,11 @@ relationships:
 
 ## Description
 
-A MeasurementPlan's `statistical_design.estimator` SHALL be one value from a
-closed vocabulary, and its `statistical_design.decision_rule` SHALL be a
+A current MeasurementPlan's `statistical_design.estimator` SHALL be one value
+from a closed vocabulary, and its `statistical_design.decision_rule` SHALL be a
 structured rule a checker evaluates mechanically against the plan's `metric`.
+Retired plans authored under the v0.2.1 prose contract remain readable as
+history; they cannot govern new measurement collections.
 
 ## Inputs
 
@@ -174,8 +176,8 @@ change produces a finding rather than being accepted silently.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-021-AC-1 | The MeasurementPlan frontmatter schema accepts a decision rule with every comparator against a `threshold`, and every baseline with and without `margin`; it rejects an unknown or missing comparator, neither or both of `threshold` and `baseline`, `margin` with `threshold` or with `eq`, a non-numeric `margin`, an unknown baseline, `eq` against `best-seen`, a non-numeric `threshold`, an extra rule key, and a prose rule; it accepts a non-finite `threshold`; and it requires `metric` when `statistical_design` is present. | Test (TC-144) |
-| FR-021-AC-2 | The schema accepts each of the five estimators and rejects any other value; `population`, `sampling`, `error_model`, and `uncertainty` remain prose; the MeasurementPlan skeleton carries a valid structured estimator and decision rule, and an objective `bound` distinct from the rule's `threshold`. | Test (TC-145) |
+| FR-021-AC-1 | For non-retired plans, the MeasurementPlan frontmatter schema accepts a decision rule with every comparator against a `threshold`, and every baseline with and without `margin`; it rejects an unknown or missing comparator, neither or both of `threshold` and `baseline`, `margin` with `threshold` or with `eq`, a non-numeric `margin`, an unknown baseline, `eq` against `best-seen`, a non-numeric `threshold`, an extra rule key, and a prose rule; it accepts a non-finite `threshold`; and it requires `metric` when `statistical_design` is present. | Test (TC-144) |
+| FR-021-AC-2 | For non-retired plans, the schema accepts each of the five estimators and rejects any other value; `population`, `sampling`, `error_model`, and `uncertainty` remain prose; the MeasurementPlan skeleton carries a valid structured estimator and decision rule, and an objective `bound` distinct from the rule's `threshold`. | Test (TC-145) |
 | FR-021-AC-3 | The Rust `DecisionRule` accepts threshold and baseline rules and refuses neither or both references, `margin` without `baseline` or with `eq`, `eq` against `best-seen`, and a non-finite `threshold` or `margin` with distinct typed errors, through construction and deserialization; deserialization refuses unknown comparators, baselines, estimators, a non-numeric `margin`, and extra keys; a valid rule round-trips. | Test (TC-146) |
 | FR-021-AC-4 | The schema's `estimator`, `comparator`, and `baseline` enums equal the Rust `Estimator`, `Comparator`, and `Baseline` wire-name sets, in order, and each `ALL` constant covers every variant. | Test (TC-147) |
 | FR-021-AC-5 | Each comparator holds exactly for the estimates below, at, or above the reference its symbol names, and none holds against NaN; a baseline rule compares against the baseline value moved by its margin in the direction of improvement, for higher- and lower-is-better rules and for positive and negative margins; a missing or unexpected baseline value, a non-finite estimate or baseline value, and an overflowing reference are typed refusals. | Test (TC-148) |
@@ -184,6 +186,7 @@ change produces a finding rather than being accepted silently.
 | FR-021-AC-8 | Given two plan definitions with an equal `definition_version`, an added, removed, or changed estimator or decision rule yields one typed finding naming each changed member; the same edit with a different `definition_version`, and an unchanged definition, yield no finding. | Test (TC-141) |
 | FR-021-AC-9 | The schema and the Rust `DecisionRule` accept a comparator that agrees with the objective's direction and refuse one that disagrees, with a typed error naming both; they accept `constant-predictor` only with `estimator: proportion`, with a typed error naming the estimator. | Test (TC-144, TC-146) |
 | FR-021-AC-10 | The schema and the Rust `DecisionRule` accept `baseline: external-reference` with every estimator and, unlike `best-seen`, with `comparator: eq`, and refuse it with `eq` plus a `margin` and with a comparator that disagrees with the objective's direction, with the same typed errors as every other baseline; evaluating it without a supplied value is a typed refusal naming `external-reference`, and a supplied value is moved by the margin in the direction of improvement; the Rust `Baseline` type round-trips `external-reference` through construction, serialization, and deserialization. | Test (TC-171) |
+| FR-021-AC-11 | A retired plan with the exact v0.2.1 prose `statistical_design` shape validates without a fabricated numeric rule; the same prose is refused for proposed or active plans. Empty, missing, or extra legacy design fields are refused, a retired current-shape plan remains valid, and a legacy prose plan cannot mix in fields introduced after v0.2.1. | Test (TC-172) |
 
 ## Dependencies
 

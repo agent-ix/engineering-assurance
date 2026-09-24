@@ -10,6 +10,7 @@
     "status": { "enum": ["proposed", "active", "retired"] },
     "owner": { "type": "string", "minLength": 1 },
     "schema_version": { "const": 0.2 },
+    "profile_version": { "const": 0.2 },
     "profile_kind": { "enum": ["general", "production-ai"] },
     "scope": { "type": "string", "minLength": 1 },
     "impact_assessments": {
@@ -23,6 +24,20 @@
       "items": { "$ref": "#/$defs/relationship" }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "retired" } },
+        "required": ["status"]
+      },
+      "then": {
+        "not": { "required": ["schema_version", "profile_version"] }
+      },
+      "else": {
+        "not": { "required": ["profile_version"] }
+      }
+    }
+  ],
   "$defs": {
     "relationship": {
       "type": "object",
