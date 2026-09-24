@@ -28,7 +28,7 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
             source: Some(crate::identity::SourceLocusMeta {
                 source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
                 path: "spec/functional/VO-005-campaign-source.md",
-                start_line: 25,
+                start_line: 29,
                 start_column: 3,
                 end_line: None,
                 end_column: None,
@@ -58,7 +58,7 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
             source: Some(crate::identity::SourceLocusMeta {
                 source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
                 path: "spec/functional/VO-005-campaign-source.md",
-                start_line: 23,
+                start_line: 27,
                 start_column: 3,
                 end_line: None,
                 end_column: None,
@@ -88,7 +88,7 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
             source: Some(crate::identity::SourceLocusMeta {
                 source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
                 path: "spec/functional/VO-005-campaign-source.md",
-                start_line: 24,
+                start_line: 28,
                 start_column: 3,
                 end_line: None,
                 end_column: None,

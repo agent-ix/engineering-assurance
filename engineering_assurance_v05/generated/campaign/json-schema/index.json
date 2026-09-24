@@ -58,7 +58,7 @@
 		},
 		{
 			"path": "CampaignSource.json",
-			"digest": "sha256:867e9c1f31495b9ef3672a341f44aed3c5c9b984068025f369d3fa8f05286e43",
+			"digest": "sha256:6f75135b538f76aa6b9ffc6f4be021806a9ddb69eed08d9aa25485e2303f6223",
 			"identity": "ix://agent-ix/engineering-assurance-campaign/VO-005",
 			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/CampaignSource.json"
 		},

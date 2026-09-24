@@ -93,6 +93,11 @@ unique within their respective request collections.
   prevent undeclared, changed-unbound, or post-preflight files beneath the source
   capability root from becoming visible through the producer working directory.
   Descriptor arguments and stdin SHALL expose the same sealed input snapshots.
+- For campaign source-tree binding, the capability root SHALL still contain
+  every tracked Git symlink at preflight. The resolver reads its target bytes
+  without following the link and verifies the link's Git blob OID. It then
+  records the path and digest as omitted projection metadata. The invocation
+  working directory receives no symlink; a command that needs one fails there.
 - The executor SHALL validate every declared output path beneath the
   invocation-owned staged tree before launch, enforce output-artifact count and
   aggregate byte bounds, and after termination open each produced artifact

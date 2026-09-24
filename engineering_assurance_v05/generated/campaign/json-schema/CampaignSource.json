@@ -13,7 +13,7 @@
 					"path": "spec/functional/VO-005-campaign-source.md",
 					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 					"startColumn": 3,
-					"startLine": 25
+					"startLine": 29
 				}
 			},
 			"x-agent-ix-constraints": [
@@ -28,7 +28,7 @@
 							"path": "spec/functional/VO-005-campaign-source.md",
 							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 							"startColumn": 3,
-							"startLine": 25
+							"startLine": 29
 						}
 					}
 				}
@@ -43,7 +43,7 @@
 					"path": "spec/functional/VO-005-campaign-source.md",
 					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 					"startColumn": 3,
-					"startLine": 23
+					"startLine": 27
 				}
 			},
 			"x-agent-ix-constraints": [
@@ -58,7 +58,7 @@
 							"path": "spec/functional/VO-005-campaign-source.md",
 							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 							"startColumn": 3,
-							"startLine": 23
+							"startLine": 27
 						}
 					}
 				}
@@ -73,7 +73,7 @@
 					"path": "spec/functional/VO-005-campaign-source.md",
 					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 					"startColumn": 3,
-					"startLine": 24
+					"startLine": 28
 				}
 			},
 			"x-agent-ix-constraints": [
@@ -88,7 +88,7 @@
 							"path": "spec/functional/VO-005-campaign-source.md",
 							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 							"startColumn": 3,
-							"startLine": 24
+							"startLine": 28
 						}
 					}
 				}

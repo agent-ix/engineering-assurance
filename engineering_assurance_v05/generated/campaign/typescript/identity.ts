@@ -5,7 +5,7 @@
  * backend: ix://agent-ix/filament-core-data/backend/typescript@0.1.0
  * contract: 2.0.0
  * package: agent-ix/engineering-assurance-campaign@0.0.0
- * fingerprint: sha256:48b5076ce2d1aca9837552f7b007a344e7e407585b9330022264374c8ec5f4bb
+ * fingerprint: sha256:31c94d1557e6ef0f45b37ee370f974673fb767d3f6f73ac11001e9fec02a890e
  */
 
 /**

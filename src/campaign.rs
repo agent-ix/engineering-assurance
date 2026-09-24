@@ -96,8 +96,9 @@ pub struct ProcedureBindings {
 /// `CampaignSource` digest. Every regular tracked file is opened under the
 /// capability root and checked against its Git blob OID before selection as
 /// an [`InputBinding`] with `role = "source/" + path`. FR-019 later rechecks
-/// its SHA-256 before staging. Tracked symlink blobs are verified and recorded
-/// as omitted: no symlink is staged or followed. Other modes refuse the tree.
+/// its SHA-256 before staging. Tracked symlinks must be present at preflight:
+/// their target bytes are verified against their Git blob OIDs and recorded
+/// as omitted, but no symlink is staged or followed. Other modes refuse the tree.
 /// The caller and independent checker must establish that these manifest bytes
 /// came from `CampaignSource.revision` in the retained Git repository; this
 /// pure binding alone cannot derive a commit's tree from its self-reported ID.

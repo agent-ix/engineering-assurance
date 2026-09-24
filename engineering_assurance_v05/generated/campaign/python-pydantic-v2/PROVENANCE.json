@@ -19,14 +19,14 @@
 			"ProcedureEnvironmentKind.json",
 			"ProcedureInputPrefix.json"
 		],
-		"inputDigest": "sha256:312563a5913670e8b8c1f51a0f391d26904a7c2eb12ee4677267b953d9d886ed",
+		"inputDigest": "sha256:c04b15a6208656cbfedb0a050bc00ff0dfcc575ff69f2de0a849dd9a70cef830",
 		"preparation": []
 	},
 	"profile": {
 		"id": "pydantic_v2_basemodel",
 		"digest": "sha256:de77a678b1815ffce78633025a657d40deea86bcec59ba28c35adf93a9112dd0"
 	},
-	"toolchainFingerprint": "sha256:27bb01eab4030d457d5585a0f584d751da5d56d4cc6bba4a3787ea035595aea0",
+	"toolchainFingerprint": "sha256:e9cb670b35fba39520ca90b3f796b19a9b961c18d2f35e39f60759742d0154ab",
 	"generator": {
 		"distribution": "datamodel-code-generator",
 		"version": "0.76.0",

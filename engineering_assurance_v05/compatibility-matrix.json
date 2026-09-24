@@ -100,7 +100,7 @@
         },
         {
           "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignSource.json",
-          "sha256": "867e9c1f31495b9ef3672a341f44aed3c5c9b984068025f369d3fa8f05286e43"
+          "sha256": "6f75135b538f76aa6b9ffc6f4be021806a9ddb69eed08d9aa25485e2303f6223"
         },
         {
           "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignVerdict.json",
@@ -136,11 +136,11 @@
         },
         {
           "path": "engineering_assurance_v05/generated/campaign/json-schema/index.json",
-          "sha256": "94c5e185461bdffd62f0f70fec5663cf837aa62ee05fe97a093171afd70e948e"
+          "sha256": "0e6eab95d4908b9dfa38301b90feb31083b818a608dd3753323b2c8da2fcf7f1"
         },
         {
           "path": "engineering_assurance_v05/generated/campaign/semantic-ir.json",
-          "sha256": "48b5076ce2d1aca9837552f7b007a344e7e407585b9330022264374c8ec5f4bb"
+          "sha256": "31c94d1557e6ef0f45b37ee370f974673fb767d3f6f73ac11001e9fec02a890e"
         },
         {
           "path": "engineering_assurance_v05/schemas/architecture-description-frontmatter.schema.json",

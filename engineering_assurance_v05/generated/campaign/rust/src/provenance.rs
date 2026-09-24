@@ -18,7 +18,7 @@ pub const SOURCE_VERSION: &str = "0.0.0";
 
 /// The digest of the source the contract was read from.
 pub const SOURCE_DIGEST: &str =
-    "sha256:4d2105daee8f53b56e1bf49f585ca2db09c0a40577405ef3c5a5cf2012027099";
+    "sha256:8caaca3b1f04628c783a3d1a251257c193af066017c20617c951dbc89bd78846";
 
 /// The semantic contract package this crate was generated from.
 pub const PACKAGE_IDENTITY: &str = "agent-ix/engineering-assurance-campaign";
@@ -36,7 +36,7 @@ pub const LOCK_DIGEST: &str =
 
 /// The lock fingerprint the compiler request carried.
 pub const LOCK_FINGERPRINT: &str =
-    "sha256:48b5076ce2d1aca9837552f7b007a344e7e407585b9330022264374c8ec5f4bb";
+    "sha256:31c94d1557e6ef0f45b37ee370f974673fb767d3f6f73ac11001e9fec02a890e";
 
 /// The IR contract version the document declared.
 pub const CONTRACT_VERSION: &str = "2.0.0";
