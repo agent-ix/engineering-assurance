@@ -26,7 +26,26 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
+const USAGE =
+  "Usage: node engineering_assurance/skills/assurance-onboarding/scripts/onboard.js [--repo <path>] [--json]\n\n" +
+  "  --repo <path>  the consuming project's root (default: current directory)\n" +
+  "  --json         emit the report as JSON instead of text\n" +
+  "  -h, --help     print this message\n";
+
 const args = process.argv.slice(2);
+if (args.includes("--help") || args.includes("-h")) {
+  process.stdout.write(USAGE);
+  process.exit(0);
+}
+// Every argument is either a known flag or the path following `--repo`, so a
+// mistyped flag stops here instead of silently printing a full report.
+const unknown = args.filter(
+  (arg, index) => !["--repo", "--json"].includes(arg) && args[index - 1] !== "--repo",
+);
+if (unknown.length > 0) {
+  process.stderr.write(`unknown argument: ${unknown.join(" ")}\n\n${USAGE}`);
+  process.exit(2);
+}
 const repoFlagIndex = args.indexOf("--repo");
 const repoFlagValue = repoFlagIndex >= 0 ? args[repoFlagIndex + 1] : undefined;
 if (repoFlagIndex >= 0 && (repoFlagValue === undefined || repoFlagValue.startsWith("--"))) {

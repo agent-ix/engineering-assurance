@@ -73,6 +73,7 @@ implemented and reviewed.
 | FR-001 | FR-001-AC-5 | TC-008 | ✅ Passing |
 | FR-001 | FR-001-AC-6 | TC-044 | ✅ Passing |
 | FR-001 | FR-001-AC-7 | TC-045 | ✅ Passing |
+| FR-001 | FR-001-AC-8 | TC-174 | ✅ Passing |
 | FR-002 | FR-002-AC-1 | TC-009 | ✅ Passing |
 | FR-002 | FR-002-AC-2 | TC-010 | ✅ Passing |
 | FR-002 | FR-002-AC-3 | TC-011 | ✅ Passing |
@@ -390,6 +391,7 @@ implemented and reviewed.
 | TC-171 | The schema and the Rust DecisionRule accept baseline external-reference with every estimator, including proportion, and with comparator eq, unlike constant-predictor's proportion-only restriction and best-seen's eq refusal; both refuse it with eq plus a margin and with a comparator disagreeing with the objective direction; evaluation without a supplied value is MissingBaselineValue naming external-reference, and a supplied value is moved by the margin; the Rust Baseline type round-trips external-reference through construction, serialization and deserialization | Unit | P0 | FR-021-AC-10 | ✅ external-reference acceptance, estimator-agnostic, eq-compatible, refusal and evaluation cases passing |
 | TC-172 | A retired MeasurementPlan accepts the exact v0.2.1 prose statistical design without newly introduced gate declarations, while active and proposed plans refuse prose and require all gate declarations; malformed or hybrid legacy designs are refused, and retired current designs stay valid | Unit | P0 | FR-021-AC-11, FR-024-AC-9 | ✅ focused Rust JSON Schema accept/refuse cases passing |
 | TC-173 | A retired AssuranceProfile accepts historical profile_version 0.2; active and proposed profiles refuse it, invalid versions and both version spellings are refused, and current schema_version 0.2 remains valid | Unit | P0 | FR-025-AC-8 | ✅ focused Rust JSON Schema accept/refuse cases passing |
+| TC-174 | `onboard.js --help` and `-h` print usage on stdout and exit 0; `onboard.js --bogus` prints the unknown argument and usage on stderr and exits 2; neither prints a report | Unit | P1 | FR-001-AC-8 | ✅ `tests/test_onboarding_script.py` usage cases passing |
 
 ## Option Permutation Matrix
 

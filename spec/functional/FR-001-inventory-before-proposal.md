@@ -31,6 +31,11 @@ MeasurementPlan, or governed workflow.
 
 ## Behavior
 
+- When the onboarding report is invoked with `--help` or `-h`, the onboarding
+  report SHALL print its usage and exit 0 without inventorying a repository.
+- When the onboarding report is invoked with an argument it does not accept,
+  the onboarding report SHALL print that argument and its usage to standard
+  error and exit 2 without inventorying a repository.
 - The onboarding skill SHALL inspect existing decision and measurement material
   before it recommends new assurance artifacts.
 - If an applicable valid artifact already exists, then the onboarding skill SHALL
@@ -64,6 +69,7 @@ MeasurementPlan, or governed workflow.
 | FR-001-AC-5 | The inventory lists discovered decisions, measurements, artifacts, producer configurations, and unresolved inputs as separate collections. | Test (TC-008) |
 | FR-001-AC-6 | Malformed or conflicting applicable artifacts remain byte-unchanged, every path and validation result is reported, and no replacement is selected without human input. | Test (TC-044) |
 | FR-001-AC-7 | A justified artifact becomes visible only after staged Quire validation and atomic rename; validation failure or an escaping target leaves the intended path absent. | Test (TC-045) |
+| FR-001-AC-8 | `--help` and `-h` print the onboarding report's usage and exit 0; an unaccepted argument prints that argument and the usage to standard error and exits 2; neither prints a report. | Test (TC-174) |
 
 ## Dependencies
 
