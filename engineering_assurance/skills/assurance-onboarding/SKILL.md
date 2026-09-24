@@ -18,12 +18,15 @@ Run this once, before authoring anything, the first time this skill is used in
 a repository:
 
 ```bash
-node <installed-module-root>/engineering_assurance/skills/assurance-onboarding/scripts/onboard.js --repo <repo_root>
+node <skill-dir>/scripts/onboard.js --repo <repo_root>
 ```
 
-(`<installed-module-root>` is wherever the module was installed per
-`engineering_assurance/INSTALL.md` — the same bundle root every host's plugin
-manifest resolves. Add `--json` for a machine-readable report.)
+(`<skill-dir>` is the directory holding this `SKILL.md`. For a module installed
+with `quoin module install` it is
+`~/.ix/filament/modules/engineering-assurance/skills/assurance-onboarding`; in a
+checkout of this repository it is
+`engineering_assurance/skills/assurance-onboarding`. Add `--json` for a
+machine-readable report, or `--help` for usage.)
 
 It prints, in one place:
 
