@@ -5,10 +5,10 @@ it back. It uses Quoin's `quoin measurement record` and `quoin report`
 commands. Engineering Assurance supplies the `MeasurementPlan` type; Quoin owns
 the collection format and the measurement store.
 
-Every file below was recorded and reported with quoin 0.23.1 (the version the
+Every file below was recorded and reported with quoin 0.24.1 (the version the
 [compatibility matrix](../engineering_assurance/compatibility-matrix.json)
-pins) and with quoin 0.24.1, and validated with quire-cli 0.33.0 against the
-v0.4.0 module. The service, harness, and digests are fictional. Run the
+pins) and with quoin 0.23.1, and validated with quire-cli 0.33.0 against the
+v0.4.0 and v0.4.1 modules. The service, harness, and digests are fictional. Run the
 commands from the repository root, or pass `--repo <repo_root>`.
 
 ## 1. Write the plan
@@ -73,7 +73,7 @@ Validate it:
 quire validate --scope . 'spec/**/*.md'
 ```
 
-This needs the module installed from v0.4.0. A module installed from an older
+This needs the module installed from v0.4.0 or later. A module installed from an older
 commit refuses `statistical_design.decision_rule` and `minimum_population`;
 `quoin module list` shows which `ref` you have.
 
@@ -161,9 +161,9 @@ it refuses a record. The onboarding report restates the full field contract:
 node engineering_assurance/skills/assurance-onboarding/scripts/onboard.js --repo <repo_root>
 ```
 
-Quoin 0.23.1 requires `verificationStack.toolchains` to name all three of
-`node`, `rust`, and `python`, and it cannot read back a record that names
-fewer, so the example sets all three. Quoin 0.24.0 accepts any one.
+Quoin 0.24.0 and later accept a `verificationStack.toolchains` that names any
+one of `node`, `rust`, and `python`. The example names all three because quoin
+0.23.1 requires all three and cannot read back a record that names fewer.
 
 ## 3. Record it
 

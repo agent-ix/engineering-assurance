@@ -106,7 +106,7 @@ OpenCode, and GitHub Copilot. Use the section for your agent.
 From a shell or a script:
 
 ```bash
-claude plugin marketplace add agent-ix/engineering-assurance
+claude plugin marketplace add agent-ix/engineering-assurance@v0.4.1
 claude plugin install engineering-assurance@engineering-assurance
 ```
 
@@ -173,12 +173,13 @@ module.
 
 | Piece | Check | Ready when |
 | --- | --- | --- |
-| Quire module | `quoin module list` | `engineering-assurance` is listed with `ref` set to the tag you installed, such as `v0.4.0`. A bare commit SHA means it came from an untagged commit. |
+| Quire module | `quoin module list` | `engineering-assurance` is listed with `ref` set to the tag you installed, such as `v0.4.1`. A bare commit SHA means it came from an untagged commit. |
 | Native CLI | `engineering-assurance --version` | It prints the same version. `command not found` means `~/.cargo/bin` is not on `PATH`. |
 | Agent plugin | `claude plugin list` (or `/plugin` in a session) | `engineering-assurance@engineering-assurance` is listed as enabled at the same version. |
 
-The plugin marketplace follows this repository's default branch, not a tag.
-The version check above catches a plugin that has moved to a newer release.
+The `@v0.4.1` suffix on `marketplace add` pins the plugin to that tag. Without
+it, the marketplace follows this repository's default branch and can move past
+the tag you installed for the module and the CLI.
 
 Then classify the toolchain against the compatibility matrix:
 
