@@ -884,6 +884,7 @@ def test_repository_has_only_governed_review_evidence() -> None:
         "compatibility-matrix.md",
         "compatibility-release-gate.md",
         "consumption-boundary.md",
+        "measurement-walkthrough.md",
         "migration-contract.md",
         "structural-coverage.md",
         "verification-semantics",

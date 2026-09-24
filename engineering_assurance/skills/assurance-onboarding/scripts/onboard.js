@@ -457,7 +457,7 @@ const measurementRecordChecklist = {
       "subject — non-empty string, what was measured",
       "toolIdentity — non-empty string",
       "toolVersion — non-empty string",
-      "configDigest — non-empty string",
+      "configDigest — non-empty string (when schemaVersion is 2, also sha256:<64 LOWERCASE hex>, below)",
       "timestamp — non-empty string (no format is enforced beyond non-empty)",
       "sourceRevision — non-empty string (no format is enforced here — this is NOT the same rule as verificationStack.sources.*.revision below)",
       "scope — present (any JSON value; producer-defined)",
@@ -469,11 +469,12 @@ const measurementRecordChecklist = {
     // Required, well-formed, whenever schemaVersion is 2 — for a STORED
     // record as much as a new one. validate/stack.rs `verification_stack()`.
     schemaVersion2VerificationStack: [
+      "configDigest — sha256:<64 LOWERCASE hex> when schemaVersion is 2 (quoin >= 0.24.0; stack.rs `config_digest_shape`)",
       "verificationStack — required object when schemaVersion is 2",
       "  schemaVersion — const \"verification-stack-attestation-v1\"",
       "  lockDigest, executableDigest — sha256:<64 LOWERCASE hex>; uppercase is refused (quoin-store digest.rs)",
       "  buildProfile — when present: \"debug\" or \"release\" (a stored record may omit it, or say \"debug\" — \"release\"-only is a NEW-collection-intake rule, below)",
-      "  toolchains — when present: must name all of {node, rust, python}, each non-empty (a stored record may omit toolchains entirely — requiring it is a NEW-collection-intake rule, below)",
+      "  toolchains — when present: node, rust and python are each a non-empty string, null, or absent, and at least one is set (quoin >= 0.24.0; quoin 0.23.1 requires all three, and cannot read a record that sets fewer). A stored record may omit toolchains entirely — requiring it is a NEW-collection-intake rule, below",
       "  sources — non-empty map; each entry: revision (exactly 40 LOWERCASE hex chars — a full, unabbreviated SHA, not the looser rule sourceRevision above gets), sourceState \"clean\", remote (non-empty)",
       "  capabilities — non-empty array of non-empty strings",
       "  artifacts — non-empty map of name -> sha256:<64 LOWERCASE hex> digest",
@@ -485,8 +486,10 @@ const measurementRecordChecklist = {
     newCollectionIntakeOnly: [
       "schemaVersion must be exactly 2 — a schemaVersion-1 collection is accepted for reading only, never for new submission",
       "verificationStack.buildProfile must be exactly \"release\"",
-      "verificationStack.toolchains must be present and name all of {node, rust, python}",
-      "each observation's metric must resolve to an ACTIVE MeasurementPlan discovered under spec/assurance/ OR assurance/ in the target repo (both are searched — discovery.rs), at the SAME definitionVersion, and observation.planId must equal that plan's id",
+      "verificationStack.toolchains must be present (its per-language rule is above)",
+      "each observation's metric must resolve to an ACTIVE MeasurementPlan discovered under spec/assurance/ OR assurance/ in the target repo (both are searched — discovery.rs; a file counts only when its frontmatter says type: MeasurementPlan), at the SAME definitionVersion, and observation.planId must equal that plan's id. Plans are keyed by metric; when two share one, the higher id wins whatever its status, so keep one plan per metric",
+      "quoin >= 0.24.0, measured observations only (validate/population.rs): plan minimum_population requires population.examined >= it (QM-POPULATION-UNSTATED if absent, QM-POPULATION-BELOW-MINIMUM if smaller); plan repetitions above 1 requires population.repetitions >= it (QM-POPULATION-UNSTATED if absent, QM-REPETITIONS-SHORT if smaller)",
+      "quoin >= 0.24.0: an artifacts entry whose name is a file in the repository must carry that file's digest; `quoin measurement record --digest-from-file artifacts.<name>=<path>` fills or checks it",
     ],
   },
   observation: [
