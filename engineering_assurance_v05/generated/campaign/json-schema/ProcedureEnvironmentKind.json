@@ -1,0 +1,24 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/ProcedureEnvironmentKind.json",
+	"title": "ProcedureEnvironmentKind",
+	"type": "string",
+	"enum": [
+		"literal",
+		"runtime"
+	],
+	"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/EN-005",
+	"x-agent-ix-unknown-policy": "reject",
+	"x-agent-ix-roles": [
+		"engineering-assurance:campaign_enum"
+	],
+	"x-agent-ix-origin": {
+		"source": {
+			"path": "spec/functional/EN-005-procedure-environment-kind.md",
+			"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+			"startColumn": 1,
+			"startLine": 1
+		}
+	},
+	"x-agent-ix-kind": "campaign_enum"
+}

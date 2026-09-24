@@ -1,0 +1,99 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/ProcedureEnvironment.json",
+	"title": "ProcedureEnvironment",
+	"type": "object",
+	"properties": {
+		"kind": {
+			"$ref": "./ProcedureEnvironmentKind.json",
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-010/kind",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-010-procedure-environment.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 16
+				}
+			}
+		},
+		"name": {
+			"type": "string",
+			"minLength": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-010/name",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-010-procedure-environment.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 15
+				}
+			},
+			"x-agent-ix-constraints": [
+				{
+					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-010/name",
+					"diagnosticCode": "agent-ix.engineering-assurance-campaign.PROCEDUREENVIRONMENT_NAME_NONEMPTY",
+					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-010-name-nonEmpty",
+					"keyword": "nonEmpty",
+					"operands": {},
+					"origin": {
+						"source": {
+							"path": "spec/functional/VO-010-procedure-environment.md",
+							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+							"startColumn": 3,
+							"startLine": 15
+						}
+					}
+				}
+			]
+		},
+		"value": {
+			"type": "string",
+			"minLength": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-010/value",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-010-procedure-environment.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 17
+				}
+			},
+			"x-agent-ix-constraints": [
+				{
+					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-010/value",
+					"diagnosticCode": "agent-ix.engineering-assurance-campaign.PROCEDUREENVIRONMENT_VALUE_NONEMPTY",
+					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-010-value-nonEmpty",
+					"keyword": "nonEmpty",
+					"operands": {},
+					"origin": {
+						"source": {
+							"path": "spec/functional/VO-010-procedure-environment.md",
+							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+							"startColumn": 3,
+							"startLine": 17
+						}
+					}
+				}
+			]
+		}
+	},
+	"required": [
+		"kind",
+		"name",
+		"value"
+	],
+	"additionalProperties": false,
+	"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-010",
+	"x-agent-ix-unknown-policy": "reject",
+	"x-agent-ix-roles": [
+		"engineering-assurance:campaign_value"
+	],
+	"x-agent-ix-origin": {
+		"source": {
+			"path": "spec/functional/VO-010-procedure-environment.md",
+			"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+			"startColumn": 1,
+			"startLine": 1
+		}
+	}
+}

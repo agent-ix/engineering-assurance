@@ -1,0 +1,316 @@
+{
+  "matrix_version": "engineering-assurance.compatibility-matrix/v1",
+  "purpose": "Unaccepted Engineering Assurance 0.5.0 campaign candidate; no release or enforcing compatibility decision is implied.",
+  "accepted": {
+    "state": "pending_human_acceptance",
+    "accepted_by": null,
+    "accepted_at": null,
+    "note": "Candidate under implementation; exact versions and artifact digests require review before acceptance."
+  },
+  "gate": {
+    "rule": "Every component must classify as compatible before an enforcing migration begins.",
+    "unknown_is_not_pass": "A version this matrix has never seen is unknown, not compatible and not incompatible. Unknown never satisfies the gate.",
+    "absent_is_not_pass": "A component that could not be observed is unknown for the same reason."
+  },
+  "components": [
+    {
+      "name": "quire-cli",
+      "version": "0.33.0",
+      "released": true,
+      "release": "npm @agent-ix/quire-cli@0.33.0 (public registry)",
+      "source_revision": "5d027b057c8976a29175b3f3ebfc91088bc837d9",
+      "engine": {
+        "name": "quire-rs",
+        "version": "0.47.1",
+        "source_revision": "92dbebc49f354f7a3d5050b94cd2d57d9084d99f"
+      },
+      "provides": "Static assurance export consumed by Quoin intake (quire-cli#74).",
+      "observe": "quire provenance",
+      "incompatible": [],
+      "incompatible_reasons": {},
+      "artifacts": []
+    },
+    {
+      "name": "quoin",
+      "version": "pending-campaign-candidate",
+      "released": false,
+      "release": "unreleased generic campaign implementation",
+      "provides": "Generic campaign intake, execution and verification; candidate still under integration.",
+      "observe": "quoin --version",
+      "incompatible": [
+        "0.22.5",
+        "0.23.0"
+      ],
+      "incompatible_reasons": {
+        "0.22.5": "predates the `quoin change-assurance` surface; seal, intake, and receipt commands do not exist",
+        "0.23.0": "tagged but never published; its release run failed at the test leg on quoin#329, where an adapter accepted an inherited property name as a declared status"
+      },
+      "artifacts": []
+    },
+    {
+      "name": "ix-flow",
+      "version": "0.2.3",
+      "released": true,
+      "release": "npm @agent-ix/ix-flow@0.2.3 (public registry)",
+      "source_revision": "8b6cf8287db828b4db2df814bc7c1ef10362db24",
+      "release_integrity": "sha512-tmFIMgOhGS4Tova901cm/yRUANBKhRT3L9Sz/SNxZig1XXR8BGtuXXoETcU6kXqynVLg8uHMyoZ7+AM74Ig/BQ==",
+      "provides": "Human decision events retained as an integrity-verified chain.",
+      "observe": "ix-flow --version",
+      "incompatible": [],
+      "incompatible_reasons": {},
+      "artifacts": []
+    },
+    {
+      "name": "engineering-assurance",
+      "version": "0.5.0",
+      "released": false,
+      "release": "planned 0.5.0 source release; no tag exists",
+      "provides": "0.4.1 accepted assurance behavior plus generated mechanical campaign contracts and bounded native execution extensions.",
+      "observe": "git describe --tags",
+      "incompatible": [],
+      "incompatible_reasons": {},
+      "artifacts": [
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignAttempt.json",
+          "sha256": "ee81486ec393d6f24824bfdd5b7de1755edff06227b5b707877b4021dfb48a16"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignAttemptStatus.json",
+          "sha256": "208037277e6527c34f776bab522d6b7e4d3649ff22ec8c7c9f8aa54e819be385"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignCompletionRule.json",
+          "sha256": "0ae7f016c15cf327a0cc1ca6759614f0a5b6c3bc2c8c727565432c0e040db484"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignDefinition.json",
+          "sha256": "b4747133d724c005b448d7ec46d47b42958b3c3510020145a4d0b7da5649e642"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignMember.json",
+          "sha256": "65d2bc464bfb89be9f9c07825f495517ba637206ddb8dc79f55d3d2f14603054"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignRawArtifact.json",
+          "sha256": "7f69a07b86859979004058ef564c85e0d650689c99e30bd9d4eb24ca9d342da6"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignRun.json",
+          "sha256": "c44ad4f78bc15b025c405d7811617b84d14143f4c9f76fa3d0046b1d074101f8"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignSource.json",
+          "sha256": "185db4644f92c9dadb46848cbd9fda6a27a16c38f5a1ff97bef2a6c8be33aa62"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignVerdict.json",
+          "sha256": "0a0ac7c7d2ee69b34c9da9086142c8812f562a05aacf6d4a0c9b4ef55dae9ea3"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/MeasurementProcedure.json",
+          "sha256": "465c8f70332cedc463550a59118990f0ff1fbcc6a16981a84263479f77832fa4"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/ProcedureArgument.json",
+          "sha256": "dd58edd01f871213122ea77adc941b81dcf4a9621bdfe851b63890249a302a7e"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/ProcedureArgumentKind.json",
+          "sha256": "26dd94d516ae911716a53185cab1ba34095650d76f4209637f7cbd3a12c91944"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/ProcedureArtifact.json",
+          "sha256": "1cfff947b5a9a2d3b12dba8e74a228f717706318cc056d5f773075328b20d9c3"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/ProcedureEnvironment.json",
+          "sha256": "6f8d1e37398907327a364b8f0f57c8ff1289ed1295f1da38b87a7973a5d301d9"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/ProcedureEnvironmentKind.json",
+          "sha256": "9ed7e89fd01efb0d455b945e82cfbe21830cb65df9d7dc7544706bb8148f8ac8"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/ProcedureInputOrigin.json",
+          "sha256": "6573cceb56e2b14069e4d2fb573ef74cb2b778672739b0939f093c2b4780e893"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/ProcedureInputOriginKind.json",
+          "sha256": "65034b83af5f49287ac9485e1a750a459ead074e328e234446baf0e1db503de5"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/ProcedureInputPrefix.json",
+          "sha256": "d969d6ccab068def69e9bd237d5b9edb4f183f4370a673b55d8c7667d3dffe12"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/index.json",
+          "sha256": "5dece4fa4612466c99f4cf49d5f246039ecaee31d890ef3ef2b25d5d806925d8"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/semantic-ir.json",
+          "sha256": "7fa0a570218bdb1d90971c0826f32e7748f605b7710c40d1061392332bf9ca5c"
+        },
+        {
+          "path": "engineering_assurance_v05/schemas/architecture-description-frontmatter.schema.json",
+          "sha256": "2221c25c835f000b154f1894e7902acb1a2df371ae1885a63ce13742f8b5f42e"
+        },
+        {
+          "path": "engineering_assurance_v05/schemas/assurance-argument-frontmatter.schema.json",
+          "sha256": "a6898fdfceb83c9aaf6b6383e2b53324a708e7796ca5871f28a8d771be469148"
+        },
+        {
+          "path": "engineering_assurance_v05/schemas/assurance-profile-frontmatter.schema.json",
+          "sha256": "78680c79250a7d0b12949da19cd7b900dc05e2b33206cb0098839003ed183dd5"
+        },
+        {
+          "path": "engineering_assurance_v05/schemas/assurance-report-projection-v1.schema.json",
+          "sha256": "34ea5a24d2672a42ac6e3734f89e1e5c010f4a7e328c4fda6fe7cf02e64a515e"
+        },
+        {
+          "path": "engineering_assurance_v05/schemas/campaign-enum.schema.json",
+          "sha256": "5ebb6ec2b981921b97f04f935549b393a146ff85ef094140505199fae90437ed"
+        },
+        {
+          "path": "engineering_assurance_v05/schemas/campaign-value.schema.json",
+          "sha256": "78ff85df1fe2e98802c1d2927b2684d33581916c0396a12b7ee9c7b98035266d"
+        },
+        {
+          "path": "engineering_assurance_v05/schemas/compatibility-request-v1.schema.json",
+          "sha256": "30da8507c607c9e91767b001651d62453981e1cc4bf7c5e8bfb76a6633de09da"
+        },
+        {
+          "path": "engineering_assurance_v05/schemas/compatibility-result-v1.schema.json",
+          "sha256": "307d8cd39667c6d7a50495d60a2c6412723367321206a725a694904982833fdf"
+        },
+        {
+          "path": "engineering_assurance_v05/schemas/component-assurance-contract-frontmatter.schema.json",
+          "sha256": "0d081f2ee3942513ed46bedfa174b9cfd3e8c3c1ef89198448a4c263231172d4"
+        },
+        {
+          "path": "engineering_assurance_v05/schemas/error-v1.schema.json",
+          "sha256": "60421a0b3313cd2c23188c8ac20b235ea31f7719138598d8b95883a8ae2bba84"
+        },
+        {
+          "path": "engineering_assurance_v05/schemas/measurement-plan-frontmatter.schema.json",
+          "sha256": "e54443a0fb07aeea474791448b49f3981e7ae84f33bf05902343f5bfff72409a"
+        },
+        {
+          "path": "engineering_assurance_v05/schemas/pgm01-compatibility-view-v1.schema.json",
+          "sha256": "317294d04e430f26612a6c7cbde937e06d9e655585a59de1f1e4a0dd66855ca6"
+        },
+        {
+          "path": "engineering_assurance_v05/schemas/semantic-reference-v1.schema.json",
+          "sha256": "c72e7b8e4fe2dd9b845cdc90e210fb47bc36653c3bb96aee23bf24058e08e927"
+        },
+        {
+          "path": "engineering_assurance_v05/schemas/verification-semantics-fixture-v1.schema.json",
+          "sha256": "a8f469ceb0185b29f25fc226a72cc80dfbe7f1d65c8c197ce9cadf82b520898c"
+        },
+        {
+          "path": "engineering_assurance_v05/schemas/verification-semantics-ownership-v1.schema.json",
+          "sha256": "93ef9b5d51e659cdb39c452a45c43f34fd3a033a19ae8e118bb396f93a663c6b"
+        }
+      ],
+      "campaign_generated_artifacts": [
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignAttempt.json",
+          "sha256": "ee81486ec393d6f24824bfdd5b7de1755edff06227b5b707877b4021dfb48a16"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignAttemptStatus.json",
+          "sha256": "208037277e6527c34f776bab522d6b7e4d3649ff22ec8c7c9f8aa54e819be385"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignCompletionRule.json",
+          "sha256": "0ae7f016c15cf327a0cc1ca6759614f0a5b6c3bc2c8c727565432c0e040db484"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignDefinition.json",
+          "sha256": "b4747133d724c005b448d7ec46d47b42958b3c3510020145a4d0b7da5649e642"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignMember.json",
+          "sha256": "65d2bc464bfb89be9f9c07825f495517ba637206ddb8dc79f55d3d2f14603054"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignRawArtifact.json",
+          "sha256": "7f69a07b86859979004058ef564c85e0d650689c99e30bd9d4eb24ca9d342da6"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignRun.json",
+          "sha256": "c44ad4f78bc15b025c405d7811617b84d14143f4c9f76fa3d0046b1d074101f8"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignSource.json",
+          "sha256": "185db4644f92c9dadb46848cbd9fda6a27a16c38f5a1ff97bef2a6c8be33aa62"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignVerdict.json",
+          "sha256": "0a0ac7c7d2ee69b34c9da9086142c8812f562a05aacf6d4a0c9b4ef55dae9ea3"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/MeasurementProcedure.json",
+          "sha256": "465c8f70332cedc463550a59118990f0ff1fbcc6a16981a84263479f77832fa4"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/ProcedureArgument.json",
+          "sha256": "dd58edd01f871213122ea77adc941b81dcf4a9621bdfe851b63890249a302a7e"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/ProcedureArgumentKind.json",
+          "sha256": "26dd94d516ae911716a53185cab1ba34095650d76f4209637f7cbd3a12c91944"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/ProcedureArtifact.json",
+          "sha256": "1cfff947b5a9a2d3b12dba8e74a228f717706318cc056d5f773075328b20d9c3"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/ProcedureEnvironment.json",
+          "sha256": "6f8d1e37398907327a364b8f0f57c8ff1289ed1295f1da38b87a7973a5d301d9"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/ProcedureEnvironmentKind.json",
+          "sha256": "9ed7e89fd01efb0d455b945e82cfbe21830cb65df9d7dc7544706bb8148f8ac8"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/ProcedureInputOrigin.json",
+          "sha256": "6573cceb56e2b14069e4d2fb573ef74cb2b778672739b0939f093c2b4780e893"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/ProcedureInputOriginKind.json",
+          "sha256": "65034b83af5f49287ac9485e1a750a459ead074e328e234446baf0e1db503de5"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/ProcedureInputPrefix.json",
+          "sha256": "d969d6ccab068def69e9bd237d5b9edb4f183f4370a673b55d8c7667d3dffe12"
+        },
+        {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/index.json",
+          "sha256": "5dece4fa4612466c99f4cf49d5f246039ecaee31d890ef3ef2b25d5d806925d8"
+        }
+      ],
+      "campaign_ir": {
+        "path": "engineering_assurance_v05/generated/campaign/semantic-ir.json",
+        "sha256": "7fa0a570218bdb1d90971c0826f32e7748f605b7710c40d1061392332bf9ca5c"
+      }
+    }
+  ],
+  "fixtures": {
+    "corpus": "agent-ix/qa-corpus",
+    "note": "The pinned corpus remains a content-addressed historical cross-component fixture made by Quire 0.31.0 and Quoin 0.23.1. Current-version compatibility is separately qualified by the CLI and integration gates.",
+    "gitlink_is_the_pin": "The corpus revision is whatever gitlink this repository records; FR-011 TC-078 asserts the checked-out commit equals it."
+  },
+  "rollback": {
+    "principle": "Candidate is not released; revert the branch to the accepted 0.4.1 tag if trial integration fails."
+  },
+  "upgrade": {
+    "order": "No upgrade is authorized by this pending candidate. Integrate and verify EA, Quoin and TL before human acceptance.",
+    "verification": "Pending end-to-end campaign trial and release gates."
+  },
+  "hosted_ci": "Publication does not enable automatic hosted CI in any campaign repository. Every workflow in this campaign remains manual-dispatch only.",
+  "registry": {
+    "release_channel": "public npm registry (registry.npmjs.org)",
+    "rule": "Every npm pin in this matrix resolves from the public npm registry. The internal npm.ix mirror MUST NOT appear in any requirement, pin, lockfile, or .npmrc: it is unreachable from CI, and a pin that names it cannot be published or installed by anyone outside the network.",
+    "mirror_is_not_an_oracle": "npm.ix lags the public registry. Reading a version from it and concluding a release did not publish is a mistake that was made while preparing this matrix \u2014 quoin 0.23.1 was live on registry.npmjs.org while the mirror still reported 0.22.5. Verify a publish against the public registry."
+  }
+}

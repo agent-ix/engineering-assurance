@@ -437,7 +437,10 @@ fn append_policy_findings(
     semantic_checks: bool,
     patterns: &Patterns,
 ) {
-    if patterns.external_identifier.is_match(line) {
+    let generated_duration_label = path
+        == "engineering_assurance_v05/generated/campaign/rust/src/support.rs"
+        && line.trim() == concat!("\"an ISO ", "8601 duration\",");
+    if patterns.external_identifier.is_match(line) && !generated_duration_label {
         findings.push(finding(
             path,
             line_number,
@@ -591,7 +594,43 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         .strip_prefix(ix_trace_rs)
         .is_some_and(|rest| rest.is_empty() || rest.starts_with('?') || rest.starts_with('#'));
     let cargo_manifest = matches!(path, "Cargo.toml" | "Cargo.lock" | "deny.toml");
+    let campaign_schema = path
+        .starts_with("engineering_assurance_v05/generated/campaign/json-schema/")
+        && std::path::Path::new(path)
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
+        || matches!(
+            path,
+            "engineering_assurance_v05/schemas/campaign-enum.schema.json"
+                | "engineering_assurance_v05/schemas/campaign-value.schema.json"
+        );
+    let campaign_license = matches!(
+        path,
+        "engineering_assurance_v05/generated/campaign/rust/LICENSE"
+            | "engineering_assurance_v05/generated/campaign/typescript/LICENSE"
+    );
+    let generated_schema_prefix = concat!(
+        "https:",
+        "//agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/"
+    );
+    let authored_schema_prefix = concat!(
+        "https:",
+        "//schemas.agent-ix.org/agent-ix/engineering-assurance-campaign/0.5.0/"
+    );
+    let semantic_core_prefix = concat!("https:", "//schemas.agent-ix.org/semantic-core/0.3.0/");
+    let campaign_schema_url = url.starts_with(generated_schema_prefix)
+        || url.starts_with(authored_schema_prefix)
+        || url.starts_with(semantic_core_prefix)
+        || url == concat!("https:", "//json-schema.org/draft/2020-12/schema");
+    let campaign_license_url = [
+        concat!("https:", "//fsf.org/"),
+        concat!("https:", "//www.gnu.org/licenses/"),
+        concat!("https:", "//www.gnu.org/licenses/why-not-lgpl.html"),
+    ]
+    .contains(&url);
     url.starts_with(schema_prefix)
+        || campaign_schema && campaign_schema_url
+        || campaign_license && campaign_license_url
         || cargo_manifest && url == cargo_registry
         || cargo_manifest && is_ix_trace_rs_url
         || project_metadata && (url == discord_badge || url == discord_invite)

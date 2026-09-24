@@ -335,8 +335,8 @@ make rust-foundation-gate
 make integration-gate
 ```
 
-Read [CONTENT_RIGHTS.md](CONTENT_RIGHTS.md) before adding content. The
-repository is public. Registry packages remain private and unpublished
+Read [CONTENT_RIGHTS.md](CONTENT_RIGHTS.md) before adding content.
+The repository is public. Registry packages remain private and unpublished
 until separate, explicit authorization is given.
 
 ## License

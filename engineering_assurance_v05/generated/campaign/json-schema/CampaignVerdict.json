@@ -1,0 +1,25 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/CampaignVerdict.json",
+	"title": "CampaignVerdict",
+	"type": "string",
+	"enum": [
+		"accepted",
+		"inconclusive",
+		"rejected"
+	],
+	"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/EN-003",
+	"x-agent-ix-unknown-policy": "reject",
+	"x-agent-ix-roles": [
+		"engineering-assurance:campaign_enum"
+	],
+	"x-agent-ix-origin": {
+		"source": {
+			"path": "spec/functional/EN-003-campaign-verdict.md",
+			"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+			"startColumn": 1,
+			"startLine": 1
+		}
+	},
+	"x-agent-ix-kind": "campaign_enum"
+}

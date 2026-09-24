@@ -1,0 +1,195 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/CampaignDefinition.json",
+	"title": "CampaignDefinition",
+	"type": "object",
+	"properties": {
+		"completionRule": {
+			"$ref": "./CampaignCompletionRule.json",
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-004/completionRule",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-004-campaign-definition.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 21
+				}
+			}
+		},
+		"id": {
+			"type": "string",
+			"minLength": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-004/id",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-004-campaign-definition.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 16
+				}
+			},
+			"x-agent-ix-constraints": [
+				{
+					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-004/id",
+					"diagnosticCode": "agent-ix.engineering-assurance-campaign.CAMPAIGNDEFINITION_ID_NONEMPTY",
+					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-004-id-nonEmpty",
+					"keyword": "nonEmpty",
+					"operands": {},
+					"origin": {
+						"source": {
+							"path": "spec/functional/VO-004-campaign-definition.md",
+							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+							"startColumn": 3,
+							"startLine": 16
+						}
+					}
+				}
+			]
+		},
+		"members": {
+			"type": "array",
+			"items": {
+				"$ref": "./CampaignMember.json"
+			},
+			"minItems": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-004/members",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-004-campaign-definition.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 20
+				}
+			}
+		},
+		"schemaVersion": {
+			"type": "string",
+			"minLength": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-004/schemaVersion",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-004-campaign-definition.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 15
+				}
+			},
+			"x-agent-ix-constraints": [
+				{
+					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-004/schemaVersion",
+					"diagnosticCode": "agent-ix.engineering-assurance-campaign.CAMPAIGNDEFINITION_SCHEMAVERSION_NONEMPTY",
+					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-004-schemaVersion-nonEmpty",
+					"keyword": "nonEmpty",
+					"operands": {},
+					"origin": {
+						"source": {
+							"path": "spec/functional/VO-004-campaign-definition.md",
+							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+							"startColumn": 3,
+							"startLine": 15
+						}
+					}
+				}
+			]
+		},
+		"sourceGraph": {
+			"type": "array",
+			"items": {
+				"$ref": "./CampaignSource.json"
+			},
+			"minItems": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-004/sourceGraph",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-004-campaign-definition.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 19
+				}
+			}
+		},
+		"subjectName": {
+			"type": "string",
+			"minLength": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-004/subjectName",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-004-campaign-definition.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 17
+				}
+			},
+			"x-agent-ix-constraints": [
+				{
+					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-004/subjectName",
+					"diagnosticCode": "agent-ix.engineering-assurance-campaign.CAMPAIGNDEFINITION_SUBJECTNAME_NONEMPTY",
+					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-004-subjectName-nonEmpty",
+					"keyword": "nonEmpty",
+					"operands": {},
+					"origin": {
+						"source": {
+							"path": "spec/functional/VO-004-campaign-definition.md",
+							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+							"startColumn": 3,
+							"startLine": 17
+						}
+					}
+				}
+			]
+		},
+		"subjectVersion": {
+			"type": "string",
+			"minLength": 1,
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-004/subjectVersion",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-004-campaign-definition.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 18
+				}
+			},
+			"x-agent-ix-constraints": [
+				{
+					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-004/subjectVersion",
+					"diagnosticCode": "agent-ix.engineering-assurance-campaign.CAMPAIGNDEFINITION_SUBJECTVERSION_NONEMPTY",
+					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-004-subjectVersion-nonEmpty",
+					"keyword": "nonEmpty",
+					"operands": {},
+					"origin": {
+						"source": {
+							"path": "spec/functional/VO-004-campaign-definition.md",
+							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+							"startColumn": 3,
+							"startLine": 18
+						}
+					}
+				}
+			]
+		}
+	},
+	"required": [
+		"completionRule",
+		"id",
+		"members",
+		"schemaVersion",
+		"sourceGraph",
+		"subjectName",
+		"subjectVersion"
+	],
+	"additionalProperties": false,
+	"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-004",
+	"x-agent-ix-unknown-policy": "reject",
+	"x-agent-ix-roles": [
+		"engineering-assurance:campaign_value"
+	],
+	"x-agent-ix-origin": {
+		"source": {
+			"path": "spec/functional/VO-004-campaign-definition.md",
+			"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+			"startColumn": 1,
+			"startLine": 1
+		}
+	}
+}

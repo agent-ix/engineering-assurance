@@ -140,6 +140,10 @@ credit toward the plan's objective.
 - `ApparatusPath`, `ProtectedApparatus`, `NegativeControlKind`,
   `NegativeControl`, and `NegativeControls` SHALL be reachable through the
   `measurement` Cargo feature.
+- In the 0.5.0 Campaign candidate, an optional `execution_procedure` SHALL be
+  one safe repository-relative JSON file path. When present, the plan SHALL
+  declare `protected_apparatus`; Quoin SHALL verify that the exact procedure
+  path is protected and bind its source bytes before execution.
 
 ## Error Conditions
 
@@ -165,6 +169,7 @@ rather than being accepted silently.
 | FR-024-AC-7 | A minimal consumer with only the `measurement` feature reaches `ApparatusPath`, `ProtectedApparatus`, `NegativeControlKind`, `NegativeControl`, and `NegativeControls`, and resolves no `serde_json`. | Test (TC-142) |
 | FR-024-AC-8 | The schema refuses a non-retired gate-stage plan without `protected_apparatus`, and a plan at any stage with an `apparatus-edit` negative control but no `protected_apparatus`; it accepts both with a protected list, and a below-gate plan whose controls are of other kinds without one. | Test (TC-155) |
 | FR-024-AC-9 | A retired gate-stage plan under the v0.2.1 prose contract remains valid without fields added later for new gate plans; the same omission is refused for a proposed or active gate-stage plan, and a retired current-shape plan remains valid. | Test (TC-172) |
+| FR-024-AC-10 | The 0.5.0 candidate schema accepts an absent `execution_procedure` and safe repository-relative JSON file paths with `protected_apparatus` declared; it refuses absolute, traversing, malformed, wildcard, non-JSON, and non-string paths, and refuses a procedure path without `protected_apparatus`. Exact protected-path membership and source-byte binding remain Quoin obligations. | Test (TC-185) |
 
 ## Dependencies
 

@@ -1,0 +1,25 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/ProcedureInputOriginKind.json",
+	"title": "ProcedureInputOriginKind",
+	"type": "string",
+	"enum": [
+		"dependency",
+		"selected_bytes",
+		"source_file"
+	],
+	"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/EN-006",
+	"x-agent-ix-unknown-policy": "reject",
+	"x-agent-ix-roles": [
+		"engineering-assurance:campaign_enum"
+	],
+	"x-agent-ix-origin": {
+		"source": {
+			"path": "spec/functional/EN-006-procedure-input-origin-kind.md",
+			"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+			"startColumn": 1,
+			"startLine": 1
+		}
+	},
+	"x-agent-ix-kind": "campaign_enum"
+}
