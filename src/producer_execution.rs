@@ -706,22 +706,47 @@ pub struct ExecutionTiming {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ObservedHostContext {
-    /// Opaque stable identity of the execution host.
+    /// Opaque identity of the execution host for the recorded source and scope.
     pub machine_digest: ContentDigest,
+    /// Present when the digest identifies one kernel boot, rather than a stable machine ID.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity_source: Option<HostIdentitySource>,
     /// Operating-system class.
     pub os: String,
     /// Running kernel release.
     pub kernel_release: String,
     /// Native architecture class.
     pub architecture: String,
-    /// Kernel-reported processor model.
+    /// Kernel-reported processor model or exact ARM CPU-ID tuple.
     pub cpu_model: String,
+    /// Present when `cpu_model` is an ARM CPU-ID tuple rather than a model name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cpu_model_source: Option<CpuModelSource>,
+    /// Exact process CPU affinity for boot-scoped identity, represented opaquely.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cpu_affinity_digest: Option<ContentDigest>,
     /// CPUs available to this process at sampling time.
     pub logical_cpus: u32,
     /// Kernel-reported total physical memory in bytes.
     pub memory_bytes: u64,
     /// Executor runtime and confinement class.
     pub runtime_class: String,
+}
+
+/// Explicit narrower scope used when a stable machine identifier is absent.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HostIdentitySource {
+    /// Linux's kernel boot UUID; stable only for the lifetime of that boot.
+    KernelBootId,
+}
+
+/// Explicit origin for a CPU descriptor that is not a model name.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CpuModelSource {
+    /// The exact ARM implementation/architecture/variant/part/revision tuple.
+    ArmCpuId,
 }
 
 /// Identity-bound result of one structurally valid producer-execution attempt.
@@ -2544,15 +2569,23 @@ fn read_host_text(path: &str, maximum: u64) -> Option<String> {
 
 #[cfg(target_os = "linux")]
 fn observe_host_context() -> Option<ObservedHostContext> {
-    let machine_id = read_host_text("/etc/machine-id", 128)?;
+    let machine_id =
+        read_host_text("/etc/machine-id", 128).filter(|value| !value.trim().is_empty());
+    let boot_id = machine_id
+        .is_none()
+        .then(|| read_host_text("/proc/sys/kernel/random/boot_id", 128))
+        .flatten();
     let kernel_release = read_host_text("/proc/sys/kernel/osrelease", 256)?;
     let cpuinfo = read_host_text("/proc/cpuinfo", 1_048_576)?;
+    let status = read_host_text("/proc/self/status", 65_536);
     let logical_cpus = u32::try_from(std::thread::available_parallelism().ok()?.get()).ok()?;
     let meminfo = read_host_text("/proc/meminfo", 65_536)?;
     parse_host_context(
-        &machine_id,
+        machine_id.as_deref(),
+        boot_id.as_deref(),
         &kernel_release,
         &cpuinfo,
+        status.as_deref(),
         &meminfo,
         logical_cpus,
     )
@@ -2560,24 +2593,73 @@ fn observe_host_context() -> Option<ObservedHostContext> {
 
 #[cfg(any(test, target_os = "linux"))]
 fn parse_host_context(
-    machine_id: &str,
+    machine_id: Option<&str>,
+    boot_id: Option<&str>,
     kernel_release: &str,
     cpuinfo: &str,
+    status: Option<&str>,
     meminfo: &str,
     logical_cpus: u32,
 ) -> Option<ObservedHostContext> {
-    let machine_id = machine_id.trim();
-    if machine_id.len() != 32 || !machine_id.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return None;
-    }
     let mut identity_bytes = b"engineering-assurance.observed-host/v1\0".to_vec();
-    identity_bytes.extend_from_slice(machine_id.as_bytes());
+    let identity_source = if let Some(machine_id) = machine_id {
+        let machine_id = machine_id.trim();
+        if machine_id.len() != 32 || !machine_id.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return None;
+        }
+        identity_bytes.extend_from_slice(machine_id.as_bytes());
+        None
+    } else {
+        let boot_id = boot_id?.trim();
+        if boot_id.len() != 36
+            || !boot_id.bytes().enumerate().all(|(index, byte)| {
+                if matches!(index, 8 | 13 | 18 | 23) {
+                    byte == b'-'
+                } else {
+                    byte.is_ascii_hexdigit()
+                }
+            })
+        {
+            return None;
+        }
+        identity_bytes.extend_from_slice(b"kernel-boot-id\0");
+        identity_bytes.extend_from_slice(boot_id.as_bytes());
+        Some(HostIdentitySource::KernelBootId)
+    };
     let kernel_release = kernel_release.trim().to_owned();
-    let cpu_model = cpuinfo.lines().find_map(|line| {
-        let (name, value) = line.split_once(':')?;
-        matches!(name.trim(), "model name" | "Processor" | "Hardware")
-            .then(|| value.trim().to_owned())
-    })?;
+    let reported_model = cpuinfo
+        .lines()
+        .find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            matches!(name.trim(), "model name" | "Processor" | "Hardware")
+                .then(|| value.trim().to_owned())
+        })
+        .filter(|value| !value.is_empty());
+    let arm_ids_present = cpuinfo.lines().any(|line| {
+        line.split_once(':')
+            .is_some_and(|(name, _)| name.trim() == "CPU implementer")
+    });
+    let affinity = if identity_source.is_some() || arm_ids_present || reported_model.is_none() {
+        Some(parse_cpu_affinity(status?)?)
+    } else {
+        None
+    };
+    let (cpu_model, cpu_model_source) = if arm_ids_present || reported_model.is_none() {
+        let (_, selected) = affinity.as_ref()?;
+        (
+            arm_cpu_id(cpuinfo, selected)?,
+            Some(CpuModelSource::ArmCpuId),
+        )
+    } else {
+        (reported_model?, None)
+    };
+    let cpu_affinity_digest = if let Some((allowed, _)) = affinity {
+        let mut bytes = b"engineering-assurance.observed-host-cpu-affinity/v1\0".to_vec();
+        bytes.extend_from_slice(allowed.as_bytes());
+        Some(ContentDigest::of_bytes(&bytes))
+    } else {
+        None
+    };
     let memory_kib = meminfo.lines().find_map(|line| {
         let value = line.strip_prefix("MemTotal:")?;
         value.split_whitespace().next()?.parse::<u64>().ok()
@@ -2593,14 +2675,90 @@ fn parse_host_context(
     }
     Some(ObservedHostContext {
         machine_digest: ContentDigest::of_bytes(&identity_bytes),
+        identity_source,
         os: "linux".to_owned(),
         kernel_release,
         architecture: std::env::consts::ARCH.to_owned(),
         cpu_model,
+        cpu_model_source,
+        cpu_affinity_digest,
         logical_cpus,
         memory_bytes,
         runtime_class: "linux-process-group-v1".to_owned(),
     })
+}
+
+#[cfg(any(test, target_os = "linux"))]
+fn parse_cpu_affinity(status: &str) -> Option<(&str, std::collections::BTreeSet<u32>)> {
+    let allowed = status
+        .lines()
+        .find_map(|line| line.strip_prefix("Cpus_allowed_list:").map(str::trim))?;
+    if allowed.is_empty() || allowed.len() > 4096 {
+        return None;
+    }
+    let mut selected = std::collections::BTreeSet::new();
+    for range in allowed.split(',') {
+        let mut bounds = range.split('-');
+        let first = bounds.next()?.parse::<u32>().ok()?;
+        let last = bounds
+            .next()
+            .map_or(Some(first), |value| value.parse::<u32>().ok())?;
+        if bounds.next().is_some() || last < first || last - first > 4096 {
+            return None;
+        }
+        for cpu in first..=last {
+            if !selected.insert(cpu) || selected.len() > 4096 {
+                return None;
+            }
+        }
+    }
+    Some((allowed, selected))
+}
+
+#[cfg(any(test, target_os = "linux"))]
+fn arm_cpu_id(cpuinfo: &str, selected: &std::collections::BTreeSet<u32>) -> Option<String> {
+    let mut observed = std::collections::BTreeSet::new();
+    let mut common = None;
+    for processor in cpuinfo.split("\n\n") {
+        let field = |key: &str| {
+            processor.lines().find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                (name.trim() == key).then(|| value.trim())
+            })
+        };
+        let Some(index) = field("processor") else {
+            continue;
+        };
+        let index = index.parse::<u32>().ok()?;
+        if !selected.contains(&index) {
+            continue;
+        }
+        let implementer = field("CPU implementer")?;
+        let architecture = field("CPU architecture")?;
+        let variant = field("CPU variant")?;
+        let part = field("CPU part")?;
+        let revision = field("CPU revision")?;
+        for value in [implementer, architecture, variant, part, revision] {
+            let digits = value.strip_prefix("0x").unwrap_or(value);
+            if digits.is_empty()
+                || digits.len() > 16
+                || !digits.bytes().all(|byte| byte.is_ascii_hexdigit())
+            {
+                return None;
+            }
+        }
+        let tuple = format!(
+            "arm-cpu-id:implementer={implementer},architecture={architecture},variant={variant},part={part},revision={revision}"
+        );
+        if common.as_ref().is_some_and(|prior| prior != &tuple) || !observed.insert(index) {
+            return None;
+        }
+        common = Some(tuple);
+    }
+    if observed != *selected {
+        return None;
+    }
+    common
 }
 
 fn prelaunch_result<T>(
@@ -2673,7 +2831,7 @@ fn hex_digest(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod host_context_tests {
-    use super::parse_host_context;
+    use super::{CpuModelSource, HostIdentitySource, parse_host_context};
     use ix_trace_rs::trace;
 
     #[test]
@@ -2682,22 +2840,208 @@ mod host_context_tests {
         let machine = "0123456789abcdef0123456789abcdef";
         let cpu = "processor : 0\nmodel name : Fictional CPU\n";
         let memory = "MemTotal: 32768 kB\n";
-        let first = parse_host_context(machine, "6.1.0", cpu, memory, 4)
+        let first = parse_host_context(Some(machine), None, "6.1.0", cpu, None, memory, 4)
             .expect("complete synthetic host context");
-        let second = parse_host_context(machine, "6.1.0", cpu, memory, 4)
+        let second = parse_host_context(Some(machine), None, "6.1.0", cpu, None, memory, 4)
             .expect("stable synthetic host context");
         assert_eq!(first, second);
         assert_eq!(first.memory_bytes, 33_554_432);
         assert_eq!(first.cpu_model, "Fictional CPU");
+        assert_eq!(first.identity_source, None);
+        assert_eq!(first.cpu_model_source, None);
+        assert_eq!(first.cpu_affinity_digest, None);
+        let serialized = serde_json::to_value(&first).expect("serialize");
+        assert!(serialized.get("identitySource").is_none());
+        assert!(serialized.get("cpuModelSource").is_none());
+        assert!(serialized.get("cpuAffinityDigest").is_none());
         assert_ne!(first.machine_digest.as_str(), machine);
         assert!(
             !serde_json::to_string(&first)
                 .expect("serialize")
                 .contains(machine)
         );
-        assert!(parse_host_context("bad", "6.1.0", cpu, memory, 4).is_none());
-        assert!(parse_host_context(machine, "6.1.0", cpu, "", 4).is_none());
-        assert!(parse_host_context(machine, "6.1.0", cpu, memory, 0).is_none());
+        assert!(parse_host_context(Some("bad"), None, "6.1.0", cpu, None, memory, 4).is_none());
+        assert!(parse_host_context(Some(machine), None, "6.1.0", cpu, None, "", 4).is_none());
+        assert!(parse_host_context(Some(machine), None, "6.1.0", cpu, None, memory, 0).is_none());
+    }
+
+    #[test]
+    #[trace("TC-175", "FR-019-AC-8")]
+    fn tc_175_arm_container_uses_boot_scoped_identity_and_exact_cpu_id() {
+        let boot = "01234567-89ab-4cde-8123-0123456789ab";
+        let cpu = "processor : 0\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x000\nCPU revision : 0\n\nprocessor : 1\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x000\nCPU revision : 0\n";
+        let affinity = "Name:\tfictional\nCpus_allowed_list:\t0\n";
+        let memory = "MemTotal: 32768 kB\n";
+        let first =
+            parse_host_context(None, Some(boot), "6.1.0", cpu, Some(affinity), memory, 4).unwrap();
+        let second =
+            parse_host_context(None, Some(boot), "6.1.0", cpu, Some(affinity), memory, 4).unwrap();
+        assert_eq!(first, second);
+        let blank_model = format!("Hardware : \n{cpu}");
+        assert_eq!(
+            parse_host_context(
+                None,
+                Some(boot),
+                "6.1.0",
+                &blank_model,
+                Some(affinity),
+                memory,
+                4
+            )
+            .unwrap()
+            .cpu_model,
+            first.cpu_model
+        );
+        assert_eq!(
+            first.identity_source,
+            Some(HostIdentitySource::KernelBootId)
+        );
+        assert_eq!(first.cpu_model_source, Some(CpuModelSource::ArmCpuId));
+        assert_eq!(
+            first.cpu_model,
+            "arm-cpu-id:implementer=0x61,architecture=8,variant=0x0,part=0x000,revision=0"
+        );
+        let serialized = serde_json::to_value(&first).unwrap();
+        assert_eq!(serialized["identitySource"], "kernel_boot_id");
+        assert_eq!(serialized["cpuModelSource"], "arm_cpu_id");
+        assert!(serialized.get("cpuAffinityDigest").is_some());
+        assert!(!serialized.to_string().contains(boot));
+        assert!(!serialized.to_string().contains("Cpus_allowed_list"));
+        let different_affinity = parse_host_context(
+            None,
+            Some(boot),
+            "6.1.0",
+            cpu,
+            Some("Cpus_allowed_list:\t1\n"),
+            memory,
+            4,
+        )
+        .unwrap();
+        assert_ne!(
+            first.cpu_affinity_digest,
+            different_affinity.cpu_affinity_digest
+        );
+        let next_boot = parse_host_context(
+            None,
+            Some("01234567-89ab-4cde-8123-0123456789ac"),
+            "6.1.0",
+            cpu,
+            Some(affinity),
+            memory,
+            4,
+        )
+        .unwrap();
+        assert_ne!(first.machine_digest, next_boot.machine_digest);
+    }
+
+    #[test]
+    #[trace("TC-175", "FR-019-AC-8")]
+    fn tc_175_arm_affinity_selects_the_observed_cpu_class() {
+        let machine = "0123456789abcdef0123456789abcdef";
+        let boot = "01234567-89ab-4cde-8123-0123456789ab";
+        let cpu = "processor : 0\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x000\nCPU revision : 0\n\nprocessor : 1\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x001\nCPU revision : 0\n\nHardware : Fictional Board\n";
+        let memory = "MemTotal: 32768 kB\n";
+        let observe = |machine_id, allowed| {
+            parse_host_context(
+                machine_id,
+                Some(boot),
+                "6.1.0",
+                cpu,
+                Some(allowed),
+                memory,
+                1,
+            )
+        };
+        let first = observe(Some(machine), "Cpus_allowed_list:\t0\n").unwrap();
+        let second = observe(Some(machine), "Cpus_allowed_list:\t1\n").unwrap();
+        assert_ne!(first.cpu_model, second.cpu_model);
+        assert_ne!(first.cpu_affinity_digest, second.cpu_affinity_digest);
+        assert_eq!(first.identity_source, None);
+        assert_eq!(second.cpu_model_source, Some(CpuModelSource::ArmCpuId));
+        assert!(observe(Some(machine), "Cpus_allowed_list:\t0-1\n").is_none());
+        assert!(observe(None, "Cpus_allowed_list:\t0-1\n").is_none());
+        assert!(observe(Some(machine), "Cpus_allowed_list:\t2\n").is_none());
+        assert!(parse_host_context(Some(machine), None, "6.1.0", cpu, None, memory, 1).is_none());
+    }
+
+    #[test]
+    #[trace("TC-175", "FR-019-AC-8")]
+    fn tc_175_boot_scoped_host_refuses_missing_or_malformed_inputs() {
+        let boot = "01234567-89ab-4cde-8123-0123456789ab";
+        let cpu = "processor : 0\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x000\nCPU revision : 0\n";
+        let affinity = "Cpus_allowed_list:\t0\n";
+        let memory = "MemTotal: 32768 kB\n";
+        assert!(parse_host_context(None, None, "6.1.0", cpu, Some(affinity), memory, 4).is_none());
+        assert!(
+            parse_host_context(None, Some("bad"), "6.1.0", cpu, Some(affinity), memory, 4)
+                .is_none()
+        );
+        assert!(
+            parse_host_context(
+                Some("bad"),
+                Some(boot),
+                "6.1.0",
+                cpu,
+                Some(affinity),
+                memory,
+                4
+            )
+            .is_none()
+        );
+        assert!(parse_host_context(None, Some(boot), "6.1.0", cpu, None, memory, 4).is_none());
+        assert!(
+            parse_host_context(
+                None,
+                Some(boot),
+                "6.1.0",
+                cpu,
+                Some("Cpus_allowed_list: 0-x"),
+                memory,
+                4
+            )
+            .is_none()
+        );
+        assert!(
+            parse_host_context(
+                None,
+                Some(boot),
+                "6.1.0",
+                "processor : 0",
+                Some(affinity),
+                memory,
+                4
+            )
+            .is_none()
+        );
+        assert!(
+            parse_host_context(
+                None,
+                Some(boot),
+                "6.1.0",
+                &cpu.replace("0x61", "0xx"),
+                Some(affinity),
+                memory,
+                4
+            )
+            .is_none()
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "run in a provisioned Linux host or container with observed identity files"]
+    #[trace("TC-175", "FR-019-AC-8")]
+    fn tc_175_live_linux_host_observation_is_explicit() {
+        let observed = super::observe_host_context().expect("complete observed Linux host");
+        if super::read_host_text("/etc/machine-id", 128).is_none_or(|value| value.trim().is_empty())
+        {
+            assert_eq!(
+                observed.identity_source,
+                Some(HostIdentitySource::KernelBootId)
+            );
+        } else {
+            assert_eq!(observed.identity_source, None);
+        }
     }
 }
 
