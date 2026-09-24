@@ -16,8 +16,8 @@ use engineering_assurance::{
     },
     producer_execution::{
         CancellationBinding, ContainmentBinding, ContentDigest, ContractBinding, ExecutionBudget,
-        ExitCodeBinding, InputBinding, OutputBinding, OutputTreeBinding, ProducerDescriptor,
-        StdinBinding,
+        ExitCodeBinding, InputBinding, InvalidExecutionRequest, OutputBinding, OutputTreeBinding,
+        ProducerDescriptor, ProducerExecutionRequest, RetainedRequestError, StdinBinding,
     },
 };
 use ix_trace_rs::trace;
@@ -637,6 +637,48 @@ fn tc_180_resolved_request_identity_changes_with_every_selected_binding() {
             .expect("runtime environment variant")
             .identity
             .digest
+    );
+}
+
+#[test]
+#[trace("TC-186", "FR-019-AC-12")]
+fn tc_186_retained_request_requires_exact_typed_shape_and_valid_structure() {
+    let resolved = resolve_procedure(&procedure(), &sample_definition().source_graph, bindings())
+        .expect("source-bound request");
+    let original = serde_json::to_value(&resolved.request).expect("typed request JSON");
+    let parsed =
+        ProducerExecutionRequest::from_retained_value(&original).expect("exact retained request");
+    assert_eq!(parsed, resolved.request);
+    assert_eq!(
+        parsed.identity().expect("request identity"),
+        resolved.identity
+    );
+
+    let mut extra = original.clone();
+    extra["unclaimed"] = json!(true);
+    assert_eq!(
+        ProducerExecutionRequest::from_retained_value(&extra),
+        Err(RetainedRequestError::Shape)
+    );
+    let mut explicit_default = original.clone();
+    explicit_default["outputTrees"] = json!([]);
+    assert_eq!(
+        ProducerExecutionRequest::from_retained_value(&explicit_default),
+        Err(RetainedRequestError::Shape)
+    );
+    let mut bad_digest = original.clone();
+    bad_digest["producer"]["executableDigest"] = json!("bad");
+    assert_eq!(
+        ProducerExecutionRequest::from_retained_value(&bad_digest),
+        Err(RetainedRequestError::Wire)
+    );
+    let mut wrong_protocol = original;
+    wrong_protocol["protocol"] = json!("other");
+    assert_eq!(
+        ProducerExecutionRequest::from_retained_value(&wrong_protocol),
+        Err(RetainedRequestError::Structure(
+            InvalidExecutionRequest::Protocol
+        ))
     );
 }
 

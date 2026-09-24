@@ -191,6 +191,7 @@ unique within their respective request collections.
 | FR-019-AC-9 | The 0.5.0 candidate's FCD-generated procedure and campaign records have closed wire fields; procedures validate roles and bounds, campaign plans resolve at exact versions, and dependency graphs are finite and acyclic. | Test (TC-177, TC-179) |
 | FR-019-AC-10 | Declared fixed and tree output roles, dynamic input prefixes, executable identity, arguments, environment, and response adapter bind to one exact FR-019 request identity; near-match undeclared roles refuse. | Test (TC-178, TC-180, TC-183) |
 | FR-019-AC-11 | A campaign run binds its definition and source graph and refuses stale or unknown attempts; a source projection verifies the complete Git tree inventory and every staged file or omitted symlink blob before request creation. | Test (TC-181, TC-182) |
+| FR-019-AC-12 | Retained producer-request parsing preserves every field through typed round-trip serialization and validates the request structure; malformed digests, unknown fields and explicit elided defaults refuse. A campaign verifier can compare this exact request with a source-bound reconstructed request. | Test (TC-186) |
 
 ## Dependencies
 

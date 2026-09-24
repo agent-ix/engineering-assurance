@@ -404,6 +404,7 @@ implemented and reviewed.
 | TC-183 | Dynamic dependency input role prefixes accept only declared path components, require a matching sealed input when marked required, and reject undeclared near matches or malformed prefixes | Unit | P0 | FR-019-AC-10, VO-011 | ✅ `tests/campaign.rs` prefix binding cases passing |
 | TC-184 | A declared producer input origin names a campaign source or declared member and output artifact, matches the selected runtime role and exact origin, and rejects an undeclared dynamic input | Integration | P0 | FR-019-AC-10, VO-012, EN-006 | ✅ `tests/campaign.rs` origin context and binding cases passing; independent Quoin byte replay pending |
 | TC-185 | The 0.5.0 MeasurementPlan schema accepts a missing or safe repository-relative JSON `execution_procedure` with `protected_apparatus` declared, refuses unsafe or non-JSON paths and a missing protected list, and leaves exact protected-path membership and source-byte checks to Quoin | Unit | P0 | FR-024-AC-10 | ✅ `tests/test_campaign_measurement_plan_module.py` schema cases passing |
+| TC-186 | A source-bound EA request parses from its retained JSON with identical typed fields and identity; malformed digests, unknown fields, explicit elided defaults and an invalid protocol refuse before replay | Unit | P0 | FR-019-AC-12 | ✅ `tests/campaign.rs` retained-request accept/refuse cases passing |
 
 ## Option Permutation Matrix
 

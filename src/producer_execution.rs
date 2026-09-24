@@ -36,7 +36,7 @@ use std::{
     sync::Mutex,
 };
 
-use serde::Serialize;
+use serde::{Deserialize, Deserializer, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -132,6 +132,13 @@ impl ContentDigest {
     }
 }
 
+impl<'de> Deserialize<'de> for ContentDigest {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = String::deserialize(deserializer)?;
+        Self::parse(&value).map_err(serde::de::Error::custom)
+    }
+}
+
 /// Failure while constructing a retained-byte identity outside execution.
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
 pub enum DigestError {
@@ -153,7 +160,7 @@ pub enum DigestError {
 }
 
 /// Exact versioned identity of a caller contract or implementation.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContractBinding {
     /// Stable contract kind.
@@ -167,7 +174,7 @@ pub struct ContractBinding {
 }
 
 /// Exact identity and provenance for the selected producer executable.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProducerDescriptor {
     /// Stable producer name governed by the caller.
@@ -183,7 +190,7 @@ pub struct ProducerDescriptor {
 }
 
 /// The closed invocation procedure.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionProcedure {
     /// Execute the retained file descriptor directly without a shell.
@@ -191,7 +198,7 @@ pub enum ExecutionProcedure {
 }
 
 /// One ordered producer argument.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ArgumentBinding {
     /// One exact literal argument.
@@ -212,7 +219,7 @@ pub enum ArgumentBinding {
 }
 
 /// One selected regular-file input bound into the request identity.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InputBinding {
     /// Caller-owned unique role of the input.
@@ -232,7 +239,7 @@ fn is_false(value: &bool) -> bool {
 }
 
 /// Closed stdin source.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum StdinBinding {
     /// Deliver an immediate end-of-file.
@@ -245,7 +252,7 @@ pub enum StdinBinding {
 }
 
 /// One selected regular-file output bound before launch.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OutputBinding {
     /// Caller-owned unique role of the output.
@@ -257,7 +264,7 @@ pub struct OutputBinding {
 }
 
 /// One bounded directory of dynamic regular-file outputs.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OutputTreeBinding {
     /// Caller-owned unique role; observed file roles append `/relative/path`.
@@ -269,7 +276,7 @@ pub struct OutputTreeBinding {
 }
 
 /// Exit-code behavior declared by a response protocol.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", content = "codes", rename_all = "snake_case")]
 pub enum ExitCodeBinding {
     /// Give every normal exit code to the typed response adapter.
@@ -279,7 +286,7 @@ pub enum ExitCodeBinding {
 }
 
 /// Identity of the caller-owned response contract and decoder.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResponseBinding {
     /// Exact response-protocol contract.
@@ -291,7 +298,7 @@ pub struct ResponseBinding {
 }
 
 /// Explicitly cooperative process-group confinement.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "profile", rename_all = "kebab-case")]
 pub enum ContainmentBinding {
     /// POSIX process group plus an exact producer contract prohibiting escape.
@@ -302,7 +309,7 @@ pub enum ContainmentBinding {
 }
 
 /// Identity of the authority and event allowed to cancel an invocation.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CancellationBinding {
     /// The request cannot be cancelled by a caller event.
@@ -317,7 +324,7 @@ pub enum CancellationBinding {
 }
 
 /// Caller-selected execution ceilings beneath the library hard limits.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExecutionBudget {
     /// Maximum wall-clock duration in milliseconds.
@@ -339,7 +346,7 @@ pub struct ExecutionBudget {
 }
 
 /// One exact producer invocation.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProducerExecutionRequest {
     /// Exact [`PRODUCER_EXECUTION_REQUEST_PROTOCOL`] discriminator.
@@ -376,6 +383,23 @@ pub struct ProducerExecutionRequest {
 }
 
 impl ProducerExecutionRequest {
+    /// Parses a retained request without accepting fields or encodings that
+    /// the typed request would discard before replay.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RetainedRequestError`] if the wire shape is invalid, differs
+    /// from the typed serialization, or fails the request's structural checks.
+    pub fn from_retained_value(value: &serde_json::Value) -> Result<Self, RetainedRequestError> {
+        let request: Self =
+            serde_json::from_value(value.clone()).map_err(|_| RetainedRequestError::Wire)?;
+        if serde_json::to_value(&request).map_err(|_| RetainedRequestError::Wire)? != *value {
+            return Err(RetainedRequestError::Shape);
+        }
+        request.identity()?;
+        Ok(request)
+    }
+
     /// Validates the closed structure and computes its RFC 8785 identity.
     ///
     /// # Errors
@@ -391,6 +415,20 @@ impl ProducerExecutionRequest {
             digest: ContentDigest::of_bytes(&canonical),
         })
     }
+}
+
+/// Refusal to interpret retained producer-request bytes as an exact request.
+#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+pub enum RetainedRequestError {
+    /// The retained JSON is not a typed request.
+    #[error("invalid retained producer-request wire shape")]
+    Wire,
+    /// Deserialization would discard or normalize part of the retained shape.
+    #[error("retained producer-request shape is not exact")]
+    Shape,
+    /// The typed request fails the executor's structural validation.
+    #[error("invalid retained producer-request structure: {0}")]
+    Structure(#[from] InvalidExecutionRequest),
 }
 
 /// RFC 8785 canonical request identity.
