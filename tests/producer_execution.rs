@@ -594,10 +594,13 @@ fn assert_result_metadata_identity(result: &ProducerExecutionResult<String>) {
     assert_result_identity_changes(result, |value| {
         value.observed_host = Some(ObservedHostContext {
             machine_digest: ContentDigest::of_bytes(b"fictional host"),
+            identity_source: None,
             os: "fictional-os".to_owned(),
             kernel_release: "1".to_owned(),
             architecture: "fictional-arch".to_owned(),
             cpu_model: "fictional-cpu".to_owned(),
+            cpu_model_source: None,
+            cpu_affinity_digest: None,
             logical_cpus: 4,
             memory_bytes: 1_024,
             runtime_class: "fixture-runtime".to_owned(),
