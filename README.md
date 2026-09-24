@@ -47,6 +47,9 @@ not resolved here.
 These are the versions recorded in
 [`engineering_assurance/compatibility-matrix.json`](engineering_assurance/compatibility-matrix.json):
 
+The [v0.4.1 compatibility release gate](docs/compatibility-release-gate.md)
+records the exact accepted matrix and the patch release's verification scope.
+
 ```bash
 npm install --global \
   @agent-ix/quire-cli@0.33.0 \
@@ -55,7 +58,7 @@ npm install --global \
 rustup toolchain install 1.98.1
 ```
 
-Install the unpublished native CLI from the tagged source checkout:
+Install the native CLI from the tagged source checkout:
 
 ```bash
 cargo +1.98.1 install \

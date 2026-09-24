@@ -279,7 +279,7 @@ mod tests {
         let result = observe_with(Path::new(env!("CARGO_MANIFEST_DIR")), &fixture_runner())
             .expect("fully pinned fixture observation must classify");
         assert!(result.classification.versions_compatible);
-        assert!(!result.gate_satisfied);
+        assert!(result.gate_satisfied);
     }
 
     #[test]

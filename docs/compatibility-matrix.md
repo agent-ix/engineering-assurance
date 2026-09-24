@@ -1,10 +1,10 @@
 # Shared assurance compatibility matrix
 
-The proposed component set for the current assurance toolchain. This matrix
-remains pending human acceptance until its exact candidate and gates are reviewed.
+The accepted component set for the current assurance toolchain. Peter Krenesky
+accepted the exact v0.4.1 candidate on 2026-09-23 America/Los_Angeles.
 
 `engineering_assurance/compatibility-matrix.json` is the machine-readable
-source; this document is what a human reads before accepting it.
+source; this document records the accepted decision.
 
 ## The pinned set
 
@@ -14,10 +14,10 @@ source; this document is what a human reads before accepting it.
 | quire-rs (engine) | 0.47.1 | inside quire-cli 0.33.0 | The export the CLI delegates to |
 | quoin | 0.24.1 | npm `@agent-ix/quoin@0.24.1` | Evidence, measurements, change-assurance records, attestations, intake, audit, receipts |
 | ix-flow | 0.2.3 | npm `@agent-ix/ix-flow@0.2.3` | Human decision events as an integrity-verified chain |
-| engineering-assurance | 0.4.1 | planned git tag `v0.4.1` | Rust-native shared semantics, PGM-01 compatibility mapping, the accepted corpus gate, the Rust classifier, and the ix-flow lifecycle host |
+| engineering-assurance | 0.4.1 | git tag `v0.4.1` | Rust-native shared semantics, PGM-01 compatibility mapping, the accepted corpus gate, the Rust classifier, and the ix-flow lifecycle host |
 
-The three external tools are released artifacts. EA v0.4.1 becomes one when
-the candidate is tagged. No pin is a branch head or floating reference.
+All four component pins name released artifacts at the v0.4.1 tag. No pin is a
+branch head or floating reference.
 
 `engineering-assurance` ships as a source distribution only: its
 `prepublishOnly` hook refuses npm publication by design, so its release is the
@@ -122,16 +122,17 @@ workflow that published quoin 0.23.1.
 
 ```json
 "accepted": {
-  "state": "pending_human_acceptance",
-  "accepted_by": null,
-  "accepted_at": null
+  "state": "accepted",
+  "accepted_by": "Peter Krenesky",
+  "accepted_at": "2026-09-23"
 }
 ```
 
-The 2026-09-10 acceptance covered the earlier pins and does not carry over to
-this candidate. A named human must accept these exact versions after reviewing
-the release checks. The classifier reports the version match independently of
-that decision; a pending decision keeps the overall gate withheld.
+The 2026-09-10 acceptance covered earlier pins. Peter Krenesky accepted this
+exact candidate after reviewing PR #131. Its pre-decision matrix SHA-256 was
+`26fb2ea02d8a9bc3cb97d0e43914be00dbcc57eee927267cba6c3ab139a22cc3`.
+The classifier reports the version match independently of that decision; only
+the accepted matrix and a fully pinned toolchain open the gate.
 
 TC-082 no longer asserts the fields are unset — it now asserts acceptance is in
 one of its two honest shapes: pending with nothing filled in, or accepted with
@@ -139,5 +140,5 @@ both a named human and a date. The shape it rejects is a `state` that reads as
 accepted while nobody is on record as having accepted it.
 
 The matrix's recorded EA schema digests identify the candidate release bytes.
-They are informational until the v0.4.1 tag is cut; the observer no longer
-compares a working tree with release digests.
+The v0.4.1 tag identifies these bytes. The observer does not compare a working
+tree with release digests.

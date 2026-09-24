@@ -1,13 +1,13 @@
 # Engineering Assurance v0.4.1 consumption boundary
 
-`v0.4.1` is the proposed next Rust-port beta. It is deliberately a
+`v0.4.1` is the current immutable Rust-port beta. It is deliberately a
 pre-stabilization release: consumers may depend on it now, but its surface is
 expected to change in response to real consumer evidence. It is not a v1.0.0
 compatibility commitment.
 
 ## Pinning
 
-After human acceptance and release, use the immutable `v0.4.1` tag, never a branch name or a pull-request head.
+Use the immutable `v0.4.1` tag, never a branch name or a pull-request head.
 For a Rust consumer, pin the repository dependency by tag:
 
 ```toml

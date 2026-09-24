@@ -665,8 +665,8 @@ mod tests {
         let exact = evaluate_request_bytes(&request(&exact_observations()))
             .expect("exact request must evaluate");
         assert!(exact.versions_compatible);
-        assert_eq!(exact.outcome, CompatibilityOutcome::Withheld);
-        assert!(!exact.human_acceptance_recorded);
+        assert_eq!(exact.outcome, CompatibilityOutcome::Compatible);
+        assert!(exact.human_acceptance_recorded);
 
         // One unobserved component is enough to withhold the gate, and it has to
         // be true of every component rather than only the one a slice happens to
@@ -795,19 +795,17 @@ mod tests {
         let result =
             evaluate_request_bytes(&request(&exact_observations())).expect("request must evaluate");
         assert!(result.versions_compatible);
-        assert!(!result.human_acceptance_recorded);
-        assert!(!result.gate_satisfied);
+        assert!(result.human_acceptance_recorded);
+        assert!(result.gate_satisfied);
 
         assert_acceptance_is_honest(&matrix_value()["accepted"]);
 
-        // The release candidate remains pending until a human accepts these
-        // exact pins. The accepted branch is still checked with an independent
-        // attributed fixture.
+        // The pending branch remains checked independently after acceptance.
         assert_acceptance_is_honest(&serde_json::json!({
-            "state": "accepted",
-            "accepted_by": "Fictional Owner",
-            "accepted_at": "2026-09-23",
-            "note": "Accepted by a named human for this fixture; an agent may prepare it.",
+            "state": "pending_human_acceptance",
+            "accepted_by": serde_json::Value::Null,
+            "accepted_at": serde_json::Value::Null,
+            "note": "An agent may prepare this fixture; only a human may accept it.",
         }));
     }
 
@@ -864,7 +862,7 @@ mod tests {
         );
 
         let mut premature_acceptance = matrix_value();
-        premature_acceptance["accepted"]["state"] = serde_json::json!("accepted");
+        premature_acceptance["components"][3]["released"] = serde_json::json!(false);
         assert!(
             refusal_detail(&premature_acceptance).contains("not released"),
             "an accepted matrix named an unreleased EA candidate"
@@ -1007,9 +1005,6 @@ mod tests {
             let mut matrix: serde_json::Value =
                 serde_json::from_slice(MATRIX_BYTES).expect("the embedded matrix must be JSON");
             matrix["accepted"] = acceptance;
-            // This fixture isolates attribution from release readiness: the
-            // candidate self pin becomes released before any accepted state.
-            matrix["components"][3]["released"] = serde_json::json!(true);
             serde_json::to_vec(&matrix).expect("the mutated matrix must serialize")
         };
 

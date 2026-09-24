@@ -43,6 +43,8 @@ fn run(root: &Path) -> std::process::Output {
 
 #[test]
 #[trace(
+    "TC-014",
+    "FR-003-AC-1",
     "TC-015",
     "FR-003-AC-2",
     "TC-040",

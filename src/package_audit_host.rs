@@ -860,7 +860,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("TC-040", "NFR-003-AC-1")]
+    #[trace("TC-014", "FR-003-AC-1", "TC-040", "NFR-003-AC-1")]
     fn repository_allowlists_retain_the_existing_module_roots() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         let metadata_root = format!("engineering_assurance-{DISTRIBUTION_VERSION}.dist-info");
@@ -872,18 +872,25 @@ mod tests {
         };
         let wheel_members = wheel_allowlist(root, &wheel)
             .expect("wheel allowlist must retain the current module root");
+        let data_root = format!("engineering_assurance-{DISTRIBUTION_VERSION}.data/data");
         for required in [
-            "engineering_assurance/manifest.yaml",
-            "engineering_assurance/contracts/",
-            "engineering_assurance/fixtures/",
-            "engineering_assurance/schemas/",
-            "engineering_assurance/skeletons/",
+            "engineering_assurance/manifest.yaml".to_owned(),
+            "engineering_assurance/INSTALL.md".to_owned(),
+            "engineering_assurance/contracts/".to_owned(),
+            "engineering_assurance/fixtures/".to_owned(),
+            "engineering_assurance/schemas/".to_owned(),
+            "engineering_assurance/skeletons/".to_owned(),
+            "engineering_assurance/skills/assurance-onboarding/SKILL.md".to_owned(),
+            "engineering_assurance/skills/assurance-onboarding/workflows/".to_owned(),
+            format!("{data_root}/.claude-plugin/plugin.json"),
+            format!("{data_root}/.codex-plugin/plugin.json"),
+            format!("{data_root}/pilots/assurance-workflows/workflows/"),
         ] {
             assert!(
                 wheel_members
                     .iter()
                     .any(|member| member == required.trim_end_matches('/')
-                        || member.starts_with(required)),
+                        || member.starts_with(&required)),
                 "wheel allowlist is missing {required}"
             );
         }

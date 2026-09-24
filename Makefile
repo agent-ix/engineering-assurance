@@ -1,4 +1,4 @@
-.PHONY: lint test manifest-validate compatibility-observe package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-evidence integration-gate release-gate
+.PHONY: lint test manifest-validate compatibility-observe package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-evidence integration-gate release-gate compatibility-release-gate
 
 EVAL_AGENT ?= codex
 EVAL_RUN ?= canary
@@ -132,3 +132,10 @@ integration-evidence:
 integration-gate: lint test package-audit validate-docs rust-foundation-gate integration-traceability
 
 release-gate: integration-gate integration-evidence
+
+# The v0.4.1 patch release has a deliberately narrower, explicit boundary:
+# accepted component pins, schema bytes, packages, agent plugins, and native
+# tests. The broader integration-gate remains required for the full assurance
+# program and is neither run nor represented as green by this target.
+compatibility-release-gate: lint test package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs
+	$(PYTHON) scripts/check_compatibility_release.py
