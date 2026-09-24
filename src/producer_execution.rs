@@ -2577,10 +2577,7 @@ fn observe_host_context() -> Option<ObservedHostContext> {
         .flatten();
     let kernel_release = read_host_text("/proc/sys/kernel/osrelease", 256)?;
     let cpuinfo = read_host_text("/proc/cpuinfo", 1_048_576)?;
-    let status = machine_id
-        .is_none()
-        .then(|| read_host_text("/proc/self/status", 65_536))
-        .flatten();
+    let status = read_host_text("/proc/self/status", 65_536);
     let logical_cpus = u32::try_from(std::thread::available_parallelism().ok()?.get()).ok()?;
     let meminfo = read_host_text("/proc/meminfo", 65_536)?;
     parse_host_context(
@@ -2638,28 +2635,25 @@ fn parse_host_context(
                 .then(|| value.trim().to_owned())
         })
         .filter(|value| !value.is_empty());
-    let (cpu_model, cpu_model_source) = if let Some(model) = reported_model {
-        (model, None)
+    let arm_ids_present = cpuinfo.lines().any(|line| {
+        line.split_once(':')
+            .is_some_and(|(name, _)| name.trim() == "CPU implementer")
+    });
+    let affinity = if identity_source.is_some() || arm_ids_present || reported_model.is_none() {
+        Some(parse_cpu_affinity(status?)?)
     } else {
-        (arm_cpu_id(cpuinfo)?, Some(CpuModelSource::ArmCpuId))
+        None
     };
-    let cpu_affinity_digest = if identity_source.is_some() {
-        let allowed = status?
-            .lines()
-            .find_map(|line| line.strip_prefix("Cpus_allowed_list:").map(str::trim))?;
-        if allowed.is_empty()
-            || allowed.len() > 4096
-            || !allowed.split(',').all(|range| {
-                let mut bounds = range.split('-');
-                let first = bounds.next().and_then(|v| v.parse::<u32>().ok());
-                let last = bounds.next().map(|v| v.parse::<u32>().ok());
-                bounds.next().is_none()
-                    && first.is_some()
-                    && last.is_none_or(|v| v.is_some_and(|v| v >= first.unwrap_or_default()))
-            })
-        {
-            return None;
-        }
+    let (cpu_model, cpu_model_source) = if arm_ids_present || reported_model.is_none() {
+        let (_, selected) = affinity.as_ref()?;
+        (
+            arm_cpu_id(cpuinfo, selected)?,
+            Some(CpuModelSource::ArmCpuId),
+        )
+    } else {
+        (reported_model?, None)
+    };
+    let cpu_affinity_digest = if let Some((allowed, _)) = affinity {
         let mut bytes = b"engineering-assurance.observed-host-cpu-affinity/v1\0".to_vec();
         bytes.extend_from_slice(allowed.as_bytes());
         Some(ContentDigest::of_bytes(&bytes))
@@ -2695,31 +2689,76 @@ fn parse_host_context(
 }
 
 #[cfg(any(test, target_os = "linux"))]
-fn arm_cpu_id(cpuinfo: &str) -> Option<String> {
-    let first_processor = cpuinfo.split("\n\n").next()?;
-    let field = |key: &str| {
-        first_processor.lines().find_map(|line| {
-            let (name, value) = line.split_once(':')?;
-            (name.trim() == key).then(|| value.trim())
-        })
-    };
-    let implementer = field("CPU implementer")?;
-    let architecture = field("CPU architecture")?;
-    let variant = field("CPU variant")?;
-    let part = field("CPU part")?;
-    let revision = field("CPU revision")?;
-    for value in [implementer, architecture, variant, part, revision] {
-        let digits = value.strip_prefix("0x").unwrap_or(value);
-        if digits.is_empty()
-            || digits.len() > 16
-            || !digits.bytes().all(|byte| byte.is_ascii_hexdigit())
-        {
+fn parse_cpu_affinity(status: &str) -> Option<(&str, std::collections::BTreeSet<u32>)> {
+    let allowed = status
+        .lines()
+        .find_map(|line| line.strip_prefix("Cpus_allowed_list:").map(str::trim))?;
+    if allowed.is_empty() || allowed.len() > 4096 {
+        return None;
+    }
+    let mut selected = std::collections::BTreeSet::new();
+    for range in allowed.split(',') {
+        let mut bounds = range.split('-');
+        let first = bounds.next()?.parse::<u32>().ok()?;
+        let last = bounds
+            .next()
+            .map_or(Some(first), |value| value.parse::<u32>().ok())?;
+        if bounds.next().is_some() || last < first || last - first > 4096 {
             return None;
         }
+        for cpu in first..=last {
+            if !selected.insert(cpu) || selected.len() > 4096 {
+                return None;
+            }
+        }
     }
-    Some(format!(
-        "arm-cpu-id:implementer={implementer},architecture={architecture},variant={variant},part={part},revision={revision}"
-    ))
+    Some((allowed, selected))
+}
+
+#[cfg(any(test, target_os = "linux"))]
+fn arm_cpu_id(cpuinfo: &str, selected: &std::collections::BTreeSet<u32>) -> Option<String> {
+    let mut observed = std::collections::BTreeSet::new();
+    let mut common = None;
+    for processor in cpuinfo.split("\n\n") {
+        let field = |key: &str| {
+            processor.lines().find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                (name.trim() == key).then(|| value.trim())
+            })
+        };
+        let Some(index) = field("processor") else {
+            continue;
+        };
+        let index = index.parse::<u32>().ok()?;
+        if !selected.contains(&index) {
+            continue;
+        }
+        let implementer = field("CPU implementer")?;
+        let architecture = field("CPU architecture")?;
+        let variant = field("CPU variant")?;
+        let part = field("CPU part")?;
+        let revision = field("CPU revision")?;
+        for value in [implementer, architecture, variant, part, revision] {
+            let digits = value.strip_prefix("0x").unwrap_or(value);
+            if digits.is_empty()
+                || digits.len() > 16
+                || !digits.bytes().all(|byte| byte.is_ascii_hexdigit())
+            {
+                return None;
+            }
+        }
+        let tuple = format!(
+            "arm-cpu-id:implementer={implementer},architecture={architecture},variant={variant},part={part},revision={revision}"
+        );
+        if common.as_ref().is_some_and(|prior| prior != &tuple) || !observed.insert(index) {
+            return None;
+        }
+        common = Some(tuple);
+    }
+    if observed != *selected {
+        return None;
+    }
+    common
 }
 
 fn prelaunch_result<T>(
@@ -2830,8 +2869,8 @@ mod host_context_tests {
     #[trace("TC-175", "FR-019-AC-8")]
     fn tc_175_arm_container_uses_boot_scoped_identity_and_exact_cpu_id() {
         let boot = "01234567-89ab-4cde-8123-0123456789ab";
-        let cpu = "processor : 0\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x000\nCPU revision : 0\n";
-        let affinity = "Name:\tfictional\nCpus_allowed_list:\t0-3\n";
+        let cpu = "processor : 0\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x000\nCPU revision : 0\n\nprocessor : 1\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x000\nCPU revision : 0\n";
+        let affinity = "Name:\tfictional\nCpus_allowed_list:\t0\n";
         let memory = "MemTotal: 32768 kB\n";
         let first =
             parse_host_context(None, Some(boot), "6.1.0", cpu, Some(affinity), memory, 4).unwrap();
@@ -2867,13 +2906,13 @@ mod host_context_tests {
         assert_eq!(serialized["cpuModelSource"], "arm_cpu_id");
         assert!(serialized.get("cpuAffinityDigest").is_some());
         assert!(!serialized.to_string().contains(boot));
-        assert!(!serialized.to_string().contains("0-3"));
+        assert!(!serialized.to_string().contains("Cpus_allowed_list"));
         let different_affinity = parse_host_context(
             None,
             Some(boot),
             "6.1.0",
             cpu,
-            Some("Cpus_allowed_list:\t4-7\n"),
+            Some("Cpus_allowed_list:\t1\n"),
             memory,
             4,
         )
@@ -2897,10 +2936,40 @@ mod host_context_tests {
 
     #[test]
     #[trace("TC-175", "FR-019-AC-8")]
+    fn tc_175_arm_affinity_selects_the_observed_cpu_class() {
+        let machine = "0123456789abcdef0123456789abcdef";
+        let boot = "01234567-89ab-4cde-8123-0123456789ab";
+        let cpu = "processor : 0\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x000\nCPU revision : 0\n\nprocessor : 1\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x001\nCPU revision : 0\n\nHardware : Fictional Board\n";
+        let memory = "MemTotal: 32768 kB\n";
+        let observe = |machine_id, allowed| {
+            parse_host_context(
+                machine_id,
+                Some(boot),
+                "6.1.0",
+                cpu,
+                Some(allowed),
+                memory,
+                1,
+            )
+        };
+        let first = observe(Some(machine), "Cpus_allowed_list:\t0\n").unwrap();
+        let second = observe(Some(machine), "Cpus_allowed_list:\t1\n").unwrap();
+        assert_ne!(first.cpu_model, second.cpu_model);
+        assert_ne!(first.cpu_affinity_digest, second.cpu_affinity_digest);
+        assert_eq!(first.identity_source, None);
+        assert_eq!(second.cpu_model_source, Some(CpuModelSource::ArmCpuId));
+        assert!(observe(Some(machine), "Cpus_allowed_list:\t0-1\n").is_none());
+        assert!(observe(None, "Cpus_allowed_list:\t0-1\n").is_none());
+        assert!(observe(Some(machine), "Cpus_allowed_list:\t2\n").is_none());
+        assert!(parse_host_context(Some(machine), None, "6.1.0", cpu, None, memory, 1).is_none());
+    }
+
+    #[test]
+    #[trace("TC-175", "FR-019-AC-8")]
     fn tc_175_boot_scoped_host_refuses_missing_or_malformed_inputs() {
         let boot = "01234567-89ab-4cde-8123-0123456789ab";
         let cpu = "processor : 0\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x000\nCPU revision : 0\n";
-        let affinity = "Cpus_allowed_list:\t0-3\n";
+        let affinity = "Cpus_allowed_list:\t0\n";
         let memory = "MemTotal: 32768 kB\n";
         assert!(parse_host_context(None, None, "6.1.0", cpu, Some(affinity), memory, 4).is_none());
         assert!(
