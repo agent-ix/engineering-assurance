@@ -68,6 +68,9 @@ pub struct ProcedureBindings {
     pub environment: BTreeMap<String, String>,
     /// Exact selected input files.
     pub inputs: Vec<InputBinding>,
+    /// Claimed origins of selected explicit inputs, derived from the caller's
+    /// source/dependency selectors. Quoin must independently verify the bytes.
+    pub input_origins: Option<Vec<ProcedureInputOrigin>>,
     /// Optional complete tracked source tree staged as implicit input files.
     pub source_tree: Option<SourceTreeBinding>,
     /// Declared output paths.
@@ -531,6 +534,7 @@ pub fn validate_definition(
                 plan: member.plan_id.clone(),
             })?;
         validate_procedure(procedure)?;
+        validate_origin_context(procedure, member, &sources)?;
         if !sources.contains(procedure.source_repository.as_str()) {
             return Err(CampaignError::Unresolved {
                 kind: "procedure source repository",
@@ -539,6 +543,7 @@ pub fn validate_definition(
         }
         if let Some(checker) = &member.checker_procedure {
             validate_procedure(checker)?;
+            validate_origin_context(checker, member, &sources)?;
             if !sources.contains(checker.source_repository.as_str()) {
                 return Err(CampaignError::Unresolved {
                     kind: "checker source repository",
@@ -548,6 +553,54 @@ pub fn validate_definition(
         }
     }
     validate_member_dependencies(&members)?;
+    Ok(())
+}
+
+fn validate_origin_context(
+    procedure: &MeasurementProcedure,
+    member: &CampaignMember,
+    sources: &BTreeSet<&str>,
+) -> Result<(), CampaignError> {
+    for origin in procedure.input_origins.as_deref().unwrap_or(&[]) {
+        match origin.kind {
+            ProcedureInputOriginKind::SourceFile => {
+                let repository =
+                    origin
+                        .source_repository
+                        .as_deref()
+                        .ok_or(CampaignError::Binding {
+                            field: "inputOrigins.kind",
+                        })?;
+                if !sources.contains(repository) {
+                    return Err(CampaignError::Unresolved {
+                        kind: "input origin source repository",
+                        name: repository.to_owned(),
+                    });
+                }
+            }
+            ProcedureInputOriginKind::Dependency => {
+                let dependency =
+                    origin
+                        .dependency_member
+                        .as_deref()
+                        .ok_or(CampaignError::Binding {
+                            field: "inputOrigins.kind",
+                        })?;
+                if !member
+                    .depends_on
+                    .as_deref()
+                    .unwrap_or(&[])
+                    .iter()
+                    .any(|declared| declared == dependency)
+                {
+                    return Err(CampaignError::Binding {
+                        field: "inputOrigins.dependencyMember",
+                    });
+                }
+            }
+            ProcedureInputOriginKind::SelectedBytes => {}
+        }
+    }
     Ok(())
 }
 
@@ -649,6 +702,7 @@ pub fn resolve_procedure(
         });
     }
     validate_declared_environment(procedure, &bindings.environment)?;
+    validate_bound_origins(procedure, &bindings)?;
     let (inputs, omitted_source_links) = extend_source_inputs(&bindings, source)?;
     validate_declared_artifacts(procedure, &bindings, &inputs)?;
     let arguments = procedure
@@ -700,6 +754,50 @@ pub fn resolve_procedure(
         identity,
         omitted_source_links,
     })
+}
+
+fn validate_bound_origins(
+    procedure: &MeasurementProcedure,
+    bindings: &ProcedureBindings,
+) -> Result<(), CampaignError> {
+    let (Some(declared), Some(selected)) = (
+        procedure.input_origins.as_deref(),
+        bindings.input_origins.as_deref(),
+    ) else {
+        if procedure.input_origins.is_some() || bindings.input_origins.is_some() {
+            return Err(CampaignError::Binding {
+                field: "inputOrigins.binding",
+            });
+        }
+        return Ok(());
+    };
+    let by_role: BTreeMap<_, _> = declared
+        .iter()
+        .map(|origin| (origin.role.as_str(), origin))
+        .collect();
+    let selected_roles: BTreeSet<_> = bindings
+        .inputs
+        .iter()
+        .map(|input| input.role.as_str())
+        .collect();
+    if selected_roles.len() != bindings.inputs.len()
+        || selected_roles.len() != selected.len()
+        || !selected_roles.iter().all(|role| by_role.contains_key(role))
+    {
+        return Err(CampaignError::Binding {
+            field: "inputOrigins.binding",
+        });
+    }
+    let mut seen = BTreeSet::new();
+    for origin in selected {
+        if !seen.insert(origin.role.as_str()) || by_role.get(origin.role.as_str()) != Some(&origin)
+        {
+            return Err(CampaignError::Binding {
+                field: "inputOrigins.binding",
+            });
+        }
+    }
+    Ok(())
 }
 
 fn extend_source_inputs(

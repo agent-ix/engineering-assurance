@@ -26,3 +26,7 @@ path; `dependency` fixes the upstream member and output role while the attempt
 index is selected and retained at run time; `selected_bytes` makes no origin
 claim beyond the selected bytes. Older source-pinned procedures omit the field
 and cannot claim generic source/dependency origin assurance on that basis.
+For an opted-in procedure, every caller-selected input must match an authored
+exact role and origin. A dynamic prefix cannot add an undeclared selected
+input. Source-tree projection is separate: EA derives those implicit inputs
+from the verified Git manifest, and Quoin rechecks them at replay.

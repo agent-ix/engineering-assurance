@@ -116,6 +116,7 @@ fn bindings() -> ProcedureBindings {
             digest: ContentDigest::of_bytes(b"input"),
             executable: false,
         }],
+        input_origins: None,
         source_tree: None,
         outputs: vec![OutputBinding {
             role: "report".to_owned(),
@@ -145,7 +146,7 @@ fn bindings() -> ProcedureBindings {
 }
 
 #[test]
-#[trace("TC-177", "FR-019-AC-9", "VO-001")]
+#[trace("TC-177", "FR-019-AC-9", "VO-001", "VO-012", "EN-006")]
 fn tc_177_generated_wire_is_closed_and_procedure_requires_valid_roles() {
     let mut value = serde_json::to_value(procedure()).expect("encode procedure");
     value["unknown"] = json!(true);
@@ -310,6 +311,139 @@ fn tc_183_dynamic_input_prefixes_are_component_safe_and_required_when_declared()
         validate_procedure(&procedure),
         Err(CampaignError::Binding {
             field: "inputRolePrefixes.prefix"
+        })
+    );
+}
+
+#[test]
+#[trace("TC-184", "FR-019-AC-10", "VO-012", "EN-006")]
+fn tc_184_source_origin_binds_campaign_graph_and_runtime_selection() {
+    let definition = sample_definition();
+    let base = procedure();
+    let mut source = procedure();
+    source.input_origins = Some(
+        serde_json::from_value(json!([{
+            "role": "fixture", "kind": "source_file",
+            "sourceRepository": "ghost", "sourcePath": "fixtures/input.txt"
+        }]))
+        .expect("source origin"),
+    );
+    let missing_source = source.clone();
+    let registrations = [
+        PlanRegistration {
+            id: "MP-001",
+            definition_version: "v1",
+            procedure: Some(&base),
+        },
+        PlanRegistration {
+            id: "MP-002",
+            definition_version: "v1",
+            procedure: Some(&missing_source),
+        },
+    ];
+    assert_eq!(
+        validate_definition(&definition, &registrations),
+        Err(CampaignError::Unresolved {
+            kind: "input origin source repository",
+            name: "ghost".to_owned(),
+        })
+    );
+    source.input_origins.as_mut().expect("origins")[0].source_repository =
+        Some("fictional/source".to_owned());
+    let registrations = [
+        PlanRegistration {
+            id: "MP-001",
+            definition_version: "v1",
+            procedure: Some(&base),
+        },
+        PlanRegistration {
+            id: "MP-002",
+            definition_version: "v1",
+            procedure: Some(&source),
+        },
+    ];
+    validate_definition(&definition, &registrations).expect("tracked source repository");
+
+    let mut selected = bindings();
+    assert_eq!(
+        resolve_procedure(&source, &definition.source_graph, selected.clone()).err(),
+        Some(CampaignError::Binding {
+            field: "inputOrigins.binding"
+        })
+    );
+    selected.input_origins = source.input_origins.clone();
+    resolve_procedure(&source, &definition.source_graph, selected.clone())
+        .expect("matching selected source origin");
+    selected.input_origins.as_mut().expect("origins")[0].source_path =
+        Some("fixtures/different.txt".to_owned());
+    assert_eq!(
+        resolve_procedure(&source, &definition.source_graph, selected).err(),
+        Some(CampaignError::Binding {
+            field: "inputOrigins.binding"
+        })
+    );
+}
+
+#[test]
+#[trace("TC-184", "FR-019-AC-10", "VO-012", "EN-006")]
+fn tc_184_dependency_origin_binds_declared_member_and_refuses_extra_input() {
+    let definition = sample_definition();
+    let base = procedure();
+    let mut dependent = procedure();
+    dependent.input_origins = Some(
+        serde_json::from_value(json!([{
+            "role": "fixture", "kind": "dependency",
+            "dependencyMember": "ghost", "dependencyArtifactRole": "output"
+        }]))
+        .expect("dependency origin"),
+    );
+    let missing_dependency = dependent.clone();
+    let registrations = [
+        PlanRegistration {
+            id: "MP-001",
+            definition_version: "v1",
+            procedure: Some(&base),
+        },
+        PlanRegistration {
+            id: "MP-002",
+            definition_version: "v1",
+            procedure: Some(&missing_dependency),
+        },
+    ];
+    assert_eq!(
+        validate_definition(&definition, &registrations),
+        Err(CampaignError::Binding {
+            field: "inputOrigins.dependencyMember"
+        })
+    );
+    dependent.input_origins.as_mut().expect("origins")[0].dependency_member =
+        Some("build".to_owned());
+    let registrations = [
+        PlanRegistration {
+            id: "MP-001",
+            definition_version: "v1",
+            procedure: Some(&base),
+        },
+        PlanRegistration {
+            id: "MP-002",
+            definition_version: "v1",
+            procedure: Some(&dependent),
+        },
+    ];
+    validate_definition(&definition, &registrations).expect("declared dependency origin");
+
+    let mut selected = bindings();
+    selected.input_origins = dependent.input_origins.clone();
+    selected.inputs.push(InputBinding {
+        role: "dependency/extra".to_owned(),
+        path: "extra.txt".to_owned(),
+        digest: ContentDigest::of_bytes(b"extra"),
+        executable: false,
+    });
+    assert_eq!(
+        resolve_procedure(&dependent, &definition.source_graph, selected).err(),
+        Some(CampaignError::Binding {
+            field: "inputOrigins.binding"
         })
     );
 }
