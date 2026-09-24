@@ -220,6 +220,6 @@ Other views:
 To decide whether a recorded measure moves the plan to its next `stage`, use
 the `measurement-promotion` workflow through the `assurance-onboarding` skill.
 A profile that sets that stage to `require` also needs a verdict from
-`quoin measurement verify`, which quoin 0.24.1 does not have: check that
-`quoin measurement --help` lists `verify`. Without it the workflow refuses the
+`quoin measurement verify`: check that `quoin measurement --help` lists
+`verify`. Without it the workflow refuses the
 promotion with `promotion_checker_missing`.
