@@ -10,7 +10,7 @@ determinism gate that compares two generations byte for byte.
 
 - Source identity: `ix://agent-ix/engineering-assurance-campaign/spec`
 - Source version: `0.0.0`
-- Source digest: `sha256:8caaca3b1f04628c783a3d1a251257c193af066017c20617c951dbc89bd78846`
+- Source digest: `sha256:f763b4ff0ef7f2c888c88bc9b23be1e11b1b5952f035287973c60a10b98fcfd7`
 - Contract version: `2.0.0`
 
 The same values are exported as `&'static str` constants from

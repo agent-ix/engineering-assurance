@@ -18,7 +18,9 @@ revision and digest syntax; it cannot inspect the repository bytes. The bounded
 source projection verifies every tracked regular-file and symlink blob OID.
 Regular files are staged as sealed inputs. Symlinks are reported as omitted
 projection metadata and are never materialized or followed in the execution
-directory; a command that needs one will fail in that directory.
+directory; a command that needs one will fail in that directory. Omitted-link
+target bytes are verified when the procedure is resolved, and this metadata
+does not assert that the link is unchanged at launch.
 
 ## Properties
 

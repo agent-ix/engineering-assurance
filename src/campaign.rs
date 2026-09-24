@@ -97,8 +97,11 @@ pub struct ProcedureBindings {
 /// capability root and checked against its Git blob OID before selection as
 /// an [`InputBinding`] with `role = "source/" + path`. FR-019 later rechecks
 /// its SHA-256 before staging. Tracked symlinks must be present at preflight:
-/// their target bytes are verified against their Git blob OIDs and recorded
-/// as omitted, but no symlink is staged or followed. Other modes refuse the tree.
+/// their target bytes are verified against their Git blob OIDs at resolution
+/// and recorded as omitted, but no symlink is staged or followed. Omitted-link
+/// identity is resolution evidence; it is not checked again at launch because
+/// the link cannot affect execution in the staged directory. Other modes
+/// refuse the tree.
 /// The caller and independent checker must establish that these manifest bytes
 /// came from `CampaignSource.revision` in the retained Git repository; this
 /// pure binding alone cannot derive a commit's tree from its self-reported ID.
@@ -126,7 +129,7 @@ pub struct ResolvedProcedure {
     pub request: ProducerExecutionRequest,
     /// SHA-256-JCS identity of the exact request.
     pub identity: RequestIdentity,
-    /// Verified tracked symlinks omitted from the staged regular-file projection.
+    /// Tracked symlinks verified at resolution and omitted from staging.
     pub omitted_source_links: Vec<OmittedSourceLink>,
 }
 
@@ -574,7 +577,8 @@ pub fn resolve_procedure(
         });
     }
     validate_declared_environment(procedure, &bindings.environment)?;
-    validate_declared_artifacts(procedure, &bindings)?;
+    let (inputs, omitted_source_links) = extend_source_inputs(&bindings, source)?;
+    validate_declared_artifacts(procedure, &bindings, &inputs)?;
     let arguments = procedure
         .arguments
         .as_deref()
@@ -597,7 +601,6 @@ pub fn resolve_procedure(
         u64::try_from(procedure.timeout_millis).map_err(|_| CampaignError::Limit {
             field: "timeoutMillis",
         })?;
-    let (inputs, omitted_source_links) = extend_source_inputs(&bindings, source)?;
     let request = ProducerExecutionRequest {
         protocol: PRODUCER_EXECUTION_REQUEST_PROTOCOL.to_owned(),
         producer: bindings.producer,
@@ -694,9 +697,9 @@ fn validate_declared_environment(
 fn validate_declared_artifacts(
     procedure: &MeasurementProcedure,
     bindings: &ProcedureBindings,
+    inputs: &[InputBinding],
 ) -> Result<(), CampaignError> {
-    let input_roles: BTreeMap<_, _> = bindings
-        .inputs
+    let input_roles: BTreeMap<_, _> = inputs
         .iter()
         .map(|input| (input.role.as_str(), input))
         .collect();
@@ -741,7 +744,7 @@ fn validate_declared_artifacts(
             });
         }
     }
-    if input_roles.len() != bindings.inputs.len()
+    if input_roles.len() != inputs.len()
         || output_roles.len() != bindings.outputs.len()
         || output_tree_roles.len() != bindings.output_trees.len()
     {
@@ -777,7 +780,8 @@ fn validate_declared_artifacts(
         .iter()
         .map(|artifact| artifact.role.as_str())
         .collect();
-    if input_roles.keys().any(|role| {
+    if bindings.inputs.iter().any(|input| {
+        let role = input.role.as_str();
         !declared_inputs.contains(role)
             && !declared_input_prefixes
                 .iter()

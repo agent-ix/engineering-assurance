@@ -430,9 +430,14 @@ fn git(root: &std::path::Path, args: &[&str]) -> Vec<u8> {
 }
 
 #[test]
-#[trace("TC-182", "FR-019-AC-11", "VO-005")]
+#[trace("TC-182", "TC-183", "FR-019-AC-10", "FR-019-AC-11", "VO-005", "VO-011")]
 fn tc_182_source_projection_checks_complete_git_blob_inventory() {
-    let repo = tempfile::tempdir_in("/private/tmp").expect("temporary repository");
+    let temp_root = if cfg!(target_os = "macos") {
+        "/private/tmp"
+    } else {
+        "/tmp"
+    };
+    let repo = tempfile::tempdir_in(temp_root).expect("temporary repository");
     fs::create_dir(repo.path().join("scripts")).expect("scripts directory");
     fs::write(
         repo.path().join("Cargo.toml"),
@@ -485,7 +490,12 @@ fn tc_182_source_projection_checks_complete_git_blob_inventory() {
         .expect("arguments")
         .retain(|argument| argument.value != "fixture");
     let mut bindings = bindings();
-    bindings.capability_root = repo.path().display().to_string();
+    bindings.capability_root = repo
+        .path()
+        .canonicalize()
+        .expect("canonical temporary root")
+        .display()
+        .to_string();
     bindings.producer.source_revision = revision;
     bindings.inputs.clear();
     bindings.source_tree = Some(SourceTreeBinding {
@@ -496,6 +506,7 @@ fn tc_182_source_projection_checks_complete_git_blob_inventory() {
         .expect("sealed source tree");
     assert_eq!(resolved.request.inputs.len(), 2);
     assert_eq!(resolved.omitted_source_links.len(), 1);
+    assert_required_source_prefix(&procedure, &source, bindings.clone());
     assert_eq!(
         resolved.omitted_source_links[0].path,
         "scripts/manifest-link"
@@ -517,6 +528,27 @@ fn tc_182_source_projection_checks_complete_git_blob_inventory() {
     );
 
     assert_source_tampering_rejected(repo.path(), &procedure, &source, bindings);
+}
+
+fn assert_required_source_prefix(
+    procedure: &MeasurementProcedure,
+    source: &CampaignSource,
+    bindings: ProcedureBindings,
+) {
+    let mut required_source = procedure.clone();
+    required_source.input_role_prefixes = Some(vec![
+        serde_json::from_value(json!({"prefix":"source/","required":true}))
+            .expect("generated prefix wire"),
+    ]);
+    let source_only = resolve_procedure(&required_source, std::slice::from_ref(source), bindings)
+        .expect("verified source tree satisfies required source prefix");
+    assert!(
+        source_only
+            .request
+            .inputs
+            .iter()
+            .any(|input| input.role == "source/Cargo.toml")
+    );
 }
 
 fn assert_source_tampering_rejected(
@@ -543,12 +575,24 @@ fn assert_source_tampering_rejected(
             field: "Git blob mismatch"
         })
     );
-    let mut altered = bindings;
+    let mut altered = bindings.clone();
     altered.source_tree.as_mut().expect("tree").manifest.push(0);
     assert_eq!(
         resolve_procedure(procedure, std::slice::from_ref(source), altered).err(),
         Some(CampaignError::Binding {
             field: "sourceTree.manifestDigest"
+        })
+    );
+    fs::remove_file(repo.join("scripts/manifest-link")).expect("remove changed link");
+    std::os::unix::fs::symlink("../Cargo.toml", repo.join("scripts/manifest-link"))
+        .expect("restore tracked link");
+    fs::rename(repo.join("scripts"), repo.join("scripts-real")).expect("move original directory");
+    std::os::unix::fs::symlink("scripts-real", repo.join("scripts"))
+        .expect("substitute parent link");
+    assert_eq!(
+        resolve_procedure(procedure, std::slice::from_ref(source), bindings).err(),
+        Some(CampaignError::SourceTree {
+            field: "source parent directory"
         })
     );
 }

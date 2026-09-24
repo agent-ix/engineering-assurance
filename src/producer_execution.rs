@@ -2671,7 +2671,7 @@ mod campaign_source_projection {
     };
     use crate::campaign::{CampaignError, CampaignSource, OmittedSourceLink, SourceTreeBinding};
     use sha1::{Digest as Sha1Digest, Sha1};
-    use std::{fs, io::Cursor};
+    use std::io::Cursor;
 
     fn lowercase_hex(bytes: &[u8]) -> String {
         const HEX: &[u8; 16] = b"0123456789abcdef";
@@ -2808,29 +2808,13 @@ mod campaign_source_projection {
         oid: &str,
         total: &mut u64,
     ) -> Result<OmittedSourceLink, CampaignError> {
-        let mut selected = root.to_path_buf();
-        let mut components = Path::new(path).components().peekable();
-        while let Some(component) = components.next() {
-            selected.push(component.as_os_str());
-            let metadata =
-                fs::symlink_metadata(&selected).map_err(|_| CampaignError::SourceTree {
-                    field: "source link missing",
-                })?;
-            let correct_type = if components.peek().is_some() {
-                metadata.is_dir()
-            } else {
-                metadata.file_type().is_symlink()
-            };
-            if !correct_type {
-                return Err(CampaignError::SourceTree {
-                    field: "source link type",
-                });
+        let (parent, leaf) = source_parent(root, path)?;
+        let target = rustix::fs::readlinkat(&parent, leaf, Vec::new()).map_err(|_| {
+            CampaignError::SourceTree {
+                field: "source link read",
             }
-        }
-        let target = fs::read_link(&selected).map_err(|_| CampaignError::SourceTree {
-            field: "source link read",
         })?;
-        let target = target.to_str().ok_or(CampaignError::SourceTree {
+        let target = target.to_str().map_err(|_| CampaignError::SourceTree {
             field: "source link encoding",
         })?;
         let length = u64::try_from(target.len()).map_err(|_| CampaignError::Limit {
@@ -2858,21 +2842,20 @@ mod campaign_source_projection {
         executable: bool,
         total: &mut u64,
     ) -> Result<InputBinding, CampaignError> {
-        // Reject links at every path component; FR-019 rechecks with openat2.
-        let mut selected = root.to_path_buf();
-        for component in Path::new(path).components() {
-            selected.push(component.as_os_str());
-            let metadata =
-                fs::symlink_metadata(&selected).map_err(|_| CampaignError::SourceTree {
-                    field: "source file missing",
-                })?;
-            if metadata.file_type().is_symlink() {
-                return Err(CampaignError::SourceTree {
-                    field: "source symlink",
-                });
-            }
-        }
-        let metadata = fs::metadata(&selected).map_err(|_| CampaignError::SourceTree {
+        use rustix::fs::{Mode, OFlags, openat};
+
+        let (parent, leaf) = source_parent(root, path)?;
+        let descriptor = openat(
+            &parent,
+            leaf,
+            OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+            Mode::empty(),
+        )
+        .map_err(|_| CampaignError::SourceTree {
+            field: "source file open",
+        })?;
+        let mut file = File::from(descriptor);
+        let metadata = file.metadata().map_err(|_| CampaignError::SourceTree {
             field: "source file metadata",
         })?;
         if !metadata.is_file() {
@@ -2890,9 +2873,6 @@ mod campaign_source_projection {
                 field: "source byte population",
             });
         }
-        let mut file = File::open(&selected).map_err(|_| CampaignError::SourceTree {
-            field: "source file open",
-        })?;
         let digest = hash_source_blob(&mut file, metadata.len(), oid)?;
         let role = if executable {
             format!("source-exec/{path}")
@@ -2905,6 +2885,50 @@ mod campaign_source_projection {
             digest,
             executable,
         })
+    }
+
+    /// Open every root and parent component relative to a verified directory
+    /// descriptor. No path component may be replaced by a symlink between a
+    /// separate metadata check and the read of its child.
+    fn source_parent<'a>(root: &Path, path: &'a str) -> Result<(File, &'a str), CampaignError> {
+        use rustix::fs::{Mode, OFlags, openat};
+
+        if !root.is_absolute() {
+            return Err(CampaignError::SourceTree {
+                field: "capability root",
+            });
+        }
+        let mut directory = File::open("/").map_err(|_| CampaignError::SourceTree {
+            field: "source root open",
+        })?;
+        let open_directory = |directory: File, name: &std::ffi::OsStr| {
+            openat(
+                &directory,
+                name,
+                OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+                Mode::empty(),
+            )
+            .map(File::from)
+            .map_err(|_| CampaignError::SourceTree {
+                field: "source parent directory",
+            })
+        };
+        for component in root.components() {
+            match component {
+                Component::RootDir => {}
+                Component::Normal(name) => directory = open_directory(directory, name)?,
+                _ => {
+                    return Err(CampaignError::SourceTree {
+                        field: "capability root",
+                    });
+                }
+            }
+        }
+        let (parents, leaf) = path.rsplit_once('/').unwrap_or(("", path));
+        for name in parents.split('/').filter(|name| !name.is_empty()) {
+            directory = open_directory(directory, std::ffi::OsStr::new(name))?;
+        }
+        Ok((directory, leaf))
     }
 
     fn hash_source_blob<R: Read>(

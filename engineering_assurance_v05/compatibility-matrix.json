@@ -100,7 +100,7 @@
         },
         {
           "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignSource.json",
-          "sha256": "6f75135b538f76aa6b9ffc6f4be021806a9ddb69eed08d9aa25485e2303f6223"
+          "sha256": "185db4644f92c9dadb46848cbd9fda6a27a16c38f5a1ff97bef2a6c8be33aa62"
         },
         {
           "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignVerdict.json",
@@ -136,11 +136,11 @@
         },
         {
           "path": "engineering_assurance_v05/generated/campaign/json-schema/index.json",
-          "sha256": "0e6eab95d4908b9dfa38301b90feb31083b818a608dd3753323b2c8da2fcf7f1"
+          "sha256": "97cf04612ef011df94f761fc9e485eb6a032cbe50811e3b5ba5b254b73f63d6b"
         },
         {
           "path": "engineering_assurance_v05/generated/campaign/semantic-ir.json",
-          "sha256": "31c94d1557e6ef0f45b37ee370f974673fb767d3f6f73ac11001e9fec02a890e"
+          "sha256": "46795a65600fd62af402b0407db266b7a413dfe6c2246ba3ddd2d13cf92be4ab"
         },
         {
           "path": "engineering_assurance_v05/schemas/architecture-description-frontmatter.schema.json",
@@ -234,7 +234,7 @@
         },
         {
           "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignSource.json",
-          "sha256": "867e9c1f31495b9ef3672a341f44aed3c5c9b984068025f369d3fa8f05286e43"
+          "sha256": "185db4644f92c9dadb46848cbd9fda6a27a16c38f5a1ff97bef2a6c8be33aa62"
         },
         {
           "path": "engineering_assurance_v05/generated/campaign/json-schema/CampaignVerdict.json",
@@ -242,7 +242,7 @@
         },
         {
           "path": "engineering_assurance_v05/generated/campaign/json-schema/MeasurementProcedure.json",
-          "sha256": "381a7eb9d6c7cdcfdfc0f962508c4c1891b557304506e1df482c2a8adf4d264c"
+          "sha256": "20ef5e5b4cbf105c62a3df75250f4bd077de32611593127132dbdaef5e0980c4"
         },
         {
           "path": "engineering_assurance_v05/generated/campaign/json-schema/ProcedureArgument.json",
@@ -265,13 +265,17 @@
           "sha256": "9ed7e89fd01efb0d455b945e82cfbe21830cb65df9d7dc7544706bb8148f8ac8"
         },
         {
+          "path": "engineering_assurance_v05/generated/campaign/json-schema/ProcedureInputPrefix.json",
+          "sha256": "d969d6ccab068def69e9bd237d5b9edb4f183f4370a673b55d8c7667d3dffe12"
+        },
+        {
           "path": "engineering_assurance_v05/generated/campaign/json-schema/index.json",
-          "sha256": "6fe18b885614c703f5eaae36e7e5b61f6e0d40f974f15f57782a480c207ddaf5"
+          "sha256": "97cf04612ef011df94f761fc9e485eb6a032cbe50811e3b5ba5b254b73f63d6b"
         }
       ],
       "campaign_ir": {
         "path": "engineering_assurance_v05/generated/campaign/semantic-ir.json",
-        "sha256": "e60e7124292762871ffb084e7e2f6229fe8ce652b826298a88733747c4a87091"
+        "sha256": "46795a65600fd62af402b0407db266b7a413dfe6c2246ba3ddd2d13cf92be4ab"
       }
     }
   ],
