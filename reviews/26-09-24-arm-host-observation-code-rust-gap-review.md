@@ -3,7 +3,7 @@ id: SR-133
 title: "Independent code, Rust and gap recheck of ARM host observation"
 type: SpecReview
 analysis: code-review
-scope: "EA PR #136 at 7eeacba, stacked on Campaign PR #135"
+scope: "EA PR #136 at 526c385, rebased on merged Campaign PR #135"
 review_set: subset
 relationships:
   - target: "ix://agent-ix/engineering-assurance/FR-019"
@@ -43,5 +43,5 @@ when selected CPU records are incomplete or heterogeneous.
 - The ignored live TC-175 host-observation test passed in local ARM64 Linux
   Docker with Rust 1.98.1, offline locked dependencies and `--network none`.
   The source was mounted read-only. No files were sent to a remote host.
-- The source rebase from `3ac7cce` to `7eeacba` only added the parent PR's
-  independent review file; it did not change ARM host-observation code.
+- The source rebases from `3ac7cce` through `7eeacba` to `526c385` did not
+  change the ARM host-observation code reviewed and exercised above.
