@@ -17,7 +17,8 @@ pub use agent_ix_engineering_assurance_campaign::{
     CampaignAttempt, CampaignAttemptStatus, CampaignCompletionRule, CampaignDefinition,
     CampaignMember, CampaignRawArtifact, CampaignRun, CampaignSource, CampaignVerdict,
     MeasurementProcedure, ProcedureArgument, ProcedureArgumentKind, ProcedureArtifact,
-    ProcedureEnvironment, ProcedureEnvironmentKind, ProcedureInputPrefix,
+    ProcedureEnvironment, ProcedureEnvironmentKind, ProcedureInputOrigin, ProcedureInputOriginKind,
+    ProcedureInputPrefix,
 };
 
 use crate::producer_execution::{
@@ -295,6 +296,7 @@ pub fn validate_procedure(procedure: &MeasurementProcedure) -> Result<(), Campai
         }
     }
     let input_prefixes = validate_input_prefixes(procedure, &inputs)?;
+    validate_input_origins(procedure, &inputs)?;
     for artifact in procedure.outputs.as_deref().unwrap_or(&[]) {
         nonempty(&artifact.role, "outputs.role")?;
         if !outputs.insert(artifact.role.as_str()) {
@@ -378,6 +380,76 @@ fn validate_input_prefixes<'a>(
         }
     }
     Ok(prefixes)
+}
+
+fn validate_input_origins(
+    procedure: &MeasurementProcedure,
+    inputs: &BTreeSet<&str>,
+) -> Result<(), CampaignError> {
+    // Absence preserves the pre-origin contract while current source-pinned
+    // Campaigns migrate. A present declaration is always a complete inventory.
+    let Some(origins) = &procedure.input_origins else {
+        return Ok(());
+    };
+    let mut roles = BTreeSet::new();
+    for origin in origins {
+        if !inputs.contains(origin.role.as_str()) {
+            return Err(CampaignError::Binding {
+                field: "inputOrigins.role",
+            });
+        }
+        if !roles.insert(origin.role.as_str()) {
+            return Err(CampaignError::Duplicate {
+                kind: "input origin role",
+                name: origin.role.clone(),
+            });
+        }
+        let source = origin
+            .source_repository
+            .as_deref()
+            .zip(origin.source_path.as_deref());
+        let dependency = origin
+            .dependency_member
+            .as_deref()
+            .zip(origin.dependency_artifact_role.as_deref());
+        match origin.kind {
+            ProcedureInputOriginKind::SelectedBytes
+                if origin.source_repository.is_none()
+                    && origin.source_path.is_none()
+                    && origin.dependency_member.is_none()
+                    && origin.dependency_artifact_role.is_none() => {}
+            ProcedureInputOriginKind::SourceFile
+                if source.is_some_and(|(repository, path)| {
+                    !repository.is_empty() && valid_source_path(path)
+                }) && origin.dependency_member.is_none()
+                    && origin.dependency_artifact_role.is_none() => {}
+            ProcedureInputOriginKind::Dependency
+                if dependency
+                    .is_some_and(|(member, role)| !member.is_empty() && !role.is_empty())
+                    && origin.source_repository.is_none()
+                    && origin.source_path.is_none() => {}
+            _ => {
+                return Err(CampaignError::Binding {
+                    field: "inputOrigins.kind",
+                });
+            }
+        }
+    }
+    if roles.len() != inputs.len() {
+        return Err(CampaignError::Binding {
+            field: "inputOrigins.complete",
+        });
+    }
+    Ok(())
+}
+
+fn valid_source_path(path: &str) -> bool {
+    !path.is_empty()
+        && !path.as_bytes().contains(&0)
+        && !std::path::Path::new(path).is_absolute()
+        && path
+            .split('/')
+            .all(|component| !component.is_empty() && component != "." && component != "..")
 }
 
 /// Validates a runnable campaign against the exact available plans.

@@ -13,6 +13,7 @@ TYPE_KIND: dict[str, str] = {
     'CampaignVerdict': 'campaign_enum',
     'ProcedureArgumentKind': 'campaign_enum',
     'ProcedureEnvironmentKind': 'campaign_enum',
+    'ProcedureInputOriginKind': 'campaign_enum',
 }
 
 #: The types each type specializes; its class carries their fields.

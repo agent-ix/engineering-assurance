@@ -15,4 +15,6 @@ pub mod procedure_argument_kind;
 pub mod procedure_artifact;
 pub mod procedure_environment;
 pub mod procedure_environment_kind;
+pub mod procedure_input_origin;
+pub mod procedure_input_origin_kind;
 pub mod procedure_input_prefix;

@@ -5,7 +5,7 @@
  * backend: ix://agent-ix/filament-core-data/backend/typescript@0.1.0
  * contract: 2.0.0
  * package: agent-ix/engineering-assurance-campaign@0.0.0
- * fingerprint: sha256:46795a65600fd62af402b0407db266b7a413dfe6c2246ba3ddd2d13cf92be4ab
+ * fingerprint: sha256:7fa0a570218bdb1d90971c0826f32e7748f605b7710c40d1061392332bf9ca5c
  */
 
 /**
@@ -30,7 +30,7 @@ export const PROVENANCE = {
 	sourceVersion: "0.0.0",
 	sourceDialect: "spec-bundle",
 	sourceDigest:
-		"sha256:f763b4ff0ef7f2c888c88bc9b23be1e11b1b5952f035287973c60a10b98fcfd7",
+		"sha256:fddb37510aa6e0f65f807108dec013a4de67a438dec72cd89508cd3a7c127a5e",
 	packageIdentity: "agent-ix/engineering-assurance-campaign",
 	packageVersion: "0.0.0",
 	packageManifestDigest:
@@ -40,7 +40,7 @@ export const PROVENANCE = {
 	packageLockDigest:
 		"sha256:f744926df404e8096f1eb2ddbcf6c6d143cfd721c754aa7d964156f11613850c",
 	fingerprint:
-		"sha256:46795a65600fd62af402b0407db266b7a413dfe6c2246ba3ddd2d13cf92be4ab",
+		"sha256:7fa0a570218bdb1d90971c0826f32e7748f605b7710c40d1061392332bf9ca5c",
 	backendIdentity: "ix://agent-ix/filament-core-data/backend/typescript",
 	backendVersion: "0.1.0",
 } as const;

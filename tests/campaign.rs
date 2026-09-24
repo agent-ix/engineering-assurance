@@ -171,6 +171,70 @@ fn tc_177_generated_wire_is_closed_and_procedure_requires_valid_roles() {
             field: "arguments.role"
         })
     );
+
+    let mut origin = procedure();
+    origin.input_origins = Some(
+        serde_json::from_value(json!([{
+            "role": "fixture", "kind": "source_file",
+            "sourceRepository": "fictional/source", "sourcePath": "fixtures/input.txt"
+        }]))
+        .expect("source origin"),
+    );
+    validate_procedure(&origin).expect("complete source origin");
+
+    origin.input_origins.as_mut().expect("origins")[0].source_path =
+        Some("fixtures//input.txt".to_owned());
+    assert_eq!(
+        validate_procedure(&origin),
+        Err(CampaignError::Binding {
+            field: "inputOrigins.kind"
+        })
+    );
+    origin.input_origins.as_mut().expect("origins")[0].source_path = None;
+    assert_eq!(
+        validate_procedure(&origin),
+        Err(CampaignError::Binding {
+            field: "inputOrigins.kind"
+        })
+    );
+    origin.input_origins = Some(
+        serde_json::from_value(json!([{
+            "role": "fixture", "kind": "dependency",
+            "dependencyMember": "prepare", "dependencyArtifactRole": "output"
+        }]))
+        .expect("dependency origin"),
+    );
+    validate_procedure(&origin).expect("complete dependency origin");
+    origin.input_origins.as_mut().expect("origins")[0].source_repository =
+        Some("fictional/source".to_owned());
+    assert_eq!(
+        validate_procedure(&origin),
+        Err(CampaignError::Binding {
+            field: "inputOrigins.kind"
+        })
+    );
+    origin.input_origins = Some(
+        serde_json::from_value(json!([{
+            "role": "fixture", "kind": "selected_bytes"
+        }]))
+        .expect("selected bytes origin"),
+    );
+    validate_procedure(&origin).expect("complete selected bytes origin");
+    origin.input_origins.as_mut().expect("origins")[0].source_path =
+        Some("fixtures/input.txt".to_owned());
+    assert_eq!(
+        validate_procedure(&origin),
+        Err(CampaignError::Binding {
+            field: "inputOrigins.kind"
+        })
+    );
+    origin.input_origins = Some(Vec::new());
+    assert_eq!(
+        validate_procedure(&origin),
+        Err(CampaignError::Binding {
+            field: "inputOrigins.complete"
+        })
+    );
 }
 
 #[test]

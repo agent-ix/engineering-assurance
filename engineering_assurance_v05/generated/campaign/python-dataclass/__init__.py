@@ -21,6 +21,8 @@ from .ProcedureArgumentKind import ProcedureArgumentKind
 from .ProcedureArtifact import ProcedureArtifact
 from .ProcedureEnvironment import ProcedureEnvironment
 from .ProcedureEnvironmentKind import ProcedureEnvironmentKind
+from .ProcedureInputOrigin import ProcedureInputOrigin
+from .ProcedureInputOriginKind import ProcedureInputOriginKind
 from .ProcedureInputPrefix import ProcedureInputPrefix
 from .constructs import ABSTRACT, FIELD_REDEFINES, FIELD_SUBSETS, IDENTITY_FIELDS, IMMUTABLE, MEMBERS, OCCURRENCE_FIELD, OPERATION_CLAUSES, OPERATION_FRAMES, OWNER, PERSISTS, POPULATIONS, STEPS, SUPERTYPES, TRANSITIONS, TYPE_KIND, VALUE_EQUALITY, VOCABULARY
 
@@ -52,6 +54,8 @@ __all__ = [
     "ProcedureArtifact",
     "ProcedureEnvironment",
     "ProcedureEnvironmentKind",
+    "ProcedureInputOrigin",
+    "ProcedureInputOriginKind",
     "ProcedureInputPrefix",
     "STEPS",
     "SUPERTYPES",

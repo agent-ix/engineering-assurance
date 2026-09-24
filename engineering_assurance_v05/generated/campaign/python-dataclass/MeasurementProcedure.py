@@ -11,6 +11,7 @@ from pydantic.dataclasses import dataclass
 from .ProcedureArgument import ProcedureArgument
 from .ProcedureArtifact import ProcedureArtifact
 from .ProcedureEnvironment import ProcedureEnvironment
+from .ProcedureInputOrigin import ProcedureInputOrigin
 from .ProcedureInputPrefix import ProcedureInputPrefix
 
 
@@ -27,6 +28,7 @@ class MeasurementProcedure:
     timeoutMillis: Annotated[int, Field(ge=1)]
     arguments: list[ProcedureArgument] | None = None
     environment: list[ProcedureEnvironment] | None = None
+    inputOrigins: list[ProcedureInputOrigin] | None = None
     inputRolePrefixes: list[ProcedureInputPrefix] | None = None
     inputs: list[ProcedureArtifact] | None = None
     outputTrees: list[ProcedureArtifact] | None = None

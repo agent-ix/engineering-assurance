@@ -5,7 +5,7 @@
  * backend: ix://agent-ix/filament-core-data/backend/typescript@0.1.0
  * contract: 2.0.0
  * package: agent-ix/engineering-assurance-campaign@0.0.0
- * fingerprint: sha256:46795a65600fd62af402b0407db266b7a413dfe6c2246ba3ddd2d13cf92be4ab
+ * fingerprint: sha256:7fa0a570218bdb1d90971c0826f32e7748f605b7710c40d1061392332bf9ca5c
  */
 
 /**
@@ -41,6 +41,7 @@ import type {
 	CampaignVerdict,
 	CampaignAttemptStatus,
 	ProcedureEnvironmentKind,
+	ProcedureInputOriginKind,
 	MeasurementProcedure,
 	ProcedureArgument,
 	ProcedureArtifact,
@@ -52,6 +53,7 @@ import type {
 	CampaignRawArtifact,
 	ProcedureEnvironment,
 	ProcedureInputPrefix,
+	ProcedureInputOrigin,
 } from "./types.js";
 
 function prepareProcedureArgumentKind(value: unknown, depth: number): unknown {
@@ -331,6 +333,65 @@ export function validateProcedureEnvironmentKind(
 	return { ok: false, errors: sortErrors(errors) };
 }
 
+function prepareProcedureInputOriginKind(
+	value: unknown,
+	depth: number,
+): unknown {
+	if (depth > MAX_VALIDATION_DEPTH) return value;
+	return value;
+}
+
+function checkProcedureInputOriginKind(
+	candidate: unknown,
+	pointer: string,
+	errors: ValidationError[],
+	_surfaced: ValidationError[],
+	depth: number,
+): candidate is ProcedureInputOriginKind {
+	const before = errors.length;
+	if (depth > MAX_VALIDATION_DEPTH) {
+		fail(
+			errors,
+			pointer,
+			CODES.DEPTH_LIMIT_EXCEEDED,
+			"the value nests past the declared bound",
+		);
+		return false;
+	}
+	if (typeof candidate !== "string") {
+		fail(errors, pointer, CODES.NOT_A_STRING, "the value is of the wrong type");
+		return false;
+	}
+	const variants: readonly string[] = [
+		"dependency",
+		"selected_bytes",
+		"source_file",
+	];
+	if (!variants.includes(candidate)) {
+		fail(
+			errors,
+			pointer,
+			CODES.NOT_A_DECLARED_VARIANT,
+			"the value names no declared variant",
+		);
+		return false;
+	}
+	return errors.length === before;
+}
+
+/** Decide an untrusted value against `ix://agent-ix/engineering-assurance-campaign/EN-006`. */
+export function validateProcedureInputOriginKind(
+	input: unknown,
+): ValidationResult<ProcedureInputOriginKind> {
+	const errors: ValidationError[] = [];
+	const surfaced: ValidationError[] = [];
+	const value = prepareProcedureInputOriginKind(input, 0);
+	if (checkProcedureInputOriginKind(value, "", errors, surfaced, 0)) {
+		return { ok: true, value, surfaced: sortErrors(surfaced) };
+	}
+	return { ok: false, errors: sortErrors(errors) };
+}
+
 function prepareMeasurementProcedure(value: unknown, depth: number): unknown {
 	if (depth > MAX_VALIDATION_DEPTH) return value;
 	if (!isPlainObject(value)) return value;
@@ -357,6 +418,19 @@ function prepareMeasurementProcedure(value: unknown, depth: number): unknown {
 				: member.value;
 		} else if (member.state === "accessor") {
 			copyAccessor(out, value, "environment");
+			accessor = true;
+		}
+	}
+	{
+		const member = ownMember(value, "inputOrigins");
+		if (member.state === "value") {
+			out["inputOrigins"] = Array.isArray(member.value)
+				? member.value.map((item) =>
+						prepareProcedureInputOrigin(item, depth + 1),
+					)
+				: member.value;
+		} else if (member.state === "accessor") {
+			copyAccessor(out, value, "inputOrigins");
 			accessor = true;
 		}
 	}
@@ -490,6 +564,7 @@ function prepareMeasurementProcedure(value: unknown, depth: number): unknown {
 	const declared: readonly string[] = [
 		"arguments",
 		"environment",
+		"inputOrigins",
 		"inputRolePrefixes",
 		"inputs",
 		"outputTrees",
@@ -608,6 +683,48 @@ function checkMeasurementProcedure(
 			} else {
 				for (let index = 0; index < member.value.length; index += 1) {
 					checkProcedureEnvironment(
+						member.value[index],
+						join(at, String(index)),
+						errors,
+						surfaced,
+						depth + 1,
+					);
+				}
+			}
+		}
+	}
+	{
+		const member = ownMember(candidate, "inputOrigins");
+		const at = join(pointer, "inputOrigins");
+		if (member.state === "accessor") {
+			fail(
+				errors,
+				at,
+				CODES.ACCESSOR_MEMBER,
+				"the member is an accessor and is not read",
+			);
+		} else if (member.state === "absent") {
+			// An absent optional property is accepted.
+		} else if (member.value === undefined) {
+			fail(
+				errors,
+				at,
+				CODES.EXPLICIT_UNDEFINED,
+				"the property is present with the value undefined",
+			);
+		} else if (member.value === null) {
+			fail(
+				errors,
+				at,
+				CODES.NULL_NOT_PERMITTED,
+				"the property is null and the field is not nullable",
+			);
+		} else {
+			if (!Array.isArray(member.value)) {
+				fail(errors, at, CODES.NOT_AN_ARRAY, "the value is not an array");
+			} else {
+				for (let index = 0; index < member.value.length; index += 1) {
+					checkProcedureInputOrigin(
 						member.value[index],
 						join(at, String(index)),
 						errors,
@@ -1104,6 +1221,7 @@ function checkMeasurementProcedure(
 	const declared: readonly string[] = [
 		"arguments",
 		"environment",
+		"inputOrigins",
 		"inputRolePrefixes",
 		"inputs",
 		"outputTrees",
@@ -3960,6 +4078,350 @@ export function validateProcedureInputPrefix(
 	const surfaced: ValidationError[] = [];
 	const value = prepareProcedureInputPrefix(input, 0);
 	if (checkProcedureInputPrefix(value, "", errors, surfaced, 0)) {
+		return { ok: true, value, surfaced: sortErrors(surfaced) };
+	}
+	return { ok: false, errors: sortErrors(errors) };
+}
+
+function prepareProcedureInputOrigin(value: unknown, depth: number): unknown {
+	if (depth > MAX_VALIDATION_DEPTH) return value;
+	if (!isPlainObject(value)) return value;
+	const out: Record<string, unknown> = Object.create(null);
+	let accessor = false;
+	{
+		const member = ownMember(value, "dependencyArtifactRole");
+		if (member.state === "value") {
+			out["dependencyArtifactRole"] = member.value;
+		} else if (member.state === "accessor") {
+			copyAccessor(out, value, "dependencyArtifactRole");
+			accessor = true;
+		}
+	}
+	{
+		const member = ownMember(value, "dependencyMember");
+		if (member.state === "value") {
+			out["dependencyMember"] = member.value;
+		} else if (member.state === "accessor") {
+			copyAccessor(out, value, "dependencyMember");
+			accessor = true;
+		}
+	}
+	{
+		const member = ownMember(value, "kind");
+		if (member.state === "value") {
+			out["kind"] =
+				member.value === null
+					? member.value
+					: prepareProcedureInputOriginKind(member.value, depth + 1);
+		} else if (member.state === "accessor") {
+			copyAccessor(out, value, "kind");
+			accessor = true;
+		}
+	}
+	{
+		const member = ownMember(value, "role");
+		if (member.state === "value") {
+			out["role"] = member.value;
+		} else if (member.state === "accessor") {
+			copyAccessor(out, value, "role");
+			accessor = true;
+		}
+	}
+	{
+		const member = ownMember(value, "sourcePath");
+		if (member.state === "value") {
+			out["sourcePath"] = member.value;
+		} else if (member.state === "accessor") {
+			copyAccessor(out, value, "sourcePath");
+			accessor = true;
+		}
+	}
+	{
+		const member = ownMember(value, "sourceRepository");
+		if (member.state === "value") {
+			out["sourceRepository"] = member.value;
+		} else if (member.state === "accessor") {
+			copyAccessor(out, value, "sourceRepository");
+			accessor = true;
+		}
+	}
+	const declared: readonly string[] = [
+		"dependencyArtifactRole",
+		"dependencyMember",
+		"kind",
+		"role",
+		"sourcePath",
+		"sourceRepository",
+	];
+	for (const key of ownKeys(value)) {
+		if (declared.includes(key)) continue;
+		const member = ownMember(value, key);
+		if (member.state !== "value") continue;
+		out[key] = member.value;
+	}
+	return accessor ? out : { ...out };
+}
+
+function checkProcedureInputOrigin(
+	candidate: unknown,
+	pointer: string,
+	errors: ValidationError[],
+	surfaced: ValidationError[],
+	depth: number,
+): candidate is ProcedureInputOrigin {
+	const before = errors.length;
+	if (depth > MAX_VALIDATION_DEPTH) {
+		fail(
+			errors,
+			pointer,
+			CODES.DEPTH_LIMIT_EXCEEDED,
+			"the value nests past the declared bound",
+		);
+		return false;
+	}
+	if (!isPlainObject(candidate)) {
+		fail(errors, pointer, CODES.NOT_AN_OBJECT, "the value is not an object");
+		return false;
+	}
+	{
+		const member = ownMember(candidate, "dependencyArtifactRole");
+		const at = join(pointer, "dependencyArtifactRole");
+		if (member.state === "accessor") {
+			fail(
+				errors,
+				at,
+				CODES.ACCESSOR_MEMBER,
+				"the member is an accessor and is not read",
+			);
+		} else if (member.state === "absent") {
+			// An absent optional property is accepted.
+		} else if (member.value === undefined) {
+			fail(
+				errors,
+				at,
+				CODES.EXPLICIT_UNDEFINED,
+				"the property is present with the value undefined",
+			);
+		} else if (member.value === null) {
+			fail(
+				errors,
+				at,
+				CODES.NULL_NOT_PERMITTED,
+				"the property is null and the field is not nullable",
+			);
+		} else {
+			fail(
+				errors,
+				at,
+				CODES.SHAPE_MISMATCH,
+				"the element type is not declared",
+			);
+		}
+	}
+	{
+		const member = ownMember(candidate, "dependencyMember");
+		const at = join(pointer, "dependencyMember");
+		if (member.state === "accessor") {
+			fail(
+				errors,
+				at,
+				CODES.ACCESSOR_MEMBER,
+				"the member is an accessor and is not read",
+			);
+		} else if (member.state === "absent") {
+			// An absent optional property is accepted.
+		} else if (member.value === undefined) {
+			fail(
+				errors,
+				at,
+				CODES.EXPLICIT_UNDEFINED,
+				"the property is present with the value undefined",
+			);
+		} else if (member.value === null) {
+			fail(
+				errors,
+				at,
+				CODES.NULL_NOT_PERMITTED,
+				"the property is null and the field is not nullable",
+			);
+		} else {
+			fail(
+				errors,
+				at,
+				CODES.SHAPE_MISMATCH,
+				"the element type is not declared",
+			);
+		}
+	}
+	{
+		const member = ownMember(candidate, "kind");
+		const at = join(pointer, "kind");
+		if (member.state === "accessor") {
+			fail(
+				errors,
+				at,
+				CODES.ACCESSOR_MEMBER,
+				"the member is an accessor and is not read",
+			);
+		} else if (member.state === "absent") {
+			fail(errors, at, CODES.MISSING_REQUIRED, "the property is absent");
+		} else if (member.value === undefined) {
+			fail(
+				errors,
+				at,
+				CODES.EXPLICIT_UNDEFINED,
+				"the property is present with the value undefined",
+			);
+		} else if (member.value === null) {
+			fail(
+				errors,
+				at,
+				CODES.NULL_NOT_PERMITTED,
+				"the property is null and the field is not nullable",
+			);
+		} else {
+			checkProcedureInputOriginKind(
+				member.value,
+				at,
+				errors,
+				surfaced,
+				depth + 1,
+			);
+		}
+	}
+	{
+		const member = ownMember(candidate, "role");
+		const at = join(pointer, "role");
+		if (member.state === "accessor") {
+			fail(
+				errors,
+				at,
+				CODES.ACCESSOR_MEMBER,
+				"the member is an accessor and is not read",
+			);
+		} else if (member.state === "absent") {
+			fail(errors, at, CODES.MISSING_REQUIRED, "the property is absent");
+		} else if (member.value === undefined) {
+			fail(
+				errors,
+				at,
+				CODES.EXPLICIT_UNDEFINED,
+				"the property is present with the value undefined",
+			);
+		} else if (member.value === null) {
+			fail(
+				errors,
+				at,
+				CODES.NULL_NOT_PERMITTED,
+				"the property is null and the field is not nullable",
+			);
+		} else {
+			fail(
+				errors,
+				at,
+				CODES.SHAPE_MISMATCH,
+				"the element type is not declared",
+			);
+		}
+	}
+	{
+		const member = ownMember(candidate, "sourcePath");
+		const at = join(pointer, "sourcePath");
+		if (member.state === "accessor") {
+			fail(
+				errors,
+				at,
+				CODES.ACCESSOR_MEMBER,
+				"the member is an accessor and is not read",
+			);
+		} else if (member.state === "absent") {
+			// An absent optional property is accepted.
+		} else if (member.value === undefined) {
+			fail(
+				errors,
+				at,
+				CODES.EXPLICIT_UNDEFINED,
+				"the property is present with the value undefined",
+			);
+		} else if (member.value === null) {
+			fail(
+				errors,
+				at,
+				CODES.NULL_NOT_PERMITTED,
+				"the property is null and the field is not nullable",
+			);
+		} else {
+			fail(
+				errors,
+				at,
+				CODES.SHAPE_MISMATCH,
+				"the element type is not declared",
+			);
+		}
+	}
+	{
+		const member = ownMember(candidate, "sourceRepository");
+		const at = join(pointer, "sourceRepository");
+		if (member.state === "accessor") {
+			fail(
+				errors,
+				at,
+				CODES.ACCESSOR_MEMBER,
+				"the member is an accessor and is not read",
+			);
+		} else if (member.state === "absent") {
+			// An absent optional property is accepted.
+		} else if (member.value === undefined) {
+			fail(
+				errors,
+				at,
+				CODES.EXPLICIT_UNDEFINED,
+				"the property is present with the value undefined",
+			);
+		} else if (member.value === null) {
+			fail(
+				errors,
+				at,
+				CODES.NULL_NOT_PERMITTED,
+				"the property is null and the field is not nullable",
+			);
+		} else {
+			fail(
+				errors,
+				at,
+				CODES.SHAPE_MISMATCH,
+				"the element type is not declared",
+			);
+		}
+	}
+	const declared: readonly string[] = [
+		"dependencyArtifactRole",
+		"dependencyMember",
+		"kind",
+		"role",
+		"sourcePath",
+		"sourceRepository",
+	];
+	for (const key of ownKeys(candidate)) {
+		if (declared.includes(key)) continue;
+		fail(
+			errors,
+			join(pointer, key),
+			CODES.UNKNOWN_MEMBER,
+			"the member is not declared and this record rejects unknown members",
+		);
+	}
+	return errors.length === before;
+}
+
+/** Decide an untrusted value against `ix://agent-ix/engineering-assurance-campaign/VO-012`. */
+export function validateProcedureInputOrigin(
+	input: unknown,
+): ValidationResult<ProcedureInputOrigin> {
+	const errors: ValidationError[] = [];
+	const surfaced: ValidationError[] = [];
+	const value = prepareProcedureInputOrigin(input, 0);
+	if (checkProcedureInputOrigin(value, "", errors, surfaced, 0)) {
 		return { ok: true, value, surfaced: sortErrors(surfaced) };
 	}
 	return { ok: false, errors: sortErrors(errors) };

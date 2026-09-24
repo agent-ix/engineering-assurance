@@ -33,8 +33,14 @@
 			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/ProcedureEnvironmentKind.json"
 		},
 		{
+			"path": "ProcedureInputOriginKind.json",
+			"digest": "sha256:65034b83af5f49287ac9485e1a750a459ead074e328e234446baf0e1db503de5",
+			"identity": "ix://agent-ix/engineering-assurance-campaign/EN-006",
+			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/ProcedureInputOriginKind.json"
+		},
+		{
 			"path": "MeasurementProcedure.json",
-			"digest": "sha256:20ef5e5b4cbf105c62a3df75250f4bd077de32611593127132dbdaef5e0980c4",
+			"digest": "sha256:465c8f70332cedc463550a59118990f0ff1fbcc6a16981a84263479f77832fa4",
 			"identity": "ix://agent-ix/engineering-assurance-campaign/VO-001",
 			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/MeasurementProcedure.json"
 		},
@@ -97,6 +103,12 @@
 			"digest": "sha256:d969d6ccab068def69e9bd237d5b9edb4f183f4370a673b55d8c7667d3dffe12",
 			"identity": "ix://agent-ix/engineering-assurance-campaign/VO-011",
 			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/ProcedureInputPrefix.json"
+		},
+		{
+			"path": "ProcedureInputOrigin.json",
+			"digest": "sha256:6573cceb56e2b14069e4d2fb573ef74cb2b778672739b0939f093c2b4780e893",
+			"identity": "ix://agent-ix/engineering-assurance-campaign/VO-012",
+			"$id": "https://agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/ProcedureInputOrigin.json"
 		}
 	]
 }

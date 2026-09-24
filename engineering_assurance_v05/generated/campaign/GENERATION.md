@@ -18,3 +18,11 @@ directories produced by compile checks are excluded from the retained output.
 
 The 0.5.0 candidate compatibility matrix hashes the retained semantic IR and
 JSON Schema documents. The 0.4.1 accepted matrix is unchanged.
+
+`MeasurementProcedure.inputOrigins` is an optional migration field for exact
+producer-input provenance. When present, EA requires one declaration for every
+explicit input role. `source_file` fixes a campaign repository and tracked
+path; `dependency` fixes the upstream member and output role while the attempt
+index is selected and retained at run time; `selected_bytes` makes no origin
+claim beyond the selected bytes. Older source-pinned procedures omit the field
+and cannot claim generic source/dependency origin assurance on that basis.

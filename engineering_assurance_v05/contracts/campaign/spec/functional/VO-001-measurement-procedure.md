@@ -19,6 +19,7 @@ name: MeasurementProcedure
 | arguments | ProcedureArgument | * | |
 | environment | ProcedureEnvironment | * | |
 | inputs | ProcedureArtifact | * | |
+| inputOrigins | ProcedureInputOrigin | * | |
 | inputRolePrefixes | ProcedureInputPrefix | * | |
 | outputs | ProcedureArtifact | * | |
 | outputTrees | ProcedureArtifact | * | |

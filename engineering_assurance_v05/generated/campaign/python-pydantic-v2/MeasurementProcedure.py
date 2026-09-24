@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .ProcedureArgument import ProcedureArgument
 from .ProcedureArtifact import ProcedureArtifact
 from .ProcedureEnvironment import ProcedureEnvironment
+from .ProcedureInputOrigin import ProcedureInputOrigin
 from .ProcedureInputPrefix import ProcedureInputPrefix
 
 
@@ -19,6 +20,7 @@ class MeasurementProcedure(BaseModel):
     )
     arguments: list[ProcedureArgument] | None = None
     environment: list[ProcedureEnvironment] | None = None
+    inputOrigins: list[ProcedureInputOrigin] | None = None
     inputRolePrefixes: list[ProcedureInputPrefix] | None = None
     inputs: list[ProcedureArtifact] | None = None
     outputTrees: list[ProcedureArtifact] | None = None

@@ -5,7 +5,7 @@
  * backend: ix://agent-ix/filament-core-data/backend/typescript@0.1.0
  * contract: 2.0.0
  * package: agent-ix/engineering-assurance-campaign@0.0.0
- * fingerprint: sha256:46795a65600fd62af402b0407db266b7a413dfe6c2246ba3ddd2d13cf92be4ab
+ * fingerprint: sha256:7fa0a570218bdb1d90971c0826f32e7748f605b7710c40d1061392332bf9ca5c
  */
 
 export type {
@@ -24,6 +24,8 @@ export type {
 	ProcedureArtifact,
 	ProcedureEnvironment,
 	ProcedureEnvironmentKind,
+	ProcedureInputOrigin,
+	ProcedureInputOriginKind,
 	ProcedureInputPrefix,
 } from "./types.js";
 
@@ -45,6 +47,8 @@ export {
 	validateProcedureArtifact,
 	validateProcedureEnvironment,
 	validateProcedureEnvironmentKind,
+	validateProcedureInputOrigin,
+	validateProcedureInputOriginKind,
 	validateProcedureInputPrefix,
 } from "./validators.js";
 

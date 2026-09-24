@@ -27,6 +27,8 @@ pub use crate::types::procedure_argument_kind::ProcedureArgumentKind;
 pub use crate::types::procedure_artifact::ProcedureArtifact;
 pub use crate::types::procedure_environment::ProcedureEnvironment;
 pub use crate::types::procedure_environment_kind::ProcedureEnvironmentKind;
+pub use crate::types::procedure_input_origin::ProcedureInputOrigin;
+pub use crate::types::procedure_input_origin_kind::ProcedureInputOriginKind;
 pub use crate::types::procedure_input_prefix::ProcedureInputPrefix;
 
 /// One variant per generated type.
@@ -66,6 +68,12 @@ pub enum SemanticType {
     ///
     /// Roles: engineering-assurance:campaign_enum.
     ProcedureEnvironmentKind,
+    /// ProcedureInputOriginKind
+    ///
+    /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/EN-006.
+    ///
+    /// Roles: engineering-assurance:campaign_enum.
+    ProcedureInputOriginKind,
     /// MeasurementProcedure
     ///
     /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-001.
@@ -132,6 +140,12 @@ pub enum SemanticType {
     ///
     /// Roles: engineering-assurance:campaign_value.
     ProcedureInputPrefix,
+    /// ProcedureInputOrigin
+    ///
+    /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-012.
+    ///
+    /// Roles: engineering-assurance:campaign_value.
+    ProcedureInputOrigin,
 }
 
 impl SemanticType {
@@ -150,6 +164,9 @@ impl SemanticType {
             }
             SemanticType::ProcedureEnvironmentKind => {
                 "ix://agent-ix/engineering-assurance-campaign/EN-005"
+            }
+            SemanticType::ProcedureInputOriginKind => {
+                "ix://agent-ix/engineering-assurance-campaign/EN-006"
             }
             SemanticType::MeasurementProcedure => {
                 "ix://agent-ix/engineering-assurance-campaign/VO-001"
@@ -175,6 +192,9 @@ impl SemanticType {
             }
             SemanticType::ProcedureInputPrefix => {
                 "ix://agent-ix/engineering-assurance-campaign/VO-011"
+            }
+            SemanticType::ProcedureInputOrigin => {
+                "ix://agent-ix/engineering-assurance-campaign/VO-012"
             }
         }
     }

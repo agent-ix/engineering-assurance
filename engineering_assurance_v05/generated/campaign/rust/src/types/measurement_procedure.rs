@@ -67,6 +67,36 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
         },
     },
     crate::identity::FieldMeta {
+        identity: "ix://agent-ix/engineering-assurance-campaign/VO-001/inputOrigins",
+        name: "inputOrigins",
+        rust_name: "input_origins",
+        type_ref: "ix://agent-ix/engineering-assurance-campaign/VO-012",
+        rust_type: "Option<Vec<crate::ProcedureInputOrigin>>",
+        row: "field:collection/non-null/optional",
+        presence: "optional",
+        nullable: false,
+        multiplicity: crate::identity::MultiplicityMeta {
+            lower: 0,
+            upper: None,
+            ordered: Some(false),
+            unique: Some(false),
+        },
+        unit: None,
+        default_kind: "none",
+        default_value: None,
+        origin: crate::identity::OriginMeta {
+            source: Some(crate::identity::SourceLocusMeta {
+                source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
+                path: "spec/functional/VO-001-measurement-procedure.md",
+                start_line: 22,
+                start_column: 3,
+                end_line: None,
+                end_column: None,
+            }),
+            generated: None,
+        },
+    },
+    crate::identity::FieldMeta {
         identity: "ix://agent-ix/engineering-assurance-campaign/VO-001/inputRolePrefixes",
         name: "inputRolePrefixes",
         rust_name: "input_role_prefixes",
@@ -88,7 +118,7 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
             source: Some(crate::identity::SourceLocusMeta {
                 source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
                 path: "spec/functional/VO-001-measurement-procedure.md",
-                start_line: 22,
+                start_line: 23,
                 start_column: 3,
                 end_line: None,
                 end_column: None,
@@ -148,7 +178,7 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
             source: Some(crate::identity::SourceLocusMeta {
                 source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
                 path: "spec/functional/VO-001-measurement-procedure.md",
-                start_line: 24,
+                start_line: 25,
                 start_column: 3,
                 end_line: None,
                 end_column: None,
@@ -178,7 +208,7 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
             source: Some(crate::identity::SourceLocusMeta {
                 source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
                 path: "spec/functional/VO-001-measurement-procedure.md",
-                start_line: 23,
+                start_line: 24,
                 start_column: 3,
                 end_line: None,
                 end_column: None,
@@ -268,7 +298,7 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
             source: Some(crate::identity::SourceLocusMeta {
                 source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
                 path: "spec/functional/VO-001-measurement-procedure.md",
-                start_line: 28,
+                start_line: 29,
                 start_column: 3,
                 end_line: None,
                 end_column: None,
@@ -298,7 +328,7 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
             source: Some(crate::identity::SourceLocusMeta {
                 source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
                 path: "spec/functional/VO-001-measurement-procedure.md",
-                start_line: 26,
+                start_line: 27,
                 start_column: 3,
                 end_line: None,
                 end_column: None,
@@ -328,7 +358,7 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
             source: Some(crate::identity::SourceLocusMeta {
                 source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
                 path: "spec/functional/VO-001-measurement-procedure.md",
-                start_line: 27,
+                start_line: 28,
                 start_column: 3,
                 end_line: None,
                 end_column: None,
@@ -358,7 +388,7 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
             source: Some(crate::identity::SourceLocusMeta {
                 source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
                 path: "spec/functional/VO-001-measurement-procedure.md",
-                start_line: 25,
+                start_line: 26,
                 start_column: 3,
                 end_line: None,
                 end_column: None,
@@ -448,7 +478,7 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
             source: Some(crate::identity::SourceLocusMeta {
                 source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
                 path: "spec/functional/VO-001-measurement-procedure.md",
-                start_line: 29,
+                start_line: 30,
                 start_column: 3,
                 end_line: None,
                 end_column: None,
@@ -475,6 +505,11 @@ pub struct MeasurementProcedure {
     /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-001/environment.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub environment: Option<Vec<crate::ProcedureEnvironment>>,
+    /// inputOrigins
+    ///
+    /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-001/inputOrigins.
+    #[serde(rename = "inputOrigins", skip_serializing_if = "Option::is_none")]
+    pub input_origins: Option<Vec<crate::ProcedureInputOrigin>>,
     /// inputRolePrefixes
     ///
     /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-001/inputRolePrefixes.
@@ -553,6 +588,8 @@ struct MeasurementProcedureWire {
     arguments: Option<Vec<crate::ProcedureArgument>>,
     #[serde(default)]
     environment: Option<Vec<crate::ProcedureEnvironment>>,
+    #[serde(rename = "inputOrigins", default)]
+    input_origins: Option<Vec<crate::ProcedureInputOrigin>>,
     #[serde(rename = "inputRolePrefixes", default)]
     input_role_prefixes: Option<Vec<crate::ProcedureInputPrefix>>,
     #[serde(default)]
@@ -588,6 +625,7 @@ impl MeasurementProcedure {
     pub fn try_new(
         arguments: Option<Vec<crate::ProcedureArgument>>,
         environment: Option<Vec<crate::ProcedureEnvironment>>,
+        input_origins: Option<Vec<crate::ProcedureInputOrigin>>,
         input_role_prefixes: Option<Vec<crate::ProcedureInputPrefix>>,
         inputs: Option<Vec<crate::ProcedureArtifact>>,
         output_trees: Option<Vec<crate::ProcedureArtifact>>,
@@ -605,6 +643,7 @@ impl MeasurementProcedure {
         Ok(Self {
             arguments,
             environment,
+            input_origins,
             input_role_prefixes,
             inputs,
             output_trees,
@@ -636,6 +675,7 @@ impl<'de> Deserialize<'de> for MeasurementProcedure {
         Self::try_new(
             wire.arguments,
             wire.environment,
+            wire.input_origins,
             wire.input_role_prefixes,
             wire.inputs,
             wire.output_trees,

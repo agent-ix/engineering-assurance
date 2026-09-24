@@ -5,7 +5,7 @@
  * backend: ix://agent-ix/filament-core-data/backend/typescript@0.1.0
  * contract: 2.0.0
  * package: agent-ix/engineering-assurance-campaign@0.0.0
- * fingerprint: sha256:46795a65600fd62af402b0407db266b7a413dfe6c2246ba3ddd2d13cf92be4ab
+ * fingerprint: sha256:7fa0a570218bdb1d90971c0826f32e7748f605b7710c40d1061392332bf9ca5c
  */
 
 /**
@@ -148,6 +148,8 @@ export type ExportedTypeName =
 	| "ProcedureArtifact"
 	| "ProcedureEnvironment"
 	| "ProcedureEnvironmentKind"
+	| "ProcedureInputOrigin"
+	| "ProcedureInputOriginKind"
 	| "ProcedureInputPrefix";
 
 /** Every `<Type>.<field>` key this package exports a field identity for. */
@@ -192,6 +194,7 @@ export type ExportedFieldKey =
 	| "CampaignSource.revision"
 	| "MeasurementProcedure.arguments"
 	| "MeasurementProcedure.environment"
+	| "MeasurementProcedure.inputOrigins"
 	| "MeasurementProcedure.inputRolePrefixes"
 	| "MeasurementProcedure.inputs"
 	| "MeasurementProcedure.outputTrees"
@@ -212,6 +215,12 @@ export type ExportedFieldKey =
 	| "ProcedureEnvironment.kind"
 	| "ProcedureEnvironment.name"
 	| "ProcedureEnvironment.value"
+	| "ProcedureInputOrigin.dependencyArtifactRole"
+	| "ProcedureInputOrigin.dependencyMember"
+	| "ProcedureInputOrigin.kind"
+	| "ProcedureInputOrigin.role"
+	| "ProcedureInputOrigin.sourcePath"
+	| "ProcedureInputOrigin.sourceRepository"
 	| "ProcedureInputPrefix.prefix"
 	| "ProcedureInputPrefix.required";
 
@@ -233,6 +242,9 @@ export const TYPE_IDENTITY = {
 	ProcedureEnvironment: "ix://agent-ix/engineering-assurance-campaign/VO-010",
 	ProcedureEnvironmentKind:
 		"ix://agent-ix/engineering-assurance-campaign/EN-005",
+	ProcedureInputOrigin: "ix://agent-ix/engineering-assurance-campaign/VO-012",
+	ProcedureInputOriginKind:
+		"ix://agent-ix/engineering-assurance-campaign/EN-006",
 	ProcedureInputPrefix: "ix://agent-ix/engineering-assurance-campaign/VO-011",
 } as const satisfies Record<ExportedTypeName, string>;
 
@@ -253,6 +265,8 @@ export const TYPE_KIND = {
 	ProcedureArtifact: "record",
 	ProcedureEnvironment: "record",
 	ProcedureEnvironmentKind: "campaign_enum",
+	ProcedureInputOrigin: "record",
+	ProcedureInputOriginKind: "campaign_enum",
 	ProcedureInputPrefix: "record",
 } as const satisfies Record<ExportedTypeName, string>;
 
@@ -273,6 +287,8 @@ export const TYPE_ROLES = {
 	ProcedureArtifact: ["engineering-assurance:campaign_value"],
 	ProcedureEnvironment: ["engineering-assurance:campaign_value"],
 	ProcedureEnvironmentKind: ["engineering-assurance:campaign_enum"],
+	ProcedureInputOrigin: ["engineering-assurance:campaign_value"],
+	ProcedureInputOriginKind: ["engineering-assurance:campaign_enum"],
 	ProcedureInputPrefix: ["engineering-assurance:campaign_value"],
 } as const satisfies Record<ExportedTypeName, readonly string[]>;
 
@@ -299,6 +315,8 @@ export const TYPE_UNKNOWN_POLICY = {
 	ProcedureArtifact: "reject",
 	ProcedureEnvironment: "reject",
 	ProcedureEnvironmentKind: "reject",
+	ProcedureInputOrigin: "reject",
+	ProcedureInputOriginKind: "reject",
 	ProcedureInputPrefix: "reject",
 } as const satisfies Record<ExportedTypeName, string>;
 
@@ -327,6 +345,8 @@ export const TYPE_EXTENSIONS = {
 	ProcedureArtifact: [],
 	ProcedureEnvironment: [],
 	ProcedureEnvironmentKind: [],
+	ProcedureInputOrigin: [],
+	ProcedureInputOriginKind: [],
 	ProcedureInputPrefix: [],
 } as const satisfies Record<ExportedTypeName, readonly ExtensionDescriptor[]>;
 
@@ -347,6 +367,8 @@ export const TYPE_RELATIONSHIPS = {
 	ProcedureArtifact: [],
 	ProcedureEnvironment: [],
 	ProcedureEnvironmentKind: [],
+	ProcedureInputOrigin: [],
+	ProcedureInputOriginKind: [],
 	ProcedureInputPrefix: [],
 } as const satisfies Record<
 	ExportedTypeName,
@@ -434,6 +456,8 @@ export const FIELD_IDENTITY = {
 		"ix://agent-ix/engineering-assurance-campaign/VO-001/arguments",
 	"MeasurementProcedure.environment":
 		"ix://agent-ix/engineering-assurance-campaign/VO-001/environment",
+	"MeasurementProcedure.inputOrigins":
+		"ix://agent-ix/engineering-assurance-campaign/VO-001/inputOrigins",
 	"MeasurementProcedure.inputRolePrefixes":
 		"ix://agent-ix/engineering-assurance-campaign/VO-001/inputRolePrefixes",
 	"MeasurementProcedure.inputs":
@@ -474,6 +498,18 @@ export const FIELD_IDENTITY = {
 		"ix://agent-ix/engineering-assurance-campaign/VO-010/name",
 	"ProcedureEnvironment.value":
 		"ix://agent-ix/engineering-assurance-campaign/VO-010/value",
+	"ProcedureInputOrigin.dependencyArtifactRole":
+		"ix://agent-ix/engineering-assurance-campaign/VO-012/dependencyArtifactRole",
+	"ProcedureInputOrigin.dependencyMember":
+		"ix://agent-ix/engineering-assurance-campaign/VO-012/dependencyMember",
+	"ProcedureInputOrigin.kind":
+		"ix://agent-ix/engineering-assurance-campaign/VO-012/kind",
+	"ProcedureInputOrigin.role":
+		"ix://agent-ix/engineering-assurance-campaign/VO-012/role",
+	"ProcedureInputOrigin.sourcePath":
+		"ix://agent-ix/engineering-assurance-campaign/VO-012/sourcePath",
+	"ProcedureInputOrigin.sourceRepository":
+		"ix://agent-ix/engineering-assurance-campaign/VO-012/sourceRepository",
 	"ProcedureInputPrefix.prefix":
 		"ix://agent-ix/engineering-assurance-campaign/VO-011/prefix",
 	"ProcedureInputPrefix.required":
@@ -522,6 +558,7 @@ export const FIELD_EXTENSIONS = {
 	"CampaignSource.revision": [],
 	"MeasurementProcedure.arguments": [],
 	"MeasurementProcedure.environment": [],
+	"MeasurementProcedure.inputOrigins": [],
 	"MeasurementProcedure.inputRolePrefixes": [],
 	"MeasurementProcedure.inputs": [],
 	"MeasurementProcedure.outputTrees": [],
@@ -542,6 +579,12 @@ export const FIELD_EXTENSIONS = {
 	"ProcedureEnvironment.kind": [],
 	"ProcedureEnvironment.name": [],
 	"ProcedureEnvironment.value": [],
+	"ProcedureInputOrigin.dependencyArtifactRole": [],
+	"ProcedureInputOrigin.dependencyMember": [],
+	"ProcedureInputOrigin.kind": [],
+	"ProcedureInputOrigin.role": [],
+	"ProcedureInputOrigin.sourcePath": [],
+	"ProcedureInputOrigin.sourceRepository": [],
 	"ProcedureInputPrefix.prefix": [],
 	"ProcedureInputPrefix.required": [],
 } as const satisfies Record<ExportedFieldKey, readonly ExtensionDescriptor[]>;
@@ -583,6 +626,8 @@ export const TYPE_OPERATIONS = {
 	ProcedureArtifact: [],
 	ProcedureEnvironment: [],
 	ProcedureEnvironmentKind: [],
+	ProcedureInputOrigin: [],
+	ProcedureInputOriginKind: [],
 	ProcedureInputPrefix: [],
 } as const satisfies Record<ExportedTypeName, readonly OperationDescriptor[]>;
 
@@ -608,6 +653,8 @@ export const TYPE_CLAUSES = {
 	ProcedureArtifact: [],
 	ProcedureEnvironment: [],
 	ProcedureEnvironmentKind: [],
+	ProcedureInputOrigin: [],
+	ProcedureInputOriginKind: [],
 	ProcedureInputPrefix: [],
 } as const satisfies Record<ExportedTypeName, readonly ClauseDescriptor[]>;
 
@@ -741,6 +788,27 @@ export const TYPE_VARIANTS = {
 			payloadType: "",
 		},
 	],
+	ProcedureInputOrigin: [],
+	ProcedureInputOriginKind: [
+		{
+			identity:
+				"ix://agent-ix/engineering-assurance-campaign/variant/EN-006-dependency",
+			name: "dependency",
+			payloadType: "",
+		},
+		{
+			identity:
+				"ix://agent-ix/engineering-assurance-campaign/variant/EN-006-selected-bytes",
+			name: "selected_bytes",
+			payloadType: "",
+		},
+		{
+			identity:
+				"ix://agent-ix/engineering-assurance-campaign/variant/EN-006-source-file",
+			name: "source_file",
+			payloadType: "",
+		},
+	],
 	ProcedureInputPrefix: [],
 } as const satisfies Record<ExportedTypeName, readonly VariantDescriptor[]>;
 
@@ -761,6 +829,8 @@ export const TYPE_CONSTRAINTS = {
 	ProcedureArtifact: [],
 	ProcedureEnvironment: [],
 	ProcedureEnvironmentKind: [],
+	ProcedureInputOrigin: [],
+	ProcedureInputOriginKind: [],
 	ProcedureInputPrefix: [],
 } as const satisfies Record<ExportedTypeName, readonly ConstraintDescriptor[]>;
 
@@ -812,6 +882,7 @@ export const FIELD_DEFAULT = {
 	"CampaignSource.revision": { kind: "none", value: null },
 	"MeasurementProcedure.arguments": { kind: "none", value: null },
 	"MeasurementProcedure.environment": { kind: "none", value: null },
+	"MeasurementProcedure.inputOrigins": { kind: "none", value: null },
 	"MeasurementProcedure.inputRolePrefixes": { kind: "none", value: null },
 	"MeasurementProcedure.inputs": { kind: "none", value: null },
 	"MeasurementProcedure.outputTrees": { kind: "none", value: null },
@@ -832,6 +903,12 @@ export const FIELD_DEFAULT = {
 	"ProcedureEnvironment.kind": { kind: "none", value: null },
 	"ProcedureEnvironment.name": { kind: "none", value: null },
 	"ProcedureEnvironment.value": { kind: "none", value: null },
+	"ProcedureInputOrigin.dependencyArtifactRole": { kind: "none", value: null },
+	"ProcedureInputOrigin.dependencyMember": { kind: "none", value: null },
+	"ProcedureInputOrigin.kind": { kind: "none", value: null },
+	"ProcedureInputOrigin.role": { kind: "none", value: null },
+	"ProcedureInputOrigin.sourcePath": { kind: "none", value: null },
+	"ProcedureInputOrigin.sourceRepository": { kind: "none", value: null },
 	"ProcedureInputPrefix.prefix": { kind: "none", value: null },
 	"ProcedureInputPrefix.required": { kind: "none", value: null },
 } as const satisfies Record<ExportedFieldKey, DefaultDescriptor>;

@@ -17,16 +17,18 @@
 			"ProcedureArtifact.json",
 			"ProcedureEnvironment.json",
 			"ProcedureEnvironmentKind.json",
+			"ProcedureInputOrigin.json",
+			"ProcedureInputOriginKind.json",
 			"ProcedureInputPrefix.json"
 		],
-		"inputDigest": "sha256:9c95de59c1c6ca696c105e3066c0f82f89dc42b5816ef4bb5789373f9c4df510",
+		"inputDigest": "sha256:75febf9a4e1fda07dfc37478226b39b927d48b3f133039ae700dcb4ffc3fcefe",
 		"preparation": []
 	},
 	"profile": {
 		"id": "pydantic_v2_basemodel",
 		"digest": "sha256:de77a678b1815ffce78633025a657d40deea86bcec59ba28c35adf93a9112dd0"
 	},
-	"toolchainFingerprint": "sha256:56fa38486a3bac6d14b5a81035fb1776214aa0557dd830825fd0b59130025766",
+	"toolchainFingerprint": "sha256:cb76cf672d5ff2e4bb41811bb7acf6eab5fe1087abb7d71b73646153c23194cc",
 	"generator": {
 		"distribution": "datamodel-code-generator",
 		"version": "0.76.0",
@@ -36,5 +38,5 @@
 	"generatedSourceLicense": "AGPL-3.0-or-later",
 	"nameCollisions": {},
 	"published": false,
-	"contentFingerprint": "sha256:b600716222637aab72eb1ff1a9b12374ec97e9e17548eeafd53ee60f52eabcc3"
+	"contentFingerprint": "sha256:fda675aaa43f81bb20076773bb2217144c279d852a202680fa553bf24312a54c"
 }

@@ -34,6 +34,21 @@
 				}
 			}
 		},
+		"inputOrigins": {
+			"type": "array",
+			"items": {
+				"$ref": "./ProcedureInputOrigin.json"
+			},
+			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-001/inputOrigins",
+			"x-agent-ix-origin": {
+				"source": {
+					"path": "spec/functional/VO-001-measurement-procedure.md",
+					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
+					"startColumn": 3,
+					"startLine": 22
+				}
+			}
+		},
 		"inputRolePrefixes": {
 			"type": "array",
 			"items": {
@@ -45,7 +60,7 @@
 					"path": "spec/functional/VO-001-measurement-procedure.md",
 					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 					"startColumn": 3,
-					"startLine": 22
+					"startLine": 23
 				}
 			}
 		},
@@ -75,7 +90,7 @@
 					"path": "spec/functional/VO-001-measurement-procedure.md",
 					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 					"startColumn": 3,
-					"startLine": 24
+					"startLine": 25
 				}
 			}
 		},
@@ -90,7 +105,7 @@
 					"path": "spec/functional/VO-001-measurement-procedure.md",
 					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 					"startColumn": 3,
-					"startLine": 23
+					"startLine": 24
 				}
 			}
 		},
@@ -163,7 +178,7 @@
 					"path": "spec/functional/VO-001-measurement-procedure.md",
 					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 					"startColumn": 3,
-					"startLine": 28
+					"startLine": 29
 				}
 			},
 			"x-agent-ix-constraints": [
@@ -180,7 +195,7 @@
 							"path": "spec/functional/VO-001-measurement-procedure.md",
 							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 							"startColumn": 3,
-							"startLine": 28
+							"startLine": 29
 						}
 					}
 				}
@@ -195,7 +210,7 @@
 					"path": "spec/functional/VO-001-measurement-procedure.md",
 					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 					"startColumn": 3,
-					"startLine": 26
+					"startLine": 27
 				}
 			},
 			"x-agent-ix-constraints": [
@@ -210,7 +225,7 @@
 							"path": "spec/functional/VO-001-measurement-procedure.md",
 							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 							"startColumn": 3,
-							"startLine": 26
+							"startLine": 27
 						}
 					}
 				}
@@ -225,7 +240,7 @@
 					"path": "spec/functional/VO-001-measurement-procedure.md",
 					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 					"startColumn": 3,
-					"startLine": 27
+					"startLine": 28
 				}
 			},
 			"x-agent-ix-constraints": [
@@ -240,7 +255,7 @@
 							"path": "spec/functional/VO-001-measurement-procedure.md",
 							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 							"startColumn": 3,
-							"startLine": 27
+							"startLine": 28
 						}
 					}
 				}
@@ -255,7 +270,7 @@
 					"path": "spec/functional/VO-001-measurement-procedure.md",
 					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 					"startColumn": 3,
-					"startLine": 25
+					"startLine": 26
 				}
 			},
 			"x-agent-ix-constraints": [
@@ -270,7 +285,7 @@
 							"path": "spec/functional/VO-001-measurement-procedure.md",
 							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 							"startColumn": 3,
-							"startLine": 25
+							"startLine": 26
 						}
 					}
 				}
@@ -345,7 +360,7 @@
 					"path": "spec/functional/VO-001-measurement-procedure.md",
 					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 					"startColumn": 3,
-					"startLine": 29
+					"startLine": 30
 				}
 			},
 			"x-agent-ix-constraints": [
@@ -362,7 +377,7 @@
 							"path": "spec/functional/VO-001-measurement-procedure.md",
 							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 							"startColumn": 3,
-							"startLine": 29
+							"startLine": 30
 						}
 					}
 				}
