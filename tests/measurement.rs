@@ -1612,9 +1612,9 @@ fn tc_158_a_protected_apparatus_edit_without_a_version_bump_is_a_finding() {
     );
 }
 
-#[trace("TC-146", "FR-021")]
+#[trace("TC-188", "FR-021-AC-12")]
 #[test]
-fn tc_146_a_relative_margin_is_a_fraction_of_the_baseline_value() {
+fn tc_188_a_relative_margin_is_a_fraction_of_the_baseline_value() {
     // One rule, two benchmarks whose baselines differ by three orders of
     // magnitude: "no worse than 5% slower" is 5% of each baseline.
     let rule = DecisionRule::against_baseline_with_mode(
@@ -1642,9 +1642,9 @@ fn tc_146_a_relative_margin_is_a_fraction_of_the_baseline_value() {
     assert_eq!(absolute.holds(105.0, Some(100.0)), Ok(false));
 }
 
-#[trace("TC-146", "FR-021")]
+#[trace("TC-188", "FR-021-AC-12")]
 #[test]
-fn tc_146_margin_mode_is_closed_defaults_to_absolute_and_round_trips() {
+fn tc_188_margin_mode_is_closed_defaults_to_absolute_and_round_trips() {
     let relative = parse_rule(
         "comparator: le\nbaseline: prior-collection\nmargin: -0.05\nmargin_mode: relative\n",
     )
@@ -1705,9 +1705,9 @@ fn tc_146_margin_mode_is_closed_defaults_to_absolute_and_round_trips() {
     );
 }
 
-#[trace("TC-147", "FR-021")]
+#[trace("TC-188", "FR-021-AC-12")]
 #[test]
-fn tc_147_schema_margin_mode_enum_equals_the_rust_wire_names() {
+fn tc_188_schema_margin_mode_enum_equals_the_rust_wire_names() {
     let schema = measurement_plan_schema();
     assert_wire_parity(
         &schema_enum(

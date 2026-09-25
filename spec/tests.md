@@ -149,6 +149,7 @@ implemented and reviewed.
 | FR-021 | FR-021-AC-8 | TC-141 | ✅ Unversioned estimator and decision-rule edits yield findings naming each changed member |
 | FR-021 | FR-021-AC-9 | TC-144, TC-146 | ✅ Schema and Rust direction-agreement and constant-predictor/estimator cases passing |
 | FR-021 | FR-021-AC-10 | TC-171 | ✅ Schema and Rust external-reference baseline estimator-agnostic, eq, refusal and evaluation cases passing |
+| FR-021 | FR-021-AC-12 | TC-188 | ✅ Relative and absolute margin evaluation, mode validation, default and round trip, and schema/Rust wire parity passing |
 | FR-022 | FR-022-AC-1 | TC-150 | ✅ Wire spelling, rendering, parsing, and serde round trip backed |
 | FR-022 | FR-022-AC-2 | TC-151 | ✅ Exact-match typed refusal backed |
 | FR-022 | FR-022-AC-3 | TC-152 | ✅ Exhaustive listing, compile-time trait-absence probe, and downstream ordering refusals backed |
@@ -406,6 +407,7 @@ implemented and reviewed.
 | TC-185 | The 0.5.0 MeasurementPlan schema accepts a missing or safe repository-relative JSON `execution_procedure` with `protected_apparatus` declared, refuses unsafe or non-JSON paths and a missing protected list, and leaves exact protected-path membership and source-byte checks to Quoin | Unit | P0 | FR-024-AC-10 | ✅ `tests/test_campaign_measurement_plan_module.py` schema cases passing |
 | TC-186 | A source-bound EA request parses from its retained JSON with identical typed fields and identity; malformed digests, unknown fields, explicit elided defaults and an invalid protocol refuse before replay | Unit | P0 | FR-019-AC-12 | ✅ `tests/campaign.rs` retained-request accept/refuse cases passing |
 | TC-187 | A Rust fixture copied beside a sibling fixture and pinned by absolute path reports its own resolved executable path and `argv[0]` as the executable path exactly as pinned in the request, re-executes itself through that path, and runs its sibling from the same directory, and a `#!` script pinned by absolute path sees that path as `$0`, each completing through the executor | Integration | P0 | FR-019-AC-13 | ✅ self-path, `argv[0]`, self re-execution, sibling execution and `#!` script `$0` cases passing |
+| TC-188 | A relative margin moves the baseline value by the margin times its absolute value in the direction of improvement, including for negative baselines and baselines of different scale; an absent margin mode is absolute and an absolute rule does not emit the key; a margin mode without a margin, on a threshold, or with an unknown value is refused; and the schema's margin_mode enum equals the Rust wire names | Unit | P1 | FR-021-AC-12 | ✅ evaluation, validation, round-trip and wire-parity cases passing |
 
 ## Option Permutation Matrix
 
