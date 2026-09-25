@@ -1,7 +1,17 @@
 manifest_version: 1.0.0
 name: engineering-assurance
-version: 0.4.1
+version: 0.5.0
 description: Original decision-boundary and evidence-authoring contracts
+semantic:
+  contract_version: 1.0.0
+  semantic_core: 0.3.0
+  package: agent-ix/engineering-assurance-campaign
+  exports: [campaign_value, campaign_enum]
+  imports: {}
+  targets: [json-schema, markdown]
+  mappings: [typed-table]
+  compatibility_posture: additive
+  legacy_forms: warning
 nav:
   category:
     slug: assurance
@@ -107,4 +117,41 @@ artifact_types:
           sufficiency: { from: section_body, after_heading: Sufficiency Decision, required: true }
           challenges: { from: section_body, after_heading: Challenges, required: true }
 lint_rules: []
-object_types: []
+object_types:
+  - name: campaign_value
+    allowed_links:
+      composes: [campaign_value]
+      references: [campaign_value]
+    data_schema:
+      schema: schemas/campaign-value.schema.json
+      digest: sha256:78ff85df1fe2e98802c1d2927b2684d33581916c0396a12b7ee9c7b98035266d
+    body_extraction:
+      yield_pattern:
+        match:
+          id: { from: frontmatter_field, path: [id], required: true }
+          title: { from: frontmatter_field, path: [title], required: true }
+          type: { from: frontmatter_field, path: [type], required: true }
+          properties: { from: section_body, after_heading: Properties, required: true }
+  - name: campaign_enum
+    construct:
+      identity: none
+      shape: enumeration
+      members: {variants: required, fields: forbidden, relationships: forbidden, operations: forbidden}
+      rules: []
+      meaning: quire.meaning.model.variant-type/v1
+    data_schema:
+      schema: schemas/campaign-enum.schema.json
+      digest: sha256:5ebb6ec2b981921b97f04f935549b393a146ff85ef094140505199fae90437ed
+    body_extraction:
+      yield_pattern:
+        match:
+          id: { from: frontmatter_field, path: [id], required: true }
+          title: { from: frontmatter_field, path: [title], required: true }
+          type: { from: frontmatter_field, path: [type], required: true }
+          values:
+            from: table_row
+            under_section: Values
+            required: true
+            assert:
+              columns: [Value, Description]
+              min_rows: 1

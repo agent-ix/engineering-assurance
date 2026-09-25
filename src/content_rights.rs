@@ -437,8 +437,7 @@ fn append_policy_findings(
     semantic_checks: bool,
     patterns: &Patterns,
 ) {
-    let generated_duration_label = path
-        == "engineering_assurance_v05/generated/campaign/rust/src/support.rs"
+    let generated_duration_label = path == "campaign/generated/rust/src/support.rs"
         && line.trim() == concat!("\"an ISO ", "8601 duration\",");
     if patterns.external_identifier.is_match(line) && !generated_duration_label {
         findings.push(finding(
@@ -594,20 +593,20 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         .strip_prefix(ix_trace_rs)
         .is_some_and(|rest| rest.is_empty() || rest.starts_with('?') || rest.starts_with('#'));
     let cargo_manifest = matches!(path, "Cargo.toml" | "Cargo.lock" | "deny.toml");
-    let campaign_schema = path
-        .starts_with("engineering_assurance_v05/generated/campaign/json-schema/")
+    let campaign_schema = path.starts_with("campaign/generated/json-schema/")
         && std::path::Path::new(path)
             .extension()
             .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
         || matches!(
             path,
-            "engineering_assurance_v05/schemas/campaign-enum.schema.json"
-                | "engineering_assurance_v05/schemas/campaign-value.schema.json"
+            "engineering_assurance/schemas/campaign-enum.schema.json"
+                | "engineering_assurance/schemas/campaign-value.schema.json"
+                | "schemas/campaign-enum.schema.json"
+                | "schemas/campaign-value.schema.json"
         );
     let campaign_license = matches!(
         path,
-        "engineering_assurance_v05/generated/campaign/rust/LICENSE"
-            | "engineering_assurance_v05/generated/campaign/typescript/LICENSE"
+        "campaign/generated/rust/LICENSE" | "campaign/generated/typescript/LICENSE"
     );
     let generated_schema_prefix = concat!(
         "https:",
