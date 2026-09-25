@@ -33,13 +33,14 @@ pub enum RustSourceAuditRole {
 
 /// Closed trace convention a requirement-test source is held to.
 ///
-/// A source is audited against exactly one grammar, so a repository's
-/// convention is an invariant rather than one of two silently accepted forms.
+/// A source is audited against exactly one grammar, and only that grammar
+/// satisfies the audit. The other grammar's markers are not required and are
+/// not rejected: a test carrying both is judged by the stated grammar alone.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TraceGrammar {
     /// The `ix_trace_rs` `#[trace("TC-...", "FR-...-AC-n")]` attribute macro.
     Attribute,
-    /// A `/// Trace: FR-096, NFR-024` line in the doc comment above the test.
+    /// A `/// Trace: FR-901, NFR-902` line in the outer doc comment above the test.
     DocComment,
 }
 
@@ -632,7 +633,7 @@ impl TestVisitor {
     fn inspect_doc_trace(&mut self, name: &str, attributes: &[Attribute]) {
         let mut found = false;
         let mut invalid = false;
-        for line in attributes.iter().filter_map(doc_line) {
+        for line in attributes.iter().flat_map(doc_lines) {
             let Some(list) = line.trim().strip_prefix("Trace:") else {
                 continue;
             };
@@ -763,45 +764,65 @@ fn is_acceptance_id(value: &str) -> bool {
         && number.bytes().all(|byte| byte.is_ascii_digit())
 }
 
-/// Return the text of one `#[doc = "..."]` attribute, which is how `///` and
-/// `/** */` comments reach the parsed syntax.
-fn doc_line(attribute: &Attribute) -> Option<String> {
+/// Return the lines of one outer `#[doc = "..."]` attribute, which is how `///`
+/// and `/** */` comments reach the parsed syntax. A block comment arrives as one
+/// string, so it is split on newlines and a leading `*` gutter is stripped.
+/// Inner (`//!`) docs inside a body are not a trace carrier.
+fn doc_lines(attribute: &Attribute) -> Vec<String> {
+    if !matches!(attribute.style, syn::AttrStyle::Outer) {
+        return Vec::new();
+    }
     let syn::Meta::NameValue(pair) = &attribute.meta else {
-        return None;
+        return Vec::new();
     };
     if !pair.path.is_ident("doc") {
-        return None;
+        return Vec::new();
     }
     match &pair.value {
         syn::Expr::Lit(syn::ExprLit {
             lit: syn::Lit::Str(text),
             ..
-        }) => Some(text.value()),
-        _ => None,
+        }) => text
+            .value()
+            .lines()
+            .map(|line| {
+                let line = line.trim_start();
+                line.strip_prefix('*').unwrap_or(line).trim().to_owned()
+            })
+            .collect(),
+        _ => Vec::new(),
     }
 }
 
 /// A `Trace:` list is comma-separated, non-empty, and every entry is a
-/// requirement identifier such as `FR-096` or `FR-096-AC-2`.
+/// requirement identifier.
 fn doc_trace_ids_valid(list: &str) -> bool {
     list.split(',').all(|entry| is_requirement_id(entry.trim()))
 }
 
+/// Requirement families a `Trace:` line may name. A test-case id (`TC-n`) or a
+/// placeholder is not a requirement and does not satisfy the trace.
+const REQUIREMENT_FAMILIES: [&str; 6] = ["FR", "NFR", "StR", "US", "UC", "IT"];
+
+/// `<family>-<digits>` with an optional `-AC-<digits>` or `-CON-<digits>`.
 fn is_requirement_id(value: &str) -> bool {
-    let mut parts = value.split('-');
-    let Some(kind) = parts.next() else {
+    let is_number = |part: &str| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit());
+    let Some((family, rest)) = value.split_once('-') else {
         return false;
     };
-    let mut count = 0_usize;
-    let rest_valid = parts.all(|part| {
-        count = count.saturating_add(1);
-        !part.is_empty()
-            && part
-                .bytes()
-                .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit())
-    });
-    !kind.is_empty()
-        && kind.bytes().all(|byte| byte.is_ascii_uppercase())
-        && count > 0
-        && rest_valid
+    if !REQUIREMENT_FAMILIES.contains(&family) {
+        return false;
+    }
+    let mut parts = rest.split('-');
+    let Some(number) = parts.next() else {
+        return false;
+    };
+    if !is_number(number) {
+        return false;
+    }
+    match (parts.next(), parts.next(), parts.next()) {
+        (None, ..) => true,
+        (Some("AC" | "CON"), Some(suffix), None) => is_number(suffix),
+        _ => false,
+    }
 }
