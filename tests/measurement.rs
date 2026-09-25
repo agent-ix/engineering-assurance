@@ -175,10 +175,10 @@ fn tc_140_schema_direction_enum_equals_the_rust_wire_names() {
         serde_json::from_slice(&fs::read(&schema_path).expect("schema readable"))
             .expect("schema is JSON");
     assert_eq!(
-        schema["properties"]["objective"]["$ref"], "#/$defs/objective",
-        "objective must resolve to the $defs entry this test reads"
+        schema["properties"]["objective"]["$ref"], "#/definitions/objective",
+        "objective must resolve to the definitions entry this test reads"
     );
-    let schema_directions = schema["$defs"]["objective"]["properties"]["direction"]["enum"]
+    let schema_directions = schema["definitions"]["objective"]["properties"]["direction"]["enum"]
         .as_array()
         .expect("direction enum")
         .iter()
@@ -195,7 +195,7 @@ fn tc_140_schema_direction_enum_equals_the_rust_wire_names() {
         .collect::<Vec<_>>();
     assert_eq!(schema_directions, rust_directions);
     assert_eq!(
-        schema["$defs"]["objective"]["allOf"][0]["then"]["required"],
+        schema["definitions"]["objective"]["allOf"][0]["then"]["required"],
         serde_json::json!(["bound"])
     );
 
@@ -1030,25 +1030,25 @@ fn tc_146_decision_rule_agrees_with_the_objective_direction_and_estimator() {
 fn tc_147_schema_estimator_comparator_and_baseline_enums_equal_the_rust_wire_names() {
     let schema = measurement_plan_schema();
     assert_eq!(
-        schema["$defs"]["statistical_design"]["properties"]["decision_rule"]["$ref"],
-        "#/$defs/decision_rule",
-        "decision_rule must resolve to the $defs entry this test reads"
+        schema["definitions"]["statistical_design"]["properties"]["decision_rule"]["$ref"],
+        "#/definitions/decision_rule",
+        "decision_rule must resolve to the definitions entry this test reads"
     );
     assert_wire_parity(
         &schema_enum(
             &schema,
-            "/$defs/statistical_design/properties/estimator/enum",
+            "/definitions/statistical_design/properties/estimator/enum",
         ),
         &Estimator::ALL,
         |estimator| estimator.wire_name(),
     );
     assert_wire_parity(
-        &schema_enum(&schema, "/$defs/decision_rule/properties/comparator/enum"),
+        &schema_enum(&schema, "/definitions/decision_rule/properties/comparator/enum"),
         &Comparator::ALL,
         |comparator| comparator.wire_name(),
     );
     assert_wire_parity(
-        &schema_enum(&schema, "/$defs/decision_rule/properties/baseline/enum"),
+        &schema_enum(&schema, "/definitions/decision_rule/properties/baseline/enum"),
         &Baseline::ALL,
         |baseline| baseline.wire_name(),
     );
@@ -1339,7 +1339,7 @@ fn expected_refusal(case: &ApparatusCase) -> ApparatusPathError {
 fn tc_156_apparatus_path_accepts_and_refuses_the_shared_case_table() {
     let schema = measurement_plan_schema();
     assert_eq!(
-        schema["properties"]["protected_apparatus"]["items"]["$ref"], "#/$defs/apparatus_path",
+        schema["properties"]["protected_apparatus"]["items"]["$ref"], "#/definitions/apparatus_path",
         "protected_apparatus items must resolve to the pattern this test reads"
     );
     let pattern = |pointer: &str| {
@@ -1349,8 +1349,8 @@ fn tc_156_apparatus_path_accepts_and_refuses_the_shared_case_table() {
             .unwrap_or_else(|| panic!("schema pattern at {pointer}"));
         regex::Regex::new(source).expect("schema pattern compiles")
     };
-    let entry_pattern = pattern("/$defs/apparatus_path/pattern");
-    let control_pattern = pattern("/$defs/apparatus_path/not/pattern");
+    let entry_pattern = pattern("/definitions/apparatus_path/pattern");
+    let control_pattern = pattern("/definitions/apparatus_path/not/pattern");
     let schema_accepts =
         |path: &str| entry_pattern.is_match(path) && !control_pattern.is_match(path);
 
@@ -1473,10 +1473,10 @@ fn tc_157_negative_controls_are_closed_non_empty_and_distinct() {
     let schema = measurement_plan_schema();
     assert_eq!(
         schema["properties"]["negative_controls"]["items"]["$ref"],
-        "#/$defs/negative_control"
+        "#/definitions/negative_control"
     );
     assert_wire_parity(
-        &schema_enum(&schema, "/$defs/negative_control/properties/kind/enum"),
+        &schema_enum(&schema, "/definitions/negative_control/properties/kind/enum"),
         &NegativeControlKind::ALL,
         |kind| kind.wire_name(),
     );
@@ -1493,7 +1493,7 @@ fn tc_157_negative_controls_are_closed_non_empty_and_distinct() {
     }
     assert_eq!(NegativeControlKind::ALL.len(), 5);
     assert_eq!(
-        schema["allOf"][0]["then"]["required"],
+        schema["allOf"][1]["then"]["required"],
         serde_json::json!([
             "ground_truth_kind",
             "negative_controls",

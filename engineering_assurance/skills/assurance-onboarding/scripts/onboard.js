@@ -149,7 +149,7 @@ if (moduleRoot) {
 //
 // `readAllOf` understands these shapes, and only these, at a schema's own
 // top level or at any depth inside a `$ref`'d (directly, or via an array's
-// `items.$ref`) nested `$defs` entry (see `resolveLocalRef` and `visit`
+// `items.$ref`) nested `definitions` entry (see `resolveLocalRef` and `visit`
 // below):
 // - an `allOf` branch `{ if, then, else? }` whose `if` is `properties` (at any
 //   depth, each leaf a `const`, an `enum`, or bare presence) plus `required`,
@@ -190,8 +190,8 @@ const describeConstraint = (def, prefix, path) => {
   if (Object.keys(def).some((key) => !DESCRIBABLE_KEYWORDS.has(key))) return null;
   const clauses = [];
   if (def.$ref) {
-    if (typeof def.$ref !== "string" || !def.$ref.startsWith("#/$defs/")) return null;
-    clauses.push(`${path} must match ${def.$ref.slice("#/$defs/".length)}`);
+    if (typeof def.$ref !== "string" || !def.$ref.startsWith("#/definitions/")) return null;
+    clauses.push(`${path} must match ${def.$ref.slice("#/definitions/".length)}`);
   }
   if ("const" in def) clauses.push(`${path} must be ${def.const}`);
   if (def.enum) clauses.push(`${path} must be one of ${def.enum.join(", ")}`);
@@ -309,22 +309,22 @@ const readAllOf = (schema, prefix = "", present = "") => {
   return { conditionalRequired, exactlyOneOf, conditionalConstraints, warnings };
 };
 
-// Resolve a same-document `#/$defs/<name>` reference: either a property's
+// Resolve a same-document `#/definitions/<name>` reference: either a property's
 // own `$ref` (an object embedded directly, e.g. MeasurementPlan's
-// `objective` points at `$defs/objective`, whose own
+// `objective` points at `definitions/objective`, whose own
 // `required: ["direction"]` lives there, not on the schema's own top-level
 // `required`), or an array property's `items.$ref` (e.g. AssuranceArgument's
-// `reasoning` array points at `$defs/reasoning`). AssuranceArgument's
-// `top_claim` similarly points at `$defs/claim`, whose own `evidence_refs`
-// requirement is conditional on `status`, sitting inside that $defs entry's
+// `reasoning` array points at `definitions/reasoning`). AssuranceArgument's
+// `top_claim` similarly points at `definitions/claim`, whose own `evidence_refs`
+// requirement is conditional on `status`, sitting inside that definitions entry's
 // own `allOf`. Reading only `schema.required` and `schema.allOf` (as the
 // top-level walk above does) would silently omit all of these. Anything
-// else is read as written; a `$ref` found inside a `$defs` entry is left to
+// else is read as written; a `$ref` found inside a `definitions` entry is left to
 // the existing `$ref`-in-`if` warning above, not chased further.
 const resolveLocalRef = (schema, def) => {
   const ref = def?.$ref ?? def?.items?.$ref;
-  if (typeof ref !== "string" || !ref.startsWith("#/$defs/")) return def;
-  return schema.$defs?.[ref.slice("#/$defs/".length)] ?? def;
+  if (typeof ref !== "string" || !ref.startsWith("#/definitions/")) return def;
+  return schema.definitions?.[ref.slice("#/definitions/".length)] ?? def;
 };
 
 // When a field has a retired-only legacy shape, its unconditional property
@@ -334,8 +334,8 @@ const resolveCurrentConditionalRef = (schema, name, def) => {
   if (def?.properties || def?.$ref) return def;
   const ref = (schema.allOf ?? [])
     .map((branch) => branch.else?.properties?.[name]?.$ref)
-    .find((value) => typeof value === "string" && value.startsWith("#/$defs/"));
-  return ref ? schema.$defs?.[ref.slice("#/$defs/".length)] ?? def : def;
+    .find((value) => typeof value === "string" && value.startsWith("#/definitions/"));
+  return ref ? schema.definitions?.[ref.slice("#/definitions/".length)] ?? def : def;
 };
 
 // The list keywords `visit` below describes; any other keyword on an array
