@@ -516,8 +516,38 @@ fn tc_176_live_output_tree_is_sealed_and_symlinks_refuse() {
     let refused = execute(&request, &adapter());
     assert!(matches!(
         refused.state,
-        ProducerExecutionState::Failed { .. }
+        ProducerExecutionState::Failed {
+            reason: ExecutionFailure::OutputArtifact
+        }
     ));
+}
+
+#[test]
+#[trace("TC-176", "FR-019-AC-4")]
+fn tc_176_output_tree_absent_after_execution_fails_only_when_required() {
+    let root = tempfile::tempdir().expect("temporary root");
+    let mut request = request(root.path(), &["emit", "no-tree"]);
+    request.output_trees.push(OutputTreeBinding {
+        role: "mutants".to_owned(),
+        path: "mutants.out".to_owned(),
+        required: true,
+    });
+    request.budget.max_output_artifacts = 1;
+    request.budget.max_output_bytes = 1024;
+    assert!(matches!(
+        execute(&request, &adapter()).state,
+        ProducerExecutionState::Failed {
+            reason: ExecutionFailure::OutputArtifact
+        }
+    ));
+
+    request.output_trees[0].required = false;
+    let result = execute(&request, &adapter());
+    assert!(matches!(
+        result.state,
+        ProducerExecutionState::Completed { .. }
+    ));
+    assert!(result.artifacts.is_empty());
 }
 
 #[test]

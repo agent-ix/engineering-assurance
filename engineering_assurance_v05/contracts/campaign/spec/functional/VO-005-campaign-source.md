@@ -16,11 +16,10 @@ recompute it against the retained repository before accepting a run and execute
 from the selected clean revision. EA's pure resolver checks the declared
 revision and digest syntax; it cannot inspect the repository bytes. The bounded
 source projection verifies every tracked regular-file and symlink blob OID.
-Regular files are staged as sealed inputs. Symlinks are reported as omitted
-projection metadata and are never materialized or followed in the execution
-directory; a command that needs one will fail in that directory. Omitted-link
-target bytes are verified when the procedure is resolved, and this metadata
-does not assert that the link is unchanged at launch.
+Regular files are selected as sealed inputs. Symlinks are reported as omitted
+link metadata. Omitted-link target bytes are verified when the procedure is
+resolved, and this metadata does not assert that the link is unchanged at
+launch. The producer runs in the capability root.
 
 ## Properties
 

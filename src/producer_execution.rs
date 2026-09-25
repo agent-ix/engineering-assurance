@@ -230,7 +230,7 @@ pub struct InputBinding {
     pub path: String,
     /// Expected identity of the selected input bytes.
     pub digest: ContentDigest,
-    /// Whether the declared input is an executable file; part of request identity.
+    /// Declared executable mode; part of request identity and not enforced.
     #[serde(default, skip_serializing_if = "is_false")]
     pub executable: bool,
 }

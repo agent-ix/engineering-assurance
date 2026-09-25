@@ -103,11 +103,13 @@ unique within their respective request collections.
   without following the link and verifies the link's Git blob OID. It then
   records the path and digest as omitted link metadata.
 - The producer creates its own declared output parents and trees, and
-  overwriting an existing file is permitted. The executor SHALL enforce
-  output-artifact count and aggregate byte bounds and, after termination, open each artifact at its
+  overwriting an existing file is permitted. Concurrent requests over the same
+  capability root share that directory, so one run's declared outputs can be
+  overwritten by another. The executor SHALL enforce output-artifact count and
+  aggregate byte bounds and, after termination, open each artifact at its
   declared path relative to the retained capability-root descriptor without
-  following links, reporting whatever bytes are there. A required output
-  tree the producer did not create is an executor failure. It SHALL copy each
+  following links, reporting whatever bytes are there. A required output tree
+  that is absent after execution is an executor failure. It SHALL copy each
   exact observed output into a sealed retained descriptor and compute the
   returned role, declared relative path, byte length and SHA-256 digest from
   that same immutable snapshot. Each returned output artifact SHALL provide
@@ -197,7 +199,7 @@ unique within their respective request collections.
 | FR-019-AC-8 | For a launched Linux invocation, the executor samples a complete, bounded host context before launch and binds it into canonical result identity; stable machine identity or explicitly boot-scoped identity is represented only by a domain-separated digest, boot-scoped and ARM CPU-ID observations additionally bind observed CPU affinity, heterogeneous or missing selected ARM CPU-ID tuples withhold context, and unavailable host context is explicit and cannot substantiate comparability. | Test (TC-175) |
 | FR-019-AC-9 | The 0.5.0 candidate's FCD-generated procedure and campaign records have closed wire fields; procedures validate roles and bounds, campaign plans resolve at exact versions, and dependency graphs are finite and acyclic. | Test (TC-177, TC-179) |
 | FR-019-AC-10 | Declared fixed and tree output roles, dynamic input prefixes, executable identity, arguments, environment, and response adapter bind to one exact FR-019 request identity; near-match undeclared roles refuse. | Test (TC-178, TC-180, TC-183) |
-| FR-019-AC-11 | A campaign run binds its definition and source graph and refuses stale or unknown attempts; a source projection verifies the complete Git tree inventory and every staged file or omitted symlink blob before request creation. | Test (TC-181, TC-182) |
+| FR-019-AC-11 | A campaign run binds its definition and source graph and refuses stale or unknown attempts; a source projection verifies the complete Git tree inventory and every file or omitted symlink blob before request creation. | Test (TC-181, TC-182) |
 | FR-019-AC-12 | Retained producer-request parsing preserves every field through typed round-trip serialization and validates the request structure; malformed digests, unknown fields and explicit elided defaults refuse. A campaign verifier can compare this exact request with a source-bound reconstructed request. | Test (TC-186) |
 | FR-019-AC-13 | A producer executed through the executor sees its own executable path, `argv[0]` and a script's `$0` as the executable path exactly as pinned in the request, so a producer that locates a sibling executable next to itself and one that re-executes itself both complete. | Test (TC-187) |
 
