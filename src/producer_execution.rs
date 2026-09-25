@@ -1996,146 +1996,185 @@ fn terminal_conclusion(status: ExitStatus) -> ProcessConclusion {
 }
 
 #[cfg(target_os = "linux")]
+struct OutputCollector {
+    artifacts: Vec<OutputArtifact>,
+    remaining: u64,
+    directories: usize,
+}
+
+#[cfg(target_os = "linux")]
+fn open_beneath(root: &File, path: &str, directory: bool) -> Result<File, rustix::io::Errno> {
+    use rustix::fs::{Mode, OFlags, ResolveFlags, openat2};
+
+    let mut flags = OFlags::RDONLY | OFlags::CLOEXEC;
+    if directory {
+        flags |= OFlags::DIRECTORY;
+    }
+    openat2(
+        root,
+        path,
+        flags,
+        Mode::empty(),
+        ResolveFlags::BENEATH | ResolveFlags::NO_MAGICLINKS | ResolveFlags::NO_SYMLINKS,
+    )
+    .map(File::from)
+}
+
+/// Snapshots one regular output file within the remaining byte budget, or
+/// returns `None` when it cannot be read or exceeds the budget.
+#[cfg(target_os = "linux")]
+fn snapshot_output(
+    file: &mut File,
+    collector: &mut OutputCollector,
+    cancellation: &CancellationToken,
+    label: &str,
+) -> Option<(File, ContentDigest, u64)> {
+    let (snapshot, digest) =
+        snapshot_reader(file, collector.remaining, cancellation, label).ok()?;
+    let length = snapshot.metadata().ok()?.len();
+    collector.remaining = collector.remaining.checked_sub(length)?;
+    Some((snapshot, digest, length))
+}
+
+#[cfg(target_os = "linux")]
 fn observe_outputs(
     request: &ProducerExecutionRequest,
     root: &File,
     cancellation: &CancellationToken,
 ) -> (Vec<OutputArtifact>, bool) {
-    use rustix::fs::{Mode, OFlags, ResolveFlags, openat2};
+    let mut collector = OutputCollector {
+        artifacts: Vec::new(),
+        remaining: request.budget.max_output_bytes,
+        directories: 0,
+    };
+    let failed = observe_fixed_outputs(request, root, cancellation, &mut collector)
+        || observe_output_trees(request, root, cancellation, &mut collector);
+    let mut artifacts = collector.artifacts;
+    if !failed {
+        artifacts.sort_by(|left, right| left.role.cmp(&right.role));
+    }
+    (artifacts, failed)
+}
 
-    let mut artifacts = Vec::new();
-    let mut remaining = request.budget.max_output_bytes;
+/// Observes every declared fixed output; returns `true` on failure.
+#[cfg(target_os = "linux")]
+fn observe_fixed_outputs(
+    request: &ProducerExecutionRequest,
+    root: &File,
+    cancellation: &CancellationToken,
+    collector: &mut OutputCollector,
+) -> bool {
     for output in &request.outputs {
-        let descriptor = match openat2(
-            root,
-            &output.path,
-            OFlags::RDONLY | OFlags::CLOEXEC,
-            Mode::empty(),
-            ResolveFlags::BENEATH | ResolveFlags::NO_MAGICLINKS | ResolveFlags::NO_SYMLINKS,
-        ) {
-            Ok(value) => value,
+        let mut file = match open_beneath(root, &output.path, false) {
+            Ok(file) => file,
             Err(_) if !output.required => continue,
-            Err(_) => return (artifacts, true),
+            Err(_) => return true,
         };
-        let mut file = File::from(descriptor);
         let Ok(metadata) = file.metadata() else {
-            return (artifacts, true);
+            return true;
         };
         if !metadata.is_file() {
-            return (artifacts, true);
+            return true;
         }
-        let Ok((snapshot, digest)) =
-            snapshot_reader(&mut file, remaining, cancellation, "producer-output")
+        let Some((snapshot, digest, byte_length)) =
+            snapshot_output(&mut file, collector, cancellation, "producer-output")
         else {
-            return (artifacts, true);
+            return true;
         };
-        let Ok(snapshot_metadata) = snapshot.metadata() else {
-            return (artifacts, true);
-        };
-        let Some(next_remaining) = remaining.checked_sub(snapshot_metadata.len()) else {
-            return (artifacts, true);
-        };
-        remaining = next_remaining;
-        artifacts.push(OutputArtifact {
+        collector.artifacts.push(OutputArtifact {
             role: output.role.clone(),
             path: output.path.clone(),
-            byte_length: snapshot_metadata.len(),
+            byte_length,
             digest,
             snapshot: Arc::new(snapshot),
         });
     }
-    let mut directories = 0_usize;
+    false
+}
+
+/// Observes every declared output tree; returns `true` on failure.
+#[cfg(target_os = "linux")]
+fn observe_output_trees(
+    request: &ProducerExecutionRequest,
+    root: &File,
+    cancellation: &CancellationToken,
+    collector: &mut OutputCollector,
+) -> bool {
     for tree in &request.output_trees {
         let mut pending = vec![tree.path.clone()];
         while let Some(path) = pending.pop() {
-            if cancellation.is_cancelled() || directories >= MAX_ARTIFACTS {
-                return (artifacts, true);
+            if cancellation.is_cancelled() || collector.directories >= MAX_ARTIFACTS {
+                return true;
             }
-            directories += 1;
-            let directory = match openat2(
-                root,
-                &path,
-                OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC,
-                Mode::empty(),
-                ResolveFlags::BENEATH | ResolveFlags::NO_MAGICLINKS | ResolveFlags::NO_SYMLINKS,
-            ) {
-                Ok(value) => File::from(value),
+            collector.directories += 1;
+            let directory = match open_beneath(root, &path, true) {
+                Ok(directory) => directory,
                 Err(rustix::io::Errno::NOENT) if path == tree.path && !tree.required => break,
-                Err(_) => return (artifacts, true),
+                Err(_) => return true,
             };
-            let entries = match std::fs::read_dir(descriptor_path(&directory)) {
-                Ok(value) => value,
-                Err(_) => return (artifacts, true),
+            let Ok(entries) = std::fs::read_dir(descriptor_path(&directory)) else {
+                return true;
             };
             let mut children = Vec::new();
             for entry in entries {
-                if children.len() + pending.len() + directories + artifacts.len() >= MAX_ARTIFACTS {
-                    return (artifacts, true);
+                if children.len()
+                    + pending.len()
+                    + collector.directories
+                    + collector.artifacts.len()
+                    >= MAX_ARTIFACTS
+                {
+                    return true;
                 }
                 let Ok(entry) = entry else {
-                    return (artifacts, true);
+                    return true;
                 };
                 let Ok(name) = entry.file_name().into_string() else {
-                    return (artifacts, true);
+                    return true;
                 };
                 if validate_relative_normal_path(&name).is_err() {
-                    return (artifacts, true);
+                    return true;
                 }
                 children.push(format!("{path}/{name}"));
             }
             children.sort();
             for child in children {
-                let descriptor = match openat2(
-                    root,
-                    &child,
-                    OFlags::RDONLY | OFlags::CLOEXEC,
-                    Mode::empty(),
-                    ResolveFlags::BENEATH | ResolveFlags::NO_MAGICLINKS | ResolveFlags::NO_SYMLINKS,
-                ) {
-                    Ok(value) => value,
-                    Err(_) => return (artifacts, true),
+                let Ok(mut file) = open_beneath(root, &child, false) else {
+                    return true;
                 };
-                let mut file = File::from(descriptor);
                 let Ok(metadata) = file.metadata() else {
-                    return (artifacts, true);
+                    return true;
                 };
                 if metadata.is_dir() {
                     pending.push(child);
                     continue;
                 }
-                if !metadata.is_file() || artifacts.len() >= request.budget.max_output_artifacts {
-                    return (artifacts, true);
+                if !metadata.is_file()
+                    || collector.artifacts.len() >= request.budget.max_output_artifacts
+                {
+                    return true;
                 }
-                let Ok((snapshot, digest)) =
-                    snapshot_reader(&mut file, remaining, cancellation, "producer-output-tree")
+                let Some((snapshot, digest, byte_length)) =
+                    snapshot_output(&mut file, collector, cancellation, "producer-output-tree")
                 else {
-                    return (artifacts, true);
+                    return true;
                 };
-                let Ok(snapshot_metadata) = snapshot.metadata() else {
-                    return (artifacts, true);
-                };
-                let Some(next_remaining) = remaining.checked_sub(snapshot_metadata.len()) else {
-                    return (artifacts, true);
-                };
-                remaining = next_remaining;
                 let Some(relative) = child
                     .strip_prefix(&tree.path)
                     .and_then(|p| p.strip_prefix('/'))
                 else {
-                    return (artifacts, true);
+                    return true;
                 };
-                artifacts.push(OutputArtifact {
+                collector.artifacts.push(OutputArtifact {
                     role: format!("{}/{relative}", tree.role),
                     path: child,
-                    byte_length: snapshot_metadata.len(),
+                    byte_length,
                     digest,
                     snapshot: Arc::new(snapshot),
                 });
             }
         }
     }
-    artifacts.sort_by(|left, right| left.role.cmp(&right.role));
-    (artifacts, false)
+    false
 }
 
 #[cfg(target_os = "linux")]
