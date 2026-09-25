@@ -103,7 +103,8 @@ impl ContentDigest {
 
     /// Computes a fixture or caller-side file identity.
     ///
-    /// Execution itself uses retained, capability-confined descriptors and
+    /// Execution itself hashes the executable bytes read through one
+    /// capability-confined descriptor, before the pinned path is executed, and
     /// does not rely on this convenience helper.
     ///
     /// # Errors
@@ -185,7 +186,8 @@ pub struct ProducerDescriptor {
     pub source_revision: String,
     /// Absolute executable path; ambient `PATH` lookup is forbidden.
     pub executable: String,
-    /// Expected identity of the retained executable bytes.
+    /// Expected SHA-256 identity of the executable bytes read from the opened
+    /// executable descriptor before the pinned path is executed.
     pub executable_digest: ContentDigest,
 }
 
@@ -193,7 +195,7 @@ pub struct ProducerDescriptor {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionProcedure {
-    /// Execute the retained file descriptor directly without a shell.
+    /// Execute the pinned absolute path directly without a shell.
     Direct,
 }
 
@@ -622,7 +624,8 @@ pub struct MalformedResponse;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionRefusal {
-    /// The retained executable bytes differ from the request.
+    /// The executable bytes read before the pinned path is executed differ from
+    /// the request.
     ExecutableIdentity,
     /// The capability root cannot be safely opened.
     CapabilityRoot,
@@ -759,7 +762,8 @@ pub struct ProducerExecutionResult<T> {
     pub request_identity: RequestIdentity,
     /// Exact caller-supplied producer provenance.
     pub producer: ProducerDescriptor,
-    /// Observed retained executable identity when preflight reached it.
+    /// SHA-256 of the executable bytes read before the pinned path is executed,
+    /// when preflight reached it.
     pub observed_executable_digest: Option<ContentDigest>,
     /// Bound cancellation event when it was observed.
     pub cancellation_event: Option<CancellationBinding>,

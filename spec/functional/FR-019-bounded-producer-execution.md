@@ -23,8 +23,9 @@ typed result to the caller-owned response adapter.
 - One closed `engineering-assurance.producer-execution-request/v1` request
   containing:
   - a stable producer name, exact version and source revision;
-  - an absolute producer executable path and expected SHA-256 retained-byte
-    digest;
+  - an absolute producer executable path and the expected SHA-256 digest of
+    the bytes read from the executable descriptor before that path is
+    executed;
   - an exact kind/version/revision/digest binding for the caller's domain
     request or context;
   - an exact kind/version/revision/digest binding for the response adapter;
@@ -114,8 +115,8 @@ unique within their respective request collections.
   path, byte length and SHA-256 digest from that same immutable snapshot. Each
   returned output artifact SHALL provide the response adapter and caller a
   reader for that retained snapshot without reopening the producer pathname.
-- When a valid slot is available, the executor SHALL launch the retained
-  executable directly with the ordered resolved arguments, no shell, the
+- When a valid slot is available, the executor SHALL launch the pinned
+  executable path directly with the ordered resolved arguments, no shell, the
   invocation-owned staged projection as working directory, an empty inherited
   environment, only the request's environment entries, and the exact null or
   retained-input stdin binding.
@@ -200,7 +201,7 @@ unique within their respective request collections.
 | FR-019-AC-10 | Declared fixed and tree output roles, dynamic input prefixes, executable identity, arguments, environment, and response adapter bind to one exact FR-019 request identity; near-match undeclared roles refuse. | Test (TC-178, TC-180, TC-183) |
 | FR-019-AC-11 | A campaign run binds its definition and source graph and refuses stale or unknown attempts; a source projection verifies the complete Git tree inventory and every staged file or omitted symlink blob before request creation. | Test (TC-181, TC-182) |
 | FR-019-AC-12 | Retained producer-request parsing preserves every field through typed round-trip serialization and validates the request structure; malformed digests, unknown fields and explicit elided defaults refuse. A campaign verifier can compare this exact request with a source-bound reconstructed request. | Test (TC-186) |
-| FR-019-AC-13 | A producer executed through the executor sees its own executable path, `argv[0]` and a script's `$0` as the pinned real path, so a producer that locates a sibling executable next to itself and one that re-executes itself both complete. | Test (TC-187) |
+| FR-019-AC-13 | A producer executed through the executor sees its own executable path, `argv[0]` and a script's `$0` as the executable path exactly as pinned in the request, so a producer that locates a sibling executable next to itself and one that re-executes itself both complete. | Test (TC-187) |
 
 ## Dependencies
 

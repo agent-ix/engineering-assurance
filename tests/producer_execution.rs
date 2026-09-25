@@ -234,6 +234,25 @@ fn execute(
         .expect("fixture request must be structurally valid")
 }
 
+/// Executes a just-written executable, retrying only while it is `Unavailable`.
+///
+/// A sibling test thread forking while our write descriptor is open makes
+/// `execve` return ETXTBSY (rust-lang/rust#114554).
+fn execute_staged(
+    request: &ProducerExecutionRequest,
+    adapter: &TextAdapter,
+) -> ProducerExecutionState<String> {
+    let mut state = execute(request, adapter).state;
+    for _ in 1..20 {
+        if !matches!(state, ProducerExecutionState::Unavailable) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(50));
+        state = execute(request, adapter).state;
+    }
+    state
+}
+
 fn cargo_feature_tree(manifest_path: &Path) -> String {
     let feature_tree = Command::new(env!("CARGO"))
         .args([
@@ -1193,7 +1212,7 @@ fn tc_187_producer_finds_its_own_path_sibling_and_reexecution_target() {
         request.producer.executable = producer.display().to_string();
         request.producer.executable_digest =
             ContentDigest::of_file(&producer).expect("producer must be hashable");
-        execute(&request, &adapter()).state
+        execute_staged(&request, &adapter())
     };
 
     assert!(matches!(
@@ -1234,7 +1253,7 @@ fn tc_187_script_producer_sees_its_pinned_path_as_dollar_zero() {
         ContentDigest::of_file(&script).expect("script must be hashable");
 
     assert!(matches!(
-        execute(&request, &adapter()).state,
+        execute_staged(&request, &adapter()),
         ProducerExecutionState::Completed { observation }
             if observation == script.display().to_string()
     ));
