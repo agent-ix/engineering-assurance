@@ -172,7 +172,7 @@ unique within their respective request collections.
 | State | Exact boundary |
 | --- | --- |
 | `unavailable` | A structurally valid request selects an executable that cannot be opened or the pinned executable cannot be launched. |
-| `refused` | An identity-bearing request fails a pre-launch identity, capability, adapter, input, output-parent, cancellation-binding, or concurrency admission check. |
+| `refused` | An identity-bearing request fails a pre-launch identity, capability, adapter, input, output-parent, cancellation-binding, or concurrency admission check, or an entry at a declared fixed output path cannot be removed before launch (for example a directory). |
 | `failed` | A launched process has a rejected normal exit, signal termination, stream overflow/read failure, process observation failure, or output-artifact failure. |
 | `timed_out` | Monotonic elapsed execution time reaches the request deadline before terminal observation. |
 | `malformed_response` | The exact request-bound caller adapter rejects an otherwise admitted bounded terminal response. |

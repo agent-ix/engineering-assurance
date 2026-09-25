@@ -631,7 +631,8 @@ pub enum ExecutionRefusal {
     CapabilityRoot,
     /// An input is missing, linked, unreadable, over-budget or has wrong bytes.
     Input,
-    /// An output parent cannot be admitted without following links.
+    /// An output parent cannot be admitted without following links, or an
+    /// entry at a declared fixed output path cannot be removed before launch.
     Output,
     /// The request and runtime adapter differ.
     AdapterBinding,

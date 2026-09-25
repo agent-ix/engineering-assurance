@@ -719,6 +719,63 @@ fn tc_122_directory_at_declared_output_refuses_before_launch() {
     assert!(!root.path().join("launched.marker").exists());
 }
 
+#[test]
+#[trace("TC-122", "FR-019-AC-1")]
+fn tc_122_stale_nested_declared_output_is_removed_and_not_observed() {
+    let root = tempfile::tempdir().expect("temporary root");
+    fs::create_dir(root.path().join("target")).expect("output parent");
+    fs::write(root.path().join("target/coverage.json"), b"stale").expect("stale output");
+    let mut request = declared_output_request(root.path(), &["emit", "no-write"], true);
+    request.outputs[0].path = "target/coverage.json".to_owned();
+    let result = execute(&request, &adapter());
+    assert!(matches!(
+        result.state,
+        ProducerExecutionState::Failed {
+            reason: ExecutionFailure::OutputArtifact
+        }
+    ));
+    assert!(result.artifacts.is_empty());
+    assert!(!root.path().join("target/coverage.json").exists());
+}
+
+#[test]
+#[trace("TC-122", "FR-019-AC-1")]
+fn tc_122_nested_declared_output_with_missing_parent_is_skipped() {
+    let root = tempfile::tempdir().expect("temporary root");
+    let mut request = declared_output_request(root.path(), &["emit", "no-write"], false);
+    request.outputs[0].path = "target/coverage.json".to_owned();
+    let result = execute(&request, &adapter());
+    assert!(matches!(
+        result.state,
+        ProducerExecutionState::Completed { .. }
+    ));
+    assert!(result.artifacts.is_empty());
+    assert!(!root.path().join("target").exists());
+}
+
+#[test]
+#[trace("TC-122", "FR-019-AC-1")]
+fn tc_122_symlinked_parent_of_declared_output_refuses_before_launch() {
+    let root = tempfile::tempdir().expect("temporary root");
+    fs::create_dir(root.path().join("real")).expect("link target directory");
+    fs::write(root.path().join("real/coverage.json"), b"keep").expect("target output");
+    std::os::unix::fs::symlink("real", root.path().join("target")).expect("parent link");
+    let mut request = declared_output_request(root.path(), &["touch", "launched.marker"], false);
+    request.outputs[0].path = "target/coverage.json".to_owned();
+    let result = execute(&request, &adapter());
+    assert!(matches!(
+        result.state,
+        ProducerExecutionState::Refused {
+            reason: ExecutionRefusal::Output
+        }
+    ));
+    assert!(!root.path().join("launched.marker").exists());
+    assert_eq!(
+        fs::read(root.path().join("real/coverage.json")).expect("target output"),
+        b"keep"
+    );
+}
+
 fn assert_result_metadata_identity(result: &ProducerExecutionResult<String>) {
     assert_result_identity_changes(result, |value| value.protocol = "other");
     assert_result_identity_changes(result, |value| value.request_identity.scheme = "other");
