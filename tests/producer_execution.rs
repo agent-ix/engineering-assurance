@@ -234,6 +234,25 @@ fn execute(
         .expect("fixture request must be structurally valid")
 }
 
+/// Executes a just-written executable, retrying only while it is `Unavailable`.
+///
+/// A sibling test thread forking while our write descriptor is open makes
+/// `execve` return ETXTBSY (rust-lang/rust#114554).
+fn execute_staged(
+    request: &ProducerExecutionRequest,
+    adapter: &TextAdapter,
+) -> ProducerExecutionState<String> {
+    let mut state = execute(request, adapter).state;
+    for _ in 1..20 {
+        if !matches!(state, ProducerExecutionState::Unavailable) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(50));
+        state = execute(request, adapter).state;
+    }
+    state
+}
+
 fn cargo_feature_tree(manifest_path: &Path) -> String {
     let feature_tree = Command::new(env!("CARGO"))
         .args([
@@ -1175,6 +1194,68 @@ fn tc_125_cancellation_reaps_group_and_escape_mutant_fails_containment() {
     assert!(matches!(
         escaped.state,
         ProducerExecutionState::ContainmentFailure
+    ));
+}
+
+#[test]
+#[trace("TC-187", "FR-019-AC-13")]
+fn tc_187_producer_finds_its_own_path_sibling_and_reexecution_target() {
+    let root = tempfile::tempdir().expect("temporary root must be available");
+    let toolchain = tempfile::tempdir().expect("temporary toolchain must be available");
+    let producer = toolchain.path().join("producer");
+    fs::copy(fixture_executable(), &producer).expect("producer copy");
+    fs::copy(fixture_executable(), toolchain.path().join("sibling")).expect("sibling copy");
+    let producer = fs::canonicalize(producer).expect("producer path must be canonical");
+
+    let observe = |arguments: &[&str]| {
+        let mut request = request(root.path(), arguments);
+        request.producer.executable = producer.display().to_string();
+        request.producer.executable_digest =
+            ContentDigest::of_file(&producer).expect("producer must be hashable");
+        execute_staged(&request, &adapter())
+    };
+
+    assert!(matches!(
+        observe(&["self-exe"]),
+        ProducerExecutionState::Completed { observation }
+            if observation == producer.display().to_string()
+    ));
+    assert!(matches!(
+        observe(&["argv0"]),
+        ProducerExecutionState::Completed { observation }
+            if observation == producer.display().to_string()
+    ));
+    assert!(matches!(
+        observe(&["reexec"]),
+        ProducerExecutionState::Completed { observation } if observation == "reexecuted"
+    ));
+    assert!(matches!(
+        observe(&["sibling", "sibling"]),
+        ProducerExecutionState::Completed { observation } if observation == "sibling-ran"
+    ));
+}
+
+#[test]
+#[trace("TC-187", "FR-019-AC-13")]
+fn tc_187_script_producer_sees_its_pinned_path_as_dollar_zero() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = tempfile::tempdir().expect("temporary root must be available");
+    let toolchain = tempfile::tempdir().expect("temporary toolchain must be available");
+    let script = toolchain.path().join("producer.sh");
+    fs::write(&script, "#!/bin/sh\nprintf '%s' \"$0\"\n").expect("script write");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("script mode");
+    let script = fs::canonicalize(script).expect("script path must be canonical");
+
+    let mut request = request(root.path(), &[]);
+    request.producer.executable = script.display().to_string();
+    request.producer.executable_digest =
+        ContentDigest::of_file(&script).expect("script must be hashable");
+
+    assert!(matches!(
+        execute_staged(&request, &adapter()),
+        ProducerExecutionState::Completed { observation }
+            if observation == script.display().to_string()
     ));
 }
 

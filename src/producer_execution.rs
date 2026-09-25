@@ -103,7 +103,8 @@ impl ContentDigest {
 
     /// Computes a fixture or caller-side file identity.
     ///
-    /// Execution itself uses retained, capability-confined descriptors and
+    /// Execution itself hashes the executable bytes read through one
+    /// capability-confined descriptor, before the pinned path is executed, and
     /// does not rely on this convenience helper.
     ///
     /// # Errors
@@ -185,7 +186,8 @@ pub struct ProducerDescriptor {
     pub source_revision: String,
     /// Absolute executable path; ambient `PATH` lookup is forbidden.
     pub executable: String,
-    /// Expected identity of the retained executable bytes.
+    /// Expected SHA-256 identity of the executable bytes read from the opened
+    /// executable descriptor before the pinned path is executed.
     pub executable_digest: ContentDigest,
 }
 
@@ -193,7 +195,7 @@ pub struct ProducerDescriptor {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionProcedure {
-    /// Execute the retained file descriptor directly without a shell.
+    /// Execute the pinned absolute path directly without a shell.
     Direct,
 }
 
@@ -622,7 +624,8 @@ pub struct MalformedResponse;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionRefusal {
-    /// The retained executable bytes differ from the request.
+    /// The executable bytes read before the pinned path is executed differ from
+    /// the request.
     ExecutableIdentity,
     /// The capability root cannot be safely opened.
     CapabilityRoot,
@@ -759,7 +762,8 @@ pub struct ProducerExecutionResult<T> {
     pub request_identity: RequestIdentity,
     /// Exact caller-supplied producer provenance.
     pub producer: ProducerDescriptor,
-    /// Observed retained executable identity when preflight reached it.
+    /// SHA-256 of the executable bytes read before the pinned path is executed,
+    /// when preflight reached it.
     pub observed_executable_digest: Option<ContentDigest>,
     /// Bound cancellation event when it was observed.
     pub cancellation_event: Option<CancellationBinding>,
@@ -1029,7 +1033,6 @@ enum AcquireFailure {
 
 #[cfg(target_os = "linux")]
 struct ValidatedExecution {
-    executable: File,
     _working_tree: tempfile::TempDir,
     root: File,
     inputs: Vec<ValidatedInput>,
@@ -1438,12 +1441,11 @@ fn validate_capabilities(
     cancellation: &CancellationToken,
 ) -> Result<ValidatedExecution, PreflightFailure> {
     let root = open_capability_root(&request.capability_root)?;
-    let (executable, executable_digest) = open_executable(request, cancellation)?;
+    let executable_digest = open_executable(request, cancellation)?;
     let inputs = open_inputs(request, &root, &executable_digest, cancellation)?;
     let (working_tree, staged_root) =
         stage_working_projection(request, &inputs, &executable_digest, cancellation)?;
     Ok(ValidatedExecution {
-        executable,
         _working_tree: working_tree,
         root: staged_root,
         inputs,
@@ -1473,7 +1475,7 @@ fn open_capability_root(path: &str) -> Result<File, PreflightFailure> {
 fn open_executable(
     request: &ProducerExecutionRequest,
     cancellation: &CancellationToken,
-) -> Result<(File, ContentDigest), PreflightFailure> {
+) -> Result<ContentDigest, PreflightFailure> {
     use rustix::fs::{Mode, OFlags, ResolveFlags, openat2};
 
     let slash = File::open("/").map_err(|_| PreflightFailure::Unavailable)?;
@@ -1496,25 +1498,20 @@ fn open_executable(
             None,
         ));
     }
-    let (executable, executable_digest) = snapshot_reader(
-        &mut selected,
-        MAX_EXECUTABLE_BYTES,
-        cancellation,
-        "producer-executable",
-    )
-    .map_err(|failure| match failure {
-        DigestOutcome::Cancelled => PreflightFailure::Cancelled(None),
-        DigestOutcome::Unreadable | DigestOutcome::TooLarge => {
-            PreflightFailure::Refused(ExecutionRefusal::ExecutableIdentity, None)
-        }
-    })?;
+    let executable_digest = digest_reader(&mut selected, MAX_EXECUTABLE_BYTES, Some(cancellation))
+        .map_err(|failure| match failure {
+            DigestOutcome::Cancelled => PreflightFailure::Cancelled(None),
+            DigestOutcome::Unreadable | DigestOutcome::TooLarge => {
+                PreflightFailure::Refused(ExecutionRefusal::ExecutableIdentity, None)
+            }
+        })?;
     if executable_digest != request.producer.executable_digest {
         return Err(PreflightFailure::Refused(
             ExecutionRefusal::ExecutableIdentity,
             Some(executable_digest),
         ));
     }
-    Ok((executable, executable_digest))
+    Ok(executable_digest)
 }
 
 #[cfg(target_os = "linux")]
@@ -1738,7 +1735,7 @@ fn build_command(
 ) -> Option<Command> {
     let arguments = resolve_arguments(request, validated)?;
     let stdin = resolve_stdin(request, validated)?;
-    let mut command = Command::new(descriptor_path(&validated.executable));
+    let mut command = Command::new(&request.producer.executable);
     command
         .args(arguments)
         .current_dir(descriptor_path(&validated.root))
