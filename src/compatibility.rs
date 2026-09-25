@@ -636,14 +636,20 @@ mod tests {
     /// the validator refuses an accepted matrix that pins an unreleased artifact.
     fn released_matrix_value() -> serde_json::Value {
         let mut matrix = matrix_value();
-        let own = matrix["components"]
+        set_released(&mut matrix, "engineering-assurance", true);
+        matrix
+    }
+
+    /// Set one component's `released` flag, finding it by name rather than by
+    /// position so a reordered matrix cannot redirect the mutation.
+    fn set_released(matrix: &mut serde_json::Value, name: &str, released: bool) {
+        let component = matrix["components"]
             .as_array_mut()
             .expect("components must be an array")
             .iter_mut()
-            .find(|component| component["name"] == "engineering-assurance")
-            .expect("the matrix must pin engineering-assurance");
-        own["released"] = serde_json::json!(true);
-        matrix
+            .find(|component| component["name"] == name)
+            .unwrap_or_else(|| panic!("the matrix must pin {name}"));
+        component["released"] = serde_json::json!(released);
     }
 
     /// The embedded matrix with a fictional accepted record in place of the
@@ -915,6 +921,8 @@ mod tests {
         assert!(result.human_acceptance_recorded);
         assert!(result.gate_satisfied);
 
+        // TRIPWIRE: only the commit that records a human's acceptance may flip
+        // the pending assertions below. Do not "fix" them from an agent.
         // The shipped matrix is pending: a fully pinned toolchain must not open
         // it, and the pending record must carry no attribution.
         let shipped =
@@ -993,7 +1001,7 @@ mod tests {
 
         let mut premature_acceptance: serde_json::Value =
             serde_json::from_slice(&accepted_matrix_bytes()).expect("fixture matrix must be JSON");
-        premature_acceptance["components"][3]["released"] = serde_json::json!(false);
+        set_released(&mut premature_acceptance, "engineering-assurance", false);
         assert!(
             refusal_detail(&premature_acceptance).contains("not released"),
             "an accepted matrix named an unreleased EA candidate"

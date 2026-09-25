@@ -1,12 +1,11 @@
 # Shared assurance compatibility matrix
 
-The candidate component set for the current assurance toolchain. Acceptance of
-the exact v0.5.0 candidate is pending a human decision; nobody has accepted it,
-and the `v0.5.0` tag does not exist yet. The v0.4.1 candidate was accepted by
-Peter Krenesky on 2026-09-23 America/Los_Angeles.
+The candidate component set for the current assurance toolchain. The v0.5.0
+matrix is **pending human acceptance**: nobody has accepted it, and the
+`v0.5.0` tag does not exist yet.
 
 `engineering_assurance/compatibility-matrix.json` is the machine-readable
-source; this document records the accepted decision.
+source; this document describes it and records acceptance history.
 
 ## The pinned set
 
@@ -124,25 +123,31 @@ workflow that published quoin 0.23.1.
 
 ## Acceptance
 
+Current state (v0.5.0): pending. No human is named and no date is recorded.
+
 ```json
 "accepted": {
-  "state": "accepted",
-  "accepted_by": "Peter Krenesky",
-  "accepted_at": "2026-09-23"
+  "state": "pending_human_acceptance",
+  "accepted_by": null,
+  "accepted_at": null
 }
 ```
 
-The 2026-09-10 acceptance covered earlier pins. Peter Krenesky accepted this
-exact candidate after reviewing PR #131. Its pre-decision matrix SHA-256 was
-`26fb2ea02d8a9bc3cb97d0e43914be00dbcc57eee927267cba6c3ab139a22cc3`.
-The classifier reports the version match independently of that decision; only
-the accepted matrix and a fully pinned toolchain open the gate.
+A human must accept the exact v0.5.0 candidate. An agent may prepare and
+transcribe that decision but may not accept it. The classifier reports the
+version match independently of acceptance; only an accepted matrix and a fully
+pinned toolchain open the gate, so until then the gate is withheld.
+
+History (v0.4.1, not the current state): Peter Krenesky accepted the v0.4.1
+candidate on 2026-09-23 America/Los_Angeles after reviewing PR #131. That
+decision does not carry over to v0.5.0.
 
 TC-082 no longer asserts the fields are unset — it now asserts acceptance is in
 one of its two honest shapes: pending with nothing filled in, or accepted with
 both a named human and a date. The shape it rejects is a `state` that reads as
 accepted while nobody is on record as having accepted it.
 
-The matrix's recorded EA schema digests identify the candidate release bytes.
-The v0.5.0 tag will identify these bytes once it exists. The observer does not compare a working
-tree with release digests.
+The matrix's recorded EA schema digests describe the v0.4.1 release bytes and
+are informational provenance; nothing in the gate compares a working tree, or
+this candidate, with them. The observer does not compare a working tree with
+release digests.

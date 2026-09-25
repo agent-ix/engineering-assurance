@@ -1,6 +1,6 @@
 {
   "matrix_version": "engineering-assurance.compatibility-matrix/v1",
-  "purpose": "Candidate shared-assurance component pins and exact release artifacts for the v0.5.0 acceptance decision.",
+  "purpose": "Candidate shared-assurance component pins for the v0.5.0 acceptance decision. The recorded engineering-assurance schema digests describe the v0.4.1 release and are informational provenance.",
   "accepted": {
     "state": "pending_human_acceptance",
     "accepted_by": null,

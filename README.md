@@ -62,14 +62,15 @@ work, but it has not been checked against this module. See
 
 Versions are published as Git tags. GitHub Releases are not cut for every tag,
 so use `git tag` or the repository's tags page, not the Releases page, to find
-the newest version.
+the newest version. v0.5.0 is prepared but not yet tagged, so the snippets
+below stay on `v0.4.1` until it is.
 
 Install the native CLI from the tagged source checkout:
 
 ```bash
 cargo +1.98.1 install \
   --git https://github.com/agent-ix/engineering-assurance \
-  --tag v0.5.0 \
+  --tag v0.4.1 \
   --locked \
   --bin engineering-assurance
 ```
@@ -81,7 +82,7 @@ suffix selects the module root inside this repository:
 
 ```bash
 quoin module install \
-  github:agent-ix/engineering-assurance//engineering_assurance@v0.5.0
+  github:agent-ix/engineering-assurance//engineering_assurance@v0.4.1
 ```
 
 The installed module contains `manifest.yaml`, `schemas/`, and `skeletons/`.
@@ -96,14 +97,14 @@ OpenCode, and GitHub Copilot. Use the section for your agent.
 <summary><b>Claude Code</b></summary>
 
 ```text
-/plugin marketplace add agent-ix/engineering-assurance@v0.5.0
+/plugin marketplace add agent-ix/engineering-assurance@v0.4.1
 /plugin install engineering-assurance@engineering-assurance
 ```
 
 From a shell or a script:
 
 ```bash
-claude plugin marketplace add agent-ix/engineering-assurance@v0.5.0
+claude plugin marketplace add agent-ix/engineering-assurance@v0.4.1
 claude plugin install engineering-assurance@engineering-assurance
 ```
 
@@ -113,7 +114,7 @@ claude plugin install engineering-assurance@engineering-assurance
 <summary><b>OpenAI Codex</b></summary>
 
 ```bash
-codex plugin marketplace add agent-ix/engineering-assurance --ref v0.5.0
+codex plugin marketplace add agent-ix/engineering-assurance --ref v0.4.1
 codex plugin add engineering-assurance@engineering-assurance
 ```
 
@@ -131,7 +132,7 @@ GitHub CLI so it is available in every repository:
 ```bash
 gh skill install agent-ix/engineering-assurance \
   engineering_assurance/skills/assurance-onboarding \
-  --pin v0.5.0 \
+  --pin v0.4.1 \
   --scope user \
   --agent opencode
 ```
@@ -153,7 +154,7 @@ If you want the skills-only route, use GitHub CLI instead:
 ```bash
 gh skill install agent-ix/engineering-assurance \
   engineering_assurance/skills/assurance-onboarding \
-  --pin v0.5.0 \
+  --pin v0.4.1 \
   --scope user \
   --agent github-copilot
 ```
@@ -170,7 +171,7 @@ module.
 
 | Piece | Check | Ready when |
 | --- | --- | --- |
-| Quire module | `quoin module list` | `engineering-assurance` is listed with `ref` set to the tag you installed, such as `v0.5.0`. A bare commit SHA means it came from an untagged commit. |
+| Quire module | `quoin module list` | `engineering-assurance` is listed with `ref` set to the tag you installed, such as `v0.4.1`. A bare commit SHA means it came from an untagged commit. |
 | Native CLI | `engineering-assurance --version` | It prints the same version. `command not found` means `~/.cargo/bin` is not on `PATH`. |
 | Claude Code plugin | `claude plugin list` (or `/plugin` in a session) | `engineering-assurance@engineering-assurance` is listed as enabled at the same version. |
 | Codex plugin | `codex plugin list \| grep engineering-assurance` | `engineering-assurance@engineering-assurance` shows `installed, enabled` at the same version. |
@@ -180,7 +181,7 @@ GitHub Copilot, confirm the skill appears in that agent's skill list. An agent
 finds a newly installed plugin's skill only in a new session, so restart it
 after installing.
 
-The `@v0.5.0` suffix on `marketplace add` pins the plugin to that tag. Without
+The `@v0.4.1` suffix on `marketplace add` pins the plugin to that tag. Without
 it, the marketplace follows this repository's default branch and can move past
 the tag you installed for the module and the CLI.
 

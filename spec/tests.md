@@ -410,6 +410,7 @@ implemented and reviewed.
 | TC-187 | A Rust fixture copied beside a sibling fixture and pinned by absolute path reports its own resolved executable path and `argv[0]` as the executable path exactly as pinned in the request, re-executes itself through that path, and runs its sibling from the same directory, and a `#!` script pinned by absolute path sees that path as `$0`, each completing through the executor | Integration | P0 | FR-019-AC-13 | ✅ self-path, `argv[0]`, self re-execution, sibling execution and `#!` script `$0` cases passing |
 | TC-188 | A relative margin moves the baseline value by the margin times its absolute value in the direction of improvement, including for negative baselines and baselines of different scale; an absent margin mode is absolute and an absolute rule does not emit the key; a margin mode without a margin, on a threshold, or with an unknown value is refused; and the schema's margin_mode enum equals the Rust wire names | Unit | P1 | FR-021-AC-12 | ✅ evaluation, validation, round-trip and wire-parity cases passing |
 | TC-189 | The requirement-test source audit is told one trace grammar. Under `DocComment`, `/// Trace:` lines whose identifiers are requirement-family ids pass; an absent line yields `DocTraceMissing`, and an empty list, malformed entry, test-case id or placeholder yields `DocTraceIdInvalid`; block, `#[doc]`, multi-line, inner-doc, lowercase-key, aliased-import and serialized-name cases are covered; under either grammar the other grammar's form does not satisfy the audit, and import-shape findings appear only under `Attribute` | Static | P0 | FR-014-AC-6 | ✅ `tests/source_audit.rs` doc-comment and grammar-exclusivity cases passing |
+| TC-191 | The crate version, the module manifest version, the matrix `engineering-assurance` pin, the three plugin manifests and `package.json` all state one version, so a release bump that misses one fails a static check | Static | P0 | FR-012-AC-12 | ✅ `tests/version_alignment.rs` passing |
 
 ## Option Permutation Matrix
 
@@ -595,6 +596,7 @@ become reachable again the moment a second host is declared.
 | FR-012 | FR-012-AC-9 | TC-095 | ✅ Passing natively |
 | FR-012 | FR-012-AC-10 | TC-130 | ✅ Passing |
 | FR-012 | FR-012-AC-11 | TC-130 | ✅ Passing |
+| FR-012 | FR-012-AC-12 | TC-191 | ✅ Passing |
 | FR-013 | FR-013-AC-1 | TC-087 | ✅ Passing |
 | FR-013 | FR-013-AC-2 | TC-088 | ✅ Passing |
 | FR-013 | FR-013-AC-3 | TC-089 | ✅ Passing |

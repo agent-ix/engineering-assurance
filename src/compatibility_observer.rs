@@ -352,6 +352,8 @@ mod tests {
             Some(env!("CARGO_PKG_VERSION").to_owned()),
         )
         .expect("fully pinned fixture observation must classify");
+        // TRIPWIRE: only the commit that records a human's acceptance may flip
+        // the pending assertions below. Do not "fix" them from an agent.
         // Every version is exactly pinned and the module matches the binary, so
         // the only thing withholding the gate is the shipped matrix's pending
         // acceptance, which is the classifier's fact and not the observer's.
@@ -389,37 +391,31 @@ mod tests {
     #[trace("TC-130", "FR-012-AC-11", "FR-014-AC-2")]
     fn a_module_that_disagrees_with_the_binary_withholds_an_otherwise_open_gate() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let observed = observe_with(root, &fixture_runner(), None)
-            .expect("fully pinned fixture observation must classify");
-        // The shipped matrix is pending, so the classifier withholds on its own.
-        // Open it by hand on a copy: the observer's added condition is what is
-        // under test, and it needs an otherwise-open gate to be able to fail.
-        let mut classification = observed.classification;
-        assert!(classification.versions_compatible);
-        classification.human_acceptance_recorded = true;
-        classification.gate_satisfied = true;
+        for (module, expect_match) in [
+            (Some("0.3.1".to_owned()), false),
+            (None, false),
+            (Some(CLI_VERSION.to_owned()), true),
+        ] {
+            // Production computes `matches_cli` and `installed`; read them from
+            // the real result rather than re-deriving the comparison here.
+            let result = observe_with(root, &fixture_runner(), module.clone())
+                .expect("fully pinned fixture observation must classify");
+            assert_eq!(result.module.installed, module);
+            assert_eq!(result.module.matches_cli, expect_match, "{module:?}");
 
-        for module in [Some("0.3.1".to_owned()), None] {
-            let observation = ModuleObservation {
-                matches_cli: module.as_deref() == Some(CLI_VERSION),
-                installed: module.clone(),
-                cli: CLI_VERSION,
-            };
-            assert!(!observation.matches_cli, "{module:?} matched the binary");
-            assert!(
-                !gate_opens(&classification, &observation),
-                "{module:?} opened the gate"
+            // The shipped matrix is pending, so the classifier withholds on its
+            // own. Open it by hand on a copy: the observer's added condition is
+            // what is under test, and it needs an open gate to be able to fail.
+            let mut classification = result.classification;
+            assert!(classification.versions_compatible);
+            classification.human_acceptance_recorded = true;
+            classification.gate_satisfied = true;
+            assert_eq!(
+                gate_opens(&classification, &result.module),
+                expect_match,
+                "{module:?}"
             );
         }
-        let matching = ModuleObservation {
-            matches_cli: true,
-            installed: Some(CLI_VERSION.to_owned()),
-            cli: CLI_VERSION,
-        };
-        assert!(
-            gate_opens(&classification, &matching),
-            "a matching module no longer opens an otherwise-open gate"
-        );
     }
 
     #[test]

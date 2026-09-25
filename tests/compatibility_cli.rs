@@ -47,6 +47,8 @@ fn exact_request() -> serde_json::Value {
 #[trace("TC-098", "FR-014-AC-2")]
 #[test]
 fn tc_098_machine_result_is_one_versioned_json_value() {
+    // TRIPWIRE: only the commit that records a human's acceptance may flip
+    // this test to exit 0 / accepted. Do not "fix" it from an agent.
     // The shipped matrix is pending human acceptance, so an exactly pinned
     // toolchain is compatible on versions and still withheld.
     let output = run(&exact_request());
