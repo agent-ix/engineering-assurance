@@ -91,13 +91,16 @@ pub enum RustSourceFindingCategory {
 
 /// One deterministic finding from a single source document.
 ///
-/// Fields are private and read only through accessors; the type is not
-/// `Serialize`, so no wire shape exposes what the Rust surface hides.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// The fields are public, matching the serialized form; the accessors return
+/// the same values.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct RustSourceFinding {
-    category: RustSourceFindingCategory,
-    function: Option<Box<str>>,
-    capability: Option<RustSourceCapability>,
+    /// Closed finding category.
+    pub category: RustSourceFindingCategory,
+    /// Affected test or function name when one applies.
+    pub function: Option<Box<str>>,
+    /// Prohibited capability when one applies.
+    pub capability: Option<RustSourceCapability>,
 }
 
 impl RustSourceFinding {

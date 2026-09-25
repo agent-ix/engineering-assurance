@@ -528,8 +528,8 @@ fn tc_117_trace_requires_both_test_case_and_acceptance_identifiers() {
 }
 
 #[test]
-#[trace("TC-188", "FR-014-AC-6")]
-fn tc_188_doc_comment_grammar_accepts_trace_lines_and_flags_absent_or_malformed_ones() {
+#[trace("TC-189", "FR-014-AC-6")]
+fn tc_189_doc_comment_grammar_accepts_trace_lines_and_flags_absent_or_malformed_ones() {
     let conforming = r"
         /// Trace: FR-901, NFR-902
         /// Provenance: fictional#1
@@ -574,8 +574,8 @@ fn tc_188_doc_comment_grammar_accepts_trace_lines_and_flags_absent_or_malformed_
 }
 
 #[test]
-#[trace("TC-188", "FR-014-AC-6")]
-fn tc_188_each_grammar_is_held_exclusively_and_import_findings_are_attribute_only() {
+#[trace("TC-189", "FR-014-AC-6")]
+fn tc_189_each_grammar_is_held_exclusively_and_import_findings_are_attribute_only() {
     let doc_only = "/// Trace: FR-901\n#[test] fn tc_908_doc_form() {}";
     // The attribute grammar does not accept the doc form, and the doc grammar
     // reports no import-shape finding for a source with no trace import.
