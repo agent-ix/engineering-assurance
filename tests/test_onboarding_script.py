@@ -396,3 +396,61 @@ def test_onboard_js_refuses_a_usage_error(
     assert completed.stdout == ""
     assert message in completed.stderr
     assert "Usage: " in completed.stderr
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_onboard_js_summary_reports_validation_and_toolchain(tmp_path: Path) -> None:
+    # Fake quire/quoin first on PATH make the validation and toolchain answers
+    # deterministic: quire fails the one artifact named MP-002.md.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    quire = bin_dir / "quire"
+    quire.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = provenance ]; then echo \'{"cli":{"version":"9.9.9"}}\'; exit 0; fi\n'
+        'case "$*" in *MP-002.md)\n'
+        '  echo "x/MP-002.md: [MeasurementPlan] frontmatter: \\"owner\\" is a required property" >&2\n'
+        "  exit 1;;\n"
+        "esac\n"
+        "exit 0\n"
+    )
+    quoin = bin_dir / "quoin"
+    quoin.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = --version ]; then echo "quoin 8.8.8"; exit 0; fi\n'
+        'echo "  measurement record  Record."\n'
+    )
+    quire.chmod(0o755)
+    quoin.chmod(0o755)
+
+    target_repo = tmp_path / "consumer"
+    assurance = target_repo / "spec" / "assurance"
+    assurance.mkdir(parents=True)
+    for name in ("MP-001.md", "MP-002.md"):
+        (assurance / name).write_text("---\ntype: MeasurementPlan\n---\n")
+
+    completed = subprocess.run(
+        [NODE, str(ONBOARD_JS), "--repo", str(target_repo), "--summary", "--json"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path)},
+    )
+    assert completed.returncode == 1, "an invalid artifact must fail the summary"
+    summary = json.loads(completed.stdout)
+
+    assert summary["toolchain"] == {
+        "quire": "9.9.9",
+        "quoin": "8.8.8",
+        "quoinMeasurementVerify": False,
+    }
+    assert summary["installedModuleVersion"]
+    by_name = {item["name"]: item for item in summary["artifacts"]}
+    assert by_name["MP-001.md"]["validation"] == {"status": "valid", "findings": []}
+    assert by_name["MP-002.md"]["validation"]["status"] == "invalid"
+    assert by_name["MP-002.md"]["validation"]["findings"] == [
+        '[MeasurementPlan] frontmatter: "owner" is a required property'
+    ]
+    # The compact form must not carry the full report's orientation prose.
+    assert "relationship" not in summary
+    assert "nextSteps" not in summary

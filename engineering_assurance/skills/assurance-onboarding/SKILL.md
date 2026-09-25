@@ -26,7 +26,10 @@ with `quoin module install` it is
 `~/.ix/filament/modules/engineering-assurance/skills/assurance-onboarding`; in a
 checkout of this repository it is
 `engineering_assurance/skills/assurance-onboarding`. Add `--json` for a
-machine-readable report, or `--help` for usage.)
+machine-readable report, `--summary` for a compact one (module version, each
+`spec/assurance/` artifact with its Quire validation status, and installed
+quire/quoin features; exits 1 if an artifact is invalid), or `--help` for
+usage.)
 
 It prints, in one place:
 

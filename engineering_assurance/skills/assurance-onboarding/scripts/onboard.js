@@ -21,15 +21,21 @@
 //
 // `--repo` is the consuming project's root (default: current directory).
 // `--json` emits the same report as machine-readable JSON instead of text.
+// `--summary` prints a compact report instead of the full one: the installed
+// module version, each `spec/assurance/` artifact with its Quire validation
+// status, and which quire/quoin toolchain features are installed. Combine with
+// `--json` for the machine form.
 
+import { spawnSync } from "node:child_process";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const USAGE =
-  "Usage: node engineering_assurance/skills/assurance-onboarding/scripts/onboard.js [--repo <path>] [--json]\n\n" +
+  "Usage: node engineering_assurance/skills/assurance-onboarding/scripts/onboard.js [--repo <path>] [--json] [--summary]\n\n" +
   "  --repo <path>  the consuming project's root (default: current directory)\n" +
   "  --json         emit the report as JSON instead of text\n" +
+  "  --summary      compact report: module version, per-artifact validation, toolchain\n" +
   "  -h, --help     print this message\n";
 
 const args = process.argv.slice(2);
@@ -45,10 +51,13 @@ const usageError = (message) => {
 };
 let repoFlagValue;
 let wantsJson = false;
+let wantsSummary = false;
 for (let index = 0; index < args.length; index += 1) {
   const arg = args[index];
   if (arg === "--json") {
     wantsJson = true;
+  } else if (arg === "--summary") {
+    wantsSummary = true;
   } else if (arg === "--repo") {
     const value = args[index + 1];
     if (value === undefined || value.startsWith("-")) usageError("--repo requires a path argument");
@@ -457,6 +466,70 @@ if (specAssuranceExists) {
   existingArtifacts = readdirSync(specAssuranceDir)
     .filter((name) => name.endsWith(".md"))
     .map((name) => ({ name, type: frontmatterType(path.join(specAssuranceDir, name)) }));
+}
+
+// -- Compact summary mode (--summary). -------------------------------------
+//
+// Runs the installed Quire against each inventoried artifact so a malformed
+// instance is reported here rather than found later by hand, and reports which
+// toolchain features exist so an author does not reach for one that is absent.
+const SUMMARY_TIMEOUT_MS = 60_000;
+const MAX_FINDINGS_PER_ARTIFACT = 10;
+const run = (command, commandArgs, cwd) => {
+  const result = spawnSync(command, commandArgs, { cwd, encoding: "utf8", timeout: SUMMARY_TIMEOUT_MS });
+  return result.error ? null : result;
+};
+const validateArtifact = (name) => {
+  const result = run("quire", ["validate", "--scope", targetRepo, path.join("spec", "assurance", name)], targetRepo);
+  if (result === null) return { status: "unavailable", findings: [] };
+  const findings = result.stderr
+    .split("\n")
+    .filter((text) => text.includes(`${name}: [`))
+    .map((text) => text.slice(text.indexOf(`${name}: [`) + name.length + 2))
+    .slice(0, MAX_FINDINGS_PER_ARTIFACT);
+  return { status: result.status === 0 ? "valid" : "invalid", findings };
+};
+const observeToolVersion = (command, commandArgs, pick) => {
+  const result = run(command, commandArgs, targetRepo);
+  if (result === null || result.status !== 0) return null;
+  return pick(result.stdout);
+};
+const summarize = () => ({
+  targetRepo,
+  installedModuleVersion,
+  artifacts: existingArtifacts.map((artifact) => ({ ...artifact, validation: validateArtifact(artifact.name) })),
+  toolchain: {
+    quire: observeToolVersion("quire", ["provenance"], (out) => {
+      try {
+        return JSON.parse(out)?.cli?.version ?? null;
+      } catch {
+        return null;
+      }
+    }),
+    quoin: observeToolVersion("quoin", ["--version"], (out) => out.match(/\d+\.\d+\.\d+\S*/)?.[0] ?? null),
+    quoinMeasurementVerify: observeToolVersion("quoin", ["measurement", "--help"], (out) =>
+      /^\s*measurement verify\b/m.test(out),
+    ),
+  },
+});
+if (wantsSummary) {
+  const summary = summarize();
+  if (wantsJson) {
+    console.log(JSON.stringify(summary, null, 2));
+  } else {
+    console.log(`engineering-assurance module: ${summary.installedModuleVersion ?? "not found"}`);
+    console.log(`quire: ${summary.toolchain.quire ?? "not found"}`);
+    console.log(`quoin: ${summary.toolchain.quoin ?? "not found"}`);
+    console.log(
+      `quoin measurement verify: ${summary.toolchain.quoinMeasurementVerify === null ? "unknown" : summary.toolchain.quoinMeasurementVerify ? "available" : "not available"}`,
+    );
+    console.log(`spec/assurance artifacts: ${summary.artifacts.length}`);
+    for (const artifact of summary.artifacts) {
+      console.log(`  ${artifact.validation.status.padEnd(11)} ${artifact.name} (${artifact.type})`);
+      for (const finding of artifact.validation.findings) console.log(`      ${finding}`);
+    }
+  }
+  process.exit(summary.artifacts.some((artifact) => artifact.validation.status === "invalid") ? 1 : 0);
 }
 
 // -- The measurement-record checklist is NOT schema-file-governed like §4  --
