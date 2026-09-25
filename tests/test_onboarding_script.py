@@ -132,7 +132,8 @@ def test_onboard_js_json_checklist_lists_the_decision_rule_vocabulary(
         ),
         "statistical_design.decision_rule.comparator = eq": (
             "statistical_design.decision_rule.baseline must not be best-seen and "
-            "statistical_design.decision_rule.margin must be absent"
+            "statistical_design.decision_rule.margin must be absent and "
+            "statistical_design.decision_rule.margin_mode must be absent"
         ),
     }
     for when, constraint in expected_current_constraints.items():

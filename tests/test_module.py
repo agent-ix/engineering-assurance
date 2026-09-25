@@ -450,7 +450,13 @@ def test_decision_rule_is_a_closed_comparator_with_exactly_one_reference() -> No
         "best-seen",
         "external-reference",
     ]
-    assert set(rule["properties"]) == {"comparator", "threshold", "baseline", "margin"}
+    assert set(rule["properties"]) == {
+        "comparator",
+        "threshold",
+        "baseline",
+        "margin",
+        "margin_mode",
+    }
 
     for comparator in ("gt", "ge", "lt", "le", "eq"):
         assert _statistical_design_errors(

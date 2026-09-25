@@ -6,6 +6,13 @@ semantic:
   contract_version: 1.0.0
   semantic_core: 0.3.0
   package: agent-ix/engineering-assurance-campaign
+  # The five artifact types (AssuranceProfile, MeasurementPlan,
+  # ArchitectureDescription, ComponentAssuranceContract, AssuranceArgument) are
+  # deliberately not exported yet. Exporting one needs typed semantic
+  # definitions authored under campaign/contract and a semantic-ir.json
+  # regenerated with the filament-core-data lifter (campaign/generated/
+  # GENERATION.md), and MeasurementPlan's shape is still changing. Revisit once
+  # the MeasurementPlan schema settles and the generator is available (EA-29).
   exports: [campaign_value, campaign_enum]
   imports: {}
   targets: [json-schema, markdown]

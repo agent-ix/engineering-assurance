@@ -393,7 +393,11 @@
         },
         "margin": {
           "type": "number",
-          "description": "How far the result must improve on the baseline, in the metric's own units, signed in the direction of improvement: positive means the estimate must beat the baseline by at least this much, negative allows a regression of up to this much. reference = baseline value + margin for `gt` and `ge`, and baseline value - margin for `lt` and `le`. Allowed only with `baseline` and never with `eq`; absent means 0."
+          "description": "How far the result must improve on the baseline, in the metric's own units, signed in the direction of improvement: positive means the estimate must beat the baseline by at least this much, negative allows a regression of up to this much. reference = baseline value + margin for `gt` and `ge`, and baseline value - margin for `lt` and `le`. Allowed only with `baseline` and never with `eq`; absent means 0. Its unit is `margin_mode`."
+        },
+        "margin_mode": {
+          "enum": ["absolute", "relative"],
+          "description": "The unit of `margin`. `absolute` (the default when absent): the metric's own units. `relative`: a fraction of the baseline value's magnitude, so `margin: 0.05` is 5% of the baseline -- the reference is baseline + 0.05 * |baseline| for `gt`/`ge` and baseline - 0.05 * |baseline| for `lt`/`le`. Use `relative` when one plan covers benchmarks or dimensions whose baselines differ in scale. Allowed only with `margin`."
         }
       },
       "oneOf": [
@@ -401,7 +405,8 @@
         { "required": ["baseline"] }
       ],
       "dependencies": {
-        "margin": ["baseline"]
+        "margin": ["baseline"],
+        "margin_mode": ["margin"]
       },
       "allOf": [
         {
@@ -412,7 +417,8 @@
           "then": {
             "properties": {
               "baseline": { "not": { "const": "best-seen" } },
-              "margin": false
+              "margin": false,
+              "margin_mode": false
             }
           }
         }

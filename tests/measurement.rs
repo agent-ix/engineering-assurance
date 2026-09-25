@@ -14,7 +14,7 @@ use std::{collections::BTreeSet, fs, path::Path, process::Command};
 
 use engineering_assurance::measurement::{
     ApparatusPath, ApparatusPathError, Baseline, Comparator, DecisionRule, DecisionRuleError,
-    DefinitionChangedWithoutVersionBump, DefinitionMember, Direction, Estimator,
+    DefinitionChangedWithoutVersionBump, DefinitionMember, Direction, Estimator, MarginMode,
     MeasurementDefinition, NegativeControl, NegativeControlError, NegativeControlKind,
     NegativeControls, Objective, ObjectiveError, PlanDefinition, ProtectedApparatus,
     ProtectedApparatusError, RuleEvaluationError, RuleReference,
@@ -45,6 +45,15 @@ fn apparatus(paths: &[&str]) -> ProtectedApparatus {
             .map(|path| ApparatusPath::new(*path).expect("valid apparatus path")),
     )
     .expect("valid protected apparatus")
+}
+
+/// The reference of an absolute-margin baseline rule.
+const fn absolute_baseline(baseline: Baseline, margin: f64) -> RuleReference {
+    RuleReference::Baseline {
+        baseline,
+        margin,
+        margin_mode: MarginMode::Absolute,
+    }
 }
 
 fn parse_rule(yaml: &str) -> Result<DecisionRule, String> {
@@ -832,19 +841,13 @@ fn tc_146_decision_rule_construction_and_deserialization_are_closed_and_validate
             .expect("valid rule");
     assert_eq!(
         baseline.reference(),
-        RuleReference::Baseline {
-            baseline: Baseline::ConstantPredictor,
-            margin: 0.05
-        }
+        absolute_baseline(Baseline::ConstantPredictor, 0.05)
     );
     assert_eq!(
         DecisionRule::against_baseline(Comparator::Ge, Baseline::BestSeen, None)
             .expect("valid rule")
             .reference(),
-        RuleReference::Baseline {
-            baseline: Baseline::BestSeen,
-            margin: 0.0
-        }
+        absolute_baseline(Baseline::BestSeen, 0.0)
     );
 
     assert_eq!(
@@ -1271,10 +1274,7 @@ fn tc_171_external_reference_baseline_has_no_estimator_restriction_and_allows_eq
             .expect("valid rule");
     assert_eq!(
         rule.reference(),
-        RuleReference::Baseline {
-            baseline: Baseline::ExternalReference,
-            margin: 5.0
-        }
+        absolute_baseline(Baseline::ExternalReference, 5.0)
     );
     assert_eq!(
         parse_rule("comparator: le\nbaseline: external-reference\nmargin: 5\n"),
@@ -1609,5 +1609,117 @@ fn tc_158_a_protected_apparatus_edit_without_a_version_bump_is_a_finding() {
     assert_eq!(
         DefinitionMember::ProtectedApparatus.to_string(),
         "protected_apparatus"
+    );
+}
+
+#[trace("TC-146", "FR-021")]
+#[test]
+fn tc_146_a_relative_margin_is_a_fraction_of_the_baseline_value() {
+    // One rule, two benchmarks whose baselines differ by three orders of
+    // magnitude: "no worse than 5% slower" is 5% of each baseline.
+    let rule = DecisionRule::against_baseline_with_mode(
+        Comparator::Le,
+        Baseline::PriorCollection,
+        Some(-0.05),
+        MarginMode::Relative,
+    )
+    .expect("valid rule");
+    for (baseline, tolerated, refused) in [(100.0, 105.0, 105.1), (100_000.0, 105_000.0, 105_100.0)]
+    {
+        assert_eq!(rule.holds(tolerated, Some(baseline)), Ok(true));
+        assert_eq!(rule.holds(refused, Some(baseline)), Ok(false));
+    }
+    // The scale is the baseline's magnitude, so a negative baseline does not
+    // flip the direction of the tolerance.
+    assert_eq!(rule.holds(-95.0, Some(-100.0)), Ok(true));
+    assert_eq!(rule.holds(-94.9, Some(-100.0)), Ok(false));
+
+    // The same margin stated absolutely is a fixed number of units.
+    let absolute =
+        DecisionRule::against_baseline(Comparator::Le, Baseline::PriorCollection, Some(-0.05))
+            .expect("valid rule");
+    assert_eq!(absolute.holds(100.04, Some(100.0)), Ok(true));
+    assert_eq!(absolute.holds(105.0, Some(100.0)), Ok(false));
+}
+
+#[trace("TC-146", "FR-021")]
+#[test]
+fn tc_146_margin_mode_is_closed_defaults_to_absolute_and_round_trips() {
+    let relative = parse_rule(
+        "comparator: le\nbaseline: prior-collection\nmargin: -0.05\nmargin_mode: relative\n",
+    )
+    .expect("a relative margin parses");
+    assert_eq!(
+        relative.reference(),
+        RuleReference::Baseline {
+            baseline: Baseline::PriorCollection,
+            margin: -0.05,
+            margin_mode: MarginMode::Relative
+        }
+    );
+    let encoded = yaml_serde::to_string(&relative).expect("rule serializes");
+    assert_eq!(parse_rule(&encoded), Ok(relative), "round trip: {encoded}");
+
+    // Absent means absolute, and an absolute rule never emits the key, so a
+    // plan written before this field existed serializes unchanged.
+    let legacy = parse_rule("comparator: gt\nbaseline: best-seen\nmargin: 1\n").expect("parses");
+    assert_eq!(
+        legacy.reference(),
+        RuleReference::Baseline {
+            baseline: Baseline::BestSeen,
+            margin: 1.0,
+            margin_mode: MarginMode::Absolute
+        }
+    );
+    assert!(
+        !yaml_serde::to_string(&legacy)
+            .expect("rule serializes")
+            .contains("margin_mode")
+    );
+
+    // A mode with no margin, or on a threshold, has nothing to apply to.
+    for yaml in [
+        "comparator: le\nbaseline: prior-collection\nmargin_mode: relative\n",
+        "comparator: le\nthreshold: 3\nmargin_mode: relative\n",
+    ] {
+        assert!(
+            yaml_serde::from_str::<DecisionRule>(yaml)
+                .expect_err("a mode without a margin is refused")
+                .to_string()
+                .contains("margin_mode"),
+            "{yaml}"
+        );
+    }
+    assert_eq!(
+        DecisionRule::against_baseline_with_mode(
+            Comparator::Le,
+            Baseline::PriorCollection,
+            None,
+            MarginMode::Relative
+        ),
+        Err(DecisionRuleError::MarginModeWithoutMargin)
+    );
+    assert!(
+        parse_rule("comparator: le\nbaseline: prior-collection\nmargin: 1\nmargin_mode: percent\n")
+            .is_err()
+    );
+}
+
+#[trace("TC-147", "FR-021")]
+#[test]
+fn tc_147_schema_margin_mode_enum_equals_the_rust_wire_names() {
+    let schema = measurement_plan_schema();
+    assert_wire_parity(
+        &schema_enum(
+            &schema,
+            "/definitions/decision_rule/properties/margin_mode/enum",
+        ),
+        &MarginMode::ALL,
+        |mode| mode.wire_name(),
+    );
+    assert_eq!(
+        schema["definitions"]["decision_rule"]["dependencies"]["margin_mode"],
+        serde_json::json!(["margin"]),
+        "the schema must refuse a margin_mode with no margin, as the Rust rule does"
     );
 }
