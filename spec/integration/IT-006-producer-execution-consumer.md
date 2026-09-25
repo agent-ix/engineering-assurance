@@ -27,9 +27,8 @@ producer is a deterministic fictional executable retained only by the test.
 - The consumer pins the accepted Engineering Assurance revision.
 - A temporary source capability root contains the declared fictional inputs
   plus undeclared and mutable control files. The exact Rust fixture producer is
-  opened and executed through one retained no-follow descriptor against an
-  invocation-owned working projection containing only declared inputs and
-  output parents.
+  opened and executed through one retained no-follow descriptor with the
+  capability root as its working directory.
 
 ## Inputs
 
@@ -67,8 +66,9 @@ producer is a deterministic fictional executable retained only by the test.
      Engineering Assurance.
 5. Mutate the source capability root and observed output paths around launch
    and observation.
-   - IT-006-SC-05: the producer sees exactly the staged declared projection,
-     and the adapter/consumer reads the same immutable output snapshot whose
+   - IT-006-SC-05: a declared input mutated after preflight is still read as
+     its verified bytes through the descriptor argument, and the
+     adapter/consumer reads the same immutable output snapshot whose
      digest appears in the canonical result without reopening a mutable path.
 
 ## Expected Results

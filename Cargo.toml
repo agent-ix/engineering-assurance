@@ -32,7 +32,6 @@ producer-execution = [
   "dep:serde_json",
   "dep:serde_json_canonicalizer",
   "dep:sha2",
-  "dep:tempfile",
   "dep:thiserror",
 ]
 # `source_audit` (the syn-based "is this library half I/O-free" check) needs
@@ -82,6 +81,7 @@ full = [
   "dep:jsonschema",
   "dep:regex",
   "dep:tar",
+  "dep:tempfile",
   "dep:time",
   "dep:unicode-casefold",
   "dep:yaml_serde",
@@ -114,6 +114,7 @@ zip = { version = "8.6", default-features = false, features = ["deflate-flate2"]
 # Public since 2026-09-20 (PLAT-853); pinned to the same rev the vendored
 # copy carried, matching the other Agent-IX repos that consume it.
 ix-trace-rs = { git = "https://github.com/agent-ix/ix-trace-rs", rev = "2ce4ebf47f726b9d76388220545cd0abda8a5cfb", version = "=0.1.0" }
+tempfile = "3.27"
 
 [workspace]
 resolver = "2"

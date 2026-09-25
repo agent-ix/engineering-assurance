@@ -71,7 +71,7 @@ pub struct ProcedureBindings {
     /// Claimed origins of selected explicit inputs, derived from the caller's
     /// source/dependency selectors. Quoin must independently verify the bytes.
     pub input_origins: Option<Vec<ProcedureInputOrigin>>,
-    /// Optional complete tracked source tree staged as implicit input files.
+    /// Optional complete tracked source tree selected as implicit input files.
     pub source_tree: Option<SourceTreeBinding>,
     /// Declared output paths.
     pub outputs: Vec<OutputBinding>,
@@ -93,19 +93,18 @@ pub struct ProcedureBindings {
     pub exit_codes: ExitCodeBinding,
 }
 
-/// A Git source tree selected for sealed per-file staging by FR-019.
+/// A Git source tree selected for sealed per-file inputs by FR-019.
 ///
 /// `manifest` is the exact NUL-delimited stdout of
 /// `git ls-tree -r -z --full-tree <revision>`. Its SHA-256 must equal the
 /// `CampaignSource` digest. Every regular tracked file is opened under the
 /// capability root and checked against its Git blob OID before selection as
 /// an [`InputBinding`] with `role = "source/" + path`. FR-019 later rechecks
-/// its SHA-256 before staging. Tracked symlinks must be present at preflight:
+/// its SHA-256 before launch. Tracked symlinks must be present at preflight:
 /// their target bytes are verified against their Git blob OIDs at resolution
-/// and recorded as omitted, but no symlink is staged or followed. Omitted-link
-/// identity is resolution evidence; it is not checked again at launch because
-/// the link cannot affect execution in the staged directory. Other modes
-/// refuse the tree.
+/// and recorded as omitted link metadata. Omitted-link identity is resolution
+/// evidence; it is not checked again at launch. The producer runs in the
+/// capability root. Other modes refuse the tree.
 /// The caller and independent checker must establish that these manifest bytes
 /// came from `CampaignSource.revision` in the retained Git repository; this
 /// pure binding alone cannot derive a commit's tree from its self-reported ID.
@@ -117,7 +116,7 @@ pub struct SourceTreeBinding {
     pub manifest: Vec<u8>,
 }
 
-/// A source symlink bound by the Git manifest but omitted from the safe staging projection.
+/// A source symlink bound by the Git manifest but recorded as omitted link metadata rather than selected as an input.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OmittedSourceLink {
     /// Tracked relative path.
@@ -133,7 +132,7 @@ pub struct ResolvedProcedure {
     pub request: ProducerExecutionRequest,
     /// SHA-256-JCS identity of the exact request.
     pub identity: RequestIdentity,
-    /// Tracked symlinks verified at resolution and omitted from staging.
+    /// Tracked symlinks verified at resolution and recorded as omitted link metadata.
     pub omitted_source_links: Vec<OmittedSourceLink>,
 }
 

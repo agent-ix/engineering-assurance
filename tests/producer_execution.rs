@@ -182,7 +182,7 @@ fn request(root: &Path, arguments: &[&str]) -> ProducerExecutionRequest {
 
 /// Bound for tests whose fixture is held open across a test-driven
 /// rendezvous (a ready marker, then a test action, then a release or a
-/// cancellation). Those tests exercise staging and cancellation, not the
+/// cancellation). Those tests exercise input snapshots and cancellation, not the
 /// timeout, so both the readiness wait and the request's own timeout use
 /// a bound well past any realistic scheduling delay on a loaded, shared
 /// runner. Under the default 2s budget the request could time out before
@@ -516,8 +516,38 @@ fn tc_176_live_output_tree_is_sealed_and_symlinks_refuse() {
     let refused = execute(&request, &adapter());
     assert!(matches!(
         refused.state,
-        ProducerExecutionState::Failed { .. }
+        ProducerExecutionState::Failed {
+            reason: ExecutionFailure::OutputArtifact
+        }
     ));
+}
+
+#[test]
+#[trace("TC-176", "FR-019-AC-4")]
+fn tc_176_output_tree_absent_after_execution_fails_only_when_required() {
+    let root = tempfile::tempdir().expect("temporary root");
+    let mut request = request(root.path(), &["emit", "no-tree"]);
+    request.output_trees.push(OutputTreeBinding {
+        role: "mutants".to_owned(),
+        path: "mutants.out".to_owned(),
+        required: true,
+    });
+    request.budget.max_output_artifacts = 1;
+    request.budget.max_output_bytes = 1024;
+    assert!(matches!(
+        execute(&request, &adapter()).state,
+        ProducerExecutionState::Failed {
+            reason: ExecutionFailure::OutputArtifact
+        }
+    ));
+
+    request.output_trees[0].required = false;
+    let result = execute(&request, &adapter());
+    assert!(matches!(
+        result.state,
+        ProducerExecutionState::Completed { .. }
+    ));
+    assert!(result.artifacts.is_empty());
 }
 
 #[test]
@@ -830,35 +860,10 @@ fn tc_123_invalid_and_mismatched_requests_refuse_without_launch() {
 }
 
 #[test]
-#[trace("TC-123", "FR-019-AC-2", "FR-019-CON-1")]
-fn tc_123_staged_projection_excludes_extra_and_freezes_declared_input() {
+#[trace("TC-123", "FR-019-AC-2")]
+fn tc_123_declared_input_mutated_after_preflight_reads_as_verified_bytes() {
     let root = tempfile::tempdir().expect("temporary root");
-    fs::write(root.path().join("extra.txt"), b"ambient").expect("extra control");
-    let absent = execute(&request(root.path(), &["exists", "extra.txt"]), &adapter());
-    assert!(matches!(
-        absent.state,
-        ProducerExecutionState::Completed { observation } if observation == "absent"
-    ));
-
     let controls = tempfile::tempdir().expect("control root");
-    let ready = controls.path().join("unbound-ready");
-    let release = controls.path().join("unbound-release");
-    let arguments = [
-        "wait-exists",
-        ready.to_str().expect("UTF-8 path"),
-        release.to_str().expect("UTF-8 path"),
-        "extra.txt",
-    ];
-    let unbound = rendezvous_request(root.path(), &arguments);
-    let unbound_worker = thread::spawn(move || execute(&unbound, &adapter()));
-    await_ready(&ready, &unbound_worker, "fixture did not reach launch");
-    fs::write(root.path().join("extra.txt"), b"changed-unbound").expect("unbound mutation");
-    fs::write(&release, b"release").expect("release fixture");
-    assert!(matches!(
-        unbound_worker.join().expect("worker must terminate").state,
-        ProducerExecutionState::Completed { observation } if observation == "absent"
-    ));
-
     fs::write(root.path().join("selected.txt"), b"original").expect("selected input");
     let ready = controls.path().join("bound-ready");
     let release = controls.path().join("bound-release");
@@ -866,9 +871,11 @@ fn tc_123_staged_projection_excludes_extra_and_freezes_declared_input() {
         "wait-read",
         ready.to_str().expect("UTF-8 path"),
         release.to_str().expect("UTF-8 path"),
-        "selected.txt",
     ];
     let mut frozen = rendezvous_request(root.path(), &arguments);
+    frozen.arguments.push(ArgumentBinding::InputArtifact {
+        role: "selected".to_owned(),
+    });
     frozen.inputs.push(InputBinding {
         role: "selected".to_owned(),
         path: "selected.txt".to_owned(),
@@ -932,31 +939,6 @@ fn tc_123_adapter_cancellation_concurrency_and_environment_bindings_are_closed()
         execute(&environment, &adapter()).state,
         ProducerExecutionState::Completed { observation } if observation == "ONLY=one\n"
     ));
-}
-
-#[test]
-#[trace("TC-123", "FR-019-AC-2", "FR-019-CON-1")]
-fn tc_123_output_projection_rejects_parent_leaf_conflicts_in_either_order() {
-    let root = tempfile::tempdir().expect("temporary root");
-    for paths in [["result", "result/nested"], ["result/nested", "result"]] {
-        let mut candidate = request(root.path(), &["emit", "must-not-launch"]);
-        candidate.outputs = paths
-            .into_iter()
-            .enumerate()
-            .map(|(index, path)| OutputBinding {
-                role: format!("output-{index}"),
-                path: path.to_owned(),
-                required: false,
-            })
-            .collect();
-        candidate.budget.max_output_artifacts = 2;
-        assert!(matches!(
-            execute(&candidate, &adapter()).state,
-            ProducerExecutionState::Refused {
-                reason: ExecutionRefusal::Output
-            }
-        ));
-    }
 }
 
 #[test]

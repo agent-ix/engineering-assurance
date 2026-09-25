@@ -230,7 +230,7 @@ pub struct InputBinding {
     pub path: String,
     /// Expected identity of the selected input bytes.
     pub digest: ContentDigest,
-    /// Stage this sealed input with its owner execute bit.
+    /// Declared executable mode; part of request identity and not enforced.
     #[serde(default, skip_serializing_if = "is_false")]
     pub executable: bool,
 }
@@ -271,7 +271,7 @@ pub struct OutputBinding {
 pub struct OutputTreeBinding {
     /// Caller-owned unique role; observed file roles append `/relative/path`.
     pub role: String,
-    /// Normal relative directory path beneath the staged working root.
+    /// Normal relative directory path beneath the capability root.
     pub path: String,
     /// Whether absence after execution is an executor failure.
     pub required: bool,
@@ -555,7 +555,7 @@ pub struct ProcessEvidence {
 pub struct OutputArtifact {
     /// Caller-owned output role.
     pub role: String,
-    /// Declared relative path beneath the invocation-owned staged root.
+    /// Declared relative path beneath the capability root.
     pub path: String,
     /// Observed regular-file byte length.
     pub byte_length: u64,
@@ -1033,7 +1033,6 @@ enum AcquireFailure {
 
 #[cfg(target_os = "linux")]
 struct ValidatedExecution {
-    _working_tree: tempfile::TempDir,
     root: File,
     inputs: Vec<ValidatedInput>,
     executable_digest: ContentDigest,
@@ -1042,8 +1041,6 @@ struct ValidatedExecution {
 #[cfg(target_os = "linux")]
 struct ValidatedInput {
     role: String,
-    path: String,
-    executable: bool,
     file: File,
 }
 
@@ -1443,11 +1440,8 @@ fn validate_capabilities(
     let root = open_capability_root(&request.capability_root)?;
     let executable_digest = open_executable(request, cancellation)?;
     let inputs = open_inputs(request, &root, &executable_digest, cancellation)?;
-    let (working_tree, staged_root) =
-        stage_working_projection(request, &inputs, &executable_digest, cancellation)?;
     Ok(ValidatedExecution {
-        _working_tree: working_tree,
-        root: staged_root,
+        root,
         inputs,
         executable_digest,
     })
@@ -1530,8 +1524,6 @@ fn open_inputs(
         let file = open_input(input, root, executable_digest, cancellation, &mut remaining)?;
         inputs.push(ValidatedInput {
             role: input.role.clone(),
-            path: input.path.clone(),
-            executable: input.executable,
             file,
         });
     }
@@ -1628,81 +1620,6 @@ fn snapshot_reader(
         snapshot,
         ContentDigest(hex_digest(hasher.finalize().as_slice()).into()),
     ))
-}
-
-#[cfg(target_os = "linux")]
-fn stage_working_projection(
-    request: &ProducerExecutionRequest,
-    inputs: &[ValidatedInput],
-    executable_digest: &ContentDigest,
-    cancellation: &CancellationToken,
-) -> Result<(tempfile::TempDir, File), PreflightFailure> {
-    use std::{fs::OpenOptions, os::unix::fs::PermissionsExt};
-
-    let refused =
-        || PreflightFailure::Refused(ExecutionRefusal::Input, Some(executable_digest.clone()));
-    let working_tree = tempfile::tempdir().map_err(|_| refused())?;
-    for input in inputs {
-        if cancellation.is_cancelled() {
-            return Err(PreflightFailure::Cancelled(Some(executable_digest.clone())));
-        }
-        let destination = working_tree.path().join(&input.path);
-        let parent = destination.parent().ok_or_else(refused)?;
-        std::fs::create_dir_all(parent).map_err(|_| refused())?;
-        let mut source = File::open(descriptor_path(&input.file)).map_err(|_| refused())?;
-        source.seek(SeekFrom::Start(0)).map_err(|_| refused())?;
-        let mut staged = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&destination)
-            .map_err(|_| refused())?;
-        io::copy(&mut source, &mut staged).map_err(|_| refused())?;
-        staged.flush().map_err(|_| refused())?;
-        // A campaign's sealed Git projection names tracked 100755 files with
-        // the `source-exec/` role. Preserve only that execute bit; all other
-        // selected inputs remain read-only. The role is part of request ID.
-        let mode = if input.executable { 0o500 } else { 0o400 };
-        std::fs::set_permissions(&destination, std::fs::Permissions::from_mode(mode))
-            .map_err(|_| refused())?;
-    }
-
-    for output in &request.outputs {
-        if cancellation.is_cancelled() {
-            return Err(PreflightFailure::Cancelled(Some(executable_digest.clone())));
-        }
-        let parent = Path::new(&output.path)
-            .parent()
-            .unwrap_or_else(|| Path::new("."));
-        if !parent.as_os_str().is_empty() && parent != Path::new(".") {
-            std::fs::create_dir_all(working_tree.path().join(parent)).map_err(|_| {
-                PreflightFailure::Refused(ExecutionRefusal::Output, Some(executable_digest.clone()))
-            })?;
-        }
-    }
-    for output in &request.outputs {
-        let destination = working_tree.path().join(&output.path);
-        if destination.exists() {
-            return Err(PreflightFailure::Refused(
-                ExecutionRefusal::Output,
-                Some(executable_digest.clone()),
-            ));
-        }
-    }
-    for tree in &request.output_trees {
-        if cancellation.is_cancelled() {
-            return Err(PreflightFailure::Cancelled(Some(executable_digest.clone())));
-        }
-        std::fs::create_dir_all(working_tree.path().join(&tree.path)).map_err(|_| {
-            PreflightFailure::Refused(ExecutionRefusal::Output, Some(executable_digest.clone()))
-        })?;
-    }
-    let root = File::open(working_tree.path()).map_err(|_| {
-        PreflightFailure::Refused(
-            ExecutionRefusal::CapabilityRoot,
-            Some(executable_digest.clone()),
-        )
-    })?;
-    Ok((working_tree, root))
 }
 
 #[cfg(target_os = "linux")]
@@ -3103,7 +3020,7 @@ mod campaign_source_projection {
 
     /// Expands and verifies an exact Git tree into FR-019 regular-file inputs.
     /// The executor repeats the SHA-256 check against sealed descriptors before
-    /// staging, so a mutation between resolution and execution is refused.
+    /// launch, so a mutation between resolution and execution is refused.
     pub(crate) fn validate_source_tree(
         tree: &SourceTreeBinding,
         source: &CampaignSource,

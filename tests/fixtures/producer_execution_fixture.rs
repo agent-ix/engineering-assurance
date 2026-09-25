@@ -75,10 +75,6 @@ fn emit_tree_link(arguments: &mut impl Iterator<Item = OsString>) {
         .unwrap_or_else(|_| fail("cannot create output symlink"));
 }
 
-fn observation(path: &Path) -> &'static [u8] {
-    if path.exists() { b"present" } else { b"absent" }
-}
-
 fn wait_read(arguments: &mut impl Iterator<Item = OsString>) {
     let ready = argument(arguments);
     let release = argument(arguments);
@@ -87,15 +83,6 @@ fn wait_read(arguments: &mut impl Iterator<Item = OsString>) {
     wait_for(Path::new(&release));
     let bytes = fs::read(input).unwrap_or_else(|_| fail("cannot read retained input"));
     write_stdout(&bytes);
-}
-
-fn wait_exists(arguments: &mut impl Iterator<Item = OsString>) {
-    let ready = argument(arguments);
-    let release = argument(arguments);
-    let path = argument(arguments);
-    fs::write(&ready, b"ready").unwrap_or_else(|_| fail("cannot write ready marker"));
-    wait_for(Path::new(&release));
-    write_stdout(observation(Path::new(&path)));
 }
 
 fn exit_with_output(arguments: &mut impl Iterator<Item = OsString>) -> ! {
@@ -201,8 +188,6 @@ fn main() {
         "touch" => fs::write(argument(&mut arguments), b"launched")
             .unwrap_or_else(|_| fail("cannot write launch marker")),
         "wait-read" => wait_read(&mut arguments),
-        "exists" => write_stdout(observation(Path::new(&argument(&mut arguments)))),
-        "wait-exists" => wait_exists(&mut arguments),
         "exit" => exit_with_output(&mut arguments),
         "wait" => wait(&mut arguments),
         "spawn-child" => spawn_child(&mut arguments),

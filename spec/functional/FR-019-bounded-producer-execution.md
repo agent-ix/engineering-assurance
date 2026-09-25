@@ -93,31 +93,31 @@ unique within their respective request collections.
   component, hash the bytes read from that executable descriptor, and, when
   the digest matches, execute the pinned absolute path without ambient `PATH`
   resolution.
-- The executor SHALL treat the declared ordered input population as the
-  complete working projection. It SHALL open each input relative to the retained
+- The executor SHALL open each declared input relative to the retained
   capability-root descriptor without following symbolic links, copy its exact
-  observed bytes into a sealed retained descriptor, hash that snapshot before
-  launch, and materialize only those retained input bytes plus declared empty
-  output parents into an invocation-owned staged working tree. The executor SHALL
-  prevent undeclared, changed-unbound, or post-preflight files beneath the source
-  capability root from becoming visible through the producer working directory.
-  Descriptor arguments and stdin SHALL expose the same sealed input snapshots.
+  observed bytes into a sealed retained descriptor, and hash that snapshot
+  against the declared digest before launch. Descriptor arguments and stdin
+  SHALL expose the same sealed input snapshots.
 - For campaign source-tree binding, the capability root SHALL still contain
   every tracked Git symlink at preflight. The resolver reads its target bytes
   without following the link and verifies the link's Git blob OID. It then
-  records the path and digest as omitted projection metadata. The invocation
-  working directory receives no symlink; a command that needs one fails there.
-- The executor SHALL validate every declared output path beneath the
-  invocation-owned staged tree before launch, enforce output-artifact count and
-  aggregate byte bounds, and after termination open each produced artifact
-  without following links. It SHALL copy each exact observed output into a
-  sealed retained descriptor and compute the returned role, declared relative
-  path, byte length and SHA-256 digest from that same immutable snapshot. Each
-  returned output artifact SHALL provide the response adapter and caller a
-  reader for that retained snapshot without reopening the producer pathname.
+  records the path and digest as omitted link metadata.
+- The producer creates its own declared output parents and trees, and
+  overwriting an existing file is permitted. Concurrent requests over the same
+  capability root share that directory, so one run's declared outputs can be
+  overwritten by another. The executor SHALL enforce output-artifact count and
+  aggregate byte bounds and, after termination, open each artifact at its
+  declared path relative to the retained capability-root descriptor without
+  following links, reporting whatever bytes are there. A required output tree
+  that is absent after execution is an executor failure. It SHALL copy each
+  exact observed output into a sealed retained descriptor and compute the
+  returned role, declared relative path, byte length and SHA-256 digest from
+  that same immutable snapshot. Each returned output artifact SHALL provide
+  the response adapter and caller a reader for that retained snapshot without
+  reopening the producer pathname.
 - When a valid slot is available, the executor SHALL launch the pinned
   executable path directly with the ordered resolved arguments, no shell, the
-  invocation-owned staged projection as working directory, an empty inherited
+  capability root as working directory, an empty inherited
   environment, only the request's environment entries, and the exact null or
   retained-input stdin binding.
 - The supported `process-group-v1` confinement profile SHALL require an exact
@@ -191,7 +191,7 @@ unique within their respective request collections.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-019-AC-1 | A valid Rust synthetic producer request executes once through the public Rust library, and the typed completed result carries the exact `sha256-jcs` request identity, executable digest, producer provenance, bounded raw evidence, monotonic timing, immutable retained output artifacts, and adapter-produced observation; every portable result-field/state mutation changes its canonical result bytes and identity. | Test (TC-122) |
-| FR-019-AC-2 | Every request field is JCS-identity-significant, ordered and set collections have their declared semantics, structurally invalid input mints no identity, an identity-bearing digest, capability, input, adapter, or cancellation mismatch refuses before producer launch, and the invocation working directory exposes exactly the declared staged input/output projection despite extra, changed-unbound, or post-preflight source-root files. | Test (TC-123) |
+| FR-019-AC-2 | Every request field is JCS-identity-significant, ordered and set collections have their declared semantics, structurally invalid input mints no identity, an identity-bearing digest, capability, input, adapter, or cancellation mismatch refuses before producer launch, and a declared input changed after preflight is still read as the verified bytes through its descriptor argument. | Test (TC-123) |
 | FR-019-AC-3 | Unavailable, refused, failed, timed-out, malformed-response, containment-failure, cancelled, and completed remain distinguishable and canonically serializable; launched failures retain bounded raw evidence where observable; and only completed carries `T`. | Test (TC-124) |
 | FR-019-AC-4 | Exact wall-clock, stream, input-byte, output-count/byte and concurrency boundaries are admitted while the next value is structurally invalid or terminated; an admitted non-zero exit reaches the adapter; ordinary descendants are reaped and an escaping-descendant mutant produces `containment_failure`. | Test (TC-125) |
 | FR-019-AC-5 | A caller-owned typed response adapter receives the exact bound terminal evidence without requiring the consumer to parse CLI stdout, and Engineering Assurance contains no domain oracle, qualification verdict, evidence store, or Quoin record clone. | Test (TC-127) |
@@ -199,7 +199,7 @@ unique within their respective request collections.
 | FR-019-AC-8 | For a launched Linux invocation, the executor samples a complete, bounded host context before launch and binds it into canonical result identity; stable machine identity or explicitly boot-scoped identity is represented only by a domain-separated digest, boot-scoped and ARM CPU-ID observations additionally bind observed CPU affinity, heterogeneous or missing selected ARM CPU-ID tuples withhold context, and unavailable host context is explicit and cannot substantiate comparability. | Test (TC-175) |
 | FR-019-AC-9 | The 0.5.0 candidate's FCD-generated procedure and campaign records have closed wire fields; procedures validate roles and bounds, campaign plans resolve at exact versions, and dependency graphs are finite and acyclic. | Test (TC-177, TC-179) |
 | FR-019-AC-10 | Declared fixed and tree output roles, dynamic input prefixes, executable identity, arguments, environment, and response adapter bind to one exact FR-019 request identity; near-match undeclared roles refuse. | Test (TC-178, TC-180, TC-183) |
-| FR-019-AC-11 | A campaign run binds its definition and source graph and refuses stale or unknown attempts; a source projection verifies the complete Git tree inventory and every staged file or omitted symlink blob before request creation. | Test (TC-181, TC-182) |
+| FR-019-AC-11 | A campaign run binds its definition and source graph and refuses stale or unknown attempts; a source projection verifies the complete Git tree inventory and every file or omitted symlink blob before request creation. | Test (TC-181, TC-182) |
 | FR-019-AC-12 | Retained producer-request parsing preserves every field through typed round-trip serialization and validates the request structure; malformed digests, unknown fields and explicit elided defaults refuse. A campaign verifier can compare this exact request with a source-bound reconstructed request. | Test (TC-186) |
 | FR-019-AC-13 | A producer executed through the executor sees its own executable path, `argv[0]` and a script's `$0` as the executable path exactly as pinned in the request, so a producer that locates a sibling executable next to itself and one that re-executes itself both complete. | Test (TC-187) |
 
