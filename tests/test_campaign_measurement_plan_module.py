@@ -10,9 +10,8 @@ import pytest
 import yaml
 from jsonschema import Draft7Validator
 
-
 ROOT = Path(__file__).resolve().parents[1]
-MODULE = ROOT / "engineering_assurance_v05"
+MODULE = ROOT / "engineering_assurance"
 SCHEMA = json.loads(
     (MODULE / "schemas/measurement-plan-frontmatter.schema.json").read_text()
 )

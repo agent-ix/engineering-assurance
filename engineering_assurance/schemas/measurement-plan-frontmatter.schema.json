@@ -14,6 +14,13 @@
       "pattern": "^[a-z][a-z0-9_.-]*$"
     },
     "definition_version": { "type": "string", "minLength": 1 },
+    "execution_procedure": {
+      "allOf": [
+        { "$ref": "#/$defs/apparatus_path" },
+        { "pattern": "(?:^|/)(?:[^/.][^/]*|\\.[^/.][^/]*)\\.[jJ][sS][oO][nN]$" }
+      ],
+      "description": "Optional safe repository-relative path to one standalone engineering-assurance.measurement-procedure/v1 JSON file. Runnable campaigns require it. The path must be covered by protected_apparatus; Quoin checks exact coverage and source bytes. Changing its content requires a new definition_version."
+    },
     "stage": {
       "enum": [
         "observe",
@@ -75,6 +82,10 @@
     }
   },
   "allOf": [
+    {
+      "if": { "required": ["execution_procedure"] },
+      "then": { "required": ["protected_apparatus"] }
+    },
     {
       "if": {
         "properties": {

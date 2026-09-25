@@ -42,7 +42,10 @@ def test_module_inventory_is_exact() -> None:
         "AssuranceArgument",
     ]
     assert data["lint_rules"] == []
-    assert data["object_types"] == []
+    assert [item["name"] for item in data["object_types"]] == [
+        "campaign_value",
+        "campaign_enum",
+    ]
     assert "edge_types" not in data
 
 
@@ -882,7 +885,6 @@ def test_repository_has_only_governed_review_evidence() -> None:
     }
     assert {path.name for path in (ROOT / "docs").iterdir()} == {
         "compatibility-matrix.md",
-        "compatibility-release-gate.md",
         "consumption-boundary.md",
         "measurement-walkthrough.md",
         "migration-contract.md",

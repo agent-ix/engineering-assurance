@@ -214,6 +214,12 @@ result.
 Run the declared fixture repeatedly with fixed software and configuration
 identities. Preserve per-run outcomes instead of only an aggregate.
 
+For a runnable Campaign member, set `execution_procedure` to one safe
+repository-relative `.json` procedure file and include that file in
+`protected_apparatus`. Changing that procedure's bytes requires a new
+`definition_version`. The Campaign records the measured source revision
+separately for each run.
+
 ## Interpretation
 
 Report uncertainty, invalid runs, environmental differences, and plausible

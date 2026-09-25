@@ -1,15 +1,15 @@
 # Campaign contract generation
 
 The source of these wire types is the authored Quire bundle at
-`engineering_assurance_v05/contracts/campaign`, interpreted with the
-`engineering_assurance_v05` module and Quire CLI 0.33.0 (engine 0.47.1).
+`campaign/contract`, interpreted with the
+`engineering_assurance` module and Quire CLI 0.33.0 (engine 0.47.1).
 The recorded generator source is `agent-ix/filament-core-data` commit
 `9ef44b34dc80c825f625e04e5264d6c0c0952e31`.
 
 From that FCD checkout, lift with `cargo +1.98.1 run --locked -p
 agent-ix-extraction-frontend --bin extraction-frontend -- lift --bundle
-<EA>/engineering_assurance_v05/contracts/campaign --module
-<EA>/engineering_assurance_v05 --out <scratch>/semantic-ir.json`. Generate
+<EA>/campaign/contract --module
+<EA>/engineering_assurance --out <scratch>/semantic-ir.json`. Generate
 with `node scripts/spec-to-targets.mjs <scratch>/semantic-ir.json
 <scratch>/generated --compile`, then run `cargo fmt --manifest-path
 <scratch>/generated/rust/Cargo.toml`. The committed `semantic-ir.json` and
