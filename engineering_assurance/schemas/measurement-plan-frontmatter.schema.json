@@ -397,7 +397,7 @@
         },
         "margin_mode": {
           "enum": ["absolute", "relative"],
-          "description": "The unit of `margin`. `absolute` (the default when absent): the metric's own units. `relative`: a fraction of the baseline value's magnitude, so `margin: 0.05` is 5% of the baseline -- the reference is baseline + 0.05 * |baseline| for `gt`/`ge` and baseline - 0.05 * |baseline| for `lt`/`le`. Use `relative` when one plan covers benchmarks or dimensions whose baselines differ in scale. Allowed only with `margin`."
+          "description": "The unit of `margin`. `absolute` (the default when absent): the metric's own units. `relative`: a fraction of the baseline value's magnitude, so `margin: 0.05` is 5% of the baseline -- the reference is baseline + 0.05 * |baseline| for `gt`/`ge` and baseline - 0.05 * |baseline| for `lt`/`le`. Use `relative` when one plan covers benchmarks or dimensions whose baselines differ in scale. A relative margin against a zero baseline shrinks to nothing: the reference is the baseline itself, so it demands no improvement. Allowed only with `margin`."
         }
       },
       "oneOf": [

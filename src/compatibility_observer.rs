@@ -4,8 +4,12 @@
 //! Bounded host observation for the reviewed compatibility matrix.
 //!
 //! This is intentionally separate from `engineering_assurance::compatibility`:
-//! it validates the selected root and invokes the four explicitly declared
-//! version commands, then hands only typed observations to the pure classifier.
+//! it checks that the selected root is a directory (`--root` is used for
+//! nothing else), invokes the three explicitly declared version commands
+//! (`quire`, `quoin`, `ix-flow`), reads the installed module's manifest, and
+//! hands only typed observations to the pure classifier. The classifier owns
+//! every per-component verdict; this module additionally withholds the gate
+//! when the installed module's version differs from the binary's (FR-012-AC-11).
 
 use std::{
     ffi::OsStr,
@@ -34,6 +38,10 @@ const MAX_OBSERVATION_OUTPUT_BYTES: usize = 64 * 1024;
 /// project would otherwise get either no observation (untagged project) or
 /// their project's tag reported as this tool's version. A pass therefore
 /// describes the installed executable, not the checkout `--root` points at.
+///
+/// The `engineering-assurance` row is therefore a build-consistency check: this
+/// constant against the matrix compiled into the same binary. It is not an
+/// observation of the environment; the [`ModuleObservation`] is.
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Machine result for one environment observation and pure classification.
@@ -171,11 +179,22 @@ fn observe_semver(runner: &dyn ToolRunner, command: &str, arguments: &[&str]) ->
     Some(version.to_owned())
 }
 
-/// Where Quoin installs modules: `IX_CONFIG_ROOT`, else `~/.ix`.
+/// Where Quoin installs modules: a non-empty `IX_CONFIG_ROOT`, else `~/.ix`.
 fn module_manifest_path() -> Option<PathBuf> {
-    let config_root = std::env::var_os("IX_CONFIG_ROOT")
+    manifest_path_under(std::env::var_os("IX_CONFIG_ROOT"), std::env::var_os("HOME"))
+}
+
+fn manifest_path_under(
+    config_root: Option<std::ffi::OsString>,
+    home: Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
+    // An empty `IX_CONFIG_ROOT` is unset: joined as-is it would resolve the
+    // manifest relative to the current directory. Only this user-level root is
+    // read; quoin's project-local `.ix` layering is not consulted.
+    let config_root = config_root
+        .filter(|root| !root.is_empty())
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| Path::new(&home).join(".ix")))?;
+        .or_else(|| home.map(|home| Path::new(&home).join(".ix")))?;
     Some(
         config_root
             .join("filament")
@@ -314,7 +333,7 @@ mod tests {
             serde_json::from_slice(&encoded).expect("the emitted line must be one JSON value");
         assert_eq!(
             emitted["gate_satisfied"], emitted["classification"]["gate_satisfied"],
-            "the observation result disagreed with the classifier it delegates to"
+            "the observation result disagreed with the classifier when the module matched"
         );
     }
 
@@ -356,7 +375,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("TC-130", "FR-012-AC-10", "FR-014-AC-2")]
+    #[trace("TC-130", "FR-012-AC-11", "FR-014-AC-2")]
     fn a_module_that_disagrees_with_the_binary_withholds_an_otherwise_open_gate() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         // Every external tool is pinned, so the classifier alone opens the gate.
@@ -374,7 +393,28 @@ mod tests {
     }
 
     #[test]
-    #[trace("TC-130", "FR-012-AC-10")]
+    #[trace("TC-130", "FR-012-AC-11")]
+    fn an_empty_config_root_is_unset_rather_than_the_current_directory() {
+        use std::ffi::OsString;
+        let expected = Path::new("/srv/u/.ix/filament/modules/engineering-assurance/manifest.yaml");
+        for root in [None, Some(OsString::new())] {
+            assert_eq!(
+                manifest_path_under(root.clone(), Some("/srv/u".into())).as_deref(),
+                Some(expected),
+                "{root:?}"
+            );
+        }
+        assert_eq!(
+            manifest_path_under(Some("/cfg".into()), Some("/srv/u".into())).as_deref(),
+            Some(Path::new(
+                "/cfg/filament/modules/engineering-assurance/manifest.yaml"
+            ))
+        );
+        assert_eq!(manifest_path_under(Some(OsString::new()), None), None);
+    }
+
+    #[test]
+    #[trace("TC-130", "FR-012-AC-11")]
     fn the_module_version_is_the_manifest_version() {
         assert_eq!(
             module_version_from_manifest(b"manifest_version: 1.0.0\nname: x\nversion: 0.3.1\n"),
@@ -386,13 +426,12 @@ mod tests {
     }
 
     #[test]
-    #[trace("TC-130", "FR-012-AC-10", "FR-014-AC-2")]
+    #[trace("TC-130", "FR-012-AC-10", "FR-012-AC-11", "FR-014-AC-2")]
     fn the_emitted_result_delegates_its_verdict_to_the_pure_classifier() {
-        // A reader of the JSON line has to see the same gate verdict the pure
-        // classifier reached, without the host adapter layering any judgment of
-        // its own on top of it (PLAT-973: this observer no longer verifies
-        // working-tree artifacts against the matrix's informational digest
-        // record, so the classifier's own verdict is the whole answer).
+        // With the module matching the binary, the JSON line carries the same
+        // gate verdict the pure classifier reached: the observer's only added
+        // condition is the module comparison (FR-012-AC-11), covered by the
+        // mismatch test above. Every per-component verdict is the classifier's.
         let result = observe_with(
             Path::new(env!("CARGO_MANIFEST_DIR")),
             &fixture_runner(),
@@ -404,7 +443,7 @@ mod tests {
             serde_json::from_slice(&encoded).expect("the emitted line must be one JSON value");
         assert_eq!(
             emitted["gate_satisfied"], emitted["classification"]["gate_satisfied"],
-            "the observation result disagreed with the classifier it delegates to"
+            "the observation result disagreed with the classifier when the module matched"
         );
         assert_eq!(emitted["module"]["matches_cli"], serde_json::json!(true));
         assert_eq!(emitted["protocol"], serde_json::json!(OBSERVATION_PROTOCOL));

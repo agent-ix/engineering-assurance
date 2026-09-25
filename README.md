@@ -199,12 +199,15 @@ pin, or not a plain release).
 
 The result also carries a `module` object comparing the installed
 `engineering-assurance` Quoin module (the `version` in its `manifest.yaml`,
-under `IX_CONFIG_ROOT` or `~/.ix`) with the binary. The gate stays closed
+under `IX_CONFIG_ROOT`, when set and non-empty, or `~/.ix`) with the binary. The gate stays closed
 unless they match, or if no module is found.
 
 The `engineering-assurance` row is the version of the running binary, so it
 does not depend on `--root`. Run it from any directory. A pass describes the
-installed executable, not the source tree `--root` points at.
+installed executable, not the source tree `--root` points at. It is a
+build-consistency check (the binary against the matrix compiled into it), not an
+observation of your environment; the `module` comparison is the environmental
+signal for this package. `--root` is only checked to be a directory.
 
 ## Upgrading artifacts from an earlier release
 

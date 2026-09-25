@@ -447,7 +447,11 @@ def test_onboard_js_summary_reports_validation_and_toolchain(tmp_path: Path) -> 
     }
     assert summary["installedModuleVersion"]
     by_name = {item["name"]: item for item in summary["artifacts"]}
-    assert by_name["MP-001.md"]["validation"] == {"status": "valid", "findings": []}
+    assert by_name["MP-001.md"]["validation"] == {
+        "status": "valid",
+        "findings": [],
+        "moreFindings": 0,
+    }
     assert by_name["MP-002.md"]["validation"]["status"] == "invalid"
     assert by_name["MP-002.md"]["validation"]["findings"] == [
         '[MeasurementPlan] frontmatter: "owner" is a required property'
@@ -455,3 +459,64 @@ def test_onboard_js_summary_reports_validation_and_toolchain(tmp_path: Path) -> 
     # The compact form must not carry the full report's orientation prose.
     assert "relationship" not in summary
     assert "nextSteps" not in summary
+
+
+def _summary_repo(tmp_path: Path) -> Path:
+    target_repo = tmp_path / "consumer"
+    assurance = target_repo / "spec" / "assurance"
+    assurance.mkdir(parents=True)
+    (assurance / "MP-001.md").write_text("---\ntype: MeasurementPlan\n---\n")
+    return target_repo
+
+
+def _run_summary(tmp_path: Path, path_env: str, *extra: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [NODE, str(ONBOARD_JS), "--repo", str(_summary_repo(tmp_path)), "--summary", *extra],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={"PATH": path_env, "HOME": str(tmp_path)},
+    )
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_onboard_js_summary_exits_nonzero_when_validation_is_unavailable(
+    tmp_path: Path,
+) -> None:
+    # No quire on PATH: nothing was validated, so the summary must not pass.
+    # Only node itself is reachable, so a real quire beside it cannot be found.
+    only_node = tmp_path / "only-node"
+    only_node.mkdir()
+    (only_node / "node").symlink_to(NODE)
+    completed = _run_summary(tmp_path, str(only_node), "--json")
+    assert completed.returncode == 3, completed.stderr
+    summary = json.loads(completed.stdout)
+    assert summary["artifacts"][0]["validation"]["status"] == "unavailable"
+    assert "validation unavailable" in completed.stderr
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_onboard_js_summary_marks_truncated_findings_and_labels_the_module(
+    tmp_path: Path,
+) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    quire = bin_dir / "quire"
+    quire.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = provenance ]; then echo \'{"cli":{"version":"9.9.9"}}\'; exit 0; fi\n'
+        "i=1\n"
+        "while [ $i -le 12 ]; do\n"
+        '  echo "x/MP-001.md: [MeasurementPlan] finding $i" >&2\n'
+        "  i=$((i+1))\n"
+        "done\n"
+        "exit 1\n"
+    )
+    quire.chmod(0o755)
+    (bin_dir / "node").symlink_to(NODE)
+    completed = _run_summary(tmp_path, str(bin_dir))
+    assert completed.returncode == 1, completed.stderr
+    assert "      +2 more" in completed.stdout
+    assert "finding 10" in completed.stdout
+    assert "finding 11" not in completed.stdout
+    assert "module in this checkout:" in completed.stdout

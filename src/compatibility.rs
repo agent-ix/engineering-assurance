@@ -2,6 +2,9 @@
 // Copyright (C) 2026 Agent-IX
 
 //! Pure classification against the reviewed shared-assurance compatibility matrix.
+//!
+//! The classifier owns every per-component verdict. Whether the installed Quoin
+//! module matches the binary is the host observer's check, not this module's.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -698,6 +701,29 @@ mod tests {
         // Every other component is exactly pinned here, so this is the case
         // where a single named-incompatible version has to be enough to withhold
         // the gate on its own.
+        assert!(!result.versions_compatible);
+        assert!(!result.gate_satisfied);
+        assert_eq!(result.outcome, CompatibilityOutcome::Withheld);
+    }
+
+    #[trace("TC-080", "FR-012-AC-2")]
+    #[test]
+    fn tc_080_newer_untested_alone_closes_the_gate() {
+        // Every other component is exactly pinned, so a newer-untested row is
+        // the only thing standing between this request and an open gate.
+        let mut cases = exact_observations();
+        cases[2].1 = Some("99.0.0");
+        let result = evaluate_request_bytes(&request(&cases)).expect("request must evaluate");
+        let verdicts = result
+            .components
+            .iter()
+            .filter(|item| item.verdict != CompatibilityVerdict::Compatible)
+            .map(|item| (item.component.as_str(), item.verdict))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            verdicts,
+            vec![("ix-flow", CompatibilityVerdict::NewerUntested)]
+        );
         assert!(!result.versions_compatible);
         assert!(!result.gate_satisfied);
         assert_eq!(result.outcome, CompatibilityOutcome::Withheld);

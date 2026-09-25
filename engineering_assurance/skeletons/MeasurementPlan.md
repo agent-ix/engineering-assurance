@@ -146,7 +146,9 @@ plan covers benchmarks or dimensions whose baselines differ in scale: allow a
 5% regression against the compared collection with
 `{ comparator: le, baseline: prior-collection, margin: -0.05, margin_mode: relative }`,
 so a 100 ms prior tolerates 105 ms and a 100 000 ms prior tolerates 105 000 ms.
-`margin_mode` is allowed only with `margin`. An observation-side uncertainty
+A relative margin against a zero baseline shrinks to nothing -- the reference
+is the baseline itself -- so state an absolute margin when the baseline can be
+zero. `margin_mode` is allowed only with `margin`. An observation-side uncertainty
 or confidence interval is not part of a plan; `statistical_design.uncertainty`
 stays prose.
 

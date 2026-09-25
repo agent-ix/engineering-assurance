@@ -24,7 +24,11 @@
 // `--summary` prints a compact report instead of the full one: the installed
 // module version, each `spec/assurance/` artifact with its Quire validation
 // status, and which quire/quoin toolchain features are installed. Combine with
-// `--json` for the machine form.
+// `--json` for the machine form. The summary exits 1 when any artifact is
+// invalid, 3 when validation could not run (quire missing, timed out, or its
+// output overflowed the buffer) and none is invalid, and 0 only when every
+// artifact validated. The module version it prints is the one in this
+// checkout; `quire validate` uses whichever module quire itself loads.
 
 import { spawnSync } from "node:child_process";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
@@ -475,19 +479,29 @@ if (specAssuranceExists) {
 // toolchain features exist so an author does not reach for one that is absent.
 const SUMMARY_TIMEOUT_MS = 60_000;
 const MAX_FINDINGS_PER_ARTIFACT = 10;
+const SUMMARY_EXIT_INVALID = 1;
+const SUMMARY_EXIT_UNAVAILABLE = 3;
 const run = (command, commandArgs, cwd) => {
-  const result = spawnSync(command, commandArgs, { cwd, encoding: "utf8", timeout: SUMMARY_TIMEOUT_MS });
+  const result = spawnSync(command, commandArgs, {
+    cwd,
+    encoding: "utf8",
+    timeout: SUMMARY_TIMEOUT_MS,
+    maxBuffer: 16 * 1024 * 1024,
+  });
   return result.error ? null : result;
 };
 const validateArtifact = (name) => {
   const result = run("quire", ["validate", "--scope", targetRepo, path.join("spec", "assurance", name)], targetRepo);
-  if (result === null) return { status: "unavailable", findings: [] };
-  const findings = result.stderr
+  if (result === null) return { status: "unavailable", findings: [], moreFindings: 0 };
+  const all = result.stderr
     .split("\n")
     .filter((text) => text.includes(`${name}: [`))
-    .map((text) => text.slice(text.indexOf(`${name}: [`) + name.length + 2))
-    .slice(0, MAX_FINDINGS_PER_ARTIFACT);
-  return { status: result.status === 0 ? "valid" : "invalid", findings };
+    .map((text) => text.slice(text.indexOf(`${name}: [`) + name.length + 2));
+  return {
+    status: result.status === 0 ? "valid" : "invalid",
+    findings: all.slice(0, MAX_FINDINGS_PER_ARTIFACT),
+    moreFindings: Math.max(0, all.length - MAX_FINDINGS_PER_ARTIFACT),
+  };
 };
 const observeToolVersion = (command, commandArgs, pick) => {
   const result = run(command, commandArgs, targetRepo);
@@ -517,7 +531,7 @@ if (wantsSummary) {
   if (wantsJson) {
     console.log(JSON.stringify(summary, null, 2));
   } else {
-    console.log(`engineering-assurance module: ${summary.installedModuleVersion ?? "not found"}`);
+    console.log(`engineering-assurance module in this checkout: ${summary.installedModuleVersion ?? "not found"}`);
     console.log(`quire: ${summary.toolchain.quire ?? "not found"}`);
     console.log(`quoin: ${summary.toolchain.quoin ?? "not found"}`);
     console.log(
@@ -527,9 +541,16 @@ if (wantsSummary) {
     for (const artifact of summary.artifacts) {
       console.log(`  ${artifact.validation.status.padEnd(11)} ${artifact.name} (${artifact.type})`);
       for (const finding of artifact.validation.findings) console.log(`      ${finding}`);
+      if (artifact.validation.moreFindings > 0) console.log(`      +${artifact.validation.moreFindings} more`);
     }
   }
-  process.exit(summary.artifacts.some((artifact) => artifact.validation.status === "invalid") ? 1 : 0);
+  const statuses = summary.artifacts.map((artifact) => artifact.validation.status);
+  if (statuses.includes("invalid")) process.exit(SUMMARY_EXIT_INVALID);
+  if (statuses.includes("unavailable")) {
+    process.stderr.write("validation unavailable: quire did not run to completion, so nothing was validated\n");
+    process.exit(SUMMARY_EXIT_UNAVAILABLE);
+  }
+  process.exit(0);
 }
 
 // -- The measurement-record checklist is NOT schema-file-governed like §4  --

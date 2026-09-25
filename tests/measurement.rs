@@ -1723,3 +1723,40 @@ fn tc_188_schema_margin_mode_enum_equals_the_rust_wire_names() {
         "the schema must refuse a margin_mode with no margin, as the Rust rule does"
     );
 }
+
+#[trace("TC-188", "FR-021-AC-12")]
+#[test]
+fn tc_188_a_zero_margin_is_canonical_and_round_trips_in_either_mode() {
+    let relative_zero = DecisionRule::against_baseline_with_mode(
+        Comparator::Ge,
+        Baseline::PriorCollection,
+        Some(0.0),
+        MarginMode::Relative,
+    )
+    .expect("valid rule");
+    let absolute_zero =
+        DecisionRule::against_baseline(Comparator::Ge, Baseline::PriorCollection, Some(0.0))
+            .expect("valid rule");
+    assert_eq!(relative_zero, absolute_zero);
+    let encoded = yaml_serde::to_string(&relative_zero).expect("rule serializes");
+    assert_eq!(
+        parse_rule(&encoded),
+        Ok(relative_zero),
+        "round trip: {encoded}"
+    );
+}
+
+#[trace("TC-188", "FR-021-AC-12")]
+#[test]
+fn tc_188_a_relative_margin_against_a_zero_baseline_shrinks_to_nothing() {
+    let rule = DecisionRule::against_baseline_with_mode(
+        Comparator::Ge,
+        Baseline::PriorCollection,
+        Some(0.05),
+        MarginMode::Relative,
+    )
+    .expect("valid rule");
+    // "5% better" than zero is zero: the rule demands no improvement.
+    assert_eq!(rule.holds(0.0, Some(0.0)), Ok(true));
+    assert_eq!(rule.holds(-0.001, Some(0.0)), Ok(false));
+}

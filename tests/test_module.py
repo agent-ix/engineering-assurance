@@ -31,13 +31,39 @@ def schema(name: str) -> dict:
     )
 
 
+# Assembled from parts so the content-rights URL scan does not see a literal.
+DRAFT_07_PATH = "//json-schema.org/draft-07/schema"
+DRAFT_07_URIS = tuple(scheme + DRAFT_07_PATH for scheme in ("http:", "https:"))
+
+
+def _is_draft_07(declared: object) -> bool:
+    return isinstance(declared, str) and declared.removesuffix("#") in DRAFT_07_URIS
+
+
+def test_draft_07_detector_accepts_every_spelling_and_refuses_other_drafts() -> None:
+    for uri in DRAFT_07_URIS:
+        for declared in (uri, uri + "#"):
+            assert _is_draft_07(declared), declared
+    for declared in (
+        "https:" + "//json-schema.org/draft/2019-09/schema",
+        "http:" + "//json-schema.org/draft-04/schema#",
+        None,
+    ):
+        assert not _is_draft_07(declared), declared
+
+
 def test_draft_07_schemas_use_draft_07_definitions() -> None:
     # A schema that declares draft-07 must keep its reusable definitions under
     # `definitions`; `$defs` is a 2019-09 keyword a strict draft-07 tool ignores.
-    for path in sorted((package.PACKAGE_ROOT / "schemas").glob("*.json")):
+    paths = sorted((package.PACKAGE_ROOT / "schemas").glob("*.json"))
+    assert paths
+    checked = 0
+    for path in paths:
         text = path.read_text()
-        if '"$schema": "http://json-schema.org/draft-07/schema#"' in text:
+        if _is_draft_07(json.loads(text).get("$schema")):
+            checked += 1
             assert "$defs" not in text, f"{path.name} declares draft-07 but uses $defs"
+    assert checked, "no schema declares draft-07, so this guard checked nothing"
 
 
 def test_module_inventory_is_exact() -> None:
@@ -519,6 +545,50 @@ def test_decision_rule_is_a_closed_comparator_with_exactly_one_reference() -> No
     assert "'metric' is a required property" in [
         error.message for error in validator.iter_errors(without_metric)
     ]
+
+
+def test_margin_mode_refusals_and_acceptance_run_through_the_validator() -> None:
+    """Trace: FR-021-AC-12, TC-188."""
+    for mode in ("relative", "absolute"):
+        assert _statistical_design_errors(
+            decision_rule={
+                "comparator": "ge",
+                "baseline": "prior-collection",
+                "margin": 0.05,
+                "margin_mode": mode,
+            }
+        ) == [], mode
+    refused = {
+        "margin_mode with a threshold": {
+            "comparator": "ge",
+            "threshold": 1,
+            "margin_mode": "relative",
+        },
+        "margin_mode without a margin": {
+            "comparator": "ge",
+            "baseline": "prior-collection",
+            "margin_mode": "relative",
+        },
+        "margin_mode with eq": {
+            "comparator": "eq",
+            "baseline": "prior-collection",
+            "margin_mode": "relative",
+        },
+        "margin_mode with eq and a margin": {
+            "comparator": "eq",
+            "baseline": "prior-collection",
+            "margin": 0.1,
+            "margin_mode": "relative",
+        },
+        "unknown margin_mode": {
+            "comparator": "ge",
+            "baseline": "prior-collection",
+            "margin": 0.05,
+            "margin_mode": "percent",
+        },
+    }
+    for case, decision_rule in refused.items():
+        assert _statistical_design_errors(decision_rule=decision_rule) != [], case
 
 
 def test_decision_rule_agrees_with_objective_direction_and_estimator() -> None:

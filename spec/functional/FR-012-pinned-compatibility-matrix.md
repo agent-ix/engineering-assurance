@@ -55,7 +55,14 @@ acceptance of that matrix.
 - The classifier SHALL execute nothing. Observing the environment SHALL be a
   separate program.
 - The Rust-owned CLI host adapter SHALL invoke only the matrix-declared `quire`,
-  `quoin`, `ix-flow`, and local Git tag observations with bounded capture.
+  `quoin`, and `ix-flow` version commands with bounded capture, and SHALL take
+  the `engineering-assurance` row from the running binary's own version. That
+  row is a build-consistency check, not an environmental observation.
+- The Rust-owned CLI host adapter SHALL read the installed `engineering-assurance`
+  Quoin module's manifest version and SHALL withhold the gate unless it equals
+  the running binary's version, or when no module or readable manifest is found.
+  The classifier does not own this comparison; every per-component verdict
+  remains the classifier's.
 - The Rust-owned CLI host adapter SHALL pass typed observations to the classifier
   without reimplementing matrix policy.
 - Publication of these versions SHALL leave every campaign repository's
@@ -89,7 +96,8 @@ are each refused with a `MatrixError`.
 | FR-012-AC-7 | An unknown matrix version and an unknown component name are refused. | Test (TC-085) |
 | FR-012-AC-8 | The classifier reaches for no subprocess, socket, or write, and the observing program is a separate file (CON-1). | Inspection (TC-086) |
 | FR-012-AC-9 | Compatible versions and recorded human acceptance are independent gate conditions; a fully pinned toolchain does not satisfy the gate while acceptance is unrecorded, any state but `accepted` withholds, and an `accepted` state lacking a name or a date withholds as a half-record. | Test (TC-095) |
-| FR-012-AC-10 | The Rust observer keeps an unavailable, failed, timed-out, oversized, or unparseable declared tool observation as unknown; it invokes no undeclared tool; and it delegates all verdicts to the pure classifier. | Test (TC-130) |
+| FR-012-AC-10 | The Rust observer keeps an unavailable, failed, timed-out, oversized, or unparseable declared tool observation as unknown; it invokes no undeclared tool; and it delegates every per-component verdict to the pure classifier. | Test (TC-130) |
+| FR-012-AC-11 | The Rust observer withholds the gate when the installed `engineering-assurance` module's manifest version is absent, unreadable, or differs from the running binary's version, even when the classifier alone would open it. | Test (TC-130) |
 
 ## Dependencies
 

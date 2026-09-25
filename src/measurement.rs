@@ -684,6 +684,10 @@ impl DecisionRule {
     /// The errors of [`Self::against_baseline`], and
     /// [`DecisionRuleError::MarginModeWithoutMargin`] for a
     /// [`MarginMode::Relative`] mode with no `margin`.
+    ///
+    /// A zero margin is canonicalised to [`MarginMode::Absolute`]. A relative
+    /// margin scales with the baseline's magnitude, so against a zero baseline
+    /// it shrinks to nothing and the reference is the baseline itself.
     pub fn against_baseline_with_mode(
         comparator: Comparator,
         baseline: Baseline,
@@ -705,6 +709,14 @@ impl DecisionRule {
         if !margin.is_finite() {
             return Err(DecisionRuleError::NonFiniteMargin { margin });
         }
+        // A zero margin moves nothing in either unit, and serializes as no
+        // margin at all, which reads back as `Absolute`; keep one spelling so
+        // a round trip is equal.
+        let margin_mode = if margin == 0.0 {
+            MarginMode::Absolute
+        } else {
+            margin_mode
+        };
         Ok(Self {
             comparator,
             reference: RuleReference::Baseline {
