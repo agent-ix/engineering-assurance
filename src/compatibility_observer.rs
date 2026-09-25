@@ -7,7 +7,12 @@
 //! it validates the selected root and invokes the four explicitly declared
 //! version commands, then hands only typed observations to the pure classifier.
 
-use std::{ffi::OsStr, path::Path, time::Duration};
+use std::{
+    ffi::OsStr,
+    io::Read as _,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use engineering_assurance::compatibility::{
     CompatibilityError, CompatibilityRequest, CompatibilityResult, ComponentObservation,
@@ -27,7 +32,25 @@ const MAX_OBSERVATION_OUTPUT_BYTES: usize = 64 * 1024;
 pub(crate) struct CompatibilityObservationResult {
     protocol: &'static str,
     classification: CompatibilityResult,
+    module: ModuleObservation,
     pub(crate) gate_satisfied: bool,
+}
+
+/// The installed `engineering-assurance` Quoin module, compared with this binary.
+///
+/// The matrix pins toolchain versions; it does not see the module Quoin loaded
+/// its schemas and skeletons from. A CLI at one release beside a module from
+/// another validates documents against schemas the CLI was not built for, so
+/// the pair must agree before the gate opens.
+#[derive(Debug, Serialize)]
+struct ModuleObservation {
+    /// Version the installed module's `manifest.yaml` declares, or `null` when
+    /// no module was found or its manifest could not be read.
+    installed: Option<String>,
+    /// Version of this binary.
+    cli: &'static str,
+    /// Whether the installed module version equals this binary's version.
+    matches_cli: bool,
 }
 
 /// Stable failures at the impure observer boundary.
@@ -55,12 +78,13 @@ impl CompatibilityObservationError {
 pub(crate) fn observe(
     root: &Path,
 ) -> Result<CompatibilityObservationResult, CompatibilityObservationError> {
-    observe_with(root, &SystemToolRunner)
+    observe_with(root, &SystemToolRunner, installed_module_version())
 }
 
 fn observe_with(
     root: &Path,
     runner: &dyn ToolRunner,
+    module_version: Option<String>,
 ) -> Result<CompatibilityObservationResult, CompatibilityObservationError> {
     if !root.is_dir() {
         return Err(CompatibilityObservationError::RootInvalid);
@@ -80,7 +104,7 @@ fn observe_with(
         },
         ComponentObservation {
             component: "engineering-assurance".to_owned(),
-            version: observe_self(root, runner),
+            version: observe_self(),
         },
     ];
     let input = serde_json::to_vec(&CompatibilityRequest {
@@ -89,10 +113,17 @@ fn observe_with(
     })
     .map_err(CompatibilityObservationError::ResultSerialization)?;
     let classification = evaluate_request_bytes(&input)?;
-    let gate_satisfied = classification.gate_satisfied;
+    let cli = env!("CARGO_PKG_VERSION");
+    let module = ModuleObservation {
+        matches_cli: module_version.as_deref() == Some(cli),
+        installed: module_version,
+        cli,
+    };
+    let gate_satisfied = classification.gate_satisfied && module.matches_cli;
     Ok(CompatibilityObservationResult {
         protocol: OBSERVATION_PROTOCOL,
         classification,
+        module,
         gate_satisfied,
     })
 }
@@ -132,22 +163,53 @@ fn observe_semver(runner: &dyn ToolRunner, command: &str, arguments: &[&str]) ->
     Some(version.to_owned())
 }
 
-fn observe_self(root: &Path, runner: &dyn ToolRunner) -> Option<String> {
-    let root = root.as_os_str();
-    let output = runner.run(
-        OsStr::new("git"),
-        &[
-            OsStr::new("-C"),
-            root,
-            OsStr::new("describe"),
-            OsStr::new("--tags"),
-            OsStr::new("--abbrev=0"),
-        ],
-    )?;
-    let tag = std::str::from_utf8(&output).ok()?.trim();
-    tag.strip_prefix('v')
-        .filter(|version| !version.is_empty())
-        .map(ToOwned::to_owned)
+/// The running binary's own version.
+///
+/// Read from the binary rather than from `--root`'s git tag: a consumer who
+/// installed the CLI from a tag and runs it in their own project would
+/// otherwise get either no observation (untagged project) or their project's
+/// tag reported as this tool's version. A pass therefore describes the
+/// executable that is installed, not the checkout `--root` points at.
+fn observe_self() -> Option<String> {
+    Some(env!("CARGO_PKG_VERSION").to_owned())
+}
+
+/// Where Quoin installs modules: `IX_CONFIG_ROOT`, else `~/.ix`.
+fn module_manifest_path() -> Option<PathBuf> {
+    let config_root = std::env::var_os("IX_CONFIG_ROOT")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| Path::new(&home).join(".ix")))?;
+    Some(
+        config_root
+            .join("filament")
+            .join("modules")
+            .join("engineering-assurance")
+            .join("manifest.yaml"),
+    )
+}
+
+/// Version declared by the installed module's manifest, `None` when absent,
+/// oversized, or unparseable (which the gate treats as not matching).
+fn installed_module_version() -> Option<String> {
+    let path = module_manifest_path()?;
+    let file = std::fs::File::open(path).ok()?;
+    let mut bytes = Vec::new();
+    file.take(MAX_OBSERVATION_OUTPUT_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    if bytes.len() > MAX_OBSERVATION_OUTPUT_BYTES {
+        return None;
+    }
+    module_version_from_manifest(&bytes)
+}
+
+fn module_version_from_manifest(bytes: &[u8]) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    struct Manifest {
+        version: String,
+    }
+    let manifest: Manifest = yaml_serde::from_slice(bytes).ok()?;
+    Some(manifest.version).filter(|version| !version.trim().is_empty())
 }
 
 trait ToolRunner {
@@ -195,10 +257,8 @@ mod tests {
         }
     }
 
-    /// A runner reporting every declared tool at exactly its reviewed pin,
-    /// observing this crate's own repository root.
+    /// A runner reporting every external tool at exactly its reviewed pin.
     fn fixture_runner() -> FixtureRunner {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
         FixtureRunner {
             outputs: BTreeMap::from([
                 (
@@ -212,19 +272,6 @@ mod tests {
                 (
                     ("ix-flow".to_owned(), vec!["--version".to_owned()]),
                     b"0.2.3\n".to_vec(),
-                ),
-                (
-                    (
-                        "git".to_owned(),
-                        vec![
-                            "-C".to_owned(),
-                            root.to_string_lossy().into_owned(),
-                            "describe".to_owned(),
-                            "--tags".to_owned(),
-                            "--abbrev=0".to_owned(),
-                        ],
-                    ),
-                    b"v0.4.1\n".to_vec(),
                 ),
             ]),
         }
@@ -259,6 +306,7 @@ mod tests {
             &FixtureRunner {
                 outputs: BTreeMap::new(),
             },
+            None,
         )
         .expect("an observation with no tool output must still classify");
         assert!(!result.classification.versions_compatible);
@@ -276,10 +324,68 @@ mod tests {
     #[test]
     #[trace("TC-130", "FR-012-AC-10", "FR-014-AC-2")]
     fn fixture_observer_separates_host_observation_from_pure_accepted_gate() {
-        let result = observe_with(Path::new(env!("CARGO_MANIFEST_DIR")), &fixture_runner())
-            .expect("fully pinned fixture observation must classify");
+        let result = observe_with(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            &fixture_runner(),
+            Some(env!("CARGO_PKG_VERSION").to_owned()),
+        )
+        .expect("fully pinned fixture observation must classify");
         assert!(result.classification.versions_compatible);
         assert!(result.gate_satisfied);
+    }
+
+    #[test]
+    #[trace("TC-130", "FR-012-AC-10", "FR-012-CON-1")]
+    fn the_engineering_assurance_row_is_the_binary_version_wherever_root_points() {
+        // `--root` is a directory with no git history at all. The row must still
+        // be observed, and as the running binary's version rather than as
+        // anything read from the directory.
+        let root = std::env::temp_dir();
+        let result = observe_with(
+            &root,
+            &FixtureRunner {
+                outputs: BTreeMap::new(),
+            },
+            None,
+        )
+        .expect("an observation with no tool output must still classify");
+        let own = result
+            .classification
+            .components
+            .iter()
+            .find(|item| item.component == "engineering-assurance")
+            .expect("the matrix must classify engineering-assurance");
+        assert_eq!(own.observed.as_deref(), Some(env!("CARGO_PKG_VERSION")));
+    }
+
+    #[test]
+    #[trace("TC-130", "FR-012-AC-10", "FR-014-AC-2")]
+    fn a_module_that_disagrees_with_the_binary_withholds_an_otherwise_open_gate() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        // Every external tool is pinned, so the classifier alone opens the gate.
+        for module in [Some("0.3.1".to_owned()), None] {
+            let result = observe_with(root, &fixture_runner(), module.clone())
+                .expect("fully pinned fixture observation must classify");
+            assert!(
+                result.classification.gate_satisfied,
+                "the classifier no longer opens the gate, so this test proves nothing"
+            );
+            assert!(!result.module.matches_cli, "{module:?} matched the binary");
+            assert!(!result.gate_satisfied, "{module:?} opened the gate");
+            assert_eq!(result.module.installed, module);
+        }
+    }
+
+    #[test]
+    #[trace("TC-130", "FR-012-AC-10")]
+    fn the_module_version_is_the_manifest_version() {
+        assert_eq!(
+            module_version_from_manifest(b"manifest_version: 1.0.0\nname: x\nversion: 0.3.1\n"),
+            Some("0.3.1".to_owned())
+        );
+        assert_eq!(module_version_from_manifest(b"name: x\n"), None);
+        assert_eq!(module_version_from_manifest(b"version: '  '\n"), None);
+        assert_eq!(module_version_from_manifest(b"\x00not yaml: ["), None);
     }
 
     #[test]
@@ -290,8 +396,12 @@ mod tests {
         // its own on top of it (PLAT-973: this observer no longer verifies
         // working-tree artifacts against the matrix's informational digest
         // record, so the classifier's own verdict is the whole answer).
-        let result = observe_with(Path::new(env!("CARGO_MANIFEST_DIR")), &fixture_runner())
-            .expect("fully pinned fixture observation must classify");
+        let result = observe_with(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            &fixture_runner(),
+            Some(env!("CARGO_PKG_VERSION").to_owned()),
+        )
+        .expect("fully pinned fixture observation must classify");
         let encoded = to_json_line(&result).expect("the result must serialize");
         let emitted: serde_json::Value =
             serde_json::from_slice(&encoded).expect("the emitted line must be one JSON value");
@@ -299,6 +409,7 @@ mod tests {
             emitted["gate_satisfied"], emitted["classification"]["gate_satisfied"],
             "the observation result disagreed with the classifier it delegates to"
         );
+        assert_eq!(emitted["module"]["matches_cli"], serde_json::json!(true));
         assert_eq!(emitted["protocol"], serde_json::json!(OBSERVATION_PROTOCOL));
     }
 }

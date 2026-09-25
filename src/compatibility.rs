@@ -45,7 +45,12 @@ pub enum CompatibilityVerdict {
     Compatible,
     /// The reviewed matrix explicitly identifies the observed version as incompatible.
     Incompatible,
-    /// The component was absent or its version is not classified by the matrix.
+    /// The observed version is a release newer than the reviewed pin that the
+    /// matrix has never seen. Untested, not rejected: running updated tools is
+    /// the normal state after an update. Never satisfies the gate.
+    NewerUntested,
+    /// The component was absent, or its version is not classified by the matrix
+    /// and is not a plain release newer than the pin.
     Unknown,
 }
 
@@ -544,6 +549,13 @@ fn classify(component: &MatrixComponent, observed: Option<String>) -> ComponentC
                     )
                 }),
         ),
+        Some(version) if is_newer_release(version, &component.version) => (
+            CompatibilityVerdict::NewerUntested,
+            format!(
+                "{} {version} is newer than the pinned {} and this matrix has never seen it; it is untested, not approved and not rejected",
+                component.name, component.version
+            ),
+        ),
         Some(version) => (
             CompatibilityVerdict::Unknown,
             format!(
@@ -559,6 +571,24 @@ fn classify(component: &MatrixComponent, observed: Option<String>) -> ComponentC
         verdict,
         reason,
     }
+}
+
+/// Parse a plain `MAJOR.MINOR.PATCH` release. Anything else, including a
+/// pre-release or build suffix, is not a plain release and yields `None`.
+fn release_triple(version: &str) -> Option<(u64, u64, u64)> {
+    let mut parts = version.split('.');
+    let mut next = || parts.next()?.parse::<u64>().ok();
+    let triple = (next()?, next()?, next()?);
+    parts.next().is_none().then_some(triple)
+}
+
+/// Whether `observed` is a plain release strictly newer than the plain release
+/// `pinned`. A pre-release or unparseable version on either side is not.
+fn is_newer_release(observed: &str, pinned: &str) -> bool {
+    matches!(
+        (release_triple(observed), release_triple(pinned)),
+        (Some(observed), Some(pinned)) if observed > pinned
+    )
 }
 
 #[cfg(test)]
@@ -626,10 +656,24 @@ mod tests {
             vec![
                 CompatibilityVerdict::Compatible,
                 CompatibilityVerdict::Incompatible,
-                CompatibilityVerdict::Unknown,
+                CompatibilityVerdict::NewerUntested,
                 CompatibilityVerdict::Unknown,
             ]
         );
+
+        // Older than the pin, and not a plain release, are unknown rather than
+        // newer: only a plain release above the pin reads as "newer, untested".
+        for observed in ["0.1.0", "99.0.0-rc.1", "banana", "1.2"] {
+            let mut cases = exact_observations();
+            cases[2].1 = Some(observed);
+            let result = evaluate_request_bytes(&request(&cases)).expect("request must evaluate");
+            assert_eq!(
+                result.components[2].verdict,
+                CompatibilityVerdict::Unknown,
+                "{observed:?} was read as newer than the pin"
+            );
+            assert!(!result.gate_satisfied);
+        }
 
         // quoin 0.23.0 was tagged and never reached the registry. The matrix
         // names it so nobody has to rediscover why a version that exists in git
