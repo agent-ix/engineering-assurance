@@ -14,7 +14,7 @@ source; this document records the accepted decision.
 | quire-rs (engine) | 0.47.1 | inside quire-cli 0.33.0 | The export the CLI delegates to |
 | quoin | 0.24.1 | npm `@agent-ix/quoin@0.24.1` | Evidence, measurements, change-assurance records, attestations, intake, audit, receipts |
 | ix-flow | 0.2.3 | npm `@agent-ix/ix-flow@0.2.3` | Human decision events as an integrity-verified chain |
-| engineering-assurance | 0.4.1 | git tag `v0.4.1` | Rust-native shared semantics, PGM-01 compatibility mapping, the accepted corpus gate, the Rust classifier, and the ix-flow lifecycle host |
+| engineering-assurance | 0.4.1 | git tag `v0.4.1` (observed from the running binary) | Rust-native shared semantics, PGM-01 compatibility mapping, the accepted corpus gate, the Rust classifier, and the ix-flow lifecycle host |
 
 All four component pins name released artifacts at the v0.4.1 tag. No pin is a
 branch head or floating reference.

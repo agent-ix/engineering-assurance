@@ -187,19 +187,27 @@ the tag you installed for the module and the CLI.
 Then classify the toolchain against the compatibility matrix:
 
 ```bash
-engineering-assurance compatibility-observe --root <engineering-assurance-checkout>
+engineering-assurance compatibility-observe --root .
 ```
 
 It prints one verdict per component and exits non-zero unless every component
-is `compatible`. A component on a newer, unlisted version reports `unknown`
-with the reason "not approved and not rejected". That is expected when you run
-newer toolchain releases. It is not an install failure.
+is `compatible`. A component on a newer release the matrix has not seen
+reports `newer_untested`, with the reason "not approved and not rejected". That
+is expected when you run newer toolchain releases. It is not an install failure,
+and it is distinct from `incompatible` and from `unknown` (absent, older than the
+pin, or not a plain release).
 
-The `engineering-assurance` row is read from the Git tag of the `--root`
-directory, not from the installed binary. Point `--root` at a checkout of this
-repository at the tag you installed. Run from any other directory, that row is
-unobserved, or reports that directory's own tag. Use
-`engineering-assurance --version` for the installed CLI instead.
+The result also carries a `module` object comparing the installed
+`engineering-assurance` Quoin module (the `version` in its `manifest.yaml`,
+under `IX_CONFIG_ROOT`, when set and non-empty, or `~/.ix`) with the binary. The gate stays closed
+unless they match, or if no module is found.
+
+The `engineering-assurance` row is the version of the running binary, so it
+does not depend on `--root`. Run it from any directory. A pass describes the
+installed executable, not the source tree `--root` points at. It is a
+build-consistency check (the binary against the matrix compiled into it), not an
+observation of your environment; the `module` comparison is the environmental
+signal for this package. `--root` is only checked to be a directory.
 
 ## Upgrading artifacts from an earlier release
 

@@ -40,7 +40,7 @@ def test_onboard_js_json_checklist_lists_nested_objective_requirements(
 
     A MeasurementPlan's `objective` block is itself optional, but once
     present its own `direction` field is required
-    (`$defs.objective.required`). onboard.js's §4 checklist must surface that
+    (`definitions.objective.required`). onboard.js's §4 checklist must surface that
     nested requirement, not just the top-level `required` list, or an author
     who reads the checklist and adds `objective:` with no `direction` finds
     out only from a schema rejection.
@@ -132,7 +132,8 @@ def test_onboard_js_json_checklist_lists_the_decision_rule_vocabulary(
         ),
         "statistical_design.decision_rule.comparator = eq": (
             "statistical_design.decision_rule.baseline must not be best-seen and "
-            "statistical_design.decision_rule.margin must be absent"
+            "statistical_design.decision_rule.margin must be absent and "
+            "statistical_design.decision_rule.margin_mode must be absent"
         ),
     }
     for when, constraint in expected_current_constraints.items():
@@ -227,7 +228,7 @@ def test_onboard_js_json_checklist_lists_protected_apparatus_and_negative_contro
         / "schemas"
         / "measurement-plan-frontmatter.schema.json"
     )
-    apparatus_path = json.loads(schema_path.read_text())["$defs"]["apparatus_path"]
+    apparatus_path = json.loads(schema_path.read_text())["definitions"]["apparatus_path"]
     report = run_onboard_json(tmp_path)
     plan_checklist = report["artifactChecklists"]["MeasurementPlan"]
     assert plan_checklist["arrays"]["protected_apparatus"] == {
@@ -396,3 +397,126 @@ def test_onboard_js_refuses_a_usage_error(
     assert completed.stdout == ""
     assert message in completed.stderr
     assert "Usage: " in completed.stderr
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_onboard_js_summary_reports_validation_and_toolchain(tmp_path: Path) -> None:
+    # Fake quire/quoin first on PATH make the validation and toolchain answers
+    # deterministic: quire fails the one artifact named MP-002.md.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    quire = bin_dir / "quire"
+    quire.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = provenance ]; then echo \'{"cli":{"version":"9.9.9"}}\'; exit 0; fi\n'
+        'case "$*" in *MP-002.md)\n'
+        '  echo "x/MP-002.md: [MeasurementPlan] frontmatter: \\"owner\\" is a required property" >&2\n'
+        "  exit 1;;\n"
+        "esac\n"
+        "exit 0\n"
+    )
+    quoin = bin_dir / "quoin"
+    quoin.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = --version ]; then echo "quoin 8.8.8"; exit 0; fi\n'
+        'echo "  measurement record  Record."\n'
+    )
+    quire.chmod(0o755)
+    quoin.chmod(0o755)
+
+    target_repo = tmp_path / "consumer"
+    assurance = target_repo / "spec" / "assurance"
+    assurance.mkdir(parents=True)
+    for name in ("MP-001.md", "MP-002.md"):
+        (assurance / name).write_text("---\ntype: MeasurementPlan\n---\n")
+
+    completed = subprocess.run(
+        [NODE, str(ONBOARD_JS), "--repo", str(target_repo), "--summary", "--json"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={"PATH": f"{bin_dir}:/usr/bin:/bin", "HOME": str(tmp_path)},
+    )
+    assert completed.returncode == 1, "an invalid artifact must fail the summary"
+    summary = json.loads(completed.stdout)
+
+    assert summary["toolchain"] == {
+        "quire": "9.9.9",
+        "quoin": "8.8.8",
+        "quoinMeasurementVerify": False,
+    }
+    assert summary["installedModuleVersion"]
+    by_name = {item["name"]: item for item in summary["artifacts"]}
+    assert by_name["MP-001.md"]["validation"] == {
+        "status": "valid",
+        "findings": [],
+        "moreFindings": 0,
+    }
+    assert by_name["MP-002.md"]["validation"]["status"] == "invalid"
+    assert by_name["MP-002.md"]["validation"]["findings"] == [
+        '[MeasurementPlan] frontmatter: "owner" is a required property'
+    ]
+    # The compact form must not carry the full report's orientation prose.
+    assert "relationship" not in summary
+    assert "nextSteps" not in summary
+
+
+def _summary_repo(tmp_path: Path) -> Path:
+    target_repo = tmp_path / "consumer"
+    assurance = target_repo / "spec" / "assurance"
+    assurance.mkdir(parents=True)
+    (assurance / "MP-001.md").write_text("---\ntype: MeasurementPlan\n---\n")
+    return target_repo
+
+
+def _run_summary(tmp_path: Path, path_env: str, *extra: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [NODE, str(ONBOARD_JS), "--repo", str(_summary_repo(tmp_path)), "--summary", *extra],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={"PATH": path_env, "HOME": str(tmp_path)},
+    )
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_onboard_js_summary_exits_nonzero_when_validation_is_unavailable(
+    tmp_path: Path,
+) -> None:
+    # No quire on PATH: nothing was validated, so the summary must not pass.
+    # Only node itself is reachable, so a real quire beside it cannot be found.
+    only_node = tmp_path / "only-node"
+    only_node.mkdir()
+    (only_node / "node").symlink_to(NODE)
+    completed = _run_summary(tmp_path, str(only_node), "--json")
+    assert completed.returncode == 3, completed.stderr
+    summary = json.loads(completed.stdout)
+    assert summary["artifacts"][0]["validation"]["status"] == "unavailable"
+    assert "validation unavailable" in completed.stderr
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_onboard_js_summary_marks_truncated_findings_and_labels_the_module(
+    tmp_path: Path,
+) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    quire = bin_dir / "quire"
+    quire.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = provenance ]; then echo \'{"cli":{"version":"9.9.9"}}\'; exit 0; fi\n'
+        "i=1\n"
+        "while [ $i -le 12 ]; do\n"
+        '  echo "x/MP-001.md: [MeasurementPlan] finding $i" >&2\n'
+        "  i=$((i+1))\n"
+        "done\n"
+        "exit 1\n"
+    )
+    quire.chmod(0o755)
+    (bin_dir / "node").symlink_to(NODE)
+    completed = _run_summary(tmp_path, str(bin_dir))
+    assert completed.returncode == 1, completed.stderr
+    assert "      +2 more" in completed.stdout
+    assert "finding 10" in completed.stdout
+    assert "finding 11" not in completed.stdout
+    assert "module in this checkout:" in completed.stdout

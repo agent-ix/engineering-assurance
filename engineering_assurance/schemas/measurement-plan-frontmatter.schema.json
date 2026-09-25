@@ -16,7 +16,7 @@
     "definition_version": { "type": "string", "minLength": 1 },
     "execution_procedure": {
       "allOf": [
-        { "$ref": "#/$defs/apparatus_path" },
+        { "$ref": "#/definitions/apparatus_path" },
         { "pattern": "(?:^|/)(?:[^/.][^/]*|\\.[^/.][^/]*)\\.[jJ][sS][oO][nN]$" }
       ],
       "description": "Optional safe repository-relative path to one standalone engineering-assurance.measurement-procedure/v1 JSON file. Runnable campaigns require it. The path must be covered by protected_apparatus; Quoin checks exact coverage and source bytes. Changing its content requires a new definition_version."
@@ -59,26 +59,26 @@
         }
       }
     },
-    "objective": { "$ref": "#/$defs/objective" },
+    "objective": { "$ref": "#/definitions/objective" },
     "protected_apparatus": {
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
       "description": "The files that produce this plan's number (FR-024): the measurement harness, the labels, corpus, or answer key, the file that selects the population, and the checker configuration. Each entry is a repository-relative file path or a directory entry `<directory>/**`. Quoin's intake resolves the entries to files (case-sensitive, dotfiles included, symlinks refused and never followed, a directory entry must contain at least one file, an entry that names no file refuses the collection) and records the resolved set of (path, digest) pairs; a different set between collections -- a file added, removed, or edited under an entry -- is an apparatus change. Required when `stage` is `gate`, and whenever a `negative_controls` entry has kind `apparatus-edit`. Part of the measurement definition: adding, removing, or changing an entry, or any change to the resolved set, requires a new `definition_version`.",
-      "items": { "$ref": "#/$defs/apparatus_path" }
+      "items": { "$ref": "#/definitions/apparatus_path" }
     },
     "negative_controls": {
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
       "description": "Gaming scenarios this plan declares it guards against (FR-024), each a closed `kind` plus a `description` of how the plan guards against it. A declaration only: Engineering Assurance checks its shape, and Quoin's checker exercises the kinds it can detect. Required, with at least one entry, when `stage` is `gate`; optional otherwise.",
-      "items": { "$ref": "#/$defs/negative_control" }
+      "items": { "$ref": "#/definitions/negative_control" }
     },
     "statistical_design": { "type": "object" },
     "relationships": {
       "type": "array",
       "description": "Structural links to other spec artifacts. When a pass/fail decision genuinely depends on more than one metric succeeding together (a composite/AND gate), that composition MUST be expressed here as one `references` entry per constituent metric's MeasurementPlan -- never as a fabricated single `metric` id, and never only as prose. Do not add a separate constituent-metrics field for this; `references` is the one spelling of the edge.",
-      "items": { "$ref": "#/$defs/relationship" }
+      "items": { "$ref": "#/definitions/relationship" }
     }
   },
   "allOf": [
@@ -105,7 +105,7 @@
       },
       "then": {
         "anyOf": [
-          { "properties": { "statistical_design": { "$ref": "#/$defs/statistical_design" } } },
+          { "properties": { "statistical_design": { "$ref": "#/definitions/statistical_design" } } },
           {
             "not": {
               "anyOf": [
@@ -118,14 +118,14 @@
               ]
             },
             "properties": {
-              "statistical_design": { "$ref": "#/$defs/legacy_retired_statistical_design" }
+              "statistical_design": { "$ref": "#/definitions/legacy_retired_statistical_design" }
             }
           }
         ]
       },
       "else": {
         "properties": {
-          "statistical_design": { "$ref": "#/$defs/statistical_design" }
+          "statistical_design": { "$ref": "#/definitions/statistical_design" }
         }
       }
     },
@@ -223,7 +223,7 @@
       }
     }
   ],
-  "$defs": {
+  "definitions": {
     "apparatus_path": {
       "type": "string",
       "pattern": "^(?:[^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f]*|\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f]*|\\.\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f]+)(?:/(?:[^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f]*|\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f.][^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f]*|\\.\\.[^/\\\\*?\\[\\]{}:\\x00-\\x1f\\x7f-\\x9f]+))*(?:/\\*\\*)?$",
@@ -354,7 +354,7 @@
         },
         "error_model": { "type": "string", "minLength": 1 },
         "uncertainty": { "type": "string", "minLength": 1 },
-        "decision_rule": { "$ref": "#/$defs/decision_rule" }
+        "decision_rule": { "$ref": "#/definitions/decision_rule" }
       },
       "allOf": [
         {
@@ -393,7 +393,11 @@
         },
         "margin": {
           "type": "number",
-          "description": "How far the result must improve on the baseline, in the metric's own units, signed in the direction of improvement: positive means the estimate must beat the baseline by at least this much, negative allows a regression of up to this much. reference = baseline value + margin for `gt` and `ge`, and baseline value - margin for `lt` and `le`. Allowed only with `baseline` and never with `eq`; absent means 0."
+          "description": "How far the result must improve on the baseline, in the metric's own units, signed in the direction of improvement: positive means the estimate must beat the baseline by at least this much, negative allows a regression of up to this much. reference = baseline value + margin for `gt` and `ge`, and baseline value - margin for `lt` and `le`. Allowed only with `baseline` and never with `eq`; absent means 0. Its unit is `margin_mode`."
+        },
+        "margin_mode": {
+          "enum": ["absolute", "relative"],
+          "description": "The unit of `margin`. `absolute` (the default when absent): the metric's own units. `relative`: a fraction of the baseline value's magnitude, so `margin: 0.05` is 5% of the baseline -- the reference is baseline + 0.05 * |baseline| for `gt`/`ge` and baseline - 0.05 * |baseline| for `lt`/`le`. Use `relative` when one plan covers benchmarks or dimensions whose baselines differ in scale. A relative margin against a zero baseline shrinks to nothing: the reference is the baseline itself, so it demands no improvement. Allowed only with `margin`."
         }
       },
       "oneOf": [
@@ -401,7 +405,8 @@
         { "required": ["baseline"] }
       ],
       "dependencies": {
-        "margin": ["baseline"]
+        "margin": ["baseline"],
+        "margin_mode": ["margin"]
       },
       "allOf": [
         {
@@ -412,7 +417,8 @@
           "then": {
             "properties": {
               "baseline": { "not": { "const": "best-seen" } },
-              "margin": false
+              "margin": false,
+              "margin_mode": false
             }
           }
         }

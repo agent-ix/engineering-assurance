@@ -12,10 +12,10 @@
     "system": { "type": "string", "minLength": 1 },
     "relationships": {
       "type": "array",
-      "items": { "$ref": "#/$defs/relationship" }
+      "items": { "$ref": "#/definitions/relationship" }
     }
   },
-  "$defs": {
+  "definitions": {
     "relationship": {
       "type": "object",
       "additionalProperties": false,

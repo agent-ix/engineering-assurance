@@ -34,8 +34,8 @@ acceptance of that matrix.
 - `engineering_assurance/compatibility-matrix.json`, naming each component's
   released version, the versions it rules out and why, and an informational
   record of the artifact digests observed at the reviewed release.
-- A classification of an observed toolchain as compatible, incompatible, or
-  unknown, per component, with the reason.
+- A classification of an observed toolchain as compatible, incompatible,
+  newer-untested, or unknown, per component, with the reason.
 - Upgrade order and per-component rollback notes.
 
 ## Behavior
@@ -45,14 +45,24 @@ acceptance of that matrix.
 - An observed version equal to the pin SHALL classify as compatible.
 - A version the matrix names and rules out SHALL classify as incompatible, with
   the recorded reason.
-- A version the matrix has never seen SHALL classify as unknown. Unknown SHALL
-  NOT satisfy the gate, and SHALL NOT be reported as incompatible.
+- A plain release newer than the pin that the matrix has never seen SHALL
+  classify as newer-untested. Newer-untested SHALL NOT satisfy the gate, and
+  SHALL NOT be reported as incompatible or as unknown.
+- Any other version the matrix has never seen SHALL classify as unknown. Unknown
+  SHALL NOT satisfy the gate, and SHALL NOT be reported as incompatible.
 - A component that could not be observed SHALL classify as unknown.
 - The gate SHALL require every pinned component to be compatible.
 - The classifier SHALL execute nothing. Observing the environment SHALL be a
   separate program.
 - The Rust-owned CLI host adapter SHALL invoke only the matrix-declared `quire`,
-  `quoin`, `ix-flow`, and local Git tag observations with bounded capture.
+  `quoin`, and `ix-flow` version commands with bounded capture, and SHALL take
+  the `engineering-assurance` row from the running binary's own version. That
+  row is a build-consistency check, not an environmental observation.
+- The Rust-owned CLI host adapter SHALL read the installed `engineering-assurance`
+  Quoin module's manifest version and SHALL withhold the gate unless it equals
+  the running binary's version, or when no module or readable manifest is found.
+  The classifier does not own this comparison; every per-component verdict
+  remains the classifier's.
 - The Rust-owned CLI host adapter SHALL pass typed observations to the classifier
   without reimplementing matrix policy.
 - Publication of these versions SHALL leave every campaign repository's
@@ -79,14 +89,15 @@ are each refused with a `MatrixError`.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-012-AC-1 | Every component pins a released version and names its release; no pin is a branch, `latest`, or `HEAD`. | Test (TC-079) |
-| FR-012-AC-2 | Compatible, incompatible, and unknown are distinct, each carries its reason, and neither incompatible nor unknown satisfies the gate. | Test (TC-080) |
+| FR-012-AC-2 | Compatible, incompatible, newer-untested, and unknown are distinct, each carries its reason, and none but compatible satisfies the gate. | Test (TC-080) |
 | FR-012-AC-3 | The gate requires every pinned component; one unobserved component withholds it. | Test (TC-081) |
 | FR-012-AC-4 | Acceptance is either pending and wholly unattributed, or accepted with both a named human and a date; it is never half-recorded, and it is documented as a human act (CON-2, CON-4, CON-5). | Test (TC-082) |
 | FR-012-AC-6 | Upgrade order and a rollback note exist per component, no rollback is irreversible, and publication changes no repository's CI posture. | Test (TC-084) |
 | FR-012-AC-7 | An unknown matrix version and an unknown component name are refused. | Test (TC-085) |
 | FR-012-AC-8 | The classifier reaches for no subprocess, socket, or write, and the observing program is a separate file (CON-1). | Inspection (TC-086) |
 | FR-012-AC-9 | Compatible versions and recorded human acceptance are independent gate conditions; a fully pinned toolchain does not satisfy the gate while acceptance is unrecorded, any state but `accepted` withholds, and an `accepted` state lacking a name or a date withholds as a half-record. | Test (TC-095) |
-| FR-012-AC-10 | The Rust observer keeps an unavailable, failed, timed-out, oversized, or unparseable declared tool observation as unknown; it invokes no undeclared tool; and it delegates all verdicts to the pure classifier. | Test (TC-130) |
+| FR-012-AC-10 | The Rust observer keeps an unavailable, failed, timed-out, oversized, or unparseable declared tool observation as unknown; it invokes no undeclared tool; and it delegates every per-component verdict to the pure classifier. | Test (TC-130) |
+| FR-012-AC-11 | The Rust observer withholds the gate when the installed `engineering-assurance` module's manifest version is absent, unreadable, or differs from the running binary's version, even when the classifier alone would open it. | Test (TC-130) |
 
 ## Dependencies
 

@@ -74,6 +74,13 @@ history; they cannot govern new measurement collections.
   predictor, and, for a lower-is-better latency,
   `{ comparator: le, baseline: prior-collection, margin: 20 }` needs 180 ms or
   less against a 200 ms prior collection.
+- `margin` SHALL be a fraction of the baseline value's magnitude when
+  `margin_mode` is `relative`, and in the metric's own units when `margin_mode`
+  is `absolute` or absent. A relative margin moves the baseline value by
+  `margin` times its absolute value, in the same direction of improvement, so
+  `{ comparator: le, baseline: prior-collection, margin: -0.05, margin_mode:
+  relative }` tolerates a 5% regression whatever the scale of the baseline.
+  `margin_mode` SHALL be allowed only with `margin`, and never with `eq`.
 - `baseline: constant-predictor` SHALL mean, for each answer family, the
   agreement rate of the highest-scoring single constant answer on the corpus
   at evaluation time, combined across families as the size-weighted mean
@@ -187,6 +194,7 @@ change produces a finding rather than being accepted silently.
 | FR-021-AC-9 | The schema and the Rust `DecisionRule` accept a comparator that agrees with the objective's direction and refuse one that disagrees, with a typed error naming both; they accept `constant-predictor` only with `estimator: proportion`, with a typed error naming the estimator. | Test (TC-144, TC-146) |
 | FR-021-AC-10 | The schema and the Rust `DecisionRule` accept `baseline: external-reference` with every estimator and, unlike `best-seen`, with `comparator: eq`, and refuse it with `eq` plus a `margin` and with a comparator that disagrees with the objective's direction, with the same typed errors as every other baseline; evaluating it without a supplied value is a typed refusal naming `external-reference`, and a supplied value is moved by the margin in the direction of improvement; the Rust `Baseline` type round-trips `external-reference` through construction, serialization, and deserialization. | Test (TC-171) |
 | FR-021-AC-11 | A retired plan with the exact v0.2.1 prose `statistical_design` shape validates without a fabricated numeric rule; the same prose is refused for proposed or active plans. Empty, missing, or extra legacy design fields are refused, a retired current-shape plan remains valid, and a legacy prose plan cannot mix in fields introduced after v0.2.1. | Test (TC-172) |
+| FR-021-AC-12 | The schema and the Rust `DecisionRule` accept `margin_mode` of `absolute` or `relative` only with a `margin`, and refuse it with a threshold, without a margin, with `eq`, or with any other value; an absent mode is absolute and an absolute rule does not serialize the key; a relative margin moves the baseline value by the margin times its absolute value in the direction of improvement, so one rule tolerates the same fraction of baselines that differ in scale, including negative baselines; the schema's `margin_mode` enum equals the Rust `MarginMode` wire names. | Test (TC-188) |
 
 ## Dependencies
 

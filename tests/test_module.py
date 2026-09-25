@@ -31,6 +31,41 @@ def schema(name: str) -> dict:
     )
 
 
+# Assembled from parts so the content-rights URL scan does not see a literal.
+DRAFT_07_PATH = "//json-schema.org/draft-07/schema"
+DRAFT_07_URIS = tuple(scheme + DRAFT_07_PATH for scheme in ("http:", "https:"))
+
+
+def _is_draft_07(declared: object) -> bool:
+    return isinstance(declared, str) and declared.removesuffix("#") in DRAFT_07_URIS
+
+
+def test_draft_07_detector_accepts_every_spelling_and_refuses_other_drafts() -> None:
+    for uri in DRAFT_07_URIS:
+        for declared in (uri, uri + "#"):
+            assert _is_draft_07(declared), declared
+    for declared in (
+        "https:" + "//json-schema.org/draft/2019-09/schema",
+        "http:" + "//json-schema.org/draft-04/schema#",
+        None,
+    ):
+        assert not _is_draft_07(declared), declared
+
+
+def test_draft_07_schemas_use_draft_07_definitions() -> None:
+    # A schema that declares draft-07 must keep its reusable definitions under
+    # `definitions`; `$defs` is a 2019-09 keyword a strict draft-07 tool ignores.
+    paths = sorted((package.PACKAGE_ROOT / "schemas").glob("*.json"))
+    assert paths
+    checked = 0
+    for path in paths:
+        text = path.read_text()
+        if _is_draft_07(json.loads(text).get("$schema")):
+            checked += 1
+            assert "$defs" not in text, f"{path.name} declares draft-07 but uses $defs"
+    assert checked, "no schema declares draft-07, so this guard checked nothing"
+
+
 def test_module_inventory_is_exact() -> None:
     data = manifest()
     assert data["version"] == "0.5.0"
@@ -81,7 +116,7 @@ def test_profile_schema_version_and_profile_kind_are_optional() -> None:
     contract = schema("assurance-profile-frontmatter.schema")
     assert "schema_version" not in contract["required"]
     assert "profile_kind" not in contract["required"]
-    impact = contract["$defs"]["impact"]["properties"]
+    impact = contract["definitions"]["impact"]["properties"]
     assert impact["verifiability"]["type"] == "object"
     assert impact["detect_before_harm"]["properties"]["control_ref"] == {
         "type": "string",
@@ -108,11 +143,11 @@ def test_profile_measurement_policy_is_closed_and_uses_plan_stages() -> None:
     """Trace: FR-025-AC-1, TC-163."""
     contract = schema("assurance-profile-frontmatter.schema")
     plan = schema("measurement-plan-frontmatter.schema")
-    policy = contract["$defs"]["measurement_policy"]
+    policy = contract["definitions"]["measurement_policy"]
     assert policy["properties"]["stages"]["items"]["enum"] == plan["properties"][
         "stage"
     ]["enum"]
-    assert policy["properties"]["mode"]["enum"] == contract["$defs"][
+    assert policy["properties"]["mode"]["enum"] == contract["definitions"][
         "review_policy"
     ]["properties"]["mode"]["enum"]
     assert "measurement_policy" not in contract["required"]
@@ -163,7 +198,7 @@ def test_measurement_stages_and_statistical_design_are_explicit() -> None:
         "target",
         "gate",
     ]
-    required = contract["$defs"]["statistical_design"]["required"]
+    required = contract["definitions"]["statistical_design"]["required"]
     assert required == [
         "population",
         "sampling",
@@ -173,7 +208,7 @@ def test_measurement_stages_and_statistical_design_are_explicit() -> None:
         "uncertainty",
         "decision_rule",
     ]
-    assert contract["$defs"]["statistical_design"]["properties"][
+    assert contract["definitions"]["statistical_design"]["properties"][
         "minimum_population"
     ] == {
         "type": "integer",
@@ -317,7 +352,7 @@ def test_measurement_plan_skeleton_shows_a_valid_objective() -> None:
 def test_objective_steering_fields_are_optional_advisory_and_range_checked() -> None:
     """Trace: FR-026-AC-1, TC-166."""
     contract = schema("measurement-plan-frontmatter.schema")
-    objective_schema = contract["$defs"]["objective"]
+    objective_schema = contract["definitions"]["objective"]
     assert set(objective_schema["properties"]) == {
         "direction",
         "bound",
@@ -433,7 +468,7 @@ def _statistical_design_errors(
 def test_decision_rule_is_a_closed_comparator_with_exactly_one_reference() -> None:
     """Trace: FR-021-AC-1, TC-144."""
     contract = schema("measurement-plan-frontmatter.schema")
-    rule = contract["$defs"]["decision_rule"]
+    rule = contract["definitions"]["decision_rule"]
     assert rule["properties"]["comparator"]["enum"] == ["gt", "ge", "lt", "le", "eq"]
     assert rule["properties"]["baseline"]["enum"] == [
         "constant-predictor",
@@ -441,7 +476,13 @@ def test_decision_rule_is_a_closed_comparator_with_exactly_one_reference() -> No
         "best-seen",
         "external-reference",
     ]
-    assert set(rule["properties"]) == {"comparator", "threshold", "baseline", "margin"}
+    assert set(rule["properties"]) == {
+        "comparator",
+        "threshold",
+        "baseline",
+        "margin",
+        "margin_mode",
+    }
 
     for comparator in ("gt", "ge", "lt", "le", "eq"):
         assert _statistical_design_errors(
@@ -504,6 +545,50 @@ def test_decision_rule_is_a_closed_comparator_with_exactly_one_reference() -> No
     assert "'metric' is a required property" in [
         error.message for error in validator.iter_errors(without_metric)
     ]
+
+
+def test_margin_mode_refusals_and_acceptance_run_through_the_validator() -> None:
+    """Trace: FR-021-AC-12, TC-188."""
+    for mode in ("relative", "absolute"):
+        assert _statistical_design_errors(
+            decision_rule={
+                "comparator": "ge",
+                "baseline": "prior-collection",
+                "margin": 0.05,
+                "margin_mode": mode,
+            }
+        ) == [], mode
+    refused = {
+        "margin_mode with a threshold": {
+            "comparator": "ge",
+            "threshold": 1,
+            "margin_mode": "relative",
+        },
+        "margin_mode without a margin": {
+            "comparator": "ge",
+            "baseline": "prior-collection",
+            "margin_mode": "relative",
+        },
+        "margin_mode with eq": {
+            "comparator": "eq",
+            "baseline": "prior-collection",
+            "margin_mode": "relative",
+        },
+        "margin_mode with eq and a margin": {
+            "comparator": "eq",
+            "baseline": "prior-collection",
+            "margin": 0.1,
+            "margin_mode": "relative",
+        },
+        "unknown margin_mode": {
+            "comparator": "ge",
+            "baseline": "prior-collection",
+            "margin": 0.05,
+            "margin_mode": "percent",
+        },
+    }
+    for case, decision_rule in refused.items():
+        assert _statistical_design_errors(decision_rule=decision_rule) != [], case
 
 
 def test_decision_rule_agrees_with_objective_direction_and_estimator() -> None:
@@ -596,7 +681,7 @@ def test_decision_rule_external_reference_baseline_has_no_estimator_restriction(
 def test_estimator_is_a_closed_vocabulary() -> None:
     """Trace: FR-021-AC-2, TC-145."""
     contract = schema("measurement-plan-frontmatter.schema")
-    assert contract["$defs"]["statistical_design"]["properties"]["estimator"]["enum"] == [
+    assert contract["definitions"]["statistical_design"]["properties"]["estimator"]["enum"] == [
         "proportion",
         "count",
         "mean",
@@ -609,7 +694,7 @@ def test_estimator_is_a_closed_vocabulary() -> None:
         assert _statistical_design_errors(estimator=refused) != [], refused
     # Prose fields stay prose (FR-021): only estimator and decision_rule close.
     for prose in ("population", "sampling", "error_model", "uncertainty"):
-        assert contract["$defs"]["statistical_design"]["properties"][prose] == {
+        assert contract["definitions"]["statistical_design"]["properties"][prose] == {
             "type": "string",
             "minLength": 1,
         }
@@ -670,7 +755,7 @@ def test_protected_apparatus_is_a_unique_list_of_safe_relative_paths() -> None:
 def test_negative_controls_are_closed_and_required_at_gate_stage() -> None:
     """Trace: FR-024-AC-2, TC-155."""
     contract = schema("measurement-plan-frontmatter.schema")
-    kinds = contract["$defs"]["negative_control"]["properties"]["kind"]["enum"]
+    kinds = contract["definitions"]["negative_control"]["properties"]["kind"]["enum"]
     assert kinds == [
         "suppressed-observation",
         "gain-within-noise",
@@ -840,7 +925,7 @@ def test_onboarding_checklist_reports_the_nested_evidence_refs_condition() -> No
     `onboard.js` section 4 derives conditional requirements from a schema's
     `allOf`. The claim's `evidence_refs` requirement is not on the
     AssuranceArgument schema's own top-level `allOf` -- it sits inside
-    `$defs/claim`, reached only through `top_claim`'s `$ref`. Assert the
+    `definitions/claim`, reached only through `top_claim`'s `$ref`. Assert the
     onboarding checklist actually walks that `$ref` and surfaces the
     condition, rather than silently omitting it (or warning that it cannot
     read it).

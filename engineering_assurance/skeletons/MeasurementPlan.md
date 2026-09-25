@@ -140,6 +140,18 @@ that much. The reference is `baseline + margin` for `gt`/`ge` and
   collection: `{ comparator: le, baseline: prior-collection, margin: 20 }`, so
   a 200 ms prior needs 180 ms or less.
 
+`margin` is in the metric's own units unless `margin_mode: relative` is set,
+which makes it a fraction of the baseline value's magnitude. Use it when one
+plan covers benchmarks or dimensions whose baselines differ in scale: allow a
+5% regression against the compared collection with
+`{ comparator: le, baseline: prior-collection, margin: -0.05, margin_mode: relative }`,
+so a 100 ms prior tolerates 105 ms and a 100 000 ms prior tolerates 105 000 ms.
+A relative margin against a zero baseline shrinks to nothing -- the reference
+is the baseline itself -- so state an absolute margin when the baseline can be
+zero. `margin_mode` is allowed only with `margin`. An observation-side uncertainty
+or confidence interval is not part of a plan; `statistical_design.uncertainty`
+stays prose.
+
 When `objective` is present the comparator agrees with it: `higher` takes `gt`
 or `ge`, `lower` takes `lt` or `le`, `zero` takes `eq` or `le` against
 threshold 0, and `target` takes any comparator.

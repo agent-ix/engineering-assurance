@@ -477,6 +477,48 @@ impl fmt::Display for Baseline {
     }
 }
 
+/// The unit a decision rule's `margin` is stated in.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum MarginMode {
+    /// The margin is in the metric's own units.
+    #[default]
+    Absolute,
+    /// The margin is a fraction of the baseline value's magnitude, so `0.05`
+    /// tolerates or demands 5% of the baseline. This is how one rule expresses
+    /// a per-benchmark relative tolerance when the benchmarks' baselines differ
+    /// by orders of magnitude.
+    Relative,
+}
+
+impl MarginMode {
+    /// Every margin mode, in declaration order.
+    pub const ALL: [Self; 2] = [Self::Absolute, Self::Relative];
+
+    /// The frontmatter wire name of this margin mode.
+    #[must_use]
+    pub const fn wire_name(self) -> &'static str {
+        match self {
+            Self::Absolute => "absolute",
+            Self::Relative => "relative",
+        }
+    }
+
+    /// The signed distance a `margin` moves a baseline value.
+    fn offset(self, margin: f64, baseline_value: f64) -> f64 {
+        match self {
+            Self::Absolute => margin,
+            Self::Relative => margin * baseline_value.abs(),
+        }
+    }
+}
+
+impl fmt::Display for MarginMode {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.wire_name())
+    }
+}
+
 /// What a decision rule compares the estimate against.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RuleReference {
@@ -489,8 +531,12 @@ pub enum RuleReference {
         baseline: Baseline,
         /// How far the estimate must improve on the baseline, in the metric's
         /// own units: positive demands an improvement of at least this much,
-        /// negative tolerates a regression of up to this much.
+        /// negative tolerates a regression of up to this much. Its unit is
+        /// `margin_mode`.
         margin: f64,
+        /// Whether `margin` is in the metric's own units or a fraction of the
+        /// baseline value.
+        margin_mode: MarginMode,
     },
 }
 
@@ -544,6 +590,9 @@ pub enum DecisionRuleError {
         /// The refused margin.
         margin: f64,
     },
+    /// A `margin_mode` was stated without a `margin` to apply it to.
+    #[error("decision rule `margin_mode` is allowed only with `margin`")]
+    MarginModeWithoutMargin,
 }
 
 /// Why a decision rule could not be evaluated against supplied values.
@@ -624,6 +673,30 @@ impl DecisionRule {
         baseline: Baseline,
         margin: Option<f64>,
     ) -> Result<Self, DecisionRuleError> {
+        Self::against_baseline_with_mode(comparator, baseline, margin, MarginMode::Absolute)
+    }
+
+    /// Build a rule against a baseline plus an optional signed margin whose
+    /// unit is `margin_mode`.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Self::against_baseline`], and
+    /// [`DecisionRuleError::MarginModeWithoutMargin`] for a
+    /// [`MarginMode::Relative`] mode with no `margin`.
+    ///
+    /// A zero margin is canonicalised to [`MarginMode::Absolute`]. A relative
+    /// margin scales with the baseline's magnitude, so against a zero baseline
+    /// it shrinks to nothing and the reference is the baseline itself.
+    pub fn against_baseline_with_mode(
+        comparator: Comparator,
+        baseline: Baseline,
+        margin: Option<f64>,
+        margin_mode: MarginMode,
+    ) -> Result<Self, DecisionRuleError> {
+        if margin.is_none() && margin_mode == MarginMode::Relative {
+            return Err(DecisionRuleError::MarginModeWithoutMargin);
+        }
         if comparator == Comparator::Eq {
             if baseline == Baseline::BestSeen {
                 return Err(DecisionRuleError::EqAgainstBestSeen);
@@ -636,9 +709,21 @@ impl DecisionRule {
         if !margin.is_finite() {
             return Err(DecisionRuleError::NonFiniteMargin { margin });
         }
+        // A zero margin moves nothing in either unit, and serializes as no
+        // margin at all, which reads back as `Absolute`; keep one spelling so
+        // a round trip is equal.
+        let margin_mode = if margin == 0.0 {
+            MarginMode::Absolute
+        } else {
+            margin_mode
+        };
         Ok(Self {
             comparator,
-            reference: RuleReference::Baseline { baseline, margin },
+            reference: RuleReference::Baseline {
+                baseline,
+                margin,
+                margin_mode,
+            },
         })
     }
 
@@ -710,6 +795,8 @@ impl DecisionRule {
     /// threshold, or the baseline value moved by the margin in the direction
     /// of improvement: `baseline_value + margin` for `gt`/`ge`, and
     /// `baseline_value - margin` for `lt`/`le` (an `eq` rule has no margin).
+    /// Under [`MarginMode::Relative`] the margin is first scaled by the
+    /// magnitude of the baseline value.
     ///
     /// # Errors
     ///
@@ -737,13 +824,21 @@ impl DecisionRule {
             (RuleReference::Baseline { baseline, .. }, None) => {
                 return Err(RuleEvaluationError::MissingBaselineValue { baseline });
             }
-            (RuleReference::Baseline { margin, .. }, Some(value)) => {
+            (
+                RuleReference::Baseline {
+                    margin,
+                    margin_mode,
+                    ..
+                },
+                Some(value),
+            ) => {
                 if !value.is_finite() {
                     return Err(RuleEvaluationError::NonFiniteBaselineValue { value });
                 }
+                let offset = margin_mode.offset(margin, value);
                 let reference = match self.comparator {
-                    Comparator::Gt | Comparator::Ge | Comparator::Eq => value + margin,
-                    Comparator::Lt | Comparator::Le => value - margin,
+                    Comparator::Gt | Comparator::Ge | Comparator::Eq => value + offset,
+                    Comparator::Lt | Comparator::Le => value - offset,
                 };
                 if !reference.is_finite() {
                     return Err(RuleEvaluationError::NonFiniteReference { reference });
@@ -766,6 +861,8 @@ struct DecisionRuleFields {
     baseline: Option<Baseline>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     margin: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    margin_mode: Option<MarginMode>,
 }
 
 impl TryFrom<DecisionRuleFields> for DecisionRule {
@@ -776,20 +873,36 @@ impl TryFrom<DecisionRuleFields> for DecisionRule {
             (Some(_), Some(_), _) => Err(DecisionRuleError::ThresholdAndBaseline),
             (None, None, _) => Err(DecisionRuleError::MissingReference),
             (Some(_), None, Some(_)) => Err(DecisionRuleError::MarginWithoutBaseline),
-            (Some(threshold), None, None) => Self::against_threshold(fields.comparator, threshold),
-            (None, Some(baseline), margin) => {
-                Self::against_baseline(fields.comparator, baseline, margin)
+            (Some(_), None, None) | (None, Some(_), None) if fields.margin_mode.is_some() => {
+                Err(DecisionRuleError::MarginModeWithoutMargin)
             }
+            (Some(threshold), None, None) => Self::against_threshold(fields.comparator, threshold),
+            (None, Some(baseline), margin) => Self::against_baseline_with_mode(
+                fields.comparator,
+                baseline,
+                margin,
+                fields.margin_mode.unwrap_or_default(),
+            ),
         }
     }
 }
 
 impl From<DecisionRule> for DecisionRuleFields {
     fn from(rule: DecisionRule) -> Self {
-        let (threshold, baseline, margin) = match rule.reference {
-            RuleReference::Threshold(threshold) => (Some(threshold), None, None),
-            RuleReference::Baseline { baseline, margin } => {
-                (None, Some(baseline), (margin != 0.0).then_some(margin))
+        let (threshold, baseline, margin, margin_mode) = match rule.reference {
+            RuleReference::Threshold(threshold) => (Some(threshold), None, None, None),
+            RuleReference::Baseline {
+                baseline,
+                margin,
+                margin_mode,
+            } => {
+                let stated = margin != 0.0;
+                (
+                    None,
+                    Some(baseline),
+                    stated.then_some(margin),
+                    (stated && margin_mode != MarginMode::Absolute).then_some(margin_mode),
+                )
             }
         };
         Self {
@@ -797,6 +910,7 @@ impl From<DecisionRule> for DecisionRuleFields {
             threshold,
             baseline,
             margin,
+            margin_mode,
         }
     }
 }

@@ -23,31 +23,31 @@
     "status": { "enum": ["proposed", "active", "retired"] },
     "owner": { "type": "string", "minLength": 1 },
     "profile": { "type": "string", "pattern": "^ix://" },
-    "top_claim": { "$ref": "#/$defs/claim" },
+    "top_claim": { "$ref": "#/definitions/claim" },
     "reasoning": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/reasoning" }
+      "items": { "$ref": "#/definitions/reasoning" }
     },
     "assumptions": {
       "type": "array",
-      "items": { "$ref": "#/$defs/assumption" }
+      "items": { "$ref": "#/definitions/assumption" }
     },
     "participants": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/$defs/participant" }
+      "items": { "$ref": "#/definitions/participant" }
     },
     "challenges": {
       "type": "array",
-      "items": { "$ref": "#/$defs/challenge" }
+      "items": { "$ref": "#/definitions/challenge" }
     },
     "relationships": {
       "type": "array",
-      "items": { "$ref": "#/$defs/relationship" }
+      "items": { "$ref": "#/definitions/relationship" }
     }
   },
-  "$defs": {
+  "definitions": {
     "claim": {
       "type": "object",
       "additionalProperties": false,

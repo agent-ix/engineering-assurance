@@ -21,15 +21,25 @@
 //
 // `--repo` is the consuming project's root (default: current directory).
 // `--json` emits the same report as machine-readable JSON instead of text.
+// `--summary` prints a compact report instead of the full one: the installed
+// module version, each `spec/assurance/` artifact with its Quire validation
+// status, and which quire/quoin toolchain features are installed. Combine with
+// `--json` for the machine form. The summary exits 1 when any artifact is
+// invalid, 3 when validation could not run (quire missing, timed out, or its
+// output overflowed the buffer) and none is invalid, and 0 only when every
+// artifact validated. The module version it prints is the one in this
+// checkout; `quire validate` uses whichever module quire itself loads.
 
+import { spawnSync } from "node:child_process";
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const USAGE =
-  "Usage: node engineering_assurance/skills/assurance-onboarding/scripts/onboard.js [--repo <path>] [--json]\n\n" +
+  "Usage: node engineering_assurance/skills/assurance-onboarding/scripts/onboard.js [--repo <path>] [--json] [--summary]\n\n" +
   "  --repo <path>  the consuming project's root (default: current directory)\n" +
   "  --json         emit the report as JSON instead of text\n" +
+  "  --summary      compact report: module version, per-artifact validation, toolchain\n" +
   "  -h, --help     print this message\n";
 
 const args = process.argv.slice(2);
@@ -45,10 +55,13 @@ const usageError = (message) => {
 };
 let repoFlagValue;
 let wantsJson = false;
+let wantsSummary = false;
 for (let index = 0; index < args.length; index += 1) {
   const arg = args[index];
   if (arg === "--json") {
     wantsJson = true;
+  } else if (arg === "--summary") {
+    wantsSummary = true;
   } else if (arg === "--repo") {
     const value = args[index + 1];
     if (value === undefined || value.startsWith("-")) usageError("--repo requires a path argument");
@@ -149,7 +162,7 @@ if (moduleRoot) {
 //
 // `readAllOf` understands these shapes, and only these, at a schema's own
 // top level or at any depth inside a `$ref`'d (directly, or via an array's
-// `items.$ref`) nested `$defs` entry (see `resolveLocalRef` and `visit`
+// `items.$ref`) nested `definitions` entry (see `resolveLocalRef` and `visit`
 // below):
 // - an `allOf` branch `{ if, then, else? }` whose `if` is `properties` (at any
 //   depth, each leaf a `const`, an `enum`, or bare presence) plus `required`,
@@ -190,8 +203,8 @@ const describeConstraint = (def, prefix, path) => {
   if (Object.keys(def).some((key) => !DESCRIBABLE_KEYWORDS.has(key))) return null;
   const clauses = [];
   if (def.$ref) {
-    if (typeof def.$ref !== "string" || !def.$ref.startsWith("#/$defs/")) return null;
-    clauses.push(`${path} must match ${def.$ref.slice("#/$defs/".length)}`);
+    if (typeof def.$ref !== "string" || !def.$ref.startsWith("#/definitions/")) return null;
+    clauses.push(`${path} must match ${def.$ref.slice("#/definitions/".length)}`);
   }
   if ("const" in def) clauses.push(`${path} must be ${def.const}`);
   if (def.enum) clauses.push(`${path} must be one of ${def.enum.join(", ")}`);
@@ -309,22 +322,22 @@ const readAllOf = (schema, prefix = "", present = "") => {
   return { conditionalRequired, exactlyOneOf, conditionalConstraints, warnings };
 };
 
-// Resolve a same-document `#/$defs/<name>` reference: either a property's
+// Resolve a same-document `#/definitions/<name>` reference: either a property's
 // own `$ref` (an object embedded directly, e.g. MeasurementPlan's
-// `objective` points at `$defs/objective`, whose own
+// `objective` points at `definitions/objective`, whose own
 // `required: ["direction"]` lives there, not on the schema's own top-level
 // `required`), or an array property's `items.$ref` (e.g. AssuranceArgument's
-// `reasoning` array points at `$defs/reasoning`). AssuranceArgument's
-// `top_claim` similarly points at `$defs/claim`, whose own `evidence_refs`
-// requirement is conditional on `status`, sitting inside that $defs entry's
+// `reasoning` array points at `definitions/reasoning`). AssuranceArgument's
+// `top_claim` similarly points at `definitions/claim`, whose own `evidence_refs`
+// requirement is conditional on `status`, sitting inside that definitions entry's
 // own `allOf`. Reading only `schema.required` and `schema.allOf` (as the
 // top-level walk above does) would silently omit all of these. Anything
-// else is read as written; a `$ref` found inside a `$defs` entry is left to
+// else is read as written; a `$ref` found inside a `definitions` entry is left to
 // the existing `$ref`-in-`if` warning above, not chased further.
 const resolveLocalRef = (schema, def) => {
   const ref = def?.$ref ?? def?.items?.$ref;
-  if (typeof ref !== "string" || !ref.startsWith("#/$defs/")) return def;
-  return schema.$defs?.[ref.slice("#/$defs/".length)] ?? def;
+  if (typeof ref !== "string" || !ref.startsWith("#/definitions/")) return def;
+  return schema.definitions?.[ref.slice("#/definitions/".length)] ?? def;
 };
 
 // When a field has a retired-only legacy shape, its unconditional property
@@ -334,8 +347,8 @@ const resolveCurrentConditionalRef = (schema, name, def) => {
   if (def?.properties || def?.$ref) return def;
   const ref = (schema.allOf ?? [])
     .map((branch) => branch.else?.properties?.[name]?.$ref)
-    .find((value) => typeof value === "string" && value.startsWith("#/$defs/"));
-  return ref ? schema.$defs?.[ref.slice("#/$defs/".length)] ?? def : def;
+    .find((value) => typeof value === "string" && value.startsWith("#/definitions/"));
+  return ref ? schema.definitions?.[ref.slice("#/definitions/".length)] ?? def : def;
 };
 
 // The list keywords `visit` below describes; any other keyword on an array
@@ -457,6 +470,87 @@ if (specAssuranceExists) {
   existingArtifacts = readdirSync(specAssuranceDir)
     .filter((name) => name.endsWith(".md"))
     .map((name) => ({ name, type: frontmatterType(path.join(specAssuranceDir, name)) }));
+}
+
+// -- Compact summary mode (--summary). -------------------------------------
+//
+// Runs the installed Quire against each inventoried artifact so a malformed
+// instance is reported here rather than found later by hand, and reports which
+// toolchain features exist so an author does not reach for one that is absent.
+const SUMMARY_TIMEOUT_MS = 60_000;
+const MAX_FINDINGS_PER_ARTIFACT = 10;
+const SUMMARY_EXIT_INVALID = 1;
+const SUMMARY_EXIT_UNAVAILABLE = 3;
+const run = (command, commandArgs, cwd) => {
+  const result = spawnSync(command, commandArgs, {
+    cwd,
+    encoding: "utf8",
+    timeout: SUMMARY_TIMEOUT_MS,
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  return result.error ? null : result;
+};
+const validateArtifact = (name) => {
+  const result = run("quire", ["validate", "--scope", targetRepo, path.join("spec", "assurance", name)], targetRepo);
+  if (result === null) return { status: "unavailable", findings: [], moreFindings: 0 };
+  const all = result.stderr
+    .split("\n")
+    .filter((text) => text.includes(`${name}: [`))
+    .map((text) => text.slice(text.indexOf(`${name}: [`) + name.length + 2));
+  return {
+    status: result.status === 0 ? "valid" : "invalid",
+    findings: all.slice(0, MAX_FINDINGS_PER_ARTIFACT),
+    moreFindings: Math.max(0, all.length - MAX_FINDINGS_PER_ARTIFACT),
+  };
+};
+const observeToolVersion = (command, commandArgs, pick) => {
+  const result = run(command, commandArgs, targetRepo);
+  if (result === null || result.status !== 0) return null;
+  return pick(result.stdout);
+};
+const summarize = () => ({
+  targetRepo,
+  installedModuleVersion,
+  artifacts: existingArtifacts.map((artifact) => ({ ...artifact, validation: validateArtifact(artifact.name) })),
+  toolchain: {
+    quire: observeToolVersion("quire", ["provenance"], (out) => {
+      try {
+        return JSON.parse(out)?.cli?.version ?? null;
+      } catch {
+        return null;
+      }
+    }),
+    quoin: observeToolVersion("quoin", ["--version"], (out) => out.match(/\d+\.\d+\.\d+\S*/)?.[0] ?? null),
+    quoinMeasurementVerify: observeToolVersion("quoin", ["measurement", "--help"], (out) =>
+      /^\s*measurement verify\b/m.test(out),
+    ),
+  },
+});
+if (wantsSummary) {
+  const summary = summarize();
+  if (wantsJson) {
+    console.log(JSON.stringify(summary, null, 2));
+  } else {
+    console.log(`engineering-assurance module in this checkout: ${summary.installedModuleVersion ?? "not found"}`);
+    console.log(`quire: ${summary.toolchain.quire ?? "not found"}`);
+    console.log(`quoin: ${summary.toolchain.quoin ?? "not found"}`);
+    console.log(
+      `quoin measurement verify: ${summary.toolchain.quoinMeasurementVerify === null ? "unknown" : summary.toolchain.quoinMeasurementVerify ? "available" : "not available"}`,
+    );
+    console.log(`spec/assurance artifacts: ${summary.artifacts.length}`);
+    for (const artifact of summary.artifacts) {
+      console.log(`  ${artifact.validation.status.padEnd(11)} ${artifact.name} (${artifact.type})`);
+      for (const finding of artifact.validation.findings) console.log(`      ${finding}`);
+      if (artifact.validation.moreFindings > 0) console.log(`      +${artifact.validation.moreFindings} more`);
+    }
+  }
+  const statuses = summary.artifacts.map((artifact) => artifact.validation.status);
+  if (statuses.includes("invalid")) process.exit(SUMMARY_EXIT_INVALID);
+  if (statuses.includes("unavailable")) {
+    process.stderr.write("validation unavailable: quire did not run to completion, so nothing was validated\n");
+    process.exit(SUMMARY_EXIT_UNAVAILABLE);
+  }
+  process.exit(0);
 }
 
 // -- The measurement-record checklist is NOT schema-file-governed like §4  --

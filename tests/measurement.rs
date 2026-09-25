@@ -14,7 +14,7 @@ use std::{collections::BTreeSet, fs, path::Path, process::Command};
 
 use engineering_assurance::measurement::{
     ApparatusPath, ApparatusPathError, Baseline, Comparator, DecisionRule, DecisionRuleError,
-    DefinitionChangedWithoutVersionBump, DefinitionMember, Direction, Estimator,
+    DefinitionChangedWithoutVersionBump, DefinitionMember, Direction, Estimator, MarginMode,
     MeasurementDefinition, NegativeControl, NegativeControlError, NegativeControlKind,
     NegativeControls, Objective, ObjectiveError, PlanDefinition, ProtectedApparatus,
     ProtectedApparatusError, RuleEvaluationError, RuleReference,
@@ -45,6 +45,15 @@ fn apparatus(paths: &[&str]) -> ProtectedApparatus {
             .map(|path| ApparatusPath::new(*path).expect("valid apparatus path")),
     )
     .expect("valid protected apparatus")
+}
+
+/// The reference of an absolute-margin baseline rule.
+const fn absolute_baseline(baseline: Baseline, margin: f64) -> RuleReference {
+    RuleReference::Baseline {
+        baseline,
+        margin,
+        margin_mode: MarginMode::Absolute,
+    }
 }
 
 fn parse_rule(yaml: &str) -> Result<DecisionRule, String> {
@@ -175,10 +184,10 @@ fn tc_140_schema_direction_enum_equals_the_rust_wire_names() {
         serde_json::from_slice(&fs::read(&schema_path).expect("schema readable"))
             .expect("schema is JSON");
     assert_eq!(
-        schema["properties"]["objective"]["$ref"], "#/$defs/objective",
-        "objective must resolve to the $defs entry this test reads"
+        schema["properties"]["objective"]["$ref"], "#/definitions/objective",
+        "objective must resolve to the definitions entry this test reads"
     );
-    let schema_directions = schema["$defs"]["objective"]["properties"]["direction"]["enum"]
+    let schema_directions = schema["definitions"]["objective"]["properties"]["direction"]["enum"]
         .as_array()
         .expect("direction enum")
         .iter()
@@ -195,7 +204,7 @@ fn tc_140_schema_direction_enum_equals_the_rust_wire_names() {
         .collect::<Vec<_>>();
     assert_eq!(schema_directions, rust_directions);
     assert_eq!(
-        schema["$defs"]["objective"]["allOf"][0]["then"]["required"],
+        schema["definitions"]["objective"]["allOf"][0]["then"]["required"],
         serde_json::json!(["bound"])
     );
 
@@ -832,19 +841,13 @@ fn tc_146_decision_rule_construction_and_deserialization_are_closed_and_validate
             .expect("valid rule");
     assert_eq!(
         baseline.reference(),
-        RuleReference::Baseline {
-            baseline: Baseline::ConstantPredictor,
-            margin: 0.05
-        }
+        absolute_baseline(Baseline::ConstantPredictor, 0.05)
     );
     assert_eq!(
         DecisionRule::against_baseline(Comparator::Ge, Baseline::BestSeen, None)
             .expect("valid rule")
             .reference(),
-        RuleReference::Baseline {
-            baseline: Baseline::BestSeen,
-            margin: 0.0
-        }
+        absolute_baseline(Baseline::BestSeen, 0.0)
     );
 
     assert_eq!(
@@ -1030,25 +1033,31 @@ fn tc_146_decision_rule_agrees_with_the_objective_direction_and_estimator() {
 fn tc_147_schema_estimator_comparator_and_baseline_enums_equal_the_rust_wire_names() {
     let schema = measurement_plan_schema();
     assert_eq!(
-        schema["$defs"]["statistical_design"]["properties"]["decision_rule"]["$ref"],
-        "#/$defs/decision_rule",
-        "decision_rule must resolve to the $defs entry this test reads"
+        schema["definitions"]["statistical_design"]["properties"]["decision_rule"]["$ref"],
+        "#/definitions/decision_rule",
+        "decision_rule must resolve to the definitions entry this test reads"
     );
     assert_wire_parity(
         &schema_enum(
             &schema,
-            "/$defs/statistical_design/properties/estimator/enum",
+            "/definitions/statistical_design/properties/estimator/enum",
         ),
         &Estimator::ALL,
         |estimator| estimator.wire_name(),
     );
     assert_wire_parity(
-        &schema_enum(&schema, "/$defs/decision_rule/properties/comparator/enum"),
+        &schema_enum(
+            &schema,
+            "/definitions/decision_rule/properties/comparator/enum",
+        ),
         &Comparator::ALL,
         |comparator| comparator.wire_name(),
     );
     assert_wire_parity(
-        &schema_enum(&schema, "/$defs/decision_rule/properties/baseline/enum"),
+        &schema_enum(
+            &schema,
+            "/definitions/decision_rule/properties/baseline/enum",
+        ),
         &Baseline::ALL,
         |baseline| baseline.wire_name(),
     );
@@ -1265,10 +1274,7 @@ fn tc_171_external_reference_baseline_has_no_estimator_restriction_and_allows_eq
             .expect("valid rule");
     assert_eq!(
         rule.reference(),
-        RuleReference::Baseline {
-            baseline: Baseline::ExternalReference,
-            margin: 5.0
-        }
+        absolute_baseline(Baseline::ExternalReference, 5.0)
     );
     assert_eq!(
         parse_rule("comparator: le\nbaseline: external-reference\nmargin: 5\n"),
@@ -1339,7 +1345,8 @@ fn expected_refusal(case: &ApparatusCase) -> ApparatusPathError {
 fn tc_156_apparatus_path_accepts_and_refuses_the_shared_case_table() {
     let schema = measurement_plan_schema();
     assert_eq!(
-        schema["properties"]["protected_apparatus"]["items"]["$ref"], "#/$defs/apparatus_path",
+        schema["properties"]["protected_apparatus"]["items"]["$ref"],
+        "#/definitions/apparatus_path",
         "protected_apparatus items must resolve to the pattern this test reads"
     );
     let pattern = |pointer: &str| {
@@ -1349,8 +1356,8 @@ fn tc_156_apparatus_path_accepts_and_refuses_the_shared_case_table() {
             .unwrap_or_else(|| panic!("schema pattern at {pointer}"));
         regex::Regex::new(source).expect("schema pattern compiles")
     };
-    let entry_pattern = pattern("/$defs/apparatus_path/pattern");
-    let control_pattern = pattern("/$defs/apparatus_path/not/pattern");
+    let entry_pattern = pattern("/definitions/apparatus_path/pattern");
+    let control_pattern = pattern("/definitions/apparatus_path/not/pattern");
     let schema_accepts =
         |path: &str| entry_pattern.is_match(path) && !control_pattern.is_match(path);
 
@@ -1473,10 +1480,13 @@ fn tc_157_negative_controls_are_closed_non_empty_and_distinct() {
     let schema = measurement_plan_schema();
     assert_eq!(
         schema["properties"]["negative_controls"]["items"]["$ref"],
-        "#/$defs/negative_control"
+        "#/definitions/negative_control"
     );
     assert_wire_parity(
-        &schema_enum(&schema, "/$defs/negative_control/properties/kind/enum"),
+        &schema_enum(
+            &schema,
+            "/definitions/negative_control/properties/kind/enum",
+        ),
         &NegativeControlKind::ALL,
         |kind| kind.wire_name(),
     );
@@ -1493,7 +1503,7 @@ fn tc_157_negative_controls_are_closed_non_empty_and_distinct() {
     }
     assert_eq!(NegativeControlKind::ALL.len(), 5);
     assert_eq!(
-        schema["allOf"][0]["then"]["required"],
+        schema["allOf"][1]["then"]["required"],
         serde_json::json!([
             "ground_truth_kind",
             "negative_controls",
@@ -1600,4 +1610,153 @@ fn tc_158_a_protected_apparatus_edit_without_a_version_bump_is_a_finding() {
         DefinitionMember::ProtectedApparatus.to_string(),
         "protected_apparatus"
     );
+}
+
+#[trace("TC-188", "FR-021-AC-12")]
+#[test]
+fn tc_188_a_relative_margin_is_a_fraction_of_the_baseline_value() {
+    // One rule, two benchmarks whose baselines differ by three orders of
+    // magnitude: "no worse than 5% slower" is 5% of each baseline.
+    let rule = DecisionRule::against_baseline_with_mode(
+        Comparator::Le,
+        Baseline::PriorCollection,
+        Some(-0.05),
+        MarginMode::Relative,
+    )
+    .expect("valid rule");
+    for (baseline, tolerated, refused) in [(100.0, 105.0, 105.1), (100_000.0, 105_000.0, 105_100.0)]
+    {
+        assert_eq!(rule.holds(tolerated, Some(baseline)), Ok(true));
+        assert_eq!(rule.holds(refused, Some(baseline)), Ok(false));
+    }
+    // The scale is the baseline's magnitude, so a negative baseline does not
+    // flip the direction of the tolerance.
+    assert_eq!(rule.holds(-95.0, Some(-100.0)), Ok(true));
+    assert_eq!(rule.holds(-94.9, Some(-100.0)), Ok(false));
+
+    // The same margin stated absolutely is a fixed number of units.
+    let absolute =
+        DecisionRule::against_baseline(Comparator::Le, Baseline::PriorCollection, Some(-0.05))
+            .expect("valid rule");
+    assert_eq!(absolute.holds(100.04, Some(100.0)), Ok(true));
+    assert_eq!(absolute.holds(105.0, Some(100.0)), Ok(false));
+}
+
+#[trace("TC-188", "FR-021-AC-12")]
+#[test]
+fn tc_188_margin_mode_is_closed_defaults_to_absolute_and_round_trips() {
+    let relative = parse_rule(
+        "comparator: le\nbaseline: prior-collection\nmargin: -0.05\nmargin_mode: relative\n",
+    )
+    .expect("a relative margin parses");
+    assert_eq!(
+        relative.reference(),
+        RuleReference::Baseline {
+            baseline: Baseline::PriorCollection,
+            margin: -0.05,
+            margin_mode: MarginMode::Relative
+        }
+    );
+    let encoded = yaml_serde::to_string(&relative).expect("rule serializes");
+    assert_eq!(parse_rule(&encoded), Ok(relative), "round trip: {encoded}");
+
+    // Absent means absolute, and an absolute rule never emits the key, so a
+    // plan written before this field existed serializes unchanged.
+    let legacy = parse_rule("comparator: gt\nbaseline: best-seen\nmargin: 1\n").expect("parses");
+    assert_eq!(
+        legacy.reference(),
+        RuleReference::Baseline {
+            baseline: Baseline::BestSeen,
+            margin: 1.0,
+            margin_mode: MarginMode::Absolute
+        }
+    );
+    assert!(
+        !yaml_serde::to_string(&legacy)
+            .expect("rule serializes")
+            .contains("margin_mode")
+    );
+
+    // A mode with no margin, or on a threshold, has nothing to apply to.
+    for yaml in [
+        "comparator: le\nbaseline: prior-collection\nmargin_mode: relative\n",
+        "comparator: le\nthreshold: 3\nmargin_mode: relative\n",
+    ] {
+        assert!(
+            yaml_serde::from_str::<DecisionRule>(yaml)
+                .expect_err("a mode without a margin is refused")
+                .to_string()
+                .contains("margin_mode"),
+            "{yaml}"
+        );
+    }
+    assert_eq!(
+        DecisionRule::against_baseline_with_mode(
+            Comparator::Le,
+            Baseline::PriorCollection,
+            None,
+            MarginMode::Relative
+        ),
+        Err(DecisionRuleError::MarginModeWithoutMargin)
+    );
+    assert!(
+        parse_rule("comparator: le\nbaseline: prior-collection\nmargin: 1\nmargin_mode: percent\n")
+            .is_err()
+    );
+}
+
+#[trace("TC-188", "FR-021-AC-12")]
+#[test]
+fn tc_188_schema_margin_mode_enum_equals_the_rust_wire_names() {
+    let schema = measurement_plan_schema();
+    assert_wire_parity(
+        &schema_enum(
+            &schema,
+            "/definitions/decision_rule/properties/margin_mode/enum",
+        ),
+        &MarginMode::ALL,
+        |mode| mode.wire_name(),
+    );
+    assert_eq!(
+        schema["definitions"]["decision_rule"]["dependencies"]["margin_mode"],
+        serde_json::json!(["margin"]),
+        "the schema must refuse a margin_mode with no margin, as the Rust rule does"
+    );
+}
+
+#[trace("TC-188", "FR-021-AC-12")]
+#[test]
+fn tc_188_a_zero_margin_is_canonical_and_round_trips_in_either_mode() {
+    let relative_zero = DecisionRule::against_baseline_with_mode(
+        Comparator::Ge,
+        Baseline::PriorCollection,
+        Some(0.0),
+        MarginMode::Relative,
+    )
+    .expect("valid rule");
+    let absolute_zero =
+        DecisionRule::against_baseline(Comparator::Ge, Baseline::PriorCollection, Some(0.0))
+            .expect("valid rule");
+    assert_eq!(relative_zero, absolute_zero);
+    let encoded = yaml_serde::to_string(&relative_zero).expect("rule serializes");
+    assert_eq!(
+        parse_rule(&encoded),
+        Ok(relative_zero),
+        "round trip: {encoded}"
+    );
+}
+
+#[trace("TC-188", "FR-021-AC-12")]
+#[test]
+fn tc_188_a_relative_margin_against_a_zero_baseline_shrinks_to_nothing() {
+    let rule = DecisionRule::against_baseline_with_mode(
+        Comparator::Ge,
+        Baseline::PriorCollection,
+        Some(0.05),
+        MarginMode::Relative,
+    )
+    .expect("valid rule");
+    // "5% better" than zero is zero: the rule demands no improvement.
+    assert_eq!(rule.holds(0.0, Some(0.0)), Ok(true));
+    assert_eq!(rule.holds(-0.001, Some(0.0)), Ok(false));
 }
