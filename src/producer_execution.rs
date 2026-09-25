@@ -631,7 +631,8 @@ pub enum ExecutionRefusal {
     CapabilityRoot,
     /// An input is missing, linked, unreadable, over-budget or has wrong bytes.
     Input,
-    /// An output parent cannot be admitted without following links.
+    /// An output parent cannot be admitted without following links, or an
+    /// entry at a declared fixed output path cannot be removed before launch.
     Output,
     /// The request and runtime adapter differ.
     AdapterBinding,
@@ -974,6 +975,15 @@ impl ProducerExecutor {
                 );
             }
         };
+        if let Err(failure) = remove_declared_outputs(request, &validated) {
+            return preflight_failure_result(
+                call_started,
+                request_identity,
+                producer,
+                &request.cancellation,
+                failure,
+            );
+        }
         let preflight_nanos = elapsed_nanos(call_started);
         let observed_host = observe_host_context();
         let launched = monotonic_now();
@@ -1445,6 +1455,55 @@ fn validate_capabilities(
         inputs,
         executable_digest,
     })
+}
+
+/// Removes each declared fixed output that exists beneath the capability root,
+/// so every declared fixed output is absent when the producer starts.
+///
+/// A missing parent or a missing file is nothing to remove. A symlink at the
+/// declared path is removed as a link, never followed. Any other failure, such
+/// as a directory at the path, refuses the request before launch.
+#[cfg(target_os = "linux")]
+fn remove_declared_outputs(
+    request: &ProducerExecutionRequest,
+    validated: &ValidatedExecution,
+) -> Result<(), PreflightFailure> {
+    use rustix::{
+        fs::{AtFlags, unlinkat},
+        io::Errno,
+    };
+
+    let refused = || {
+        PreflightFailure::Refused(
+            ExecutionRefusal::Output,
+            Some(validated.executable_digest.clone()),
+        )
+    };
+    for output in &request.outputs {
+        let (directory, name) = output
+            .path
+            .rsplit_once('/')
+            .map_or((None, output.path.as_str()), |(directory, name)| {
+                (Some(directory), name)
+            });
+        let opened;
+        let parent = match directory {
+            None => &validated.root,
+            Some(directory) => {
+                opened = match open_beneath(&validated.root, directory, true) {
+                    Ok(parent) => parent,
+                    Err(Errno::NOENT) => continue,
+                    Err(_) => return Err(refused()),
+                };
+                &opened
+            }
+        };
+        match unlinkat(parent, name, AtFlags::empty()) {
+            Ok(()) | Err(Errno::NOENT) => {}
+            Err(_) => return Err(refused()),
+        }
+    }
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]

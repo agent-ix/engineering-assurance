@@ -102,7 +102,10 @@ unique within their respective request collections.
   every tracked Git symlink at preflight. The resolver reads its target bytes
   without following the link and verifies the link's Git blob OID. It then
   records the path and digest as omitted link metadata.
-- The producer creates its own declared output parents and trees, and
+- Before launch the executor removes any existing file at each declared fixed
+  output path beneath the capability root, without following links, so each
+  declared fixed output is absent when the producer starts.
+  The producer creates its own declared output parents and trees, and
   overwriting an existing file is permitted. Concurrent requests over the same
   capability root share that directory, so one run's declared outputs can be
   overwritten by another. The executor SHALL enforce output-artifact count and
@@ -169,7 +172,7 @@ unique within their respective request collections.
 | State | Exact boundary |
 | --- | --- |
 | `unavailable` | A structurally valid request selects an executable that cannot be opened or the pinned executable cannot be launched. |
-| `refused` | An identity-bearing request fails a pre-launch identity, capability, adapter, input, output-parent, cancellation-binding, or concurrency admission check. |
+| `refused` | An identity-bearing request fails a pre-launch identity, capability, adapter, input, output-parent, cancellation-binding, or concurrency admission check, or an entry at a declared fixed output path cannot be removed before launch (for example a directory). |
 | `failed` | A launched process has a rejected normal exit, signal termination, stream overflow/read failure, process observation failure, or output-artifact failure. |
 | `timed_out` | Monotonic elapsed execution time reaches the request deadline before terminal observation. |
 | `malformed_response` | The exact request-bound caller adapter rejects an otherwise admitted bounded terminal response. |
