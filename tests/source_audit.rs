@@ -12,10 +12,18 @@ use std::{
 
 use engineering_assurance::source_audit::{
     MAX_RUST_SOURCE_BYTES, RustSourceAuditError, RustSourceAuditRole, RustSourceCapability,
-    RustSourceFinding, RustSourceFindingCategory, audit_rust_source,
+    RustSourceFinding, RustSourceFindingCategory, TraceGrammar, audit_rust_source,
 };
 use ix_trace_rs::trace;
 use syn::{Item, UseTree, visit::Visit};
+
+const ATTRIBUTE_TESTS: RustSourceAuditRole = RustSourceAuditRole::RequirementTests {
+    grammar: TraceGrammar::Attribute,
+};
+
+const DOC_COMMENT_TESTS: RustSourceAuditRole = RustSourceAuditRole::RequirementTests {
+    grammar: TraceGrammar::DocComment,
+};
 
 fn repository_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -416,7 +424,7 @@ fn tc_117_every_first_party_rust_test_uses_canonical_trace_syntax() {
     for path in files {
         let bytes = fs::read(&path)
             .unwrap_or_else(|error| panic!("cannot read {}: {error}", path.display()));
-        let findings = audit_rust_source(&bytes, RustSourceAuditRole::RequirementTests)
+        let findings = audit_rust_source(&bytes, ATTRIBUTE_TESTS)
             .unwrap_or_else(|error| panic!("cannot audit {}: {error}", path.display()));
         assert!(findings.is_empty(), "{}: {findings:?}", path.display());
     }
@@ -433,7 +441,7 @@ fn tc_117_missing_aliased_qualified_and_malformed_traces_fail_closed() {
     "#,
     );
     assert_eq!(
-        categories(&qualified, RustSourceAuditRole::RequirementTests),
+        categories(&qualified, ATTRIBUTE_TESTS),
         [
             RustSourceFindingCategory::TraceImportMissing,
             RustSourceFindingCategory::TraceAttributeQualified,
@@ -450,7 +458,7 @@ fn tc_117_missing_aliased_qualified_and_malformed_traces_fail_closed() {
     "#,
     );
     assert_eq!(
-        categories(&aliased, RustSourceAuditRole::RequirementTests),
+        categories(&aliased, ATTRIBUTE_TESTS),
         [
             RustSourceFindingCategory::TraceImportMissing,
             RustSourceFindingCategory::TraceImportAliased,
@@ -467,7 +475,7 @@ fn tc_117_missing_aliased_qualified_and_malformed_traces_fail_closed() {
     "#,
     );
     assert_eq!(
-        categories(&grouped_import, RustSourceAuditRole::RequirementTests),
+        categories(&grouped_import, ATTRIBUTE_TESTS),
         [RustSourceFindingCategory::TraceImportMissing]
     );
 
@@ -480,7 +488,7 @@ fn tc_117_missing_aliased_qualified_and_malformed_traces_fail_closed() {
     ",
     );
     assert_eq!(
-        categories(&malformed, RustSourceAuditRole::RequirementTests),
+        categories(&malformed, ATTRIBUTE_TESTS),
         [
             RustSourceFindingCategory::TraceArgumentsInvalid,
             RustSourceFindingCategory::TraceTestCaseMissing,
@@ -501,7 +509,7 @@ fn tc_117_trace_requires_both_test_case_and_acceptance_identifiers() {
     "#,
     );
     assert_eq!(
-        categories(&missing_test, RustSourceAuditRole::RequirementTests),
+        categories(&missing_test, ATTRIBUTE_TESTS),
         [RustSourceFindingCategory::TraceTestCaseMissing]
     );
 
@@ -514,8 +522,195 @@ fn tc_117_trace_requires_both_test_case_and_acceptance_identifiers() {
     "#,
     );
     assert_eq!(
-        categories(&missing_acceptance, RustSourceAuditRole::RequirementTests),
+        categories(&missing_acceptance, ATTRIBUTE_TESTS),
         [RustSourceFindingCategory::TraceAcceptanceCriterionMissing]
+    );
+}
+
+#[test]
+#[trace("TC-189", "FR-014-AC-6")]
+fn tc_189_doc_comment_grammar_accepts_trace_lines_and_flags_absent_or_malformed_ones() {
+    let conforming = r"
+        /// Trace: FR-901, NFR-902
+        /// Provenance: fictional#1
+        #[test]
+        fn tc_901_widgets_are_sorted() {}
+
+        /// Trace: FR-903-AC-2
+        #[test]
+        fn tc_902_gadgets_are_counted() {}
+    ";
+    assert_eq!(categories(conforming, DOC_COMMENT_TESTS), []);
+
+    let cases = [
+        (
+            "#[test] fn tc_903_untagged() {}",
+            RustSourceFindingCategory::DocTraceMissing,
+        ),
+        (
+            "/// Explains the case without tracing it.\n#[test] fn tc_904_prose_only() {}",
+            RustSourceFindingCategory::DocTraceMissing,
+        ),
+        (
+            "/// Trace:\n#[test] fn tc_905_empty_list() {}",
+            RustSourceFindingCategory::DocTraceIdInvalid,
+        ),
+        (
+            "/// Trace: FR-901, not an id\n#[test] fn tc_906_bad_entry() {}",
+            RustSourceFindingCategory::DocTraceIdInvalid,
+        ),
+        (
+            "/// Trace: FR-901,, NFR-902\n#[test] fn tc_907_empty_entry() {}",
+            RustSourceFindingCategory::DocTraceIdInvalid,
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(
+            categories(source, DOC_COMMENT_TESTS),
+            [expected],
+            "{source}"
+        );
+    }
+}
+
+#[test]
+#[trace("TC-189", "FR-014-AC-6")]
+fn tc_189_each_grammar_is_held_exclusively_and_import_findings_are_attribute_only() {
+    let doc_only = "/// Trace: FR-901\n#[test] fn tc_908_doc_form() {}";
+    // The attribute grammar does not accept the doc form, and the doc grammar
+    // reports no import-shape finding for a source with no trace import.
+    assert_eq!(
+        categories(doc_only, ATTRIBUTE_TESTS),
+        [
+            RustSourceFindingCategory::TraceImportMissing,
+            RustSourceFindingCategory::TestTraceMissing,
+        ]
+    );
+    assert_eq!(categories(doc_only, DOC_COMMENT_TESTS), []);
+
+    let attribute_only = synthetic_source(
+        r#"
+        use ix_trace_rs::TRACE;
+        #[test]
+        #[TRACE("TC-908", "FR-901-AC-1")]
+        fn tc_909_attribute_form() {}
+    "#,
+    );
+    assert_eq!(categories(&attribute_only, ATTRIBUTE_TESTS), []);
+    assert_eq!(
+        categories(&attribute_only, DOC_COMMENT_TESTS),
+        [RustSourceFindingCategory::DocTraceMissing]
+    );
+}
+
+#[test]
+#[trace("TC-189", "FR-014-AC-6")]
+fn tc_189_only_requirement_family_ids_satisfy_a_doc_trace() {
+    for accepted in [
+        "FR-901",
+        "NFR-902",
+        "StR-903",
+        "US-904",
+        "FR-901-AC-2",
+        "FR-901-CON-3",
+        "FR-901, NFR-902-AC-1",
+        "FR-901 ,NFR-902",
+    ] {
+        let source = format!("/// Trace: {accepted}\n#[test] fn tc_910_accepted() {{}}");
+        assert_eq!(categories(&source, DOC_COMMENT_TESTS), [], "{accepted}");
+    }
+    for rejected in [
+        "TODO-LATER",
+        "X-X",
+        "TC-901",
+        "fr-901",
+        "FR-",
+        "FR-9x",
+        "FR-901-AC",
+        "FR-901-XX-1",
+        "FR-901-AC-1-2",
+        "FR-901,",
+        "FR-901, TC-901",
+    ] {
+        let source = format!("/// Trace: {rejected}\n#[test] fn tc_911_rejected() {{}}");
+        assert_eq!(
+            categories(&source, DOC_COMMENT_TESTS),
+            [RustSourceFindingCategory::DocTraceIdInvalid],
+            "{rejected}"
+        );
+    }
+}
+
+#[test]
+#[trace("TC-189", "FR-014-AC-6")]
+fn tc_189_doc_trace_carriers_are_outer_docs_and_are_read_line_by_line() {
+    let accepted = [
+        "#[doc = \" Trace: FR-901\"]\n#[test] fn tc_912_doc_attribute() {}",
+        "/** Trace: FR-901 */\n#[test] fn tc_913_one_line_block() {}",
+        "/**\n * Summary of the case.\n * Trace: FR-901, NFR-902\n */\n#[test] fn tc_914_block() {}",
+        "/**\n * Trace: FR-901\n * prose on its own line is not part of the list\n */\n#[test] fn tc_917_prose_after_block_trace() {}",
+        "/// Trace: FR-901\n/// Trace: NFR-902\n#[test] fn tc_915_two_lines() {}",
+        "/// Trace: FR-901\n#[test]\n#[trace(\"TC-901\", \"FR-901-AC-1\")]\nfn tc_916_both_forms() {}",
+    ];
+    for source in accepted {
+        assert_eq!(categories(source, DOC_COMMENT_TESTS), [], "{source}");
+    }
+
+    let cases = [
+        (
+            "/// Trace: FR-901\n/// Trace: TODO-LATER\n#[test] fn tc_918_one_bad_line() {}",
+            RustSourceFindingCategory::DocTraceIdInvalid,
+        ),
+        (
+            "#[test] fn tc_919_inner_doc() {\n    //! Trace: FR-901\n}",
+            RustSourceFindingCategory::DocTraceMissing,
+        ),
+        (
+            "/// trace: FR-901\n#[test] fn tc_920_lowercase_key() {}",
+            RustSourceFindingCategory::DocTraceMissing,
+        ),
+    ];
+    for (source, expected) in cases {
+        assert_eq!(
+            categories(source, DOC_COMMENT_TESTS),
+            [expected],
+            "{source}"
+        );
+    }
+}
+
+#[test]
+#[trace("TC-189", "FR-014-AC-6")]
+fn tc_189_doc_grammar_reports_no_import_finding_for_an_aliased_trace_import() {
+    let source = synthetic_source(
+        "use ix_trace_rs::TRACE as tracked;\n/// Trace: FR-901\n#[test] fn tc_921_aliased() {}",
+    );
+    assert_eq!(categories(&source, DOC_COMMENT_TESTS), []);
+    assert_eq!(
+        categories(&source, ATTRIBUTE_TESTS),
+        [
+            RustSourceFindingCategory::TraceImportMissing,
+            RustSourceFindingCategory::TraceImportAliased,
+            RustSourceFindingCategory::TestTraceMissing,
+        ]
+    );
+}
+
+#[test]
+#[trace("TC-189", "FR-014-AC-6")]
+fn tc_189_doc_finding_categories_have_stable_wire_names() {
+    let findings = audit_rust_source(
+        b"#[test] fn tc_922_missing() {}\n/// Trace: TODO-LATER\n#[test] fn tc_923_invalid() {}",
+        DOC_COMMENT_TESTS,
+    )
+    .expect("valid source");
+    let wire = serde_json::to_value(&findings).expect("findings serialize");
+    assert_eq!(
+        wire,
+        serde_json::json!([
+            {"category": "doc_trace_missing", "function": "tc_922_missing", "capability": null},
+            {"category": "doc_trace_id_invalid", "function": "tc_923_invalid", "capability": null},
+        ])
     );
 }
 

@@ -24,8 +24,24 @@ pub const MAX_RUST_SOURCE_BYTES: usize = 2_097_152;
 pub enum RustSourceAuditRole {
     /// Inspect reusable library code for prohibited host capabilities.
     ReusableLibrary,
-    /// Inspect first-party tests for canonical requirement traces.
-    RequirementTests,
+    /// Inspect first-party tests for requirement traces in the stated grammar.
+    RequirementTests {
+        /// The one trace convention this repository holds.
+        grammar: TraceGrammar,
+    },
+}
+
+/// Closed trace convention a requirement-test source is held to.
+///
+/// A source is audited against exactly one grammar, and only that grammar
+/// satisfies the audit. The other grammar's markers are not required and are
+/// not rejected: a test carrying both is judged by the stated grammar alone.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TraceGrammar {
+    /// The `ix_trace_rs` `#[trace("TC-...", "FR-...-AC-n")]` attribute macro.
+    Attribute,
+    /// A `/// Trace: FR-901, NFR-902` line in the outer doc comment above the test.
+    DocComment,
 }
 
 /// Host capability prohibited from reusable library source.
@@ -68,14 +84,24 @@ pub enum RustSourceFindingCategory {
     TraceTestCaseMissing,
     /// A test's trace attributes contain no acceptance-criterion identifier.
     TraceAcceptanceCriterionMissing,
+    /// A test's doc comment has no `Trace:` line.
+    DocTraceMissing,
+    /// A `Trace:` doc line lists no identifier or a malformed identifier.
+    DocTraceIdInvalid,
 }
 
 /// One deterministic finding from a single source document.
+///
+/// The fields are public, matching the serialized form; the accessors return
+/// the same values.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct RustSourceFinding {
-    category: RustSourceFindingCategory,
-    function: Option<Box<str>>,
-    capability: Option<RustSourceCapability>,
+    /// Closed finding category.
+    pub category: RustSourceFindingCategory,
+    /// Affected test or function name when one applies.
+    pub function: Option<Box<str>>,
+    /// Prohibited capability when one applies.
+    pub capability: Option<RustSourceCapability>,
 }
 
 impl RustSourceFinding {
@@ -173,7 +199,7 @@ pub fn audit_rust_source(
     let syntax = syn::parse_file(source).map_err(RustSourceAuditError::InvalidSyntax)?;
     let mut findings = match role {
         RustSourceAuditRole::ReusableLibrary => audit_library(&syntax),
-        RustSourceAuditRole::RequirementTests => audit_tests(&syntax),
+        RustSourceAuditRole::RequirementTests { grammar } => audit_tests(&syntax, grammar),
     };
     findings.sort_by(|left, right| {
         left.function
@@ -551,33 +577,43 @@ fn allowed_package_metadata(value: &Macro) -> bool {
     )
 }
 
-fn audit_tests(syntax: &File) -> Vec<RustSourceFinding> {
+fn audit_tests(syntax: &File, grammar: TraceGrammar) -> Vec<RustSourceFinding> {
+    let mut visitor = TestVisitor {
+        grammar,
+        findings: Vec::new(),
+        test_count: 0,
+    };
+    visitor.visit_file(syntax);
+    if grammar == TraceGrammar::Attribute && visitor.test_count > 0 {
+        visitor.findings.extend(attribute_import_findings(syntax));
+    }
+    visitor.findings
+}
+
+/// Import-shape findings; they describe the `ix_trace_rs` attribute only.
+fn attribute_import_findings(syntax: &File) -> Vec<RustSourceFinding> {
     let imports = collect_imports(syntax);
     let exact_import = imports.exact_trace_import;
     let aliased_import = imports
         .imports
         .iter()
         .any(|import| import.target == ["ix_trace_rs", "trace"] && import.renamed);
-    let mut visitor = TestVisitor {
-        findings: Vec::new(),
-        test_count: 0,
-    };
-    visitor.visit_file(syntax);
-    if visitor.test_count > 0 && !exact_import {
-        visitor.findings.push(RustSourceFinding::global(
+    let mut findings = Vec::new();
+    if !exact_import {
+        findings.push(RustSourceFinding::global(
             RustSourceFindingCategory::TraceImportMissing,
         ));
     }
-    if visitor.test_count > 0 && aliased_import {
-        visitor.findings.push(RustSourceFinding::global(
+    if aliased_import {
+        findings.push(RustSourceFinding::global(
             RustSourceFindingCategory::TraceImportAliased,
         ));
     }
-    visitor.findings
+    findings
 }
 
-#[derive(Default)]
 struct TestVisitor {
+    grammar: TraceGrammar,
     findings: Vec<RustSourceFinding>,
     test_count: usize,
 }
@@ -588,6 +624,36 @@ impl TestVisitor {
             return;
         }
         self.test_count = self.test_count.saturating_add(1);
+        match self.grammar {
+            TraceGrammar::Attribute => self.inspect_attribute_trace(name, attributes),
+            TraceGrammar::DocComment => self.inspect_doc_trace(name, attributes),
+        }
+    }
+
+    fn inspect_doc_trace(&mut self, name: &str, attributes: &[Attribute]) {
+        let mut found = false;
+        let mut invalid = false;
+        for line in attributes.iter().flat_map(doc_lines) {
+            let Some(list) = line.trim().strip_prefix("Trace:") else {
+                continue;
+            };
+            found = true;
+            invalid |= !doc_trace_ids_valid(list);
+        }
+        if !found {
+            self.findings.push(RustSourceFinding::for_function(
+                RustSourceFindingCategory::DocTraceMissing,
+                name,
+            ));
+        } else if invalid {
+            self.findings.push(RustSourceFinding::for_function(
+                RustSourceFindingCategory::DocTraceIdInvalid,
+                name,
+            ));
+        }
+    }
+
+    fn inspect_attribute_trace(&mut self, name: &str, attributes: &[Attribute]) {
         let mut bare_trace = false;
         let mut has_test_case = false;
         let mut has_acceptance = false;
@@ -696,4 +762,67 @@ fn is_acceptance_id(value: &str) -> bool {
             .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'-')
         && !number.is_empty()
         && number.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+/// Return the lines of one outer `#[doc = "..."]` attribute, which is how `///`
+/// and `/** */` comments reach the parsed syntax. A block comment arrives as one
+/// string, so it is split on newlines and a leading `*` gutter is stripped.
+/// Inner (`//!`) docs inside a body are not a trace carrier.
+fn doc_lines(attribute: &Attribute) -> Vec<String> {
+    if !matches!(attribute.style, syn::AttrStyle::Outer) {
+        return Vec::new();
+    }
+    let syn::Meta::NameValue(pair) = &attribute.meta else {
+        return Vec::new();
+    };
+    if !pair.path.is_ident("doc") {
+        return Vec::new();
+    }
+    match &pair.value {
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Str(text),
+            ..
+        }) => text
+            .value()
+            .lines()
+            .map(|line| {
+                let line = line.trim_start();
+                line.strip_prefix('*').unwrap_or(line).trim().to_owned()
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// A `Trace:` list is comma-separated, non-empty, and every entry is a
+/// requirement identifier.
+fn doc_trace_ids_valid(list: &str) -> bool {
+    list.split(',').all(|entry| is_requirement_id(entry.trim()))
+}
+
+/// Requirement families a `Trace:` line may name. A test-case id (`TC-n`) or a
+/// placeholder is not a requirement and does not satisfy the trace.
+const REQUIREMENT_FAMILIES: [&str; 6] = ["FR", "NFR", "StR", "US", "UC", "IT"];
+
+/// `<family>-<digits>` with an optional `-AC-<digits>` or `-CON-<digits>`.
+fn is_requirement_id(value: &str) -> bool {
+    let is_number = |part: &str| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit());
+    let Some((family, rest)) = value.split_once('-') else {
+        return false;
+    };
+    if !REQUIREMENT_FAMILIES.contains(&family) {
+        return false;
+    }
+    let mut parts = rest.split('-');
+    let Some(number) = parts.next() else {
+        return false;
+    };
+    if !is_number(number) {
+        return false;
+    }
+    match (parts.next(), parts.next(), parts.next()) {
+        (None, ..) => true,
+        (Some("AC" | "CON"), Some(suffix), None) => is_number(suffix),
+        _ => false,
+    }
 }
