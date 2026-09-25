@@ -39,7 +39,7 @@ fn exact_request() -> serde_json::Value {
             {"component": "quire-cli", "version": "0.33.0"},
             {"component": "quoin", "version": "0.24.1"},
             {"component": "ix-flow", "version": "0.2.3"},
-            {"component": "engineering-assurance", "version": "0.4.1"}
+            {"component": "engineering-assurance", "version": "0.5.0"}
         ]
     })
 }
@@ -47,18 +47,22 @@ fn exact_request() -> serde_json::Value {
 #[trace("TC-098", "FR-014-AC-2")]
 #[test]
 fn tc_098_machine_result_is_one_versioned_json_value() {
+    // TRIPWIRE: only the commit that records a human's acceptance may flip
+    // this test to exit 0 / accepted. Do not "fix" it from an agent.
+    // The shipped matrix is pending human acceptance, so an exactly pinned
+    // toolchain is compatible on versions and still withheld.
     let output = run(&exact_request());
-    assert_eq!(output.status.code(), Some(0));
+    assert_eq!(output.status.code(), Some(1));
     assert!(output.stderr.is_empty());
     assert_eq!(output.stdout.last(), Some(&b'\n'));
     assert!(!output.stdout[..output.stdout.len() - 1].contains(&b'\n'));
     let result: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("stdout must be one JSON value");
     assert_eq!(result["protocol"], RESULT_PROTOCOL);
-    assert_eq!(result["outcome"], "compatible");
+    assert_eq!(result["outcome"], "withheld");
     assert_eq!(result["versions_compatible"], true);
-    assert_eq!(result["human_acceptance_recorded"], true);
-    assert_eq!(result["gate_satisfied"], true);
+    assert_eq!(result["human_acceptance_recorded"], false);
+    assert_eq!(result["gate_satisfied"], false);
     assert_eq!(result["components"].as_array().map(Vec::len), Some(4));
 }
 

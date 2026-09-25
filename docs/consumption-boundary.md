@@ -5,6 +5,9 @@ pre-stabilization release: consumers may depend on it now, but its surface is
 expected to change in response to real consumer evidence. It is not a v1.0.0
 compatibility commitment.
 
+v0.5.0 is prepared in the source tree but not yet tagged; these instructions
+stay on `v0.4.1` until the tag exists.
+
 ## Pinning
 
 Use the immutable `v0.4.1` tag, never a branch name or a pull-request head.

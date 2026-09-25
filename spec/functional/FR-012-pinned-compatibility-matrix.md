@@ -63,6 +63,10 @@ acceptance of that matrix.
   the running binary's version, or when no module or readable manifest is found.
   The classifier does not own this comparison; every per-component verdict
   remains the classifier's.
+- The repository SHALL state one release version across the crate, the module
+  manifest, the matrix's `engineering-assurance` pin, the plugin manifests, and
+  `package.json`, so the installed-module comparison above cannot be withheld
+  by a version this repository itself left behind.
 - The Rust-owned CLI host adapter SHALL pass typed observations to the classifier
   without reimplementing matrix policy.
 - Publication of these versions SHALL leave every campaign repository's
@@ -98,6 +102,7 @@ are each refused with a `MatrixError`.
 | FR-012-AC-9 | Compatible versions and recorded human acceptance are independent gate conditions; a fully pinned toolchain does not satisfy the gate while acceptance is unrecorded, any state but `accepted` withholds, and an `accepted` state lacking a name or a date withholds as a half-record. | Test (TC-095) |
 | FR-012-AC-10 | The Rust observer keeps an unavailable, failed, timed-out, oversized, or unparseable declared tool observation as unknown; it invokes no undeclared tool; and it delegates every per-component verdict to the pure classifier. | Test (TC-130) |
 | FR-012-AC-11 | The Rust observer withholds the gate when the installed `engineering-assurance` module's manifest version is absent, unreadable, or differs from the running binary's version, even when the classifier alone would open it. | Test (TC-130) |
+| FR-012-AC-12 | The crate version, the module manifest version, the compatibility matrix's `engineering-assurance` pin, and the version in each plugin manifest and `package.json` are the same version. | Test (TC-191) |
 
 ## Dependencies
 

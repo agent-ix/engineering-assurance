@@ -1,11 +1,11 @@
 {
   "matrix_version": "engineering-assurance.compatibility-matrix/v1",
-  "purpose": "Candidate shared-assurance component pins and exact release artifacts for the v0.4.1 acceptance decision.",
+  "purpose": "Candidate shared-assurance component pins for the v0.5.0 acceptance decision. The recorded engineering-assurance schema digests describe the v0.4.1 release and are informational provenance.",
   "accepted": {
-    "state": "accepted",
-    "accepted_by": "Peter Krenesky",
-    "accepted_at": "2026-09-23",
-    "note": "Peter Krenesky, the named human, accepted the exact v0.4.1 candidate matrix on 2026-09-23 America/Los_Angeles after review of PR #131; the pre-decision candidate SHA-256 was 26fb2ea02d8a9bc3cb97d0e43914be00dbcc57eee927267cba6c3ab139a22cc3. An agent may prepare and transcribe the decision but may not accept it."
+    "state": "pending_human_acceptance",
+    "accepted_by": null,
+    "accepted_at": null,
+    "note": "Acceptance of the exact v0.5.0 candidate matrix is pending. A human must accept it; nobody has yet. An agent may prepare and transcribe the decision but may not accept it."
   },
   "gate": {
     "rule": "Every component must classify as compatible before an enforcing migration begins.",
@@ -62,9 +62,9 @@
     },
     {
       "name": "engineering-assurance",
-      "version": "0.4.1",
-      "released": true,
-      "release": "git tag v0.4.1 \u2014 pre-stabilization source distribution; npm publication is refused by design",
+      "version": "0.5.0",
+      "released": false,
+      "release": "git tag v0.5.0 (pending: the tag does not exist yet) \u2014 pre-stabilization source distribution; npm publication is refused by design",
       "provides": "Shared verification semantics, the PGM-01 read-only compatibility mapping, the accepted compatibility corpus gate, and the Rust compatibility classifier and ix-flow lifecycle host (FR-008..FR-012, FR-016-AC-3).",
       "observe": "engineering-assurance --version",
       "incompatible": [],
@@ -123,13 +123,13 @@
     "quoin": "Reinstall @agent-ix/quoin@0.23.1. Current-version change-assurance behavior is unavailable; retained records remain owned by Quoin.",
     "quire-cli": "Reinstall @agent-ix/quire-cli@0.31.0. The 0.33.0 export and engine behavior is then unavailable.",
     "ix-flow": "Reinstall @agent-ix/ix-flow@0.0.4. Existing run-state and event-chain files remain owned by ix-flow; the Rust adapter is additive and must be removed from invocation before the package downgrade.",
-    "engineering-assurance": "Check out the previous tag v0.4.0. The new schema contracts and current-toolchain matrix are then unavailable; retained external evidence and ix-flow state are unchanged.",
+    "engineering-assurance": "Check out the previous tag v0.4.1. The new schema contracts and current-toolchain matrix are then unavailable; retained external evidence and ix-flow state are unchanged.",
     "corpus": "Move the `corpus` gitlink to the earlier commit and re-run the FR-011 gate. The corpus is content-addressed, so an earlier pin is a complete, self-verifying set.",
     "irreversible": "None of the above. No pin here migrates data, rewrites evidence, or changes a stored schema."
   },
   "upgrade": {
-    "order": "Install quire-cli, then quoin, then ix-flow, then the v0.4.1 EA tag after acceptance. The historical corpus gitlink remains fixed and is verified independently.",
-    "verification": "After each tool upgrade, classify with `engineering-assurance compatibility-observe --root .`. It exits zero only after this matrix is accepted and the matching EA v0.4.1 tag is installed.",
+    "order": "Install quire-cli, then quoin, then ix-flow, then the v0.5.0 EA tag after acceptance and tagging. The historical corpus gitlink remains fixed and is verified independently.",
+    "verification": "After each tool upgrade, classify with `engineering-assurance compatibility-observe --root .`. It exits zero only after this matrix is accepted and the matching EA v0.5.0 tag is installed.",
     "what_does_not_change": "No campaign repository is touched by an upgrade of these components. Migrations are agent-ix/engineering-assurance#10 and begin only after this matrix is accepted."
   },
   "hosted_ci": "Publication does not enable automatic hosted CI in any campaign repository. Every workflow in this campaign remains manual-dispatch only.",
