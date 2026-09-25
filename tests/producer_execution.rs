@@ -1179,6 +1179,68 @@ fn tc_125_cancellation_reaps_group_and_escape_mutant_fails_containment() {
 }
 
 #[test]
+#[trace("TC-187", "FR-019-AC-13")]
+fn tc_187_producer_finds_its_own_path_sibling_and_reexecution_target() {
+    let root = tempfile::tempdir().expect("temporary root must be available");
+    let toolchain = tempfile::tempdir().expect("temporary toolchain must be available");
+    let producer = toolchain.path().join("producer");
+    fs::copy(fixture_executable(), &producer).expect("producer copy");
+    fs::copy(fixture_executable(), toolchain.path().join("sibling")).expect("sibling copy");
+    let producer = fs::canonicalize(producer).expect("producer path must be canonical");
+
+    let observe = |arguments: &[&str]| {
+        let mut request = request(root.path(), arguments);
+        request.producer.executable = producer.display().to_string();
+        request.producer.executable_digest =
+            ContentDigest::of_file(&producer).expect("producer must be hashable");
+        execute(&request, &adapter()).state
+    };
+
+    assert!(matches!(
+        observe(&["self-exe"]),
+        ProducerExecutionState::Completed { observation }
+            if observation == producer.display().to_string()
+    ));
+    assert!(matches!(
+        observe(&["argv0"]),
+        ProducerExecutionState::Completed { observation }
+            if observation == producer.display().to_string()
+    ));
+    assert!(matches!(
+        observe(&["reexec"]),
+        ProducerExecutionState::Completed { observation } if observation == "reexecuted"
+    ));
+    assert!(matches!(
+        observe(&["sibling", "sibling"]),
+        ProducerExecutionState::Completed { observation } if observation == "sibling-ran"
+    ));
+}
+
+#[test]
+#[trace("TC-187", "FR-019-AC-13")]
+fn tc_187_script_producer_sees_its_pinned_path_as_dollar_zero() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = tempfile::tempdir().expect("temporary root must be available");
+    let toolchain = tempfile::tempdir().expect("temporary toolchain must be available");
+    let script = toolchain.path().join("producer.sh");
+    fs::write(&script, "#!/bin/sh\nprintf '%s' \"$0\"\n").expect("script write");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("script mode");
+    let script = fs::canonicalize(script).expect("script path must be canonical");
+
+    let mut request = request(root.path(), &[]);
+    request.producer.executable = script.display().to_string();
+    request.producer.executable_digest =
+        ContentDigest::of_file(&script).expect("script must be hashable");
+
+    assert!(matches!(
+        execute(&request, &adapter()).state,
+        ProducerExecutionState::Completed { observation }
+            if observation == script.display().to_string()
+    ));
+}
+
+#[test]
 #[trace("TC-128", "FR-019-AC-7")]
 fn tc_128_minimal_downstream_compiles_only_producer_execution_feature() {
     let consumer = tempfile::tempdir().expect("consumer root");

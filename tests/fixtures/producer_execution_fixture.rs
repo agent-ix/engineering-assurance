@@ -144,6 +144,48 @@ fn escape_child(arguments: &mut impl Iterator<Item = OsString>) {
     thread::sleep(Duration::from_secs(10));
 }
 
+fn own_path() -> std::path::PathBuf {
+    env::current_exe().unwrap_or_else(|_| fail("cannot resolve current executable"))
+}
+
+fn self_exe() {
+    write_stdout(own_path().as_os_str().as_encoded_bytes());
+}
+
+fn argv0() {
+    let argv0 = env::args_os()
+        .next()
+        .unwrap_or_else(|| fail("missing argv[0]"));
+    write_stdout(argv0.as_encoded_bytes());
+}
+
+fn reexec() {
+    let output = Command::new(own_path())
+        .args(["emit", "reexecuted"])
+        .output()
+        .unwrap_or_else(|_| fail("cannot re-execute current executable"));
+    if !output.status.success() {
+        fail("re-executed fixture failed");
+    }
+    write_stdout(&output.stdout);
+}
+
+fn sibling(arguments: &mut impl Iterator<Item = OsString>) {
+    let name = argument(arguments);
+    let path = own_path();
+    let directory = path
+        .parent()
+        .unwrap_or_else(|| fail("current executable has no directory"));
+    let output = Command::new(directory.join(name))
+        .args(["emit", "sibling-ran"])
+        .output()
+        .unwrap_or_else(|_| fail("cannot run sibling executable"));
+    if !output.status.success() {
+        fail("sibling fixture failed");
+    }
+    write_stdout(&output.stdout);
+}
+
 fn main() {
     let mut arguments = env::args_os().skip(1);
     match text(argument(&mut arguments)).as_str() {
@@ -166,6 +208,10 @@ fn main() {
         "spawn-child" => spawn_child(&mut arguments),
         "escape" => escape(&mut arguments),
         "escape-child" => escape_child(&mut arguments),
+        "self-exe" => self_exe(),
+        "argv0" => argv0(),
+        "reexec" => reexec(),
+        "sibling" => sibling(&mut arguments),
         _ => fail("unknown fixture mode"),
     }
 }
