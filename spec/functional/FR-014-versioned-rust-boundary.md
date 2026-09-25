@@ -63,9 +63,16 @@ the `engineering-assurance` native CLI.
 - The reusable-library audit SHALL admit only the exact Cargo package-name and
   package-version `env!` expressions already used as compile-time package
   metadata; it SHALL reject other environment macros and output macros.
-- For a caller-designated first-party Rust test source, the audit SHALL require
-  every test function to have at least one bare `#[trace(...)]` attribute, an
-  exact unaliased `use ix_trace_rs::trace` import in the parsed file, at least
+- The caller SHALL state one trace grammar, `Attribute` or `DocComment`, with
+  a first-party Rust test source, and the audit SHALL hold the source to that
+  grammar alone. The import-shape and attribute findings apply to `Attribute`
+  only.
+- For the `DocComment` grammar, the audit SHALL require every test function to
+  carry a `/// Trace: <ID>[, <ID>...]` doc line and SHALL report a typed
+  finding for an absent line and for an empty or malformed identifier list.
+- For a caller-designated first-party Rust test source under the `Attribute`
+  grammar, the audit SHALL require every test function to have at least one
+  bare `#[trace(...)]` attribute, an exact unaliased `use ix_trace_rs::trace` import in the parsed file, at least
   one `TC-XXX` literal, and at least one `*-AC-N` literal.
 - The source audit SHALL reject path-qualified trace attributes, aliased trace
   imports, malformed trace arguments, invalid UTF-8, invalid Rust syntax, and
@@ -82,7 +89,8 @@ required host, and a structurally invalid host response each return a
 distinguishable non-success result and are never reported as successful.
 Invalid or oversized Rust source refuses source auditing. A forbidden library
 capability, absent or non-canonical trace import, path-qualified or malformed
-trace attribute, or missing test/acceptance identifier produces a typed
+trace attribute, missing test/acceptance identifier, or absent or malformed
+`Trace:` doc line produces a typed
 containment finding and cannot satisfy the corresponding static gate.
 
 ## Constraints
@@ -102,6 +110,7 @@ containment finding and cannot satisfy the corresponding static gate.
 | FR-014-AC-3 | Unknown versions, malformed inputs, escaping roots, unavailable hosts, and invalid host responses fail before a write or downstream action. | Test (TC-099) |
 | FR-014-AC-4 | An AST-based audit of every reusable-library module except the dedicated FR-019 producer-execution module finds no filesystem, environment, child-program, network, persistence, or arbitrary-stdout recovery capability named directly or through a lexical alias in that source; the dedicated module is separately checked against FR-019, comments and literals cannot manufacture a finding, and the audit does not claim cross-document compiler name resolution. | Test (TC-101, TC-127) |
 | FR-014-AC-5 | A minimal consumer compiles the existing crate with default features disabled, only `source-audit` enabled, and reaches the Rust source audit; that consumer activates no `serde_json` dependency at all, so it cannot inherit a `serde_json/arbitrary_precision` feature flip from elsewhere in a downstream workspace; the default `full` feature continues to expose the source audit unchanged. | Test (TC-138) |
+| FR-014-AC-6 | The source audit's requirement-test role takes an explicit `Attribute` or `DocComment` trace grammar. Under `DocComment`, a test carrying `/// Trace:` with well-formed comma-separated identifiers yields no finding, and an absent line, an empty list, or a malformed entry each yields a typed finding; import-shape findings are never reported. Under `Attribute`, a doc-comment trace does not satisfy the gate, and a `#[trace(...)]` source is not accepted under `DocComment`. | Analysis (TC-188) |
 
 ## Dependencies
 
