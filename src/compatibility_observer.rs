@@ -135,13 +135,19 @@ fn observe_with(
         installed: module_version,
         cli: CLI_VERSION,
     };
-    let gate_satisfied = classification.gate_satisfied && module.matches_cli;
+    let gate_satisfied = gate_opens(&classification, &module);
     Ok(CompatibilityObservationResult {
         protocol: OBSERVATION_PROTOCOL,
         classification,
         module,
         gate_satisfied,
     })
+}
+
+/// The gate opens only when the classifier opened it and the installed module
+/// matches this binary (FR-012-AC-11).
+fn gate_opens(classification: &CompatibilityResult, module: &ModuleObservation) -> bool {
+    classification.gate_satisfied && module.matches_cli
 }
 
 pub(crate) fn to_json_line(
@@ -346,8 +352,13 @@ mod tests {
             Some(env!("CARGO_PKG_VERSION").to_owned()),
         )
         .expect("fully pinned fixture observation must classify");
+        // Every version is exactly pinned and the module matches the binary, so
+        // the only thing withholding the gate is the shipped matrix's pending
+        // acceptance, which is the classifier's fact and not the observer's.
         assert!(result.classification.versions_compatible);
-        assert!(result.gate_satisfied);
+        assert!(result.module.matches_cli);
+        assert!(!result.classification.human_acceptance_recorded);
+        assert!(!result.gate_satisfied);
     }
 
     #[test]
@@ -378,18 +389,37 @@ mod tests {
     #[trace("TC-130", "FR-012-AC-11", "FR-014-AC-2")]
     fn a_module_that_disagrees_with_the_binary_withholds_an_otherwise_open_gate() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-        // Every external tool is pinned, so the classifier alone opens the gate.
+        let observed = observe_with(root, &fixture_runner(), None)
+            .expect("fully pinned fixture observation must classify");
+        // The shipped matrix is pending, so the classifier withholds on its own.
+        // Open it by hand on a copy: the observer's added condition is what is
+        // under test, and it needs an otherwise-open gate to be able to fail.
+        let mut classification = observed.classification;
+        assert!(classification.versions_compatible);
+        classification.human_acceptance_recorded = true;
+        classification.gate_satisfied = true;
+
         for module in [Some("0.3.1".to_owned()), None] {
-            let result = observe_with(root, &fixture_runner(), module.clone())
-                .expect("fully pinned fixture observation must classify");
+            let observation = ModuleObservation {
+                matches_cli: module.as_deref() == Some(CLI_VERSION),
+                installed: module.clone(),
+                cli: CLI_VERSION,
+            };
+            assert!(!observation.matches_cli, "{module:?} matched the binary");
             assert!(
-                result.classification.gate_satisfied,
-                "the classifier no longer opens the gate, so this test proves nothing"
+                !gate_opens(&classification, &observation),
+                "{module:?} opened the gate"
             );
-            assert!(!result.module.matches_cli, "{module:?} matched the binary");
-            assert!(!result.gate_satisfied, "{module:?} opened the gate");
-            assert_eq!(result.module.installed, module);
         }
+        let matching = ModuleObservation {
+            matches_cli: true,
+            installed: Some(CLI_VERSION.to_owned()),
+            cli: CLI_VERSION,
+        };
+        assert!(
+            gate_opens(&classification, &matching),
+            "a matching module no longer opens an otherwise-open gate"
+        );
     }
 
     #[test]

@@ -302,11 +302,14 @@ pub fn expected_component_version(name: &str) -> Result<String, CompatibilityErr
 
 impl Matrix {
     fn parse() -> Result<Self, CompatibilityError> {
-        let matrix: Self = serde_json::from_slice(MATRIX_BYTES).map_err(|error| {
-            CompatibilityError::InvalidMatrix {
+        Self::parse_bytes(MATRIX_BYTES)
+    }
+
+    fn parse_bytes(bytes: &[u8]) -> Result<Self, CompatibilityError> {
+        let matrix: Self =
+            serde_json::from_slice(bytes).map_err(|error| CompatibilityError::InvalidMatrix {
                 detail: error.to_string(),
-            }
-        })?;
+            })?;
         matrix.validate()?;
         Ok(matrix)
     }
@@ -457,6 +460,17 @@ fn acceptance_recorded_in(matrix_bytes: &[u8]) -> Result<bool, CompatibilityErro
 /// Returns a stable [`CompatibilityError`] for syntax, protocol, observation,
 /// or embedded-matrix failures.
 pub fn evaluate_request_bytes(input: &[u8]) -> Result<CompatibilityResult, CompatibilityError> {
+    evaluate_against(MATRIX_BYTES, input)
+}
+
+/// Evaluate one request against explicit matrix bytes.
+///
+/// Production always passes the embedded matrix; tests pass a mutated copy so
+/// the gate can be exercised in states the real matrix is not in.
+fn evaluate_against(
+    matrix_bytes: &[u8],
+    input: &[u8],
+) -> Result<CompatibilityResult, CompatibilityError> {
     let request: CompatibilityRequest =
         serde_json::from_slice(input).map_err(|error| CompatibilityError::InvalidRequest {
             detail: error.to_string(),
@@ -467,7 +481,7 @@ pub fn evaluate_request_bytes(input: &[u8]) -> Result<CompatibilityResult, Compa
         });
     }
 
-    let matrix = Matrix::parse()?;
+    let matrix = Matrix::parse_bytes(matrix_bytes)?;
     let known: BTreeSet<&str> = matrix
         .components
         .iter()
@@ -618,6 +632,39 @@ mod tests {
         error.to_string()
     }
 
+    /// The embedded matrix as it will read once the pending self pin is tagged:
+    /// the validator refuses an accepted matrix that pins an unreleased artifact.
+    fn released_matrix_value() -> serde_json::Value {
+        let mut matrix = matrix_value();
+        let own = matrix["components"]
+            .as_array_mut()
+            .expect("components must be an array")
+            .iter_mut()
+            .find(|component| component["name"] == "engineering-assurance")
+            .expect("the matrix must pin engineering-assurance");
+        own["released"] = serde_json::json!(true);
+        matrix
+    }
+
+    /// The embedded matrix with a fictional accepted record in place of the
+    /// real (pending) one, so gate-opening behaviour can be exercised without
+    /// editing the shipped matrix to claim a decision nobody made.
+    fn accepted_matrix_bytes() -> Vec<u8> {
+        let mut matrix = released_matrix_value();
+        matrix["accepted"] = serde_json::json!({
+            "state": "accepted",
+            "accepted_by": "Fictional Owner",
+            "accepted_at": "2026-09-10",
+            "note": "Accepted by a named human for this fixture.",
+        });
+        serde_json::to_vec(&matrix).expect("the mutated matrix must serialize")
+    }
+
+    /// Evaluate a request against the fixture-accepted matrix.
+    fn evaluate_accepted(input: &[u8]) -> Result<CompatibilityResult, CompatibilityError> {
+        evaluate_against(&accepted_matrix_bytes(), input)
+    }
+
     fn request(observed: &[(&str, Option<&str>)]) -> Vec<u8> {
         let observed = observed
             .iter()
@@ -637,7 +684,7 @@ mod tests {
             ("quire-cli", Some("0.33.0")),
             ("quoin", Some("0.24.1")),
             ("ix-flow", Some("0.2.3")),
-            ("engineering-assurance", Some("0.4.1")),
+            ("engineering-assurance", Some("0.5.0")),
         ]
     }
 
@@ -648,7 +695,7 @@ mod tests {
         cases[1].1 = Some("0.22.5");
         cases[2].1 = Some("99.0.0");
         cases[3].1 = None;
-        let result = evaluate_request_bytes(&request(&cases)).expect("request must evaluate");
+        let result = evaluate_accepted(&request(&cases)).expect("request must evaluate");
         assert_eq!(result.outcome, CompatibilityOutcome::Withheld);
         assert_eq!(
             result
@@ -669,7 +716,7 @@ mod tests {
         for observed in ["0.1.0", "99.0.0-rc.1", "banana", "1.2"] {
             let mut cases = exact_observations();
             cases[2].1 = Some(observed);
-            let result = evaluate_request_bytes(&request(&cases)).expect("request must evaluate");
+            let result = evaluate_accepted(&request(&cases)).expect("request must evaluate");
             assert_eq!(
                 result.components[2].verdict,
                 CompatibilityVerdict::Unknown,
@@ -684,8 +731,8 @@ mod tests {
         // reaches the classification rather than sitting unread in the file.
         let mut tagged_never_published = exact_observations();
         tagged_never_published[1].1 = Some("0.23.0");
-        let result = evaluate_request_bytes(&request(&tagged_never_published))
-            .expect("request must evaluate");
+        let result =
+            evaluate_accepted(&request(&tagged_never_published)).expect("request must evaluate");
         let quoin = result
             .components
             .iter()
@@ -713,7 +760,7 @@ mod tests {
         // the only thing standing between this request and an open gate.
         let mut cases = exact_observations();
         cases[2].1 = Some("99.0.0");
-        let result = evaluate_request_bytes(&request(&cases)).expect("request must evaluate");
+        let result = evaluate_accepted(&request(&cases)).expect("request must evaluate");
         let verdicts = result
             .components
             .iter()
@@ -732,7 +779,7 @@ mod tests {
     #[trace("TC-081", "FR-012-AC-3")]
     #[test]
     fn tc_081_requires_every_pinned_component() {
-        let exact = evaluate_request_bytes(&request(&exact_observations()))
+        let exact = evaluate_accepted(&request(&exact_observations()))
             .expect("exact request must evaluate");
         assert!(exact.versions_compatible);
         assert_eq!(exact.outcome, CompatibilityOutcome::Compatible);
@@ -745,7 +792,7 @@ mod tests {
             let mut partial = exact_observations();
             partial[index].1 = None;
             let missing =
-                evaluate_request_bytes(&request(&partial)).expect("partial request must evaluate");
+                evaluate_accepted(&request(&partial)).expect("partial request must evaluate");
             assert!(
                 !missing.versions_compatible,
                 "{} was allowed to go unobserved",
@@ -863,10 +910,23 @@ mod tests {
     #[test]
     fn tc_082_reports_attributed_acceptance_separately() {
         let result =
-            evaluate_request_bytes(&request(&exact_observations())).expect("request must evaluate");
+            evaluate_accepted(&request(&exact_observations())).expect("request must evaluate");
         assert!(result.versions_compatible);
         assert!(result.human_acceptance_recorded);
         assert!(result.gate_satisfied);
+
+        // The shipped matrix is pending: a fully pinned toolchain must not open
+        // it, and the pending record must carry no attribution.
+        let shipped =
+            evaluate_request_bytes(&request(&exact_observations())).expect("request must evaluate");
+        assert!(shipped.versions_compatible);
+        assert!(!shipped.human_acceptance_recorded);
+        assert!(!shipped.gate_satisfied);
+        assert_eq!(shipped.outcome, CompatibilityOutcome::Withheld);
+        assert_eq!(
+            matrix_value()["accepted"]["state"],
+            "pending_human_acceptance"
+        );
 
         assert_acceptance_is_honest(&matrix_value()["accepted"]);
 
@@ -931,7 +991,8 @@ mod tests {
             "a component with no release was not refused"
         );
 
-        let mut premature_acceptance = matrix_value();
+        let mut premature_acceptance: serde_json::Value =
+            serde_json::from_slice(&accepted_matrix_bytes()).expect("fixture matrix must be JSON");
         premature_acceptance["components"][3]["released"] = serde_json::json!(false);
         assert!(
             refusal_detail(&premature_acceptance).contains("not released"),
@@ -1072,8 +1133,7 @@ mod tests {
     #[test]
     fn tc_095_a_pinned_toolchain_does_not_open_an_unaccepted_gate() {
         let with_acceptance = |acceptance: serde_json::Value| -> Vec<u8> {
-            let mut matrix: serde_json::Value =
-                serde_json::from_slice(MATRIX_BYTES).expect("the embedded matrix must be JSON");
+            let mut matrix = released_matrix_value();
             matrix["accepted"] = acceptance;
             serde_json::to_vec(&matrix).expect("the mutated matrix must serialize")
         };
