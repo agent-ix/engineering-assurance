@@ -620,6 +620,105 @@ fn tc_122_completed_result_retains_canonical_identity_evidence_and_output_snapsh
     assert_eq!(retained, b"accepted");
 }
 
+fn declared_output_request(
+    root: &Path,
+    arguments: &[&str],
+    required: bool,
+) -> ProducerExecutionRequest {
+    let mut request = request(root, arguments);
+    request.outputs.push(OutputBinding {
+        role: "report".to_owned(),
+        path: "report.json".to_owned(),
+        required,
+    });
+    request.budget.max_output_artifacts = 1;
+    request.budget.max_output_bytes = 1024;
+    request
+}
+
+#[test]
+#[trace("TC-122", "FR-019-AC-1")]
+fn tc_122_stale_declared_output_is_removed_and_not_observed() {
+    let root = tempfile::tempdir().expect("temporary root");
+    fs::write(root.path().join("report.json"), b"stale").expect("stale output");
+    let request = declared_output_request(root.path(), &["emit", "no-write"], true);
+    let result = execute(&request, &adapter());
+    assert!(matches!(
+        result.state,
+        ProducerExecutionState::Failed {
+            reason: ExecutionFailure::OutputArtifact
+        }
+    ));
+    assert!(result.artifacts.is_empty());
+    assert!(!root.path().join("report.json").exists());
+}
+
+#[test]
+#[trace("TC-122", "FR-019-AC-1")]
+fn tc_122_declared_output_written_by_producer_is_observed_with_its_bytes() {
+    let root = tempfile::tempdir().expect("temporary root");
+    fs::write(root.path().join("report.json"), b"stale").expect("stale output");
+    let request = declared_output_request(root.path(), &["touch", "report.json"], true);
+    let result = execute(&request, &adapter());
+    assert!(matches!(
+        result.state,
+        ProducerExecutionState::Completed { .. }
+    ));
+    assert_eq!(result.artifacts.len(), 1);
+    assert_eq!(result.artifacts[0].path, "report.json");
+    assert_eq!(
+        result.artifacts[0].digest,
+        ContentDigest::of_bytes(b"launched")
+    );
+    let mut retained = Vec::new();
+    result.artifacts[0]
+        .try_reader()
+        .expect("retained reader")
+        .read_to_end(&mut retained)
+        .expect("retained bytes");
+    assert_eq!(retained, b"launched");
+}
+
+#[test]
+#[trace("TC-122", "FR-019-AC-1")]
+fn tc_122_symlink_at_declared_output_is_removed_and_target_untouched() {
+    let root = tempfile::tempdir().expect("temporary root");
+    fs::write(root.path().join("target.txt"), b"keep").expect("link target");
+    std::os::unix::fs::symlink("target.txt", root.path().join("report.json"))
+        .expect("declared output link");
+    let request = declared_output_request(root.path(), &["emit", "no-write"], false);
+    let result = execute(&request, &adapter());
+    assert!(matches!(
+        result.state,
+        ProducerExecutionState::Completed { .. }
+    ));
+    assert!(result.artifacts.is_empty());
+    assert!(
+        fs::symlink_metadata(root.path().join("report.json")).is_err(),
+        "the link itself is removed"
+    );
+    assert_eq!(
+        fs::read(root.path().join("target.txt")).expect("link target"),
+        b"keep"
+    );
+}
+
+#[test]
+#[trace("TC-122", "FR-019-AC-1")]
+fn tc_122_directory_at_declared_output_refuses_before_launch() {
+    let root = tempfile::tempdir().expect("temporary root");
+    fs::create_dir(root.path().join("report.json")).expect("directory at output path");
+    let request = declared_output_request(root.path(), &["touch", "launched.marker"], false);
+    let result = execute(&request, &adapter());
+    assert!(matches!(
+        result.state,
+        ProducerExecutionState::Refused {
+            reason: ExecutionRefusal::Output
+        }
+    ));
+    assert!(!root.path().join("launched.marker").exists());
+}
+
 fn assert_result_metadata_identity(result: &ProducerExecutionResult<String>) {
     assert_result_identity_changes(result, |value| value.protocol = "other");
     assert_result_identity_changes(result, |value| value.request_identity.scheme = "other");

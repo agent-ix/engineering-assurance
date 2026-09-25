@@ -102,7 +102,10 @@ unique within their respective request collections.
   every tracked Git symlink at preflight. The resolver reads its target bytes
   without following the link and verifies the link's Git blob OID. It then
   records the path and digest as omitted link metadata.
-- The producer creates its own declared output parents and trees, and
+- Before launch the executor removes any existing file at each declared fixed
+  output path beneath the capability root, without following links, so each
+  declared fixed output is absent when the producer starts.
+  The producer creates its own declared output parents and trees, and
   overwriting an existing file is permitted. Concurrent requests over the same
   capability root share that directory, so one run's declared outputs can be
   overwritten by another. The executor SHALL enforce output-artifact count and
