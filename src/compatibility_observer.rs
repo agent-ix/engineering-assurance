@@ -27,6 +27,15 @@ const OBSERVATION_PROTOCOL: &str = "engineering-assurance.compatibility-observat
 const OBSERVATION_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_OBSERVATION_OUTPUT_BYTES: usize = 64 * 1024;
 
+/// The running binary's own version.
+///
+/// The `engineering-assurance` row observes this rather than `--root`'s git
+/// tag: a consumer who installed the CLI from a tag and runs it in their own
+/// project would otherwise get either no observation (untagged project) or
+/// their project's tag reported as this tool's version. A pass therefore
+/// describes the installed executable, not the checkout `--root` points at.
+const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// Machine result for one environment observation and pure classification.
 #[derive(Debug, Serialize)]
 pub(crate) struct CompatibilityObservationResult {
@@ -104,7 +113,7 @@ fn observe_with(
         },
         ComponentObservation {
             component: "engineering-assurance".to_owned(),
-            version: observe_self(),
+            version: Some(CLI_VERSION.to_owned()),
         },
     ];
     let input = serde_json::to_vec(&CompatibilityRequest {
@@ -113,11 +122,10 @@ fn observe_with(
     })
     .map_err(CompatibilityObservationError::ResultSerialization)?;
     let classification = evaluate_request_bytes(&input)?;
-    let cli = env!("CARGO_PKG_VERSION");
     let module = ModuleObservation {
-        matches_cli: module_version.as_deref() == Some(cli),
+        matches_cli: module_version.as_deref() == Some(CLI_VERSION),
         installed: module_version,
-        cli,
+        cli: CLI_VERSION,
     };
     let gate_satisfied = classification.gate_satisfied && module.matches_cli;
     Ok(CompatibilityObservationResult {
@@ -161,17 +169,6 @@ fn observe_semver(runner: &dyn ToolRunner, command: &str, arguments: &[&str]) ->
         .get(1)?
         .as_str();
     Some(version.to_owned())
-}
-
-/// The running binary's own version.
-///
-/// Read from the binary rather than from `--root`'s git tag: a consumer who
-/// installed the CLI from a tag and runs it in their own project would
-/// otherwise get either no observation (untagged project) or their project's
-/// tag reported as this tool's version. A pass therefore describes the
-/// executable that is installed, not the checkout `--root` points at.
-fn observe_self() -> Option<String> {
-    Some(env!("CARGO_PKG_VERSION").to_owned())
 }
 
 /// Where Quoin installs modules: `IX_CONFIG_ROOT`, else `~/.ix`.

@@ -1043,12 +1043,18 @@ fn tc_147_schema_estimator_comparator_and_baseline_enums_equal_the_rust_wire_nam
         |estimator| estimator.wire_name(),
     );
     assert_wire_parity(
-        &schema_enum(&schema, "/definitions/decision_rule/properties/comparator/enum"),
+        &schema_enum(
+            &schema,
+            "/definitions/decision_rule/properties/comparator/enum",
+        ),
         &Comparator::ALL,
         |comparator| comparator.wire_name(),
     );
     assert_wire_parity(
-        &schema_enum(&schema, "/definitions/decision_rule/properties/baseline/enum"),
+        &schema_enum(
+            &schema,
+            "/definitions/decision_rule/properties/baseline/enum",
+        ),
         &Baseline::ALL,
         |baseline| baseline.wire_name(),
     );
@@ -1339,7 +1345,8 @@ fn expected_refusal(case: &ApparatusCase) -> ApparatusPathError {
 fn tc_156_apparatus_path_accepts_and_refuses_the_shared_case_table() {
     let schema = measurement_plan_schema();
     assert_eq!(
-        schema["properties"]["protected_apparatus"]["items"]["$ref"], "#/definitions/apparatus_path",
+        schema["properties"]["protected_apparatus"]["items"]["$ref"],
+        "#/definitions/apparatus_path",
         "protected_apparatus items must resolve to the pattern this test reads"
     );
     let pattern = |pointer: &str| {
@@ -1476,7 +1483,10 @@ fn tc_157_negative_controls_are_closed_non_empty_and_distinct() {
         "#/definitions/negative_control"
     );
     assert_wire_parity(
-        &schema_enum(&schema, "/definitions/negative_control/properties/kind/enum"),
+        &schema_enum(
+            &schema,
+            "/definitions/negative_control/properties/kind/enum",
+        ),
         &NegativeControlKind::ALL,
         |kind| kind.wire_name(),
     );
