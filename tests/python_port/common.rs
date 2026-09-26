@@ -44,22 +44,6 @@ pub fn merged(mut base: serde_json::Value, over: serde_json::Value) -> serde_jso
     base
 }
 
-/// Every regular file under `dir`, recursively.
-pub fn walk_files(dir: &Path) -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    for entry in
-        std::fs::read_dir(dir).unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()))
-    {
-        let path = entry.expect("dir entry").path();
-        if path.is_dir() {
-            out.extend(walk_files(&path));
-        } else {
-            out.push(path);
-        }
-    }
-    out
-}
-
 /// Files directly in `dir` with the given extension, sorted.
 pub fn glob_ext(dir: &Path, ext: &str) -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = std::fs::read_dir(dir)
@@ -80,6 +64,20 @@ pub fn schema_errors(
         .iter_errors(instance)
         .map(|e| e.to_string())
         .collect()
+}
+
+/// Python truthiness of a JSON value, as the retired suite's bare `assert x`
+/// judged it: `null`, `false`, `0`, `""`, `[]` and `{}` are falsy.
+pub fn truthy(value: &serde_json::Value) -> bool {
+    use serde_json::Value;
+    match value {
+        Value::Null => false,
+        Value::Bool(flag) => *flag,
+        Value::Number(number) => number.as_f64().is_some_and(|n| n.abs() > 0.0),
+        Value::String(text) => !text.is_empty(),
+        Value::Array(items) => !items.is_empty(),
+        Value::Object(members) => !members.is_empty(),
+    }
 }
 
 /// The message jsonschema gives when `name` is missing from an object.

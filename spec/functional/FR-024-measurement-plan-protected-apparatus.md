@@ -29,7 +29,10 @@ credit toward the plan's objective.
     directory entries;
   - `negative_controls`: a list of `{ kind, description }` entries, where
     `kind` is exactly one of `suppressed-observation`, `gain-within-noise`,
-    `stale-evidence`, `apparatus-edit`, or `selective-reporting`.
+    `stale-evidence`, `apparatus-edit`, or `selective-reporting`;
+  - `ground_truth_kind`: one of `human-labelled`, `agent-labelled`, or
+    `mechanical`;
+  - `preregistration`: `{ bar_digest }`, a `sha256:` digest.
 - For the definition-change check: the plan's frontmatter before and after an
   edit, as in [FR-020](./FR-020-measurement-plan-objective.md).
 
@@ -144,15 +147,23 @@ credit toward the plan's objective.
   one safe repository-relative JSON file path. When present, the plan SHALL
   declare `protected_apparatus`; Quoin SHALL verify that the exact procedure
   path is protected and bind its source bytes before execution.
+- The schema SHALL admit `ground_truth_kind` only as `human-labelled`,
+  `agent-labelled`, or `mechanical` at any stage, and SHALL require it for a
+  gate-stage plan that is not retired.
+- An optional `preregistration` SHALL carry exactly one member, `bar_digest`,
+  a `sha256:` digest of 64 lowercase hexadecimal digits. Quoin's measurement
+  intake computes and compares that digest; this repository checks only its
+  shape.
 
 ## Error Conditions
 
 An unsafe or malformed entry, an empty or repeated `protected_apparatus` list,
 an unknown control kind, a control with a missing or empty description or an
 extra key, an empty or repeated `negative_controls` list, a gate-stage plan
-without `negative_controls` or `protected_apparatus`, and a plan with an
-`apparatus-edit` control but no `protected_apparatus` fail validation or
-construction. An edit to
+without `negative_controls`, `protected_apparatus`, or `ground_truth_kind`,
+an unknown `ground_truth_kind`, a malformed or extended `preregistration`, and
+a plan with an `apparatus-edit` control but no `protected_apparatus` fail
+validation or construction. An edit to
 the protected list without a `definition_version` change produces a finding
 rather than being accepted silently.
 
@@ -170,6 +181,8 @@ rather than being accepted silently.
 | FR-024-AC-8 | The schema refuses a non-retired gate-stage plan without `protected_apparatus`, and a plan at any stage with an `apparatus-edit` negative control but no `protected_apparatus`; it accepts both with a protected list, and a below-gate plan whose controls are of other kinds without one. | Test (TC-155) |
 | FR-024-AC-9 | A retired gate-stage plan under the v0.2.1 prose contract remains valid without fields added later for new gate plans; the same omission is refused for a proposed or active gate-stage plan, and a retired current-shape plan remains valid. | Test (TC-172) |
 | FR-024-AC-10 | The 0.5.0 candidate schema accepts an absent `execution_procedure` and safe repository-relative JSON file paths with `protected_apparatus` declared; it refuses absolute, traversing, malformed, wildcard, non-JSON, and non-string paths, and refuses a procedure path without `protected_apparatus`. Exact protected-path membership and source-byte binding remain Quoin obligations. | Test (TC-185) |
+| FR-024-AC-11 | The schema accepts each of `human-labelled`, `agent-labelled`, and `mechanical` at gate and below gate, requires `ground_truth_kind` at gate with no other finding, leaves it optional below gate, and refuses any other value, including a case variant and an empty string, at every stage. | Test (TC-203) |
+| FR-024-AC-12 | The schema accepts a plan without `preregistration` and one whose `preregistration` is exactly `{ bar_digest }` with a `sha256:` digest of 64 lowercase hexadecimal digits; it refuses an empty object, a bare, uppercase, short, long, or other-algorithm digest, a non-string digest, an extra member, and a non-object value. | Test (TC-204) |
 
 ## Dependencies
 

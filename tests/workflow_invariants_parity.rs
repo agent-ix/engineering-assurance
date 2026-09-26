@@ -773,3 +773,258 @@ fn tc_162_malformed_checker_and_policy_items_are_refused_before_outcomes() {
         "a non-object checker item must be refused"
     );
 }
+
+/// The single outcome of `invariant` over `projection`, after asserting the
+/// retained JavaScript provider produces the same bytes.
+fn sole_outcome(projection: &Value, invariant: &str) -> Value {
+    let request = request(projection, &[invariant]);
+    let rust = evaluate_request_bytes(
+        &serde_json::to_vec(&request).expect("request fixture must serialize"),
+    )
+    .unwrap_or_else(|error| panic!("{invariant}: Rust must accept the request: {error}"));
+    assert_parity(&request);
+    let outcomes = serde_json::to_value(&rust.outcomes).expect("outcomes must serialize");
+    let [outcome] = outcomes
+        .as_array()
+        .expect("outcomes must be an array")
+        .as_slice()
+    else {
+        panic!("{invariant}: exactly one outcome expected, got {outcomes}");
+    };
+    outcome.clone()
+}
+
+/// Assert `invariant` passes over `projection`, the unbroken control a
+/// refusal case is measured against.
+fn assert_binding_holds(case: &str, projection: &Value, invariant: &str) {
+    let outcome = sole_outcome(projection, invariant);
+    assert_eq!(outcome["status"], json!("passed"), "{case}: {outcome}");
+}
+
+/// Assert `invariant` fails closed over `projection` with exactly `code`.
+fn assert_binding_refused(case: &str, projection: &Value, invariant: &str, code: &str) {
+    let outcome = sole_outcome(projection, invariant);
+    assert_eq!(outcome["status"], json!("failed"), "{case}: {outcome}");
+    assert_eq!(outcome["code"], json!(code), "{case}: {outcome}");
+}
+
+/// The `MeasurementPlan` maturity stages, in the order the schema declares them.
+fn schema_stages() -> Vec<String> {
+    let schema: Value = serde_json::from_str(include_str!(
+        "../engineering_assurance/schemas/measurement-plan-frontmatter.schema.json"
+    ))
+    .expect("the MeasurementPlan schema must be valid JSON");
+    schema["properties"]["stage"]["enum"]
+        .as_array()
+        .expect("stage must be an enum")
+        .iter()
+        .map(|stage| stage.as_str().expect("a stage is a string").to_owned())
+        .collect()
+}
+
+fn with_stages(mut projection: Value, prior: &str, proposed: &str) -> Value {
+    for kind in ["promotion_request", "promotion_evidence"] {
+        projection["items"][kind][0]["prior_stage"] = json!(prior);
+        projection["items"][kind][0]["proposed_stage"] = json!(proposed);
+    }
+    projection
+}
+
+#[trace("TC-201", "FR-016-AC-5")]
+#[test]
+fn tc_201_a_promotion_advances_exactly_one_schema_stage() {
+    let stages = schema_stages();
+    assert_eq!(stages.len(), 7, "{stages:?}");
+    for (prior_index, prior) in stages.iter().enumerate() {
+        for (proposed_index, proposed) in stages.iter().enumerate() {
+            let case = format!("{prior} -> {proposed}");
+            let projection = with_stages(promotion(), prior, proposed);
+            if proposed_index == prior_index + 1 {
+                assert_binding_holds(&case, &projection, "measurement.promotion_ready");
+            } else {
+                assert_binding_refused(
+                    &case,
+                    &projection,
+                    "measurement.promotion_ready",
+                    "promotion_must_advance_one_stage",
+                );
+            }
+        }
+    }
+    for (prior, proposed) in [("observe", "release"), ("draft", "observe")] {
+        assert_binding_refused(
+            &format!("unknown stage {prior} -> {proposed}"),
+            &with_stages(promotion(), prior, proposed),
+            "measurement.promotion_ready",
+            "promotion_must_advance_one_stage",
+        );
+    }
+}
+
+fn change_impact() -> Value {
+    workflow_projection(
+        "change-assurance",
+        &["decision_ready->approved", "decision_ready->rejected"],
+        &["change_request", "impact_snapshot"],
+    )
+}
+
+#[trace("TC-201", "FR-016-AC-5")]
+#[test]
+fn tc_201_an_impact_snapshot_must_bind_the_change_and_carry_every_array() {
+    let invariant = "change.impact_ready";
+    assert_binding_holds("complete snapshot", &change_impact(), invariant);
+    for array in [
+        "changed_nodes",
+        "impacted_nodes",
+        "missing_edges",
+        "stale_evidence",
+        "suspect_evidence",
+        "unknowns",
+    ] {
+        let mut projection = change_impact();
+        projection["items"]["impact_snapshot"][0]
+            .as_object_mut()
+            .expect("snapshot must be an object")
+            .remove(array);
+        assert_binding_refused(
+            &format!("without {array}"),
+            &projection,
+            invariant,
+            "impact_snapshot_incomplete",
+        );
+    }
+    for (member, value) in [
+        ("baseline_id", json!("baseline-2")),
+        ("profile_path", json!("assurance/other.yaml")),
+        ("source_revision", json!("b".repeat(40))),
+    ] {
+        let mut projection = change_impact();
+        projection["items"]["impact_snapshot"][0][member] = value;
+        assert_binding_refused(
+            &format!("snapshot for another {member}"),
+            &projection,
+            invariant,
+            "impact_snapshot_incomplete",
+        );
+    }
+}
+
+fn intake_with_exception(expected: bool, exception: Option<Value>) -> Value {
+    let mut projection = workflow_projection(
+        "assurance-intake",
+        &["decision_ready->accepted", "decision_ready->rejected"],
+        &["intake_request"],
+    );
+    projection["items"]["intake_request"][0]["exceptions_expected"] = json!(expected);
+    if let Some(exception) = exception {
+        projection["items"]["exception"] = json!([exception]);
+    }
+    projection
+}
+
+fn current_exception() -> Value {
+    passing_projection()["items"]["exception"][0].clone()
+}
+
+#[trace("TC-201", "FR-016-AC-5")]
+#[test]
+fn tc_201_every_recorded_exception_must_be_owned_and_current() {
+    let invariant = "shared.exceptions_ready";
+    let code = "owned_current_exception_required";
+    assert_binding_holds(
+        "expected and current",
+        &intake_with_exception(true, Some(current_exception())),
+        invariant,
+    );
+    assert_binding_holds(
+        "none expected, none recorded",
+        &intake_with_exception(false, None),
+        invariant,
+    );
+    assert_binding_refused(
+        "expected but none recorded",
+        &intake_with_exception(true, None),
+        invariant,
+        code,
+    );
+    // An exception nobody expected is still checked: it must not slip through
+    // because the request said none would be needed.
+    for (member, value) in [
+        ("expires_at", json!("not-a-date")),
+        ("expires_at", json!(EVALUATED_AT)),
+        ("owner", json!(" ")),
+        ("rationale", json!("")),
+        ("impact", Value::Null),
+    ] {
+        let mut exception = current_exception();
+        exception[member] = value.clone();
+        for expected in [false, true] {
+            assert_binding_refused(
+                &format!("{member} = {value}, expected = {expected}"),
+                &intake_with_exception(expected, Some(exception.clone())),
+                invariant,
+                code,
+            );
+        }
+    }
+}
+
+fn architecture_review() -> Value {
+    workflow_projection(
+        "architecture-evaluation",
+        &["decision_ready->accepted", "decision_ready->rejected"],
+        &["architecture_request", "review_validation"],
+    )
+}
+
+fn change_review() -> Value {
+    workflow_projection(
+        "change-assurance",
+        &["decision_ready->approved", "decision_ready->rejected"],
+        &["change_request", "review_validation"],
+    )
+}
+
+#[trace("TC-201", "FR-016-AC-5")]
+#[test]
+fn tc_201_a_review_must_bind_the_requested_subject() {
+    let architecture = "architecture.review_ready";
+    assert_binding_holds("matching review", &architecture_review(), architecture);
+    let change = "change.review_ready";
+    assert_binding_holds("matching review", &change_review(), change);
+
+    // The architecture review is review_validation[0]; the code review is [1].
+    for (member, value) in [
+        ("subject_path", json!("spec/other-architecture.md")),
+        ("valid", json!(false)),
+        ("analysis", json!("code-review")),
+        ("artifact_type", json!("ArchitectureDescription")),
+        ("path", json!("")),
+    ] {
+        let mut projection = architecture_review();
+        projection["items"]["review_validation"][0][member] = value.clone();
+        assert_binding_refused(
+            &format!("architecture review {member} = {value}"),
+            &projection,
+            architecture,
+            "architecture_review_missing",
+        );
+    }
+    for (member, value) in [
+        ("source_revision", json!("b".repeat(40))),
+        ("valid", json!(false)),
+        ("analysis", json!("architecture-evaluation")),
+        ("artifact_type", json!("ArchitectureDescription")),
+        ("path", json!("")),
+    ] {
+        let mut projection = change_review();
+        projection["items"]["review_validation"][1][member] = value.clone();
+        assert_binding_refused(
+            &format!("code review {member} = {value}"),
+            &projection,
+            change,
+            "code_review_missing",
+        );
+    }
+}

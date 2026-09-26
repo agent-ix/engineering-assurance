@@ -127,14 +127,15 @@ Rust library and CLI.
   next-action command strings returned by ix-flow as display data and never
   execute them.
 - Return all applicable invariant failures in deterministic order.
-- Evaluate exception expiry against the request's explicit evaluation instant;
-  the reusable Rust library SHALL NOT read the system clock.
-- Reject an unknown invariant name rather than treating it as passed or
-  omitting it from the result.
-- Reject unknown workflow, phase, or protocol versions.
-- Leave a decision-ready run non-terminal when human input is absent.
-- Retain the pilot path only as a temporary compatibility alias until the
-  canonical Rust path passes locally at the same candidate revision.
+- The Rust evaluator SHALL fail each canonical invariant closed when the
+  binding it checks does not hold. It SHALL refuse a promotion that does not
+  advance exactly one MeasurementPlan stage in the schema's stage order, an
+  impact snapshot that does not name the change request's source revision,
+  profile, and baseline or lacks a change array, any recorded exception that
+  is unowned, unjustified, without impact, or not current, whether or not one
+  was expected, and a review that is not a valid `SpecReview` of the matching
+  analysis naming the requested architecture description or change source
+  revision.
 
 ## Error Conditions
 
@@ -178,6 +179,7 @@ Quire unavailability during staged publication refuses publication.
 | FR-016-AC-2 | For every canonical invariant and focused valid boundary fixture, Rust and the retained reference produce the same complete ordered outcome set at the same explicit evaluation instant; unknown names and malformed Rust requests are refused before an outcome is emitted. | Test (TC-106) |
 | FR-016-AC-3 | Against the exact accepted ix-flow pin, start, pristine unbound-run recovery, interruption/resume, explicit acceptance, explicit rejection, missing choice, repeated same choice, opposite choice, invalid transition, run-binding mismatch, broken event chain, unavailable/incompatible host, malformed/oversized/timed-out response, and automatic-gate evidence preserve ix-flow-owned state and human-gate behavior; every successful Rust result is typed and follows an intact ix-flow chain verification, every pre-mutation refusal leaves prior history unchanged, and every ambiguous post-mutation outcome is reported as indeterminate and reconciled on retry. | Test (TC-107) |
 | FR-016-AC-4 | Canonical and pilot invocations pass through Rust before either legacy JavaScript path is removed. | Test (TC-108) |
+| FR-016-AC-5 | Starting from a passing projection and breaking one binding, the Rust evaluator fails closed with that binding's code, and the retained reference agrees: every stage pair other than one step forward in the MeasurementPlan schema's stage order, and an unknown stage, yields `promotion_must_advance_one_stage`; an impact snapshot missing any change array or naming another revision, profile, or baseline yields `impact_snapshot_incomplete`; an expected but absent exception, or any recorded exception that is unowned, unjustified, without impact, expired at the evaluation instant, or undated, yields `owned_current_exception_required`; and a review for another subject, source revision, analysis, or artifact type, an invalid one, or one without a path yields `architecture_review_missing` or `code_review_missing`. | Test (TC-201) |
 
 ## Dependencies
 

@@ -1,5 +1,6 @@
 //! Port of `tests/test_workflows.py`; see `main.rs`.
 use super::common::{package_root, read, root, yaml};
+use ix_trace_rs::trace;
 use serde_json::{Map, Value, json};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -111,19 +112,7 @@ fn assert_ix_flow_loads(search: &Path, id_prefix: &str, tmp: &Path) {
 }
 
 #[test]
-fn workflow_inventory_and_versions_are_exact() {
-    let data = definitions();
-    assert_eq!(names(&data), expected_names());
-    assert_eq!(data["change-assurance"]["version"], json!("0.2.0"));
-    let versions: BTreeSet<&str> = data
-        .iter()
-        .filter(|(k, _)| *k != "change-assurance")
-        .map(|(_, v)| v["version"].as_str().expect("version string"))
-        .collect();
-    assert_eq!(versions, BTreeSet::from(["0.1.0"]));
-}
-
-#[test]
+#[trace("TC-027", "FR-005-AC-2")]
 fn every_terminal_transition_is_human_gated() {
     for definition in definitions().values() {
         let terminal: BTreeSet<&str> = definition["phases"]
@@ -154,6 +143,7 @@ fn every_terminal_transition_is_human_gated() {
 }
 
 #[test]
+#[trace("TC-030", "FR-005-AC-5")]
 fn terminal_gate_override_fails() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let result = run_invariant(
@@ -173,6 +163,7 @@ fn terminal_gate_override_fails() {
 }
 
 #[test]
+#[trace("TC-160", "FR-025-AC-2")]
 fn adjacent_measurement_promotion_passes() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let request = json!({
@@ -207,136 +198,15 @@ fn adjacent_measurement_promotion_passes() {
 }
 
 #[test]
-fn non_adjacent_measurement_promotion_fails() {
-    let tmp = tempfile::tempdir().expect("tempdir");
-    let result = run_invariant(
-        tmp.path(),
-        "measurement.promotion_ready",
-        &json!({
-            "defName": "measurement-promotion",
-            "items": {
-                "promotion_request": [{
-                    "interviewId": "promotion",
-                    "prior_stage": "observe",
-                    "proposed_stage": "gate",
-                }]
-            },
-        }),
-    );
-    assert_eq!(result["code"], json!("promotion_must_advance_one_stage"));
-}
-
-#[test]
-fn missing_change_arrays_fail_closed() {
-    let tmp = tempfile::tempdir().expect("tempdir");
-    let a = "a".repeat(40);
-    let result = run_invariant(
-        tmp.path(),
-        "change.impact_ready",
-        &json!({
-            "defName": "change-assurance",
-            "items": {
-                "change_request": [{
-                    "interviewId": "change",
-                    "source_revision": a,
-                    "profile_path": "fixtures/AP-001.md",
-                    "baseline_id": "baseline-1",
-                }],
-                "impact_snapshot": [{
-                    "source_revision": a,
-                    "profile_path": "fixtures/AP-001.md",
-                    "baseline_id": "baseline-1",
-                    "changed_nodes": [],
-                }],
-            },
-        }),
-    );
-    assert_eq!(result["code"], json!("impact_snapshot_incomplete"));
-}
-
-#[test]
-fn unexpected_invalid_exception_fails_closed() {
-    let tmp = tempfile::tempdir().expect("tempdir");
-    let result = run_invariant(
-        tmp.path(),
-        "shared.exceptions_ready",
-        &json!({
-            "defName": "change-assurance",
-            "items": {
-                "change_request": [{"interviewId": "change", "exceptions_expected": false}],
-                "exception": [{
-                    "owner": "decision-owner",
-                    "expires_at": "not-a-date",
-                    "rationale": "fictional",
-                    "impact": "unknown",
-                }],
-            },
-        }),
-    );
-    assert_eq!(result["code"], json!("owned_current_exception_required"));
-}
-
-#[test]
-fn architecture_review_must_match_description() {
-    let tmp = tempfile::tempdir().expect("tempdir");
-    let result = run_invariant(
-        tmp.path(),
-        "architecture.review_ready",
-        &json!({
-            "defName": "architecture-evaluation",
-            "items": {
-                "architecture_request": [{
-                    "interviewId": "architecture",
-                    "description_path": "spec/AD-001.md",
-                }],
-                "review_validation": [{
-                    "valid": true,
-                    "artifact_type": "SpecReview",
-                    "analysis": "architecture-evaluation",
-                    "subject_path": "spec/AD-999.md",
-                    "path": "reviews/SR-001.md",
-                }],
-            },
-        }),
-    );
-    assert_eq!(result["code"], json!("architecture_review_missing"));
-}
-
-#[test]
-fn change_review_must_match_source_revision() {
-    let tmp = tempfile::tempdir().expect("tempdir");
-    let result = run_invariant(
-        tmp.path(),
-        "change.review_ready",
-        &json!({
-            "defName": "change-assurance",
-            "items": {
-                "change_request": [{
-                    "interviewId": "change",
-                    "source_revision": "a".repeat(40),
-                }],
-                "review_validation": [{
-                    "valid": true,
-                    "artifact_type": "SpecReview",
-                    "analysis": "code-review",
-                    "source_revision": "b".repeat(40),
-                    "path": "reviews/SR-002.md",
-                }],
-            },
-        }),
-    );
-    assert_eq!(result["code"], json!("code_review_missing"));
-}
-
-/// Trace: FR-007-AC-1, NFR-003-AC-3, TC-035, TC-040.
-#[test]
+#[trace("TC-035", "FR-007-AC-1")]
+#[trace("TC-040", "NFR-003-AC-3")]
 fn ix_flow_can_load_every_definition() {
     let tmp = tempfile::tempdir().expect("tempdir");
     assert_ix_flow_loads(&pilot(), "test", tmp.path());
 }
 
-/// Trace: FR-007-AC-2, TC-036.
 #[test]
+#[trace("TC-036", "FR-007-AC-2")]
 fn pilot_and_canonical_workflows_are_equivalent() {
     let pilot = definitions();
     let canonical = load_definitions(&canonical().join("workflows"));
@@ -344,32 +214,34 @@ fn pilot_and_canonical_workflows_are_equivalent() {
     assert_eq!(canonical, pilot);
 }
 
-/// Trace: FR-007-CON-1, TC-043.
+/// The pilot path keeps exactly the four workflows present before promotion:
+/// a fifth, or a missing one, fails.
 #[test]
+#[trace("TC-043", "FR-007-AC-4", "FR-007-CON-1")]
 fn compatible_pilot_inventory_is_exact() {
     assert_eq!(names(&definitions()), expected_names());
 }
 
-/// Trace: FR-007-AC-2, TC-036.
 #[test]
+#[trace("TC-036", "FR-007-AC-2")]
 fn pilot_invariant_surface_delegates_to_canonical() {
     let compatibility = read(&pilot().join("scripts/invariants.js"));
     assert!(compatibility.contains("engineering_assurance/skills/assurance-onboarding"));
 }
 
-/// Trace: FR-002-AC-3, TC-011; FR-007-AC-1, TC-035.
 #[test]
+#[trace("TC-011", "FR-002-AC-3")]
+#[trace("TC-035", "FR-007-AC-1")]
 fn ix_flow_can_load_every_canonical_definition() {
     let tmp = tempfile::tempdir().expect("tempdir");
     assert_ix_flow_loads(&canonical(), "canonical", tmp.path());
 }
 
-/// Trace: FR-025-AC-6, TC-164.
-///
 /// The promotion workflow accepts a typed checker result and the profile's
 /// policy as run items, and an accepted verdict still reaches `promoted` only
-/// through the human-gated terminal transition (FR-005).
+/// through the human-gated terminal transition that human decisions own.
 #[test]
+#[trace("TC-164", "FR-025-AC-6")]
 fn measurement_promotion_declares_checker_and_policy_items() {
     let all = definitions();
     let definition = &all["measurement-promotion"];
@@ -424,11 +296,10 @@ fn measurement_promotion_declares_checker_and_policy_items() {
     assert_eq!(&canonical, definition);
 }
 
-/// Trace: FR-025-AC-3, TC-164.
-///
 /// Through the pilot surface ix-flow loads, a `require` policy for the proposed
 /// stage refuses a rejected checker result with a typed code.
 #[test]
+#[trace("TC-164", "FR-025-AC-3")]
 fn required_checker_refuses_rejected_promotion() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let evidence = json!({

@@ -44,6 +44,7 @@ version is not justified merely because existing files already name it.
 | NFR-005-AC-2 | Every first-party Rust test under `src/` or `tests/`, excluding vendored crates, imports `ix_trace_rs::trace` without an alias and uses at least one bare `#[trace(...)]` carrying a `TC-XXX` and an `*-AC-N` literal; missing, aliased, path-qualified, or malformed markers are rejected by parsed-syntax inspection. | Analysis (TC-117) |
 | NFR-005-AC-3 | Quire reconciles Rust criterion markers to the test matrix with no missing, orphaned, or duplicate binding. | Test (TC-118) |
 | NFR-005-AC-4 | The final executable-path and host-configuration audit reports zero unapproved non-Rust semantic or assertion paths. | Analysis (TC-115) |
+| NFR-005-AC-5 | Every test-case id that a Test Matrix coverage row names has its own row in the Test Case Summary table, whatever padding the table cells carry; a coverage reference to a test case with no row fails. | Test (TC-205) |
 
 ## Verification
 

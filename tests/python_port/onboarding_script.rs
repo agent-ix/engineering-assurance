@@ -2,6 +2,7 @@
 //!
 //! Each test returns early (printing a SKIP line) when node is not installed,
 //! as the Python suite skipped.
+use ix_trace_rs::trace;
 use std::fs;
 use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::{Path, PathBuf};
@@ -10,7 +11,7 @@ use std::process::{Command, Output};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
-use super::common::{package_root, read, schema};
+use super::common::{manifest, package_root, read, schema, truthy};
 
 fn onboard_js() -> PathBuf {
     package_root()
@@ -122,8 +123,8 @@ fn probe_report(node: &Path, tmp: &Path, probe_schema: &Value) -> Value {
 }
 
 #[test]
+#[trace("TC-139", "FR-020-AC-1")]
 fn onboard_js_json_checklist_lists_nested_objective_requirements() {
-    // Trace: FR-020-AC-1, TC-139.
     let node = require_node!();
     let tmp = TempDir::new().unwrap();
     let report = run_onboard_json(&node, tmp.path());
@@ -145,8 +146,8 @@ fn onboard_js_json_checklist_lists_nested_objective_requirements() {
 }
 
 #[test]
+#[trace("TC-149", "FR-021-AC-6")]
 fn onboard_js_json_checklist_lists_the_decision_rule_vocabulary() {
-    // Trace: FR-021-AC-6, TC-149.
     let node = require_node!();
     let tmp = TempDir::new().unwrap();
     let report = run_onboard_json(&node, tmp.path());
@@ -245,8 +246,8 @@ fn onboard_js_json_checklist_lists_the_decision_rule_vocabulary() {
 }
 
 #[test]
+#[trace("TC-149", "FR-021-AC-6")]
 fn onboard_js_reports_combined_then_and_warns_on_an_empty_one_of() {
-    // Trace: FR-021-AC-6, TC-149.
     let node = require_node!();
     let tmp = TempDir::new().unwrap();
     let probe = probe_report(
@@ -293,8 +294,8 @@ fn onboard_js_reports_combined_then_and_warns_on_an_empty_one_of() {
 }
 
 #[test]
+#[trace("TC-159", "FR-024-AC-6")]
 fn onboard_js_json_checklist_lists_protected_apparatus_and_negative_controls() {
-    // Trace: FR-024-AC-6, TC-159.
     let node = require_node!();
     let tmp = TempDir::new().unwrap();
     let apparatus_path =
@@ -353,8 +354,8 @@ fn onboard_js_json_checklist_lists_protected_apparatus_and_negative_controls() {
 }
 
 #[test]
+#[trace("TC-159", "FR-024-AC-6")]
 fn onboard_js_reports_no_warning_for_any_artifact_type() {
-    // Trace: FR-024-AC-6, TC-159.
     let node = require_node!();
     let tmp = TempDir::new().unwrap();
     let report = run_onboard_json(&node, tmp.path());
@@ -398,8 +399,8 @@ fn onboard_js_reports_no_warning_for_any_artifact_type() {
 }
 
 #[test]
+#[trace("TC-165", "FR-025-AC-7")]
 fn onboard_js_lists_the_profile_measurement_policy() {
-    // Trace: FR-025-AC-7, TC-165.
     let node = require_node!();
     let tmp = TempDir::new().unwrap();
     let report = run_onboard_json(&node, tmp.path());
@@ -454,7 +455,6 @@ fn onboard_js_lists_the_profile_measurement_policy() {
 }
 
 fn help_prints_usage_not_a_report(flag: &str) {
-    // Trace: FR-001-AC-8, TC-174.
     let node = require_node!();
     let tmp = TempDir::new().unwrap();
     let output = Command::new(&node)
@@ -471,17 +471,18 @@ fn help_prints_usage_not_a_report(flag: &str) {
 }
 
 #[test]
+#[trace("TC-174", "FR-001-AC-8")]
 fn onboard_js_help_prints_usage_not_a_report_long_flag() {
     help_prints_usage_not_a_report("--help");
 }
 
 #[test]
+#[trace("TC-174", "FR-001-AC-8")]
 fn onboard_js_help_prints_usage_not_a_report_short_flag() {
     help_prints_usage_not_a_report("-h");
 }
 
 fn refuses_a_usage_error(arguments: &[&str], message: &str) {
-    // Trace: FR-001-AC-8, TC-174.
     let node = require_node!();
     let tmp = TempDir::new().unwrap();
     let repo = tmp.path().to_str().expect("utf-8 tmp path");
@@ -498,6 +499,7 @@ fn refuses_a_usage_error(arguments: &[&str], message: &str) {
 }
 
 #[test]
+#[trace("TC-174", "FR-001-AC-8")]
 fn onboard_js_refuses_a_usage_error_unknown_argument() {
     refuses_a_usage_error(
         &["--repo", "{repo}", "--bogus"],
@@ -506,16 +508,19 @@ fn onboard_js_refuses_a_usage_error_unknown_argument() {
 }
 
 #[test]
+#[trace("TC-174", "FR-001-AC-8")]
 fn onboard_js_refuses_a_usage_error_repo_without_path() {
     refuses_a_usage_error(&["--repo"], "--repo requires a path argument");
 }
 
 #[test]
+#[trace("TC-174", "FR-001-AC-8")]
 fn onboard_js_refuses_a_usage_error_repo_followed_by_flag() {
     refuses_a_usage_error(&["--repo", "--json"], "--repo requires a path argument");
 }
 
 #[test]
+#[trace("TC-174", "FR-001-AC-8")]
 fn onboard_js_refuses_a_usage_error_repo_given_twice() {
     refuses_a_usage_error(
         &["--repo", "{repo}", "--repo", "{repo}"],
@@ -551,6 +556,7 @@ fn run_summary(node: &Path, tmp: &Path, path_env: &str, extra: &[&str]) -> Outpu
 }
 
 #[test]
+#[trace("TC-202", "FR-001-AC-9")]
 fn onboard_js_summary_reports_validation_and_toolchain() {
     let node = require_node!();
     let tmp = TempDir::new().unwrap();
@@ -608,8 +614,13 @@ echo "  measurement record  Record."
     );
     let version = &summary["installedModuleVersion"];
     assert!(
-        !version.is_null() && version != "" && version != false,
-        "installedModuleVersion is empty"
+        truthy(version),
+        "installedModuleVersion is empty: {version}"
+    );
+    assert_eq!(
+        version,
+        &manifest()["version"],
+        "the checkout's module version"
     );
     let by_name: std::collections::HashMap<&str, &Value> = summary["artifacts"]
         .as_array()
@@ -632,6 +643,7 @@ echo "  measurement record  Record."
 }
 
 #[test]
+#[trace("TC-202", "FR-001-AC-9")]
 fn onboard_js_summary_exits_nonzero_when_validation_is_unavailable() {
     let node = require_node!();
     let tmp = TempDir::new().unwrap();
@@ -651,6 +663,35 @@ fn onboard_js_summary_exits_nonzero_when_validation_is_unavailable() {
 }
 
 #[test]
+#[trace("TC-202", "FR-001-AC-9")]
+fn onboard_js_summary_exits_zero_only_when_every_artifact_validates() {
+    let node = require_node!();
+    let tmp = TempDir::new().unwrap();
+    let bin_dir = tmp.path().join("bin");
+    fs::create_dir(&bin_dir).unwrap();
+    // A quire that accepts everything: every artifact validates.
+    write_executable(
+        &bin_dir.join("quire"),
+        "#!/bin/sh\nif [ \"$1\" = provenance ]; then echo '{\"cli\":{\"version\":\"9.9.9\"}}'; fi\nexit 0\n",
+    );
+    symlink(&node, bin_dir.join("node")).unwrap();
+    let output = run_summary(&node, tmp.path(), bin_dir.to_str().unwrap(), &["--json"]);
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    let summary: Value = serde_json::from_str(&stdout(&output)).expect("json summary");
+    assert_eq!(
+        summary["artifacts"][0]["validation"],
+        json!({"status": "valid", "findings": [], "moreFindings": 0})
+    );
+    // quoin is absent here: the summary says so rather than guessing.
+    assert_eq!(
+        summary["toolchain"],
+        json!({"quire": "9.9.9", "quoin": null, "quoinMeasurementVerify": null})
+    );
+    assert_eq!(stderr(&output), "");
+}
+
+#[test]
+#[trace("TC-202", "FR-001-AC-9")]
 fn onboard_js_summary_marks_truncated_findings_and_labels_the_module() {
     let node = require_node!();
     let tmp = TempDir::new().unwrap();
@@ -679,8 +720,8 @@ exit 1
 }
 
 #[test]
+#[trace("TC-149", "FR-021-AC-6")]
 fn onboard_js_observation_checklist_notes_the_optional_interval() {
-    // Trace: FR-021-AC-6, TC-149.
     let node = require_node!();
     let tmp = TempDir::new().unwrap();
     let report = run_onboard_json(&node, tmp.path());
@@ -701,8 +742,8 @@ fn onboard_js_observation_checklist_notes_the_optional_interval() {
 }
 
 #[test]
+#[trace("TC-188", "FR-021-AC-12")]
 fn onboard_js_reads_dependent_required_and_warns_on_a_malformed_entry() {
-    // Trace: FR-021-AC-12, TC-188.
     let node = require_node!();
     let tmp = TempDir::new().unwrap();
     let probe = probe_report(

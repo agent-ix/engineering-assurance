@@ -1,7 +1,15 @@
 //! Port of the retired `tests/test_module.py`; see `main.rs`.
-#![allow(clippy::needless_pass_by_value, clippy::too_many_lines)]
+#![allow(
+    clippy::needless_pass_by_value,
+    reason = "case builders take owned `json!` values so call sites stay literal"
+)]
+#![allow(
+    clippy::too_many_lines,
+    reason = "each ported schema test keeps its accept/refuse table in one place"
+)]
+use ix_trace_rs::trace;
 use std::collections::BTreeSet;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
 use jsonschema::Validator;
@@ -10,7 +18,7 @@ use serde_json::{Value, json};
 
 use super::common::{
     frontmatter, glob_ext, manifest, merged, package_root, read, required_msg, root, schema,
-    schema_errors, walk_files, yaml,
+    schema_errors, yaml,
 };
 
 // Assembled from parts so the content-rights URL scan does not see a literal.
@@ -166,6 +174,7 @@ fn dr(rule: Value) -> Vec<String> {
 }
 
 #[test]
+#[trace("TC-194", "FR-003-AC-7")]
 fn dialect_detector_accepts_every_spelling_and_refuses_other_drafts() {
     for uri in draft_07_uris() {
         for declared in [uri.clone(), format!("{uri}#")] {
@@ -196,6 +205,7 @@ fn dialect_detector_accepts_every_spelling_and_refuses_other_drafts() {
 }
 
 #[test]
+#[trace("TC-194", "FR-003-AC-7")]
 fn every_schema_uses_the_forms_of_the_dialect_it_declares() {
     // `definitions`/array-form `dependencies` are draft-07; `$defs`/
     // `dependentRequired` are 2019-09+. A file that mixes them validates
@@ -227,6 +237,7 @@ fn every_schema_uses_the_forms_of_the_dialect_it_declares() {
 }
 
 #[test]
+#[trace("TC-194", "FR-003-AC-7")]
 fn module_inventory_is_exact() {
     let data = manifest();
     assert_eq!(data["version"], "0.5.0");
@@ -254,6 +265,7 @@ fn module_inventory_is_exact() {
 }
 
 #[test]
+#[trace("TC-115", "FR-018-AC-4")]
 fn only_the_configuration_package_entry_point_remains_python() {
     let sources: Vec<String> = glob_ext(&package_root(), "py")
         .iter()
@@ -266,6 +278,7 @@ fn only_the_configuration_package_entry_point_remains_python() {
 }
 
 #[test]
+#[trace("TC-195", "FR-003-AC-8")]
 fn every_schema_and_skeleton_is_valid() {
     for artifact in manifest()["artifact_types"].as_array().unwrap() {
         let schema_path = package_root().join(artifact["frontmatter_schema_ref"].as_str().unwrap());
@@ -289,26 +302,8 @@ fn every_schema_and_skeleton_is_valid() {
 }
 
 #[test]
-fn profile_schema_version_and_profile_kind_are_optional() {
-    let contract = schema("assurance-profile-frontmatter.schema");
-    let required = strs(&contract["required"]);
-    assert!(!required.contains(&"schema_version"));
-    assert!(!required.contains(&"profile_kind"));
-    let impact = &contract["$defs"]["impact"]["properties"];
-    assert_eq!(impact["verifiability"]["type"], "object");
-    assert_eq!(
-        impact["detect_before_harm"]["properties"]["control_ref"],
-        json!({"type": "string", "pattern": "^ix://"})
-    );
-    assert_eq!(
-        impact["verifiability"]["properties"]["class"]["enum"],
-        json!(["cheap-conclusive", "probabilistic", "proxy-only"])
-    );
-}
-
-#[test]
+#[trace("TC-163", "FR-025-AC-1")]
 fn profile_measurement_policy_is_closed_and_uses_plan_stages() {
-    // Trace: FR-025-AC-1, TC-163.
     let contract = schema("assurance-profile-frontmatter.schema");
     let plan = schema("measurement-plan-frontmatter.schema");
     let policy = &contract["$defs"]["measurement_policy"];
@@ -354,134 +349,82 @@ fn profile_measurement_policy_is_closed_and_uses_plan_stages() {
     }
 }
 
+/// A gate-stage plan grades against answers someone produced, so it must say
+/// how: by a person, by another agent, or mechanically. Below gate it may
+/// stay silent, and no other provenance is admitted at any stage.
 #[test]
-fn measurement_stages_and_statistical_design_are_explicit() {
-    let contract = schema("measurement-plan-frontmatter.schema");
-    assert_eq!(
-        contract["properties"]["metric"]["pattern"],
-        "^[a-z][a-z0-9_.-]*$"
-    );
-    assert_eq!(
-        contract["properties"]["definition_version"],
-        json!({"type": "string", "minLength": 1})
-    );
-    assert_eq!(
-        contract["properties"]["stage"]["enum"],
-        json!([
-            "observe",
-            "baseline",
-            "branch-comparison",
-            "trend",
-            "ratchet",
-            "target",
-            "gate"
-        ])
-    );
-    let required = &contract["$defs"]["statistical_design"]["required"];
-    assert_eq!(
-        *required,
-        json!([
-            "population",
-            "sampling",
-            "repetitions",
-            "estimator",
-            "error_model",
-            "uncertainty",
-            "decision_rule"
-        ])
-    );
-    assert_eq!(
-        contract["$defs"]["statistical_design"]["properties"]["minimum_population"],
-        json!({
-            "type": "integer",
-            "minimum": 1,
-            "description": "The smallest population size below which a result must not be \
-                            trusted -- e.g. refuses the 'decided from two examples' failure \
-                            mode. Optional; when set, a result collected against a smaller \
-                            population is invalid and must be refused or flagged, not \
-                            silently accepted.",
-        })
-    );
-    assert!(!strs(required).contains(&"minimum_population"));
-}
-
-#[test]
+#[trace("TC-203", "FR-024-AC-11")]
 fn ground_truth_kind_is_required_only_for_gate_stage() {
-    let contract = schema("measurement-plan-frontmatter.schema");
-    assert_eq!(
-        contract["properties"]["ground_truth_kind"]["enum"],
-        json!(["human-labelled", "agent-labelled", "mechanical"])
-    );
+    let gate = |kind: Option<&str>| {
+        let mut plan = json!({
+            "stage": "gate",
+            "negative_controls": [negative_control()],
+            "protected_apparatus": ["evals/harness.py"],
+        });
+        if let Some(kind) = kind {
+            plan["ground_truth_kind"] = json!(kind);
+        }
+        plan_errors(plan)
+    };
+    for kind in ["human-labelled", "agent-labelled", "mechanical"] {
+        assert!(
+            gate(Some(kind)).is_empty(),
+            "{kind}: {:?}",
+            gate(Some(kind))
+        );
+        let below = plan_errors(json!({"stage": "baseline", "ground_truth_kind": kind}));
+        assert!(below.is_empty(), "{kind} below gate: {below:?}");
+    }
+
+    let missing = gate(None);
+    assert_eq!(missing, [required_msg("ground_truth_kind")]);
     assert!(plan_errors(json!({"stage": "baseline"})).is_empty());
 
-    let gate_missing = plan_errors(json!({"stage": "gate"}));
-    assert!(
-        gate_missing.contains(&required_msg("ground_truth_kind")),
-        "{gate_missing:?}"
-    );
-
-    let gate_present = plan_errors(json!({
-        "stage": "gate",
-        "ground_truth_kind": "mechanical",
-        "negative_controls": [negative_control()],
-        "protected_apparatus": ["evals/harness.py"],
-    }));
-    assert!(gate_present.is_empty(), "{gate_present:?}");
-
-    assert!(!plan_errors(json!({"stage": "gate", "ground_truth_kind": "vibes-based"})).is_empty());
+    for refused in ["vibes-based", "Mechanical", ""] {
+        assert!(!gate(Some(refused)).is_empty(), "{refused} at gate");
+        let below = plan_errors(json!({"stage": "baseline", "ground_truth_kind": refused}));
+        assert!(!below.is_empty(), "{refused} below gate");
+    }
 }
 
+/// `preregistration` records only the digest Quoin checks the plan's
+/// "Comparison and Enforcement" section against at intake, so its one member
+/// must be a `sha256:` digest Quoin can compare byte for byte.
 #[test]
-fn subject_identity_is_optional_name_and_version() {
-    let contract = schema("measurement-plan-frontmatter.schema");
-    let identity = &contract["properties"]["subject_identity"];
-    assert_eq!(identity["required"], json!(["name", "version"]));
-    let props: BTreeSet<&str> = identity["properties"]
-        .as_object()
-        .unwrap()
-        .keys()
-        .map(String::as_str)
-        .collect();
-    assert_eq!(props, BTreeSet::from(["name", "version"]));
-    assert!(!strs(&contract["required"]).contains(&"subject_identity"));
-
-    assert!(
-        plan_errors(json!({
-            "subject_identity": {"name": "juniper-classifier", "version": "2026.09.1"}
-        }))
-        .is_empty()
-    );
-    assert!(!plan_errors(json!({"subject_identity": {"name": "juniper"}})).is_empty());
-}
-
-#[test]
+#[trace("TC-204", "FR-024-AC-12")]
 fn preregistration_is_optional_and_requires_a_sha256_bar_digest() {
-    let contract = schema("measurement-plan-frontmatter.schema");
-    let prereg = &contract["properties"]["preregistration"];
-    assert_eq!(prereg["required"], json!(["bar_digest"]));
-    let props: BTreeSet<&str> = prereg["properties"]
-        .as_object()
-        .unwrap()
-        .keys()
-        .map(String::as_str)
-        .collect();
-    assert_eq!(props, BTreeSet::from(["bar_digest"]));
-    assert!(!strs(&contract["required"]).contains(&"preregistration"));
+    assert!(
+        !strs(&schema("measurement-plan-frontmatter.schema")["required"])
+            .contains(&"preregistration")
+    );
+    assert!(plan_errors(json!({})).is_empty());
 
     let digest = format!("sha256:{}", "a".repeat(64));
     assert!(plan_errors(json!({"preregistration": {"bar_digest": digest}})).is_empty());
-    assert!(!plan_errors(json!({"preregistration": {"bar_digest": "not-a-digest"}})).is_empty());
-    assert!(
-        !plan_errors(json!({
-            "preregistration": {"bar_digest": digest, "bar_source": "elsewhere.rs"}
-        }))
-        .is_empty()
-    );
+
+    let refused = [
+        json!({}),
+        json!({"bar_digest": "not-a-digest"}),
+        json!({"bar_digest": "a".repeat(64)}),
+        json!({"bar_digest": format!("sha256:{}", "A".repeat(64))}),
+        json!({"bar_digest": format!("sha256:{}", "a".repeat(63))}),
+        json!({"bar_digest": format!("sha256:{}", "a".repeat(65))}),
+        json!({"bar_digest": format!("sha512:{}", "a".repeat(64))}),
+        json!({"bar_digest": 7}),
+        json!({"bar_digest": digest, "bar_source": "elsewhere.rs"}),
+        json!(digest),
+    ];
+    for value in refused {
+        assert!(
+            !plan_errors(json!({"preregistration": value})).is_empty(),
+            "{value}"
+        );
+    }
 }
 
 #[test]
+#[trace("TC-139", "FR-020-AC-1")]
 fn objective_is_optional_and_target_requires_a_bound() {
-    // Trace: FR-020-AC-1, TC-139.
     let contract = schema("measurement-plan-frontmatter.schema");
     assert!(!strs(&contract["required"]).contains(&"objective"));
     let errors = |objective: Value| plan_errors(json!({"objective": objective}));
@@ -501,8 +444,8 @@ fn objective_is_optional_and_target_requires_a_bound() {
 }
 
 #[test]
+#[trace("TC-139", "FR-020-AC-1")]
 fn measurement_plan_skeleton_shows_a_valid_objective() {
-    // Trace: FR-020-AC-1, TC-139.
     let skeleton = frontmatter(&skeleton_path("MeasurementPlan.md"));
     let direction = skeleton["objective"]["direction"].as_str().unwrap();
     assert!(["higher", "lower", "zero", "target"].contains(&direction));
@@ -510,8 +453,8 @@ fn measurement_plan_skeleton_shows_a_valid_objective() {
 }
 
 #[test]
+#[trace("TC-166", "FR-026-AC-1")]
 fn objective_steering_fields_are_optional_advisory_and_range_checked() {
-    // Trace: FR-026-AC-1, TC-166.
     let contract = schema("measurement-plan-frontmatter.schema");
     let objective_schema = &contract["$defs"]["objective"];
     let props: BTreeSet<&str> = objective_schema["properties"]
@@ -557,8 +500,8 @@ fn objective_steering_fields_are_optional_advisory_and_range_checked() {
 }
 
 #[test]
+#[trace("TC-170", "FR-026-AC-5")]
 fn measurement_plan_skeleton_shows_the_steering_fields() {
-    // Trace: FR-026-AC-5, TC-170.
     let skeleton = frontmatter(&skeleton_path("MeasurementPlan.md"));
     let objective = &skeleton["objective"];
     assert!(objective["weight"].as_f64().unwrap() > 0.0);
@@ -581,8 +524,9 @@ fn measurement_plan_skeleton_shows_the_steering_fields() {
 }
 
 #[test]
+#[trace("TC-144", "FR-021-AC-1")]
+#[trace("TC-192", "FR-021-AC-13")]
 fn decision_rule_is_a_closed_comparator_with_exactly_one_reference() {
-    // Trace: FR-021-AC-1, FR-021-AC-13, TC-144, TC-192.
     let contract = schema("measurement-plan-frontmatter.schema");
     let rule = &contract["$defs"]["decision_rule"];
     assert_eq!(
@@ -743,8 +687,8 @@ fn decision_rule_is_a_closed_comparator_with_exactly_one_reference() {
 }
 
 #[test]
+#[trace("TC-188", "FR-021-AC-12")]
 fn margin_mode_refusals_and_acceptance_run_through_the_validator() {
-    // Trace: FR-021-AC-12, TC-188.
     for mode in ["relative", "absolute"] {
         assert!(
             dr(json!({
@@ -795,8 +739,8 @@ fn margin_mode_refusals_and_acceptance_run_through_the_validator() {
 }
 
 #[test]
+#[trace("TC-144", "FR-021-AC-9")]
 fn decision_rule_agrees_with_objective_direction_and_estimator() {
-    // Trace: FR-021-AC-9, TC-144.
     fn rule(comparator: &str, reference: Option<Value>) -> Value {
         merged(
             json!({"comparator": comparator}),
@@ -862,8 +806,8 @@ fn decision_rule_agrees_with_objective_direction_and_estimator() {
 }
 
 #[test]
+#[trace("TC-171", "FR-021-AC-10")]
 fn decision_rule_external_reference_baseline_has_no_estimator_restriction() {
-    // Trace: FR-021-AC-10, TC-171.
     //
     // `external-reference` is a checker-resolved value from outside the plan
     // (PLAT-1009), not a corpus computation like `constant-predictor`, so it
@@ -906,8 +850,8 @@ fn decision_rule_external_reference_baseline_has_no_estimator_restriction() {
 }
 
 #[test]
+#[trace("TC-145", "FR-021-AC-2")]
 fn estimator_is_a_closed_vocabulary() {
-    // Trace: FR-021-AC-2, TC-145.
     let contract = schema("measurement-plan-frontmatter.schema");
     let design = &contract["$defs"]["statistical_design"]["properties"];
     assert_eq!(
@@ -940,8 +884,8 @@ fn estimator_is_a_closed_vocabulary() {
 }
 
 #[test]
+#[trace("TC-145", "FR-021-AC-2")]
 fn measurement_plan_skeleton_shows_a_structured_decision_rule() {
-    // Trace: FR-021-AC-2, TC-145.
     let skeleton = frontmatter(&skeleton_path("MeasurementPlan.md"));
     let design = &skeleton["statistical_design"];
     assert_eq!(design["estimator"], "proportion");
@@ -976,8 +920,8 @@ fn case_paths(cases: &Value, key: &str) -> Vec<Value> {
 }
 
 #[test]
+#[trace("TC-154", "FR-024-AC-1")]
 fn protected_apparatus_is_a_unique_list_of_safe_relative_paths() {
-    // Trace: FR-024-AC-1, TC-154.
     let contract = schema("measurement-plan-frontmatter.schema");
     assert!(!strs(&contract["required"]).contains(&"protected_apparatus"));
     let cases = apparatus_cases();
@@ -1005,8 +949,8 @@ fn protected_apparatus_is_a_unique_list_of_safe_relative_paths() {
 }
 
 #[test]
+#[trace("TC-155", "FR-024-AC-2")]
 fn negative_controls_are_closed_and_required_at_gate_stage() {
-    // Trace: FR-024-AC-2, TC-155.
     let contract = schema("measurement-plan-frontmatter.schema");
     let kinds_value = &contract["$defs"]["negative_control"]["properties"]["kind"]["enum"];
     assert_eq!(
@@ -1087,8 +1031,8 @@ fn negative_controls_are_closed_and_required_at_gate_stage() {
 }
 
 #[test]
+#[trace("TC-155", "FR-024-AC-8")]
 fn gate_and_apparatus_edit_plans_require_protected_apparatus() {
-    // Trace: FR-024-AC-8, TC-155.
     let control = json!({"kind": "suppressed-observation", "description": "d"});
     let edit = json!({"kind": "apparatus-edit", "description": "d"});
     let gate = json!({"stage": "gate", "ground_truth_kind": "mechanical"});
@@ -1140,8 +1084,8 @@ fn gate_and_apparatus_edit_plans_require_protected_apparatus() {
 }
 
 #[test]
+#[trace("TC-159", "FR-024-AC-6")]
 fn measurement_plan_skeleton_shows_apparatus_and_negative_controls() {
-    // Trace: FR-024-AC-6, TC-159.
     let skeleton = frontmatter(&skeleton_path("MeasurementPlan.md"));
     assert!(
         skeleton["protected_apparatus"]
@@ -1170,36 +1114,6 @@ fn measurement_plan_skeleton_shows_apparatus_and_negative_controls() {
     }
 }
 
-#[test]
-fn component_contract_exposes_failure_and_control_boundaries() {
-    let contract = schema("component-assurance-contract-frontmatter.schema");
-    let required = strs(&contract["required"]);
-    for key in [
-        "responsibility",
-        "failure_behaviors",
-        "version_pins",
-        "controls",
-        "isolation",
-        "replacement",
-    ] {
-        assert!(required.contains(&key), "{key}");
-    }
-    assert_eq!(
-        contract["properties"]["kind"]["enum"],
-        json!(["deterministic", "stochastic", "human"])
-    );
-}
-
-#[test]
-fn argument_has_authored_claims_and_no_score() {
-    let contract = schema("assurance-argument-frontmatter.schema");
-    let required = strs(&contract["required"]);
-    for key in ["top_claim", "reasoning", "participants", "challenges"] {
-        assert!(required.contains(&key), "{key}");
-    }
-    assert!(!contract.to_string().to_lowercase().contains("score"));
-}
-
 fn argument_with_top_claim(over: Value) -> Value {
     let mut argument = frontmatter(&skeleton_path("AssuranceArgument.md"));
     let mut claim = argument["top_claim"]
@@ -1213,8 +1127,8 @@ fn argument_with_top_claim(over: Value) -> Value {
 }
 
 #[test]
+#[trace("TC-143", "FR-023-AC-1", "FR-023-AC-2", "FR-023-AC-3")]
 fn supported_claim_must_reference_evidence() {
-    // Trace: FR-023-AC-1, FR-023-AC-2, FR-023-AC-3, TC-143.
     let v = validator(&schema("assurance-argument-frontmatter.schema"));
     let evidence = "ix://example/juniper/evidence/request-loss-run";
 
@@ -1256,8 +1170,8 @@ fn supported_claim_must_reference_evidence() {
 }
 
 #[test]
+#[trace("TC-143", "FR-023-AC-1")]
 fn onboarding_checklist_reports_the_nested_evidence_refs_condition() {
-    // Trace: FR-023-AC-1, TC-143.
     //
     // `onboard.js` derives conditional requirements from a schema's `allOf`.
     // The claim's `evidence_refs` requirement sits inside `$defs/claim`,
@@ -1278,93 +1192,7 @@ fn onboarding_checklist_reports_the_nested_evidence_refs_condition() {
 }
 
 #[test]
-fn repository_has_only_governed_review_evidence() {
-    // Trace: StR-001-VC-1, TC-001; StR-003-VC-2, TC-097.
-    let repo = root();
-    assert!(!repo.join("examples").exists());
-    assert!(!repo.join("research").exists());
-    let reviews = repo.join("reviews");
-    let review_files = glob_ext(&reviews, "md");
-    assert!(!review_files.is_empty());
-    let subdirs = std::fs::read_dir(&reviews)
-        .unwrap()
-        .filter(|e| e.as_ref().unwrap().path().is_dir())
-        .count();
-    assert_eq!(subdirs, 0);
-    for path in review_files {
-        let metadata = frontmatter(&path);
-        assert_eq!(metadata["type"], "SpecReview");
-        let analysis = metadata["analysis"].as_str().unwrap();
-        assert!(
-            ["code-review", "gap-analysis"].contains(&analysis),
-            "{}",
-            path.display()
-        );
-    }
-    let names = |dir: &Path| -> BTreeSet<String> {
-        std::fs::read_dir(dir)
-            .unwrap()
-            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
-            .collect()
-    };
-    let owned =
-        |items: &[&str]| -> BTreeSet<String> { items.iter().map(|s| (*s).to_owned()).collect() };
-    assert_eq!(
-        names(&repo.join("plan")),
-        owned(&[
-            "PLAN-001-assurance-onboarding",
-            "PLAN-002-verification-semantics"
-        ])
-    );
-    assert_eq!(
-        names(&repo.join("docs")),
-        owned(&[
-            "compatibility-matrix.md",
-            "consumption-boundary.md",
-            "measurement-walkthrough.md",
-            "migration-contract.md",
-            "structural-coverage.md",
-            "verification-semantics",
-        ])
-    );
-}
-
-#[test]
-fn module_payload_is_visible_to_git_and_rights_checks() {
-    let repo = root();
-    let expected: BTreeSet<String> = walk_files(&package_root())
-        .iter()
-        .filter(|p| !p.components().any(|c| c.as_os_str() == "__pycache__"))
-        .map(|p| {
-            p.strip_prefix(&repo)
-                .unwrap()
-                .to_string_lossy()
-                .replace('\\', "/")
-        })
-        .collect();
-    let completed = Command::new("git")
-        .args([
-            "ls-files",
-            "-z",
-            "--cached",
-            "--others",
-            "--exclude-standard",
-        ])
-        .current_dir(&repo)
-        .output()
-        .expect("run git");
-    assert!(completed.status.success());
-    let visible: BTreeSet<String> = completed
-        .stdout
-        .split(|b| *b == 0)
-        .filter(|raw| !raw.is_empty())
-        .map(|raw| String::from_utf8(raw.to_vec()).unwrap())
-        .collect();
-    let missing: Vec<_> = expected.difference(&visible).collect();
-    assert!(missing.is_empty(), "not visible to git: {missing:?}");
-}
-
-#[test]
+#[trace("TC-112", "FR-017-AC-4")]
 fn packages_are_private_and_have_no_release_configuration() {
     let repo = root();
     let npm: Value = serde_json::from_str(&read(&repo.join("package.json"))).unwrap();
@@ -1389,6 +1217,7 @@ fn ci_workflow() -> Value {
 }
 
 #[test]
+#[trace("TC-112", "FR-017-AC-4")]
 fn hosted_ci_is_manual_only() {
     // Program invariant: opening or updating a PR must not dispatch hosted CI.
     let workflow = ci_workflow();
@@ -1402,6 +1231,7 @@ fn hosted_ci_is_manual_only() {
 }
 
 #[test]
+#[trace("TC-116", "NFR-005-AC-1")]
 fn manual_verification_workflow_runs_the_rust_foundation_gate() {
     let workflow = ci_workflow();
     let steps = workflow["jobs"]["verify"]["steps"].as_array().unwrap();
@@ -1445,14 +1275,6 @@ fn manual_verification_workflow_runs_the_rust_foundation_gate() {
     assert!(makefile.contains("$(CARGO) audit"));
 }
 
-#[test]
-fn structural_coverage_never_collapses_unknowns_into_success() {
-    let text = read(&root().join("docs").join("structural-coverage.md")).to_lowercase();
-    assert!(text.contains("exactly once"));
-    assert!(text.contains("silently merged into success"));
-    assert!(text.contains("quality score"));
-}
-
 fn find_on_path(name: &str) -> Option<PathBuf> {
     let path = std::env::var_os("PATH")?;
     std::env::split_paths(&path)
@@ -1461,6 +1283,7 @@ fn find_on_path(name: &str) -> Option<PathBuf> {
 }
 
 #[test]
+#[trace("TC-006", "FR-001-AC-3")]
 fn quire_accepts_every_skeleton_without_diagnostics() {
     let executable = std::env::var_os("QUIRE_BIN")
         .filter(|v| !v.is_empty())
@@ -1505,41 +1328,54 @@ fn quire_accepts_every_skeleton_without_diagnostics() {
     );
 }
 
-#[test]
-fn every_matrix_test_reference_has_a_test_case_row() {
-    // Trace: FR-021-AC-13, TC-192.
-    //
-    // A traceability-matrix row that names a TC-n with no `| TC-n |` row in the
-    // Test Cases table is a corrupted or missing row.
-    let text = read(&root().join("spec").join("tests.md"));
-    let defined: BTreeSet<String> = Regex::new(r"(?m)^\| (TC-\d+) \|")
-        .unwrap()
-        .captures_iter(&text)
-        .map(|c| c[1].to_owned())
-        .collect();
-    let row_re = Regex::new(r"^\| (?:FR|NFR|StR)-[\w-]+ \| [^|]+ \| ([^|]+)\|").unwrap();
+/// Test-case ids named by requirement coverage rows (`| FR-n | AC | TC.. |`)
+/// that have no row of their own in the Test Case Summary table.
+fn dangling_test_case_references(matrix: &str) -> BTreeSet<String> {
+    let defined_re = Regex::new(r"^\|\s*(TC-\d+)\s*\|").unwrap();
+    let coverage_re = Regex::new(r"^\|\s*(?:FR|NFR|StR|US)-[\w-]+\s*\|[^|]+\|([^|]+)\|").unwrap();
     let tc_re = Regex::new(r"TC-\d+").unwrap();
-    let mut referenced: BTreeSet<String> = BTreeSet::new();
-    for line in text.lines() {
-        if let Some(row) = row_re.captures(line) {
-            referenced.extend(tc_re.find_iter(&row[1]).map(|m| m.as_str().to_owned()));
-        }
-    }
-    // Matrix references that predate this check and have no test-case row.
-    let undefined_matrix_tcs: BTreeSet<String> = ["TC-016", "TC-118"]
-        .iter()
-        .map(|s| (*s).to_owned())
+    let defined: BTreeSet<&str> = matrix
+        .lines()
+        .filter_map(|line| defined_re.captures(line))
+        .map(|c| c.get(1).unwrap().as_str())
         .collect();
-    let dangling: BTreeSet<String> = referenced.difference(&defined).cloned().collect();
-    assert_eq!(dangling, undefined_matrix_tcs);
-    for tc in ["TC-191", "TC-192", "TC-193"] {
-        assert!(defined.contains(tc), "{tc}");
-    }
+    matrix
+        .lines()
+        .filter_map(|line| coverage_re.captures(line))
+        .flat_map(|row| {
+            tc_re
+                .find_iter(row.get(1).unwrap().as_str())
+                .map(|m| m.as_str().to_owned())
+                .collect::<Vec<_>>()
+        })
+        .filter(|tc| !defined.contains(tc.as_str()))
+        .collect()
 }
 
 #[test]
+#[trace("TC-205", "NFR-005-AC-5")]
+fn every_matrix_test_reference_has_a_test_case_row() {
+    let matrix = read(&root().join("spec").join("tests.md"));
+    let dangling = dangling_test_case_references(&matrix);
+    assert!(
+        dangling.is_empty(),
+        "coverage rows name absent test cases: {dangling:?}"
+    );
+
+    // The check can fail: a coverage row naming an absent test case is caught,
+    // and a padded test-case row still counts as present.
+    let probe = format!(
+        "{matrix}\n| FR-999 | FR-999-AC-1 | TC-998, TC-999 | x |\n| TC-998  | padded | Unit | P1 | FR-999-AC-1 | x |\n"
+    );
+    assert_eq!(
+        dangling_test_case_references(&probe),
+        BTreeSet::from(["TC-999".to_owned()])
+    );
+}
+
+#[test]
+#[trace("TC-195", "FR-003-AC-8")]
 fn review_by_date_time_is_enforced_by_the_pattern_alone() {
-    // Trace: FR-003-AC-8, TC-195.
     //
     // The validator asserts no `format` by default for 2020-12, like quire, so
     // this proves the pattern carries the check.

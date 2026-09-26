@@ -74,6 +74,7 @@ implemented and reviewed.
 | FR-001 | FR-001-AC-6 | TC-044 | ✅ Passing |
 | FR-001 | FR-001-AC-7 | TC-045 | ✅ Passing |
 | FR-001 | FR-001-AC-8 | TC-174 | ✅ Passing |
+| FR-001 | FR-001-AC-9 | TC-202 | ✅ Valid, invalid, capped-findings, unavailable-validation and all-valid summary cases passing |
 | FR-002 | FR-002-AC-1 | TC-009 | ✅ Passing |
 | FR-002 | FR-002-AC-2 | TC-010 | ✅ Passing |
 | FR-002 | FR-002-AC-3 | TC-011 | ✅ Passing |
@@ -111,6 +112,7 @@ implemented and reviewed.
 | FR-007 | FR-007-AC-1 | TC-035 | ✅ Passing |
 | FR-007 | FR-007-AC-2 | TC-036 | ✅ Passing |
 | FR-007 | FR-007-AC-3 | TC-037 | ✅ Passing |
+| FR-007 | FR-007-AC-4 | TC-043 | ✅ Passing |
 | FR-014 | FR-014-AC-1 | TC-096 | ✅ Rust package foundation backed |
 | FR-014 | FR-014-AC-2 | TC-098 | 🚧 Compatibility-command slice backed; aggregate pending |
 | FR-014 | FR-014-AC-3 | TC-099 | 🚧 Compatibility-command slice backed; aggregate pending |
@@ -131,6 +133,7 @@ implemented and reviewed.
 | FR-016 | FR-016-AC-2 | TC-106 | ✅ Rust evaluator and CLI parity backed |
 | FR-016 | FR-016-AC-3 | TC-107 | 🚧 Rust lifecycle host and adverse cases pass against ix-flow 0.2.3; human matrix acceptance pending |
 | FR-016 | FR-016-AC-4 | TC-108 | 🚧 Pending implementation |
+| FR-016 | FR-016-AC-5 | TC-201 | ✅ Single-binding refusal cases with retained-reference parity passing |
 | FR-017 | FR-017-AC-1 | TC-109 | 🚧 Pending implementation |
 | FR-017 | FR-017-AC-2 | TC-110 | 🚧 Pending implementation |
 | FR-017 | FR-017-AC-3 | TC-111 | 🚧 Bounded Rust package/archive/install candidate and preceding qualification slices backed; full slice review and promotion pending |
@@ -142,7 +145,7 @@ implemented and reviewed.
 | FR-018 | FR-018-AC-1 | TC-097 | 🚧 Pending implementation |
 | FR-018 | FR-018-AC-2 | TC-113 | 🚧 Content-rights, package-audit, and compatibility/corpus/fixture-generation same-revision cutovers plus their deletion candidates backed; aggregate removal population pending |
 | FR-018 | FR-018-AC-3 | TC-114 | 🚧 Content-rights, package-audit, and compatibility/corpus dispatch rollback/reapplication backed; aggregate rollback population pending |
-| FR-018 | FR-018-AC-4 | TC-115 | 🚧 Pending implementation |
+| FR-018 | FR-018-AC-4 | TC-115 | 🚧 Python slice backed (`tests/python_port/module.rs`: only the configuration-only package `__init__.py` remains); JavaScript onboarding/invariant providers remain, aggregate audit pending |
 | FR-020 | FR-020-AC-1 | TC-139 | ✅ Schema accept/refuse cases and skeleton validation passing |
 | FR-020 | FR-020-AC-2 | TC-140 | ✅ Rust construction/deserialization refusals and schema/enum wire-set equality passing |
 | FR-020 | FR-020-AC-3 | TC-141 | ✅ Unversioned objective add/remove/change findings naming `objective`, and versioned no-finding cases passing |
@@ -177,6 +180,8 @@ implemented and reviewed.
 | FR-024 | FR-024-AC-7 | TC-142 | ✅ Minimal `measurement` consumer reaches the apparatus and control types without `serde_json` |
 | FR-024 | FR-024-AC-8 | TC-155 | ✅ Gate-stage and apparatus-edit `protected_apparatus` requirements passing |
 | FR-024 | FR-024-AC-10 | TC-185 | ✅ Candidate `execution_procedure` path and protected-list schema cases passing; Quoin checks exact membership and source bytes |
+| FR-024 | FR-024-AC-11 | TC-203 | ✅ Gate-stage ground-truth requirement and closed-value cases passing |
+| FR-024 | FR-024-AC-12 | TC-204 | ✅ Preregistration digest accept/refuse cases passing |
 | FR-025 | FR-025-AC-1 | TC-163 | ✅ Profile `measurement_policy` schema accept/refuse cases and stage-enum parity passing |
 | FR-025 | FR-025-AC-2 | TC-160 | ✅ Recommend-mode pass for every checker status passing |
 | FR-025 | FR-025-AC-3 | TC-161, TC-164 | ✅ Require-mode accept and typed refusals passing |
@@ -198,7 +203,7 @@ implemented and reviewed.
 | NFR-001 | Install, discovery, digest comparison, and static scan | TC-038 | ✅ Passing |
 | NFR-002 | Agent evaluation against fixture-authorized outcomes | TC-039 | 🚧 No evaluation aggregate is retained in this repository, so no test here decides the three measured counts; the aggregate gate that refuses an unsupported addition or an inferred terminal decision is backed by TC-032, TC-034, and TC-049 |
 | NFR-003 | Wheel/npm member audit plus compatibility invocation | TC-040 | ✅ Passing |
-| NFR-005 | Exact toolchain build, unsafe audit, executable-path audit, and Quire reconciliation | TC-115..TC-118 | 🚧 Quire reconciliation (TC-118) backed; toolchain, unsafe audit, and executable-path audit pending |
+| NFR-005 | Exact toolchain build, unsafe audit, executable-path audit, Quire reconciliation, and matrix row integrity | TC-115..TC-118, TC-205 | 🚧 Quire reconciliation (TC-118) backed; toolchain, unsafe audit, and executable-path audit pending |
 
 ### Constraint Coverage
 
@@ -278,7 +283,7 @@ implemented and reviewed.
 | TC-040 | Package contract stability reaches all thresholds | Integration | P0 | NFR-003 | ✅ |
 | TC-041 | Supported-agent set rejects missing, extra, or duplicate hosts | Property | P1 | FR-002-CON-1 | ✅ |
 | TC-042 | Thin manifests reject behavioral sections and copied workflows | Property | P1 | FR-002-CON-2 | ✅ |
-| TC-043 | Compatibility inventory is exactly the four promoted pilots | Property | P1 | FR-007-CON-1 | ✅ |
+| TC-043 | Compatibility inventory is exactly the four promoted pilots | Property | P1 | FR-007-AC-4, FR-007-CON-1 | ✅ |
 | TC-044 | Malformed or conflicting existing artifacts remain unchanged and require human resolution | E2E | P0 | FR-001-AC-6 | ✅ |
 | TC-045 | Artifact publication is staged, Quire-validated, atomic, and confined to the selected root | Integration | P0 | FR-001-AC-7 | ✅ |
 | TC-046 | Exactly one availability state exists for every considered producer | Property | P0 | FR-004-AC-7 | ✅ |
@@ -351,7 +356,7 @@ implemented and reviewed.
 | TC-112 | Package-manager and host files contain declarative dispatch only; npm lifecycle hooks invoke the pinned local Rust CLI in explicit hook mode without embedded staging/refusal semantics or contamination of npm output; `make test` invokes the Rust content-rights tree adapter and `make package-audit` invokes the Rust package-audit adapter after their respective same-revision correspondence; local qualification, real-agent evaluation, publication, and release operations remain explicit manual actions | Static | P0 | FR-017-AC-4, FR-017-CON-2 | 🚧 npm lifecycle, content-rights, and package-audit Rust dispatch backed; remaining host-configuration census pending |
 | TC-113 | Removal refuses mismatched revisions, incomplete parity, and direct invocations that still use the old path; content-rights removal additionally requires exact full-tree status/finding correspondence and an independently passing Rust tree and package-audit dispatch at one candidate revision, followed by removal of every executable import or subprocess reference to the deleted Python paths | Property | P0 | FR-018-AC-2, FR-018-CON-1 | 🚧 content-rights and package-audit same-revision cutovers plus final four-file deletion candidate backed; aggregate removal population pending |
 | TC-114 | A failed cutover can restore the previous invocation without changing historical bytes; the content-rights and package-audit dispatches are separately reverted while their retained implementations remain present before the final deletion step | Property | P0 | FR-018-AC-3, FR-018-CON-2 | 🚧 content-rights and package-audit revert/reapply evidence backed; aggregate rollback population pending |
-| TC-115 | Final audit finds no unapproved non-Rust semantic or assertion logic | Static | P0 | StR-003-VC-4, FR-016-CON-2, FR-018-AC-4, FR-018-CON-3, NFR-005-AC-4 | 🚧 pending implementation |
+| TC-115 | Final audit finds no unapproved non-Rust semantic or assertion logic | Static | P0 | StR-003-VC-4, FR-016-CON-2, FR-018-AC-4, FR-018-CON-3, NFR-005-AC-4 | 🚧 Python slice backed by `tests/python_port/module.rs`; JavaScript providers remain, aggregate audit pending |
 | TC-116 | Exact Rust 1.98.1 builds and tests every target with unsafe code forbidden | Compile | P0 | NFR-005-AC-1 | ✅ Rust package foundation; exact all-target gates recorded with implementation review |
 | TC-117 | Parsed first-party Rust tests under `src/` and `tests/` use an exact unaliased `ix_trace_rs::trace` import and bare trace attributes carrying both TC and AC literals; absent, aliased, path-qualified, malformed, invalid-source, and over-limit cases fail closed | Static | P0 | NFR-005-AC-2 | ✅ Parsed repository census, canonical-form adverse cases, and mutation evidence passing |
 | TC-118  | Quire reconciles every Rust test marker without missing, orphaned, or duplicate bindings | Integration | P0       | NFR-005-AC-3             | ✅ Real Quire reconciliation over this repository; submodule markers excluded, empty population refused |
@@ -430,6 +435,11 @@ implemented and reviewed.
 | TC-198 | `cargo tree --duplicates` (normal and build edges, every target) over the default graph and each capability feature alone (`--no-default-features`) finds no crate at more than one version, except `syn` under `manifest` and `digest`, `block-buffer`, `crypto-common`, `cpufeatures` under `campaign`; under `--features full` the duplicated set equals the listed residue exactly, so an unlisted new duplicate and a listed but resolved one both fail, and the failure names which; EA's own graph only, not a consumer's union | Static | P0 | FR-014-AC-10 | ✅ `tests/duplicate_crates.rs` passing; mutation-checked by emptying the `manifest` residue; `source-audit` alone resolves none |
 | TC-199 | `ContentDigest` pins the bare lowercase hex for empty, `abc` and 65,537-byte inputs through bytes, streaming reader, incremental hasher, `of_file`, PGM-01 `source_digest` and corpus `verify_bytes`; three JSON outputs through the evidence `output_digest`; one fixed input each through the history digest, governing file and runtime identity, package staging digest, executor snapshot, retained transcript and the campaign source projection; the evaluation-report identity digest is not pinned (a report embeds its temporary work directory); `of_file` refuses links, non-regular and absent paths; the reader refuses over-ceiling and cancelled reads; the algorithm is carried by the value; the `sha256:<hex>` form round-trips and the parser refuses an unknown algorithm, uppercase, wrong length and a missing prefix while the bare parser refuses the prefixed form; the serialized form is the bare hex string | Unit | P0 | FR-014-AC-11 | ✅ `src/content_digest.rs`, `tests/evidence_parity.rs`, `tests/semantics_parity.rs`, `tests/compatibility_corpus.rs`, `tests/campaign.rs`, `tests/producer_execution.rs` and the host-module unit tests passing |
 | TC-200 | A source scan of `src/` finds a hash crate, hash type, alias, leading-colon path, `Digest` import or other hash crate only in `content_digest` and `git_object_id`, compared for equality so a private helper (including one appended to `producer_execution`) and a stale entry both fail; the hash crate dependencies are exactly `sha1` and `sha2`; each mutation is proven on a scratch copy of `src/` | Static | P0 | FR-014-AC-11 | ✅ `tests/digest_identity_audit.rs` passing |
+| TC-201 | From a passing projection with one binding broken, the Rust evaluator and the retained provider agree on a failed outcome with that binding's code: any stage pair but one step forward in the MeasurementPlan schema's stage order, or an unknown stage, is `promotion_must_advance_one_stage`; an impact snapshot missing a change array or naming another revision, profile or baseline is `impact_snapshot_incomplete`; an expected but absent exception, or a recorded one unowned, unjustified, without impact, expired or undated whether or not expected, is `owned_current_exception_required`; a review for another subject, revision, analysis or artifact type, an invalid one or one without a path is `architecture_review_missing` or `code_review_missing`; each unbroken projection passes | Unit | P0 | FR-016-AC-5 | ✅ `tests/workflow_invariants_parity.rs` passing; mutation-checked by reordering two stages and dropping the architecture subject binding |
+| TC-202 | `onboard.js --summary` with stub Quire and Quoin reports a valid and an invalid artifact with its findings, caps findings at ten with a `+N more` line, labels this checkout's module version, reports `null` for an absent tool, omits the orientation sections, and exits 1 on an invalid artifact, 3 with a stated reason without Quire, and 0 when every artifact validates | Integration | P1 | FR-001-AC-9 | ✅ `tests/python_port/onboarding_script.rs` summary cases passing |
+| TC-203 | The MeasurementPlan schema accepts each ground-truth kind at and below gate, requires `ground_truth_kind` at gate as the only finding, leaves it optional below gate, and refuses an unknown, case-variant or empty value at every stage | Unit | P1 | FR-024-AC-11 | ✅ `tests/python_port/module.rs` schema cases passing |
+| TC-204 | The MeasurementPlan schema accepts no `preregistration` and `{ bar_digest }` with a lowercase `sha256:` digest, and refuses an empty object, a bare, uppercase, short, long or other-algorithm digest, a non-string digest, an extra member and a non-object value | Unit | P1 | FR-024-AC-12 | ✅ `tests/python_port/module.rs` schema cases passing |
+| TC-205 | Every TC id named by a requirement coverage row has a Test Case Summary row, matching rows whatever their cell padding, with no allowlist of exceptions; a synthetic coverage row naming an absent TC is detected | Static | P1 | NFR-005-AC-5 | ✅ `tests/python_port/module.rs` matrix-integrity case passing |
 
 ## Option Permutation Matrix
 

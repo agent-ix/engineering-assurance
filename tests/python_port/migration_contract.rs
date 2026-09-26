@@ -3,11 +3,12 @@
 //!
 //! Most of these read the contract. One reads the eight campaign repositories
 //! and checks the decision table accounts for what is in them.
+use ix_trace_rs::trace;
 use std::path::Path;
 use std::process::Command;
 use std::sync::LazyLock;
 
-use super::common::{read, root};
+use super::common::{read, root, truthy};
 
 const CAMPAIGN_REPOSITORIES: [&str; 8] = [
     "quire-contract-ir",
@@ -46,8 +47,8 @@ fn decision_rows() -> Vec<(String, String)> {
 }
 
 #[test]
+#[trace("TC-087", "FR-013-AC-1")]
 fn every_family_carries_exactly_one_decision() {
-    // Trace: FR-013-AC-1, TC-087.
     let rows = decision_rows();
     assert!(
         rows.len() >= 12,
@@ -66,8 +67,8 @@ fn every_family_carries_exactly_one_decision() {
 }
 
 #[test]
+#[trace("TC-088", "FR-013-AC-2")]
 fn the_table_accounts_for_every_recurring_family() {
-    // Trace: FR-013-AC-2, TC-088.
     // Skipped when the campaign repositories are not checked out. Stated,
     // never silent: a census that cannot read its population has not been taken.
     let root = root();
@@ -126,8 +127,8 @@ fn the_table_accounts_for_every_recurring_family() {
 }
 
 #[test]
+#[trace("TC-089", "FR-013-AC-3")]
 fn both_prohibitions_are_stated_by_name() {
-    // Trace: FR-013-AC-3, TC-089.
     assert!(CONTRACT.contains("No repository-local generic evidence schema"));
     assert!(CONTRACT.contains("No universal stdout corroboration"));
     assert!(CONTRACT.contains("verdict recovered from console text"));
@@ -140,8 +141,8 @@ fn both_prohibitions_are_stated_by_name() {
 }
 
 #[test]
+#[trace("TC-090", "FR-013-AC-4")]
 fn domain_validation_and_evidence_intake_have_distinct_owners() {
-    // Trace: FR-013-AC-4, TC-090.
     assert!(CONTRACT.contains("Domain output validation is not evidence intake"));
     for owner in [
         "the domain repository, in its own tests",
@@ -154,8 +155,8 @@ fn domain_validation_and_evidence_intake_have_distinct_owners() {
 }
 
 #[test]
+#[trace("TC-091", "FR-013-AC-5")]
 fn rollback_is_per_failure_mode_and_never_rewrites_history() {
-    // Trace: FR-013-AC-5, TC-091.
     assert!(CONTRACT.contains("## Rollback"));
     assert!(CONTRACT.contains("Legacy history is never rewritten in any of these paths."));
     assert!(CONTRACT.contains("do not edit the legacy record to make it read"));
@@ -166,8 +167,8 @@ fn rollback_is_per_failure_mode_and_never_rewrites_history() {
 }
 
 #[test]
+#[trace("TC-092", "FR-013-AC-6")]
 fn the_review_checklist_covers_every_required_question() {
-    // Trace: FR-013-AC-6, TC-092.
     let checklist: Vec<&str> = CONTRACT
         .lines()
         .filter(|line| line.trim().starts_with("- [ ]"))
@@ -195,8 +196,8 @@ fn the_review_checklist_covers_every_required_question() {
 }
 
 #[test]
+#[trace("TC-093", "FR-013-AC-7")]
 fn the_agent_allocation_covers_all_eight_repositories_once() {
-    // Trace: FR-013-AC-7, TC-093.
     let allocation = CONTRACT
         .split("## The decision table")
         .next()
@@ -215,8 +216,14 @@ fn the_agent_allocation_covers_all_eight_repositories_once() {
 }
 
 #[test]
+#[trace(
+    "TC-094",
+    "FR-013-AC-8",
+    "FR-013-CON-1",
+    "FR-013-CON-2",
+    "FR-013-CON-3"
+)]
 fn migration_waits_on_acceptance_and_claims_no_qualification() {
-    // Trace: FR-013-AC-8, TC-094, FR-013-CON-1, FR-013-CON-2, FR-013-CON-3.
     assert!(CONTRACT.contains("may begin until the compatibility matrix records"));
     // Whitespace-normalized: the sentence is line-wrapped in the document, and
     // a reader cares that it is said, not where it broke.
@@ -235,18 +242,12 @@ fn migration_waits_on_acceptance_and_claims_no_qualification() {
         "unexpected acceptance state {state}"
     );
     if state == "accepted" {
-        let truthy = |key: &str| {
-            !matches!(
-                &acceptance[key],
-                serde_json::Value::Null | serde_json::Value::Bool(false)
-            ) && acceptance[key].as_str().is_none_or(|s| !s.is_empty())
-        };
         assert!(
-            truthy("accepted_by"),
+            truthy(&acceptance["accepted_by"]),
             "the gate opened with nobody on record"
         );
         assert!(
-            truthy("accepted_at"),
+            truthy(&acceptance["accepted_at"]),
             "the gate opened with no date on record"
         );
     }

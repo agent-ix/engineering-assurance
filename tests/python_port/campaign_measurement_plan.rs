@@ -1,5 +1,6 @@
 //! The Campaign candidate's procedure path is an exact, safe plan input.
 use super::common::{package_root, read, schema, yaml};
+use ix_trace_rs::trace;
 use serde_json::{Value, json};
 
 fn validator() -> jsonschema::Validator {
@@ -27,8 +28,8 @@ fn errors(value: &Value) -> Vec<String> {
         .collect()
 }
 
-/// Trace: FR-024-AC-10, TC-185.
 #[test]
+#[trace("TC-185", "FR-024-AC-10")]
 fn procedure_path_is_optional_and_safe_json_files_are_valid() {
     jsonschema::meta::validate(&schema("measurement-plan-frontmatter.schema"))
         .expect("schema is a valid draft 2020-12 schema");
@@ -53,8 +54,8 @@ fn procedure_path_is_optional_and_safe_json_files_are_valid() {
     }
 }
 
-/// Trace: FR-024-AC-10, TC-185.
 #[test]
+#[trace("TC-185", "FR-024-AC-10")]
 fn procedure_path_refuses_unsafe_or_non_json_values() {
     let cases: Vec<Value> = [
         "",
@@ -83,8 +84,9 @@ fn procedure_path_refuses_unsafe_or_non_json_values() {
     }
 }
 
-/// Trace: FR-024-AC-10, TC-185; Quoin checks exact path coverage.
+/// Quoin checks exact path coverage.
 #[test]
+#[trace("TC-185", "FR-024-AC-10")]
 fn procedure_path_requires_protected_apparatus_declaration() {
     let mut candidate = plan();
     candidate["execution_procedure"] = json!("campaign/procedures/probe.json");
