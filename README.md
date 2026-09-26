@@ -356,6 +356,26 @@ number as a private marker map. `evidence`, `semantics`, `evaluation` and
 depend on exact numbers; nothing else does, and a consumer can opt in
 explicitly with `features = ["exact-numbers"]`.
 
+### Known duplicate crate versions
+
+A consumer that bans duplicate versions (`cargo deny`,
+`multiple-versions = "deny"`) resolves none for the default graph or for any
+capability feature alone, `source-audit` included, with two exceptions.
+Measured on normal and build edges over every target; `tests/duplicate_crates.rs`
+fails on any other duplicate and on a row below that stops being true.
+`campaign` hashes git object ids with `sha1` on the same RustCrypto `digest`
+generation as `sha2`, so it adds no duplicate.
+
+| Duplicated crate | Versions | Reached by | Owner and reason |
+|---|---|---|---|
+| `syn` | 2 and 3 | `manifest`, `full` | `jsonschema` 0.56 and 0.58: `strum_macros` 0.28 (syn 2, no syn 3 release), `zerocopy-derive` 0.8 via `ahash`, and on wasm targets `wasm-bindgen-macro-support`; this crate's `syn = 3` and the serde and thiserror derives are on syn 3 |
+| `io-lifetimes` | 2.0.4 and 3.0.1 | `full` | `cap-std` 4.0.3 (latest): `fs-set-times` 0.20.3 is on 2, `cap-primitives` and `io-extras` on 3 |
+| `windows-sys` | 0.59, 0.60 and 0.61 | `full` | `cap-std` subtree: `fs-set-times` and `winx` on 0.59, `io-extras` on 0.60; 0.61 is also ours (`rustix`, `tempfile`) |
+| `windows-targets` and the `windows_*` target crates | 0.52 and 0.53 | `full` | the `windows-sys` 0.59 and 0.60 split above |
+
+`cap-std` reaches only `full` (the `*_host` modules and the binary), and
+`jsonschema` reaches only `manifest`, so no other feature inherits either.
+
 ## Development
 
 ```bash
@@ -366,8 +386,8 @@ make rust-foundation-gate
 make integration-gate
 ```
 
-A bare `cargo test` runs only the default-feature test (default features are
-empty); use `cargo test --all-features`, which is what CI runs, for the full
+A bare `cargo test` runs only the tests that need no feature
+(`default_features`, `duplicate_crates`; default features are empty); use `cargo test --all-features`, which is what CI runs, for the full
 suite.
 
 Read [CONTENT_RIGHTS.md](CONTENT_RIGHTS.md) before adding content.

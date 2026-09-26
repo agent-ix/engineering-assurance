@@ -14,6 +14,11 @@ allow = [
 ]
 
 [bans]
+# "warn" because `full` carries the residue listed in the README ("Known
+# duplicate crate versions"): `cap-std` and `jsonschema` subtrees. `make
+# rust-deps` checks the empty-default graph only, so it does not see them; the
+# guard that a graph a consumer resolves has no unlisted duplicate is
+# `tests/duplicate_crates.rs`, which needs no cargo-deny.
 multiple-versions = "warn"
 wildcards = "deny"
 
