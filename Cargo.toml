@@ -227,6 +227,12 @@ required-features = ["workflow-invariants"]
 # builds only the test targets that need no capability; the rest declare
 # `required-features`.
 default = []
+# FR-027: atomic no-replace publish, and the declared-reference verifier. Both
+# are filesystem modules, so like `producer-execution` they are exempt from the
+# FR-014-AC-4 I/O-freedom audit. The publisher needs only `thiserror`; the
+# verifier reuses `ContentDigest::of_file`, which lives in `producer-execution`.
+atomic-publish = ["dep:thiserror"]
+reference-verifier = ["producer-execution"]
 # `content-digest` is the one evidence-byte identity (`ContentDigest`); every
 # capability that hashes retained bytes implies it rather than carrying its own
 # `sha2` use.
@@ -364,6 +370,7 @@ exact-numbers = ["serde_json/arbitrary_precision"]
 # and its `*_host` modules use (clap, cap-std, tar, zip, flate2, tempfile),
 # plus `exact-numbers`.
 full = [
+  "atomic-publish",
   "campaign",
   "claim-strength",
   "compatibility",
@@ -381,6 +388,7 @@ full = [
   "package-lifecycle",
   "package-membership",
   "producer-execution",
+  "reference-verifier",
   "semantics",
   "source-audit",
   "structured-yaml",

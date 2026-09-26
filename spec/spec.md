@@ -178,6 +178,9 @@ same canonical bundle and do not redefine these responsibilities.
 - [FR-026](./functional/FR-026-measurement-plan-objective-steering-fields.md) —
   declare optional `weight`, `value_half_life`, and `budget` steering fields
   on a MeasurementPlan objective, advisory only and never a gate.
+- [FR-027](./functional/FR-027-atomic-publish-and-reference-verification.md) —
+  publish evidence files without replacement and verify declared file
+  references, reporting every mismatch.
 
 ### Non-Functional Requirements
 

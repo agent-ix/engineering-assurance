@@ -195,6 +195,9 @@ implemented and reviewed.
 | FR-026 | FR-026-AC-4 | TC-169 | ✅ Smallest and largest steering values produce the identical decision-rule verdict as none at all |
 | FR-026 | FR-026-AC-5 | TC-170 | ✅ Skeleton carries all three steering fields with an advisory-only section, no warning |
 | FR-026 | FR-026-AC-6 | TC-142 | ✅ Minimal `measurement` consumer reaches the steering-field accessors without `serde_json` |
+| FR-027 | FR-027-AC-1 | TC-206 | ✅ Atomic publish creation and sidecar-cleanup cases passing |
+| FR-027 | FR-027-AC-2 | TC-207 | ✅ Identical, different, directory, symlink and pre-commit-race collision cases passing |
+| FR-027 | FR-027-AC-3 | TC-208 | ✅ Every-mismatch reference verification with JSON Pointer findings passing |
 
 ### Non-Functional Requirement Coverage
 
@@ -440,6 +443,9 @@ implemented and reviewed.
 | TC-203 | The MeasurementPlan schema accepts each ground-truth kind at and below gate, requires `ground_truth_kind` at gate as the only finding, leaves it optional below gate, and refuses an unknown, case-variant or empty value at every stage | Unit | P1 | FR-024-AC-11 | ✅ `tests/python_port/module.rs` schema cases passing |
 | TC-204 | The MeasurementPlan schema accepts no `preregistration` and `{ bar_digest }` with a lowercase `sha256:` digest, and refuses an empty object, a bare, uppercase, short, long or other-algorithm digest, a non-string digest, an extra member and a non-object value | Unit | P1 | FR-024-AC-12 | ✅ `tests/python_port/module.rs` schema cases passing |
 | TC-205 | Every TC id named by a requirement coverage row has a Test Case Summary row, matching rows whatever their cell padding, with no allowlist of exceptions; a synthetic coverage row naming an absent TC is detected | Static | P1 | NFR-005-AC-5 | ✅ `tests/python_port/module.rs` matrix-integrity case passing |
+| TC-206 | Publishing bytes to an absent destination creates it with exactly those bytes, and no `.tmp-` sidecar remains in the directory | Unit | P0 | FR-027-AC-1, FR-027-CON-1 | ✅ `src/atomic_publish.rs` passing |
+| TC-207 | Publishing over an identical existing file succeeds and leaves it untouched; over a different file, a directory or a symbolic link it returns the typed collision with the destination unchanged; a destination appearing before the commit step is handled the same way; the sidecar is removed in every case | Unit | P0 | FR-027-AC-2 | ✅ `src/atomic_publish.rs` passing |
+| TC-208 | Verifying a list of declared references with a size mismatch, a digest mismatch, a missing file, a symbolic link, a directory and an escaping path reports one typed finding per mismatch at its own JSON Pointer, does not stop at the first, and reports nothing for matching references | Unit | P0 | FR-027-AC-3 | ✅ `src/reference_verifier.rs` passing |
 
 ## Option Permutation Matrix
 
