@@ -338,7 +338,14 @@ As a library, every module has its own capability feature (for example
 modules it uses and pulls only the dependencies they need. The table of
 features, modules and dependencies is at the top of the crate documentation in
 `src/lib.rs`. The `engineering-assurance` binary requires `full`.
-`make rust-features` checks that every feature compiles alone.
+`make rust-features` checks that every feature compiles alone, and that its
+unit tests compile.
+
+`exact-numbers` is an opt-in feature that turns on
+`serde_json/arbitrary_precision`. It is workspace-global (Cargo unifies
+features) and changes how a `serde_json::Value` bridges to non-JSON
+serializers. `evidence`, `semantics`, `evaluation` and `evaluation-reports`
+imply it because their digests and refusals depend on exact numbers.
 
 ## Development
 

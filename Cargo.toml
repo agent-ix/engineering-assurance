@@ -88,16 +88,29 @@ evaluation = [
   "evidence",
   "workflow",
   "dep:serde",
+  "dep:serde_json",
   "dep:thiserror",
   "dep:time",
 ]
 evaluation-reports = [
   "evaluation",
+  "evidence",
+  "workflow",
   "dep:serde",
   "dep:serde_json",
   "dep:thiserror",
 ]
-evidence = ["dep:serde", "dep:serde_json", "dep:sha2", "dep:thiserror"]
+# `evidence` and `semantics` (and so `evaluation`, `evaluation-reports`) hash
+# and compare numbers that only stay exact with `serde_json/arbitrary_precision`
+# (integers beyond u64, refusal of `1e309`); measured by running
+# `evidence_parity` and `semantics_parity` with and without it.
+evidence = [
+  "exact-numbers",
+  "dep:serde",
+  "dep:serde_json",
+  "dep:sha2",
+  "dep:thiserror",
+]
 manifest = [
   "structured-yaml",
   "dep:jsonschema",
@@ -117,6 +130,7 @@ package-membership = ["dep:serde", "dep:thiserror"]
 semantics = [
   "claim-strength",
   "compatibility-corpus",
+  "exact-numbers",
   "dep:serde",
   "dep:serde_json",
   "dep:sha2",
@@ -130,8 +144,16 @@ workflow-invariants = [
   "dep:thiserror",
   "dep:time",
 ]
+# Opt-in: turns on `serde_json/arbitrary_precision`. Cargo unifies features
+# across the whole dependency graph, so enabling this in one crate changes
+# serde_json's number representation for every crate in the same build (it is
+# workspace-global, not local to this package), and it changes how a
+# `serde_json::Value` bridges to non-JSON serializers (yaml, toml, ciborium).
+# Capabilities whose code depends on exact numbers enable it themselves.
+exact-numbers = ["serde_json/arbitrary_precision"]
 # `full` is every capability plus what only the `engineering-assurance` binary
-# and its `*_host` modules use (clap, cap-std, tar, zip, flate2, tempfile), plus the `serde_json/arbitrary_precision` flip.
+# and its `*_host` modules use (clap, cap-std, tar, zip, flate2, tempfile),
+# plus `exact-numbers`.
 full = [
   "campaign",
   "claim-strength",
@@ -154,7 +176,7 @@ full = [
   "structured-yaml",
   "workflow",
   "workflow-invariants",
-  "serde_json/arbitrary_precision",
+  "exact-numbers",
   "dep:cap-std",
   "dep:clap",
   "dep:flate2",
@@ -190,6 +212,9 @@ zip = { version = "8.6", default-features = false, features = ["deflate-flate2"]
 # copy carried, matching the other Agent-IX repos that consume it.
 ix-trace-rs = { git = "https://github.com/agent-ix/ix-trace-rs", rev = "2ce4ebf47f726b9d76388220545cd0abda8a5cfb", version = "=0.1.0" }
 tempfile = "3.27"
+# The `compatibility` unit tests use these; the feature itself does not.
+time = { version = "0.3", features = ["formatting", "parsing"] }
+unicode-casefold = "0.2"
 
 [workspace]
 resolver = "2"
@@ -209,3 +234,4 @@ workspace = true
 [profile.release]
 codegen-units = 1
 lto = "thin"
+

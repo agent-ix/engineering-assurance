@@ -5,7 +5,7 @@
 //!
 //! This crate is the reusable boundary governed by ADR-002 and FR-014. Domain
 //! modules are I/O-free. FR-019 admits process, filesystem, and environment
-//! access only inside the bounded [`producer_execution`] capability.
+//! access only inside the bounded `producer_execution` capability.
 //!
 //! # Cargo features
 //!
@@ -13,8 +13,14 @@
 //! consumer needs; each feature compiles alone (`make rust-features`).
 //! `full` (the current `default`) enables every row below plus the
 //! `engineering-assurance` binary's own crates (`clap`, `cap-std`, `tar`,
-//! `zip`, `flate2`, `tempfile`) and `serde_json/arbitrary_precision`, which
-//! no per-capability feature enables.
+//! `zip`, `flate2`, `tempfile`) and `exact-numbers`.
+//!
+//! `exact-numbers` turns on `serde_json/arbitrary_precision`. Cargo unifies
+//! features across the whole build, so it is workspace-global and changes how
+//! a `serde_json::Value` bridges to non-JSON serializers (yaml, toml,
+//! ciborium). It is opt-in, and only the features marked "implies
+//! `exact-numbers`" below enable it: their identity digests and refusals
+//! (integers beyond `u64`, `1e309`) change without it.
 //!
 //! | Feature | Module(s) | Other features it enables | Extra dependencies |
 //! |---|---|---|---|
@@ -23,9 +29,9 @@
 //! | `compatibility-corpus` | `compatibility_corpus` | | `serde`, `serde_json`, `sha2`, `thiserror` |
 //! | `content-rights` | `content_rights` | | `regex`, `serde`, `serde_json`, `thiserror`, `unicode-casefold` |
 //! | `discovery` | `discovery` | `workflow` | `serde`, `serde_json`, `thiserror` |
-//! | `evaluation` | `evaluation` | `evidence`, `workflow` | `serde`, `thiserror`, `time` |
-//! | `evaluation-reports` | `evaluation_reports` | `evaluation` | `serde`, `serde_json`, `thiserror` |
-//! | `evidence` | `evidence` | | `serde`, `serde_json`, `sha2`, `thiserror` |
+//! | `evaluation` | `evaluation` | `evidence`, `workflow` (implies `exact-numbers`) | `serde`, `serde_json`, `thiserror`, `time` |
+//! | `evaluation-reports` | `evaluation_reports` | `evaluation`, `evidence`, `workflow` (implies `exact-numbers`) | `serde`, `serde_json`, `thiserror` |
+//! | `evidence` | `evidence` | `exact-numbers` | `serde`, `serde_json`, `sha2`, `thiserror` |
 //! | `manifest` | `manifest` | `structured-yaml` | `jsonschema`, `serde`, `serde_json`, `thiserror` |
 //! | `measurement` | `measurement` | | `serde`, `thiserror` |
 //! | `onboarding` | `onboarding` | | `serde`, `serde_json`, `thiserror`, `yaml_serde` |
@@ -33,13 +39,14 @@
 //! | `package-lifecycle` | `package_lifecycle` | | `serde`, `serde_json`, `thiserror` |
 //! | `package-membership` | `package_membership` | | `serde`, `thiserror` |
 //! | `producer-execution` | `producer_execution` | | `rustix`, `serde`, `serde_json`, `serde_json_canonicalizer`, `sha2`, `thiserror` |
-//! | `semantics` | `semantics` | `claim-strength`, `compatibility-corpus` | `serde`, `serde_json`, `sha2`, `thiserror` |
+//! | `semantics` | `semantics` | `claim-strength`, `compatibility-corpus`, `exact-numbers` | `serde`, `serde_json`, `sha2`, `thiserror` |
 //! | `source-audit` | `source_audit` | | `serde`, `syn`, `thiserror` |
 //! | `structured-yaml` | `structured_yaml` | | `serde_json`, `yaml_serde` |
 //! | `workflow` | `workflow` | | `serde`, `serde_json`, `thiserror` |
 //! | `workflow-invariants` | `workflow_invariants` | | `serde`, `serde_json`, `thiserror`, `time` |
 //! | `campaign` | `campaign` | `measurement`, `producer-execution` | the generated campaign crate, `sha1` |
-//! | `full` | all of the above, plus the binary | every feature above | `clap`, `cap-std`, `tar`, `zip`, `flate2`, `tempfile`, `serde_json/arbitrary_precision` |
+//! | `exact-numbers` | none (opt-in) | | `serde_json/arbitrary_precision` |
+//! | `full` | all of the above, plus the binary | every feature above | `clap`, `cap-std`, `tar`, `zip`, `flate2`, `tempfile` |
 
 #![forbid(unsafe_code)]
 

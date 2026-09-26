@@ -82,8 +82,10 @@ rust-audit:
 # behind `--all-features`. The list is read from Cargo.toml via `cargo
 # metadata` (the `engineering-assurance` package's features, minus `default`
 # and the `full` umbrella), so a newly declared feature is checked without
-# editing this file. Scope: `--lib` only (the binary needs `full`), and it
-# needs python3 for the derivation. No workflow file runs this target
+# editing this file. Scope: `--lib` only (the binary needs `full`), both
+# `check`, building its unit tests (`test --no-run`) and a warning-free
+# `doc`; it needs python3 for
+# the derivation. No workflow file runs this target
 # directly; CI enforces it through `make rust-foundation-gate` -> `rust-tests`,
 # which runs tests/feature_matrix.rs (TC-190), which runs this target.
 # The derivation is a `$(shell)` so `make -n` prints the commands without
@@ -101,6 +103,10 @@ rust-features:
 	@for f in $(EA_FEATURES); do \
 		echo "cargo check --lib --no-default-features --features $$f"; \
 		CARGO_BUILD_JOBS=2 $(CARGO) check --lib --no-default-features --features $$f --locked || exit 1; \
+		echo "cargo test --lib --no-run --no-default-features --features $$f"; \
+		CARGO_BUILD_JOBS=2 $(CARGO) test --lib --no-run --no-default-features --features $$f --locked || exit 1; \
+		echo "cargo doc --no-deps --no-default-features --features $$f"; \
+		RUSTDOCFLAGS='-D warnings' CARGO_BUILD_JOBS=2 $(CARGO) doc --no-deps --no-default-features --features $$f --locked || exit 1; \
 	done
 
 rust-foundation-gate: rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit
