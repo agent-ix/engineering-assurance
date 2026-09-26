@@ -159,7 +159,7 @@ required-features = ["full"]
 [[test]]
 name = "package_membership_parity"
 path = "tests/package_membership_parity.rs"
-required-features = ["package-membership"]
+required-features = ["full"]
 
 [[test]]
 name = "producer_execution"
@@ -268,8 +268,9 @@ claim-strength = [
 # names the optional dependencies its module actually compiles against (driven
 # by `cargo check --lib --no-default-features --features <f>` alone; the
 # `make rust-features` matrix re-checks that) and any other capability whose
-# module it imports. None of them turns on `serde_json/arbitrary_precision`;
-# only `full` does, until that flip is revisited.
+# module it imports. Only `evidence`, `semantics` (and so `evaluation` and
+# `evaluation-reports`), `exact-numbers` and `full` turn on
+# `serde_json/arbitrary_precision`, through `exact-numbers`.
 compatibility = ["dep:serde", "dep:serde_json", "dep:thiserror"]
 compatibility-corpus = ["dep:serde", "dep:serde_json", "dep:sha2", "dep:thiserror"]
 content-rights = [

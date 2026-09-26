@@ -32,7 +32,7 @@ const FORBIDDEN_SUFFIXES: &[&str] = &[
 /// on purpose (this library reads no manifest); `tests/semantic_exports.rs`
 /// asserts the two lists agree, so a drift fails a test instead of the scan.
 /// A stale `$id` after a version bump is flagged as an unapproved external URL;
-/// rewrite it with `EA_BLESS=1 cargo test --test semantic_exports -- --ignored bless`.
+/// rewrite it with `EA_BLESS=1 cargo test --features full --test semantic_exports -- --ignored bless`.
 const SEMANTIC_EXPORT_SCHEMAS: &[&str] = &[
     "campaign-enum.schema.json",
     "campaign-value.schema.json",

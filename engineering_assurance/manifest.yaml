@@ -8,7 +8,7 @@ semantic:
   package: agent-ix/engineering-assurance-campaign
   # Each exported artifact type's data_schema is its frontmatter schema itself
   # (one 2020-12 file, also its frontmatter_schema_ref). On a version bump run
-  # `EA_BLESS=1 cargo test --test semantic_exports -- --ignored bless` to
+  # `EA_BLESS=1 cargo test --features full --test semantic_exports -- --ignored bless` to
   # rewrite the schemas' `$id` version and every digest below.
   exports:
     - AssuranceProfile

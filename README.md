@@ -76,6 +76,9 @@ cargo +1.98.1 install \
   --bin engineering-assurance
 ```
 
+`--features full` is required: `cargo install --path .` without it exits 0 but
+installs nothing, because the binary requires `full`.
+
 ### 2. Install the Quire module
 
 Install the module directory from the same tag. The `//engineering_assurance`
@@ -362,6 +365,10 @@ make package-audit
 make rust-foundation-gate
 make integration-gate
 ```
+
+A bare `cargo test` runs only the default-feature test (default features are
+empty); use `cargo test --all-features`, which is what CI runs, for the full
+suite.
 
 Read [CONTENT_RIGHTS.md](CONTENT_RIGHTS.md) before adding content.
 The repository is public. Registry packages remain private and unpublished
