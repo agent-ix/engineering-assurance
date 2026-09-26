@@ -85,6 +85,8 @@ implemented and reviewed.
 | FR-003 | FR-003-AC-4 | TC-017 | ✅ Passing |
 | FR-003 | FR-003-AC-5 | TC-018 | ✅ Passing |
 | FR-003 | FR-003-AC-6 | TC-019 | ✅ Passing |
+| FR-003 | FR-003-AC-7 | TC-194 | ✅ Export declaration, digest, `$id`, 2020-12 and derivation checks passing |
+| FR-003 | FR-003-AC-8 | TC-195 | ✅ Draft-07 and 2020-12 accept and refuse identical documents over the differential corpus |
 | FR-004 | FR-004-AC-1 | TC-020 | ✅ Passing |
 | FR-004 | FR-004-AC-2 | TC-021 | ✅ Passing |
 | FR-004 | FR-004-AC-3 | TC-022 | ✅ Passing |
@@ -415,6 +417,8 @@ implemented and reviewed.
 | TC-191 | The crate version, the module manifest version, the matrix `engineering-assurance` pin, the three plugin manifests and `package.json` all state one version, so a release bump that misses one fails a static check | Static | P0 | FR-012-AC-12 | ✅ `tests/version_alignment.rs` passing |
 | TC-192 | The schema and the Rust DecisionRule accept an interval_level strictly between 0 and 1 and refuse it with eq, at or beyond 0 and 1, and non-numeric, with typed errors; an absent level is not emitted and a level round-trips; Interval and ConfidenceLevel validate bounds, order, level and method with typed errors and round-trip; the key sits inside decision_rule so its edit without a version bump is a definition-change finding; the schema property and eq prohibition are asserted | Unit | P1 | FR-021-AC-13 | ✅ validation, round-trip, schema and definition-change cases passing |
 | TC-193 | A rule with interval_level holds at the lower bound for gt/ge and the upper bound for lt/le for threshold and baseline references, refuses a missing interval, a lower observed level, an estimate outside its interval, a rule without interval_level and non-finite inputs, accepts an equal or higher level, and the point-form holds refuses the rule with IntervalRequired | Unit | P1 | FR-021-AC-14 | ✅ unfavourable-bound evaluation and typed refusal cases passing |
+| TC-194 | The module manifest exports its five artifact types and both campaign types through the semantic contract: each export is a declared type with a `data_schema`, every digest equals the file's SHA-256, every exported schema is 2020-12 with an `$id` under the manifest version, and each artifact-type file equals the mechanical transformation of its draft-07 source, which refuses forms it cannot carry over | Static | P1 | FR-003-AC-7 | ✅ `tests/semantic_exports.rs` passing; `EA_BLESS=1` regenerates |
+| TC-195 | Each 2020-12 export accepts and refuses exactly what its draft-07 source does over every skeleton, its single-field mutations, the decision-rule, `margin_mode` and interval cases, and the retired-plan cases | Unit | P1 | FR-003-AC-8 | ✅ `tests/semantic_exports.rs` differential case passing |
 
 ## Option Permutation Matrix
 

@@ -25,6 +25,18 @@ const FORBIDDEN_SUFFIXES: &[&str] = &[
     ".pptx", ".xls", ".xlsx", ".zip",
 ];
 
+/// Schema files the module exports through its semantic contract; each names
+/// its own `$id` and the 2020-12 draft URL, which the URL allowlist admits.
+const SEMANTIC_EXPORT_SCHEMAS: &[&str] = &[
+    "campaign-enum.schema.json",
+    "campaign-value.schema.json",
+    "assurance-profile.schema.json",
+    "measurement-plan.schema.json",
+    "architecture-description.schema.json",
+    "component-assurance-contract.schema.json",
+    "assurance-argument.schema.json",
+];
+
 const SEMANTIC_POLICY_FILES: &[&str] = &[
     "AGENTS.md",
     "CONTENT_RIGHTS.md",
@@ -597,13 +609,10 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         && std::path::Path::new(path)
             .extension()
             .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
-        || matches!(
-            path,
-            "engineering_assurance/schemas/campaign-enum.schema.json"
-                | "engineering_assurance/schemas/campaign-value.schema.json"
-                | "schemas/campaign-enum.schema.json"
-                | "schemas/campaign-value.schema.json"
-        );
+        || path
+            .strip_prefix("engineering_assurance/schemas/")
+            .or_else(|| path.strip_prefix("schemas/"))
+            .is_some_and(|file| SEMANTIC_EXPORT_SCHEMAS.contains(&file));
     let campaign_license = matches!(
         path,
         "campaign/generated/rust/LICENSE" | "campaign/generated/typescript/LICENSE"
@@ -612,13 +621,19 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         "https:",
         "//agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/"
     );
-    let authored_schema_prefix = concat!(
-        "https:",
-        "//schemas.agent-ix.org/agent-ix/engineering-assurance-campaign/0.5.0/"
+    // The `$id` version is the module version, which `tests/version_alignment.rs`
+    // keeps equal to the crate version, so a release bump needs no edit here.
+    let authored_schema_prefix = format!(
+        "{}{}/",
+        concat!(
+            "https:",
+            "//schemas.agent-ix.org/agent-ix/engineering-assurance-campaign/"
+        ),
+        env!("CARGO_PKG_VERSION")
     );
     let semantic_core_prefix = concat!("https:", "//schemas.agent-ix.org/semantic-core/0.3.0/");
     let campaign_schema_url = url.starts_with(generated_schema_prefix)
-        || url.starts_with(authored_schema_prefix)
+        || url.starts_with(authored_schema_prefix.as_str())
         || url.starts_with(semantic_core_prefix)
         || url == concat!("https:", "//json-schema.org/draft/2020-12/schema");
     let campaign_license_url = [

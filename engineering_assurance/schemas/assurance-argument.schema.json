@@ -1,0 +1,302 @@
+{
+  "$defs": {
+    "assumption": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "owner": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "review_by": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "statement": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "open",
+            "confirmed",
+            "invalid"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "statement",
+        "owner",
+        "status",
+        "review_by"
+      ],
+      "type": "object"
+    },
+    "challenge": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "owner": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "resolution_ref": {
+          "pattern": "^ix://",
+          "type": "string"
+        },
+        "statement": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "open",
+            "resolved",
+            "accepted"
+          ]
+        },
+        "target": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "target",
+        "statement",
+        "status",
+        "owner"
+      ],
+      "type": "object"
+    },
+    "claim": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "supported"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "evidence_refs"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "evidence_refs": {
+          "description": "ix:// references to the authoritative evidence records the claim cites. Required and non-empty when status is supported: a claim is never declared supported without referencing the evidence that supports it. A citation alone is not support; the sufficiency decision remains the authorized participant's.",
+          "items": {
+            "pattern": "^ix://",
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "statement": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "open",
+            "supported",
+            "challenged",
+            "rejected"
+          ]
+        },
+        "subject": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "statement",
+        "subject",
+        "status"
+      ],
+      "type": "object"
+    },
+    "participant": {
+      "additionalProperties": false,
+      "properties": {
+        "authority": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "independence": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "role": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "role",
+        "authority",
+        "independence"
+      ],
+      "type": "object"
+    },
+    "reasoning": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "statement": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "sufficiency_criteria": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "supports": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "statement",
+        "supports",
+        "sufficiency_criteria"
+      ],
+      "type": "object"
+    },
+    "relationship": {
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "pattern": "^ix://",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "supports",
+            "references"
+          ]
+        }
+      },
+      "required": [
+        "target",
+        "type"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://schemas.agent-ix.org/agent-ix/engineering-assurance-campaign/0.5.0/assurance-argument.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "assumptions": {
+      "items": {
+        "$ref": "#/$defs/assumption"
+      },
+      "type": "array"
+    },
+    "challenges": {
+      "items": {
+        "$ref": "#/$defs/challenge"
+      },
+      "type": "array"
+    },
+    "id": {
+      "pattern": "^AA-[0-9]+$",
+      "type": "string"
+    },
+    "owner": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "participants": {
+      "items": {
+        "$ref": "#/$defs/participant"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "profile": {
+      "pattern": "^ix://",
+      "type": "string"
+    },
+    "reasoning": {
+      "items": {
+        "$ref": "#/$defs/reasoning"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "relationships": {
+      "items": {
+        "$ref": "#/$defs/relationship"
+      },
+      "type": "array"
+    },
+    "status": {
+      "enum": [
+        "proposed",
+        "active",
+        "retired"
+      ]
+    },
+    "title": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "top_claim": {
+      "$ref": "#/$defs/claim"
+    },
+    "type": {
+      "const": "AssuranceArgument"
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "type",
+    "status",
+    "owner",
+    "profile",
+    "top_claim",
+    "reasoning",
+    "assumptions",
+    "participants",
+    "challenges",
+    "relationships"
+  ],
+  "type": "object"
+}
