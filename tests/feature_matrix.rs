@@ -19,7 +19,7 @@ use ix_trace_rs::trace;
 use serde_json::Value;
 
 /// Generous ceiling for the nested cold-cache `cargo check` runs.
-const MAKE_TIMEOUT: Duration = Duration::from_secs(1800);
+const MAKE_TIMEOUT: Duration = Duration::from_mins(30);
 
 /// The capability features per `cargo metadata`: the crate's features minus
 /// `default` and the `full` umbrella. Implicit optional-dependency features
