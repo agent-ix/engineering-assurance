@@ -994,17 +994,17 @@ fn tc_138_a_minimal_downstream_compiles_only_the_source_audit_feature() {
          in its dependency graph: {resolved_packages:?}"
     );
 
-    // The default `full` feature must still expose `source_audit` and still
+    // The `full` feature must still expose `source_audit` and still
     // carry `arbitrary_precision` unchanged -- this split must not weaken the
     // existing consumer's guarantee while adding the narrow one.
-    let full_feature_tree = cargo_feature_tree(&manifest_dir.join("Cargo.toml"));
+    let full_feature_tree = cargo_feature_tree(&manifest_dir.join("Cargo.toml"), &["full"]);
     assert!(
         full_feature_tree.contains("arbitrary_precision"),
         "full Engineering Assurance feature set must retain serde_json arbitrary_precision"
     );
 }
 
-fn cargo_feature_tree(manifest_path: &Path) -> String {
+fn cargo_feature_tree(manifest_path: &Path, features: &[&str]) -> String {
     let feature_tree = Command::new(env!("CARGO"))
         .args([
             "tree",
@@ -1016,6 +1016,7 @@ fn cargo_feature_tree(manifest_path: &Path) -> String {
             "--manifest-path",
         ])
         .arg(manifest_path)
+        .args(features.iter().flat_map(|f| ["--features", f]))
         .output()
         .expect("feature tree must launch");
     assert!(

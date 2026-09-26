@@ -15,7 +15,7 @@
 //!
 //! After a version bump, rewrite the schemas' `$id` version and every manifest
 //! digest with
-//! `EA_BLESS=1 cargo test --test semantic_exports -- --ignored bless`. That test
+//! `EA_BLESS=1 cargo test --features full --test semantic_exports -- --ignored bless`. That test
 //! is `#[ignore]`d so it can neither race the checks nor count as coverage, and
 //! it changes nothing but `$id` lines and digests.
 
@@ -160,7 +160,7 @@ fn with_digests(manifest_text: &str) -> String {
 
 /// After a version bump: rewrites each exported schema's `$id` version and every
 /// manifest digest. Changes nothing else. Run alone with
-/// `EA_BLESS=1 cargo test --test semantic_exports -- --ignored bless`. It keeps a
+/// `EA_BLESS=1 cargo test --features full --test semantic_exports -- --ignored bless`. It keeps a
 /// trace tag because the repository's source audit requires one on every test.
 /// Tag-based tools may therefore count TC-194 as covered by it; the live TC-194
 /// tests are what actually check the files, and this one only rewrites them.
@@ -236,7 +236,7 @@ fn every_export_is_a_declared_type_with_a_current_2020_12_schema_under_the_manif
             parsed["$id"].as_str(),
             Some(derived_id(&version, file).as_str()),
             "{relative}: $id does not carry manifest version {version}; after a version \
-bump run `EA_BLESS=1 cargo test --test semantic_exports -- --ignored bless`"
+bump run `EA_BLESS=1 cargo test --features full --test semantic_exports -- --ignored bless`"
         );
         checked.insert(relative.to_owned());
     }

@@ -141,7 +141,7 @@ fn tc_112_package_audit_make_target_is_exact_rust_dispatch() {
     );
     assert_eq!(
         String::from_utf8(output.stdout).expect("make dry-run output must be UTF-8"),
-        "CARGO_BUILD_JOBS=2 cargo +1.98.1 run --locked --quiet -- package-audit --root .\n"
+        "CARGO_BUILD_JOBS=2 cargo +1.98.1 run --locked --quiet --features full -- package-audit --root .\n"
     );
 }
 

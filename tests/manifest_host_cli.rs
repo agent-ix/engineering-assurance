@@ -150,7 +150,7 @@ fn tc_131_make_target_requires_and_forwards_the_explicit_schema_and_registry_roo
 ///   the `edge_types` registry (e.g. spec-artifacts-iso's installed module
 ///   root, `spec_artifacts_iso/`).
 ///
-/// Run with `cargo test --test manifest_host_cli -- --ignored` after
+/// Run with `cargo test --features full --test manifest_host_cli -- --ignored` after
 /// exporting both.
 #[test]
 #[ignore = "requires EA_MANIFEST_SCHEMA_ROOT and EA_MANIFEST_REGISTRY_ROOT pointed at real, \
