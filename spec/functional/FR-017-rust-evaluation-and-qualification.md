@@ -66,7 +66,7 @@ checking, manifest validation, and qualification assertions to Rust.
   module); it is not part of the default gate because this public
   repository's default CI cannot assume access to the private schema root.
   The `quire validate --module` run in
-  `tests/test_module.py::test_quire_accepts_every_skeleton_without_diagnostics`
+  `tests/python_port/module.rs::quire_accepts_every_skeleton_without_diagnostics`
   loads the manifest with typed fields but does not enforce the full schema.
 - For the pure aggregation boundary, one
   `engineering-assurance.evaluation-aggregate-request/v1` document containing

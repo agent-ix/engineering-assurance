@@ -1287,7 +1287,7 @@ fn tc_171_external_reference_baseline_has_no_estimator_restriction_and_allows_eq
 }
 
 /// One case from `tests/fixtures/apparatus-paths.json`, the shared
-/// `protected_apparatus` entry table `tests/test_module.py` also reads.
+/// `protected_apparatus` entry table `tests/python_port/module.rs` also reads.
 #[derive(serde::Deserialize)]
 struct ApparatusCase {
     path: String,

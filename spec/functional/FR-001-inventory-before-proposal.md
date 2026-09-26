@@ -31,6 +31,9 @@ MeasurementPlan, or governed workflow.
 - The onboarding report (`scripts/onboard.js` in the skill), which a reader
   runs once before authoring to see how the module relates to the
   repository and what each artifact type requires.
+- With `--summary`, a compact report of the module version, each
+  `spec/assurance/` artifact's Quire validation status, and the installed
+  Quire and Quoin toolchain, whose exit status is the validation outcome.
 
 ## Behavior
 
@@ -62,6 +65,15 @@ MeasurementPlan, or governed workflow.
   without a path, or more than one `--repo`, then the onboarding report SHALL
   print the error and its usage to standard error and exit 2 without
   inventorying a repository.
+- When the onboarding report is invoked with `--summary`, it SHALL print,
+  instead of the full report, the module version in this checkout, each
+  `spec/assurance/` artifact with its Quire validation status (`valid`,
+  `invalid` with at most ten findings and a count of the rest, or
+  `unavailable` when Quire did not run to completion), and the installed
+  Quire and Quoin versions and whether `quoin measurement verify` exists,
+  each `null` when it cannot be observed. It SHALL exit 1 when any artifact
+  is invalid, 3 when validation was unavailable and none is invalid, and 0
+  only when every artifact validated.
 
 ## Acceptance Criteria
 
@@ -75,6 +87,7 @@ MeasurementPlan, or governed workflow.
 | FR-001-AC-6 | Malformed or conflicting applicable artifacts remain byte-unchanged, every path and validation result is reported, and no replacement is selected without human input. | Test (TC-044) |
 | FR-001-AC-7 | A justified artifact becomes visible only after staged Quire validation and atomic rename; validation failure or an escaping target leaves the intended path absent. | Test (TC-045) |
 | FR-001-AC-8 | `--help` and `-h` print the onboarding report's usage to standard output and exit 0; an unknown argument, a `--repo` without a path, or a repeated `--repo` prints the error and the usage to standard error and exits 2; none of them prints a report. | Test (TC-174) |
+| FR-001-AC-9 | With `--summary`, an artifact Quire accepts reports `valid` with no findings and one it refuses reports `invalid` with its findings, capped at ten with the remainder counted; the summary carries this checkout's module version and the observed Quire and Quoin versions, `null` for one not installed, and omits the full report's orientation sections; it exits 1 when any artifact is invalid, 3 with a stated reason when Quire is not installed, and 0 when every artifact validates. | Test (TC-202) |
 
 ## Dependencies
 

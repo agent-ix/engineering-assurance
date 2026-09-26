@@ -35,7 +35,7 @@
 //! default because no root is discovered or defaulted (FR-017 Behavior) and
 //! the schema root is a private-repo checkout this public repository's
 //! default CI cannot assume.
-//! `tests/test_module.py::test_quire_accepts_every_skeleton_without_diagnostics`
+//! `tests/python_port/module.rs::quire_accepts_every_skeleton_without_diagnostics`
 //! runs the real `quire validate --module` engine, whose module load rejects
 //! a mistyped manifest field but is not a full FR-035 schema check (it
 //! accepts an unknown top-level key the schema forbids) and reports every
