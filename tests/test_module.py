@@ -466,7 +466,7 @@ def _statistical_design_errors(
 
 
 def test_decision_rule_is_a_closed_comparator_with_exactly_one_reference() -> None:
-    """Trace: FR-021-AC-1, TC-144."""
+    """Trace: FR-021-AC-1, FR-021-AC-13, TC-144, TC-192."""
     contract = schema("measurement-plan-frontmatter.schema")
     rule = contract["definitions"]["decision_rule"]
     assert rule["properties"]["comparator"]["enum"] == ["gt", "ge", "lt", "le", "eq"]
@@ -482,7 +482,12 @@ def test_decision_rule_is_a_closed_comparator_with_exactly_one_reference() -> No
         "baseline",
         "margin",
         "margin_mode",
+        "interval_level",
     }
+    interval_level = rule["properties"]["interval_level"]
+    assert interval_level["type"] == "number"
+    assert interval_level["exclusiveMinimum"] == 0
+    assert interval_level["exclusiveMaximum"] == 1
 
     for comparator in ("gt", "ge", "lt", "le", "eq"):
         assert _statistical_design_errors(
@@ -504,6 +509,24 @@ def test_decision_rule_is_a_closed_comparator_with_exactly_one_reference() -> No
             decision_rule={"comparator": "ge", "baseline": baseline, "margin": -0.01}
         ) == []
 
+    for comparator in ("gt", "ge", "lt", "le"):
+        assert _statistical_design_errors(
+            decision_rule={
+                "comparator": comparator,
+                "threshold": 1,
+                "interval_level": 0.95,
+            }
+        ) == []
+    assert _statistical_design_errors(
+        decision_rule={
+            "comparator": "le",
+            "baseline": "prior-collection",
+            "margin": -0.05,
+            "margin_mode": "relative",
+            "interval_level": 0.9,
+        }
+    ) == []
+
     refused = {
         "unknown comparator": {"comparator": "approximately", "threshold": 1},
         "missing comparator": {"threshold": 1},
@@ -523,6 +546,23 @@ def test_decision_rule_is_a_closed_comparator_with_exactly_one_reference() -> No
             "comparator": "ge",
             "baseline": "best-seen",
             "margin": "0.05",
+        },
+        "interval_level with eq": {
+            "comparator": "eq",
+            "threshold": 1,
+            "interval_level": 0.9,
+        },
+        "interval_level of 0": {"comparator": "ge", "threshold": 1, "interval_level": 0},
+        "interval_level of 1": {"comparator": "ge", "threshold": 1, "interval_level": 1},
+        "interval_level above 1": {
+            "comparator": "ge",
+            "threshold": 1,
+            "interval_level": 95,
+        },
+        "non-numeric interval_level": {
+            "comparator": "ge",
+            "threshold": 1,
+            "interval_level": "0.95",
         },
         "unknown baseline": {"comparator": "ge", "baseline": "vibes"},
         "eq against best-seen": {"comparator": "eq", "baseline": "best-seen"},
@@ -694,10 +734,10 @@ def test_estimator_is_a_closed_vocabulary() -> None:
         assert _statistical_design_errors(estimator=refused) != [], refused
     # Prose fields stay prose (FR-021): only estimator and decision_rule close.
     for prose in ("population", "sampling", "error_model", "uncertainty"):
-        assert contract["definitions"]["statistical_design"]["properties"][prose] == {
-            "type": "string",
-            "minLength": 1,
-        }
+        prose_field = contract["definitions"]["statistical_design"]["properties"][prose]
+        assert prose_field["type"] == "string"
+        assert prose_field["minLength"] == 1
+        assert set(prose_field) <= {"type", "minLength", "description"}
 
 
 def test_measurement_plan_skeleton_shows_a_structured_decision_rule() -> None:

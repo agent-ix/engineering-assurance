@@ -245,7 +245,7 @@
             "apparatus-edit",
             "selective-reporting"
           ],
-          "description": "`suppressed-observation`: an unfavourable item or run is left out of the collected population. `gain-within-noise`: an improvement smaller than the plan's stated uncertainty is claimed as a gain. `stale-evidence`: a result collected against an earlier subject version or apparatus is presented as current. `apparatus-edit`: a protected-apparatus file is edited alongside the change it grades. `selective-reporting`: only a favourable run or variant is reported out of several tried."
+          "description": "`suppressed-observation`: an unfavourable item or run is left out of the collected population. `gain-within-noise`: an improvement smaller than the plan's stated uncertainty is claimed as a gain; a rule with `decision_rule.interval_level` judges each observation at the unfavourable end of its stated interval, which guards this for that rule. `stale-evidence`: a result collected against an earlier subject version or apparatus is presented as current. `apparatus-edit`: a protected-apparatus file is edited alongside the change it grades. `selective-reporting`: only a favourable run or variant is reported out of several tried."
         },
         "description": {
           "type": "string",
@@ -353,7 +353,11 @@
           "description": "How the plan's metric is computed from the collected population (FR-021). `proportion`: matching items divided by examined items, in [0, 1]. `count`: the number of matching items. `mean`: the arithmetic mean of per-item or per-repetition values, including a weighted mean whose weights the plan's body states. `eq` against a `mean` or `ratio` estimate is exact floating-point equality. `median`: the middle per-item value. `ratio`: one total divided by another, unbounded (e.g. cost per confirmed finding)."
         },
         "error_model": { "type": "string", "minLength": 1 },
-        "uncertainty": { "type": "string", "minLength": 1 },
+        "uncertainty": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Prose: how uncertain the estimate is and how the plan accounts for it. It is never read by a checker. To have the decision rule judge each observation's stated interval instead of its point estimate, state `decision_rule.interval_level`."
+        },
         "decision_rule": { "$ref": "#/definitions/decision_rule" }
       },
       "allOf": [
@@ -398,6 +402,12 @@
         "margin_mode": {
           "enum": ["absolute", "relative"],
           "description": "The unit of `margin`. `absolute` (the default when absent): the metric's own units. `relative`: a fraction of the baseline value's magnitude, so `margin: 0.05` is 5% of the baseline -- the reference is baseline + 0.05 * |baseline| for `gt`/`ge` and baseline - 0.05 * |baseline| for `lt`/`le`. Use `relative` when one plan covers benchmarks or dimensions whose baselines differ in scale. A relative margin against a zero baseline shrinks to nothing: the reference is the baseline itself, so it demands no improvement. Allowed only with `margin`."
+        },
+        "interval_level": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "exclusiveMaximum": 1,
+          "description": "A confidence level (`0.95` is 95%). When present, the rule is judged at the UNFAVOURABLE end of the observation's stated interval rather than at its point estimate: the lower bound for `gt`/`ge`, the upper bound for `lt`/`le`. The observation must then carry an interval computed at this level or higher; one without an interval, or at a lower level, is refused rather than judged on its point estimate. Absent means the point estimate is used. Never allowed with `eq`. Part of the decision rule, so changing it requires a new `definition_version`, and a reader that does not know the key refuses the plan rather than silently judging the point estimate."
         }
       },
       "oneOf": [
@@ -418,7 +428,8 @@
             "properties": {
               "baseline": { "not": { "const": "best-seen" } },
               "margin": false,
-              "margin_mode": false
+              "margin_mode": false,
+              "interval_level": false
             }
           }
         }

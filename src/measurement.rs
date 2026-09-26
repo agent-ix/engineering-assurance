@@ -14,6 +14,10 @@
 //! `budget` steering fields (FR-026) are advisory only: they are excluded
 //! from the definition-change check, and no decision rule evaluation ever
 //! reads them.
+//! A rule may state an `interval_level` (FR-021-AC-13); it is then evaluated at
+//! the unfavourable end of an observation's [`Interval`], a serde-only value
+//! type the observation's owner reuses for validation. The observation itself
+//! is not defined here.
 //! It performs no filesystem, process, environment, network, clock, or
 //! persistence access: callers parse plan frontmatter and pass the relevant
 //! fields in, and compute any baseline value themselves.
@@ -519,6 +523,201 @@ impl fmt::Display for MarginMode {
     }
 }
 
+/// Why a number is not a confidence level.
+#[derive(Clone, Copy, Debug, Error, PartialEq)]
+#[error("confidence level {level} is not a finite number strictly between 0 and 1")]
+pub struct ConfidenceLevelError {
+    /// The refused level.
+    pub level: f64,
+}
+
+/// A confidence level: a finite number strictly between 0 and 1 (`0.95` is a
+/// 95% interval).
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize)]
+#[serde(try_from = "f64", into = "f64")]
+pub struct ConfidenceLevel(f64);
+
+impl ConfidenceLevel {
+    /// Build a confidence level.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfidenceLevelError`] when `level` is NaN, infinite, or not
+    /// strictly between 0 and 1.
+    pub fn new(level: f64) -> Result<Self, ConfidenceLevelError> {
+        if level > 0.0 && level < 1.0 {
+            Ok(Self(level))
+        } else {
+            Err(ConfidenceLevelError { level })
+        }
+    }
+
+    /// The level as a number in the open interval (0, 1).
+    #[must_use]
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+}
+
+impl TryFrom<f64> for ConfidenceLevel {
+    type Error = ConfidenceLevelError;
+
+    fn try_from(level: f64) -> Result<Self, Self::Error> {
+        Self::new(level)
+    }
+}
+
+impl From<ConfidenceLevel> for f64 {
+    fn from(level: ConfidenceLevel) -> Self {
+        level.0
+    }
+}
+
+impl fmt::Display for ConfidenceLevel {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
+/// Why an observation's `interval` is invalid.
+#[derive(Clone, Copy, Debug, Error, PartialEq)]
+pub enum IntervalError {
+    /// A bound was NaN or infinite.
+    #[error("interval bounds [{lower}, {upper}] must both be finite numbers")]
+    NonFiniteBound {
+        /// The stated lower bound.
+        lower: f64,
+        /// The stated upper bound.
+        upper: f64,
+    },
+    /// The lower bound was above the upper bound.
+    #[error("interval lower bound {lower} is above its upper bound {upper}")]
+    InvertedBounds {
+        /// The stated lower bound.
+        lower: f64,
+        /// The stated upper bound.
+        upper: f64,
+    },
+    /// The `level` was not a confidence level.
+    #[error("interval `level` is invalid: {0}")]
+    Level(#[from] ConfidenceLevelError),
+    /// The `method` was empty or only whitespace.
+    #[error("interval `method` must not be empty")]
+    EmptyMethod,
+}
+
+/// An observation's stated uncertainty interval around its value, in the
+/// value's own unit. The observation itself is defined outside this crate; this
+/// is the validated value type its `interval` field uses.
+///
+/// `method` is free text for a human reader (how the interval was obtained);
+/// nothing in this crate reads it.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(try_from = "IntervalFields", into = "IntervalFields")]
+pub struct Interval {
+    lower: f64,
+    upper: f64,
+    level: ConfidenceLevel,
+    method: String,
+}
+
+impl Interval {
+    /// Build an interval.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IntervalError::NonFiniteBound`] for a NaN or infinite bound,
+    /// [`IntervalError::InvertedBounds`] when `lower > upper`, and
+    /// [`IntervalError::EmptyMethod`] when `method` is empty or whitespace.
+    pub fn new(
+        lower: f64,
+        upper: f64,
+        level: ConfidenceLevel,
+        method: impl Into<String>,
+    ) -> Result<Self, IntervalError> {
+        if !lower.is_finite() || !upper.is_finite() {
+            return Err(IntervalError::NonFiniteBound { lower, upper });
+        }
+        if lower > upper {
+            return Err(IntervalError::InvertedBounds { lower, upper });
+        }
+        let method = method.into();
+        if method.trim().is_empty() {
+            return Err(IntervalError::EmptyMethod);
+        }
+        Ok(Self {
+            lower,
+            upper,
+            level,
+            method,
+        })
+    }
+
+    /// The lower bound.
+    #[must_use]
+    pub const fn lower(&self) -> f64 {
+        self.lower
+    }
+
+    /// The upper bound.
+    #[must_use]
+    pub const fn upper(&self) -> f64 {
+        self.upper
+    }
+
+    /// The confidence level the bounds were computed at.
+    #[must_use]
+    pub const fn level(&self) -> ConfidenceLevel {
+        self.level
+    }
+
+    /// The free-text method note.
+    #[must_use]
+    pub fn method(&self) -> &str {
+        &self.method
+    }
+
+    /// Whether `value` lies within the closed interval `[lower, upper]`.
+    #[must_use]
+    pub fn contains(&self, value: f64) -> bool {
+        self.lower <= value && value <= self.upper
+    }
+}
+
+/// The closed wire shape of an observation `interval`, before validation.
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct IntervalFields {
+    lower: f64,
+    upper: f64,
+    level: f64,
+    method: String,
+}
+
+impl TryFrom<IntervalFields> for Interval {
+    type Error = IntervalError;
+
+    fn try_from(fields: IntervalFields) -> Result<Self, Self::Error> {
+        Self::new(
+            fields.lower,
+            fields.upper,
+            ConfidenceLevel::new(fields.level)?,
+            fields.method,
+        )
+    }
+}
+
+impl From<Interval> for IntervalFields {
+    fn from(interval: Interval) -> Self {
+        Self {
+            lower: interval.lower,
+            upper: interval.upper,
+            level: interval.level.get(),
+            method: interval.method,
+        }
+    }
+}
+
 /// What a decision rule compares the estimate against.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RuleReference {
@@ -593,6 +792,13 @@ pub enum DecisionRuleError {
     /// A `margin_mode` was stated without a `margin` to apply it to.
     #[error("decision rule `margin_mode` is allowed only with `margin`")]
     MarginModeWithoutMargin,
+    /// An `eq` rule stated an `interval_level`: equality has no unfavourable
+    /// end of an interval to judge at.
+    #[error("decision rule comparator `eq` cannot take an `interval_level`")]
+    IntervalLevelWithEq,
+    /// The `interval_level` was not a confidence level.
+    #[error("decision rule `interval_level` is invalid: {0}")]
+    IntervalLevel(#[from] ConfidenceLevelError),
 }
 
 /// Why a decision rule could not be evaluated against supplied values.
@@ -628,6 +834,44 @@ pub enum RuleEvaluationError {
         /// The non-finite reference.
         reference: f64,
     },
+    /// The rule states an `interval_level`, so it must be judged on the
+    /// observation's interval, and the point form was called.
+    #[error("decision rule states `interval_level` {required}; evaluate it on an interval")]
+    IntervalRequired {
+        /// The level the rule demands.
+        required: ConfidenceLevel,
+    },
+    /// The rule states no `interval_level`, so it is judged on the point
+    /// estimate and an interval has no role.
+    #[error("decision rule states no `interval_level`; evaluate it on the point estimate")]
+    IntervalNotRequested,
+    /// The rule needs an interval and the observation carried none.
+    #[error("decision rule needs an observation interval at level {required}; none was given")]
+    MissingInterval {
+        /// The level the rule demands.
+        required: ConfidenceLevel,
+    },
+    /// The observation's interval was computed at a lower level than the rule
+    /// demands.
+    #[error(
+        "observation interval level {observed} is below the rule's `interval_level` {required}"
+    )]
+    IntervalLevelTooLow {
+        /// The level the rule demands.
+        required: ConfidenceLevel,
+        /// The level the observation's interval states.
+        observed: ConfidenceLevel,
+    },
+    /// The estimate lies outside its own interval.
+    #[error("estimate {estimate} is outside its interval [{lower}, {upper}]")]
+    EstimateOutsideInterval {
+        /// The estimate.
+        estimate: f64,
+        /// The interval's lower bound.
+        lower: f64,
+        /// The interval's upper bound.
+        upper: f64,
+    },
 }
 
 /// A validated `statistical_design.decision_rule`: a comparator and exactly
@@ -637,6 +881,7 @@ pub enum RuleEvaluationError {
 pub struct DecisionRule {
     comparator: Comparator,
     reference: RuleReference,
+    interval_level: Option<ConfidenceLevel>,
 }
 
 impl DecisionRule {
@@ -656,6 +901,7 @@ impl DecisionRule {
         Ok(Self {
             comparator,
             reference: RuleReference::Threshold(threshold),
+            interval_level: None,
         })
     }
 
@@ -724,7 +970,33 @@ impl DecisionRule {
                 margin,
                 margin_mode,
             },
+            interval_level: None,
         })
+    }
+
+    /// Judge this rule at the unfavourable end of the observation's stated
+    /// interval instead of at its point estimate: the lower bound for
+    /// `gt`/`ge`, the upper bound for `lt`/`le`. The observation's interval
+    /// must have been computed at `level` or higher.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DecisionRuleError::IntervalLevelWithEq`] for an `eq` rule.
+    pub fn with_interval_level(self, level: ConfidenceLevel) -> Result<Self, DecisionRuleError> {
+        if self.comparator == Comparator::Eq {
+            return Err(DecisionRuleError::IntervalLevelWithEq);
+        }
+        Ok(Self {
+            interval_level: Some(level),
+            ..self
+        })
+    }
+
+    /// The confidence level the rule demands of an observation's interval, when
+    /// it is judged on the interval rather than the point estimate.
+    #[must_use]
+    pub const fn interval_level(&self) -> Option<ConfidenceLevel> {
+        self.interval_level
     }
 
     /// How the estimate is compared with the reference.
@@ -805,9 +1077,11 @@ impl DecisionRule {
     /// input, [`RuleEvaluationError::NonFiniteReference`] when the baseline
     /// value moved by the margin overflows,
     /// [`RuleEvaluationError::MissingBaselineValue`] when a baseline rule gets
-    /// no baseline value, and
+    /// no baseline value,
     /// [`RuleEvaluationError::UnexpectedBaselineValue`] when a threshold rule
-    /// gets one.
+    /// gets one, and [`RuleEvaluationError::IntervalRequired`] for a rule that
+    /// states an `interval_level`: judging it on the point estimate would
+    /// silently ignore the plan, so use [`Self::holds_on_interval`].
     pub fn holds(
         &self,
         estimate: f64,
@@ -816,13 +1090,76 @@ impl DecisionRule {
         if !estimate.is_finite() {
             return Err(RuleEvaluationError::NonFiniteEstimate { estimate });
         }
-        let reference = match (self.reference, baseline_value) {
-            (RuleReference::Threshold(threshold), None) => threshold,
+        if let Some(required) = self.interval_level {
+            return Err(RuleEvaluationError::IntervalRequired { required });
+        }
+        let reference = self.resolve_reference(baseline_value)?;
+        Ok(self.comparator.holds(estimate, reference))
+    }
+
+    /// Whether the rule holds for `estimate` at the unfavourable end of its
+    /// `interval`: the lower bound for `gt`/`ge`, the upper bound for
+    /// `lt`/`le`. The reference is resolved exactly as in [`Self::holds`].
+    ///
+    /// An interval computed at a level at or above the rule's `interval_level`
+    /// is accepted; a wider (higher-level) interval is only more conservative.
+    ///
+    /// # Errors
+    ///
+    /// The input refusals of [`Self::holds`], plus
+    /// [`RuleEvaluationError::IntervalNotRequested`] when the rule states no
+    /// `interval_level`, [`RuleEvaluationError::MissingInterval`] when
+    /// `interval` is `None`, [`RuleEvaluationError::IntervalLevelTooLow`] when
+    /// the interval's level is below the rule's, and
+    /// [`RuleEvaluationError::EstimateOutsideInterval`] when `estimate` is not
+    /// within `[lower, upper]`.
+    pub fn holds_on_interval(
+        &self,
+        estimate: f64,
+        interval: Option<&Interval>,
+        baseline_value: Option<f64>,
+    ) -> Result<bool, RuleEvaluationError> {
+        if !estimate.is_finite() {
+            return Err(RuleEvaluationError::NonFiniteEstimate { estimate });
+        }
+        let required = self
+            .interval_level
+            .ok_or(RuleEvaluationError::IntervalNotRequested)?;
+        let interval = interval.ok_or(RuleEvaluationError::MissingInterval { required })?;
+        if interval.level() < required {
+            return Err(RuleEvaluationError::IntervalLevelTooLow {
+                required,
+                observed: interval.level(),
+            });
+        }
+        if !interval.contains(estimate) {
+            return Err(RuleEvaluationError::EstimateOutsideInterval {
+                estimate,
+                lower: interval.lower(),
+                upper: interval.upper(),
+            });
+        }
+        let unfavourable = match self.comparator {
+            Comparator::Gt | Comparator::Ge => interval.lower(),
+            Comparator::Lt | Comparator::Le => interval.upper(),
+            // An `eq` rule cannot state an `interval_level`, so it returned
+            // `IntervalNotRequested` above.
+            Comparator::Eq => return Err(RuleEvaluationError::IntervalNotRequested),
+        };
+        let reference = self.resolve_reference(baseline_value)?;
+        Ok(self.comparator.holds(unfavourable, reference))
+    }
+
+    /// The value the estimate is compared with: the threshold, or the baseline
+    /// value moved by the margin.
+    fn resolve_reference(&self, baseline_value: Option<f64>) -> Result<f64, RuleEvaluationError> {
+        match (self.reference, baseline_value) {
+            (RuleReference::Threshold(threshold), None) => Ok(threshold),
             (RuleReference::Threshold(_), Some(_)) => {
-                return Err(RuleEvaluationError::UnexpectedBaselineValue);
+                Err(RuleEvaluationError::UnexpectedBaselineValue)
             }
             (RuleReference::Baseline { baseline, .. }, None) => {
-                return Err(RuleEvaluationError::MissingBaselineValue { baseline });
+                Err(RuleEvaluationError::MissingBaselineValue { baseline })
             }
             (
                 RuleReference::Baseline {
@@ -840,13 +1177,13 @@ impl DecisionRule {
                     Comparator::Gt | Comparator::Ge | Comparator::Eq => value + offset,
                     Comparator::Lt | Comparator::Le => value - offset,
                 };
-                if !reference.is_finite() {
-                    return Err(RuleEvaluationError::NonFiniteReference { reference });
+                if reference.is_finite() {
+                    Ok(reference)
+                } else {
+                    Err(RuleEvaluationError::NonFiniteReference { reference })
                 }
-                reference
             }
-        };
-        Ok(self.comparator.holds(estimate, reference))
+        }
     }
 }
 
@@ -863,13 +1200,16 @@ struct DecisionRuleFields {
     margin: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     margin_mode: Option<MarginMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    interval_level: Option<f64>,
 }
 
 impl TryFrom<DecisionRuleFields> for DecisionRule {
     type Error = DecisionRuleError;
 
     fn try_from(fields: DecisionRuleFields) -> Result<Self, Self::Error> {
-        match (fields.threshold, fields.baseline, fields.margin) {
+        let interval_level = fields.interval_level;
+        let rule = match (fields.threshold, fields.baseline, fields.margin) {
             (Some(_), Some(_), _) => Err(DecisionRuleError::ThresholdAndBaseline),
             (None, None, _) => Err(DecisionRuleError::MissingReference),
             (Some(_), None, Some(_)) => Err(DecisionRuleError::MarginWithoutBaseline),
@@ -883,6 +1223,10 @@ impl TryFrom<DecisionRuleFields> for DecisionRule {
                 margin,
                 fields.margin_mode.unwrap_or_default(),
             ),
+        }?;
+        match interval_level {
+            None => Ok(rule),
+            Some(level) => rule.with_interval_level(ConfidenceLevel::new(level)?),
         }
     }
 }
@@ -911,6 +1255,7 @@ impl From<DecisionRule> for DecisionRuleFields {
             baseline,
             margin,
             margin_mode,
+            interval_level: rule.interval_level.map(ConfidenceLevel::get),
         }
     }
 }
