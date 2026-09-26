@@ -62,8 +62,8 @@ def test_dialect_detector_accepts_every_spelling_and_refuses_other_drafts() -> N
 def test_every_schema_uses_the_forms_of_the_dialect_it_declares() -> None:
     # `definitions`/array-form `dependencies` are draft-07; `$defs`/
     # `dependentRequired` are 2019-09+. A file that mixes them validates
-    # differently under different consumers, and a 2020-12 file must not lean on
-    # `format`, which a default-options consumer does not assert.
+    # differently under different consumers. (A 2020-12 `format` is allowed only
+    # beside an explicit `pattern`: see tests/semantic_exports.rs.)
     paths = sorted((package.PACKAGE_ROOT / "schemas").glob("*.json"))
     assert paths
     seen: set[str] = set()
@@ -76,7 +76,7 @@ def test_every_schema_uses_the_forms_of_the_dialect_it_declares() -> None:
             for modern in ('"$defs"', "#/$defs/", '"dependentRequired"'):
                 assert modern not in text, f"{path.name} is draft-07 but uses {modern}"
         else:
-            for old in ('"definitions"', "#/definitions/", '"dependencies"', '"format"'):
+            for old in ('"definitions"', "#/definitions/", '"dependencies"'):
                 assert old not in text, f"{path.name} is 2020-12 but uses {old}"
     assert seen == {"draft-07", "2020-12"}, "the guard must exercise both dialects"
 

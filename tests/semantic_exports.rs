@@ -37,8 +37,10 @@ const ID_BASE: &str = concat!(
     "//schemas.agent-ix.org/agent-ix/engineering-assurance-campaign/"
 );
 
-/// RFC 3339 `date-time` as a pattern: a full date, `T`, a time with an optional
-/// fraction, and a `Z` or numeric offset. It replaces `format: date-time`
+/// Kept beside `format: date-time`, not instead of it: the pattern is the
+/// baseline for consumers that do not assert `format`, and `format` adds full
+/// calendar validity wherever it is asserted. RFC 3339 `date-time` as a pattern: a full date, `T`, a time with an optional
+/// fraction, and a `Z` or numeric offset. It is needed
 /// because quire-rs (jsonschema 0.18) does not assert `format` under 2020-12, and
 /// every wire field must be checked by every consumer. It checks the shape and
 /// range of each field, not calendar validity (no day-of-month vs month check).
@@ -258,15 +260,10 @@ fn every_export_is_a_declared_type_with_a_current_2020_12_schema_under_the_manif
 
 #[trace("TC-194", "FR-003-AC-7")]
 #[test]
-fn artifact_schemas_use_2020_12_forms_only_and_carry_the_documented_date_time_pattern() {
+fn artifact_schemas_use_2020_12_forms_only_and_carry_format_and_the_documented_date_time_pattern() {
     for (name, file) in ARTIFACTS {
         let text = fs::read_to_string(module_root().join("schemas").join(file)).expect("reads");
-        for stale in [
-            "\"definitions\"",
-            "#/definitions/",
-            "\"dependencies\"",
-            "\"format\"",
-        ] {
+        for stale in ["\"definitions\"", "#/definitions/", "\"dependencies\""] {
             assert!(!text.contains(stale), "{name}: {file} still uses {stale}");
         }
     }
@@ -274,8 +271,8 @@ fn artifact_schemas_use_2020_12_forms_only_and_carry_the_documented_date_time_pa
         read_json(&module_root().join("schemas/assurance-argument-frontmatter.schema.json"));
     assert_eq!(
         argument["$defs"]["assumption"]["properties"]["review_by"],
-        json!({"type": "string", "pattern": RFC_3339_DATE_TIME}),
-        "review_by must carry the one documented RFC 3339 pattern"
+        json!({"type": "string", "format": "date-time", "pattern": RFC_3339_DATE_TIME}),
+        "review_by must carry both `format` and the one documented RFC 3339 pattern"
     );
     let plan = read_json(&module_root().join("schemas/measurement-plan-frontmatter.schema.json"));
     assert_eq!(
@@ -624,4 +621,36 @@ fn each_artifact_schema_gives_the_verdicts_the_original_draft_07_schema_gave() {
         accepted > 10 && refused > 100,
         "{accepted} accepted, {refused} refused"
     );
+}
+
+#[trace("TC-195", "FR-003-AC-8")]
+#[test]
+fn calendar_validity_is_caught_by_format_where_asserted_and_is_a_pattern_only_limitation() {
+    let schema =
+        read_json(&module_root().join("schemas/assurance-argument-frontmatter.schema.json"));
+    let default_options = validator(&schema);
+    let asserting = jsonschema::options()
+        .should_validate_formats(true)
+        .build(&schema)
+        .expect("schema compiles with format assertion");
+    let mut document = frontmatter("AssuranceArgument");
+    document["assumptions"][0]["review_by"] = json!("2030-02-31T00:00:00Z");
+    assert!(
+        !asserting.is_valid(&document),
+        "a format-asserting validator refuses a day that is not in the month"
+    );
+    assert!(
+        default_options.is_valid(&document),
+        "documented limitation: the pattern alone checks shape and range, not the calendar"
+    );
+    for value in ["next spring", "2030-13-01T00:00:00Z"] {
+        document["assumptions"][0]["review_by"] = json!(value);
+        assert!(
+            !default_options.is_valid(&document),
+            "{value}: pattern refuses everywhere"
+        );
+        assert!(!asserting.is_valid(&document), "{value}");
+    }
+    document["assumptions"][0]["review_by"] = json!("2030-01-01T00:00:00Z");
+    assert!(asserting.is_valid(&document) && default_options.is_valid(&document));
 }

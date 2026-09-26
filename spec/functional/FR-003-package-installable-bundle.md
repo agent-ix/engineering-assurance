@@ -55,8 +55,12 @@ existing engineering-assurance module root.
   pins the frontmatter contract for typed consumers and does not describe an
   extracted record.
 - Every constraint of these schemas SHALL be a keyword a default-options
-  2020-12 consumer asserts: a date-time field SHALL use one documented RFC 3339
-  `pattern` (shape and field ranges, not calendar validity), never `format`.
+  2020-12 consumer asserts. A date-time field SHALL carry both one documented
+  RFC 3339 `pattern` and `format: date-time`. The pattern checks shape and field
+  ranges in every consumer; it does not check calendar validity (a day past the
+  end of its month passes it). `format` checks full calendar validity only in a
+  consumer that asserts `format`, which a default-options 2020-12 consumer does
+  not.
   The digested schema files SHALL be excluded from line-ending conversion.
 - If either package contains an unallowlisted member, then the package audit SHALL
   fail.
@@ -73,8 +77,8 @@ existing engineering-assurance module root.
 | FR-003-AC-4 | Repository-source installation resolves module and onboarding discovery from the installed tree. | Test (TC-017) |
 | FR-003-AC-5 | An unexpected or missing package member, or any installed manifest/link that escapes its bundle, fails the package audit. | Test (TC-018) |
 | FR-003-AC-6 | Install documentation separates module installation from agent-plugin installation and presents local-source and repository-source procedures in distinct sections. | Test (TC-019) |
-| FR-003-AC-7 | Every name in `semantic.exports` is a declared type with a `data_schema`; every recorded `data_schema` digest equals the SHA-256 of its file; every exported schema declares 2020-12 and an `$id` under the manifest version; each artifact type's `data_schema` is the same file as its `frontmatter_schema_ref`; the artifact schemas use no draft-07 form and no `format`; and the digested files contain no carriage return and are excluded from line-ending conversion. | Test (TC-194) |
-| FR-003-AC-8 | Over every skeleton, every top-level single-field mutation of it, the decision-rule, `margin_mode` and interval-level cases, the retired-plan cases and nested `review_by` date-time cases, each artifact schema, built at default validator options, gives the verdict the original draft-07 schema gave, except that calendar validity of a date-time is not asserted. | Test (TC-195) |
+| FR-003-AC-7 | Every name in `semantic.exports` is a declared type with a `data_schema`; every recorded `data_schema` digest equals the SHA-256 of its file; every exported schema declares 2020-12 and an `$id` under the manifest version; each artifact type's `data_schema` is the same file as its `frontmatter_schema_ref`; the artifact schemas use no draft-07 form and every date-time field carries both `format` and the documented pattern; and the digested files contain no carriage return and are excluded from line-ending conversion. | Test (TC-194) |
+| FR-003-AC-8 | Over every skeleton, every top-level single-field mutation of it, the decision-rule, `margin_mode` and interval-level cases, the retired-plan cases and nested `review_by` date-time cases, each artifact schema, built at default validator options, gives the verdict the original draft-07 schema gave, except that calendar validity of a date-time is refused only by a validator that asserts `format`, a tested limitation of the pattern. | Test (TC-195) |
 
 ## Dependencies
 
