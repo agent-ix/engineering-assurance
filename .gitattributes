@@ -1,0 +1,3 @@
+# The semantic-contract digests in engineering_assurance/manifest.yaml are over
+# the raw bytes of these files, so no checkout may convert their line endings.
+engineering_assurance/schemas/*.json -text

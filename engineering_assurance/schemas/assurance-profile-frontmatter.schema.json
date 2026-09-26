@@ -1,5 +1,6 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.agent-ix.org/agent-ix/engineering-assurance-campaign/0.5.0/assurance-profile-frontmatter.schema.json",
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "title", "type", "status", "owner", "relationships"],
@@ -15,13 +16,13 @@
     "scope": { "type": "string", "minLength": 1 },
     "impact_assessments": {
       "type": "array",
-      "items": { "$ref": "#/definitions/impact" }
+      "items": { "$ref": "#/$defs/impact" }
     },
-    "review_policy": { "$ref": "#/definitions/review_policy" },
-    "measurement_policy": { "$ref": "#/definitions/measurement_policy" },
+    "review_policy": { "$ref": "#/$defs/review_policy" },
+    "measurement_policy": { "$ref": "#/$defs/measurement_policy" },
     "relationships": {
       "type": "array",
-      "items": { "$ref": "#/definitions/relationship" }
+      "items": { "$ref": "#/$defs/relationship" }
     }
   },
   "allOf": [
@@ -38,7 +39,7 @@
       }
     }
   ],
-  "definitions": {
+  "$defs": {
     "relationship": {
       "type": "object",
       "additionalProperties": false,

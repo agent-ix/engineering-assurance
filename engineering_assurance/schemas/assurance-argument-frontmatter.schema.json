@@ -1,5 +1,6 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.agent-ix.org/agent-ix/engineering-assurance-campaign/0.5.0/assurance-argument-frontmatter.schema.json",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -23,31 +24,31 @@
     "status": { "enum": ["proposed", "active", "retired"] },
     "owner": { "type": "string", "minLength": 1 },
     "profile": { "type": "string", "pattern": "^ix://" },
-    "top_claim": { "$ref": "#/definitions/claim" },
+    "top_claim": { "$ref": "#/$defs/claim" },
     "reasoning": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/definitions/reasoning" }
+      "items": { "$ref": "#/$defs/reasoning" }
     },
     "assumptions": {
       "type": "array",
-      "items": { "$ref": "#/definitions/assumption" }
+      "items": { "$ref": "#/$defs/assumption" }
     },
     "participants": {
       "type": "array",
       "minItems": 1,
-      "items": { "$ref": "#/definitions/participant" }
+      "items": { "$ref": "#/$defs/participant" }
     },
     "challenges": {
       "type": "array",
-      "items": { "$ref": "#/definitions/challenge" }
+      "items": { "$ref": "#/$defs/challenge" }
     },
     "relationships": {
       "type": "array",
-      "items": { "$ref": "#/definitions/relationship" }
+      "items": { "$ref": "#/$defs/relationship" }
     }
   },
-  "definitions": {
+  "$defs": {
     "claim": {
       "type": "object",
       "additionalProperties": false,
@@ -99,7 +100,7 @@
         "statement": { "type": "string", "minLength": 1 },
         "owner": { "type": "string", "minLength": 1 },
         "status": { "enum": ["open", "confirmed", "invalid"] },
-        "review_by": { "type": "string", "format": "date-time" }
+        "review_by": { "type": "string", "format": "date-time", "pattern": "^(?:[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:(?:0[048]|[2468][048]|[13579][26])00|[0-9]{2}(?:0[48]|[2468][048]|[13579][26]))-02-29)[Tt ](?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:[Zz]|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$" }
       }
     },
     "participant": {
