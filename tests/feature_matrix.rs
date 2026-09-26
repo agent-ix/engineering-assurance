@@ -2,45 +2,112 @@
 // Copyright (C) 2026 Agent-IX
 
 //! FR-014: every capability feature compiles alone with default features off.
+//!
+//! Needs `make` and `python3` on `PATH` (the Makefile derives the list with
+//! the latter). Covers `--lib` only, as `make rust-features` does.
 
-use std::{collections::BTreeSet, fs, path::Path, process::Command};
+use std::{
+    collections::BTreeSet,
+    io::{Read, Seek, SeekFrom},
+    path::Path,
+    process::{Command, Stdio},
+    thread::sleep,
+    time::{Duration, Instant},
+};
 
 use ix_trace_rs::trace;
+use serde_json::Value;
 
-/// Feature names declared in the `[features]` table of `Cargo.toml`, read
-/// directly from the manifest text (independent of `cargo metadata`, which the
-/// Makefile uses), excluding `default` and the `full` umbrella.
-fn declared_capability_features(manifest: &str) -> BTreeSet<String> {
-    let mut in_features = false;
-    let mut names = BTreeSet::new();
-    for line in manifest.lines() {
-        let trimmed = line.trim_end();
-        if trimmed.starts_with('[') {
-            in_features = trimmed == "[features]";
-        } else if in_features
-            && !line.starts_with([' ', '#', ']'])
-            && let Some((name, _)) = line.split_once('=')
-        {
-            names.insert(name.trim().to_owned());
-        }
-    }
-    names.remove("default");
-    names.remove("full");
-    names
+/// Generous ceiling for the nested cold-cache `cargo check` runs.
+const MAKE_TIMEOUT: Duration = Duration::from_secs(1800);
+
+/// The capability features per `cargo metadata`: the crate's features minus
+/// `default` and the `full` umbrella. Implicit optional-dependency features
+/// appear here too, and the manifest syntax (quoting, comments, tabs) is
+/// cargo's problem, not a hand parser's.
+fn metadata_features(root: &Path) -> (BTreeSet<String>, BTreeSet<String>) {
+    let out = Command::new(env!("CARGO"))
+        .args(["metadata", "--no-deps", "--format-version", "1", "--locked"])
+        .current_dir(root)
+        .output()
+        .expect("cargo metadata must launch");
+    assert!(out.status.success(), "cargo metadata failed");
+    let meta: Value = serde_json::from_slice(&out.stdout).expect("metadata JSON");
+    let package = meta["packages"]
+        .as_array()
+        .expect("packages")
+        .iter()
+        .find(|p| p["name"] == "engineering-assurance")
+        .expect("engineering-assurance package");
+    let features = package["features"].as_object().expect("features table");
+    let capability: BTreeSet<String> = features
+        .keys()
+        .filter(|k| !matches!(k.as_str(), "default" | "full"))
+        .cloned()
+        .collect();
+    // Plain feature names `full` turns on (not `dep:x` or `pkg/feat`).
+    let full_members: BTreeSet<String> = features["full"]
+        .as_array()
+        .expect("full members")
+        .iter()
+        .filter_map(|v| v.as_str())
+        .filter(|m| !m.contains(':') && !m.contains('/'))
+        .map(str::to_owned)
+        .collect();
+    (capability, full_members)
 }
 
-/// The Makefile's feature list is exactly what `Cargo.toml` declares, and
-/// `make rust-features` compiles the library with no default features and with
-/// each capability feature alone; it fails if any of them stops compiling.
+/// Runs `make <args>` in `root`, killing it at `MAKE_TIMEOUT`; returns
+/// success and the child's stderr.
+fn run_make(root: &Path, args: &[&str]) -> (bool, String) {
+    let stderr_file = tempfile::tempfile().expect("stderr capture");
+    let mut child = Command::new("make")
+        .args(args)
+        .current_dir(root)
+        .stdout(Stdio::null())
+        .stderr(Stdio::from(stderr_file.try_clone().expect("clone stderr")))
+        .spawn()
+        .expect("make must launch");
+    let start = Instant::now();
+    let status = loop {
+        if let Some(status) = child.try_wait().expect("wait on make") {
+            break Some(status);
+        }
+        if start.elapsed() > MAKE_TIMEOUT {
+            child.kill().expect("kill timed-out make");
+            child.wait().expect("reap make");
+            break None;
+        }
+        sleep(Duration::from_millis(200));
+    };
+    // The clone handed to the child shares this offset; rewind before reading.
+    let mut stderr_file = stderr_file;
+    let mut text = String::new();
+    stderr_file.seek(SeekFrom::Start(0)).expect("rewind stderr");
+    stderr_file.read_to_string(&mut text).ok();
+    (status.is_some_and(|s| s.success()), text)
+}
+
+/// The Makefile's feature list equals the metadata-derived capability set, that
+/// set covers everything `full` enables, and `make rust-features` compiles the
+/// library with no default features and with each capability feature alone; it
+/// fails if any of them stops compiling alone.
+///
+/// The nested make shares this build's target dir, so a stale artifact is
+/// only a hazard for the binaries `CARGO_MANIFEST_DIR` runs, not for `check`.
 #[test]
 #[trace("TC-190", "FR-014-AC-7")]
 fn tc_190_each_capability_feature_compiles_alone() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let manifest = fs::read_to_string(root.join("Cargo.toml")).expect("Cargo.toml");
-    let declared = declared_capability_features(&manifest);
+    let (declared, full_members) = metadata_features(root);
     assert!(
         declared.len() >= 5,
-        "manifest parse found too few features: {declared:?}"
+        "metadata found too few features: {declared:?}"
+    );
+    assert!(
+        full_members.is_subset(&declared),
+        "`full` enables features the matrix does not check: {:?}",
+        full_members.difference(&declared).collect::<Vec<_>>()
     );
 
     let listed = Command::new("make")
@@ -59,13 +126,35 @@ fn tc_190_each_capability_feature_compiles_alone() {
         "Makefile feature list drifted from Cargo.toml"
     );
 
-    let status = Command::new("make")
-        .arg("rust-features")
-        .current_dir(root)
-        .status()
-        .expect("make rust-features must launch");
+    let (ok, stderr) = run_make(root, &["rust-features"]);
     assert!(
-        status.success(),
-        "a capability feature no longer compiles alone"
+        ok,
+        "a capability feature no longer compiles alone (or make timed out):\n{stderr}"
     );
+}
+
+/// An empty or failed derivation is an error rather than a vacuous pass, and
+/// `make -n` prints one check per feature without running any.
+#[test]
+#[trace("TC-190", "FR-014-AC-7")]
+fn tc_190_an_empty_derivation_fails_and_dry_run_lists_every_feature() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let (ok, stderr) = run_make(root, &["rust-features", "EA_FEATURES="]);
+    assert!(!ok, "an empty feature list must fail rust-features");
+    assert!(
+        stderr.contains("could not derive the feature list"),
+        "missing diagnostic: {stderr}"
+    );
+
+    let dry = Command::new("make")
+        .args(["-n", "rust-features"])
+        .current_dir(root)
+        .output()
+        .expect("make -n must launch");
+    assert!(dry.status.success(), "make -n rust-features failed");
+    let dry = String::from_utf8(dry.stdout).expect("utf-8 dry run");
+    let (declared, _) = metadata_features(root);
+    for feature in &declared {
+        assert!(dry.contains(feature.as_str()), "dry run omits {feature}");
+    }
 }
