@@ -5,7 +5,6 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fmt::Write as _,
     io::{self, Read, Write},
     path::{Component, Path, PathBuf},
 };
@@ -15,6 +14,7 @@ use cap_std::{
     fs::{Dir, OpenOptions},
 };
 use engineering_assurance::{
+    content_digest::ContentDigest,
     evaluation::{
         EvaluationEnvelope, EvaluationFailure, EvaluationHost, EvaluationScenario,
         aggregate_evaluations, is_immutable_revision,
@@ -22,7 +22,6 @@ use engineering_assurance::{
     evaluation_reports::{DecodedEvaluationSample, MAX_CLI_REPORT_BYTES, decode_cli_eval_report},
 };
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 pub(crate) const MAX_REPORT_COLLECTION: usize = 64;
@@ -180,7 +179,7 @@ pub(crate) fn execute(
         };
         identities.push(EvaluationReportIdentity {
             path: relative.to_owned(),
-            digest: sha256_hex(&bytes),
+            digest: ContentDigest::of_bytes(&bytes).into_hex(),
         });
         let decoded = match decode_cli_eval_report(&bytes, source_revision) {
             Ok(decoded) => decoded,
@@ -352,7 +351,7 @@ fn retained_governing(
     for identity in identities {
         let bytes = read_rooted_file(repository, Path::new(&identity.path), MAX_CLI_REPORT_BYTES)
             .map_err(|_| EvaluationReportHostError::ArtifactMismatch)?;
-        if sha256_hex(&bytes) != identity.digest {
+        if ContentDigest::of_bytes(&bytes).as_str() != identity.digest {
             return Err(EvaluationReportHostError::ArtifactMismatch);
         }
         let report = decode_cli_eval_report(&bytes, expected_source_revision)
@@ -565,7 +564,7 @@ fn verify_transcript(
         Path::new(transcript_path),
         MAX_TRANSCRIPT_BYTES,
     )?;
-    if sha256_hex(&bytes) == expected_digest {
+    if ContentDigest::of_bytes(&bytes).as_str() == expected_digest {
         Ok(())
     } else {
         Err("transcript-digest-mismatch")
@@ -737,15 +736,6 @@ fn staged_output_path(path: &Path, attempt: usize) -> PathBuf {
     parent.join(format!(".{name}.ea-stage-{}-{attempt}", std::process::id()))
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
-    let digest = Sha256::digest(bytes);
-    let mut encoded = String::with_capacity(64);
-    for byte in digest {
-        let _ = write!(&mut encoded, "{byte:02x}");
-    }
-    encoded
-}
-
 #[cfg(test)]
 mod tests {
     use std::{fs, path::Path};
@@ -858,7 +848,7 @@ mod tests {
             &report_path,
             serde_json::to_vec(&report(
                 &work_dir,
-                &sha256_hex(b"retained transcript\n"),
+                "705dcda7f899b8b581a0cb3f47cd1fd60136a99bdc984b3c84ed4557c3c95d3c",
                 model,
             ))
             .expect("report fixture must encode"),

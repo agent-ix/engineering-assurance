@@ -13,14 +13,12 @@
 //! proves nothing about the live state of the source repositories; it proves
 //! that these exact bytes behave this exact way.
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::Write as _,
-};
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use thiserror::Error;
+
+use crate::content_digest::ContentDigest;
 
 /// The exact accepted corpus-index version.
 pub const CORPUS_VERSION: &str = "engineering-assurance.compatibility-corpus/v1";
@@ -555,23 +553,6 @@ impl CorpusError {
     }
 }
 
-/// Lowercase hexadecimal SHA-256 of `bytes`.
-#[must_use]
-pub fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hex = String::with_capacity(64);
-    for byte in Sha256::digest(bytes) {
-        write!(&mut hex, "{byte:02x}").expect("writing into a String cannot fail");
-    }
-    hex
-}
-
-fn is_sha256_hex(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-}
-
 /// Refuse a producer case whose retention and recorded members disagree.
 ///
 /// A retained case must carry both halves of an identity — the path its bytes
@@ -593,7 +574,7 @@ fn validate_producer_retention(producer: &ProducerCase) -> Result<(), CorpusErro
                     identity: producer.id.clone(),
                 }
             })?;
-            if !is_sha256_hex(digest) {
+            if ContentDigest::parse(digest).is_err() {
                 return Err(CorpusError::InvalidRecordedDigest {
                     identity: producer.id.clone(),
                 });
@@ -707,7 +688,7 @@ impl CorpusIndex {
                 });
             }
             validate_retained_path(&case.id, &case.retained_path)?;
-            if !is_sha256_hex(&case.retained_sha256) {
+            if ContentDigest::parse(&case.retained_sha256).is_err() {
                 return Err(CorpusError::InvalidRecordedDigest {
                     identity: case.id.clone(),
                 });
@@ -738,7 +719,7 @@ impl CorpusIndex {
                 }
             }
             validate_producer_retention(producer)?;
-            if !is_sha256_hex(&producer.source_sha256) {
+            if ContentDigest::parse(&producer.source_sha256).is_err() {
                 return Err(CorpusError::InvalidRecordedDigest {
                     identity: producer.id.clone(),
                 });
@@ -754,7 +735,7 @@ impl CorpusIndex {
                 });
             }
             validate_retained_path(&artifact.role, &artifact.retained_path)?;
-            if !is_sha256_hex(&artifact.retained_sha256) {
+            if ContentDigest::parse(&artifact.retained_sha256).is_err() {
                 return Err(CorpusError::InvalidRecordedDigest {
                     identity: artifact.role.clone(),
                 });
@@ -941,7 +922,7 @@ impl RetainedArtifact<'_> {
                 .ok_or_else(|| CorpusError::RetainedArtifactWithoutDigest {
                     identity: self.identity.to_owned(),
                 })?;
-        let actual = sha256_hex(bytes);
+        let actual = ContentDigest::of_bytes(bytes).into_hex();
         if actual == expected {
             Ok(())
         } else {
@@ -968,7 +949,7 @@ mod tests {
     /// them in the production artifact. The real corpus is read by the confined
     /// host adapter, which is where the accepted-corpus assertions live.
     fn valid_index() -> Value {
-        let digest = sha256_hex(b"retained bytes");
+        let digest = ContentDigest::of_bytes(b"retained bytes").into_hex();
         let cases: Vec<Value> = REQUIRED_KINDS
             .iter()
             .enumerate()
@@ -1393,9 +1374,8 @@ mod tests {
         // claiming an identity for bytes this corpus does not hold, and without
         // this assertion only the path half of that claim was ever refused.
         assert_eq!(
-            mutated(
-                |raw| raw["producer_cases"][1]["retained_sha256"] = json!(sha256_hex(b"smuggled"))
-            )
+            mutated(|raw| raw["producer_cases"][1]["retained_sha256"] =
+                json!(ContentDigest::of_bytes(b"smuggled").into_hex()))
             .code(),
             "compatibility_corpus_referenced_case_with_digest"
         );
@@ -1405,11 +1385,12 @@ mod tests {
         // reached through the accessors rather than through parsing, so they
         // need their own construction; without these two assertions the
         // accessors were the only incomplete-retention failures nothing drove.
+        let anything = ContentDigest::of_bytes(b"anything");
         let orphan = RetainedArtifact {
             identity: "chain-artifact-with-no-path",
             retention: Retention::Retained,
             retained_path: None,
-            retained_sha256: Some(&sha256_hex(b"anything")),
+            retained_sha256: Some(anything.as_str()),
         };
         assert_eq!(
             orphan

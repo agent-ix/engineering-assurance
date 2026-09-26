@@ -5,8 +5,9 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use thiserror::Error;
+
+use crate::content_digest::ContentDigest;
 
 const MUTABLE_VERSIONS: [&str; 7] = [
     "latest", "main", "master", "head", "current", "nightly", "*",
@@ -132,7 +133,7 @@ impl VersionIdentity {
         } else if is_mutable_version(version) {
             errors.push("identity-version-mutable".to_owned());
         }
-        if !is_lower_sha256(&self.digest) {
+        if ContentDigest::parse(&self.digest).is_err() {
             errors.push("identity-digest-not-sha256".to_owned());
         }
         errors
@@ -151,24 +152,6 @@ fn is_mutable_version(version: &str) -> bool {
             .map_or(version, |(core, _)| core)
             .split(['.', '-'])
             .any(|component| component.eq_ignore_ascii_case("x"))
-}
-
-fn is_lower_sha256(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let digest = Sha256::digest(bytes);
-    let mut encoded = String::with_capacity(64);
-    for byte in digest {
-        encoded.push(char::from(HEX[usize::from(byte >> 4)]));
-        encoded.push(char::from(HEX[usize::from(byte & 0x0f)]));
-    }
-    encoded
 }
 
 fn legacy_canonical_json(output: &Value) -> Vec<u8> {
@@ -585,7 +568,7 @@ pub fn classify_producer(attempt: &ProducerAttempt) -> EvidenceEnvelope {
     let encoded = legacy_canonical_json(output);
     let mut result = classified(attempt, AvailabilityState::Observed);
     result.governing.clone_from(&attempt.governing);
-    result.output_digest = Some(sha256_hex(&encoded));
+    result.output_digest = Some(ContentDigest::of_bytes(&encoded).into_hex());
     result.quoin_reference.clone_from(&attempt.quoin_reference);
     result
 }

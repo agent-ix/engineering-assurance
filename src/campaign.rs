@@ -21,10 +21,11 @@ pub use agent_ix_engineering_assurance_campaign::{
     ProcedureInputPrefix,
 };
 
+use crate::content_digest::ContentDigest;
 use crate::producer_execution::{
-    ArgumentBinding, CancellationBinding, ContainmentBinding, ContentDigest, ContractBinding,
-    ExecutionBudget, ExecutionProcedure, ExitCodeBinding, InputBinding, InvalidExecutionRequest,
-    MAX_ARGUMENTS, MAX_ARTIFACTS, MAX_TIMEOUT_MILLIS, OutputBinding, OutputTreeBinding,
+    ArgumentBinding, CancellationBinding, ContainmentBinding, ContractBinding, ExecutionBudget,
+    ExecutionProcedure, ExitCodeBinding, InputBinding, InvalidExecutionRequest, MAX_ARGUMENTS,
+    MAX_ARTIFACTS, MAX_TIMEOUT_MILLIS, OutputBinding, OutputTreeBinding,
     PRODUCER_EXECUTION_REQUEST_PROTOCOL, ProducerDescriptor, ProducerExecutionRequest,
     RequestIdentity, ResponseBinding, StdinBinding, validate_source_tree,
 };

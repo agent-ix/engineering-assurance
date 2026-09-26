@@ -12,15 +12,13 @@ use std::{
     collections::BTreeMap,
     env,
     ffi::{OsStr, OsString},
-    fmt::{self, Write as _},
-    fs,
+    fmt, fs,
     path::{Component, Path, PathBuf},
     time::Duration,
 };
 
-use engineering_assurance::evidence::VersionIdentity;
+use engineering_assurance::{content_digest::ContentDigest, evidence::VersionIdentity};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{
@@ -773,17 +771,12 @@ fn file_identity(
     version: String,
     path: &Path,
 ) -> Result<VersionIdentity, IntegrationEvidenceError> {
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|_| IntegrationEvidenceError::GoverningIdentityChanged)?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err(IntegrationEvidenceError::GoverningIdentityChanged);
-    }
     Ok(VersionIdentity {
         name: name.to_owned(),
         version,
-        digest: digest(
-            &fs::read(path).map_err(|_| IntegrationEvidenceError::GoverningIdentityChanged)?,
-        ),
+        digest: ContentDigest::of_file(path)
+            .map_err(|_| IntegrationEvidenceError::GoverningIdentityChanged)?
+            .into_hex(),
     })
 }
 
@@ -838,21 +831,22 @@ fn runtime_identity(name: &str, path: &OsStr) -> Result<VersionIdentity, Integra
     collect_runtime_files(&dist, &mut files, &mut runtime_bytes)?;
     files.sort();
     files.dedup();
-    let mut hasher = Sha256::new();
+    let mut hasher = ContentDigest::hasher();
     for file in files {
         let relative = file
             .strip_prefix(&package)
             .map_err(|_| IntegrationEvidenceError::GoverningRuntimeInvalid)?;
         hasher.update(relative.to_string_lossy().replace('\\', "/").as_bytes());
-        hasher.update([0]);
-        hasher
-            .update(fs::read(file).map_err(|_| IntegrationEvidenceError::GoverningRuntimeInvalid)?);
-        hasher.update([0]);
+        hasher.update(&[0]);
+        hasher.update(
+            &fs::read(file).map_err(|_| IntegrationEvidenceError::GoverningRuntimeInvalid)?,
+        );
+        hasher.update(&[0]);
     }
     Ok(VersionIdentity {
         name: name.to_owned(),
         version,
-        digest: hex_digest(hasher.finalize()),
+        digest: hasher.finalize().into_hex(),
     })
 }
 
@@ -946,18 +940,6 @@ fn safe_name(value: &str) -> bool {
             .components()
             .all(|component| matches!(component, Component::Normal(_)))
         && !value.contains(['/', '\\'])
-}
-
-fn digest(bytes: &[u8]) -> String {
-    hex_digest(Sha256::digest(bytes))
-}
-
-fn hex_digest<D: AsRef<[u8]>>(digest: D) -> String {
-    let mut encoded = String::with_capacity(digest.as_ref().len().saturating_mul(2));
-    for byte in digest.as_ref() {
-        let _ = write!(&mut encoded, "{byte:02x}");
-    }
-    encoded
 }
 
 #[cfg(test)]
@@ -1303,5 +1285,22 @@ mod tests {
             runtime_identity("ix-flow", &path),
             Err(IntegrationEvidenceError::GoverningRuntimeInvalid)
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[trace("TC-199", "FR-014-AC-11")]
+    fn tc_199_governing_identity_digests_are_pinned() {
+        let package = runtime_package("original");
+        assert_eq!(
+            runtime_digest(&package).1,
+            "4c76dd00c0397c8588a8b0a4806d1916c2bc6eb9a106ac03dd63d0081b7556a1"
+        );
+        let file = package.path().join("dist/runtime.js");
+        let identity = file_identity("runtime", "1".to_owned(), &file).expect("file identity");
+        assert_eq!(
+            identity.digest,
+            "6e66e366f0aefb84ad8110afcd9b2245702c643c831edf8316ff048fec739d2e"
+        );
     }
 }

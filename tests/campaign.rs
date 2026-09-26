@@ -14,9 +14,10 @@ use engineering_assurance::{
         SourceTreeBinding, canonical_digest, resolve_procedure, validate_definition,
         validate_procedure, validate_run,
     },
+    content_digest::ContentDigest,
     producer_execution::{
-        CancellationBinding, ContainmentBinding, ContentDigest, ContractBinding, ExecutionBudget,
-        ExitCodeBinding, InputBinding, InvalidExecutionRequest, OutputBinding, OutputTreeBinding,
+        CancellationBinding, ContainmentBinding, ContractBinding, ExecutionBudget, ExitCodeBinding,
+        InputBinding, InvalidExecutionRequest, OutputBinding, OutputTreeBinding,
         ProducerDescriptor, ProducerExecutionRequest, RetainedRequestError, StdinBinding,
     },
 };

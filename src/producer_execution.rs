@@ -36,9 +36,10 @@ use std::{
     sync::Mutex,
 };
 
-use serde::{Deserialize, Deserializer, Serialize};
-use sha2::{Digest, Sha256};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use crate::content_digest::{ContentDigest, DigestError, hash_reader};
 
 /// Closed producer-execution request protocol.
 pub const PRODUCER_EXECUTION_REQUEST_PROTOCOL: &str =
@@ -71,41 +72,16 @@ pub const MAX_CONCURRENCY: usize = 64;
 const MAX_TEXT_BYTES: usize = 32_768;
 const MAX_EXECUTABLE_BYTES: u64 = 1_073_741_824;
 
-/// A validated lowercase SHA-256 retained-byte identity.
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
-#[serde(transparent)]
-pub struct ContentDigest(Box<str>);
-
 impl ContentDigest {
-    /// Parses an exact lowercase SHA-256 hexadecimal value.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`DigestError::Invalid`] unless `value` is exactly 64 lowercase
-    /// hexadecimal characters.
-    pub fn parse(value: &str) -> Result<Self, DigestError> {
-        if value.len() != 64
-            || !value
-                .as_bytes()
-                .iter()
-                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(byte))
-        {
-            return Err(DigestError::Invalid);
-        }
-        Ok(Self(value.into()))
-    }
-
-    /// Computes the identity of an in-memory byte sequence.
-    #[must_use]
-    pub fn of_bytes(bytes: &[u8]) -> Self {
-        Self(hex_digest(Sha256::digest(bytes).as_slice()).into())
-    }
-
     /// Computes a fixture or caller-side file identity.
     ///
-    /// Execution itself hashes the executable bytes read through one
-    /// capability-confined descriptor, before the pinned path is executed, and
-    /// does not rely on this convenience helper.
+    /// Defined here, not in `content_digest`, because this module owns the
+    /// crate's filesystem access (FR-014-AC-4). Execution itself hashes the
+    /// executable bytes read through one capability-confined descriptor,
+    /// before the pinned path is executed, and does not rely on this
+    /// convenience helper. Refuses symbolic links and anything that is not a
+    /// regular file, refuses files above 1 GiB, and fails when the bytes read
+    /// differ from the file's length.
     ///
     /// # Errors
     ///
@@ -120,44 +96,12 @@ impl ContentDigest {
             return Err(DigestError::TooLarge);
         }
         let mut file = File::open(path).map_err(|_| DigestError::Unreadable)?;
-        digest_reader(&mut file, metadata.len(), None).map_err(|outcome| match outcome {
-            DigestOutcome::Cancelled | DigestOutcome::Unreadable => DigestError::Unreadable,
-            DigestOutcome::TooLarge => DigestError::TooLarge,
-        })
+        let (digest, total) = hash_reader(&mut file, metadata.len(), || false)?;
+        if total != metadata.len() {
+            return Err(DigestError::Unreadable);
+        }
+        Ok(digest)
     }
-
-    /// Returns the lowercase hexadecimal identity.
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl<'de> Deserialize<'de> for ContentDigest {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let value = String::deserialize(deserializer)?;
-        Self::parse(&value).map_err(serde::de::Error::custom)
-    }
-}
-
-/// Failure while constructing a retained-byte identity outside execution.
-#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
-pub enum DigestError {
-    /// The supplied text is not lowercase SHA-256 hexadecimal.
-    #[error("digest is not lowercase SHA-256 hexadecimal")]
-    Invalid,
-    /// The selected file does not exist or cannot be resolved.
-    #[error("selected file is unavailable")]
-    Unavailable,
-    /// The selected path is linked or is not a regular file.
-    #[error("selected path is not a regular file")]
-    NotRegular,
-    /// The selected file exceeds the supported identity ceiling.
-    #[error("selected file exceeds the identity ceiling")]
-    TooLarge,
-    /// The selected file could not be read completely.
-    #[error("selected file is unreadable")]
-    Unreadable,
 }
 
 /// Exact versioned identity of a caller contract or implementation.
@@ -1551,13 +1495,13 @@ fn open_executable(
             None,
         ));
     }
-    let executable_digest = digest_reader(&mut selected, MAX_EXECUTABLE_BYTES, Some(cancellation))
-        .map_err(|failure| match failure {
-            DigestOutcome::Cancelled => PreflightFailure::Cancelled(None),
-            DigestOutcome::Unreadable | DigestOutcome::TooLarge => {
-                PreflightFailure::Refused(ExecutionRefusal::ExecutableIdentity, None)
-            }
-        })?;
+    let executable_digest = ContentDigest::of_reader(&mut selected, MAX_EXECUTABLE_BYTES, || {
+        cancellation.is_cancelled()
+    })
+    .map_err(|failure| match failure {
+        DigestError::Cancelled => PreflightFailure::Cancelled(None),
+        _ => PreflightFailure::Refused(ExecutionRefusal::ExecutableIdentity, None),
+    })?;
     if executable_digest != request.producer.executable_digest {
         return Err(PreflightFailure::Refused(
             ExecutionRefusal::ExecutableIdentity,
@@ -1622,8 +1566,8 @@ fn open_input(
         "producer-input",
     )
     .map_err(|failure| match failure {
-        DigestOutcome::Cancelled => PreflightFailure::Cancelled(Some(executable_digest.clone())),
-        DigestOutcome::Unreadable | DigestOutcome::TooLarge => refused(),
+        DigestError::Cancelled => PreflightFailure::Cancelled(Some(executable_digest.clone())),
+        _ => refused(),
     })?;
     if observed != input.digest {
         return Err(refused());
@@ -1637,48 +1581,45 @@ fn snapshot_reader(
     maximum: u64,
     cancellation: &CancellationToken,
     name: &str,
-) -> Result<(File, ContentDigest), DigestOutcome> {
+) -> Result<(File, ContentDigest), DigestError> {
     use rustix::fs::{MemfdFlags, SealFlags, fcntl_add_seals, memfd_create};
 
     let descriptor = memfd_create(name, MemfdFlags::CLOEXEC | MemfdFlags::ALLOW_SEALING)
-        .map_err(|_| DigestOutcome::Unreadable)?;
+        .map_err(|_| DigestError::Unreadable)?;
     let mut snapshot = File::from(descriptor);
-    let mut hasher = Sha256::new();
+    let mut hasher = ContentDigest::hasher();
     let mut total = 0_u64;
     let mut buffer = [0_u8; 16 * 1024];
     loop {
         if cancellation.is_cancelled() {
-            return Err(DigestOutcome::Cancelled);
+            return Err(DigestError::Cancelled);
         }
         let read = source
             .read(&mut buffer)
-            .map_err(|_| DigestOutcome::Unreadable)?;
+            .map_err(|_| DigestError::Unreadable)?;
         if read == 0 {
             break;
         }
         total = total
-            .checked_add(u64::try_from(read).map_err(|_| DigestOutcome::TooLarge)?)
-            .ok_or(DigestOutcome::TooLarge)?;
+            .checked_add(u64::try_from(read).map_err(|_| DigestError::TooLarge)?)
+            .ok_or(DigestError::TooLarge)?;
         if total > maximum {
-            return Err(DigestOutcome::TooLarge);
+            return Err(DigestError::TooLarge);
         }
         hasher.update(&buffer[..read]);
         snapshot
             .write_all(&buffer[..read])
-            .map_err(|_| DigestOutcome::Unreadable)?;
+            .map_err(|_| DigestError::Unreadable)?;
     }
     fcntl_add_seals(
         &snapshot,
         SealFlags::SEAL | SealFlags::SHRINK | SealFlags::GROW | SealFlags::WRITE,
     )
-    .map_err(|_| DigestOutcome::Unreadable)?;
+    .map_err(|_| DigestError::Unreadable)?;
     snapshot
         .seek(SeekFrom::Start(0))
-        .map_err(|_| DigestOutcome::Unreadable)?;
-    Ok((
-        snapshot,
-        ContentDigest(hex_digest(hasher.finalize().as_slice()).into()),
-    ))
+        .map_err(|_| DigestError::Unreadable)?;
+    Ok((snapshot, hasher.finalize()))
 }
 
 #[cfg(target_os = "linux")]
@@ -2510,43 +2451,6 @@ pub mod __private {
     }
 }
 
-fn digest_reader(
-    reader: &mut impl Read,
-    maximum: u64,
-    cancellation: Option<&CancellationToken>,
-) -> Result<ContentDigest, DigestOutcome> {
-    let mut hasher = Sha256::new();
-    let mut total = 0_u64;
-    let mut buffer = [0_u8; 16 * 1024];
-    loop {
-        if cancellation.is_some_and(CancellationToken::is_cancelled) {
-            return Err(DigestOutcome::Cancelled);
-        }
-        let read = reader
-            .read(&mut buffer)
-            .map_err(|_| DigestOutcome::Unreadable)?;
-        if read == 0 {
-            break;
-        }
-        total = total
-            .checked_add(u64::try_from(read).map_err(|_| DigestOutcome::TooLarge)?)
-            .ok_or(DigestOutcome::TooLarge)?;
-        if total > maximum {
-            return Err(DigestOutcome::TooLarge);
-        }
-        hasher.update(&buffer[..read]);
-    }
-    Ok(ContentDigest(
-        hex_digest(hasher.finalize().as_slice()).into(),
-    ))
-}
-
-enum DigestOutcome {
-    Cancelled,
-    TooLarge,
-    Unreadable,
-}
-
 #[cfg(target_os = "linux")]
 fn exit_code_accepted(binding: &ExitCodeBinding, code: i32) -> bool {
     match binding {
@@ -2832,15 +2736,6 @@ fn prelaunch_result_with_observed_cancellation<T>(
     result
 }
 
-fn hex_digest(bytes: &[u8]) -> String {
-    let mut encoded = String::with_capacity(bytes.len().saturating_mul(2));
-    for byte in bytes {
-        use std::fmt::Write;
-        let _ = write!(encoded, "{byte:02x}");
-    }
-    encoded
-}
-
 #[cfg(test)]
 mod host_context_tests {
     use super::{CpuModelSource, HostIdentitySource, parse_host_context};
@@ -3060,11 +2955,14 @@ mod host_context_tests {
 #[cfg(feature = "campaign")]
 mod campaign_source_projection {
     use super::{
-        BTreeSet, Component, ContentDigest, Digest, File, InputBinding, MAX_ARTIFACTS,
-        MAX_INPUT_BYTES, Path, Read, Sha256,
+        BTreeSet, Component, ContentDigest, File, InputBinding, MAX_ARTIFACTS, MAX_INPUT_BYTES,
+        Path, Read,
     };
     use crate::campaign::{CampaignError, CampaignSource, OmittedSourceLink, SourceTreeBinding};
+    // Git object identity (blob SHA-1 / SHA-256 object format), not a content
+    // identity: it must equal what `git` reports, whatever `ContentDigest` uses.
     use sha1::{Digest as Sha1Digest, Sha1};
+    use sha2::{Digest, Sha256};
     use std::io::Cursor;
 
     fn lowercase_hex(bytes: &[u8]) -> String {
@@ -3335,7 +3233,7 @@ mod campaign_source_projection {
         let mut git_sha256 = Sha256::new();
         git_sha1.update(header.as_bytes());
         git_sha256.update(header.as_bytes());
-        let mut content_sha256 = Sha256::new();
+        let mut content = ContentDigest::hasher();
         let mut read_total = 0_u64;
         let mut buffer = [0_u8; 16 * 1024];
         loop {
@@ -3361,7 +3259,7 @@ mod campaign_source_projection {
             }
             git_sha1.update(&buffer[..count]);
             git_sha256.update(&buffer[..count]);
-            content_sha256.update(&buffer[..count]);
+            content.update(&buffer[..count]);
         }
         if read_total != length {
             return Err(CampaignError::SourceTree {
@@ -3378,11 +3276,7 @@ mod campaign_source_projection {
                 field: "Git blob mismatch",
             });
         }
-        ContentDigest::parse(&lowercase_hex(&content_sha256.finalize())).map_err(|_| {
-            CampaignError::SourceTree {
-                field: "source digest",
-            }
-        })
+        Ok(content.finalize())
     }
 }
 

@@ -16,11 +16,12 @@ use std::{
     time::{Duration, Instant},
 };
 
+use engineering_assurance::content_digest::ContentDigest;
 use engineering_assurance::producer_execution::{
-    ArgumentBinding, CancellationBinding, CancellationToken, ContainmentBinding, ContentDigest,
-    ContractBinding, ExecutionBudget, ExecutionFailure, ExecutionProcedure, ExecutionRefusal,
-    ExitCodeBinding, InputBinding, InvalidExecutionRequest, MalformedResponse, ObservedHostContext,
-    OutputArtifact, OutputBinding, OutputTreeBinding, PRODUCER_EXECUTION_REQUEST_PROTOCOL,
+    ArgumentBinding, CancellationBinding, CancellationToken, ContainmentBinding, ContractBinding,
+    ExecutionBudget, ExecutionFailure, ExecutionProcedure, ExecutionRefusal, ExitCodeBinding,
+    InputBinding, InvalidExecutionRequest, MalformedResponse, ObservedHostContext, OutputArtifact,
+    OutputBinding, OutputTreeBinding, PRODUCER_EXECUTION_REQUEST_PROTOCOL,
     PRODUCER_EXECUTION_RESULT_PROTOCOL, ProcessEvidence, ProducerDescriptor,
     ProducerExecutionRequest, ProducerExecutionResult, ProducerExecutionState, ProducerExecutor,
     ProducerResponseAdapter, REQUEST_IDENTITY_SCHEME, RESULT_IDENTITY_SCHEME, ResponseBinding,
@@ -498,6 +499,11 @@ fn tc_176_live_output_tree_is_sealed_and_symlinks_refuse() {
     assert_eq!(
         result.artifacts[0].digest,
         ContentDigest::of_bytes(b"{\"passed\":true}\n")
+    );
+    // Pinned through the executor's sealed-snapshot hashing path.
+    assert_eq!(
+        result.artifacts[0].digest.as_str(),
+        "1ea63e7fda68e7ce49b013af8410102e9228f7591e79ef602dd23d95556d03bc"
     );
     assert!(
         result.observed_host.is_some(),
@@ -1500,5 +1506,67 @@ fn tc_128_minimal_downstream_compiles_only_producer_execution_feature() {
     assert!(
         full_feature_tree.contains("arbitrary_precision"),
         "full Engineering Assurance feature set must retain serde_json arbitrary_precision"
+    );
+}
+
+#[test]
+#[trace("TC-199", "FR-014-AC-11")]
+fn tc_199_wire_form_is_the_bare_hex_string() {
+    let digest = ContentDigest::of_bytes(b"abc");
+    let bare = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    assert_eq!(
+        serde_json::to_string(&digest).expect("digest serializes"),
+        format!("\"{bare}\"")
+    );
+    assert_eq!(
+        serde_json::from_str::<ContentDigest>(&format!("\"{bare}\"")).expect("bare form parses"),
+        digest
+    );
+    assert!(serde_json::from_str::<ContentDigest>(&format!("\"sha256:{bare}\"")).is_err());
+}
+
+#[test]
+#[trace("TC-199", "FR-014-AC-11")]
+fn tc_199_file_identity_is_pinned_and_refuses_links_and_non_files() {
+    use engineering_assurance::content_digest::DigestError;
+
+    let long: Vec<u8> = (0..65_537_u32)
+        .map(|index| u8::try_from(index % 251).expect("remainder fits a byte"))
+        .collect();
+    let directory = tempfile::tempdir().expect("temporary directory");
+    for (bytes, expected) in [
+        (
+            &b""[..],
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ),
+        (
+            &b"abc"[..],
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        ),
+        (
+            &long[..],
+            "237356e18b503616912abb8ffaed3a72591e397d4ac294c4637917d48a3f529d",
+        ),
+    ] {
+        let path = directory.path().join("input");
+        std::fs::write(&path, bytes).expect("fixture writes");
+        assert_eq!(
+            ContentDigest::of_file(&path).expect("file hashes").as_str(),
+            expected
+        );
+    }
+    let file = directory.path().join("input");
+    std::os::unix::fs::symlink(&file, directory.path().join("link")).expect("symlink");
+    assert_eq!(
+        ContentDigest::of_file(&directory.path().join("link")),
+        Err(DigestError::NotRegular)
+    );
+    assert_eq!(
+        ContentDigest::of_file(directory.path()),
+        Err(DigestError::NotRegular)
+    );
+    assert_eq!(
+        ContentDigest::of_file(&directory.path().join("absent")),
+        Err(DigestError::Unavailable)
     );
 }

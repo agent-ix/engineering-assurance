@@ -17,10 +17,11 @@ use std::{
     time::Duration,
 };
 
-use engineering_assurance::{evidence::GoverningVersions, workflow::DecisionEvent};
+use engineering_assurance::{
+    content_digest::ContentDigest, evidence::GoverningVersions, workflow::DecisionEvent,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::process_host::{self, ProcessLimits};
@@ -542,7 +543,7 @@ fn json_proof(
     json!({
         "run_id": run_id,
         "state_dir": state_dir.strip_prefix(workspace).ok().map(|value| value.to_string_lossy().replace('\\', "/")),
-        "history_digest": history.as_ref().ok().and_then(|value| serde_json::to_vec(value).ok()).map(|bytes| digest(&bytes)),
+        "history_digest": history.as_ref().ok().and_then(|value| serde_json::to_vec(value).ok()).map(|bytes| ContentDigest::of_bytes(&bytes).into_hex()),
         "history_ok": history.is_ok(),
         "verification_ok": verification.as_ref().ok().and_then(|value| value.get("ok")).and_then(Value::as_bool) == Some(true),
     })
@@ -616,17 +617,6 @@ fn validate_terminal_history(
     {
         failures.push("ix-flow terminal timestamp mismatch".to_owned());
     }
-}
-
-fn digest(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    let mut value = String::with_capacity(64);
-    for byte in hasher.finalize() {
-        use std::fmt::Write as _;
-        let _ = write!(value, "{byte:02x}");
-    }
-    value
 }
 
 fn scenario_name(scenario: &ProviderScenario) -> Result<&str, AgentEvalsProviderError> {
@@ -1081,4 +1071,30 @@ fn encode<T: Serialize>(
     .map_err(|_| AgentEvalsProviderError::ResponseInvalid)?;
     bytes.push(b'\n');
     Ok(bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use ix_trace_rs::trace;
+    use serde_json::json;
+
+    use super::json_proof;
+
+    #[test]
+    #[trace("TC-199", "FR-014-AC-11")]
+    fn tc_199_history_digest_is_pinned() {
+        let proof = json_proof(
+            &Ok(json!({"a": 1})),
+            &Ok(json!({"ok": true})),
+            "run",
+            Path::new("/w/state"),
+            Path::new("/w"),
+        );
+        assert_eq!(
+            proof["history_digest"],
+            "015abd7f5cc57a2dd94b7590f04ad8084273905ee33ec5cebeae62276a97f862"
+        );
+    }
 }

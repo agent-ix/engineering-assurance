@@ -222,12 +222,16 @@ required-features = ["workflow-invariants"]
 # builds only the test targets that need no capability; the rest declare
 # `required-features`.
 default = []
+# `content-digest` is the one evidence-byte identity (`ContentDigest`); every
+# capability that hashes retained bytes implies it rather than carrying its own
+# `sha2` use.
+content-digest = ["dep:serde", "dep:sha2", "dep:thiserror"]
 producer-execution = [
+  "content-digest",
   "dep:rustix",
   "dep:serde",
   "dep:serde_json",
   "dep:serde_json_canonicalizer",
-  "dep:sha2",
   "dep:thiserror",
 ]
 # `source_audit` (the syn-based "is this library half I/O-free" check) needs
@@ -256,6 +260,7 @@ campaign = [
   "producer-execution",
   "dep:agent-ix-engineering-assurance-campaign",
   "dep:sha1",
+  "dep:sha2",
 ]
 # `claim_strength` is the FR-022 claim-strength vocabulary. It needs only
 # serde, so a consumer that records a strength (Quire, Quoin) must not have to
@@ -272,7 +277,7 @@ claim-strength = [
 # `evaluation-reports`), `exact-numbers` and `full` turn on
 # `serde_json/arbitrary_precision`, through `exact-numbers`.
 compatibility = ["dep:serde", "dep:serde_json", "dep:thiserror"]
-compatibility-corpus = ["dep:serde", "dep:serde_json", "dep:sha2", "dep:thiserror"]
+compatibility-corpus = ["content-digest", "dep:serde", "dep:serde_json", "dep:thiserror"]
 content-rights = [
   "dep:regex",
   "dep:serde",
@@ -302,10 +307,10 @@ evaluation-reports = [
 # (integers beyond u64, refusal of `1e309`); measured by running
 # `evidence_parity` and `semantics_parity` with and without it.
 evidence = [
+  "content-digest",
   "exact-numbers",
   "dep:serde",
   "dep:serde_json",
-  "dep:sha2",
   "dep:thiserror",
 ]
 manifest = [
@@ -327,10 +332,10 @@ package-membership = ["dep:serde", "dep:thiserror"]
 semantics = [
   "claim-strength",
   "compatibility-corpus",
+  "content-digest",
   "exact-numbers",
   "dep:serde",
   "dep:serde_json",
-  "dep:sha2",
   "dep:thiserror",
 ]
 structured-yaml = ["dep:serde_json", "dep:yaml_serde"]
@@ -356,6 +361,7 @@ full = [
   "claim-strength",
   "compatibility",
   "compatibility-corpus",
+  "content-digest",
   "content-rights",
   "discovery",
   "evaluation",

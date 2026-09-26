@@ -5,7 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use sha2::{Digest, Sha256};
+
+use crate::content_digest::ContentDigest;
 
 use super::{
     PGM01_MAPPING_PROTOCOL, SemanticConcept, SemanticError, SemanticErrorKind, validate_digest,
@@ -77,7 +78,7 @@ impl Pgm01View {
             mapping_version: PGM01_MAPPING_PROTOCOL.to_owned(),
             source_schema_version: schema_version.into(),
             source_record_id: record_id.into(),
-            source_digest: sha256_hex(raw),
+            source_digest: ContentDigest::of_bytes(raw).into_hex(),
             outcome: Pgm01Outcome::Lossy,
             mappings: Vec::new(),
             unmapped_fields: Vec::new(),
@@ -98,7 +99,7 @@ impl Pgm01View {
                 "generated PGM-01 view has an empty source identity",
             ));
         }
-        if self.source_digest != sha256_hex(raw)
+        if self.source_digest != ContentDigest::of_bytes(raw).as_str()
             || validate_digest(&self.source_digest, "generated PGM-01 source digest").is_err()
         {
             return Err(SemanticError::new(
@@ -600,7 +601,7 @@ pub fn map_pgm01_bytes(
     raw: &[u8],
     expected_digest: Option<&str>,
 ) -> Result<Pgm01View, SemanticError> {
-    let digest = sha256_hex(raw);
+    let digest = ContentDigest::of_bytes(raw).into_hex();
     if let Some(expected) = expected_digest {
         if validate_digest(expected, "expected digest").is_err() {
             return Err(SemanticError::new(
@@ -695,17 +696,6 @@ fn malformed_view(
     view.limitations
         .push("The malformed legacy record was not accepted.".to_owned());
     view
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let digest = Sha256::digest(bytes);
-    let mut encoded = String::with_capacity(64);
-    for byte in digest {
-        encoded.push(char::from(HEX[usize::from(byte >> 4)]));
-        encoded.push(char::from(HEX[usize::from(byte & 0x0f)]));
-    }
-    encoded
 }
 
 #[cfg(test)]
