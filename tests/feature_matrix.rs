@@ -158,3 +158,89 @@ fn tc_190_an_empty_derivation_fails_and_dry_run_lists_every_feature() {
         assert!(dry.contains(feature.as_str()), "dry run omits {feature}");
     }
 }
+
+/// Crates only `full` (the binary) may resolve.
+const BINARY_ONLY_CRATES: [&str; 6] = ["cap-std", "clap", "tar", "zip", "flate2", "tempfile"];
+
+/// Features whose code needs `serde_json/arbitrary_precision`, measured by
+/// running `evidence_parity` and `semantics_parity` with and without it:
+/// large integers change identity digests and `1e309` stops being refused.
+/// `evaluation` and `evaluation-reports` reach it through `evidence`. The
+/// `exact-numbers` feature is the switch itself, and `full` includes it.
+const EXACT_NUMBERS: [&str; 6] = [
+    "evaluation",
+    "evaluation-reports",
+    "evidence",
+    "exact-numbers",
+    "full",
+    "semantics",
+];
+
+/// The resolved crates and the `serde_json` feature set of one feature alone
+/// (default features off): `(crate names, serde_json arbitrary_precision on)`.
+fn resolved(root: &Path, feature: &str) -> (BTreeSet<String>, bool) {
+    let tree = |edges: &[&str]| {
+        let out = Command::new(env!("CARGO"))
+            .args(["tree", "--no-default-features", "--features", feature])
+            .args(edges)
+            .args(["--prefix", "none", "--locked"])
+            .current_dir(root)
+            .output()
+            .expect("cargo tree must launch");
+        assert!(out.status.success(), "cargo tree failed for {feature}");
+        String::from_utf8(out.stdout).expect("utf-8 tree")
+    };
+    let crates: BTreeSet<String> = tree(&["-e", "normal"])
+        .lines()
+        .filter_map(|line| line.split_whitespace().next())
+        .map(str::to_owned)
+        .collect();
+    // The inverted feature tree lists who turned `arbitrary_precision` on;
+    // the forward tree does not show it. `-i serde_json` errors when the
+    // graph has no serde_json, and then it is trivially off.
+    let exact = crates.contains("serde_json")
+        && tree(&["-e", "features", "-i", "serde_json"])
+            .lines()
+            .any(|line| line.trim() == "serde_json feature \"arbitrary_precision\"");
+    (crates, exact)
+}
+
+/// For every feature (not just `source-audit`): its normal-dependency graph
+/// resolves none of the binary-only crates (only `full` may), and
+/// `serde_json/arbitrary_precision` is on exactly for the features that imply
+/// `exact-numbers`, so a stray `dep:zip` or a dropped `exact-numbers` fails
+/// here rather than in a consumer's build.
+#[test]
+#[trace("TC-196", "FR-014-AC-8")]
+fn tc_196_every_feature_graph_is_minimal_and_exact_numbers_is_exact() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let (declared, _) = metadata_features(root);
+    let mut all: BTreeSet<String> = declared;
+    all.insert("full".to_owned());
+    for feature in &all {
+        let (crates, exact) = resolved(root, feature);
+        if feature != "full" {
+            for banned in BINARY_ONLY_CRATES {
+                assert!(
+                    !crates.contains(banned),
+                    "feature {feature} must not resolve {banned}: {crates:?}"
+                );
+            }
+        }
+        let want_exact = EXACT_NUMBERS.contains(&feature.as_str());
+        assert_eq!(
+            exact, want_exact,
+            "feature {feature}: serde_json/arbitrary_precision on = {exact}, expected {want_exact}"
+        );
+    }
+    let (audit, _) = resolved(root, "source-audit");
+    assert!(
+        audit.contains("syn"),
+        "source-audit graph lost syn: {audit:?}"
+    );
+    let (manifest, _) = resolved(root, "manifest");
+    assert!(
+        manifest.contains("yaml_serde") && manifest.contains("jsonschema"),
+        "manifest graph lost a dependency: {manifest:?}"
+    );
+}
