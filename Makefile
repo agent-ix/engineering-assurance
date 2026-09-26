@@ -1,4 +1,4 @@
-.PHONY: lint test manifest-validate compatibility-observe package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-evidence integration-gate release-gate
+.PHONY: rust-features rust-feature-list lint test manifest-validate compatibility-observe package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-evidence integration-gate release-gate
 
 EVAL_AGENT ?= codex
 EVAL_RUN ?= canary
@@ -76,6 +76,23 @@ rust-deps:
 
 rust-audit:
 	$(CARGO) audit
+
+# Feature matrix (EA-20): every capability feature must compile ALONE, with
+# default features off, so a module gated on the wrong feature cannot hide
+# behind `--all-features`. The list is read from Cargo.toml via `cargo
+# metadata` (all features except the `default` set and the `full` umbrella),
+# so a newly declared feature is checked without editing this file. Run it
+# locally (`make rust-features`); CI wiring is intentionally not included
+# (owner decision).
+rust-feature-list:
+	@$(CARGO) metadata --no-deps --format-version 1 --locked | python3 -c 'import json,sys; [print(f) for f in sorted(json.load(sys.stdin)["packages"][0]["features"]) if f not in ("default","full")]'
+
+rust-features:
+	CARGO_BUILD_JOBS=2 $(CARGO) check --lib --no-default-features --locked
+	@for f in $$($(MAKE) --no-print-directory rust-feature-list); do \
+		echo "cargo check --lib --no-default-features --features $$f"; \
+		CARGO_BUILD_JOBS=2 $(CARGO) check --lib --no-default-features --features $$f --locked || exit 1; \
+	done
 
 rust-foundation-gate: rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit
 
