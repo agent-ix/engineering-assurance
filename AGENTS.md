@@ -20,6 +20,13 @@ make test
 make package-audit
 ```
 
+## Tests are Rust only
+
+New tests go in Rust, never Python. The former Python suite (EA-19) lives in
+the single `python_port` test binary (`tests/python_port/`, one module per
+retired file); extend it or add a `tests/*.rs` target. Do not add or extend
+`tests/test_*.py`.
+
 ## Publication boundary
 
 - Keep the repository public; registry publication remains a separate,

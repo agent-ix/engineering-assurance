@@ -1,5 +1,5 @@
 {
-  "_comment": "Shared protected_apparatus entry cases (FR-024). tests/measurement.rs runs them through the Rust ApparatusPath and the schema pattern; tests/test_module.py runs them through the schema. `error` names the ApparatusPathError variant; `character` is the forbidden character it reports.",
+  "_comment": "Shared protected_apparatus entry cases (FR-024). tests/measurement.rs runs them through the Rust ApparatusPath and the schema pattern; tests/python_port/module.rs runs them through the schema. `error` names the ApparatusPathError variant; `character` is the forbidden character it reports.",
   "accepted": [
     {
       "path": "tests/fixtures/labels.json",

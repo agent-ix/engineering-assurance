@@ -21,7 +21,7 @@ lint:
 
 test:
 	CARGO_BUILD_JOBS=2 cargo +1.98.1 run --locked --quiet --features full -- content-rights-tree --root .
-	$(PYTHON) -m pytest
+	CARGO_BUILD_JOBS=2 cargo +1.98.1 test --locked --features full --test python_port
 
 manifest-validate:
 	@test -n "$(strip $(MANIFEST_SCHEMA_ROOT))" || { \

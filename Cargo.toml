@@ -37,6 +37,11 @@ path = "tests/agent_evals_provider_cli.rs"
 required-features = ["full"]
 
 [[test]]
+name = "python_port"
+path = "tests/python_port/main.rs"
+required-features = ["full"]
+
+[[test]]
 name = "assurance_profile_schema_retired"
 path = "tests/assurance_profile_schema_retired.rs"
 required-features = ["manifest"]
