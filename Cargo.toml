@@ -24,8 +24,204 @@ test = false
 doc = false
 required-features = ["producer-execution"]
 
+# Under the empty `default`, a test target builds only when the features it
+# imports are on (each needs at least `serde_json`, which only a capability
+# feature provides), so each declares them; `cargo test --all-features` runs
+# every target. `full` is used where a test runs the binary (which requires
+# `full`) or spans several capabilities and dev crates. Unlisted targets are
+# still auto-discovered; `default_features` needs no feature and is not listed.
+
+[[test]]
+name = "agent_evals_provider_cli"
+path = "tests/agent_evals_provider_cli.rs"
+required-features = ["full"]
+
+[[test]]
+name = "assurance_profile_schema_retired"
+path = "tests/assurance_profile_schema_retired.rs"
+required-features = ["manifest"]
+
+[[test]]
+name = "campaign"
+path = "tests/campaign.rs"
+required-features = ["campaign"]
+
+[[test]]
+name = "claim_strength"
+path = "tests/claim_strength.rs"
+required-features = ["semantics"]
+
+[[test]]
+name = "compatibility_cli"
+path = "tests/compatibility_cli.rs"
+required-features = ["full"]
+
+[[test]]
+name = "compatibility_corpus"
+path = "tests/compatibility_corpus.rs"
+required-features = ["full"]
+
+[[test]]
+name = "compatibility_parity"
+path = "tests/compatibility_parity.rs"
+required-features = ["compatibility"]
+
+[[test]]
+name = "content_rights_parity"
+path = "tests/content_rights_parity.rs"
+required-features = ["content-rights"]
+
+[[test]]
+name = "content_rights_tree_cli"
+path = "tests/content_rights_tree_cli.rs"
+required-features = ["full"]
+
+[[test]]
+name = "discovery"
+path = "tests/discovery.rs"
+required-features = ["full"]
+
+[[test]]
+name = "evaluation_parity"
+path = "tests/evaluation_parity.rs"
+required-features = ["evaluation"]
+
+[[test]]
+name = "evaluation_report_cli"
+path = "tests/evaluation_report_cli.rs"
+required-features = ["full"]
+
+[[test]]
+name = "evaluation_reports"
+path = "tests/evaluation_reports.rs"
+required-features = ["evaluation-reports"]
+
+[[test]]
+name = "evidence_parity"
+path = "tests/evidence_parity.rs"
+required-features = ["evidence"]
+
+[[test]]
+name = "feature_matrix"
+path = "tests/feature_matrix.rs"
+required-features = ["full"]
+
+[[test]]
+name = "integration_evidence_cli"
+path = "tests/integration_evidence_cli.rs"
+required-features = ["full"]
+
+[[test]]
+name = "manifest_host_cli"
+path = "tests/manifest_host_cli.rs"
+required-features = ["full"]
+
+[[test]]
+name = "manifest_parity"
+path = "tests/manifest_parity.rs"
+required-features = ["manifest"]
+
+[[test]]
+name = "measurement"
+path = "tests/measurement.rs"
+required-features = ["full"]
+
+[[test]]
+name = "measurement_schema_retired"
+path = "tests/measurement_schema_retired.rs"
+required-features = ["manifest"]
+
+[[test]]
+name = "onboarding_cli"
+path = "tests/onboarding_cli.rs"
+required-features = ["full"]
+
+[[test]]
+name = "onboarding_core_parity"
+path = "tests/onboarding_core_parity.rs"
+required-features = ["onboarding"]
+
+[[test]]
+name = "package_audit_cli"
+path = "tests/package_audit_cli.rs"
+required-features = ["full"]
+
+[[test]]
+name = "package_boundary"
+path = "tests/package_boundary.rs"
+required-features = ["full"]
+
+[[test]]
+name = "package_lifecycle_cli"
+path = "tests/package_lifecycle_cli.rs"
+required-features = ["full"]
+
+[[test]]
+name = "package_membership_parity"
+path = "tests/package_membership_parity.rs"
+required-features = ["package-membership"]
+
+[[test]]
+name = "producer_execution"
+path = "tests/producer_execution.rs"
+required-features = ["producer-execution"]
+
+[[test]]
+name = "semantic_exports"
+path = "tests/semantic_exports.rs"
+required-features = ["full"]
+
+[[test]]
+name = "semantics_contract"
+path = "tests/semantics_contract.rs"
+required-features = ["full"]
+
+[[test]]
+name = "semantics_parity"
+path = "tests/semantics_parity.rs"
+required-features = ["semantics"]
+
+[[test]]
+name = "source_audit"
+path = "tests/source_audit.rs"
+required-features = ["full"]
+
+[[test]]
+name = "traceability_reconciliation"
+path = "tests/traceability_reconciliation.rs"
+required-features = ["full"]
+
+[[test]]
+name = "version_alignment"
+path = "tests/version_alignment.rs"
+required-features = ["full"]
+
+[[test]]
+name = "workflow_host_cli"
+path = "tests/workflow_host_cli.rs"
+required-features = ["full"]
+
+[[test]]
+name = "workflow_invariants_cli"
+path = "tests/workflow_invariants_cli.rs"
+required-features = ["full"]
+
+[[test]]
+name = "workflow_invariants_parity"
+path = "tests/workflow_invariants_parity.rs"
+required-features = ["workflow-invariants"]
+
 [features]
-default = ["full"]
+# EMPTY ON PURPOSE (EA-17). Cargo unifies features across a whole build, so a
+# default that reached `serde_json/arbitrary_precision` would switch it on for
+# every crate in a consumer's workspace, and non-JSON serializers (yaml, toml,
+# ciborium) would then write a private marker map for a `serde_json::Value`
+# number. Enable the capability you need (`features = ["source-audit"]`); the
+# `engineering-assurance` binary requires `full`. Do not add a member here
+# without re-reading `exact-numbers` below. `cargo test` under an empty default
+# builds only the test targets that need no capability; the rest declare
+# `required-features`.
+default = []
 producer-execution = [
   "dep:rustix",
   "dep:serde",
@@ -144,7 +340,7 @@ workflow-invariants = [
   "dep:thiserror",
   "dep:time",
 ]
-# Opt-in: turns on `serde_json/arbitrary_precision`. Cargo unifies features
+# Opt-in, and never part of `default`: turns on `serde_json/arbitrary_precision`. Cargo unifies features
 # across the whole dependency graph, so enabling this in one crate changes
 # serde_json's number representation for every crate in the same build (it is
 # workspace-global, not local to this package), and it changes how a

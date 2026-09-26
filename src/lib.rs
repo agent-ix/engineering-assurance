@@ -9,18 +9,25 @@
 //!
 //! # Cargo features
 //!
-//! Every library module has its own capability feature. Enable only what a
-//! consumer needs; each feature compiles alone (`make rust-features`).
-//! `full` (the current `default`) enables every row below plus the
-//! `engineering-assurance` binary's own crates (`clap`, `cap-std`, `tar`,
-//! `zip`, `flate2`, `tempfile`) and `exact-numbers`.
+//! **Default features are empty.** Enable the capability you need, for example
+//! `features = ["source-audit"]`; the `engineering-assurance` binary needs
+//! `full`. A bare dependency on this crate therefore exposes no module and
+//! pulls no optional dependency. That is deliberate: Cargo unifies features
+//! across the whole build, so a default that reached
+//! `serde_json/arbitrary_precision` would silently turn it on for every crate
+//! in a consumer's workspace.
 //!
-//! `exact-numbers` turns on `serde_json/arbitrary_precision`. Cargo unifies
-//! features across the whole build, so it is workspace-global and changes how
-//! a `serde_json::Value` bridges to non-JSON serializers (yaml, toml,
-//! ciborium). It is opt-in, and only the features marked "implies
-//! `exact-numbers`" below enable it: their identity digests and refusals
-//! (integers beyond `u64`, `1e309`) change without it.
+//! Every library module has its own capability feature. Enable only what a
+//! consumer needs; each feature compiles alone (`make rust-features`). `full`
+//! enables every row below plus the `engineering-assurance` binary's own crates
+//! (`clap`, `cap-std`, `tar`, `zip`, `flate2`, `tempfile`) and `exact-numbers`.
+//!
+//! `exact-numbers` turns on `serde_json/arbitrary_precision`. It is workspace-
+//! global, and it changes how a `serde_json::Value` bridges to non-JSON
+//! serializers: yaml, toml and ciborium re-serialise a number as a private
+//! marker map instead of a number. It is the explicit opt-in, and only the
+//! features marked "implies `exact-numbers`" below enable it: their identity
+//! digests and refusals (integers beyond `u64`, `1e309`) change without it.
 //!
 //! | Feature | Module(s) | Other features it enables | Extra dependencies |
 //! |---|---|---|---|

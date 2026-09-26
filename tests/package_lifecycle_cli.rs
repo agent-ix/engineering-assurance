@@ -401,9 +401,9 @@ fn tc_112_npm_lifecycle_hooks_are_exact_declarative_rust_dispatch() {
     assert_eq!(
         package["scripts"],
         serde_json::json!({
-            "prepack": "cargo run --locked --quiet -- package-lifecycle stage --root . --npm-hook",
-            "postpack": "cargo run --locked --quiet -- package-lifecycle clean --root . --npm-hook",
-            "prepublishOnly": "cargo run --locked --quiet -- package-lifecycle refuse-publication --npm-hook",
+            "prepack": "cargo run --locked --quiet --features full -- package-lifecycle stage --root . --npm-hook",
+            "postpack": "cargo run --locked --quiet --features full -- package-lifecycle clean --root . --npm-hook",
+            "prepublishOnly": "cargo run --locked --quiet --features full -- package-lifecycle refuse-publication --npm-hook",
         })
     );
     assert!(!root.join("scripts/stage-npm.mjs").exists());

@@ -20,7 +20,7 @@ lint:
 	$(PYTHON) -m ruff check .
 
 test:
-	CARGO_BUILD_JOBS=2 cargo +1.98.1 run --locked --quiet -- content-rights-tree --root .
+	CARGO_BUILD_JOBS=2 cargo +1.98.1 run --locked --quiet --features full -- content-rights-tree --root .
 	$(PYTHON) -m pytest
 
 manifest-validate:
@@ -32,7 +32,7 @@ manifest-validate:
 		echo "MANIFEST_REGISTRY_ROOT is required for explicit manifest validation" >&2; \
 		exit 2; \
 	}
-	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet -- manifest-validate \
+	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet --features full -- manifest-validate \
 		--root . \
 		--schema-root "$(MANIFEST_SCHEMA_ROOT)" \
 		--registry-root "$(MANIFEST_REGISTRY_ROOT)"
@@ -48,10 +48,10 @@ manifest-validate:
 # Quire CLI versions — is now asserted by TC-130 in `tests/compatibility_cli.rs`,
 # which needs nothing installed and so runs under `make rust-tests`.
 compatibility-observe:
-	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet -- compatibility-observe --root .
+	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet --features full -- compatibility-observe --root .
 
 package-audit:
-	CARGO_BUILD_JOBS=2 cargo +1.98.1 run --locked --quiet -- package-audit --root .
+	CARGO_BUILD_JOBS=2 cargo +1.98.1 run --locked --quiet --features full -- package-audit --root .
 
 validate-docs:
 	$(QUIRE) validate --scope "$(CURDIR)" "spec/**/*.md" "plan/**/*.md" "reviews/**/*.md"
@@ -112,7 +112,7 @@ rust-features:
 rust-foundation-gate: rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit
 
 agent-evals:
-	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet -- agent-evals --root . \
+	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet --features full -- agent-evals --root . \
 		--agent "$(EVAL_AGENT)" \
 		--run "$(EVAL_RUN)" \
 		$(if $(strip $(EVAL_FILTER)),--filter "$(EVAL_FILTER)") \
@@ -133,7 +133,7 @@ agent-evals-aggregate:
 		echo "EVAL_WORKSPACE_ROOT is required for retained transcript confinement" >&2; \
 		exit 2; \
 	}
-	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet -- evaluation-aggregate \
+	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet --features full -- evaluation-aggregate \
 		--root . \
 		--workspace-root "$(EVAL_WORKSPACE_ROOT)" \
 		$(foreach report,$(EVAL_REPORTS),--report "$(report)") \
@@ -141,7 +141,7 @@ agent-evals-aggregate:
 		--output "$(EVAL_AGGREGATE_REPORT)"
 
 integration-traceability:
-	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet -- integration-evidence \
+	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet --features full -- integration-evidence \
 		--root . \
 		--quire "$(QUIRE)" \
 		--traceability-only
@@ -155,7 +155,7 @@ integration-evidence:
 		echo "EVAL_WORKSPACE_ROOT is required for retained transcript confinement" >&2; \
 		exit 2; \
 	}
-	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet -- integration-evidence \
+	CARGO_BUILD_JOBS=2 $(CARGO) +1.98.1 run --locked --quiet --features full -- integration-evidence \
 		--root . \
 		--quire "$(QUIRE)" \
 		--artifact "$(EVAL_AGGREGATE_REPORT)" \

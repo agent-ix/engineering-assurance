@@ -72,6 +72,7 @@ cargo +1.98.1 install \
   --git https://github.com/agent-ix/engineering-assurance \
   --tag v0.4.1 \
   --locked \
+  --features full \
   --bin engineering-assurance
 ```
 
@@ -331,21 +332,26 @@ Run `engineering-assurance --help` or
 commands do not make a release decision and should not be invoked as a
 substitute for the human workflow gates.
 
-## Cargo features
+## Using as a library: Cargo features
 
-As a library, every module has its own capability feature (for example
-`source-audit`, `manifest`, `package-audit`), so a consumer enables only the
-modules it uses and pulls only the dependencies they need. The table of
+**Default features are empty: enable the capability you need, for example
+`features = ["source-audit"]`; the CLI needs `full`.** A bare dependency on the
+crate exposes no module. Every module has its own capability feature (for
+example `source-audit`, `manifest`, `package-audit`), so a consumer enables only
+the modules it uses and pulls only the dependencies they need. The table of
 features, modules and dependencies is at the top of the crate documentation in
-`src/lib.rs`. The `engineering-assurance` binary requires `full`.
-`make rust-features` checks that every feature compiles alone, and that its
-unit tests compile.
+`src/lib.rs`. The `engineering-assurance` binary requires `full`, so build or
+run it with `--features full`. `make rust-features` checks that every feature
+compiles alone, and that its unit tests compile.
 
-`exact-numbers` is an opt-in feature that turns on
-`serde_json/arbitrary_precision`. It is workspace-global (Cargo unifies
-features) and changes how a `serde_json::Value` bridges to non-JSON
-serializers. `evidence`, `semantics`, `evaluation` and `evaluation-reports`
-imply it because their digests and refusals depend on exact numbers.
+Why empty: `exact-numbers` turns on `serde_json/arbitrary_precision`, and Cargo
+unifies features across the whole build, so a default that enabled it would
+switch it on for every crate in a consumer's workspace. Serializers other than
+`serde_json` (yaml, toml, ciborium) then re-serialise a `serde_json::Value`
+number as a private marker map. `evidence`, `semantics`, `evaluation` and
+`evaluation-reports` imply `exact-numbers` because their digests and refusals
+depend on exact numbers; nothing else does, and a consumer can opt in
+explicitly with `features = ["exact-numbers"]`.
 
 ## Development
 
