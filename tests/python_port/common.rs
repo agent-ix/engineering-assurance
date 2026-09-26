@@ -84,3 +84,35 @@ pub fn truthy(value: &serde_json::Value) -> bool {
 pub fn required_msg(name: &str) -> String {
     format!("\"{name}\" is a required property")
 }
+
+/// True when `path` is a regular file with an execute bit set (unix), like
+/// `shutil.which`.
+fn is_executable_file(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+}
+
+/// First executable `name` on `PATH`.
+pub fn find_on_path(name: &str) -> Option<PathBuf> {
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path)
+        .map(|d| d.join(name))
+        .find(|p| is_executable_file(p))
+}
+
+/// `file://` URI for an absolute path; bytes outside unreserved and `/` are
+/// percent-encoded.
+pub fn file_uri(path: &Path) -> String {
+    use std::fmt::Write as _;
+    use std::os::unix::ffi::OsStrExt;
+    debug_assert!(path.is_absolute(), "file_uri needs an absolute path");
+    let mut uri = String::from("file://");
+    for &b in path.as_os_str().as_bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~' | b'/') {
+            uri.push(b as char);
+        } else {
+            let _ = write!(uri, "%{b:02X}");
+        }
+    }
+    uri
+}

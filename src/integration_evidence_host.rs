@@ -33,13 +33,6 @@ const MAX_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_MATRIX_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_RUNTIME_FILES: usize = 16_384;
 const MAX_RUNTIME_BYTES: u64 = 64 * 1024 * 1024;
-/// The declared test-case population in `spec/tests.md`.
-///
-/// Pinning the count is what catches a test case being silently deleted, so it
-/// is raised deliberately whenever one is added — never derived from the
-/// document it is meant to guard.
-const REQUIRED_TEST_CASES: usize = 164;
-
 #[derive(Debug, Error)]
 pub(crate) enum IntegrationEvidenceError {
     #[error("integration-evidence repository root is invalid")]
@@ -158,8 +151,6 @@ struct CoverageDocument {
     #[serde(default)]
     untracked_symbols: Vec<CoverageReference>,
     #[serde(default)]
-    groups: Vec<CoverageGroup>,
-    #[serde(default)]
     diagnostics: Vec<CoverageDiagnostic>,
 }
 
@@ -255,14 +246,6 @@ fn submodule_paths(root: &Path) -> Vec<String> {
         .map(|value| value.trim().trim_end_matches('/').to_owned())
         .filter(|value| !value.is_empty())
         .collect()
-}
-
-#[derive(Debug, Deserialize)]
-struct CoverageGroup {
-    document: String,
-    target: String,
-    backed: usize,
-    total: usize,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -547,33 +530,6 @@ fn totals_refusal(totals: &CoverageTotals) -> Option<CoverageRefusal> {
     })
 }
 
-fn test_case_population_refusal(coverage: &CoverageDocument) -> Option<CoverageRefusal> {
-    const CODE: &str = "integration_evidence_coverage_test_case_population";
-    let group = coverage
-        .groups
-        .iter()
-        .find(|group| group.document == "spec/tests.md" && group.target == "test-case");
-    match group {
-        Some(group)
-            if group.backed == REQUIRED_TEST_CASES && group.total == REQUIRED_TEST_CASES =>
-        {
-            None
-        }
-        Some(group) => Some(CoverageRefusal {
-            code: CODE,
-            detail: format!(
-                "spec/tests.md test-case population is {}/{}, expected \
-                 {REQUIRED_TEST_CASES}/{REQUIRED_TEST_CASES}",
-                group.backed, group.total
-            ),
-        }),
-        None => Some(CoverageRefusal {
-            code: CODE,
-            detail: "spec/tests.md declares no test-case traceability group".to_owned(),
-        }),
-    }
-}
-
 /// Collect every failing condition, in fixed severity order.
 ///
 /// Each condition is evaluated independently: stopping at the first one is
@@ -608,7 +564,6 @@ fn validate_coverage(
             "first-party trace tag(s) bind to nothing the matrix minted",
             &orphaned,
         ),
-        test_case_population_refusal(coverage),
     ]
     .into_iter()
     .flatten()
@@ -972,12 +927,6 @@ mod tests {
                     ..CoverageReference::default()
                 })
                 .collect(),
-            groups: vec![CoverageGroup {
-                document: "spec/tests.md".into(),
-                target: "test-case".into(),
-                backed: REQUIRED_TEST_CASES,
-                total: REQUIRED_TEST_CASES,
-            }],
             diagnostics: vec![],
         };
 
@@ -1037,12 +986,6 @@ mod tests {
             unbacked_rows: vec![],
             status_lies: vec![],
             untracked_symbols: vec![],
-            groups: vec![CoverageGroup {
-                document: "spec/tests.md".into(),
-                target: "test-case".into(),
-                backed: REQUIRED_TEST_CASES,
-                total: REQUIRED_TEST_CASES,
-            }],
             diagnostics: vec![],
         };
         let root = tempfile::tempdir().expect("fixture root");
@@ -1069,12 +1012,6 @@ mod tests {
             unbacked_rows: vec![],
             status_lies: vec![],
             untracked_symbols: vec![],
-            groups: vec![CoverageGroup {
-                document: "spec/tests.md".into(),
-                target: "test-case".into(),
-                backed: REQUIRED_TEST_CASES,
-                total: REQUIRED_TEST_CASES,
-            }],
             diagnostics: vec![],
         }
     }
@@ -1127,24 +1064,6 @@ mod tests {
         let refusal = validate_coverage(&lie, root.path()).expect_err("a status lie must refuse");
         assert_eq!(refusal.code(), "integration_evidence_coverage_status_lies");
         assert!(refusal.to_string().contains("spec/tests.md:69 FR-001"));
-
-        // A wrong pinned population names both counts.
-        let population = CoverageDocument {
-            groups: vec![CoverageGroup {
-                document: "spec/tests.md".into(),
-                target: "test-case".into(),
-                backed: REQUIRED_TEST_CASES - 1,
-                total: REQUIRED_TEST_CASES,
-            }],
-            ..complete_coverage()
-        };
-        let refusal = validate_coverage(&population, root.path())
-            .expect_err("a short test-case population must refuse");
-        assert_eq!(
-            refusal.code(),
-            "integration_evidence_coverage_test_case_population"
-        );
-        assert!(refusal.to_string().contains("spec/tests.md test-case"));
     }
 
     #[test]

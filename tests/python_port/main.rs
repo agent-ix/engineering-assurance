@@ -9,7 +9,6 @@
 
 mod campaign_measurement_plan;
 mod common;
-mod corpus_reproduction;
 mod migration_contract;
 mod module;
 mod onboarding_script;

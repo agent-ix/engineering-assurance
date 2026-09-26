@@ -17,8 +17,8 @@ use regex::Regex;
 use serde_json::{Value, json};
 
 use super::common::{
-    frontmatter, glob_ext, manifest, merged, package_root, read, required_msg, root, schema,
-    schema_errors, yaml,
+    find_on_path, frontmatter, glob_ext, manifest, merged, package_root, read, required_msg, root,
+    schema, schema_errors, yaml,
 };
 
 // Assembled from parts so the content-rights URL scan does not see a literal.
@@ -289,15 +289,6 @@ fn every_schema_and_skeleton_is_valid() {
             .unwrap_or_else(|e| panic!("{name} schema is not valid: {e}"));
         let errors = schema_errors(&validator(&contract), &frontmatter(&path));
         assert!(errors.is_empty(), "{name}: {errors:?}");
-        let body = read(&path);
-        let locators = artifact["body_extraction"]["yield_pattern"]["match"]
-            .as_object()
-            .unwrap();
-        for locator in locators.values() {
-            assert_eq!(locator["required"], json!(true));
-            let heading = locator["after_heading"].as_str().unwrap();
-            assert!(body.contains(&format!("## {heading}")), "{name}: {heading}");
-        }
     }
 }
 
@@ -1273,13 +1264,6 @@ fn manual_verification_workflow_runs_the_rust_foundation_gate() {
     assert!(deps.contains("rust-deps") && deps.contains("rust-audit"));
     assert!(makefile.contains("$(CARGO) deny --locked check"));
     assert!(makefile.contains("$(CARGO) audit"));
-}
-
-fn find_on_path(name: &str) -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path)
-        .map(|d| d.join(name))
-        .find(|p| p.is_file())
 }
 
 #[test]

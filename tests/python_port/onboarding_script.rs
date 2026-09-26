@@ -23,10 +23,7 @@ fn onboard_js() -> PathBuf {
 
 /// Path of `node` on `PATH`, if installed.
 fn node() -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
-    std::env::split_paths(&path)
-        .map(|dir| dir.join("node"))
-        .find(|candidate| candidate.is_file())
+    super::common::find_on_path("node")
 }
 
 macro_rules! require_node {
