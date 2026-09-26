@@ -148,9 +148,18 @@ plan covers benchmarks or dimensions whose baselines differ in scale: allow a
 so a 100 ms prior tolerates 105 ms and a 100 000 ms prior tolerates 105 000 ms.
 A relative margin against a zero baseline shrinks to nothing -- the reference
 is the baseline itself -- so state an absolute margin when the baseline can be
-zero. `margin_mode` is allowed only with `margin`. An observation-side uncertainty
-or confidence interval is not part of a plan; `statistical_design.uncertainty`
-stays prose.
+zero. `margin_mode` is allowed only with `margin`.
+
+`statistical_design.uncertainty` stays prose that no checker reads. To have the
+rule account for measurement uncertainty, add `interval_level`, a confidence
+level strictly between 0 and 1, to the `decision_rule`, for example
+`{ comparator: ge, threshold: 0.9, interval_level: 0.95 }`. The rule is then
+judged at the unfavourable end of the observation's stated interval -- its
+lower bound for `gt`/`ge`, its upper bound for `lt`/`le` -- so a gain that the
+interval cannot rule out as noise does not pass. The observation must carry an
+`interval` of at least that level; one without it is refused, not judged on its
+point estimate. `interval_level` is never allowed with `eq`, and, being part of
+the rule, changing it requires a new `definition_version`.
 
 When `objective` is present the comparator agrees with it: `higher` takes `gt`
 or `ge`, `lower` takes `lt` or `le`, `zero` takes `eq` or `le` against

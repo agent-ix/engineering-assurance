@@ -28,11 +28,14 @@ history; they cannot govern new measurement collections.
   - `decision_rule`: an object with `comparator` (exactly one of `gt`, `ge`,
     `lt`, `le`, or `eq`) and exactly one reference: a numeric `threshold`, or a
     `baseline` (exactly one of `constant-predictor`, `prior-collection`,
-    `best-seen`, or `external-reference`) with an optional numeric `margin`.
+    `best-seen`, or `external-reference`) with an optional numeric `margin`;
+    either form may also carry an optional `interval_level`, a number
+    strictly between 0 and 1.
 - For the consistency checks: a validated rule with the plan's `objective` or
   `estimator`.
 - For rule evaluation: a validated rule, the estimate, and, for a baseline
-  rule, the caller-computed baseline value.
+  rule, the caller-computed baseline value; for a rule with `interval_level`,
+  the observation's interval (`lower`, `upper`, `level`, `method`).
 - For the definition-change check: the plan's frontmatter before and after an
   edit, as in [FR-020](./FR-020-measurement-plan-objective.md).
 
@@ -81,6 +84,22 @@ history; they cannot govern new measurement collections.
   `{ comparator: le, baseline: prior-collection, margin: -0.05, margin_mode:
   relative }` tolerates a 5% regression whatever the scale of the baseline.
   `margin_mode` SHALL be allowed only with `margin`, and never with `eq`.
+- `interval_level`, when present, SHALL make the rule hold at the unfavourable
+  end of the observation's stated interval instead of at its point estimate:
+  the lower bound for `gt` and `ge`, the upper bound for `lt` and `le`. It
+  SHALL be a finite number strictly between 0 and 1, SHALL NOT be stated with
+  `eq`, and, being inside `decision_rule`, SHALL be part of the measurement
+  definition (a reader that does not know it refuses the plan rather than
+  judging the point estimate). An absent `interval_level` means the point
+  estimate is used. `statistical_design.uncertainty` stays prose.
+- An interval (`lower`, `upper`, `level`, `method`) SHALL have finite bounds
+  with `lower <= upper`, a `level` strictly between 0 and 1, and a non-empty
+  `method` that no checker reads. A rule with `interval_level` SHALL refuse an
+  observation with no interval, an interval at a lower level than the rule's,
+  and an estimate outside its interval; an interval at an equal or higher level
+  SHALL be accepted, and the point-estimate evaluation SHALL refuse such a
+  rule rather than judge the point estimate. The observation's `interval`
+  field is owned by Quoin, not this repository.
 - `baseline: constant-predictor` SHALL mean, for each answer family, the
   agreement rate of the highest-scoring single constant answer on the corpus
   at evaluation time, combined across families as the size-weighted mean
@@ -188,13 +207,15 @@ change produces a finding rather than being accepted silently.
 | FR-021-AC-3 | The Rust `DecisionRule` accepts threshold and baseline rules and refuses neither or both references, `margin` without `baseline` or with `eq`, `eq` against `best-seen`, and a non-finite `threshold` or `margin` with distinct typed errors, through construction and deserialization; deserialization refuses unknown comparators, baselines, estimators, a non-numeric `margin`, and extra keys; a valid rule round-trips. | Test (TC-146) |
 | FR-021-AC-4 | The schema's `estimator`, `comparator`, and `baseline` enums equal the Rust `Estimator`, `Comparator`, and `Baseline` wire-name sets, in order, and each `ALL` constant covers every variant. | Test (TC-147) |
 | FR-021-AC-5 | Each comparator holds exactly for the estimates below, at, or above the reference its symbol names, and none holds against NaN; a baseline rule compares against the baseline value moved by its margin in the direction of improvement, for higher- and lower-is-better rules and for positive and negative margins; a missing or unexpected baseline value, a non-finite estimate or baseline value, and an overflowing reference are typed refusals. | Test (TC-148) |
-| FR-021-AC-6 | The onboarding checklist lists the estimator, comparator, and baseline sets, the one-of choice between `threshold` and `baseline`, `margin`'s dependency on `baseline`, `metric`'s dependency on `statistical_design`, the direction and estimator consistency rules, and the refused `eq` combinations, with no warning. | Test (TC-149) |
+| FR-021-AC-6 | The onboarding checklist lists the estimator, comparator, and baseline sets, the one-of choice between `threshold` and `baseline`, `margin`'s dependency on `baseline`, `metric`'s dependency on `statistical_design`, the direction and estimator consistency rules, the refused `eq` combinations, and the `interval_level` refusal with `eq`, and notes that an observation MAY carry a Quoin-validated `interval` object, with no warning. | Test (TC-149) |
 | FR-021-AC-7 | A minimal consumer with only the `measurement` feature reaches `Estimator`, `Comparator`, `Baseline`, `DecisionRule`, and the definition-change check, and resolves no `serde_json`. | Test (TC-142) |
 | FR-021-AC-8 | Given two plan definitions with an equal `definition_version`, an added, removed, or changed estimator or decision rule yields one typed finding naming each changed member; the same edit with a different `definition_version`, and an unchanged definition, yield no finding. | Test (TC-141) |
 | FR-021-AC-9 | The schema and the Rust `DecisionRule` accept a comparator that agrees with the objective's direction and refuse one that disagrees, with a typed error naming both; they accept `constant-predictor` only with `estimator: proportion`, with a typed error naming the estimator. | Test (TC-144, TC-146) |
 | FR-021-AC-10 | The schema and the Rust `DecisionRule` accept `baseline: external-reference` with every estimator and, unlike `best-seen`, with `comparator: eq`, and refuse it with `eq` plus a `margin` and with a comparator that disagrees with the objective's direction, with the same typed errors as every other baseline; evaluating it without a supplied value is a typed refusal naming `external-reference`, and a supplied value is moved by the margin in the direction of improvement; the Rust `Baseline` type round-trips `external-reference` through construction, serialization, and deserialization. | Test (TC-171) |
 | FR-021-AC-11 | A retired plan with the exact v0.2.1 prose `statistical_design` shape validates without a fabricated numeric rule; the same prose is refused for proposed or active plans. Empty, missing, or extra legacy design fields are refused, a retired current-shape plan remains valid, and a legacy prose plan cannot mix in fields introduced after v0.2.1. | Test (TC-172) |
 | FR-021-AC-12 | The schema and the Rust `DecisionRule` accept `margin_mode` of `absolute` or `relative` only with a `margin`, and refuse it with a threshold, without a margin, with `eq`, or with any other value; an absent mode is absolute and an absolute rule does not serialize the key; a relative margin moves the baseline value by the margin times its absolute value in the direction of improvement, so one rule tolerates the same fraction of baselines that differ in scale, including negative baselines; the schema's `margin_mode` enum equals the Rust `MarginMode` wire names. | Test (TC-188) |
+| FR-021-AC-13 | The schema and the Rust `DecisionRule` accept an `interval_level` strictly between 0 and 1 with a threshold or baseline rule and every comparator but `eq`, and refuse it with `eq`, at 0 or 1, outside that range, non-numeric, or (Rust) non-finite, with distinct typed errors, through construction and deserialization; an absent level is not serialized and a stated level round-trips; the Rust `Interval` and `ConfidenceLevel` types accept a finite ordered interval at a level strictly between 0 and 1 with a non-empty method and refuse each violation with a typed `IntervalError`, and round-trip; the `interval_level` key is inside `decision_rule`, so an unknown-key reader refuses it and editing it without a `definition_version` bump yields a finding. | Test (TC-192) |
+| FR-021-AC-14 | `holds_on_interval` judges a rule at the interval's lower bound for `gt` and `ge` and its upper bound for `lt` and `le`, for higher- and lower-is-better rules and for threshold and baseline (including relative-margin) references, so a point estimate that passes but whose unfavourable bound fails is refused; an interval at a level at or above the rule's is accepted; a missing interval, a lower level, an estimate outside the interval, a rule without `interval_level`, and non-finite inputs are typed refusals; and the point-form `holds` returns a typed `IntervalRequired` error for a rule with `interval_level`. | Test (TC-193) |
 
 ## Dependencies
 

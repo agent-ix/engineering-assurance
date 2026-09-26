@@ -133,7 +133,8 @@ def test_onboard_js_json_checklist_lists_the_decision_rule_vocabulary(
         "statistical_design.decision_rule.comparator = eq": (
             "statistical_design.decision_rule.baseline must not be best-seen and "
             "statistical_design.decision_rule.margin must be absent and "
-            "statistical_design.decision_rule.margin_mode must be absent"
+            "statistical_design.decision_rule.margin_mode must be absent and "
+            "statistical_design.decision_rule.interval_level must be absent"
         ),
     }
     for when, constraint in expected_current_constraints.items():
@@ -520,3 +521,27 @@ def test_onboard_js_summary_marks_truncated_findings_and_labels_the_module(
     assert "finding 10" in completed.stdout
     assert "finding 11" not in completed.stdout
     assert "module in this checkout:" in completed.stdout
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_onboard_js_observation_checklist_notes_the_optional_interval(
+    tmp_path: Path,
+) -> None:
+    """Trace: FR-021-AC-6, TC-149.
+
+    An observation MAY carry an `interval` object that quoin validates, and
+    the minimum quoin version that reads it is not yet known.
+    """
+    report = run_onboard_json(tmp_path)
+    notes = [
+        item
+        for item in report["measurementRecordChecklist"]["observation"]
+        if item.startswith("interval")
+    ]
+    assert len(notes) == 1
+    (note,) = notes
+    assert "OPTIONAL" in note
+    assert "quoin applies it" in note
+    assert "tracked in EA-26" in note
+    assert "TBD" not in note
+    assert "decision_rule.interval_level" in note

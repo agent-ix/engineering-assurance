@@ -13,12 +13,12 @@
 use std::{collections::BTreeSet, fs, path::Path, process::Command};
 
 use engineering_assurance::measurement::{
-    ApparatusPath, ApparatusPathError, Baseline, Comparator, DecisionRule, DecisionRuleError,
-    DefinitionChangedWithoutVersionBump, DefinitionMember, Direction, Estimator, MarginMode,
-    MeasurementDefinition, NegativeControl, NegativeControlError, NegativeControlKind,
-    NegativeControls, Objective, ObjectiveError, PlanDefinition, ProtectedApparatus,
-    ProtectedApparatusError, RuleEvaluationError, RuleReference,
-    definition_change_without_version_bump,
+    ApparatusPath, ApparatusPathError, Baseline, Comparator, ConfidenceLevel, ConfidenceLevelError,
+    DecisionRule, DecisionRuleError, DefinitionChangedWithoutVersionBump, DefinitionMember,
+    Direction, Estimator, Interval, IntervalError, MarginMode, MeasurementDefinition,
+    NegativeControl, NegativeControlError, NegativeControlKind, NegativeControls, Objective,
+    ObjectiveError, PlanDefinition, ProtectedApparatus, ProtectedApparatusError,
+    RuleEvaluationError, RuleReference, definition_change_without_version_bump,
 };
 use ix_trace_rs::trace;
 
@@ -785,7 +785,7 @@ fn tc_142_a_minimal_downstream_compiles_only_the_measurement_feature() {
     .expect("consumer manifest");
     fs::write(
         consumer.path().join("src/main.rs"),
-        "use engineering_assurance::measurement::{ApparatusPath, Baseline, Comparator, DecisionRule, Direction, Estimator, NegativeControl, NegativeControlKind, NegativeControls, Objective, ProtectedApparatus, definition_change_without_version_bump};\nfn main(){let steered = Objective::with_steering(Direction::Target, Some(1.0), Some(1.0), Some(30.0), Some(50.0)).expect(\"valid\"); let _ = (steered.weight(), steered.value_half_life(), steered.budget(), steered.definitional(), definition_change_without_version_bump, DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, None), Estimator::Proportion, ApparatusPath::new(\"evals/**\").map(|path| ProtectedApparatus::new([path])), NegativeControl::new(NegativeControlKind::ApparatusEdit, \"digest\").map(|control| NegativeControls::new([control])));}\n",
+        "use engineering_assurance::measurement::{ApparatusPath, Baseline, Comparator, ConfidenceLevel, DecisionRule, Interval, Direction, Estimator, NegativeControl, NegativeControlKind, NegativeControls, Objective, ProtectedApparatus, definition_change_without_version_bump};\nfn main(){let steered = Objective::with_steering(Direction::Target, Some(1.0), Some(1.0), Some(30.0), Some(50.0)).expect(\"valid\"); let level = ConfidenceLevel::new(0.95).expect(\"level\"); let interval = Interval::new(0.0, 1.0, level, \"m\").expect(\"interval\"); let rule = DecisionRule::against_threshold(Comparator::Ge, 0.5).and_then(|rule| rule.with_interval_level(level)).expect(\"rule\"); let _ = (rule.holds_on_interval(0.5, Some(&interval), None), steered.weight(), steered.value_half_life(), steered.budget(), steered.definitional(), definition_change_without_version_bump, DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, None), Estimator::Proportion, ApparatusPath::new(\"evals/**\").map(|path| ProtectedApparatus::new([path])), NegativeControl::new(NegativeControlKind::ApparatusEdit, \"digest\").map(|control| NegativeControls::new([control])));}\n",
     )
     .expect("consumer source");
     let status = Command::new(env!("CARGO"))
@@ -1759,4 +1759,400 @@ fn tc_188_a_relative_margin_against_a_zero_baseline_shrinks_to_nothing() {
     // "5% better" than zero is zero: the rule demands no improvement.
     assert_eq!(rule.holds(0.0, Some(0.0)), Ok(true));
     assert_eq!(rule.holds(-0.001, Some(0.0)), Ok(false));
+}
+
+fn level(value: f64) -> ConfidenceLevel {
+    ConfidenceLevel::new(value).expect("valid confidence level")
+}
+
+fn interval(lower: f64, upper: f64, at: f64) -> Interval {
+    Interval::new(lower, upper, level(at), "bootstrap, 1000 resamples").expect("valid interval")
+}
+
+fn interval_rule(rule: DecisionRule, at: f64) -> DecisionRule {
+    rule.with_interval_level(level(at))
+        .expect("valid interval rule")
+}
+
+#[trace("TC-192", "FR-021-AC-13")]
+#[test]
+fn tc_192_interval_level_is_validated_optional_and_round_trips() {
+    let rule = parse_rule("comparator: ge\nthreshold: 0.9\ninterval_level: 0.95\n")
+        .expect("a threshold rule with a level parses");
+    assert_eq!(rule.interval_level(), Some(level(0.95)));
+    let encoded = yaml_serde::to_string(&rule).expect("rule serializes");
+    assert_eq!(parse_rule(&encoded), Ok(rule), "round trip: {encoded}");
+
+    let baseline = parse_rule(
+        "comparator: le\nbaseline: prior-collection\nmargin: -0.05\nmargin_mode: relative\ninterval_level: 0.9\n",
+    )
+    .expect("a baseline rule with a level parses");
+    assert_eq!(baseline.interval_level(), Some(level(0.9)));
+    let encoded = yaml_serde::to_string(&baseline).expect("rule serializes");
+    assert_eq!(parse_rule(&encoded), Ok(baseline), "round trip: {encoded}");
+
+    // Absent means the point estimate, and no key is emitted.
+    let point = parse_rule("comparator: gt\nthreshold: 1\n").expect("parses");
+    assert_eq!(point.interval_level(), None);
+    assert!(
+        !yaml_serde::to_string(&point)
+            .expect("rule serializes")
+            .contains("interval_level")
+    );
+
+    // Every comparator but eq takes a level.
+    for comparator in [
+        Comparator::Gt,
+        Comparator::Ge,
+        Comparator::Lt,
+        Comparator::Le,
+    ] {
+        assert!(
+            rule_threshold(comparator, 1.0)
+                .with_interval_level(level(0.5))
+                .is_ok()
+        );
+    }
+    assert_eq!(
+        rule_threshold(Comparator::Eq, 1.0).with_interval_level(level(0.5)),
+        Err(DecisionRuleError::IntervalLevelWithEq)
+    );
+    assert!(
+        parse_rule("comparator: eq\nbaseline: prior-collection\ninterval_level: 0.9\n")
+            .expect_err("eq refuses a level")
+            .contains("interval_level")
+    );
+
+    for bad in ["0", "1", "-0.5", "1.5", ".inf", ".nan"] {
+        let yaml = format!("comparator: ge\nthreshold: 1\ninterval_level: {bad}\n");
+        assert!(
+            parse_rule(&yaml)
+                .expect_err("an out-of-range level is refused")
+                .contains("interval_level"),
+            "{bad}"
+        );
+    }
+    assert!(parse_rule("comparator: ge\nthreshold: 1\ninterval_level: high\n").is_err());
+    for bad in [0.0, 1.0, -0.1, 1.1, f64::NAN, f64::INFINITY] {
+        assert!(
+            matches!(ConfidenceLevel::new(bad), Err(ConfidenceLevelError { .. })),
+            "{bad}"
+        );
+    }
+}
+
+#[trace("TC-192", "FR-021-AC-13")]
+#[test]
+fn tc_192_interval_validates_and_round_trips() {
+    let value = interval(0.8, 0.9, 0.95);
+    assert_eq!(
+        (value.lower(), value.upper(), value.level(), value.method()),
+        (0.8, 0.9, level(0.95), "bootstrap, 1000 resamples")
+    );
+    let encoded = yaml_serde::to_string(&value).expect("interval serializes");
+    assert_eq!(
+        yaml_serde::from_str::<Interval>(&encoded).expect("round trip"),
+        value,
+        "{encoded}"
+    );
+    // A degenerate interval is a valid interval.
+    assert!(Interval::new(1.0, 1.0, level(0.5), "exact count").is_ok());
+
+    assert_eq!(
+        Interval::new(1.0, 0.0, level(0.5), "m"),
+        Err(IntervalError::InvertedBounds {
+            lower: 1.0,
+            upper: 0.0
+        })
+    );
+    for (lower, upper) in [
+        (f64::NAN, 1.0),
+        (0.0, f64::INFINITY),
+        (f64::NEG_INFINITY, 0.0),
+    ] {
+        assert!(matches!(
+            Interval::new(lower, upper, level(0.5), "m"),
+            Err(IntervalError::NonFiniteBound { .. })
+        ));
+    }
+    for method in ["", "  \t"] {
+        assert_eq!(
+            Interval::new(0.0, 1.0, level(0.5), method),
+            Err(IntervalError::EmptyMethod)
+        );
+    }
+    for yaml in [
+        "lower: 0\nupper: 1\nlevel: 1\nmethod: m\n",
+        "lower: 0\nupper: 1\nlevel: 0\nmethod: m\n",
+        "lower: 1\nupper: 0\nlevel: 0.9\nmethod: m\n",
+        "lower: 0\nupper: 1\nlevel: 0.9\nmethod: ''\n",
+        "lower: 0\nupper: 1\nlevel: 0.9\n",
+        "lower: 0\nupper: 1\nlevel: 0.9\nmethod: m\nextra: 1\n",
+    ] {
+        assert!(yaml_serde::from_str::<Interval>(yaml).is_err(), "{yaml}");
+    }
+    assert!(matches!(
+        yaml_serde::from_str::<Interval>("lower: 0\nupper: 1\nlevel: 1\nmethod: m\n")
+            .expect_err("level 1 refused")
+            .to_string()
+            .as_str(),
+        message if message.contains("level")
+    ));
+}
+
+#[trace("TC-192", "FR-021-AC-13")]
+#[test]
+fn tc_192_schema_interval_level_is_an_open_unit_interval_forbidden_with_eq() {
+    let schema = measurement_plan_schema();
+    let rule = &schema["definitions"]["decision_rule"];
+    let property = &rule["properties"]["interval_level"];
+    assert_eq!(property["type"], "number");
+    assert_eq!(property["exclusiveMinimum"], 0);
+    assert_eq!(property["exclusiveMaximum"], 1);
+    assert_eq!(
+        rule["allOf"][0]["then"]["properties"]["interval_level"],
+        serde_json::json!(false),
+        "the schema must refuse interval_level with eq, as the Rust rule does"
+    );
+    assert!(
+        rule["dependencies"].get("interval_level").is_none(),
+        "interval_level stands alone: a threshold or baseline rule may state it"
+    );
+}
+
+#[trace("TC-192", "FR-021-AC-13", "FR-021-AC-8")]
+#[test]
+fn tc_192_editing_interval_level_without_a_version_bump_is_a_definition_finding() {
+    let definition = |decision_rule| MeasurementDefinition {
+        decision_rule: Some(decision_rule),
+        ..MeasurementDefinition::default()
+    };
+    let plan = |version, definition| PlanDefinition {
+        definition_version: version,
+        definition,
+    };
+    let point = rule_threshold(Comparator::Ge, 0.9);
+    let at_95 = interval_rule(point, 0.95);
+    let at_99 = interval_rule(point, 0.99);
+
+    for (before, after) in [(point, at_95), (at_95, at_99), (at_95, point)] {
+        let finding = definition_change_without_version_bump(
+            &plan(Some("v1"), definition(before)),
+            &plan(Some("v1"), definition(after)),
+        )
+        .expect("an interval_level edit is a finding");
+        assert_eq!(finding.changed, vec![DefinitionMember::DecisionRule]);
+        assert_eq!(
+            definition_change_without_version_bump(
+                &plan(Some("v1"), definition(before)),
+                &plan(Some("v2"), definition(after)),
+            ),
+            None
+        );
+    }
+    assert_eq!(
+        definition_change_without_version_bump(
+            &plan(Some("v1"), definition(at_95)),
+            &plan(Some("v1"), definition(at_95)),
+        ),
+        None
+    );
+}
+
+#[trace("TC-193", "FR-021-AC-14")]
+#[test]
+fn tc_193_a_rule_holds_at_the_unfavourable_bound_of_the_interval() {
+    // Higher is better: the lower bound decides.
+    let ge = interval_rule(rule_threshold(Comparator::Ge, 0.9), 0.95);
+    let gt = interval_rule(rule_threshold(Comparator::Gt, 0.9), 0.95);
+    let passes = interval(0.91, 0.97, 0.95);
+    let straddles = interval(0.85, 0.99, 0.95);
+    assert_eq!(ge.holds_on_interval(0.95, Some(&passes), None), Ok(true));
+    // The point estimate clears 0.9 but its interval cannot rule out noise.
+    assert_eq!(
+        ge.holds_on_interval(0.95, Some(&straddles), None),
+        Ok(false)
+    );
+    assert_eq!(
+        ge.holds(0.95, None),
+        Err(RuleEvaluationError::IntervalRequired {
+            required: level(0.95)
+        })
+    );
+    // Boundary: `ge` holds at equality, `gt` does not.
+    let edge = interval(0.9, 0.97, 0.95);
+    assert_eq!(ge.holds_on_interval(0.95, Some(&edge), None), Ok(true));
+    assert_eq!(gt.holds_on_interval(0.95, Some(&edge), None), Ok(false));
+
+    // Lower is better: the upper bound decides.
+    let le = interval_rule(rule_threshold(Comparator::Le, 100.0), 0.9);
+    let lt = interval_rule(rule_threshold(Comparator::Lt, 100.0), 0.9);
+    assert_eq!(
+        le.holds_on_interval(90.0, Some(&interval(85.0, 99.0, 0.9)), None),
+        Ok(true)
+    );
+    assert_eq!(
+        le.holds_on_interval(90.0, Some(&interval(85.0, 105.0, 0.9)), None),
+        Ok(false)
+    );
+    assert_eq!(
+        le.holds_on_interval(90.0, Some(&interval(85.0, 100.0, 0.9)), None),
+        Ok(true)
+    );
+    assert_eq!(
+        lt.holds_on_interval(90.0, Some(&interval(85.0, 100.0, 0.9)), None),
+        Ok(false)
+    );
+
+    // A baseline reference, absolute and relative, resolves as in `holds`.
+    let ratchet = interval_rule(
+        rule_baseline(Comparator::Ge, Baseline::PriorCollection, Some(0.02)),
+        0.9,
+    );
+    assert_eq!(
+        ratchet.holds_on_interval(0.8, Some(&interval(0.73, 0.85, 0.9)), Some(0.7)),
+        Ok(true)
+    );
+    assert_eq!(
+        ratchet.holds_on_interval(0.8, Some(&interval(0.71, 0.85, 0.9)), Some(0.7)),
+        Ok(false)
+    );
+    let relative = interval_rule(
+        DecisionRule::against_baseline_with_mode(
+            Comparator::Le,
+            Baseline::PriorCollection,
+            Some(-0.05),
+            MarginMode::Relative,
+        )
+        .expect("valid rule"),
+        0.9,
+    );
+    assert_eq!(
+        relative.holds_on_interval(100.0, Some(&interval(98.0, 104.0, 0.9)), Some(100.0)),
+        Ok(true)
+    );
+    assert_eq!(
+        relative.holds_on_interval(100.0, Some(&interval(98.0, 106.0, 0.9)), Some(100.0)),
+        Ok(false)
+    );
+    assert_eq!(
+        ratchet.holds_on_interval(0.8, Some(&interval(0.7, 0.9, 0.9)), None),
+        Err(RuleEvaluationError::MissingBaselineValue {
+            baseline: Baseline::PriorCollection
+        })
+    );
+    assert_eq!(
+        ge.holds_on_interval(0.95, Some(&passes), Some(1.0)),
+        Err(RuleEvaluationError::UnexpectedBaselineValue)
+    );
+}
+
+#[trace("TC-193", "FR-021-AC-14")]
+#[test]
+fn tc_193_interval_evaluation_refuses_what_it_cannot_judge() {
+    let ge = interval_rule(rule_threshold(Comparator::Ge, 0.9), 0.95);
+    assert_eq!(
+        ge.holds_on_interval(0.95, None, None),
+        Err(RuleEvaluationError::MissingInterval {
+            required: level(0.95)
+        })
+    );
+    assert_eq!(
+        ge.holds_on_interval(0.95, Some(&interval(0.91, 0.97, 0.9)), None),
+        Err(RuleEvaluationError::IntervalLevelTooLow {
+            required: level(0.95),
+            observed: level(0.9)
+        })
+    );
+    // An equal or higher level is accepted.
+    for at in [0.95, 0.99] {
+        assert_eq!(
+            ge.holds_on_interval(0.95, Some(&interval(0.91, 0.97, at)), None),
+            Ok(true)
+        );
+    }
+    for outside in [0.9, 0.98] {
+        assert_eq!(
+            ge.holds_on_interval(outside, Some(&interval(0.91, 0.97, 0.95)), None),
+            Err(RuleEvaluationError::EstimateOutsideInterval {
+                estimate: outside,
+                lower: 0.91,
+                upper: 0.97
+            })
+        );
+    }
+    for estimate in [f64::NAN, f64::INFINITY] {
+        assert!(matches!(
+            ge.holds_on_interval(estimate, Some(&interval(0.91, 0.97, 0.95)), None),
+            Err(RuleEvaluationError::NonFiniteEstimate { .. })
+        ));
+    }
+    let overflow = interval_rule(
+        rule_baseline(Comparator::Ge, Baseline::PriorCollection, Some(f64::MAX)),
+        0.9,
+    );
+    assert!(matches!(
+        overflow.holds_on_interval(1.0, Some(&interval(0.0, 2.0, 0.9)), Some(f64::MAX)),
+        Err(RuleEvaluationError::NonFiniteReference { .. })
+    ));
+    assert!(matches!(
+        overflow.holds_on_interval(1.0, Some(&interval(0.0, 2.0, 0.9)), Some(f64::NAN)),
+        Err(RuleEvaluationError::NonFiniteBaselineValue { .. })
+    ));
+    // A point rule takes no interval, and an eq rule is a point rule.
+    let point = rule_threshold(Comparator::Ge, 0.9);
+    assert_eq!(
+        point.holds_on_interval(0.95, Some(&interval(0.91, 0.97, 0.95)), None),
+        Err(RuleEvaluationError::IntervalNotRequested)
+    );
+    assert_eq!(point.holds(0.95, None), Ok(true));
+}
+
+#[trace("TC-192", "FR-021-AC-13")]
+#[test]
+fn tc_192_a_present_null_is_refused_not_read_as_absent() {
+    // Each optional key, spelled as a present null, over an otherwise valid rule.
+    let cases = [
+        ("interval_level", "comparator: ge\nthreshold: 1\n"),
+        ("margin", "comparator: ge\nbaseline: prior-collection\n"),
+        (
+            "margin_mode",
+            "comparator: ge\nbaseline: prior-collection\n",
+        ),
+        ("threshold", "comparator: ge\nbaseline: prior-collection\n"),
+        ("baseline", "comparator: ge\nthreshold: 1\n"),
+    ];
+    for (key, base) in cases {
+        for spelling in ["~", "null", ""] {
+            let yaml = format!(
+                "{base}{key}:{}{spelling}\n",
+                if spelling.is_empty() { "" } else { " " }
+            );
+            assert!(
+                parse_rule(&yaml).is_err(),
+                "a present null must be refused: {yaml:?}"
+            );
+        }
+        let json = format!("{{\"comparator\":\"ge\",\"threshold\":1,\"{key}\":null}}");
+        assert!(
+            serde_json::from_str::<DecisionRule>(&json).is_err(),
+            "{json}"
+        );
+    }
+    // Absent is still absent.
+    assert_eq!(
+        parse_rule("comparator: ge\nthreshold: 1\n")
+            .expect("parses")
+            .interval_level(),
+        None
+    );
+}
+
+#[trace("TC-192", "FR-021-AC-13")]
+#[test]
+fn tc_192_confidence_level_is_eq_and_ordered() {
+    const fn assert_eq_impl<T: Eq>() {}
+    assert_eq_impl::<ConfidenceLevel>();
+    assert_eq!(level(0.5), level(0.5));
+    assert!(level(0.5) < level(0.9));
 }

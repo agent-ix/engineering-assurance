@@ -619,6 +619,7 @@ const measurementRecordChecklist = {
     "shape — one of: scalar, ratio, count",
     "state — one of: measured, not_computed",
     "value — when state=measured: required numeric. When state=not_computed: the `value` KEY must be present and explicitly null — an ABSENT value key is refused, it is not treated as null (mod.rs `observation()`)",
+    "interval — OPTIONAL object { lower, upper, level, method }: same unit as value, lower <= value <= upper, all finite, 0 < level < 1, method non-empty free text. This package ships the validated Interval type and quoin applies it to the observation; the minimum quoin version is set when quoin's observation interval ships, tracked in EA-26. Provide it when the governing plan's `statistical_design.decision_rule.interval_level` is set: that rule is judged at the unfavourable bound of the interval and refuses an observation with no interval or one at a lower level",
     "no two observations in one collection may share the same (metric, sorted dimensions) pair — a duplicate is refused (mod.rs `stored_measurement_collection`)",
     "population — read only when it IS a JSON object: examined, matched, complete, identity (+ freeform extra fields, kept verbatim); a non-object population is silently treated as absent, not rejected",
     "dimensions — same silent-if-not-an-object treatment as population",
