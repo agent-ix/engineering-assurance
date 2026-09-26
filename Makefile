@@ -1,4 +1,4 @@
-.PHONY: lint test manifest-validate compatibility-observe package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-evidence integration-gate release-gate
+.PHONY: rust-features rust-feature-list lint test manifest-validate compatibility-observe package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-evidence integration-gate release-gate
 
 EVAL_AGENT ?= codex
 EVAL_RUN ?= canary
@@ -76,6 +76,32 @@ rust-deps:
 
 rust-audit:
 	$(CARGO) audit
+
+# Feature matrix (EA-20): every capability feature must compile ALONE, with
+# default features off, so a module gated on the wrong feature cannot hide
+# behind `--all-features`. The list is read from Cargo.toml via `cargo
+# metadata` (the `engineering-assurance` package's features, minus `default`
+# and the `full` umbrella), so a newly declared feature is checked without
+# editing this file. Scope: `--lib` only (the binary needs `full`), and it
+# needs python3 for the derivation. No workflow file runs this target
+# directly; CI enforces it through `make rust-foundation-gate` -> `rust-tests`,
+# which runs tests/feature_matrix.rs (TC-190), which runs this target.
+# The derivation is a `$(shell)` so `make -n` prints the commands without
+# running them; an empty or failed derivation is an error, not a pass. Cargo
+# parallelism is pinned by CARGO_BUILD_JOBS, so no `+` jobserver prefix (it
+# would make `make -n` execute the cargo lines).
+EA_FEATURES = $(shell $(CARGO) metadata --no-deps --format-version 1 --locked 2>/dev/null | python3 -c 'import json,sys; p=next(p for p in json.load(sys.stdin)["packages"] if p["name"]=="engineering-assurance"); [print(f) for f in sorted(p["features"]) if f not in ("default","full")]' 2>/dev/null)
+
+rust-feature-list:
+	@printf '%s\n' $(EA_FEATURES)
+
+rust-features:
+	@features="$(EA_FEATURES)"; test -n "$$features" || { echo "rust-features: could not derive the feature list from cargo metadata (empty or failed)" >&2; exit 1; }
+	CARGO_BUILD_JOBS=2 $(CARGO) check --lib --no-default-features --locked
+	@for f in $(EA_FEATURES); do \
+		echo "cargo check --lib --no-default-features --features $$f"; \
+		CARGO_BUILD_JOBS=2 $(CARGO) check --lib --no-default-features --features $$f --locked || exit 1; \
+	done
 
 rust-foundation-gate: rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit
 
