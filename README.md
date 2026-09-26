@@ -331,6 +331,15 @@ Run `engineering-assurance --help` or
 commands do not make a release decision and should not be invoked as a
 substitute for the human workflow gates.
 
+## Cargo features
+
+As a library, every module has its own capability feature (for example
+`source-audit`, `manifest`, `package-audit`), so a consumer enables only the
+modules it uses and pulls only the dependencies they need. The table of
+features, modules and dependencies is at the top of the crate documentation in
+`src/lib.rs`. The `engineering-assurance` binary requires `full`.
+`make rust-features` checks that every feature compiles alone.
+
 ## Development
 
 ```bash

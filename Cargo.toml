@@ -68,23 +68,98 @@ campaign = [
 claim-strength = [
   "dep:serde",
 ]
+# The remaining library modules, one capability feature each. Each feature
+# names the optional dependencies its module actually compiles against (driven
+# by `cargo check --lib --no-default-features --features <f>` alone; the
+# `make rust-features` matrix re-checks that) and any other capability whose
+# module it imports. None of them turns on `serde_json/arbitrary_precision`;
+# only `full` does, until that flip is revisited.
+compatibility = ["dep:serde", "dep:serde_json", "dep:thiserror"]
+compatibility-corpus = ["dep:serde", "dep:serde_json", "dep:sha2", "dep:thiserror"]
+content-rights = [
+  "dep:regex",
+  "dep:serde",
+  "dep:serde_json",
+  "dep:thiserror",
+  "dep:unicode-casefold",
+]
+discovery = ["workflow", "dep:serde", "dep:serde_json", "dep:thiserror"]
+evaluation = [
+  "evidence",
+  "workflow",
+  "dep:serde",
+  "dep:thiserror",
+  "dep:time",
+]
+evaluation-reports = [
+  "evaluation",
+  "dep:serde",
+  "dep:serde_json",
+  "dep:thiserror",
+]
+evidence = ["dep:serde", "dep:serde_json", "dep:sha2", "dep:thiserror"]
+manifest = [
+  "structured-yaml",
+  "dep:jsonschema",
+  "dep:serde",
+  "dep:serde_json",
+  "dep:thiserror",
+]
+onboarding = [
+  "dep:serde",
+  "dep:serde_json",
+  "dep:thiserror",
+  "dep:yaml_serde",
+]
+package-audit = ["dep:serde", "dep:serde_json", "dep:thiserror"]
+package-lifecycle = ["dep:serde", "dep:serde_json", "dep:thiserror"]
+package-membership = ["dep:serde", "dep:thiserror"]
+semantics = [
+  "claim-strength",
+  "compatibility-corpus",
+  "dep:serde",
+  "dep:serde_json",
+  "dep:sha2",
+  "dep:thiserror",
+]
+structured-yaml = ["dep:serde_json", "dep:yaml_serde"]
+workflow = ["dep:serde", "dep:serde_json", "dep:thiserror"]
+workflow-invariants = [
+  "dep:serde",
+  "dep:serde_json",
+  "dep:thiserror",
+  "dep:time",
+]
+# `full` is every capability plus what only the `engineering-assurance` binary
+# and its `*_host` modules use (clap, cap-std, tar, zip, flate2, tempfile), plus the `serde_json/arbitrary_precision` flip.
 full = [
   "campaign",
-  "measurement",
   "claim-strength",
+  "compatibility",
+  "compatibility-corpus",
+  "content-rights",
+  "discovery",
+  "evaluation",
+  "evaluation-reports",
+  "evidence",
+  "manifest",
+  "measurement",
+  "onboarding",
+  "package-audit",
+  "package-lifecycle",
+  "package-membership",
   "producer-execution",
+  "semantics",
   "source-audit",
+  "structured-yaml",
+  "workflow",
+  "workflow-invariants",
   "serde_json/arbitrary_precision",
   "dep:cap-std",
   "dep:clap",
   "dep:flate2",
-  "dep:jsonschema",
-  "dep:regex",
   "dep:tar",
   "dep:tempfile",
-  "dep:time",
-  "dep:unicode-casefold",
-  "dep:yaml_serde",
   "dep:zip",
 ]
 

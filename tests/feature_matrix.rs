@@ -158,3 +158,64 @@ fn tc_190_an_empty_derivation_fails_and_dry_run_lists_every_feature() {
         assert!(dry.contains(feature.as_str()), "dry run omits {feature}");
     }
 }
+
+/// The normal-dependency graph of one feature alone (default features off),
+/// as the sorted, de-duplicated crate names `cargo tree` prints.
+fn normal_graph(root: &Path, feature: &str) -> BTreeSet<String> {
+    let out = Command::new(env!("CARGO"))
+        .args([
+            "tree",
+            "--no-default-features",
+            "--features",
+            feature,
+            "-e",
+            "normal",
+            "--prefix",
+            "none",
+            "--locked",
+        ])
+        .current_dir(root)
+        .output()
+        .expect("cargo tree must launch");
+    assert!(out.status.success(), "cargo tree failed for {feature}");
+    String::from_utf8(out.stdout)
+        .expect("utf-8 tree")
+        .lines()
+        .filter_map(|line| line.split_whitespace().next())
+        .map(str::to_owned)
+        .collect()
+}
+
+/// The `source-audit` feature alone resolves none of the crates the archive
+/// and CLI capabilities need, and a capability feature that names another
+/// capability pulls that capability's dependencies but nothing beyond it
+/// (`manifest` reaches `yaml_serde` through `structured-yaml`; neither reaches
+/// the archive crates).
+#[test]
+#[trace("TC-196", "FR-014-AC-8")]
+fn tc_196_source_audit_graph_excludes_archive_and_cli_crates() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let audit = normal_graph(root, "source-audit");
+    assert!(
+        audit.contains("syn"),
+        "source-audit graph lost syn: {audit:?}"
+    );
+    for banned in ["cap-std", "clap", "tar", "zip", "flate2"] {
+        assert!(
+            !audit.contains(banned),
+            "source-audit must not resolve {banned}: {audit:?}"
+        );
+    }
+
+    let manifest = normal_graph(root, "manifest");
+    assert!(
+        manifest.contains("yaml_serde") && manifest.contains("jsonschema"),
+        "manifest graph lost a dependency: {manifest:?}"
+    );
+    for banned in ["cap-std", "clap", "tar", "zip", "flate2"] {
+        assert!(
+            !manifest.contains(banned),
+            "manifest must not resolve {banned}: {manifest:?}"
+        );
+    }
+}
