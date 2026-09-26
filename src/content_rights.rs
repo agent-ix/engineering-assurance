@@ -27,6 +27,12 @@ const FORBIDDEN_SUFFIXES: &[&str] = &[
 
 /// Schema files the module exports through its semantic contract; each names
 /// its own `$id` and the 2020-12 draft URL, which the URL allowlist admits.
+///
+/// This repeats the `data_schema` files of `engineering_assurance/manifest.yaml`
+/// on purpose (this library reads no manifest); `tests/semantic_exports.rs`
+/// asserts the two lists agree, so a drift fails a test instead of the scan.
+/// A stale `$id` after a version bump is flagged as an unapproved external URL;
+/// rewrite it with `EA_BLESS=1 cargo test --test semantic_exports -- --ignored bless`.
 const SEMANTIC_EXPORT_SCHEMAS: &[&str] = &[
     "campaign-enum.schema.json",
     "campaign-value.schema.json",

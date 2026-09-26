@@ -131,7 +131,7 @@ artifact_types:
     frontmatter_schema_ref: schemas/assurance-argument-frontmatter.schema.json
     data_schema:
       schema: schemas/assurance-argument-frontmatter.schema.json
-      digest: sha256:cde02c497468d20290c7af5a0d48ae30ae98c0383c90ea9dc23594abe3f776ff
+      digest: sha256:22fb86b44ab071ae0c2813ff53e66a85c37b738c5a9f0e23b19d119a671af233
     defaults:
       id_pattern: AA-{next:03d}
     allowed_links: [supports, references]

@@ -26,6 +26,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use engineering_assurance::content_rights::{
+    ContentEntryKind, ContentRightsCategory, inspect_content,
+};
 use ix_trace_rs::trace;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -37,15 +40,18 @@ const ID_BASE: &str = concat!(
     "//schemas.agent-ix.org/agent-ix/engineering-assurance-campaign/"
 );
 
-/// Kept beside `format: date-time`, not instead of it: the pattern is the
-/// baseline for consumers that do not assert `format`, and `format` adds full
-/// calendar validity wherever it is asserted. RFC 3339 `date-time` as a pattern: a full date, `T`, a time with an optional
-/// fraction, and a `Z` or numeric offset. It is needed
-/// because quire-rs (jsonschema 0.18) does not assert `format` under 2020-12, and
-/// every wire field must be checked by every consumer. It checks the shape and
-/// range of each field, not calendar validity (no day-of-month vs month check).
-/// The one place this regex is documented; the schema must carry it verbatim.
-const RFC_3339_DATE_TIME: &str = "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])[Tt]([01][0-9]|2[0-3]):[0-5][0-9]:([0-5][0-9]|60)(\\.[0-9]+)?([Zz]|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$";
+/// RFC 3339 `date-time` as a pattern, kept beside `format: date-time`.
+///
+/// quire-rs (jsonschema 0.18) asserts `format` under draft-07 but not under
+/// 2020-12, so this pattern must by itself be as strict as the check quire
+/// applied to the original draft-07 schema. It was measured against that check
+/// on the real quire CLI (the `QUIRE_OLD_VERDICTS` table below): month-aware day
+/// ranges with the full Gregorian leap-year rule, seconds 00 to 59 only (a leap
+/// second `:60` is refused), a `T`, `t` or space separator, `Z` or `z` or a
+/// numeric offset of at most 23:59, and one or more fraction digits. Uppercase
+/// only is NOT required: the old check accepted lowercase `t`/`z`. The one place
+/// this regex is written; the schema must carry it verbatim.
+const RFC_3339_DATE_TIME: &str = r"^(?:[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:(?:0[048]|[2468][048]|[13579][26])00|[0-9]{2}(?:0[48]|[2468][048]|[13579][26]))-02-29)[Tt ](?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\.[0-9]+)?(?:[Zz]|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$";
 
 /// Artifact types; each one's schema is `schemas/<kebab-name>-frontmatter.schema.json`.
 const ARTIFACTS: [(&str, &str); 5] = [
@@ -155,8 +161,9 @@ fn with_digests(manifest_text: &str) -> String {
 /// After a version bump: rewrites each exported schema's `$id` version and every
 /// manifest digest. Changes nothing else. Run alone with
 /// `EA_BLESS=1 cargo test --test semantic_exports -- --ignored bless`. It keeps a
-/// trace tag only because the repository's source audit requires one on every
-/// test; being ignored, it contributes no coverage.
+/// trace tag because the repository's source audit requires one on every test.
+/// Tag-based tools may therefore count TC-194 as covered by it; the live TC-194
+/// tests are what actually check the files, and this one only rewrites them.
 #[test]
 #[ignore = "rewrites committed files; run alone with EA_BLESS=1"]
 #[trace("TC-194", "FR-003-AC-7")]
@@ -228,7 +235,8 @@ fn every_export_is_a_declared_type_with_a_current_2020_12_schema_under_the_manif
         assert_eq!(
             parsed["$id"].as_str(),
             Some(derived_id(&version, file).as_str()),
-            "{relative}: $id does not carry manifest version {version}"
+            "{relative}: $id does not carry manifest version {version}; after a version \
+bump run `EA_BLESS=1 cargo test --test semantic_exports -- --ignored bless`"
         );
         checked.insert(relative.to_owned());
     }
@@ -258,22 +266,53 @@ fn every_export_is_a_declared_type_with_a_current_2020_12_schema_under_the_manif
     }
 }
 
+/// Walks a schema at any depth. Every `format` must be `date-time` with the one
+/// documented pattern beside it (quire does not assert `format` under 2020-12,
+/// so an unpaired `format` is unchecked); any other `format` value has no known
+/// pattern and fails. Returns how many were found.
+fn check_formats(node: &Value, at: &str) -> usize {
+    match node {
+        Value::Object(map) => {
+            let mut found = 0;
+            if let Some(format) = map.get("format") {
+                assert_eq!(
+                    format, "date-time",
+                    "{at}: `format: {format}` has no known pattern; add one or drop the format"
+                );
+                assert_eq!(
+                    map.get("pattern").and_then(Value::as_str),
+                    Some(RFC_3339_DATE_TIME),
+                    "{at}: `format: date-time` needs the documented pattern beside it"
+                );
+                found += 1;
+            }
+            for (key, child) in map {
+                found += check_formats(child, &format!("{at}/{key}"));
+            }
+            found
+        }
+        Value::Array(items) => items
+            .iter()
+            .enumerate()
+            .map(|(index, child)| check_formats(child, &format!("{at}/{index}")))
+            .sum(),
+        _ => 0,
+    }
+}
+
 #[trace("TC-194", "FR-003-AC-7")]
 #[test]
-fn artifact_schemas_use_2020_12_forms_only_and_carry_format_and_the_documented_date_time_pattern() {
+fn artifact_schemas_use_2020_12_forms_only_and_every_format_is_paired_with_its_pattern() {
+    let mut formats = 0_usize;
     for (name, file) in ARTIFACTS {
         let text = fs::read_to_string(module_root().join("schemas").join(file)).expect("reads");
         for stale in ["\"definitions\"", "#/definitions/", "\"dependencies\""] {
             assert!(!text.contains(stale), "{name}: {file} still uses {stale}");
         }
+        let schema: Value = serde_json::from_str(&text).expect("schema is JSON");
+        formats += check_formats(&schema, &format!("{name} #"));
     }
-    let argument =
-        read_json(&module_root().join("schemas/assurance-argument-frontmatter.schema.json"));
-    assert_eq!(
-        argument["$defs"]["assumption"]["properties"]["review_by"],
-        json!({"type": "string", "format": "date-time", "pattern": RFC_3339_DATE_TIME}),
-        "review_by must carry both `format` and the one documented RFC 3339 pattern"
-    );
+    assert!(formats >= 1, "the walk must reach the one date-time field");
     let plan = read_json(&module_root().join("schemas/measurement-plan-frontmatter.schema.json"));
     assert_eq!(
         plan["$defs"]["decision_rule"]["dependentRequired"],
@@ -465,28 +504,6 @@ fn decision_rule_cases() -> Vec<(&'static str, Value)> {
     ]
 }
 
-/// `assumptions[].review_by` is a nested `format: date-time`; the mutations
-/// above only reach top-level keys.
-fn review_by_cases() -> Vec<(String, Value)> {
-    [
-        "2030-01-01T00:00:00Z",
-        "2030-01-01T00:00:00.5+02:00",
-        "next spring",
-        "2030-01-01",
-        "2030-13-01T00:00:00Z",
-        "2030-01-01T25:00:00Z",
-        "",
-        "2030-01-01T00:00:00",
-    ]
-    .into_iter()
-    .map(|value| {
-        let mut plan = frontmatter("AssuranceArgument");
-        plan["assumptions"][0]["review_by"] = json!(value);
-        (format!("review_by {value:?}"), plan)
-    })
-    .collect()
-}
-
 /// The retired-plan shape from `tests/measurement_schema_retired.rs`.
 fn retired_legacy_plan() -> Value {
     json!({
@@ -563,69 +580,270 @@ fn retired_cases() -> Vec<(String, Value)> {
     cases
 }
 
+/// Every nested path of a document: drop it, retype it several ways, add an
+/// undeclared key to each object, and duplicate the first item of each array.
+/// Reaches every `$defs` entry a skeleton populates (claim, reasoning,
+/// participant, challenge, impact, review and measurement policy, objective,
+/// negative control, apparatus path).
+fn deep_mutations(base: &Value) -> Vec<(String, Value)> {
+    fn paths(node: &Value, at: &mut Vec<String>, out: &mut Vec<Vec<String>>) {
+        match node {
+            Value::Object(map) => {
+                for (key, child) in map {
+                    at.push(key.clone());
+                    out.push(at.clone());
+                    paths(child, at, out);
+                    at.pop();
+                }
+            }
+            Value::Array(items) => {
+                for (index, child) in items.iter().enumerate() {
+                    at.push(index.to_string());
+                    out.push(at.clone());
+                    paths(child, at, out);
+                    at.pop();
+                }
+            }
+            _ => {}
+        }
+    }
+    fn parent<'a>(root: &'a mut Value, path: &[String]) -> &'a mut Value {
+        path[..path.len() - 1]
+            .iter()
+            .fold(root, |node, step| match node {
+                Value::Array(items) => &mut items[step.parse::<usize>().expect("index")],
+                other => &mut other[step.as_str()],
+            })
+    }
+    let mut all = Vec::new();
+    paths(base, &mut Vec::new(), &mut all);
+    let mut cases = Vec::new();
+    for path in all {
+        let name = path.join(".");
+        let last = path.last().expect("non-empty path");
+        for (op, wrong) in [
+            ("null", Value::Null),
+            ("number", json!(-1)),
+            ("empty string", json!("")),
+            ("empty list", json!([])),
+            ("empty object", json!({})),
+        ] {
+            let mut changed = base.clone();
+            match parent(&mut changed, &path) {
+                Value::Array(items) => items[last.parse::<usize>().expect("index")] = wrong,
+                node => node[last.as_str()] = wrong,
+            }
+            cases.push((format!("@{name} as {op}"), changed));
+        }
+        let mut dropped = base.clone();
+        match parent(&mut dropped, &path) {
+            Value::Array(items) => {
+                items.remove(last.parse::<usize>().expect("index"));
+            }
+            Value::Object(map) => {
+                map.remove(last.as_str());
+            }
+            _ => unreachable!("a path always ends inside a container"),
+        }
+        cases.push((format!("@{name} dropped"), dropped));
+
+        let mut node = base;
+        for step in &path {
+            node = match node {
+                Value::Array(items) => &items[step.parse::<usize>().expect("index")],
+                other => &other[step.as_str()],
+            };
+        }
+        if node.is_object() {
+            let mut extended = base.clone();
+            let mut target = &mut extended;
+            for step in &path {
+                target = match target {
+                    Value::Array(items) => &mut items[step.parse::<usize>().expect("index")],
+                    other => &mut other[step.as_str()],
+                };
+            }
+            target["undeclared_field"] = json!(true);
+            cases.push((format!("@{name} plus undeclared field"), extended));
+        }
+    }
+    cases
+}
+
+/// The corpus of documents whose verdicts are recorded for each artifact type.
+fn corpus(name: &str) -> Vec<(String, Value)> {
+    let base = frontmatter(name);
+    let mut cases = mutations(&base);
+    cases.extend(deep_mutations(&base));
+    if name == "MeasurementPlan" {
+        cases.extend(
+            decision_rule_cases()
+                .into_iter()
+                .map(|(label, rule)| (format!("rule: {label}"), plan_with_rule(&rule))),
+        );
+        cases.extend(retired_cases());
+    }
+    let labels: BTreeSet<&str> = cases.iter().map(|(label, _)| label.as_str()).collect();
+    assert_eq!(
+        labels.len(),
+        cases.len(),
+        "{name}: corpus labels must be unique"
+    );
+    cases
+}
+
 #[trace("TC-195", "FR-003-AC-8")]
 #[test]
 fn each_artifact_schema_gives_the_verdicts_the_original_draft_07_schema_gave() {
     let recorded: Value = serde_json::from_str(VERDICTS).expect("verdict fixture is JSON");
-    let mut accepted = 0_usize;
-    let mut refused = 0_usize;
+    let mut accepted_total = 0_usize;
+    let mut refused_total = 0_usize;
     for (name, file) in ARTIFACTS {
-        let schema = read_json(&module_root().join("schemas").join(file));
-        let validator = validator(&schema);
-
-        let base = frontmatter(name);
-        let mut cases = mutations(&base);
-        if name == "AssuranceArgument" {
-            cases.extend(review_by_cases());
-        }
-        if name == "MeasurementPlan" {
-            cases.extend(
-                decision_rule_cases()
-                    .into_iter()
-                    .map(|(label, rule)| (format!("rule: {label}"), plan_with_rule(&rule))),
-            );
-            cases.extend(retired_cases());
-        }
+        let validator = validator(&read_json(&module_root().join("schemas").join(file)));
         assert!(
-            validator.is_valid(&base),
+            validator.is_valid(&frontmatter(name)),
             "{name}: the skeleton must be accepted"
         );
-
-        let expected = recorded[name]
-            .as_object()
-            .expect("recorded verdicts per type");
+        let entry = &recorded["types"][name];
+        let accepted: BTreeSet<&str> = entry["accepted"]
+            .as_array()
+            .expect("accepted list")
+            .iter()
+            .map(|label| label.as_str().expect("label"))
+            .collect();
+        let cases = corpus(name);
         assert_eq!(
-            cases.len(),
-            expected.len(),
-            "{name}: the corpus and the recorded verdicts differ in size"
+            entry["cases"].as_u64(),
+            Some(cases.len() as u64),
+            "{name}: the corpus size changed; update the fixture by hand with a stated reason"
         );
-        for (label, document) in cases {
-            let verdict = expected
-                .get(&label)
-                .and_then(Value::as_bool)
-                .unwrap_or_else(|| panic!("{name} / {label}: no recorded verdict"));
-            assert_eq!(
-                validator.is_valid(&document),
-                verdict,
-                "{name} / {label}: the verdict changed from the recorded draft-07 one"
+        let labels: BTreeSet<&str> = cases.iter().map(|(label, _)| label.as_str()).collect();
+        for label in &accepted {
+            assert!(
+                labels.contains(label),
+                "{name}: recorded case {label:?} is gone"
             );
-            if verdict {
-                accepted += 1;
+        }
+        for (label, document) in &cases {
+            let old = accepted.contains(label.as_str());
+            let new = validator.is_valid(document);
+            assert_eq!(
+                new,
+                old,
+                "{name} / {label}: draft-07 verdict was {}, the schema now {}; if intended, \
+                 hand-edit tests/fixtures/semantic-export-verdicts.json in this change",
+                if old { "accept" } else { "refuse" },
+                if new { "accept" } else { "refuse" },
+            );
+            if old {
+                accepted_total += 1;
             } else {
-                refused += 1;
+                refused_total += 1;
             }
         }
     }
     // Both verdicts must be exercised, or agreement would prove nothing.
     assert!(
-        accepted > 10 && refused > 100,
-        "{accepted} accepted, {refused} refused"
+        accepted_total > 10 && refused_total > 1000,
+        "{accepted_total} accepted, {refused_total} refused"
     );
+    // The nested definitions must be reached, not just top-level keys.
+    let reached = |name: &str, prefix: &str| {
+        corpus(name)
+            .iter()
+            .any(|(label, _)| label.starts_with(prefix))
+    };
+    for (name, prefix) in [
+        ("AssuranceArgument", "@top_claim.evidence_refs"),
+        ("AssuranceArgument", "@reasoning.0."),
+        ("AssuranceArgument", "@participants.0."),
+        ("AssuranceArgument", "@challenges.0."),
+        ("AssuranceProfile", "@impact_assessments.0."),
+        ("AssuranceProfile", "@review_policy."),
+        ("AssuranceProfile", "@measurement_policy."),
+        ("MeasurementPlan", "@objective."),
+        ("MeasurementPlan", "@negative_controls.0."),
+        ("MeasurementPlan", "@protected_apparatus.0"),
+    ] {
+        assert!(
+            reached(name, prefix),
+            "{name}: corpus never reaches {prefix}"
+        );
+    }
+}
+
+/// Verdicts of the ORIGINAL draft-07 module on the real quire CLI (quire 0.33,
+/// engine 0.47.1, jsonschema 0.18, which asserts `format`) for an
+/// `AssuranceArgument` whose `assumptions[0].review_by` is the value. Measured
+/// with `quire validate --module <old module>`; `true` means accepted. The
+/// 2020-12 schema must give the same verdict without `format` being asserted.
+const QUIRE_OLD_VERDICTS: [(&str, bool); 40] = [
+    ("2030-01-01T00:00:00Z", true),
+    ("2030-01-01T00:00:00z", true),
+    ("2030-01-01t00:00:00Z", true),
+    ("2030-01-01t00:00:00z", true),
+    ("2030-01-01 00:00:00Z", true),
+    ("2030-01-01T00:00:00", false),
+    ("2030-01-01", false),
+    ("2030-02-31T00:00:00Z", false),
+    ("2030-02-29T00:00:00Z", false),
+    ("2028-02-29T00:00:00Z", true),
+    ("2100-02-29T00:00:00Z", false),
+    ("2000-02-29T00:00:00Z", true),
+    ("1900-02-29T00:00:00Z", false),
+    ("2030-04-31T00:00:00Z", false),
+    ("2030-01-01T00:00:60Z", false),
+    ("2030-01-01T23:59:60Z", false),
+    ("2030-01-01T00:00:59Z", true),
+    ("2030-01-01T24:00:00Z", false),
+    ("2030-01-01T23:60:00Z", false),
+    ("2030-01-01T00:00:00.5Z", true),
+    ("2030-01-01T00:00:00.Z", false),
+    ("2030-01-01T00:00:00.123456789012Z", true),
+    ("2030-01-01T00:00:00+02:00", true),
+    ("2030-01-01T00:00:00-23:59", true),
+    ("2030-01-01T00:00:00+24:00", false),
+    ("2030-01-01T00:00:00+00:60", false),
+    ("2030-01-01T00:00:00+0200", false),
+    ("2030-01-01T00:00:00+02", false),
+    ("2030-01-01T00:00:00-00:00", true),
+    ("2030-00-10T00:00:00Z", false),
+    ("2030-13-01T00:00:00Z", false),
+    ("2030-01-00T00:00:00Z", false),
+    ("2030-01-32T00:00:00Z", false),
+    ("0000-01-01T00:00:00Z", true),
+    ("9999-12-31T23:59:59Z", true),
+    ("2030-1-1T00:00:00Z", false),
+    (" 2030-01-01T00:00:00Z", false),
+    ("2030-01-01T00:00:00Z ", false),
+    ("2030-01-01T00:00Z", false),
+    ("next spring", false),
+];
+
+fn argument_with_review_by(value: &str) -> Value {
+    let mut document = frontmatter("AssuranceArgument");
+    document["assumptions"][0]["review_by"] = json!(value);
+    document
 }
 
 #[trace("TC-195", "FR-003-AC-8")]
 #[test]
-fn calendar_validity_is_caught_by_format_where_asserted_and_is_a_pattern_only_limitation() {
+fn review_by_pattern_gives_the_verdicts_quire_gave_the_original_format_check() {
+    let schema =
+        read_json(&module_root().join("schemas/assurance-argument-frontmatter.schema.json"));
+    let default_options = validator(&schema);
+    for (value, accepted) in QUIRE_OLD_VERDICTS {
+        assert_eq!(
+            default_options.is_valid(&argument_with_review_by(value)),
+            accepted,
+            "review_by {value:?}: quire 0.18 with the draft-07 schema gave {accepted}"
+        );
+    }
+}
+
+#[trace("TC-195", "FR-003-AC-8")]
+#[test]
+fn review_by_pattern_agrees_with_a_format_asserting_validator_over_a_generated_set() {
     let schema =
         read_json(&module_root().join("schemas/assurance-argument-frontmatter.schema.json"));
     let default_options = validator(&schema);
@@ -633,24 +851,173 @@ fn calendar_validity_is_caught_by_format_where_asserted_and_is_a_pattern_only_li
         .should_validate_formats(true)
         .build(&schema)
         .expect("schema compiles with format assertion");
-    let mut document = frontmatter("AssuranceArgument");
-    document["assumptions"][0]["review_by"] = json!("2030-02-31T00:00:00Z");
-    assert!(
-        !asserting.is_valid(&document),
-        "a format-asserting validator refuses a day that is not in the month"
-    );
-    assert!(
-        default_options.is_valid(&document),
-        "documented limitation: the pattern alone checks shape and range, not the calendar"
-    );
-    for value in ["next spring", "2030-13-01T00:00:00Z"] {
-        document["assumptions"][0]["review_by"] = json!(value);
-        assert!(
-            !default_options.is_valid(&document),
-            "{value}: pattern refuses everywhere"
-        );
-        assert!(!asserting.is_valid(&document), "{value}");
+
+    // Every calendar day, plus impossible days, of years around each leap rule.
+    let mut values = Vec::new();
+    for year in [0_u32, 1900, 2000, 2023, 2024, 2100, 2400, 9999] {
+        for month in 0..=13_u32 {
+            for day in 0..=32_u32 {
+                values.push(format!("{year:04}-{month:02}-{day:02}T12:30:45Z"));
+            }
+        }
     }
-    document["assumptions"][0]["review_by"] = json!("2030-01-01T00:00:00Z");
-    assert!(asserting.is_valid(&document) && default_options.is_valid(&document));
+    // Time fields, offsets, fractions, separators and case.
+    for hour in ["00", "12", "23", "24", "25", "1", ""] {
+        for minute in ["00", "59", "60", "6"] {
+            for second in ["00", "59", "61", "5"] {
+                values.push(format!("2030-06-15T{hour}:{minute}:{second}Z"));
+            }
+        }
+    }
+    for offset in [
+        "Z",
+        "z",
+        "+00:00",
+        "-00:00",
+        "+23:59",
+        "-23:59",
+        "+24:00",
+        "+23:60",
+        "+0200",
+        "+02",
+        "+2:00",
+        "",
+        "+02:00:00",
+        " ",
+    ] {
+        values.push(format!("2030-06-15T12:30:45{offset}"));
+    }
+    for fraction in ["", ".", ".0", ".5", ".123456789012345", ".x", ",5"] {
+        values.push(format!("2030-06-15T12:30:45{fraction}Z"));
+    }
+    for separator in ["T", "t", " ", "_", "", "TT"] {
+        values.push(format!("2030-06-15{separator}12:30:45Z"));
+    }
+    for junk in [
+        "",
+        "x",
+        "2030",
+        "2030-06-15",
+        "12:30:45Z",
+        "2030-06-15T12:30:45Z\n",
+    ] {
+        values.push(junk.to_owned());
+    }
+
+    let mut agreed = 0_usize;
+    for value in &values {
+        let document = argument_with_review_by(value);
+        let by_pattern = default_options.is_valid(&document);
+        // The other documented difference: quire's own check accepted a space
+        // as the date/time separator (RFC 3339 section 5.6 permits it), which
+        // this crate's format validator refuses; compare that value as if `T`.
+        let by_format = if value.get(10..11) == Some(" ") {
+            asserting.is_valid(&argument_with_review_by(&value.replacen(' ', "T", 1)))
+        } else {
+            asserting.is_valid(&document)
+        };
+        // The one documented difference: the format validator in this crate
+        // accepts a leap second, which quire's own format check refused (see
+        // QUIRE_OLD_VERDICTS), so the pattern is stricter there on purpose.
+        if value.contains(":60") && by_format {
+            assert!(
+                !by_pattern,
+                "review_by {value:?}: leap second must be refused"
+            );
+            continue;
+        }
+        assert_eq!(
+            by_pattern, by_format,
+            "review_by {value:?}: pattern says {by_pattern}, format validator says {by_format}"
+        );
+        agreed += 1;
+    }
+    assert!(agreed > 3000, "{agreed} generated values compared");
+    let accepted = values
+        .iter()
+        .filter(|value| default_options.is_valid(&argument_with_review_by(value)))
+        .count();
+    assert!(
+        accepted > 1000 && accepted < values.len(),
+        "both verdicts occur"
+    );
+}
+
+fn url_findings(path: &str, text: &str) -> Vec<ContentRightsCategory> {
+    inspect_content(path, ContentEntryKind::File, text.as_bytes(), &[])
+        .expect("policy patterns compile")
+        .into_iter()
+        .map(|finding| finding.category)
+        .collect()
+}
+
+#[trace("TC-194", "FR-003-AC-7")]
+#[test]
+fn content_rights_admits_exactly_the_manifest_data_schema_files_at_the_current_version() {
+    let manifest = manifest();
+    let version = manifest_version(&manifest);
+    assert_eq!(
+        version,
+        env!("CARGO_PKG_VERSION"),
+        "manifest and crate versions"
+    );
+    for entry in declared_types(&manifest) {
+        let Some(relative) = entry["data_schema"]["schema"].as_str() else {
+            continue;
+        };
+        // Every exported schema passes the scan at its real path with its real bytes.
+        let path = format!("engineering_assurance/{relative}");
+        let text = fs::read_to_string(module_root().join(relative)).expect("schema reads");
+        assert_eq!(url_findings(&path, &text), vec![], "{path}");
+
+        let file = relative.strip_prefix("schemas/").expect("under schemas/");
+        let id_line = |version: &str| format!("{{\"$id\": \"{}\"}}", derived_id(version, file));
+        // The same `$id` at another version is refused, even at an allowed path.
+        assert_eq!(
+            url_findings(&path, &id_line("9.9.9")),
+            vec![ContentRightsCategory::UnapprovedExternalUrl],
+            "{path}: a stale $id must be flagged"
+        );
+        assert_eq!(url_findings(&path, &id_line(&version)), vec![], "{path}");
+        // A nested directory is not the listed file.
+        for nested in [
+            format!("engineering_assurance/schemas/sub/{file}"),
+            format!("schemas/sub/{file}"),
+        ] {
+            assert_eq!(
+                url_findings(&nested, &id_line(&version)),
+                vec![ContentRightsCategory::UnapprovedExternalUrl],
+                "{nested}"
+            );
+        }
+    }
+    // Every other schema file is refused the same URL, so the allowlist holds no
+    // file the manifest does not export.
+    let exported: BTreeSet<String> = declared_types(&manifest)
+        .into_iter()
+        .filter_map(|entry| entry["data_schema"]["schema"].as_str())
+        .map(|relative| relative.trim_start_matches("schemas/").to_owned())
+        .collect();
+    let mut unlisted = 0_usize;
+    for entry in fs::read_dir(module_root().join("schemas")).expect("schemas dir") {
+        let file = entry
+            .expect("entry")
+            .file_name()
+            .to_string_lossy()
+            .into_owned();
+        if exported.contains(&file) {
+            continue;
+        }
+        unlisted += 1;
+        let text = format!("{{\"$id\": \"{}\"}}", derived_id(&version, &file));
+        assert_eq!(
+            url_findings(&format!("engineering_assurance/schemas/{file}"), &text),
+            vec![ContentRightsCategory::UnapprovedExternalUrl],
+            "{file} is not exported, so it must not be allowlisted"
+        );
+    }
+    assert!(
+        unlisted > 0,
+        "the schemas directory holds non-exported files"
+    );
 }

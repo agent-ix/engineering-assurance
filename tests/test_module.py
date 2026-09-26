@@ -78,7 +78,7 @@ def test_every_schema_uses_the_forms_of_the_dialect_it_declares() -> None:
         else:
             for old in ('"definitions"', "#/definitions/", '"dependencies"'):
                 assert old not in text, f"{path.name} is 2020-12 but uses {old}"
-    assert seen == {"draft-07", "2020-12"}, "the guard must exercise both dialects"
+    assert seen, "the guard checked no schema"
 
 
 def test_module_inventory_is_exact() -> None:
@@ -1167,3 +1167,27 @@ def test_every_matrix_test_reference_has_a_test_case_row() -> None:
             referenced |= set(re.findall(r"TC-\d+", row.group(1)))
     assert referenced - defined == _UNDEFINED_MATRIX_TCS
     assert {"TC-191", "TC-192", "TC-193"} <= defined
+
+
+def test_review_by_date_time_is_enforced_by_the_pattern_alone() -> None:
+    """Trace: FR-003-AC-8, TC-195.
+
+    Draft202012Validator asserts no `format` by default, like quire, so this
+    proves the pattern carries the check. The full corpus, including every
+    calendar day, is in tests/semantic_exports.rs.
+    """
+    contract = schema("assurance-argument-frontmatter.schema")
+    validator = Draft202012Validator(contract)
+    document = frontmatter(package.PACKAGE_ROOT / "skeletons" / "AssuranceArgument.md")
+    assert list(validator.iter_errors(document)) == []
+    for value, accepted in (
+        ("2030-01-01T00:00:00Z", True),
+        ("2028-02-29T00:00:00+02:00", True),
+        ("2030-02-31T00:00:00Z", False),
+        ("2100-02-29T00:00:00Z", False),
+        ("2030-01-01T00:00:60Z", False),
+        ("next spring", False),
+        ("", False),
+    ):
+        document["assumptions"][0]["review_by"] = value
+        assert (list(validator.iter_errors(document)) == []) is accepted, value

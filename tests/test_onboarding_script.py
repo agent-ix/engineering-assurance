@@ -545,3 +545,45 @@ def test_onboard_js_observation_checklist_notes_the_optional_interval(
     assert "tracked in EA-26" in note
     assert "TBD" not in note
     assert "decision_rule.interval_level" in note
+
+
+@pytest.mark.skipif(NODE is None, reason="node is not installed")
+def test_onboard_js_reads_dependent_required_and_warns_on_a_malformed_entry(
+    tmp_path: Path,
+) -> None:
+    """Trace: FR-021-AC-12, TC-188.
+
+    `dependentRequired` lists become conditional requirements; an entry that is
+    not a list of field names is a warning, not a crash.
+    """
+    module = tmp_path / "engineering_assurance"
+    script_dir = module / "skills" / "assurance-onboarding" / "scripts"
+    script_dir.mkdir(parents=True)
+    shutil.copy(ONBOARD_JS, script_dir / "onboard.js")
+    (module / "skeletons").mkdir()
+    (module / "schemas").mkdir()
+    (module / "manifest.yaml").write_text(
+        "artifact_types:\n"
+        "  - name: Probe\n"
+        "    frontmatter_schema_ref: schemas/probe.schema.json\n"
+    )
+    (module / "schemas" / "probe.schema.json").write_text(
+        json.dumps(
+            {
+                "type": "object",
+                "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
+                "dependentRequired": {"a": ["b"], "b": "a"},
+            }
+        )
+    )
+    target_repo = tmp_path / "consumer"
+    target_repo.mkdir()
+    completed = subprocess.run(
+        [NODE, str(script_dir / "onboard.js"), "--repo", str(target_repo), "--json"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    probe = json.loads(completed.stdout)["artifactChecklists"]["Probe"]
+    assert {"when": "a is present", "required": ["b"]} in probe["conditionalRequired"]
+    assert any("dependentRequired" in warning for warning in probe["warnings"]), probe

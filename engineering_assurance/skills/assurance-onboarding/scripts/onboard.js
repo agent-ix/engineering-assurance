@@ -251,10 +251,14 @@ const readAllOf = (schema, prefix = "", present = "") => {
     warnings.push("schema uses `dependentSchemas`, which this checklist does not read");
   }
   for (const [name, dependency] of Object.entries(schema.dependentRequired ?? {})) {
-    conditionalRequired.push({
-      when: `${prefix}${name} is present`,
-      required: dependency.map((required) => `${prefix}${required}`),
-    });
+    if (Array.isArray(dependency)) {
+      conditionalRequired.push({
+        when: `${prefix}${name} is present`,
+        required: dependency.map((required) => `${prefix}${required}`),
+      });
+    } else {
+      warnings.push("schema uses a non-array `dependentRequired` entry, which this checklist does not read");
+    }
   }
   const oneOfFields = (schema.oneOf ?? []).map((branch) =>
     Object.keys(branch).length === 1 && Array.isArray(branch.required) && branch.required.length === 1
