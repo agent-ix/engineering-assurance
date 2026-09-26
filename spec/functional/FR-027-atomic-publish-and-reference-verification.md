@@ -48,14 +48,17 @@ re-checks every declared file reference against the bytes now on disk.
   or is not a regular file, publish SHALL return the collision and leave it
   untouched.
 - Publish SHALL remove its sidecar on every path, success or failure.
-- The commit step SHALL be separately callable with an already-written
-  sidecar, so a destination that appears between the caller's check and the
-  commit is testable without threads or sleeps.
+- The commit step SHALL be a separate step over an already-written sidecar, so
+  a destination that appears between the caller's check and the commit is
+  testable without threads or sleeps. It is not public API.
+- Publish SHALL retry a taken sidecar name a bounded number of times, and SHALL
+  compare an existing destination through one descriptor opened without
+  following links.
 - Verify SHALL re-resolve each path beneath the capability root, refusing an
-  absolute path or one with a parent component; re-read it with the existing
-  `ContentDigest::of_file`, which refuses symbolic links and non-regular files;
-  and report every mismatch of size and of digest rather than stopping at the
-  first.
+  absolute path or one with a parent component; open it with no path component
+  following a symbolic link (Linux `openat2`), refuse a non-regular file; take
+  size and digest from that one descriptor; and report every mismatch of size
+  and of digest rather than stopping at the first.
 - An unresolvable or unreadable reference SHALL be a typed finding at that
   reference's pointer, not an error that ends verification.
 - The two modules are filesystem modules, like `producer_execution`, and are
@@ -65,7 +68,7 @@ re-checks every declared file reference against the bytes now on disk.
 
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
-| FR-027-CON-1 | Neither capability SHALL fsync, spawn a process, or add a platform-specific layer. | Simplicity | Inspection (TC-206) |
+| FR-027-CON-1 | Neither capability SHALL spawn a process. | Security | Test (TC-127) |
 
 ## Acceptance Criteria
 

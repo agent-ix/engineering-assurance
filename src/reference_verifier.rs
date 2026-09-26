@@ -4,8 +4,9 @@
 //! Re-verify declared file references against the bytes now on disk (FR-027).
 //!
 //! Each declared `{path, size_bytes, digest}` is re-resolved beneath a
-//! capability root, re-read with [`ContentDigest::of_file`] (which refuses
-//! symbolic links and non-regular files) and re-digested. Every mismatch is
+//! capability root with `openat2(BENEATH | NO_SYMLINKS)`, so no path component
+//! may be a symbolic link or leave the root, then re-digested from that one
+//! descriptor (size and digest describe the same file). Only Linux is supported. Every mismatch is
 //! reported, not just the first, as a finding at a JSON Pointer such as
 //! `/raw_evidence/3/digest`.
 //!
@@ -14,10 +15,16 @@
 
 use std::{
     fmt,
+    fs::File,
     path::{Component, Path},
 };
 
-use crate::content_digest::{ContentDigest, DigestError};
+use rustix::{
+    fs::{Mode, OFlags, ResolveFlags, openat2},
+    io::Errno,
+};
+
+use crate::content_digest::{ContentDigest, DigestError, hash_reader};
 
 /// One declared file reference to re-verify.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -87,6 +94,30 @@ impl fmt::Display for ReferenceFinding {
     }
 }
 
+/// Opens `relative` beneath `root` without following any link, and returns the
+/// digest and length of the regular file's bytes read from that descriptor.
+fn read_beneath(root: &File, relative: &Path) -> Result<(ContentDigest, u64), DigestError> {
+    let fd = openat2(
+        root,
+        relative,
+        OFlags::RDONLY | OFlags::CLOEXEC,
+        Mode::empty(),
+        ResolveFlags::BENEATH | ResolveFlags::NO_MAGICLINKS | ResolveFlags::NO_SYMLINKS,
+    )
+    .map_err(|errno| match errno {
+        Errno::NOENT => DigestError::Unavailable,
+        Errno::LOOP | Errno::XDEV => DigestError::NotRegular,
+        _ => DigestError::Unreadable,
+    })?;
+    let mut file = File::from(fd);
+    let metadata = file.metadata().map_err(|_| DigestError::Unreadable)?;
+    if !metadata.is_file() {
+        return Err(DigestError::NotRegular);
+    }
+    let (digest, total) = hash_reader(&mut file, metadata.len(), || false)?;
+    Ok((digest, total))
+}
+
 /// Verifies every reference beneath `root` and returns every finding.
 ///
 /// `pointer_prefix` names the collection in the caller's document (for example
@@ -99,6 +130,19 @@ pub fn verify_references(
     references: &[DeclaredReference],
 ) -> Vec<ReferenceFinding> {
     let mut findings = Vec::new();
+    let Ok(root_dir) = File::open(root) else {
+        // No reference can be resolved without the root: report each one.
+        return references
+            .iter()
+            .enumerate()
+            .map(|(index, _)| ReferenceFinding {
+                pointer: format!("{pointer_prefix}/{index}/path"),
+                kind: FindingKind::Unreadable {
+                    error: DigestError::Unavailable,
+                },
+            })
+            .collect();
+    };
     for (index, reference) in references.iter().enumerate() {
         let at = |field: &str| format!("{pointer_prefix}/{index}/{field}");
         let relative = Path::new(&reference.path);
@@ -112,9 +156,8 @@ pub fn verify_references(
             });
             continue;
         }
-        let path = root.join(relative);
-        let observed = match ContentDigest::of_file(&path) {
-            Ok(observed) => observed,
+        let (observed, length) = match read_beneath(&root_dir, relative) {
+            Ok(read) => read,
             Err(error) => {
                 findings.push(ReferenceFinding {
                     pointer: at("path"),
@@ -123,23 +166,14 @@ pub fn verify_references(
                 continue;
             }
         };
-        match std::fs::metadata(&path) {
-            Ok(metadata) if metadata.len() != reference.size_bytes => {
-                findings.push(ReferenceFinding {
-                    pointer: at("size_bytes"),
-                    kind: FindingKind::SizeMismatch {
-                        expected: reference.size_bytes,
-                        observed: metadata.len(),
-                    },
-                });
-            }
-            Ok(_) => {}
-            Err(_) => findings.push(ReferenceFinding {
-                pointer: at("path"),
-                kind: FindingKind::Unreadable {
-                    error: DigestError::Unreadable,
+        if length != reference.size_bytes {
+            findings.push(ReferenceFinding {
+                pointer: at("size_bytes"),
+                kind: FindingKind::SizeMismatch {
+                    expected: reference.size_bytes,
+                    observed: length,
                 },
-            }),
+            });
         }
         if observed != reference.digest {
             findings.push(ReferenceFinding {
@@ -180,6 +214,10 @@ mod tests {
         fs::write(dir.path().join("same-size"), b"abcd").expect("write");
         fs::create_dir(dir.path().join("dir")).expect("mkdir");
         std::os::unix::fs::symlink(dir.path().join("good"), dir.path().join("link")).expect("link");
+        // An intermediate directory symlink must not be followed out of the root.
+        let outside = tempfile::tempdir().expect("outside");
+        fs::write(outside.path().join("secret"), b"secret").expect("write");
+        std::os::unix::fs::symlink(outside.path(), dir.path().join("sub")).expect("dir link");
 
         let references = [
             declared("good", b"good"),
@@ -190,6 +228,7 @@ mod tests {
             declared("dir", b"d"),
             declared("../escape", b"e"),
             declared("/abs", b"a"),
+            declared("sub/secret", b"secret"),
         ];
         let findings = verify_references(dir.path(), "/raw_evidence", &references);
         let summary: Vec<(&str, &FindingKind)> = findings
@@ -197,7 +236,7 @@ mod tests {
             .map(|finding| (finding.pointer.as_str(), &finding.kind))
             .collect();
 
-        assert_eq!(summary.len(), 8, "{findings:?}");
+        assert_eq!(summary.len(), 9, "{findings:?}");
         assert!(matches!(
             summary[0],
             (

@@ -211,22 +211,22 @@ impl<'ast> Visit<'ast> for ChildProgramUse {
 #[trace("TC-086", "FR-012-AC-8")]
 #[trace("TC-101", "FR-014-AC-4", "FR-014-CON-1", "FR-014-CON-2")]
 fn tc_101_every_library_module_is_capability_confined() {
-    // FR-014-AC-4 admits the FR-019 module and the two FR-027 filesystem modules.
-    let filesystem_modules: Vec<PathBuf> = [
-        "src/producer_execution.rs",
-        "src/atomic_publish.rs",
-        "src/reference_verifier.rs",
-    ]
-    .map(|module| repository_root().join(module))
-    .to_vec();
+    // FR-014-AC-4 admits the FR-019 module wholesale (it has its own check
+    // below); the two FR-027 modules are admitted for filesystem access only.
+    let producer_execution = repository_root().join("src/producer_execution.rs");
+    let filesystem_only = ["src/atomic_publish.rs", "src/reference_verifier.rs"]
+        .map(|module| repository_root().join(module));
     for path in library_module_files() {
-        if filesystem_modules.contains(&path) {
+        if path == producer_execution {
             continue;
         }
         let bytes = fs::read(&path)
             .unwrap_or_else(|error| panic!("cannot read {}: {error}", path.display()));
-        let findings = audit_rust_source(&bytes, RustSourceAuditRole::ReusableLibrary)
+        let mut findings = audit_rust_source(&bytes, RustSourceAuditRole::ReusableLibrary)
             .unwrap_or_else(|error| panic!("cannot audit {}: {error}", path.display()));
+        if filesystem_only.contains(&path) {
+            findings.retain(|finding| finding.capability != Some(RustSourceCapability::Filesystem));
+        }
         assert!(findings.is_empty(), "{}: {findings:?}", path.display());
     }
 }
@@ -237,6 +237,7 @@ fn tc_101_every_library_module_is_capability_confined() {
     "FR-019-AC-5",
     "FR-019-CON-2",
     "FR-019-CON-3",
+    "FR-027-CON-1",
     "NFR-004-AC-2"
 )]
 #[test]

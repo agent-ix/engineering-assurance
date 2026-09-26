@@ -31,7 +31,7 @@
 //!
 //! | Feature | Module(s) | Other features it enables | Extra dependencies |
 //! |---|---|---|---|
-//! | `atomic-publish` | `atomic_publish` | | `thiserror` |
+//! | `atomic-publish` | `atomic_publish` | | `rustix`, `thiserror` |
 //! | `claim-strength` | `claim_strength` | | `serde` |
 //! | `compatibility` | `compatibility` | | `serde`, `serde_json`, `thiserror` |
 //! | `compatibility-corpus` | `compatibility_corpus` | `content-digest` | `serde`, `serde_json`, `thiserror` |
@@ -48,7 +48,7 @@
 //! | `package-lifecycle` | `package_lifecycle` | | `serde`, `serde_json`, `thiserror` |
 //! | `package-membership` | `package_membership` | | `serde`, `thiserror` |
 //! | `producer-execution` | `producer_execution` | `content-digest` | `rustix`, `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
-//! | `reference-verifier` | `reference_verifier` | `producer-execution` | none beyond `producer-execution`'s |
+//! | `reference-verifier` | `reference_verifier` (Linux only) | `producer-execution` | none beyond `producer-execution`'s |
 //! | `semantics` | `semantics` | `claim-strength`, `compatibility-corpus`, `content-digest`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
 //! | `source-audit` | `source_audit` | | `serde`, `syn`, `thiserror` |
 //! | `structured-yaml` | `structured_yaml` | | `serde_json`, `yaml_serde` |
@@ -98,7 +98,7 @@ pub mod package_lifecycle;
 pub mod package_membership;
 #[cfg(feature = "producer-execution")]
 pub mod producer_execution;
-#[cfg(feature = "reference-verifier")]
+#[cfg(all(feature = "reference-verifier", target_os = "linux"))]
 pub mod reference_verifier;
 #[cfg(feature = "semantics")]
 pub mod semantics;

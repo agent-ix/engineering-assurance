@@ -229,9 +229,9 @@ required-features = ["workflow-invariants"]
 default = []
 # FR-027: atomic no-replace publish, and the declared-reference verifier. Both
 # are filesystem modules, so like `producer-execution` they are exempt from the
-# FR-014-AC-4 I/O-freedom audit. The publisher needs only `thiserror`; the
+# FR-014-AC-4 I/O-freedom audit. The publisher needs `thiserror` and `rustix` (O_NOFOLLOW); the
 # verifier reuses `ContentDigest::of_file`, which lives in `producer-execution`.
-atomic-publish = ["dep:thiserror"]
+atomic-publish = ["dep:rustix", "dep:thiserror"]
 reference-verifier = ["producer-execution"]
 # `content-digest` is the one evidence-byte identity (`ContentDigest`); every
 # capability that hashes retained bytes implies it rather than carrying its own

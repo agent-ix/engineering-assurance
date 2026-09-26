@@ -14,11 +14,12 @@
 
 use std::{
     fs,
-    io::{self, Write as _},
+    io::{self, Read as _, Write as _},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
 };
 
+use rustix::fs::{Mode, OFlags};
 use thiserror::Error;
 
 /// The filesystem step that failed.
@@ -65,6 +66,7 @@ pub enum PublishError<C: std::fmt::Debug> {
     },
 }
 
+const SIDECAR_ATTEMPTS: u32 = 8;
 static SIDECAR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Writes `bytes` to `path` unless a different file is already there.
@@ -82,41 +84,65 @@ pub fn write_file_atomic_no_replace<C: std::fmt::Debug>(
     let file_name = path.file_name().ok_or_else(|| PublishError::NoFileName {
         path: path.to_owned(),
     })?;
-    let counter = SIDECAR_COUNTER.fetch_add(1, Ordering::Relaxed);
-    let mut sidecar_name =
-        std::ffi::OsString::from(format!(".tmp-{}-{counter}-", std::process::id()));
-    sidecar_name.push(file_name);
-    let tmp = path.with_file_name(sidecar_name);
-
-    let io_error = |step, source| PublishError::Io {
-        step,
-        path: tmp.clone(),
-        source,
-    };
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&tmp)
-        .map_err(|error| io_error(PublishStep::CreateSidecar, error))?;
+    let (tmp, mut file) = create_sidecar(path, file_name)?;
     if let Err(error) = file.write_all(bytes) {
         drop(file);
         let _ = fs::remove_file(&tmp);
-        return Err(io_error(PublishStep::WriteSidecar, error));
+        return Err(PublishError::Io {
+            step: PublishStep::WriteSidecar,
+            path: tmp,
+            source: error,
+        });
     }
     drop(file);
     publish_file_no_replace(&tmp, path, bytes, collision)
 }
 
+/// Creates a uniquely named sidecar exclusively, retrying a bounded number of
+/// times when the name is taken (a stale sidecar, or another process sharing
+/// this directory and process id).
+fn create_sidecar<C: std::fmt::Debug>(
+    path: &Path,
+    file_name: &std::ffi::OsStr,
+) -> Result<(PathBuf, fs::File), PublishError<C>> {
+    let mut last = None;
+    for _ in 0..SIDECAR_ATTEMPTS {
+        let counter = SIDECAR_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let mut name = std::ffi::OsString::from(format!(".tmp-{}-{counter}-", std::process::id()));
+        name.push(file_name);
+        let tmp = path.with_file_name(name);
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)
+        {
+            Ok(file) => return Ok((tmp, file)),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => last = Some((tmp, error)),
+            Err(source) => {
+                return Err(PublishError::Io {
+                    step: PublishStep::CreateSidecar,
+                    path: tmp,
+                    source,
+                });
+            }
+        }
+    }
+    let (path, source) = last.expect("SIDECAR_ATTEMPTS is non-zero");
+    Err(PublishError::Io {
+        step: PublishStep::CreateSidecar,
+        path,
+        source,
+    })
+}
+
 /// Commits the already-written sidecar `tmp` to `path` and removes `tmp`.
 ///
-/// Exported so a destination that appears before the commit can be tested
-/// without threads or sleeps. `bytes` are the sidecar's content, compared with
-/// an existing destination to decide between idempotent success and collision.
-///
-/// # Errors
-///
-/// As [`write_file_atomic_no_replace`], except for the sidecar creation steps.
-pub fn publish_file_no_replace<C: std::fmt::Debug>(
+/// A separate step so a destination that appears before the commit can be
+/// tested without threads or sleeps; private because it trusts that `tmp` is a
+/// distinct regular file holding exactly `bytes`. If the sidecar cannot be
+/// removed after a successful link, the publish still happened, but the error
+/// is reported and a retry succeeds as identical content.
+fn publish_file_no_replace<C: std::fmt::Debug>(
     tmp: &Path,
     path: &Path,
     bytes: &[u8],
@@ -154,10 +180,26 @@ fn existing_matches<C: std::fmt::Debug>(
         path: path.to_owned(),
         source,
     };
-    let metadata = fs::symlink_metadata(path).map_err(read_error)?;
+    // One O_NOFOLLOW descriptor supplies both the type check and the bytes, so
+    // a destination swapped for a symlink cannot be read as identical.
+    let opened = rustix::fs::open(
+        path,
+        OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    );
+    let Ok(fd) = opened else {
+        return Err(PublishError::Collision {
+            path: path.to_owned(),
+            collision,
+        });
+    };
+    let mut file = fs::File::from(fd);
+    let metadata = file.metadata().map_err(read_error)?;
+    let mut observed = Vec::new();
     let identical = metadata.is_file()
         && u64::try_from(bytes.len()).is_ok_and(|length| length == metadata.len())
-        && fs::read(path).map_err(read_error)? == bytes;
+        && file.read_to_end(&mut observed).map_err(read_error)? == bytes.len()
+        && observed == bytes;
     if identical {
         Ok(())
     } else {
@@ -194,7 +236,7 @@ mod tests {
         names
     }
 
-    #[trace("TC-206", "FR-027-AC-1", "FR-027-CON-1")]
+    #[trace("TC-206", "FR-027-AC-1")]
     #[test]
     fn tc_206_publish_creates_exact_bytes_and_leaves_no_sidecar() {
         let dir = tempfile::tempdir().expect("tempdir");
