@@ -1131,3 +1131,25 @@ def test_quire_accepts_every_skeleton_without_diagnostics() -> None:
     diagnostics = completed.stderr.splitlines()
     assert diagnostics
     assert all(line.startswith("UnknownEdgeType:") for line in diagnostics)
+
+
+# Matrix references that predate this check and have no test-case row.
+_UNDEFINED_MATRIX_TCS = {"TC-016", "TC-118"}
+
+
+def test_every_matrix_test_reference_has_a_test_case_row() -> None:
+    """Trace: FR-021-AC-13, TC-192.
+
+    A traceability-matrix row that names a TC-n with no `| TC-n |` row in the
+    Test Cases table is a corrupted or missing row (a stray edit once
+    overwrote a matrix row and dropped TC-192's definition).
+    """
+    text = (ROOT / "spec" / "tests.md").read_text(encoding="utf-8")
+    defined = set(re.findall(r"^\| (TC-\d+) \|", text, re.MULTILINE))
+    referenced: set[str] = set()
+    for line in text.splitlines():
+        row = re.match(r"^\| (?:FR|NFR|StR)-[\w-]+ \| [^|]+ \| ([^|]+)\|", line)
+        if row:
+            referenced |= set(re.findall(r"TC-\d+", row.group(1)))
+    assert referenced - defined == _UNDEFINED_MATRIX_TCS
+    assert {"TC-191", "TC-192", "TC-193"} <= defined

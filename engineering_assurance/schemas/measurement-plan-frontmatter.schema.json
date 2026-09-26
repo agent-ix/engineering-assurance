@@ -407,7 +407,7 @@
           "type": "number",
           "exclusiveMinimum": 0,
           "exclusiveMaximum": 1,
-          "description": "A confidence level (`0.95` is 95%). When present, the rule is judged at the UNFAVOURABLE end of the observation's stated interval rather than at its point estimate: the lower bound for `gt`/`ge`, the upper bound for `lt`/`le`. The observation must then carry an interval computed at this level or higher; one without an interval, or at a lower level, is refused rather than judged on its point estimate. Absent means the point estimate is used. Never allowed with `eq`. Part of the decision rule, so changing it requires a new `definition_version`, and a reader that does not know the key refuses the plan rather than silently judging the point estimate."
+          "description": "A confidence level (`0.95` is 95%). When present, the rule is judged at the UNFAVOURABLE end of the observation's stated interval rather than at its point estimate: the lower bound for `gt`/`ge`, the upper bound for `lt`/`le`. The observation must then carry an interval computed at this level or higher; one without an interval, or at a lower level, is refused rather than judged on its point estimate. Absent means the point estimate is used. Never allowed with `eq`. JSON Schema has no finiteness keyword, so a YAML `.nan` passes this schema; the Rust `DecisionRule` refuses it. Part of the decision rule, so changing it requires a new `definition_version`, and a reader that does not know the key refuses the plan rather than silently judging the point estimate."
         }
       },
       "oneOf": [

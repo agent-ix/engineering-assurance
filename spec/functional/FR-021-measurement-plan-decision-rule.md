@@ -28,8 +28,9 @@ history; they cannot govern new measurement collections.
   - `decision_rule`: an object with `comparator` (exactly one of `gt`, `ge`,
     `lt`, `le`, or `eq`) and exactly one reference: a numeric `threshold`, or a
     `baseline` (exactly one of `constant-predictor`, `prior-collection`,
-    `best-seen`, or `external-reference`) with an optional numeric `margin`; either form may also carry an optional
-    `interval_level`, a number strictly between 0 and 1.
+    `best-seen`, or `external-reference`) with an optional numeric `margin`;
+    either form may also carry an optional `interval_level`, a number
+    strictly between 0 and 1.
 - For the consistency checks: a validated rule with the plan's `objective` or
   `estimator`.
 - For rule evaluation: a validated rule, the estimate, and, for a baseline

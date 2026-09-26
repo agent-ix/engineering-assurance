@@ -541,6 +541,7 @@ def test_onboard_js_observation_checklist_notes_the_optional_interval(
     assert len(notes) == 1
     (note,) = notes
     assert "OPTIONAL" in note
-    assert "validated by quoin" in note
-    assert "TBD" in note
+    assert "quoin applies it" in note
+    assert "tracked in EA-26" in note
+    assert "TBD" not in note
     assert "decision_rule.interval_level" in note

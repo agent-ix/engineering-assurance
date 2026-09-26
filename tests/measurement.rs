@@ -785,7 +785,7 @@ fn tc_142_a_minimal_downstream_compiles_only_the_measurement_feature() {
     .expect("consumer manifest");
     fs::write(
         consumer.path().join("src/main.rs"),
-        "use engineering_assurance::measurement::{ApparatusPath, Baseline, Comparator, DecisionRule, Direction, Estimator, NegativeControl, NegativeControlKind, NegativeControls, Objective, ProtectedApparatus, definition_change_without_version_bump};\nfn main(){let steered = Objective::with_steering(Direction::Target, Some(1.0), Some(1.0), Some(30.0), Some(50.0)).expect(\"valid\"); let _ = (steered.weight(), steered.value_half_life(), steered.budget(), steered.definitional(), definition_change_without_version_bump, DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, None), Estimator::Proportion, ApparatusPath::new(\"evals/**\").map(|path| ProtectedApparatus::new([path])), NegativeControl::new(NegativeControlKind::ApparatusEdit, \"digest\").map(|control| NegativeControls::new([control])));}\n",
+        "use engineering_assurance::measurement::{ApparatusPath, Baseline, Comparator, ConfidenceLevel, DecisionRule, Interval, Direction, Estimator, NegativeControl, NegativeControlKind, NegativeControls, Objective, ProtectedApparatus, definition_change_without_version_bump};\nfn main(){let steered = Objective::with_steering(Direction::Target, Some(1.0), Some(1.0), Some(30.0), Some(50.0)).expect(\"valid\"); let level = ConfidenceLevel::new(0.95).expect(\"level\"); let interval = Interval::new(0.0, 1.0, level, \"m\").expect(\"interval\"); let rule = DecisionRule::against_threshold(Comparator::Ge, 0.5).and_then(|rule| rule.with_interval_level(level)).expect(\"rule\"); let _ = (rule.holds_on_interval(0.5, Some(&interval), None), steered.weight(), steered.value_half_life(), steered.budget(), steered.definitional(), definition_change_without_version_bump, DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, None), Estimator::Proportion, ApparatusPath::new(\"evals/**\").map(|path| ProtectedApparatus::new([path])), NegativeControl::new(NegativeControlKind::ApparatusEdit, \"digest\").map(|control| NegativeControls::new([control])));}\n",
     )
     .expect("consumer source");
     let status = Command::new(env!("CARGO"))
@@ -2106,4 +2106,53 @@ fn tc_193_interval_evaluation_refuses_what_it_cannot_judge() {
         Err(RuleEvaluationError::IntervalNotRequested)
     );
     assert_eq!(point.holds(0.95, None), Ok(true));
+}
+
+#[trace("TC-192", "FR-021-AC-13")]
+#[test]
+fn tc_192_a_present_null_is_refused_not_read_as_absent() {
+    // Each optional key, spelled as a present null, over an otherwise valid rule.
+    let cases = [
+        ("interval_level", "comparator: ge\nthreshold: 1\n"),
+        ("margin", "comparator: ge\nbaseline: prior-collection\n"),
+        (
+            "margin_mode",
+            "comparator: ge\nbaseline: prior-collection\n",
+        ),
+        ("threshold", "comparator: ge\nbaseline: prior-collection\n"),
+        ("baseline", "comparator: ge\nthreshold: 1\n"),
+    ];
+    for (key, base) in cases {
+        for spelling in ["~", "null", ""] {
+            let yaml = format!(
+                "{base}{key}:{}{spelling}\n",
+                if spelling.is_empty() { "" } else { " " }
+            );
+            assert!(
+                parse_rule(&yaml).is_err(),
+                "a present null must be refused: {yaml:?}"
+            );
+        }
+        let json = format!("{{\"comparator\":\"ge\",\"threshold\":1,\"{key}\":null}}");
+        assert!(
+            serde_json::from_str::<DecisionRule>(&json).is_err(),
+            "{json}"
+        );
+    }
+    // Absent is still absent.
+    assert_eq!(
+        parse_rule("comparator: ge\nthreshold: 1\n")
+            .expect("parses")
+            .interval_level(),
+        None
+    );
+}
+
+#[trace("TC-192", "FR-021-AC-13")]
+#[test]
+fn tc_192_confidence_level_is_eq_and_ordered() {
+    const fn assert_eq_impl<T: Eq>() {}
+    assert_eq_impl::<ConfidenceLevel>();
+    assert_eq!(level(0.5), level(0.5));
+    assert!(level(0.5) < level(0.9));
 }

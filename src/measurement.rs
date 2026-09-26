@@ -537,6 +537,9 @@ pub struct ConfidenceLevelError {
 #[serde(try_from = "f64", into = "f64")]
 pub struct ConfidenceLevel(f64);
 
+// A level is never NaN (`new` refuses it), so equality is reflexive.
+impl Eq for ConfidenceLevel {}
+
 impl ConfidenceLevel {
     /// Build a confidence level.
     ///
@@ -862,6 +865,10 @@ pub enum RuleEvaluationError {
         /// The level the observation's interval states.
         observed: ConfidenceLevel,
     },
+    /// An `eq` rule reached interval evaluation with a level. Unreachable
+    /// through the public constructors, which refuse `eq` with a level.
+    #[error("comparator `eq` has no unfavourable interval bound to judge at")]
+    EqHasNoUnfavourableBound,
     /// The estimate lies outside its own interval.
     #[error("estimate {estimate} is outside its interval [{lower}, {upper}]")]
     EstimateOutsideInterval {
@@ -1142,9 +1149,9 @@ impl DecisionRule {
         let unfavourable = match self.comparator {
             Comparator::Gt | Comparator::Ge => interval.lower(),
             Comparator::Lt | Comparator::Le => interval.upper(),
-            // An `eq` rule cannot state an `interval_level`, so it returned
-            // `IntervalNotRequested` above.
-            Comparator::Eq => return Err(RuleEvaluationError::IntervalNotRequested),
+            // `with_interval_level` refuses `eq`, so a level-bearing rule never
+            // reaches this arm; keep a distinct error rather than a misleading one.
+            Comparator::Eq => return Err(RuleEvaluationError::EqHasNoUnfavourableBound),
         };
         let reference = self.resolve_reference(baseline_value)?;
         Ok(self.comparator.holds(unfavourable, reference))
@@ -1187,20 +1194,51 @@ impl DecisionRule {
     }
 }
 
+/// Deserialize an optional field so that a key that is present must carry a
+/// value: `key: ~`, a bare `key:` and JSON `null` are refused rather than read
+/// as absent, as the schema refuses them. Only an absent key means absent.
+fn present_is_not_null<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
+}
+
 /// The closed wire shape of a `decision_rule` block, before validation.
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct DecisionRuleFields {
     comparator: Comparator,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "present_is_not_null",
+        skip_serializing_if = "Option::is_none"
+    )]
     threshold: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "present_is_not_null",
+        skip_serializing_if = "Option::is_none"
+    )]
     baseline: Option<Baseline>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "present_is_not_null",
+        skip_serializing_if = "Option::is_none"
+    )]
     margin: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "present_is_not_null",
+        skip_serializing_if = "Option::is_none"
+    )]
     margin_mode: Option<MarginMode>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "present_is_not_null",
+        skip_serializing_if = "Option::is_none"
+    )]
     interval_level: Option<f64>,
 }
 
