@@ -358,17 +358,23 @@ explicitly with `features = ["exact-numbers"]`.
 
 ### Known duplicate crate versions
 
-A consumer that bans duplicate versions (`cargo deny`,
-`multiple-versions = "deny"`) resolves none for the default graph or for any
-capability feature alone, `source-audit` included, with two exceptions.
-Measured on normal and build edges over every target; `tests/duplicate_crates.rs`
-fails on any other duplicate and on a row below that stops being true.
-`campaign` hashes git object ids with `sha1` on the same RustCrypto `digest`
-generation as `sha2`, so it adds no duplicate.
+This is EA's own graph in isolation: the default features, each capability
+feature alone, and `full`, on normal and build edges over every target (what
+`cargo deny` with `multiple-versions = "deny"` counts, dev-dependencies
+excluded). The default graph and every capability feature alone, `source-audit`
+included, resolve no duplicate except the rows below.
+`tests/duplicate_crates.rs` fails on any other duplicate and on a row that
+stops being true.
+
+It is not a consumer's union with its other dependencies, and it does not
+cover feature combinations. A consumer can add a duplicate this table does not
+show; Quoin's `cargo deny check bans` is the measurement that counts for Quoin.
 
 | Duplicated crate | Versions | Reached by | Owner and reason |
 |---|---|---|---|
-| `syn` | 2 and 3 | `manifest`, `full` | `jsonschema` 0.56 and 0.58: `strum_macros` 0.28 (syn 2, no syn 3 release), `zerocopy-derive` 0.8 via `ahash`, and on wasm targets `wasm-bindgen-macro-support`; this crate's `syn = 3` and the serde and thiserror derives are on syn 3 |
+| `digest`, `block-buffer`, `crypto-common` | 0.10 and 0.11 | `campaign`, `full` | `campaign` hashes git blob object ids, so it must stay SHA-1: `sha1` 0.10 is on `digest` 0.10, `sha2` 0.11 on `digest` 0.11. `sha1` 0.11 would unify them but gives Quoin (whose `gix = "=0.87.1"` -> `gix-hash` 0.26.2 -> `sha1-checked` is on `sha1` 0.10) a second `sha1`, so it is not taken. Quoin already skips these (PLAT-1043). Revisit when Quoin moves to a `gix` whose hash crate is on `digest` 0.11 (`gix` 0.88 / `gix-hash` 0.27 reportedly uses `sha1dc`; unmeasured) |
+| `cpufeatures` | 0.2.17 and 0.3.1 | `campaign`, `full` | the same `sha1` 0.10 against `sha2` 0.11 split |
+| `syn` | 2 and 3 | `manifest`, `full` | `jsonschema` (only 0.56.0 is in the lockfile; 0.58 was tried and did not help): `strum_macros` 0.28 (syn 2, no syn 3 release), `zerocopy-derive` 0.8 via `ahash`, and on wasm targets `wasm-bindgen-macro-support`; this crate's `syn = 3` and the serde and thiserror derives are on syn 3 |
 | `io-lifetimes` | 2.0.4 and 3.0.1 | `full` | `cap-std` 4.0.3 (latest): `fs-set-times` 0.20.3 is on 2, `cap-primitives` and `io-extras` on 3 |
 | `windows-sys` | 0.59, 0.60 and 0.61 | `full` | `cap-std` subtree: `fs-set-times` and `winx` on 0.59, `io-extras` on 0.60; 0.61 is also ours (`rustix`, `tempfile`) |
 | `windows-targets` and the `windows_*` target crates | 0.52 and 0.53 | `full` | the `windows-sys` 0.59 and 0.60 split above |

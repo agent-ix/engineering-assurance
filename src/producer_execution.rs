@@ -3064,7 +3064,7 @@ mod campaign_source_projection {
         MAX_INPUT_BYTES, Path, Read, Sha256,
     };
     use crate::campaign::{CampaignError, CampaignSource, OmittedSourceLink, SourceTreeBinding};
-    use sha1::Sha1;
+    use sha1::{Digest as Sha1Digest, Sha1};
     use std::io::Cursor;
 
     fn lowercase_hex(bytes: &[u8]) -> String {
