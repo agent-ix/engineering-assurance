@@ -57,7 +57,7 @@ fn expected_names() -> BTreeSet<String> {
 }
 
 fn run_invariant(tmp: &Path, name: &str, instance: &Value) -> Value {
-    let module = format!("file://{}", pilot().join("scripts/invariants.js").display());
+    let module = super::common::file_uri(&pilot().join("scripts/invariants.js"));
     let script = tmp.join("check.mjs");
     let text = format!(
         "import {{ invariants }} from {};\nconst result = await invariants[{}]({{ instance: {} }});\nconsole.log(JSON.stringify(result));\n",
@@ -82,10 +82,7 @@ fn ix_flow() -> String {
     if let Some(v) = std::env::var_os("IX_FLOW_BIN").filter(|v| !v.is_empty()) {
         return v.to_string_lossy().into_owned();
     }
-    let path = std::env::var_os("PATH").unwrap_or_default();
-    std::env::split_paths(&path)
-        .map(|d| d.join("ix-flow"))
-        .find(|p| p.is_file())
+    super::common::find_on_path("ix-flow")
         .map(|p| p.to_string_lossy().into_owned())
         .expect("ix-flow is required by the integration contract")
 }
@@ -226,7 +223,24 @@ fn compatible_pilot_inventory_is_exact() {
 #[trace("TC-036", "FR-007-AC-2")]
 fn pilot_invariant_surface_delegates_to_canonical() {
     let compatibility = read(&pilot().join("scripts/invariants.js"));
-    assert!(compatibility.contains("engineering_assurance/skills/assurance-onboarding"));
+    let target = compatibility
+        .split('"')
+        .nth(1)
+        .expect("quoted re-export target");
+    assert_eq!(
+        compatibility.trim(),
+        format!("export {{ invariants }} from \"{target}\";")
+    );
+    let resolved = pilot()
+        .join("scripts")
+        .join(target)
+        .canonicalize()
+        .expect("re-export target exists");
+    let canonical_module = canonical()
+        .join("scripts/invariants.js")
+        .canonicalize()
+        .expect("canonical invariants module exists");
+    assert_eq!(resolved, canonical_module);
 }
 
 #[test]

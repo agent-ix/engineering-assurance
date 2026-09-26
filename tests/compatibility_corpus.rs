@@ -422,6 +422,7 @@ fn mapping_values(view: &Pgm01View, source_path: &str) -> Vec<Value> {
 }
 
 #[trace("TC-069", "FR-011-AC-1", "FR-011-CON-2", "FR-015-AC-5")]
+#[trace("TC-077", "FR-011-AC-9")]
 #[test]
 fn tc_069_every_retained_artifact_is_the_artifact_recorded() {
     let (root, index) = corpus();

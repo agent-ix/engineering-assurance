@@ -1,4 +1,4 @@
-.PHONY: rust-features rust-feature-list lint test manifest-validate compatibility-observe package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-evidence integration-gate release-gate
+.PHONY: rust-features rust-feature-list lint content-rights-tree test manifest-validate compatibility-observe package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-evidence integration-gate release-gate
 
 EVAL_AGENT ?= codex
 EVAL_RUN ?= canary
@@ -19,8 +19,10 @@ CARGO ?= cargo
 lint:
 	$(PYTHON) -m ruff check .
 
-test:
+content-rights-tree:
 	CARGO_BUILD_JOBS=2 cargo +1.98.1 run --locked --quiet --features full -- content-rights-tree --root .
+
+test: content-rights-tree
 	CARGO_BUILD_JOBS=2 cargo +1.98.1 test --locked --features full --test python_port -- --nocapture
 
 manifest-validate:
@@ -161,6 +163,8 @@ integration-evidence:
 		--artifact "$(EVAL_AGGREGATE_REPORT)" \
 		--workspace-root "$(EVAL_WORKSPACE_ROOT)"
 
-integration-gate: lint test package-audit validate-docs rust-foundation-gate integration-traceability
+integration-gate: lint content-rights-tree package-audit validate-docs rust-foundation-gate integration-traceability
+# python_port runs once, inside rust-foundation-gate -> rust-tests; `test` is the
+# CI entry point that runs it standalone.
 
 release-gate: integration-gate integration-evidence

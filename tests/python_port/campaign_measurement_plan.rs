@@ -3,12 +3,15 @@ use super::common::{package_root, read, schema, yaml};
 use ix_trace_rs::trace;
 use serde_json::{Value, json};
 
-fn validator() -> jsonschema::Validator {
-    let schema = schema("measurement-plan-frontmatter.schema");
-    jsonschema::options()
-        .with_draft(jsonschema::Draft::Draft202012)
-        .build(&schema)
-        .expect("schema builds")
+fn validator() -> &'static jsonschema::Validator {
+    static VALIDATOR: std::sync::OnceLock<jsonschema::Validator> = std::sync::OnceLock::new();
+    VALIDATOR.get_or_init(|| {
+        let schema = schema("measurement-plan-frontmatter.schema");
+        jsonschema::options()
+            .with_draft(jsonschema::Draft::Draft202012)
+            .build(&schema)
+            .expect("schema builds")
+    })
 }
 
 fn plan() -> Value {

@@ -105,7 +105,7 @@ reports a count in place of the failing case.
 | FR-011-AC-6 | The retained receipt validates against Quoin's packaged schema and binds the exact record, attestation, and retained-output digests of the chain, whose tools are pinned and whose unreleased side is stated. | Test (TC-074) |
 | FR-011-AC-7 | Every producer case names a real producer, a source path, and one shared-model concept, spanning at least two languages and four concepts, including the governed `quire-code-rs` case at a pinned revision. | Test (TC-075) |
 | FR-011-AC-8 | Reading and mapping the whole corpus changes no byte, no artifact is executable, and the reader reaches for no subprocess, socket, or write (CON-1, CON-4). | Test (TC-076) |
-| FR-011-AC-9 | The committed corpus reproduces from its recorded sources where those sources are checked out, and states plainly when it is skipped. | Test (TC-077) |
+| FR-011-AC-9 | The committed corpus is verified from its own retained bytes against the source digests it recorded, with no source repository checked out; reproducing the corpus from those repositories is the responsibility of `agent-ix/qa-corpus`. | Test (TC-077) |
 | FR-011-AC-10 | The corpus is tracked as a gitlink, the checked-out commit equals the recorded pin, and an uninitialized corpus fails rather than passing quietly. | Test (TC-078) |
 
 ## Dependencies
