@@ -356,6 +356,32 @@ number as a private marker map. `evidence`, `semantics`, `evaluation` and
 depend on exact numbers; nothing else does, and a consumer can opt in
 explicitly with `features = ["exact-numbers"]`.
 
+### Known duplicate crate versions
+
+This is EA's own graph in isolation: the default features, each capability
+feature alone, and `full`, on normal and build edges over every target (what
+`cargo deny` with `multiple-versions = "deny"` counts, dev-dependencies
+excluded). The default graph and every capability feature alone, `source-audit`
+included, resolve no duplicate except the rows below.
+`tests/duplicate_crates.rs` fails on any other duplicate and on a row that
+stops being true.
+
+It is not a consumer's union with its other dependencies, and it does not
+cover feature combinations. A consumer can add a duplicate this table does not
+show; Quoin's `cargo deny check bans` is the measurement that counts for Quoin.
+
+| Duplicated crate | Versions | Reached by | Owner and reason |
+|---|---|---|---|
+| `digest`, `block-buffer`, `crypto-common` | 0.10 and 0.11 | `campaign`, `full` | `campaign` hashes git blob object ids, so it must stay SHA-1: `sha1` 0.10 is on `digest` 0.10, `sha2` 0.11 on `digest` 0.11. `sha1` 0.11 would unify them but gives Quoin (whose `gix = "=0.87.1"` -> `gix-hash` 0.26.2 -> `sha1-checked` is on `sha1` 0.10) a second `sha1`, so it is not taken. Quoin already skips these (PLAT-1043). Revisit when Quoin moves to a `gix` whose hash crate is on `digest` 0.11 (`gix` 0.88 / `gix-hash` 0.27 reportedly uses `sha1dc`; unmeasured) |
+| `cpufeatures` | 0.2.17 and 0.3.1 | `campaign`, `full` | the same `sha1` 0.10 against `sha2` 0.11 split |
+| `syn` | 2 and 3 | `manifest`, `full` | `jsonschema` (only 0.56.0 is in the lockfile; 0.58 was tried and did not help): `strum_macros` 0.28 (syn 2, no syn 3 release), `zerocopy-derive` 0.8 via `ahash`, and on wasm targets `wasm-bindgen-macro-support`; this crate's `syn = 3` and the serde and thiserror derives are on syn 3 |
+| `io-lifetimes` | 2.0.4 and 3.0.1 | `full` | `cap-std` 4.0.3 (latest): `fs-set-times` 0.20.3 is on 2, `cap-primitives` and `io-extras` on 3 |
+| `windows-sys` | 0.59, 0.60 and 0.61 | `full` | `cap-std` subtree: `fs-set-times` and `winx` on 0.59, `io-extras` on 0.60; 0.61 is also ours (`rustix`, `tempfile`) |
+| `windows-targets` and the `windows_*` target crates | 0.52 and 0.53 | `full` | the `windows-sys` 0.59 and 0.60 split above |
+
+`cap-std` reaches only `full` (the `*_host` modules and the binary), and
+`jsonschema` reaches only `manifest`, so no other feature inherits either.
+
 ## Development
 
 ```bash
@@ -366,8 +392,8 @@ make rust-foundation-gate
 make integration-gate
 ```
 
-A bare `cargo test` runs only the default-feature test (default features are
-empty); use `cargo test --all-features`, which is what CI runs, for the full
+A bare `cargo test` runs only the tests that need no feature
+(`default_features`, `duplicate_crates`; default features are empty); use `cargo test --all-features`, which is what CI runs, for the full
 suite.
 
 Read [CONTENT_RIGHTS.md](CONTENT_RIGHTS.md) before adding content.
