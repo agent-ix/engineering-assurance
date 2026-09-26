@@ -737,3 +737,28 @@ fn tc_061_committed_generated_fixtures_agree_across_every_language() {
         assert_eq!(listed, states, "{name} lists a different state set");
     }
 }
+
+#[trace("TC-199", "FR-014-AC-11")]
+#[test]
+fn tc_199_pgm01_source_digest_golden_values_are_pinned() {
+    let long: Vec<u8> = (0..65_537_u32)
+        .map(|index| u8::try_from(index % 251).expect("remainder fits a byte"))
+        .collect();
+    for (raw, expected) in [
+        (
+            &b""[..],
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ),
+        (
+            &b"abc"[..],
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        ),
+        (
+            &long[..],
+            "237356e18b503616912abb8ffaed3a72591e397d4ac294c4637917d48a3f529d",
+        ),
+    ] {
+        let view = map_pgm01_bytes(raw, None).expect("malformed bytes still map to a view");
+        assert_eq!(view.source_digest, expected);
+    }
+}

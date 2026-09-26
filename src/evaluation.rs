@@ -13,6 +13,7 @@ use thiserror::Error;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
+    content_digest::ContentDigest,
     evidence::GoverningVersions,
     workflow::{DecisionChoice, DecisionEvent},
 };
@@ -438,7 +439,7 @@ impl EvaluationEnvelope {
         if self
             .transcript_digest
             .as_deref()
-            .is_none_or(|digest| !is_lower_sha256_digest(digest))
+            .is_none_or(|digest| ContentDigest::parse(digest).is_err())
         {
             errors.push(EnvelopeFailure::TranscriptDigestInvalid);
         }
@@ -825,15 +826,6 @@ pub fn is_safe_transcript_reference(value: &str) -> bool {
     value
         .split('/')
         .all(|component| !component.is_empty() && !matches!(component, "." | ".."))
-}
-
-/// Return whether a digest is exactly 64 lowercase hexadecimal characters.
-#[must_use]
-pub fn is_lower_sha256_digest(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 fn is_safe_run_id(value: &str) -> bool {

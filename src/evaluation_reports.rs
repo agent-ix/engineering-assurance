@@ -14,9 +14,10 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::{
+    content_digest::ContentDigest,
     evaluation::{
         EvaluationEnvelope, EvaluationHost, EvaluationScenario, ExecutionStatus,
-        is_immutable_revision, is_lower_sha256_digest, is_safe_transcript_reference,
+        is_immutable_revision, is_safe_transcript_reference,
     },
     evidence::GoverningVersions,
     workflow::DecisionEvent,
@@ -377,11 +378,11 @@ fn validate_retention(
 ) -> Result<(), EvaluationReportError> {
     let valid = match retention {
         RawTranscriptRetention::Retained => {
-            digest.is_some_and(is_lower_sha256_digest)
+            digest.is_some_and(|value| ContentDigest::parse(value).is_ok())
                 && path.is_some_and(is_safe_transcript_reference)
         }
         RawTranscriptRetention::NotRetained => {
-            digest.is_some_and(is_lower_sha256_digest) && path.is_none()
+            digest.is_some_and(|value| ContentDigest::parse(value).is_ok()) && path.is_none()
         }
         RawTranscriptRetention::Unavailable => digest.is_none() && path.is_none(),
     };

@@ -33,25 +33,26 @@
 //! |---|---|---|---|
 //! | `claim-strength` | `claim_strength` | | `serde` |
 //! | `compatibility` | `compatibility` | | `serde`, `serde_json`, `thiserror` |
-//! | `compatibility-corpus` | `compatibility_corpus` | | `serde`, `serde_json`, `sha2`, `thiserror` |
+//! | `compatibility-corpus` | `compatibility_corpus` | `content-digest` | `serde`, `serde_json`, `thiserror` |
+//! | `content-digest` | `content_digest` | | `serde`, `sha2`, `thiserror` |
 //! | `content-rights` | `content_rights` | | `regex`, `serde`, `serde_json`, `thiserror`, `unicode-casefold` |
 //! | `discovery` | `discovery` | `workflow` | `serde`, `serde_json`, `thiserror` |
-//! | `evaluation` | `evaluation` | `evidence`, `workflow` (implies `exact-numbers`) | `serde`, `serde_json`, `thiserror`, `time` |
-//! | `evaluation-reports` | `evaluation_reports` | `evaluation`, `evidence`, `workflow` (implies `exact-numbers`) | `serde`, `serde_json`, `thiserror` |
-//! | `evidence` | `evidence` | `exact-numbers` | `serde`, `serde_json`, `sha2`, `thiserror` |
+//! | `evaluation` | `evaluation` | `content-digest`, `evidence`, `workflow` (implies `exact-numbers`) | `serde`, `serde_json`, `thiserror`, `time` |
+//! | `evaluation-reports` | `evaluation_reports` | `content-digest`, `evaluation`, `evidence`, `workflow` (implies `exact-numbers`) | `serde`, `serde_json`, `thiserror` |
+//! | `evidence` | `evidence` | `content-digest`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
 //! | `manifest` | `manifest` | `structured-yaml` | `jsonschema`, `serde`, `serde_json`, `thiserror` |
 //! | `measurement` | `measurement` | | `serde`, `thiserror` |
 //! | `onboarding` | `onboarding` | | `serde`, `serde_json`, `thiserror`, `yaml_serde` |
 //! | `package-audit` | `package_audit` | | `serde`, `serde_json`, `thiserror` |
 //! | `package-lifecycle` | `package_lifecycle` | | `serde`, `serde_json`, `thiserror` |
 //! | `package-membership` | `package_membership` | | `serde`, `thiserror` |
-//! | `producer-execution` | `producer_execution` | | `rustix`, `serde`, `serde_json`, `serde_json_canonicalizer`, `sha2`, `thiserror` |
-//! | `semantics` | `semantics` | `claim-strength`, `compatibility-corpus`, `exact-numbers` | `serde`, `serde_json`, `sha2`, `thiserror` |
+//! | `producer-execution` | `producer_execution` | `content-digest` | `rustix`, `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
+//! | `semantics` | `semantics` | `claim-strength`, `compatibility-corpus`, `content-digest`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
 //! | `source-audit` | `source_audit` | | `serde`, `syn`, `thiserror` |
 //! | `structured-yaml` | `structured_yaml` | | `serde_json`, `yaml_serde` |
 //! | `workflow` | `workflow` | | `serde`, `serde_json`, `thiserror` |
 //! | `workflow-invariants` | `workflow_invariants` | | `serde`, `serde_json`, `thiserror`, `time` |
-//! | `campaign` | `campaign` | `measurement`, `producer-execution` | the generated campaign crate, `sha1` |
+//! | `campaign` | `campaign` | `measurement`, `producer-execution` | the generated campaign crate, `sha1`, `sha2` |
 //! | `exact-numbers` | none (opt-in) | | `serde_json/arbitrary_precision` |
 //! | `full` | all of the above, plus the binary | every feature above | `clap`, `cap-std`, `tar`, `zip`, `flate2`, `tempfile` |
 
@@ -65,6 +66,8 @@ pub mod claim_strength;
 pub mod compatibility;
 #[cfg(feature = "compatibility-corpus")]
 pub mod compatibility_corpus;
+#[cfg(feature = "content-digest")]
+pub mod content_digest;
 #[cfg(feature = "content-rights")]
 pub mod content_rights;
 #[cfg(feature = "discovery")]
@@ -75,6 +78,8 @@ pub mod evaluation;
 pub mod evaluation_reports;
 #[cfg(feature = "evidence")]
 pub mod evidence;
+#[cfg(feature = "campaign")]
+mod git_object_id;
 #[cfg(feature = "manifest")]
 pub mod manifest;
 #[cfg(feature = "measurement")]

@@ -14,9 +14,10 @@ use engineering_assurance::{
         SourceTreeBinding, canonical_digest, resolve_procedure, validate_definition,
         validate_procedure, validate_run,
     },
+    content_digest::ContentDigest,
     producer_execution::{
-        CancellationBinding, ContainmentBinding, ContentDigest, ContractBinding, ExecutionBudget,
-        ExitCodeBinding, InputBinding, InvalidExecutionRequest, OutputBinding, OutputTreeBinding,
+        CancellationBinding, ContainmentBinding, ContractBinding, ExecutionBudget, ExitCodeBinding,
+        InputBinding, InvalidExecutionRequest, OutputBinding, OutputTreeBinding,
         ProducerDescriptor, ProducerExecutionRequest, RetainedRequestError, StdinBinding,
     },
 };
@@ -817,6 +818,7 @@ fn tc_182_source_projection_checks_complete_git_blob_inventory() {
         .expect("sealed source tree");
     assert_eq!(resolved.request.inputs.len(), 2);
     assert_eq!(resolved.omitted_source_links.len(), 1);
+    assert_source_digests_pinned(&resolved);
     assert_required_source_prefix(&procedure, &source, bindings.clone());
     assert_eq!(
         resolved.omitted_source_links[0].path,
@@ -839,6 +841,34 @@ fn tc_182_source_projection_checks_complete_git_blob_inventory() {
     );
 
     assert_source_tampering_rejected(repo.path(), &procedure, &source, bindings);
+}
+
+/// Pinned through the source projection's content digest (independent SHA-256
+/// of the fixture bytes) and its omitted-link digest.
+fn assert_source_digests_pinned(resolved: &engineering_assurance::campaign::ResolvedProcedure) {
+    let digest_of = |role: &str| {
+        resolved
+            .request
+            .inputs
+            .iter()
+            .find(|input| input.role == role)
+            .map(|input| input.digest.as_str().to_owned())
+    };
+    assert_eq!(
+        digest_of("source/Cargo.toml").as_deref(),
+        Some("2565c4efa751f1b2c642d1b92c4b7b6d42590f7b116008c11d625d49074b5e4f")
+    );
+    #[cfg(unix)]
+    {
+        assert_eq!(
+            digest_of("source-exec/scripts/check.sh").as_deref(),
+            Some("306c6ca7407560340797866e077e053627ad409277d1b9da58106fce4cf717cb")
+        );
+        assert_eq!(
+            resolved.omitted_source_links[0].digest.as_str(),
+            "708abeebc2fda1162fadd2407640cf05d757304ec0086b811a0123690b67f305"
+        );
+    }
 }
 
 fn assert_required_source_prefix(

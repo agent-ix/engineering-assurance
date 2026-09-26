@@ -252,7 +252,8 @@ mod tests {
     use super::{
         BTreeMap, CorpusIndex, SemanticErrorKind, render_generated_fixtures, semantic_refusal,
     };
-    use crate::compatibility_corpus::{CORPUS_VERSION, REQUIRED_KINDS, sha256_hex};
+    use crate::compatibility_corpus::{CORPUS_VERSION, REQUIRED_KINDS};
+    use crate::content_digest::ContentDigest;
 
     /// A structurally valid synthetic corpus index.
     ///
@@ -261,7 +262,7 @@ mod tests {
     /// the production artifact. The accepted corpus is read by the confined
     /// host adapter in the qualification tree.
     fn valid_index() -> Value {
-        let digest = sha256_hex(b"retained bytes");
+        let digest = ContentDigest::of_bytes(b"retained bytes").into_hex();
         let cases: Vec<Value> = REQUIRED_KINDS
             .iter()
             .map(|kind| {

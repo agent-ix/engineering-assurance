@@ -10,10 +10,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use engineering_assurance::package_lifecycle::PackageLifecycleResult;
+use engineering_assurance::{
+    content_digest::ContentDigest, package_lifecycle::PackageLifecycleResult,
+};
 
 const MODULE_DIRECTORY: &str = "engineering_assurance";
 const STAGED_NAMES: [&str; 6] = [
@@ -32,7 +33,7 @@ const MAX_TOTAL_BYTES: usize = 16_777_216;
 struct PlannedFile {
     relative: PathBuf,
     length: usize,
-    digest: [u8; 32],
+    digest: ContentDigest,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -354,14 +355,14 @@ fn count_entry(budget: &mut Budget) -> Result<(), PackageHostError> {
 fn inspect_bounded_file(
     path: &Path,
     budget: &mut Budget,
-) -> Result<(usize, [u8; 32]), PackageHostError> {
+) -> Result<(usize, ContentDigest), PackageHostError> {
     let metadata = fs::metadata(path).map_err(|_| PackageHostError::InspectionFailed)?;
     let length = usize::try_from(metadata.len()).map_err(|_| PackageHostError::FileTooLarge)?;
     if length > MAX_FILE_BYTES {
         return Err(PackageHostError::FileTooLarge);
     }
     let mut source = fs::File::open(path).map_err(|_| PackageHostError::InspectionFailed)?;
-    let mut hasher = Sha256::new();
+    let mut hasher = ContentDigest::hasher();
     let mut observed = 0_usize;
     let mut buffer = [0_u8; 8_192];
     loop {
@@ -384,7 +385,7 @@ fn inspect_bounded_file(
     if observed != length {
         return Err(PackageHostError::InspectionFailed);
     }
-    Ok((observed, hasher.finalize().into()))
+    Ok((observed, hasher.finalize()))
 }
 
 fn write_plan(
@@ -499,6 +500,27 @@ mod tests {
         assert!(!owned_directory.exists());
         assert!(!owned_file.exists());
         assert_eq!(fs::read(&unowned).unwrap(), b"preserve");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[trace("TC-199", "FR-014-AC-11")]
+    fn tc_199_planned_file_digest_is_pinned() {
+        let root = std::env::temp_dir().join(format!(
+            "engineering-assurance-digest-{}-{}",
+            std::process::id(),
+            TEST_SEQUENCE.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("value");
+        fs::write(&path, b"abc").unwrap();
+        let mut budget = Budget::default();
+        let (length, digest) = inspect_bounded_file(&path, &mut budget).unwrap();
+        assert_eq!(length, 3);
+        assert_eq!(
+            digest.as_str(),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }

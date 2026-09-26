@@ -24,8 +24,9 @@ use cap_std::{ambient_authority, fs::Dir};
 use engineering_assurance::{
     compatibility_corpus::{
         CorpusError, CorpusIndex, MAX_INDEX_BYTES, REQUIRED_KINDS, RetainedArtifact, Retention,
-        SharedConcept, sha256_hex,
+        SharedConcept,
     },
+    content_digest::ContentDigest,
     semantics::{Pgm01Outcome, Pgm01View, map_pgm01_bytes},
 };
 use ix_trace_rs::trace;
@@ -402,11 +403,12 @@ fn view(root: &CorpusRoot, index: &CorpusIndex, case_id: &str) -> Pgm01View {
         .expect("retained bytes must verify");
     let expected = case.expected.verify_against_digest_of.as_deref().map(|id| {
         let reference = index.case(id).expect("the referenced case must exist");
-        sha256_hex(
+        ContentDigest::of_bytes(
             &root
                 .retained_bytes(reference.into())
                 .expect("the referenced bytes must verify"),
         )
+        .into_hex()
     });
     map_pgm01_bytes(&raw, expected.as_deref()).expect("the mapper must accept a valid digest")
 }
@@ -457,7 +459,7 @@ fn tc_069_every_retained_artifact_is_the_artifact_recorded() {
             .retained_bytes(case.into())
             .expect("retained bytes must verify");
         assert_eq!(
-            sha256_hex(&raw),
+            ContentDigest::of_bytes(&raw).as_str(),
             recorded,
             "{} no longer matches the digest {} recorded for it",
             case.id,
@@ -1134,4 +1136,37 @@ fn tc_103_the_walk_refuses_exactly_one_directory_past_its_depth_bound() {
             .code(),
         "compatibility_corpus_tree_too_deep"
     );
+}
+
+#[trace("TC-199", "FR-014-AC-11")]
+#[test]
+fn tc_199_retained_digest_golden_values_are_pinned() {
+    let long: Vec<u8> = (0..65_537_u32)
+        .map(|index| u8::try_from(index % 251).expect("remainder fits a byte"))
+        .collect();
+    for (bytes, expected) in [
+        (
+            &b""[..],
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        ),
+        (
+            &b"abc"[..],
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        ),
+        (
+            &long[..],
+            "237356e18b503616912abb8ffaed3a72591e397d4ac294c4637917d48a3f529d",
+        ),
+    ] {
+        let artifact = RetainedArtifact {
+            identity: "golden",
+            retention: Retention::Retained,
+            retained_path: None,
+            retained_sha256: Some(&"0".repeat(64)),
+        };
+        match artifact.verify_bytes(bytes) {
+            Err(CorpusError::DigestMismatch { actual, .. }) => assert_eq!(actual, expected),
+            other => panic!("expected a digest mismatch reporting the actual digest: {other:?}"),
+        }
+    }
 }
