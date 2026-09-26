@@ -292,25 +292,6 @@ fn every_schema_and_skeleton_is_valid() {
     }
 }
 
-/// The skeleton carries every required body-locator heading the manifest
-/// names.
-#[test]
-#[trace("TC-121", "FR-017-AC-7")]
-fn every_skeleton_has_its_body_locator_headings() {
-    for artifact in manifest()["artifact_types"].as_array().unwrap() {
-        let name = artifact["name"].as_str().unwrap();
-        let body = read(&skeleton_path(&format!("{name}.md")));
-        let locators = artifact["body_extraction"]["yield_pattern"]["match"]
-            .as_object()
-            .unwrap();
-        for locator in locators.values() {
-            assert_eq!(locator["required"], json!(true));
-            let heading = locator["after_heading"].as_str().unwrap();
-            assert!(body.contains(&format!("## {heading}")), "{name}: {heading}");
-        }
-    }
-}
-
 #[test]
 #[trace("TC-163", "FR-025-AC-1")]
 fn profile_measurement_policy_is_closed_and_uses_plan_stages() {

@@ -104,9 +104,7 @@ then update this repository's direct invocation and remove the old path.
   the test itself wrote or by a check that passes over an empty population.
 - Where a retired Python test carries a criterion with no native replacement,
   relocate that test rather than deleting it, and record which criterion it
-  carries. The accepted corpus reproducing from its recorded sources is that
-  case: the builder belongs to the pinned corpus repository, and invoking it is
-  not the same as owning it.
+  carries.
 - Preserve historical corpus and evidence bytes.
 - Return changed interfaces or compatibility promises to specification before
   implementation continues.

@@ -105,6 +105,7 @@ pub fn find_on_path(name: &str) -> Option<PathBuf> {
 pub fn file_uri(path: &Path) -> String {
     use std::fmt::Write as _;
     use std::os::unix::ffi::OsStrExt;
+    debug_assert!(path.is_absolute(), "file_uri needs an absolute path");
     let mut uri = String::from("file://");
     for &b in path.as_os_str().as_bytes() {
         if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~' | b'/') {

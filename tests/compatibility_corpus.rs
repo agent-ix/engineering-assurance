@@ -769,6 +769,7 @@ fn tc_074_the_current_receipt_validates_against_the_packaged_schema() {
 }
 
 #[trace("TC-075", "FR-011-AC-7", "FR-015-AC-5")]
+#[trace("TC-077", "FR-011-AC-9")]
 #[test]
 fn tc_075_every_producer_case_names_a_real_producer_and_a_shared_concept() {
     let (root, index) = corpus();
@@ -791,8 +792,15 @@ fn tc_075_every_producer_case_names_a_real_producer_and_a_shared_concept() {
             // Retained bytes have to reproduce the identity the corpus records,
             // or the case is describing output nobody here actually holds.
             Retention::Retained => {
-                root.retained_bytes(producer.into())
+                let raw = root
+                    .retained_bytes(producer.into())
                     .expect("every retained producer case must reproduce its identity");
+                assert_eq!(
+                    ContentDigest::of_bytes(&raw).as_str(),
+                    producer.source_sha256,
+                    "{} no longer matches the digest recorded for its source",
+                    producer.id
+                );
             }
             // A referenced case is pinned by digest and deliberately not copied
             // here. It still has to name what it is and why it is not retained,
