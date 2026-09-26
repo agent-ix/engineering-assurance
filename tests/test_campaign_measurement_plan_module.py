@@ -8,14 +8,14 @@ from pathlib import Path
 
 import pytest
 import yaml
-from jsonschema import Draft7Validator
+from jsonschema import Draft202012Validator
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = ROOT / "engineering_assurance"
 SCHEMA = json.loads(
     (MODULE / "schemas/measurement-plan-frontmatter.schema.json").read_text()
 )
-VALIDATOR = Draft7Validator(SCHEMA)
+VALIDATOR = Draft202012Validator(SCHEMA)
 
 
 def plan() -> dict:
@@ -29,7 +29,7 @@ def errors(value: dict) -> list:
 
 def test_procedure_path_is_optional_and_safe_json_files_are_valid() -> None:
     """Trace: FR-024-AC-10, TC-185."""
-    Draft7Validator.check_schema(SCHEMA)
+    Draft202012Validator.check_schema(SCHEMA)
     candidate = plan()
     assert errors(candidate) == []
     for path in (

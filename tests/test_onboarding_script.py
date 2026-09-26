@@ -40,7 +40,7 @@ def test_onboard_js_json_checklist_lists_nested_objective_requirements(
 
     A MeasurementPlan's `objective` block is itself optional, but once
     present its own `direction` field is required
-    (`definitions.objective.required`). onboard.js's §4 checklist must surface that
+    (`$defs.objective.required`). onboard.js's §4 checklist must surface that
     nested requirement, not just the top-level `required` list, or an author
     who reads the checklist and adds `objective:` with no `direction` finds
     out only from a schema rejection.
@@ -229,7 +229,7 @@ def test_onboard_js_json_checklist_lists_protected_apparatus_and_negative_contro
         / "schemas"
         / "measurement-plan-frontmatter.schema.json"
     )
-    apparatus_path = json.loads(schema_path.read_text())["definitions"]["apparatus_path"]
+    apparatus_path = json.loads(schema_path.read_text())["$defs"]["apparatus_path"]
     report = run_onboard_json(tmp_path)
     plan_checklist = report["artifactChecklists"]["MeasurementPlan"]
     assert plan_checklist["arrays"]["protected_apparatus"] == {

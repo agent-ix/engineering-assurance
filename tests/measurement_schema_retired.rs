@@ -14,7 +14,7 @@ fn validator() -> jsonschema::Validator {
     let schema: Value = serde_json::from_slice(&fs::read(path).expect("packaged schema exists"))
         .expect("packaged schema is JSON");
     jsonschema::options()
-        .with_draft(jsonschema::Draft::Draft7)
+        .with_draft(jsonschema::Draft::Draft202012)
         .build(&schema)
         .expect("packaged schema compiles")
 }

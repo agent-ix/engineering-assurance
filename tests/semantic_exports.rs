@@ -3,15 +3,21 @@
 
 //! The module exports its five artifact types through the semantic contract.
 //!
-//! Quoin's semantic reader accepts an export only when its `data_schema` names
-//! a JSON Schema 2020-12 file whose bytes hash to the recorded digest and whose
-//! `$id` sits under the module's version. The five frontmatter schemas stay
-//! draft-07 (the retired-plan and Python guards depend on it), so each export
-//! is a separate 2020-12 file derived mechanically from its draft-07 source by
-//! [`to_2020_12`], the only place that transformation lives.
+//! Each artifact type has ONE JSON Schema 2020-12 file, which is both its
+//! manifest `frontmatter_schema_ref` and its exported `data_schema`; there is no
+//! second copy to drift. Quoin accepts an export only when the schema's bytes
+//! hash to the recorded digest and its `$id` sits under the module's version.
 //!
-//! Regenerate the derived files and every manifest digest with
-//! `EA_BLESS=1 cargo test --test semantic_exports`.
+//! The schema describes the type's frontmatter. Body sections stay quire's
+//! `body_extraction`; quire-rs applies a `data_schema` only to the declaration
+//! record of an archetype named by a document's `object:` key, never to a
+//! `type:`-backed document (see FR-003).
+//!
+//! After a version bump, rewrite the schemas' `$id` version and every manifest
+//! digest with
+//! `EA_BLESS=1 cargo test --test semantic_exports -- --ignored bless`. That test
+//! is `#[ignore]`d so it can neither race the checks nor count as coverage, and
+//! it changes nothing but `$id` lines and digests.
 
 use std::{
     collections::BTreeSet,
@@ -21,7 +27,7 @@ use std::{
 };
 
 use ix_trace_rs::trace;
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 // Assembled from parts so the content-rights URL scan does not see a literal.
@@ -31,41 +37,43 @@ const ID_BASE: &str = concat!(
     "//schemas.agent-ix.org/agent-ix/engineering-assurance-campaign/"
 );
 
-/// Artifact type, its draft-07 source and its derived 2020-12 export.
-const EXPORTS: [(&str, &str, &str); 5] = [
+/// RFC 3339 `date-time` as a pattern: a full date, `T`, a time with an optional
+/// fraction, and a `Z` or numeric offset. It replaces `format: date-time`
+/// because quire-rs (jsonschema 0.18) does not assert `format` under 2020-12, and
+/// every wire field must be checked by every consumer. It checks the shape and
+/// range of each field, not calendar validity (no day-of-month vs month check).
+/// The one place this regex is documented; the schema must carry it verbatim.
+const RFC_3339_DATE_TIME: &str = "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])[Tt]([01][0-9]|2[0-3]):[0-5][0-9]:([0-5][0-9]|60)(\\.[0-9]+)?([Zz]|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$";
+
+/// Artifact types; each one's schema is `schemas/<kebab-name>-frontmatter.schema.json`.
+const ARTIFACTS: [(&str, &str); 5] = [
     (
         "AssuranceProfile",
         "assurance-profile-frontmatter.schema.json",
-        "assurance-profile.schema.json",
     ),
     (
         "MeasurementPlan",
         "measurement-plan-frontmatter.schema.json",
-        "measurement-plan.schema.json",
     ),
     (
         "ArchitectureDescription",
         "architecture-description-frontmatter.schema.json",
-        "architecture-description.schema.json",
     ),
     (
         "ComponentAssuranceContract",
         "component-assurance-contract-frontmatter.schema.json",
-        "component-assurance-contract.schema.json",
     ),
     (
         "AssuranceArgument",
         "assurance-argument-frontmatter.schema.json",
-        "assurance-argument.schema.json",
     ),
 ];
 
+/// Recorded verdicts of the original draft-07 schemas over the corpus below.
+const VERDICTS: &str = include_str!("fixtures/semantic-export-verdicts.json");
+
 fn module_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("engineering_assurance")
-}
-
-fn blessing() -> bool {
-    std::env::var_os("EA_BLESS").is_some_and(|value| value == "1")
 }
 
 fn read_json(path: &Path) -> Value {
@@ -86,130 +94,43 @@ fn manifest_version(manifest: &Value) -> String {
 }
 
 fn sha256(bytes: &[u8]) -> String {
-    let digest = Sha256::digest(bytes);
     let mut hex = String::from("sha256:");
-    for byte in digest {
+    for byte in Sha256::digest(bytes) {
         write!(hex, "{byte:02x}").expect("writing to a String cannot fail");
     }
     hex
-}
-
-fn subschema_map(value: &Value) -> Result<Value, String> {
-    let map = value.as_object().ok_or("expected a map of subschemas")?;
-    map.iter()
-        .map(|(name, sub)| Ok((name.clone(), schema(sub)?)))
-        .collect::<Result<Map<_, _>, String>>()
-        .map(Value::Object)
-}
-
-fn subschema_list(value: &Value) -> Result<Value, String> {
-    value
-        .as_array()
-        .ok_or("expected a list of subschemas")?
-        .iter()
-        .map(schema)
-        .collect::<Result<Vec<_>, _>>()
-        .map(Value::Array)
-}
-
-/// Rewrites one draft-07 schema node into its 2020-12 equivalent.
-///
-/// Only keyword positions that hold subschemas are walked, so a property that
-/// happens to be named `dependencies` or `definitions` is left alone. Draft-07
-/// forms with no mechanical 2020-12 equivalent are refused, not guessed.
-fn schema(node: &Value) -> Result<Value, String> {
-    let Some(map) = node.as_object() else {
-        return Ok(node.clone());
-    };
-    if map.contains_key("$ref") && map.len() > 1 {
-        return Err(
-            "$ref has sibling keywords: draft-07 ignores them, 2020-12 applies them".into(),
-        );
-    }
-    let mut out = Map::new();
-    for (keyword, value) in map {
-        match keyword.as_str() {
-            "properties" | "patternProperties" => {
-                out.insert(keyword.clone(), subschema_map(value)?);
-            }
-            "items" if value.is_array() => {
-                return Err("array-form `items` is draft-07 tuple validation".into());
-            }
-            "additionalItems" => return Err("`additionalItems` is draft-07 only".into()),
-            "items"
-            | "additionalProperties"
-            | "not"
-            | "if"
-            | "then"
-            | "else"
-            | "contains"
-            | "propertyNames" => {
-                out.insert(keyword.clone(), schema(value)?);
-            }
-            "allOf" | "anyOf" | "oneOf" => {
-                out.insert(keyword.clone(), subschema_list(value)?);
-            }
-            "dependencies" => {
-                let entries = value.as_object().ok_or("`dependencies` is not a map")?;
-                let mut required = Map::new();
-                let mut schemas = Map::new();
-                for (name, dependency) in entries {
-                    if dependency.is_array() {
-                        required.insert(name.clone(), dependency.clone());
-                    } else {
-                        schemas.insert(name.clone(), schema(dependency)?);
-                    }
-                }
-                if !required.is_empty() {
-                    out.insert("dependentRequired".into(), Value::Object(required));
-                }
-                if !schemas.is_empty() {
-                    out.insert("dependentSchemas".into(), Value::Object(schemas));
-                }
-            }
-            "$ref" => {
-                let target = value.as_str().ok_or("$ref is not a string")?;
-                let target = target
-                    .strip_prefix("#/definitions/")
-                    .map_or_else(|| target.to_owned(), |rest| format!("#/$defs/{rest}"));
-                out.insert(keyword.clone(), Value::String(target));
-            }
-            _ => {
-                out.insert(keyword.clone(), value.clone());
-            }
-        }
-    }
-    Ok(Value::Object(out))
-}
-
-/// The one draft-07 to 2020-12 transformation, applied to a schema root.
-fn to_2020_12(source: &Value, id: &str) -> Value {
-    let mut root =
-        schema(source).unwrap_or_else(|reason| panic!("cannot derive {id} mechanically: {reason}"));
-    let map = root.as_object_mut().expect("schema root is an object");
-    if let Some(definitions) = map.remove("definitions") {
-        map.insert("$defs".into(), subschema_map(&definitions).expect("$defs"));
-    }
-    map.insert("$schema".into(), json!(DRAFT_2020_12));
-    map.insert("$id".into(), json!(id));
-    root
 }
 
 fn derived_id(version: &str, file: &str) -> String {
     format!("{ID_BASE}{version}/{file}")
 }
 
-fn derived_bytes(source_file: &str, file: &str, version: &str) -> String {
-    let source = read_json(&module_root().join("schemas").join(source_file));
-    let derived = to_2020_12(&source, &derived_id(version, file));
-    let mut text = serde_json::to_string_pretty(&derived).expect("derived schema serializes");
-    text.push('\n');
-    text
+fn declared_types(manifest: &Value) -> Vec<&Value> {
+    ["object_types", "artifact_types"]
+        .into_iter()
+        .filter_map(|key| manifest[key].as_array())
+        .flatten()
+        .collect()
 }
 
-/// Rewrites every `data_schema` digest line in the manifest text so it equals
-/// the hash of the schema file recorded on the preceding `schema:` line.
-fn rewrite_digests(manifest_text: &str) -> String {
+/// Rewrites the `"$id"` line of a schema file for `version`; touches nothing else.
+fn with_id(text: &str, version: &str, file: &str) -> String {
+    let mut out = String::new();
+    for line in text.lines() {
+        if line.trim_start().starts_with("\"$id\":") {
+            let indent = &line[..line.len() - line.trim_start().len()];
+            let _ = writeln!(out, "{indent}\"$id\": \"{}\",", derived_id(version, file));
+        } else {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// Rewrites every `digest:` line in the manifest text to the hash of the schema
+/// named on the preceding `schema:` line.
+fn with_digests(manifest_text: &str) -> String {
     let mut lines: Vec<String> = manifest_text.lines().map(str::to_owned).collect();
     let mut schema_path: Option<String> = None;
     for line in &mut lines {
@@ -229,33 +150,33 @@ fn rewrite_digests(manifest_text: &str) -> String {
     text
 }
 
-/// In bless mode (`EA_BLESS=1`), regenerates the derived files and the manifest
-/// digests; otherwise it does nothing and the checks below judge the files.
-#[trace("TC-194", "FR-003-AC-7")]
+/// After a version bump: rewrites each exported schema's `$id` version and every
+/// manifest digest. Changes nothing else. Run alone with
+/// `EA_BLESS=1 cargo test --test semantic_exports -- --ignored bless`. It keeps a
+/// trace tag only because the repository's source audit requires one on every
+/// test; being ignored, it contributes no coverage.
 #[test]
-fn bless_regenerates_derived_schemas_and_digests() {
-    if !blessing() {
-        return;
+#[ignore = "rewrites committed files; run alone with EA_BLESS=1"]
+#[trace("TC-194", "FR-003-AC-7")]
+fn bless_rewrites_schema_ids_and_manifest_digests() {
+    assert!(
+        std::env::var_os("EA_BLESS").is_some_and(|value| value == "1"),
+        "set EA_BLESS=1 to rewrite the schema ids and digests"
+    );
+    let manifest_path = module_root().join("manifest.yaml");
+    let manifest_value = manifest();
+    let version = manifest_version(&manifest_value);
+    for entry in declared_types(&manifest_value) {
+        let Some(relative) = entry["data_schema"]["schema"].as_str() else {
+            continue;
+        };
+        let path = module_root().join(relative);
+        let file = relative.strip_prefix("schemas/").expect("under schemas/");
+        let text = fs::read_to_string(&path).expect("schema reads");
+        fs::write(&path, with_id(&text, &version, file)).expect("schema writes");
     }
-    let version = manifest_version(&manifest());
-    for (_, source, file) in EXPORTS {
-        fs::write(
-            module_root().join("schemas").join(file),
-            derived_bytes(source, file, &version),
-        )
-        .expect("derived schema writes");
-    }
-    let path = module_root().join("manifest.yaml");
-    let text = fs::read_to_string(&path).expect("manifest reads");
-    fs::write(&path, rewrite_digests(&text)).expect("manifest writes");
-}
-
-fn declared_types(manifest: &Value) -> Vec<&Value> {
-    ["object_types", "artifact_types"]
-        .into_iter()
-        .filter_map(|key| manifest[key].as_array())
-        .flatten()
-        .collect()
+    let text = fs::read_to_string(&manifest_path).expect("manifest reads");
+    fs::write(&manifest_path, with_digests(&text)).expect("manifest writes");
 }
 
 #[trace("TC-194", "FR-003-AC-7")]
@@ -271,7 +192,7 @@ fn every_export_is_a_declared_type_with_a_current_2020_12_schema_under_the_manif
         .iter()
         .map(|name| name.as_str().expect("export names are strings"))
         .collect();
-    for name in EXPORTS.map(|(name, _, _)| name) {
+    for (name, _) in ARTIFACTS {
         assert!(exports.contains(&name), "{name} is not exported");
     }
     for name in &exports {
@@ -297,7 +218,7 @@ fn every_export_is_a_declared_type_with_a_current_2020_12_schema_under_the_manif
         assert_eq!(
             data_schema["digest"].as_str(),
             Some(sha256(&bytes).as_str()),
-            "{relative}: digest does not match the file (EA_BLESS=1 to regenerate)"
+            "{relative}: digest does not match the file (EA_BLESS=1 -- --ignored bless)"
         );
         let parsed: Value = serde_json::from_slice(&bytes).expect("schema is JSON");
         assert_eq!(parsed["$schema"], DRAFT_2020_12, "{relative}");
@@ -309,88 +230,93 @@ fn every_export_is_a_declared_type_with_a_current_2020_12_schema_under_the_manif
         );
         checked.insert(relative.to_owned());
     }
-    assert!(
-        checked.len() >= 7,
-        "campaign and artifact exports all checked"
+    assert_eq!(
+        checked.len(),
+        7,
+        "five artifact and two campaign exports are all checked"
     );
 
-    // Each artifact type points its export at the derived file for its source.
-    for (name, source, file) in EXPORTS {
+    // One file per artifact type: its export IS its frontmatter schema.
+    for (name, file) in ARTIFACTS {
         let entry = types
             .iter()
             .find(|entry| entry["name"] == name)
             .expect("artifact type declared");
+        let reference = format!("schemas/{file}");
         assert_eq!(
             entry["frontmatter_schema_ref"].as_str(),
-            Some(format!("schemas/{source}").as_str()),
+            Some(reference.as_str()),
             "{name}"
         );
         assert_eq!(
             entry["data_schema"]["schema"].as_str(),
-            Some(format!("schemas/{file}").as_str()),
-            "{name}"
+            Some(reference.as_str()),
+            "{name}: data_schema must be the frontmatter schema itself, not a copy"
         );
     }
 }
 
 #[trace("TC-194", "FR-003-AC-7")]
 #[test]
-fn each_derived_schema_equals_the_mechanical_transformation_of_its_draft_07_source() {
-    let version = manifest_version(&manifest());
-    for (name, source, file) in EXPORTS {
-        let expected = derived_bytes(source, file, &version);
-        let committed = fs::read_to_string(module_root().join("schemas").join(file))
-            .unwrap_or_else(|e| panic!("{file}: {e} (EA_BLESS=1 to regenerate)"));
-        assert_eq!(
-            committed, expected,
-            "{name}: {file} drifted from {source} (EA_BLESS=1 to regenerate)"
-        );
-        let derived: Value = serde_json::from_str(&committed).expect("derived is JSON");
-        assert!(derived.get("definitions").is_none(), "{file}");
-        assert!(!committed.contains("#/definitions/"), "{file}");
-        assert!(!committed.contains("\"dependencies\""), "{file}");
+fn artifact_schemas_use_2020_12_forms_only_and_carry_the_documented_date_time_pattern() {
+    for (name, file) in ARTIFACTS {
+        let text = fs::read_to_string(module_root().join("schemas").join(file)).expect("reads");
+        for stale in [
+            "\"definitions\"",
+            "#/definitions/",
+            "\"dependencies\"",
+            "\"format\"",
+        ] {
+            assert!(!text.contains(stale), "{name}: {file} still uses {stale}");
+        }
     }
+    let argument =
+        read_json(&module_root().join("schemas/assurance-argument-frontmatter.schema.json"));
+    assert_eq!(
+        argument["$defs"]["assumption"]["properties"]["review_by"],
+        json!({"type": "string", "pattern": RFC_3339_DATE_TIME}),
+        "review_by must carry the one documented RFC 3339 pattern"
+    );
+    let plan = read_json(&module_root().join("schemas/measurement-plan-frontmatter.schema.json"));
+    assert_eq!(
+        plan["$defs"]["decision_rule"]["dependentRequired"],
+        json!({"margin": ["baseline"], "margin_mode": ["margin"]})
+    );
 }
 
 #[trace("TC-194", "FR-003-AC-7")]
 #[test]
-fn the_transformation_refuses_draft_07_forms_it_cannot_carry_over() {
-    let refused = [
-        json!({"items": [{"type": "string"}]}),
-        json!({"items": {"type": "string"}, "additionalItems": false}),
-        json!({"$ref": "#/definitions/a", "description": "sibling"}),
-    ];
-    for case in refused {
-        assert!(schema(&case).is_err(), "{case}");
+fn digested_schemas_carry_no_carriage_return_and_are_excluded_from_line_ending_conversion() {
+    let manifest = manifest();
+    for entry in declared_types(&manifest) {
+        let Some(relative) = entry["data_schema"]["schema"].as_str() else {
+            continue;
+        };
+        let bytes = fs::read(module_root().join(relative)).expect("schema reads");
+        assert!(
+            !bytes.contains(&b'\r'),
+            "{relative} contains a carriage return"
+        );
     }
-    let converted = schema(&json!({
-        "dependencies": {"a": ["b"], "c": {"required": ["d"]}},
-        "properties": {"dependencies": {"type": "string"}, "r": {"$ref": "#/definitions/x"}}
-    }))
-    .expect("convertible");
-    assert_eq!(converted["dependentRequired"], json!({"a": ["b"]}));
-    assert_eq!(
-        converted["dependentSchemas"],
-        json!({"c": {"required": ["d"]}})
+    let attributes =
+        fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".gitattributes"))
+            .expect(".gitattributes exists");
+    assert!(
+        attributes
+            .lines()
+            .any(|line| line.trim() == "engineering_assurance/schemas/*.json -text"),
+        "digested schemas must be excluded from line-ending conversion"
     );
-    assert_eq!(
-        converted["properties"]["dependencies"],
-        json!({"type": "string"}),
-        "a property named like a keyword is data, not a keyword"
-    );
-    assert_eq!(converted["properties"]["r"]["$ref"], "#/$defs/x");
 }
 
-// --- behavioural equivalence -------------------------------------------------
+// --- behaviour ---------------------------------------------------------------
 
-fn validator(schema: &Value, draft: jsonschema::Draft) -> jsonschema::Validator {
+/// Built at the consumer's default options: under 2020-12 `format` is only an
+/// annotation, so every constraint must be a real keyword.
+fn validator(schema: &Value) -> jsonschema::Validator {
     jsonschema::options()
-        .with_draft(draft)
-        // `format` is an annotation under 2020-12 by default and an assertion
-        // under draft-07; assert it in both so the comparison is like for like.
-        .should_validate_formats(true)
         .build(schema)
-        .expect("schema compiles")
+        .expect("schema compiles at default options")
 }
 
 fn frontmatter(name: &str) -> Value {
@@ -542,6 +468,28 @@ fn decision_rule_cases() -> Vec<(&'static str, Value)> {
     ]
 }
 
+/// `assumptions[].review_by` is a nested `format: date-time`; the mutations
+/// above only reach top-level keys.
+fn review_by_cases() -> Vec<(String, Value)> {
+    [
+        "2030-01-01T00:00:00Z",
+        "2030-01-01T00:00:00.5+02:00",
+        "next spring",
+        "2030-01-01",
+        "2030-13-01T00:00:00Z",
+        "2030-01-01T25:00:00Z",
+        "",
+        "2030-01-01T00:00:00",
+    ]
+    .into_iter()
+    .map(|value| {
+        let mut plan = frontmatter("AssuranceArgument");
+        plan["assumptions"][0]["review_by"] = json!(value);
+        (format!("review_by {value:?}"), plan)
+    })
+    .collect()
+}
+
 /// The retired-plan shape from `tests/measurement_schema_retired.rs`.
 fn retired_legacy_plan() -> Value {
     json!({
@@ -620,18 +568,19 @@ fn retired_cases() -> Vec<(String, Value)> {
 
 #[trace("TC-195", "FR-003-AC-8")]
 #[test]
-fn the_2020_12_export_accepts_and_refuses_exactly_what_its_draft_07_source_does() {
-    let mut compared = 0_usize;
+fn each_artifact_schema_gives_the_verdicts_the_original_draft_07_schema_gave() {
+    let recorded: Value = serde_json::from_str(VERDICTS).expect("verdict fixture is JSON");
     let mut accepted = 0_usize;
     let mut refused = 0_usize;
-    for (name, source, file) in EXPORTS {
-        let draft07 = read_json(&module_root().join("schemas").join(source));
-        let draft2020 = read_json(&module_root().join("schemas").join(file));
-        let old = validator(&draft07, jsonschema::Draft::Draft7);
-        let new = validator(&draft2020, jsonschema::Draft::Draft202012);
+    for (name, file) in ARTIFACTS {
+        let schema = read_json(&module_root().join("schemas").join(file));
+        let validator = validator(&schema);
 
         let base = frontmatter(name);
         let mut cases = mutations(&base);
+        if name == "AssuranceArgument" {
+            cases.extend(review_by_cases());
+        }
         if name == "MeasurementPlan" {
             cases.extend(
                 decision_rule_cases()
@@ -641,18 +590,29 @@ fn the_2020_12_export_accepts_and_refuses_exactly_what_its_draft_07_source_does(
             cases.extend(retired_cases());
         }
         assert!(
-            old.is_valid(&base) && new.is_valid(&base),
-            "{name}: the skeleton must be accepted by both"
+            validator.is_valid(&base),
+            "{name}: the skeleton must be accepted"
+        );
+
+        let expected = recorded[name]
+            .as_object()
+            .expect("recorded verdicts per type");
+        assert_eq!(
+            cases.len(),
+            expected.len(),
+            "{name}: the corpus and the recorded verdicts differ in size"
         );
         for (label, document) in cases {
-            let before = old.is_valid(&document);
+            let verdict = expected
+                .get(&label)
+                .and_then(Value::as_bool)
+                .unwrap_or_else(|| panic!("{name} / {label}: no recorded verdict"));
             assert_eq!(
-                before,
-                new.is_valid(&document),
-                "{name} / {label}: draft-07 says {before}, 2020-12 disagrees"
+                validator.is_valid(&document),
+                verdict,
+                "{name} / {label}: the verdict changed from the recorded draft-07 one"
             );
-            compared += 1;
-            if before {
+            if verdict {
                 accepted += 1;
             } else {
                 refused += 1;
@@ -664,5 +624,4 @@ fn the_2020_12_export_accepts_and_refuses_exactly_what_its_draft_07_source_does(
         accepted > 10 && refused > 100,
         "{accepted} accepted, {refused} refused"
     );
-    assert!(compared > 200, "{compared} cases compared");
 }

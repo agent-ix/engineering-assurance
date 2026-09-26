@@ -30,11 +30,11 @@ const FORBIDDEN_SUFFIXES: &[&str] = &[
 const SEMANTIC_EXPORT_SCHEMAS: &[&str] = &[
     "campaign-enum.schema.json",
     "campaign-value.schema.json",
-    "assurance-profile.schema.json",
-    "measurement-plan.schema.json",
-    "architecture-description.schema.json",
-    "component-assurance-contract.schema.json",
-    "assurance-argument.schema.json",
+    "assurance-profile-frontmatter.schema.json",
+    "measurement-plan-frontmatter.schema.json",
+    "architecture-description-frontmatter.schema.json",
+    "component-assurance-contract-frontmatter.schema.json",
+    "assurance-argument-frontmatter.schema.json",
 ];
 
 const SEMANTIC_POLICY_FILES: &[&str] = &[

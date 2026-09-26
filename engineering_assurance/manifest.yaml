@@ -6,8 +6,10 @@ semantic:
   contract_version: 1.0.0
   semantic_core: 0.3.0
   package: agent-ix/engineering-assurance-campaign
-  # Each exported artifact type's data_schema is derived from its draft-07
-  # frontmatter schema; regenerate with `EA_BLESS=1 cargo test --test semantic_exports`.
+  # Each exported artifact type's data_schema is its frontmatter schema itself
+  # (one 2020-12 file, also its frontmatter_schema_ref). On a version bump run
+  # `EA_BLESS=1 cargo test --test semantic_exports -- --ignored bless` to
+  # rewrite the schemas' `$id` version and every digest below.
   exports:
     - AssuranceProfile
     - MeasurementPlan
@@ -63,8 +65,8 @@ artifact_types:
     grammar_ref: engineering-assurance
     frontmatter_schema_ref: schemas/assurance-profile-frontmatter.schema.json
     data_schema:
-      schema: schemas/assurance-profile.schema.json
-      digest: sha256:26e7841797fd80a5ef8a1e0340b6ab1a980f5d87bd840fbdf5639efc1ba8afd3
+      schema: schemas/assurance-profile-frontmatter.schema.json
+      digest: sha256:be0d9f46886e1d2ea5e7a8ce289326eae4c74aea9a409e69afd85e7fa6054e27
     defaults:
       id_pattern: AP-{next:03d}
     allowed_links: [governs, references]
@@ -79,8 +81,8 @@ artifact_types:
     grammar_ref: engineering-assurance
     frontmatter_schema_ref: schemas/measurement-plan-frontmatter.schema.json
     data_schema:
-      schema: schemas/measurement-plan.schema.json
-      digest: sha256:7060a5746146b604f43ddbc4babd2b82ec7a7b3b067753b75f1d8f24b2dfd13e
+      schema: schemas/measurement-plan-frontmatter.schema.json
+      digest: sha256:391a6cd741650f8679ee1faf9f549055be5c3d2a588f98de690b3eea51e1fddc
     defaults:
       id_pattern: MP-{next:03d}
     allowed_links: [measures, references]
@@ -95,8 +97,8 @@ artifact_types:
     grammar_ref: engineering-assurance
     frontmatter_schema_ref: schemas/architecture-description-frontmatter.schema.json
     data_schema:
-      schema: schemas/architecture-description.schema.json
-      digest: sha256:7448193f4048e630c0b319d3a23a65e14eaf7739e47592e43d06c8d48f789424
+      schema: schemas/architecture-description-frontmatter.schema.json
+      digest: sha256:520fba41b1d8fdc0f86123f1f7ddecab01aa4b85312424e856b6d1800f0f1a55
     defaults:
       id_pattern: AD-{next:03d}
     allowed_links: [realizes, references]
@@ -111,8 +113,8 @@ artifact_types:
     grammar_ref: engineering-assurance
     frontmatter_schema_ref: schemas/component-assurance-contract-frontmatter.schema.json
     data_schema:
-      schema: schemas/component-assurance-contract.schema.json
-      digest: sha256:485cfa4c33e44789d0cad6fb06b0f78829e4ccd2770eb8a7ef257478d39c70ae
+      schema: schemas/component-assurance-contract-frontmatter.schema.json
+      digest: sha256:db099957333cd910c4aee3bef753d847e7fa5bdc09738bc9635753943bc8c749
     defaults:
       id_pattern: CAC-{next:03d}
     allowed_links: [references]
@@ -128,8 +130,8 @@ artifact_types:
     grammar_ref: engineering-assurance
     frontmatter_schema_ref: schemas/assurance-argument-frontmatter.schema.json
     data_schema:
-      schema: schemas/assurance-argument.schema.json
-      digest: sha256:43ad6aa1e44b396693673aac9bd2c1c51211e5e7d59e1ff4d4cfacfb63d29a7e
+      schema: schemas/assurance-argument-frontmatter.schema.json
+      digest: sha256:3e83295cb72c3a76b9aedb1b369520569cae38f99463a931e0dac2f6b89817ce
     defaults:
       id_pattern: AA-{next:03d}
     allowed_links: [supports, references]

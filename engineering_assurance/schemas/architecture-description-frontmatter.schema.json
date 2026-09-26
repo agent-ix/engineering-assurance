@@ -1,5 +1,6 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.agent-ix.org/agent-ix/engineering-assurance-campaign/0.5.0/architecture-description-frontmatter.schema.json",
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "title", "type", "status", "owner", "system", "relationships"],
@@ -12,10 +13,10 @@
     "system": { "type": "string", "minLength": 1 },
     "relationships": {
       "type": "array",
-      "items": { "$ref": "#/definitions/relationship" }
+      "items": { "$ref": "#/$defs/relationship" }
     }
   },
-  "definitions": {
+  "$defs": {
     "relationship": {
       "type": "object",
       "additionalProperties": false,

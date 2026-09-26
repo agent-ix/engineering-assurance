@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 
 import yaml
-from jsonschema import Draft7Validator, FormatChecker
+from jsonschema import Draft202012Validator
 
 import engineering_assurance as package
 
@@ -32,38 +32,53 @@ def schema(name: str) -> dict:
 
 
 # Assembled from parts so the content-rights URL scan does not see a literal.
-DRAFT_07_PATH = "//json-schema.org/draft-07/schema"
-DRAFT_07_URIS = tuple(scheme + DRAFT_07_PATH for scheme in ("http:", "https:"))
+DRAFT_07_URIS = tuple(
+    scheme + "//json-schema.org/draft-07/schema" for scheme in ("http:", "https:")
+)
+DRAFT_2020_12_URI = "https:" + "//json-schema.org/draft/2020-12/schema"
 
 
-def _is_draft_07(declared: object) -> bool:
-    return isinstance(declared, str) and declared.removesuffix("#") in DRAFT_07_URIS
+def _dialect(declared: object) -> str | None:
+    if not isinstance(declared, str):
+        return None
+    if declared.removesuffix("#") in DRAFT_07_URIS:
+        return "draft-07"
+    return "2020-12" if declared == DRAFT_2020_12_URI else None
 
 
-def test_draft_07_detector_accepts_every_spelling_and_refuses_other_drafts() -> None:
+def test_dialect_detector_accepts_every_spelling_and_refuses_other_drafts() -> None:
     for uri in DRAFT_07_URIS:
         for declared in (uri, uri + "#"):
-            assert _is_draft_07(declared), declared
+            assert _dialect(declared) == "draft-07", declared
+    assert _dialect(DRAFT_2020_12_URI) == "2020-12"
     for declared in (
         "https:" + "//json-schema.org/draft/2019-09/schema",
         "http:" + "//json-schema.org/draft-04/schema#",
         None,
     ):
-        assert not _is_draft_07(declared), declared
+        assert _dialect(declared) is None, declared
 
 
-def test_draft_07_schemas_use_draft_07_definitions() -> None:
-    # A schema that declares draft-07 must keep its reusable definitions under
-    # `definitions`; `$defs` is a 2019-09 keyword a strict draft-07 tool ignores.
+def test_every_schema_uses_the_forms_of_the_dialect_it_declares() -> None:
+    # `definitions`/array-form `dependencies` are draft-07; `$defs`/
+    # `dependentRequired` are 2019-09+. A file that mixes them validates
+    # differently under different consumers, and a 2020-12 file must not lean on
+    # `format`, which a default-options consumer does not assert.
     paths = sorted((package.PACKAGE_ROOT / "schemas").glob("*.json"))
     assert paths
-    checked = 0
+    seen: set[str] = set()
     for path in paths:
         text = path.read_text()
-        if _is_draft_07(json.loads(text).get("$schema")):
-            checked += 1
-            assert "$defs" not in text, f"{path.name} declares draft-07 but uses $defs"
-    assert checked, "no schema declares draft-07, so this guard checked nothing"
+        dialect = _dialect(json.loads(text).get("$schema"))
+        assert dialect, f"{path.name} declares no supported dialect"
+        seen.add(dialect)
+        if dialect == "draft-07":
+            for modern in ('"$defs"', "#/$defs/", '"dependentRequired"'):
+                assert modern not in text, f"{path.name} is draft-07 but uses {modern}"
+        else:
+            for old in ('"definitions"', "#/definitions/", '"dependencies"', '"format"'):
+                assert old not in text, f"{path.name} is 2020-12 but uses {old}"
+    assert seen == {"draft-07", "2020-12"}, "the guard must exercise both dialects"
 
 
 def test_module_inventory_is_exact() -> None:
@@ -99,10 +114,10 @@ def test_every_schema_and_skeleton_is_valid() -> None:
             package.PACKAGE_ROOT / "skeletons" / f"{artifact['name']}.md"
         )
         contract = json.loads(schema_path.read_text())
-        Draft7Validator.check_schema(contract)
+        Draft202012Validator.check_schema(contract)
         errors = list(
-            Draft7Validator(
-                contract, format_checker=FormatChecker()
+            Draft202012Validator(
+                contract
             ).iter_errors(frontmatter(skeleton_path))
         )
         assert errors == []
@@ -116,7 +131,7 @@ def test_profile_schema_version_and_profile_kind_are_optional() -> None:
     contract = schema("assurance-profile-frontmatter.schema")
     assert "schema_version" not in contract["required"]
     assert "profile_kind" not in contract["required"]
-    impact = contract["definitions"]["impact"]["properties"]
+    impact = contract["$defs"]["impact"]["properties"]
     assert impact["verifiability"]["type"] == "object"
     assert impact["detect_before_harm"]["properties"]["control_ref"] == {
         "type": "string",
@@ -143,15 +158,15 @@ def test_profile_measurement_policy_is_closed_and_uses_plan_stages() -> None:
     """Trace: FR-025-AC-1, TC-163."""
     contract = schema("assurance-profile-frontmatter.schema")
     plan = schema("measurement-plan-frontmatter.schema")
-    policy = contract["definitions"]["measurement_policy"]
+    policy = contract["$defs"]["measurement_policy"]
     assert policy["properties"]["stages"]["items"]["enum"] == plan["properties"][
         "stage"
     ]["enum"]
-    assert policy["properties"]["mode"]["enum"] == contract["definitions"][
+    assert policy["properties"]["mode"]["enum"] == contract["$defs"][
         "review_policy"
     ]["properties"]["mode"]["enum"]
     assert "measurement_policy" not in contract["required"]
-    validator = Draft7Validator(contract)
+    validator = Draft202012Validator(contract)
     accepted = [
         None,
         {"mode": "recommend", "stages": ["observe"]},
@@ -198,7 +213,7 @@ def test_measurement_stages_and_statistical_design_are_explicit() -> None:
         "target",
         "gate",
     ]
-    required = contract["definitions"]["statistical_design"]["required"]
+    required = contract["$defs"]["statistical_design"]["required"]
     assert required == [
         "population",
         "sampling",
@@ -208,7 +223,7 @@ def test_measurement_stages_and_statistical_design_are_explicit() -> None:
         "uncertainty",
         "decision_rule",
     ]
-    assert contract["definitions"]["statistical_design"]["properties"][
+    assert contract["$defs"]["statistical_design"]["properties"][
         "minimum_population"
     ] == {
         "type": "integer",
@@ -251,7 +266,7 @@ def test_ground_truth_kind_is_required_only_for_gate_stage() -> None:
         "agent-labelled",
         "mechanical",
     ]
-    validator = Draft7Validator(contract, format_checker=FormatChecker())
+    validator = Draft202012Validator(contract)
 
     baseline = _minimal_measurement_plan(stage="baseline")
     assert list(validator.iter_errors(baseline)) == []
@@ -281,7 +296,7 @@ def test_subject_identity_is_optional_name_and_version() -> None:
     assert set(subject_identity["properties"]) == {"name", "version"}
     assert "subject_identity" not in contract["required"]
 
-    validator = Draft7Validator(contract, format_checker=FormatChecker())
+    validator = Draft202012Validator(contract)
     plan = _minimal_measurement_plan(
         subject_identity={"name": "juniper-classifier", "version": "2026.09.1"}
     )
@@ -298,7 +313,7 @@ def test_preregistration_is_optional_and_requires_a_sha256_bar_digest() -> None:
     assert set(preregistration["properties"]) == {"bar_digest"}
     assert "preregistration" not in contract["required"]
 
-    validator = Draft7Validator(contract, format_checker=FormatChecker())
+    validator = Draft202012Validator(contract)
     digest = "sha256:" + "a" * 64
     plan = _minimal_measurement_plan(preregistration={"bar_digest": digest})
     assert list(validator.iter_errors(plan)) == []
@@ -318,7 +333,7 @@ def test_objective_is_optional_and_target_requires_a_bound() -> None:
     """Trace: FR-020-AC-1, TC-139."""
     contract = schema("measurement-plan-frontmatter.schema")
     assert "objective" not in contract["required"]
-    validator = Draft7Validator(contract, format_checker=FormatChecker())
+    validator = Draft202012Validator(contract)
 
     def errors(**overrides: object) -> list[str]:
         plan = _minimal_measurement_plan(**overrides)
@@ -343,8 +358,8 @@ def test_measurement_plan_skeleton_shows_a_valid_objective() -> None:
     """Trace: FR-020-AC-1, TC-139."""
     skeleton = frontmatter(package.PACKAGE_ROOT / "skeletons" / "MeasurementPlan.md")
     assert skeleton["objective"]["direction"] in {"higher", "lower", "zero", "target"}
-    validator = Draft7Validator(
-        schema("measurement-plan-frontmatter.schema"), format_checker=FormatChecker()
+    validator = Draft202012Validator(
+        schema("measurement-plan-frontmatter.schema")
     )
     assert list(validator.iter_errors(skeleton)) == []
 
@@ -352,7 +367,7 @@ def test_measurement_plan_skeleton_shows_a_valid_objective() -> None:
 def test_objective_steering_fields_are_optional_advisory_and_range_checked() -> None:
     """Trace: FR-026-AC-1, TC-166."""
     contract = schema("measurement-plan-frontmatter.schema")
-    objective_schema = contract["definitions"]["objective"]
+    objective_schema = contract["$defs"]["objective"]
     assert set(objective_schema["properties"]) == {
         "direction",
         "bound",
@@ -361,7 +376,7 @@ def test_objective_steering_fields_are_optional_advisory_and_range_checked() -> 
         "budget",
     }
     assert objective_schema["required"] == ["direction"]
-    validator = Draft7Validator(contract, format_checker=FormatChecker())
+    validator = Draft202012Validator(contract)
 
     def errors(**objective_overrides: object) -> list[str]:
         plan = _minimal_measurement_plan(
@@ -405,8 +420,8 @@ def test_measurement_plan_skeleton_shows_the_steering_fields() -> None:
     assert objective["weight"] > 0
     assert objective["value_half_life"] > 0
     assert objective["budget"] >= 0
-    validator = Draft7Validator(
-        schema("measurement-plan-frontmatter.schema"), format_checker=FormatChecker()
+    validator = Draft202012Validator(
+        schema("measurement-plan-frontmatter.schema")
     )
     assert list(validator.iter_errors(skeleton)) == []
     body = (package.PACKAGE_ROOT / "skeletons" / "MeasurementPlan.md").read_text(
@@ -453,8 +468,8 @@ def _statistical_design(**overrides: object) -> dict:
 def _statistical_design_errors(
     objective: dict | None = None, **overrides: object
 ) -> list[str]:
-    validator = Draft7Validator(
-        schema("measurement-plan-frontmatter.schema"), format_checker=FormatChecker()
+    validator = Draft202012Validator(
+        schema("measurement-plan-frontmatter.schema")
     )
     plan = _minimal_measurement_plan(
         metric="request_retention_rate",
@@ -468,7 +483,7 @@ def _statistical_design_errors(
 def test_decision_rule_is_a_closed_comparator_with_exactly_one_reference() -> None:
     """Trace: FR-021-AC-1, FR-021-AC-13, TC-144, TC-192."""
     contract = schema("measurement-plan-frontmatter.schema")
-    rule = contract["definitions"]["decision_rule"]
+    rule = contract["$defs"]["decision_rule"]
     assert rule["properties"]["comparator"]["enum"] == ["gt", "ge", "lt", "le", "eq"]
     assert rule["properties"]["baseline"]["enum"] == [
         "constant-predictor",
@@ -580,7 +595,7 @@ def test_decision_rule_is_a_closed_comparator_with_exactly_one_reference() -> No
         decision_rule={"comparator": "ge", "threshold": float("inf")}
     ) == []
 
-    validator = Draft7Validator(contract, format_checker=FormatChecker())
+    validator = Draft202012Validator(contract)
     without_metric = _minimal_measurement_plan(statistical_design=_statistical_design())
     assert "'metric' is a required property" in [
         error.message for error in validator.iter_errors(without_metric)
@@ -721,7 +736,7 @@ def test_decision_rule_external_reference_baseline_has_no_estimator_restriction(
 def test_estimator_is_a_closed_vocabulary() -> None:
     """Trace: FR-021-AC-2, TC-145."""
     contract = schema("measurement-plan-frontmatter.schema")
-    assert contract["definitions"]["statistical_design"]["properties"]["estimator"]["enum"] == [
+    assert contract["$defs"]["statistical_design"]["properties"]["estimator"]["enum"] == [
         "proportion",
         "count",
         "mean",
@@ -734,7 +749,7 @@ def test_estimator_is_a_closed_vocabulary() -> None:
         assert _statistical_design_errors(estimator=refused) != [], refused
     # Prose fields stay prose (FR-021): only estimator and decision_rule close.
     for prose in ("population", "sampling", "error_model", "uncertainty"):
-        prose_field = contract["definitions"]["statistical_design"]["properties"][prose]
+        prose_field = contract["$defs"]["statistical_design"]["properties"][prose]
         assert prose_field["type"] == "string"
         assert prose_field["minLength"] == 1
         assert set(prose_field) <= {"type", "minLength", "description"}
@@ -752,8 +767,8 @@ def test_measurement_plan_skeleton_shows_a_structured_decision_rule() -> None:
     # test_measurement_plan_skeleton_shows_the_steering_fields.
     assert skeleton["objective"]["direction"] == "higher"
     assert skeleton["objective"]["bound"] == 0.995
-    validator = Draft7Validator(
-        schema("measurement-plan-frontmatter.schema"), format_checker=FormatChecker()
+    validator = Draft202012Validator(
+        schema("measurement-plan-frontmatter.schema")
     )
     assert list(validator.iter_errors(skeleton)) == []
 
@@ -766,8 +781,8 @@ APPARATUS_PATH_CASES = json.loads(
 
 
 def _apparatus_errors(**overrides: object) -> list[str]:
-    validator = Draft7Validator(
-        schema("measurement-plan-frontmatter.schema"), format_checker=FormatChecker()
+    validator = Draft202012Validator(
+        schema("measurement-plan-frontmatter.schema")
     )
     plan = _minimal_measurement_plan(**overrides)
     return [error.message for error in validator.iter_errors(plan)]
@@ -795,7 +810,7 @@ def test_protected_apparatus_is_a_unique_list_of_safe_relative_paths() -> None:
 def test_negative_controls_are_closed_and_required_at_gate_stage() -> None:
     """Trace: FR-024-AC-2, TC-155."""
     contract = schema("measurement-plan-frontmatter.schema")
-    kinds = contract["definitions"]["negative_control"]["properties"]["kind"]["enum"]
+    kinds = contract["$defs"]["negative_control"]["properties"]["kind"]["enum"]
     assert kinds == [
         "suppressed-observation",
         "gain-within-noise",
@@ -869,8 +884,8 @@ def test_measurement_plan_skeleton_shows_apparatus_and_negative_controls() -> No
     assert skeleton["negative_controls"], skeleton
     kinds = {control["kind"] for control in skeleton["negative_controls"]}
     assert "apparatus-edit" in kinds
-    validator = Draft7Validator(
-        schema("measurement-plan-frontmatter.schema"), format_checker=FormatChecker()
+    validator = Draft202012Validator(
+        schema("measurement-plan-frontmatter.schema")
     )
     assert list(validator.iter_errors(skeleton)) == []
     body = (package.PACKAGE_ROOT / "skeletons" / "MeasurementPlan.md").read_text()
@@ -925,9 +940,8 @@ def _argument_with_top_claim(**claim_overrides: object) -> dict:
 
 def test_supported_claim_must_reference_evidence() -> None:
     """Trace: FR-023-AC-1, FR-023-AC-2, FR-023-AC-3, TC-143."""
-    validator = Draft7Validator(
+    validator = Draft202012Validator(
         schema("assurance-argument-frontmatter.schema"),
-        format_checker=FormatChecker(),
     )
     evidence = "ix://example/juniper/evidence/request-loss-run"
 
@@ -965,7 +979,7 @@ def test_onboarding_checklist_reports_the_nested_evidence_refs_condition() -> No
     `onboard.js` section 4 derives conditional requirements from a schema's
     `allOf`. The claim's `evidence_refs` requirement is not on the
     AssuranceArgument schema's own top-level `allOf` -- it sits inside
-    `definitions/claim`, reached only through `top_claim`'s `$ref`. Assert the
+    `$defs/claim`, reached only through `top_claim`'s `$ref`. Assert the
     onboarding checklist actually walks that `$ref` and surfaces the
     condition, rather than silently omitting it (or warning that it cannot
     read it).
