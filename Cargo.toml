@@ -287,6 +287,7 @@ content-rights = [
 ]
 discovery = ["workflow", "dep:serde", "dep:serde_json", "dep:thiserror"]
 evaluation = [
+  "content-digest",
   "evidence",
   "workflow",
   "dep:serde",
@@ -295,6 +296,7 @@ evaluation = [
   "dep:time",
 ]
 evaluation-reports = [
+  "content-digest",
   "evaluation",
   "evidence",
   "workflow",

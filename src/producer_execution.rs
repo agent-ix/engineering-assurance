@@ -79,9 +79,12 @@ impl ContentDigest {
     /// crate's filesystem access (FR-014-AC-4). Execution itself hashes the
     /// executable bytes read through one capability-confined descriptor,
     /// before the pinned path is executed, and does not rely on this
-    /// convenience helper. Refuses symbolic links and anything that is not a
-    /// regular file, refuses files above 1 GiB, and fails when the bytes read
-    /// differ from the file's length.
+    /// convenience helper. Checks `symlink_metadata` before opening and
+    /// refuses a symbolic link or anything that is not a regular file, refuses
+    /// files above 1 GiB, and fails when the bytes read differ from the
+    /// file's length. Limitation: the check and the open are separate steps
+    /// and the open does not use `O_NOFOLLOW`, so a path swapped between them
+    /// is followed.
     ///
     /// # Errors
     ///
@@ -1500,7 +1503,14 @@ fn open_executable(
     })
     .map_err(|failure| match failure {
         DigestError::Cancelled => PreflightFailure::Cancelled(None),
-        _ => PreflightFailure::Refused(ExecutionRefusal::ExecutableIdentity, None),
+        DigestError::Invalid
+        | DigestError::UnknownAlgorithm
+        | DigestError::Unavailable
+        | DigestError::NotRegular
+        | DigestError::TooLarge
+        | DigestError::Unreadable => {
+            PreflightFailure::Refused(ExecutionRefusal::ExecutableIdentity, None)
+        }
     })?;
     if executable_digest != request.producer.executable_digest {
         return Err(PreflightFailure::Refused(
@@ -1567,7 +1577,12 @@ fn open_input(
     )
     .map_err(|failure| match failure {
         DigestError::Cancelled => PreflightFailure::Cancelled(Some(executable_digest.clone())),
-        _ => refused(),
+        DigestError::Invalid
+        | DigestError::UnknownAlgorithm
+        | DigestError::Unavailable
+        | DigestError::NotRegular
+        | DigestError::TooLarge
+        | DigestError::Unreadable => refused(),
     })?;
     if observed != input.digest {
         return Err(refused());
@@ -2959,21 +2974,8 @@ mod campaign_source_projection {
         Path, Read,
     };
     use crate::campaign::{CampaignError, CampaignSource, OmittedSourceLink, SourceTreeBinding};
-    // Git object identity (blob SHA-1 / SHA-256 object format), not a content
-    // identity: it must equal what `git` reports, whatever `ContentDigest` uses.
-    use sha1::{Digest as Sha1Digest, Sha1};
-    use sha2::{Digest, Sha256};
+    use crate::git_object_id::GitBlobHasher;
     use std::io::Cursor;
-
-    fn lowercase_hex(bytes: &[u8]) -> String {
-        const HEX: &[u8; 16] = b"0123456789abcdef";
-        let mut result = String::with_capacity(bytes.len() * 2);
-        for byte in bytes {
-            result.push(char::from(HEX[usize::from(byte >> 4)]));
-            result.push(char::from(HEX[usize::from(byte & 0x0f)]));
-        }
-        result
-    }
 
     /// Expands and verifies an exact Git tree into FR-019 regular-file inputs.
     /// The executor repeats the SHA-256 check against sealed descriptors before
@@ -3228,11 +3230,7 @@ mod campaign_source_projection {
         length: u64,
         oid: &str,
     ) -> Result<ContentDigest, CampaignError> {
-        let header = format!("blob {length}\0");
-        let mut git_sha1 = Sha1::new();
-        let mut git_sha256 = Sha256::new();
-        git_sha1.update(header.as_bytes());
-        git_sha256.update(header.as_bytes());
+        let mut git = GitBlobHasher::new(length, oid.len());
         let mut content = ContentDigest::hasher();
         let mut read_total = 0_u64;
         let mut buffer = [0_u8; 16 * 1024];
@@ -3257,8 +3255,7 @@ mod campaign_source_projection {
                     field: "source file changed",
                 });
             }
-            git_sha1.update(&buffer[..count]);
-            git_sha256.update(&buffer[..count]);
+            git.update(&buffer[..count]);
             content.update(&buffer[..count]);
         }
         if read_total != length {
@@ -3266,11 +3263,7 @@ mod campaign_source_projection {
                 field: "source file changed",
             });
         }
-        let observed_oid = if oid.len() == 40 {
-            lowercase_hex(&git_sha1.finalize())
-        } else {
-            lowercase_hex(&git_sha256.finalize())
-        };
+        let observed_oid = git.finalize();
         if observed_oid != oid {
             return Err(CampaignError::SourceTree {
                 field: "Git blob mismatch",

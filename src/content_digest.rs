@@ -204,6 +204,15 @@ pub struct DigestHasher {
     state: HasherState,
 }
 
+impl std::fmt::Debug for DigestHasher {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Deliberately opaque: the running state is not an identity.
+        formatter
+            .debug_struct("DigestHasher")
+            .finish_non_exhaustive()
+    }
+}
+
 enum HasherState {
     Sha256(Sha256),
 }

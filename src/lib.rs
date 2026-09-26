@@ -37,8 +37,8 @@
 //! | `content-digest` | `content_digest` | | `serde`, `sha2`, `thiserror` |
 //! | `content-rights` | `content_rights` | | `regex`, `serde`, `serde_json`, `thiserror`, `unicode-casefold` |
 //! | `discovery` | `discovery` | `workflow` | `serde`, `serde_json`, `thiserror` |
-//! | `evaluation` | `evaluation` | `evidence`, `workflow` (implies `exact-numbers`) | `serde`, `serde_json`, `thiserror`, `time` |
-//! | `evaluation-reports` | `evaluation_reports` | `evaluation`, `evidence`, `workflow` (implies `exact-numbers`) | `serde`, `serde_json`, `thiserror` |
+//! | `evaluation` | `evaluation` | `content-digest`, `evidence`, `workflow` (implies `exact-numbers`) | `serde`, `serde_json`, `thiserror`, `time` |
+//! | `evaluation-reports` | `evaluation_reports` | `content-digest`, `evaluation`, `evidence`, `workflow` (implies `exact-numbers`) | `serde`, `serde_json`, `thiserror` |
 //! | `evidence` | `evidence` | `content-digest`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
 //! | `manifest` | `manifest` | `structured-yaml` | `jsonschema`, `serde`, `serde_json`, `thiserror` |
 //! | `measurement` | `measurement` | | `serde`, `thiserror` |
@@ -78,6 +78,8 @@ pub mod evaluation;
 pub mod evaluation_reports;
 #[cfg(feature = "evidence")]
 pub mod evidence;
+#[cfg(feature = "campaign")]
+mod git_object_id;
 #[cfg(feature = "manifest")]
 pub mod manifest;
 #[cfg(feature = "measurement")]
