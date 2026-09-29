@@ -229,8 +229,8 @@ Documents written against v0.3.x or earlier can fail the current schemas.
     a `comparator` plus either a `threshold` or a `baseline`, and an optional
     `margin`;
   - a plan with a `statistical_design` must state its `metric`;
-  - a `gate`-stage plan that is not retired must have `ground_truth_kind`,
-    `negative_controls`, and `protected_apparatus`;
+  - a `gate`-stage plan that is not retired must have `ground_truth_kind`
+    and `negative_controls`;
   - `objective`, `subject_identity`, and `preregistration` are new and
     optional.
 

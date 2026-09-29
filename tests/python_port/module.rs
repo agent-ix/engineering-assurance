@@ -1097,7 +1097,6 @@ fn measurement_plan_skeleton_shows_apparatus_and_negative_controls() {
     assert!(body.contains("## Protected Apparatus"));
     assert!(body.contains("## Negative Controls"));
     let skill = onboarding_skill();
-    assert!(skill.contains("`protected_apparatus`"));
     assert!(skill.contains("`negative_controls`"));
     kinds.extend(["gain-within-noise", "stale-evidence", "selective-reporting"]);
     for kind in kinds {

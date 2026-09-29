@@ -100,10 +100,8 @@ answer-space family instead of one per family silently understates it.
 
 When the decision owner states which way the metric should move, record it in
 the plan's optional `objective` block rather than only in prose:
-`direction` is one of `higher`, `lower`, `zero`, or `target`, and `bound` is
-the goal the metric should reach, required when `direction` is `target` (see
-the `MeasurementPlan` skeleton). `bound` is informational and never evaluated;
-only `decision_rule` is. Do not invent an objective the owner has not stated.
+`direction` is one of `higher`, `lower`, `zero`, or `target` (see the
+`MeasurementPlan` skeleton). Do not invent an objective the owner has not stated.
 The objective may also carry optional steering fields, in units the plan's
 body states: `weight` (relative value, non-negative), `value_half_life` (how
 fast the value of improving decays, strictly positive), and `budget` (time,
@@ -132,36 +130,12 @@ then required; do not restate `metric`, `repetitions`, or
 do not invent a threshold or margin the owner has not stated. `population`,
 `sampling`, `error_model`, and `uncertainty` remain prose.
 
-List the files that produce the plan's number in `protected_apparatus`: the
-harness, the labels, corpus, or answer key, the file that selects the
-population, and the checker configuration. Each entry is a repository-relative
-file path or a directory entry ending in `/**` (every file under that
-directory, recursively); no other wildcard is allowed, `**` alone is refused,
-and so are absolute paths, `.`/`..` segments, empty segments, control
-characters, and `\ ? [ ] { } :`. The list is non-empty with no repeats, and a
-gate-stage plan, or any plan declaring an `apparatus-edit` control, must have
-one. Quoin's intake resolves each entry (case-sensitive, dotfiles included,
-symlinks refused, a directory entry must hold at least one file, an entry that
-names nothing refuses the collection) and records the (path, digest) set; any
-difference in that set is an apparatus change. A change that edits a
-protected file changed the measurement, not the thing measured, and earns no
-credit. Protect the population through the file that selects it;
-`statistical_design.population` stays prose.
-
 A gate-stage plan also declares at least one `negative_controls` entry,
 `{ kind, description }`: a gaming scenario the plan says it guards against and
 how. `kind` is one of `suppressed-observation`, `gain-within-noise`,
 `stale-evidence`, `apparatus-edit`, or `selective-reporting`. The declaration
 is checked for shape only; Quoin's checker exercises the kinds it can detect.
 Declare only controls the owner has stated.
-
-The objective's `direction` and `bound`, `estimator`, `decision_rule`, and
-`protected_apparatus` list are all part of the measurement definition (the
-objective's steering fields are not; retuning them needs no new version): when you add, remove, or change
-any of them on an existing plan, also change `definition_version`, so results
-under the old and new definition are never compared as one series. Editing a
-protected file needs a new `definition_version` too; Quoin detects that edit
-through the file's digest.
 
 When an artifact is justified, render it from the installed module skeleton,
 write a same-directory staging file, validate it with Quire, and expose it only
@@ -187,35 +161,3 @@ create or resume the stable run and its `run_binding` item. Record interviews
 and evidence items with ix-flow itself. At `decision_ready`, use the `decide`
 operation only after the bound owner supplies an explicit `accept` or `reject`;
 send no choice to leave the run non-terminal.
-
-### Measurement promotion and the checker's verdict
-
-An AssuranceProfile may carry `measurement_policy: { mode, stages }`, where
-`mode` is `recommend` or `require` and `stages` is a non-empty list of distinct
-MeasurementPlan stages. In a `measurement-promotion` run:
-
-- Record the governing profile's policy as one `measurement_policy` item
-  (`profile_path`, `mode`, `stages`) before evidence. Record nothing when the
-  profile has none: every stage is then `recommend`.
-- Record the independent checker's `quoin.measurement-verdict.v1` document
-  unchanged as a `measurement_verdict` item, and bind the `promotion_evidence`
-  item to it with `plan_id` (the plan's frontmatter `id`) and `candidate` (the
-  collection id the checker decided). The verdict must be for the evidence's
-  `definition_version`.
-- The verdict comes from `quoin measurement verify`. Before planning a
-  `require` stage, check that `quoin measurement --help` lists `verify`.
-  Without it no verdict can be recorded, so a `require`
-  stage refuses with `promotion_checker_missing`. Tell the owner, and offer
-  `recommend` or an owner-stated `exception` instead.
-- `recommend`, and any stage the policy does not list: `measurement.promotion_ready`
-  never refuses on the checker, including when no result was recorded. Tell
-  the decision owner what the recorded verdict says.
-- `require` for the proposed stage: the promotion is refused unless the bound
-  result says `accept` and its `orderSource` is `git-first-parent-add`.
-  The codes are `promotion_checker_missing`, `promotion_checker_mismatch`,
-  `promotion_checker_not_accepted`, and `promotion_checker_order_unattested`.
-- The owner overrides a refusal only with a current `exception` item (owner,
-  expiry, rationale, impact), which stays in the run as the record of the
-  override. Never record an exception the owner has not stated.
-- An accepted verdict does not promote. The owner still decides at the
-  human-gated terminal transition. Recommend `require` at `gate` only.

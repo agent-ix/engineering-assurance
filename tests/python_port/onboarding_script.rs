@@ -435,20 +435,6 @@ fn onboard_js_lists_the_profile_measurement_policy() {
     let skeleton = read(&module.join("skeletons/AssuranceProfile.md"));
     assert!(skeleton.contains("measurement_policy:\n  mode: require\n  stages: [gate]\n"));
     assert!(skeleton.contains("## Measurement Policy"));
-    let skill = read(&module.join("skills/assurance-onboarding/SKILL.md"));
-    for phrase in [
-        "measurement_policy",
-        "measurement_verdict",
-        "quoin.measurement-verdict.v1",
-        "git-first-parent-add",
-        "promotion_checker_missing",
-        "promotion_checker_mismatch",
-        "promotion_checker_not_accepted",
-        "promotion_checker_order_unattested",
-        "current `exception` item",
-    ] {
-        assert!(skill.contains(phrase), "{phrase}");
-    }
 }
 
 fn help_prints_usage_not_a_report(flag: &str) {
