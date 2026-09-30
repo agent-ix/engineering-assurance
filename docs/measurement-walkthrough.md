@@ -5,11 +5,8 @@ it back. It uses Quoin's `quoin measurement record` and `quoin report`
 commands. Engineering Assurance supplies the `MeasurementPlan` type; Quoin owns
 the collection format and the measurement store.
 
-Every file below was recorded and reported with quoin 0.24.1 (the version the
-[compatibility matrix](../engineering_assurance/compatibility-matrix.json)
-pins) and with quoin 0.23.1, and validated with quire-cli 0.33.0 against the
-v0.4.0 and v0.4.1 modules. The service, harness, and digests are fictional. Run the
-commands from the repository root, or pass `--repo <repo_root>`.
+The service, harness, and digests are fictional. Run the commands from the
+repository root, or pass `--repo <repo_root>`.
 
 ## 1. Write the plan
 

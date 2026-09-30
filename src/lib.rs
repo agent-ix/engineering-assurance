@@ -33,7 +33,6 @@
 //! |---|---|---|---|
 //! | `atomic-publish` | `atomic_publish` (Unix only) | | `rustix`, `thiserror` |
 //! | `claim-strength` | `claim_strength` | | `serde` |
-//! | `compatibility` | `compatibility` | | `serde`, `serde_json`, `thiserror` |
 //! | `compatibility-corpus` | `compatibility_corpus` | `content-digest` | `serde`, `serde_json`, `thiserror` |
 //! | `content-digest` | `content_digest` | | `serde`, `sha2`, `thiserror` |
 //! | `content-rights` | `content_rights` | | `regex`, `serde`, `serde_json`, `thiserror`, `unicode-casefold` |
@@ -66,8 +65,6 @@ pub mod atomic_publish;
 pub mod campaign;
 #[cfg(feature = "claim-strength")]
 pub mod claim_strength;
-#[cfg(feature = "compatibility")]
-pub mod compatibility;
 #[cfg(feature = "compatibility-corpus")]
 pub mod compatibility_corpus;
 #[cfg(feature = "content-digest")]

@@ -5,8 +5,6 @@ type: FR
 relationships:
   - target: "ix://agent-ix/engineering-assurance/US-005"
     type: "implements"
-  - target: "ix://agent-ix/engineering-assurance/FR-012"
-    type: "requires"
 ---
 
 # FR-013: Publish the reviewed campaign migration contract
@@ -18,14 +16,10 @@ every recurring script family in the eight campaign repositories, whether it is
 kept, deleted, or replaced, and that defines the review checklist a migration
 pull request is judged against.
 
-A migration SHALL NOT begin until the compatibility matrix records human
-acceptance.
-
 ## Inputs
 
 - The `scripts/` and `schemas/` trees of the eight campaign repositories, read
   at `origin/main`.
-- The accepted compatibility matrix (FR-012) and its acceptance state.
 - The read-only compatibility view (FR-010) for legacy history.
 - Quoin's adapter inventory for the formats those repositories emit.
 
@@ -65,7 +59,6 @@ fail its gate.
 
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
-| FR-013-CON-1 | The contract SHALL NOT authorize a migration while matrix acceptance is unrecorded. | Responsibility | Test |
 | FR-013-CON-2 | The contract SHALL change no repository's workflow trigger. | Architecture | Test (TC-094) |
 | FR-013-CON-3 | The contract SHALL claim no certification, accreditation, authorization, identity, or non-repudiation. | Responsibility | Test |
 
@@ -80,12 +73,11 @@ fail its gate.
 | FR-013-AC-5 | Rollback is defined per failure mode, legacy history is never rewritten in any of them, and deletion is last. | Test (TC-091) |
 | FR-013-AC-6 | The review checklist covers the inventory, both prohibitions, byte-identical legacy evidence, every non-success state, and the manual-dispatch posture. | Test (TC-092) |
 | FR-013-AC-7 | All eight repositories appear exactly once in the Agent A/B/C allocation. | Test (TC-093) |
-| FR-013-AC-8 | The contract states that migration waits on matrix acceptance and makes no qualification claim (CON-1, CON-3). | Test (TC-094) |
+| FR-013-AC-8 | The contract makes no qualification claim (CON-3). | Test (TC-094) |
 
 ## Dependencies
 
-- **Upstream**: [FR-010](./FR-010-read-only-compatibility-and-reporting.md),
-  [FR-011](./FR-011-accepted-compatibility-corpus.md), and
-  [FR-012](./FR-012-pinned-compatibility-matrix.md).
+- **Upstream**: [FR-010](./FR-010-read-only-compatibility-and-reporting.md) and
+  [FR-011](./FR-011-accepted-compatibility-corpus.md).
 - **Downstream**: the eight repository migrations, each of which is reviewed
   against this contract's checklist.

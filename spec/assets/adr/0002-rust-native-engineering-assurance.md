@@ -56,7 +56,7 @@ configuration, artifacts, and qualification priorities.
 
 | Capability | Rust disposition |
 | --- | --- |
-| Compatibility classification and accepted-corpus access | Port the existing behavior into the library; preserve read-only corpus and matrix behavior. |
+| Accepted-corpus access | Port the existing behavior into the library; preserve read-only corpus behavior. |
 | Verification vocabulary, reference validation, projection, and fixture generation | Port the existing Engineering Assurance mapping and validation behavior without copying external ownership or creating persisted records. |
 | Discovery, onboarding, and run coordination | Port repository-owned behavior; keep Quire and ix-flow authoritative for their domains. |
 | Workflow invariants | Port the canonical invariant behavior; integrate through an interface supported by the ix-flow owner. |

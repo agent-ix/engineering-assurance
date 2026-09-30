@@ -208,7 +208,6 @@ impl<'ast> Visit<'ast> for ChildProgramUse {
 }
 
 #[test]
-#[trace("TC-086", "FR-012-AC-8")]
 #[trace("TC-101", "FR-014-AC-4", "FR-014-CON-1", "FR-014-CON-2")]
 fn tc_101_every_library_module_is_capability_confined() {
     // FR-014-AC-4 admits the FR-019 module wholesale (it has its own check

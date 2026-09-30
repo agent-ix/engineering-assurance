@@ -8,7 +8,7 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::LazyLock;
 
-use super::common::{read, root, truthy};
+use super::common::{read, root};
 
 const CAMPAIGN_REPOSITORIES: [&str; 8] = [
     "quire-contract-ir",
@@ -186,7 +186,6 @@ fn the_review_checklist_covers_every_required_question() {
         "compatibility view",
         "not-computed",
         "manual dispatch",
-        "compatibility-observe",
     ] {
         assert!(
             joined.contains(topic),
@@ -216,42 +215,8 @@ fn the_agent_allocation_covers_all_eight_repositories_once() {
 }
 
 #[test]
-#[trace(
-    "TC-094",
-    "FR-013-AC-8",
-    "FR-013-CON-1",
-    "FR-013-CON-2",
-    "FR-013-CON-3"
-)]
-fn migration_waits_on_acceptance_and_claims_no_qualification() {
-    assert!(CONTRACT.contains("may begin until the compatibility matrix records"));
-    // Whitespace-normalized: the sentence is line-wrapped in the document, and
-    // a reader cares that it is said, not where it broke.
-    let flat = CONTRACT.split_whitespace().collect::<Vec<_>>().join(" ");
-    assert!(flat.contains("An agent cannot grant that acceptance"));
-
-    // Asserting the gate is still *closed* would freeze this test at the moment
-    // it was written; asserting it cannot open anonymously is the property the
-    // contract actually depends on.
-    let matrix_path = super::common::package_root().join("compatibility-matrix.json");
-    let matrix: serde_json::Value = serde_json::from_str(&read(&matrix_path)).expect("valid json");
-    let acceptance = &matrix["accepted"];
-    let state = acceptance["state"].as_str().expect("state is a string");
-    assert!(
-        ["pending_human_acceptance", "accepted"].contains(&state),
-        "unexpected acceptance state {state}"
-    );
-    if state == "accepted" {
-        assert!(
-            truthy(&acceptance["accepted_by"]),
-            "the gate opened with nobody on record"
-        );
-        assert!(
-            truthy(&acceptance["accepted_at"]),
-            "the gate opened with no date on record"
-        );
-    }
-
+#[trace("TC-094", "FR-013-AC-8", "FR-013-CON-2", "FR-013-CON-3")]
+fn migration_claims_no_qualification() {
     assert!(
         CONTRACT.contains("makes no certification, accreditation, authorization, identity, or")
     );

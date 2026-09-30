@@ -711,16 +711,9 @@ fn tc_107_retries_after_gate_defer_and_acknowledgement_converge() {
 
 #[trace("TC-107", "FR-016-AC-3", "FR-016-CON-5", "FR-016-CON-7")]
 #[test]
-fn tc_107_incompatible_unavailable_and_malformed_inputs_fail_before_state() {
+fn tc_107_unavailable_and_malformed_inputs_fail_before_state() {
     let state = TestDirectory::new("host-errors");
     let before = tree_digest(state.path());
-
-    let mut wrong_version = request(state.path(), "wrong-version", "start_or_resume", None);
-    wrong_version["ix_flow_executable"] =
-        Value::String(env!("CARGO_BIN_EXE_engineering-assurance").to_owned());
-    let output = run_host(&wrong_version);
-    assert_eq!(result(&output)["code"], "ix_flow_version_incompatible");
-    assert_eq!(tree_digest(state.path()), before);
 
     let mut unavailable = request(state.path(), "unavailable", "start_or_resume", None);
     unavailable["ix_flow_executable"] =

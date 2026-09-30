@@ -16,9 +16,8 @@ use serde_json::Value;
 
 static TEST_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
-const STAGED_NAMES: [&str; 6] = [
+const STAGED_NAMES: [&str; 5] = [
     "manifest.yaml",
-    "compatibility-matrix.json",
     "contracts",
     "fixtures",
     "schemas",
@@ -61,10 +60,6 @@ fn complete_fixture(name: &str) -> TestDirectory {
     let directory = TestDirectory::new(name);
     let module = directory.path().join("engineering_assurance");
     write(&module.join("manifest.yaml"), b"name: fictional\n");
-    write(
-        &module.join("compatibility-matrix.json"),
-        br#"{"state":"fictional"}"#,
-    );
     for name in ["contracts", "fixtures", "schemas", "skeletons"] {
         write(
             &module.join(name).join("fictional.txt"),
@@ -78,7 +73,6 @@ fn empty_fixture(name: &str) -> TestDirectory {
     let directory = TestDirectory::new(name);
     let module = directory.path().join("engineering_assurance");
     write(&module.join("manifest.yaml"), b"");
-    write(&module.join("compatibility-matrix.json"), b"");
     for name in ["contracts", "fixtures", "schemas", "skeletons"] {
         fs::create_dir(module.join(name)).unwrap();
     }

@@ -145,8 +145,6 @@ same canonical bundle and do not redefine these responsibilities.
   historical PGM-01 records read-only and define bounded reports.
 - [FR-011](./functional/FR-011-accepted-compatibility-corpus.md) — retain the
   accepted real-record corpus and enforce it as the migration gate.
-- [FR-012](./functional/FR-012-pinned-compatibility-matrix.md) — pin the exact
-  released shared-assurance versions and classify an observed toolchain.
 - [FR-013](./functional/FR-013-migration-contract.md) — publish the reviewed
   migration contract the eight repositories are migrated against.
 - [FR-014](./functional/FR-014-versioned-rust-boundary.md) — expose the shared

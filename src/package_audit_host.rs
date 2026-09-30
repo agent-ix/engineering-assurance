@@ -33,8 +33,7 @@ const PACKAGE_PROCESS_TIMEOUT: Duration = Duration::from_secs(180);
 const MAX_PROCESS_OUTPUT_BYTES: usize = 8_388_608;
 const MAX_ROOT_ENTRIES: usize = 4_096;
 const MAX_WHEEL_SOURCE_BYTES: usize = 67_108_864;
-/// The wheel is built from `setup.cfg`, which ships in lockstep with the crate
-/// (FR-012-AC-12; `tests/version_alignment.rs` checks `setup.cfg` agrees).
+/// The wheel is built from `setup.cfg`, which ships in lockstep with the crate.
 const DISTRIBUTION_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PRIVATE_CLASSIFIER: &[u8] = b"Classifier: Private :: Do Not Upload\n";
 const ROOT_DATA_FILES: [&str; 14] = [
@@ -53,14 +52,13 @@ const ROOT_DATA_FILES: [&str; 14] = [
     "pilots/assurance-workflows/workflows/change-assurance/def.yaml",
     "pilots/assurance-workflows/workflows/measurement-promotion/def.yaml",
 ];
-const NPM_ROOT_FILES: [&str; 8] = [
+const NPM_ROOT_FILES: [&str; 7] = [
     "CONTENT_RIGHTS.md",
     "LICENSE",
     "README.md",
     "package.json",
     "engineering_assurance/INSTALL.md",
     "engineering_assurance/manifest.yaml",
-    "engineering_assurance/compatibility-matrix.json",
     "manifest.yaml",
 ];
 const NPM_MODULE_SUBTREES: [&str; 4] = ["contracts/", "fixtures/", "schemas/", "skeletons/"];
@@ -666,7 +664,6 @@ fn npm_allowlist(root: &Path) -> Result<Vec<String>, PackageAuditHostError> {
     let mut expected = BTreeSet::new();
     expected.extend(NPM_ROOT_FILES.into_iter().map(str::to_owned));
     expected.extend(ROOT_DATA_FILES.into_iter().map(str::to_owned));
-    expected.insert("compatibility-matrix.json".to_owned());
     for path in package.files.keys() {
         if path == "manifest.yaml" {
             expected.insert(path.clone());
@@ -800,8 +797,6 @@ mod tests {
         }
         fs::write(module.join("manifest.yaml"), b"name: fixture\n")
             .expect("fixture manifest must be written");
-        fs::write(module.join("compatibility-matrix.json"), b"{}\n")
-            .expect("fixture matrix must be written");
         directory
     }
 
