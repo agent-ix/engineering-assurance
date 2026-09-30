@@ -25,7 +25,7 @@ Quoin, ix-flow, and native-result fixtures as read-only inputs.
 
 ## Preconditions
 
-- Exact schema/module versions and artifact digests are supplied.
+- Exact schema/module versions are supplied.
 - Fixture inputs are immutable for the duration of the check.
 
 ## Inputs

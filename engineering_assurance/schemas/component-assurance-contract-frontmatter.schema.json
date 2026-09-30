@@ -15,7 +15,6 @@
     "outputs",
     "invariants",
     "failure_behaviors",
-    "version_pins",
     "controls",
     "isolation",
     "replacement",

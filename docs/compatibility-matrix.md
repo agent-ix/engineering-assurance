@@ -146,8 +146,3 @@ TC-082 no longer asserts the fields are unset — it now asserts acceptance is i
 one of its two honest shapes: pending with nothing filled in, or accepted with
 both a named human and a date. The shape it rejects is a `state` that reads as
 accepted while nobody is on record as having accepted it.
-
-The matrix's recorded EA schema digests describe the v0.4.1 release bytes and
-are informational provenance; nothing in the gate compares a working tree, or
-this candidate, with them. The observer does not compare a working tree with
-release digests.
