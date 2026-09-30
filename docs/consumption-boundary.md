@@ -1,10 +1,5 @@
 # Engineering Assurance consumption boundary
 
-This is deliberately a
-pre-stabilization release: consumers may depend on it now, but its surface is
-expected to change in response to real consumer evidence. It is not a v1.0.0
-compatibility commitment.
-
 ## Dependency
 
 For a Rust consumer, add the repository dependency:
@@ -14,9 +9,7 @@ engineering-assurance = { git = "<Engineering Assurance repository remote>" }
 ```
 
 For the configuration module or CLI, use this repository's
-canonical remote. The repository intentionally refuses npm publication, so a tag is the
-distribution boundary. Before adopting the tag, run the consumer's relevant
-native tests.
+canonical remote.
 
 ## What a consumer may use
 
@@ -29,7 +22,7 @@ native tests.
   skeletons.
 
 The Rust crate's exported symbols and the named v1 protocol discriminators are
-the public surface at this beta tag. Files under `src/` that are binary-host
+the public surface. Files under `src/` that are binary-host
 adapters, test fixtures, and internal review artifacts are implementation detail rather than a frozen consumer
 contract. No consumer should depend on an unreleased branch commit, a private
 package registry, Python implementation behavior, or generated fixture layout.

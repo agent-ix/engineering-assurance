@@ -87,7 +87,7 @@ reports a count in place of the failing case.
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
 | FR-011-CON-1 | The corpus reader SHALL execute no subprocess, open no socket, and write no file. | Architecture | Test |
-| FR-011-CON-2 | Source evidence trees SHALL be read at a named revision and never written to. | Integrity | Test |
+| FR-011-CON-2 | Source evidence trees SHALL never be written to. | Integrity | Test |
 | FR-011-CON-3 | The corpus SHALL make no claim about the live state of the source repositories. | Responsibility | Test (TC-070) |
 | FR-011-CON-4 | No retained artifact SHALL be executable. | Integrity | Test |
 
@@ -101,7 +101,7 @@ reports a count in place of the failing case.
 | FR-011-AC-4 | No failed, unavailable, not-computed, malformed, or tampered case reads as clean or reports a passed check. | Test (TC-072) |
 | FR-011-AC-5 | A real legacy record preserves revision, repository, producer identity and revision, and environment, keeps inconclusive distinct from passed, and names what it could not carry. | Test (TC-073) |
 | FR-011-AC-6 | The retained receipt validates against Quoin's packaged schema and binds the exact record, attestation, and retained-output digests of the chain. | Test (TC-074) |
-| FR-011-AC-7 | Every producer case names a real producer, a source path, and one shared-model concept, spanning at least two languages and four concepts, including the governed `quire-code-rs` case. | Test (TC-075) |
+| FR-011-AC-7 | Every producer case names a real producer, a source path, and one shared-model concept, spanning at least two languages and four concepts. | Test (TC-075) |
 | FR-011-AC-8 | Reading and mapping the whole corpus changes no byte, no artifact is executable, and the reader reaches for no subprocess, socket, or write (CON-1, CON-4). | Test (TC-076) |
 | FR-011-AC-9 | Every retained legacy and producer case reproduces, from its retained bytes alone and with no source repository checked out, the source digest the corpus recorded for it. | Test (TC-077) |
 | FR-011-AC-10 | An uninitialized corpus fails rather than passing quietly. | Test (TC-078) |

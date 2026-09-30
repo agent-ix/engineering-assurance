@@ -52,10 +52,6 @@ npm install --global \
 rustup toolchain install 1.98.1
 ```
 
-Versions are published as Git tags. GitHub Releases are not cut for every tag,
-so use `git tag` or the repository's tags page, not the Releases page, to find
-the newest version.
-
 Install the native CLI:
 
 ```bash
@@ -156,17 +152,14 @@ gh skill install agent-ix/engineering-assurance \
 ### 4. Verify your install
 
 Engineering Assurance has three installed pieces: the Quire module, the native
-CLI, and the agent plugin or skill. Install all three from the same tag. A
-module from one tag and a CLI from another is not detected for you, and the
-skill will drive workflows through a CLI whose schemas do not match the
-module.
+CLI, and the agent plugin or skill.
 
 | Piece | Check | Ready when |
 | --- | --- | --- |
-| Quire module | `quoin module list` | `engineering-assurance` is listed with `ref` set to the tag you installed. A bare commit SHA means it came from an untagged commit. |
-| Native CLI | `engineering-assurance --version` | It prints the same version. `command not found` means `~/.cargo/bin` is not on `PATH`. |
-| Claude Code plugin | `claude plugin list` (or `/plugin` in a session) | `engineering-assurance@engineering-assurance` is listed as enabled at the same version. |
-| Codex plugin | `codex plugin list \| grep engineering-assurance` | `engineering-assurance@engineering-assurance` shows `installed, enabled` at the same version. |
+| Quire module | `quoin module list` | `engineering-assurance` is listed. |
+| Native CLI | `engineering-assurance --version` | `command not found` means `~/.cargo/bin` is not on `PATH`. |
+| Claude Code plugin | `claude plugin list` (or `/plugin` in a session) | `engineering-assurance@engineering-assurance` is listed as enabled. |
+| Codex plugin | `codex plugin list \| grep engineering-assurance` | `engineering-assurance@engineering-assurance` shows `installed, enabled`. |
 
 Check the row for each of Claude Code and Codex that you use. For OpenCode or
 GitHub Copilot, confirm the skill appears in that agent's skill list. An agent

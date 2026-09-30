@@ -756,7 +756,7 @@ fn source_size_encoding_and_syntax_boundaries_refuse_before_inspection() {
     assert_eq!(invalid_syntax.code(), "rust_source_syntax_invalid");
 }
 
-/// Repository-relative source that actually opens and reads the pinned corpus.
+/// Repository-relative source that actually opens and reads the corpus.
 ///
 /// The pure index module `src/compatibility_corpus.rs` is already covered by
 /// the library capability audit above, but it performs no I/O by construction,
@@ -815,8 +815,8 @@ fn tc_076_the_corpus_reader_holds_a_bounded_capability_contract() {
     // What it does not prove: that the reader behaves read-only at run time.
     // Static inspection cannot see through a helper, and a blanket capability
     // ban would be dishonest here anyway — this reader legitimately holds a
-    // confined directory capability, reads metadata, canonicalizes one root,
-    // and runs `git` to check the corpus gitlink. The behavioral half of the
+    // confined directory capability, reads metadata, and canonicalizes one
+    // root. The behavioral half of the
     // property is TC-076 in `tests/compatibility_corpus.rs`, which enumerates
     // the corpus before and after mapping it and refuses any changed byte. The
     // two halves are complementary: this one fails when a capability appears in
@@ -836,21 +836,16 @@ fn tc_076_the_corpus_reader_holds_a_bounded_capability_contract() {
     // exclusions below from passing against a file that was renamed, emptied,
     // or reduced to re-exports, which is the failure mode that let this
     // property be checked where it could not fail in the first place.
-    for expected in [
-        RustSourceCapability::Filesystem,
-        RustSourceCapability::ChildProgram,
-    ] {
-        assert!(
-            capabilities.contains(&expected),
-            "{CORPUS_READER} no longer reads the corpus directly: {capabilities:?}"
-        );
-    }
+    assert!(
+        capabilities.contains(&RustSourceCapability::Filesystem),
+        "{CORPUS_READER} no longer reads the corpus directly: {capabilities:?}"
+    );
 
     // The corpus is evidence. A reader that could open a socket could reach a
     // source the retained bytes were supposed to replace; one that could open a
     // persistence handle could carry state between runs; a clock would make the
     // qualification non-deterministic. None of the three is needed to read a
-    // pinned directory, so none of the three is admitted.
+    // directory, so none of the three is admitted.
     for forbidden in [
         RustSourceCapability::Network,
         RustSourceCapability::Persistence,

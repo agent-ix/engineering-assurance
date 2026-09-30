@@ -3,8 +3,8 @@
 
 //! Qualification of the accepted compatibility corpus through a confined reader.
 //!
-//! The corpus is retained by `agent-ix/qa-corpus`, pinned here as a submodule
-//! and read in place. The reader below opens one explicit corpus root and reads
+//! The corpus is retained by `agent-ix/qa-corpus`, a submodule
+//! read in place. The reader below opens one explicit corpus root and reads
 //! bytes out of it. It writes nothing, executes nothing from the corpus, and
 //! refuses every path that would leave the root.
 //!
@@ -33,7 +33,7 @@ use ix_trace_rs::trace;
 use serde_json::Value;
 use thiserror::Error;
 
-/// Repository-relative location of the pinned corpus submodule.
+/// Repository-relative location of the corpus submodule.
 const CORPUS_SUBMODULE: &str = "corpus";
 
 /// Submodule-relative location of the compatibility corpus.
@@ -126,7 +126,7 @@ impl CorpusRoot {
     ///
     /// # Errors
     ///
-    /// Returns [`CorpusHostError::RootUnavailable`] when the pinned submodule
+    /// Returns [`CorpusHostError::RootUnavailable`] when the submodule
     /// is not checked out, when the corpus root is a symlink, or when it is not
     /// a directory.
     fn open(repository_root: &Path) -> Result<Self, CorpusHostError> {
@@ -390,8 +390,8 @@ fn repository_root() -> &'static Path {
 }
 
 fn corpus() -> (CorpusRoot, CorpusIndex) {
-    let root = CorpusRoot::open(repository_root())
-        .expect("the pinned qa-corpus submodule must be checked out");
+    let root =
+        CorpusRoot::open(repository_root()).expect("the qa-corpus submodule must be checked out");
     let index = root.load_index().expect("the accepted corpus must parse");
     (root, index)
 }
@@ -910,7 +910,7 @@ fn tc_078_an_uninitialized_corpus_refuses() {
     // different failure, and it must say so. Collapsing it into the refusal
     // above would tell an operator to initialize a submodule that is already
     // checked out, and would hide every size and read refusal behind one code.
-    let root = CorpusRoot::open(repository_root()).expect("the pinned corpus must be readable");
+    let root = CorpusRoot::open(repository_root()).expect("the corpus must be readable");
     assert_eq!(
         root.load_index_within(1)
             .expect_err("an index beyond the read bound must refuse")
@@ -1008,7 +1008,7 @@ fn tc_103_the_walk_refuses_exactly_one_file_past_its_population_bound() {
     let (root, _index) = corpus();
     let all = root
         .corpus_paths()
-        .expect("the pinned corpus must enumerate under the shipping bounds");
+        .expect("the corpus must enumerate under the shipping bounds");
     let population = all.len();
     assert!(
         population > 1,
@@ -1042,7 +1042,7 @@ fn tc_103_the_walk_refuses_exactly_one_directory_past_its_depth_bound() {
     let (root, _index) = corpus();
     let all = root
         .corpus_paths()
-        .expect("the pinned corpus must enumerate under the shipping bounds");
+        .expect("the corpus must enumerate under the shipping bounds");
 
     // The walk descends one level per directory, so the deepest recursion a
     // path forces is one less than its component count.
