@@ -41,7 +41,7 @@ checking, manifest validation, and qualification assertions to Rust.
   retained Python-wheel and private-npm distribution definitions. The adapter
   invokes the fixed local `python3`, `npm`, and package-installer commands; it
   does not accept caller-selected executable names or command fragments.
-- For the pure module-manifest boundary, the expected module name and version,
+- For the pure module-manifest boundary, the expected module name,
   module-manifest YAML bytes, authoritative module-manifest JSON Schema bytes,
   edge-registry manifest YAML bytes, and one supplied schema/skeleton resource
   pair for each declared artifact type. The pure boundary consumes whatever
@@ -313,7 +313,7 @@ checking, manifest validation, and qualification assertions to Rust.
   through exit status.
 - The npm-hook rendering mode SHALL communicate publication refusal through a
   non-success status and a diagnostic on stderr.
-- The npm lifecycle configuration SHALL invoke the Rust CLI through the pinned
+- The npm lifecycle configuration SHALL invoke the Rust CLI through the
   local Cargo package without embedding staging or refusal semantics.
 - The npm distribution SHALL remain a configuration and artifact bundle.
 - The npm lifecycle adapter SHALL NOT claim that the npm archive distributes a
@@ -465,7 +465,7 @@ checking, manifest validation, and qualification assertions to Rust.
   caller-supplied authoritative schema using its declared JSON Schema draft,
   offline reference resolution, and enabled known-format assertions.
 - The Rust manifest classifier SHALL withhold acceptance when the manifest name
-  or version differs from the explicit expected identity.
+  differs from the explicit expected identity.
 - The Rust manifest classifier SHALL require unique artifact-type names.
 - The Rust manifest classifier SHALL require every declared allowed-link verb
   to exist in the supplied edge registry.

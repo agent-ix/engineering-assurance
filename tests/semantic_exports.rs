@@ -533,11 +533,6 @@ fn url_findings(path: &str, text: &str) -> Vec<ContentRightsCategory> {
 fn content_rights_admits_exactly_the_manifest_data_schema_files_at_the_current_version() {
     let manifest = manifest();
     let version = manifest_version(&manifest);
-    assert_eq!(
-        version,
-        env!("CARGO_PKG_VERSION"),
-        "manifest and crate versions"
-    );
     for entry in declared_types(&manifest) {
         let Some(relative) = entry["data_schema"]["schema"].as_str() else {
             continue;

@@ -24,9 +24,6 @@ use thiserror::Error;
 const CAPABILITY: &str = "manifest-validate";
 const PROTOCOL: &str = "engineering-assurance.manifest-validate/v1";
 const EXPECTED_MODULE_NAME: &str = "engineering-assurance";
-/// The module ships in lockstep with the crate, so the crate's
-/// own version is the version its manifest must declare.
-const EXPECTED_MODULE_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PACKAGE_DIRECTORY: &str = "engineering_assurance";
 const MANIFEST_PATH: &str = "engineering_assurance/manifest.yaml";
 const MODULE_SCHEMA_PATH: &str = "module-manifest.schema.json";
@@ -147,7 +144,6 @@ pub(crate) fn execute(
         .collect::<Vec<_>>();
     let qualification = qualify_manifest(&ManifestQualificationInput {
         expected_name: EXPECTED_MODULE_NAME,
-        expected_version: EXPECTED_MODULE_VERSION,
         manifest_yaml: &manifest_yaml,
         manifest_schema_json: &manifest_schema_json,
         edge_registry_yaml: &edge_registry_yaml,

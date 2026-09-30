@@ -59,7 +59,7 @@ the `engineering-assurance` native CLI.
 - The source audit SHALL NOT claim compiler name resolution across source
   documents.
 - Complete library containment SHALL combine the audit of every library module
-  with the pinned compiler, dependency-policy, and final executable-path gates.
+  with the compiler, dependency-policy, and final executable-path gates.
 - The reusable-library audit SHALL admit only the exact Cargo package-name and
   package-version `env!` expressions already used as compile-time package
   metadata; it SHALL reject other environment macros and output macros.

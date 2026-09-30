@@ -25,7 +25,7 @@ fixture generation to Rust without changing observable identities or ownership.
 
 ## Inputs
 
-- The pinned corpus.
+- The corpus.
 - Canonical semantic-reference and report fixtures.
 - Finite RFC 8259 JSON producer outputs, including exact integers outside the
   `i64` and `u64` ranges.

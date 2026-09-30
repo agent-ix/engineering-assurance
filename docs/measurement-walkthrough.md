@@ -70,10 +70,6 @@ Validate it:
 quire validate --scope . 'spec/**/*.md'
 ```
 
-This needs the module installed from v0.4.0 or later. A module installed from an older
-commit refuses `statistical_design.decision_rule` and `minimum_population`;
-`quoin module list` shows which `ref` you have.
-
 The full field list, including `objective`, `protected_apparatus`, and
 `negative_controls`, is in
 [`engineering_assurance/skeletons/MeasurementPlan.md`](../engineering_assurance/skeletons/MeasurementPlan.md).
@@ -142,7 +138,7 @@ Each observation must match a plan on three fields:
 | `observations[].planId` | `id` | Must equal the plan's id. |
 | `observations[].definitionVersion` | `definition_version` | Must be equal. |
 
-From quoin 0.24.0, a `measured` observation is also checked against the plan's
+A `measured` observation is also checked against the plan's
 `statistical_design`. This is why the example states `population.examined`
 and `population.repetitions`:
 
@@ -157,10 +153,6 @@ it refuses a record. The onboarding report restates the full field contract:
 ```bash
 node engineering_assurance/skills/assurance-onboarding/scripts/onboard.js --repo <repo_root>
 ```
-
-Quoin 0.24.0 and later accept a `verificationStack.toolchains` that names any
-one of `node`, `rust`, and `python`. The example names all three because quoin
-0.23.1 requires all three and cannot read back a record that names fewer.
 
 ## 3. Record it
 

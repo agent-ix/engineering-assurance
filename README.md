@@ -56,12 +56,11 @@ Versions are published as Git tags. GitHub Releases are not cut for every tag,
 so use `git tag` or the repository's tags page, not the Releases page, to find
 the newest version.
 
-Install the native CLI from the tagged source checkout:
+Install the native CLI:
 
 ```bash
 cargo +1.98.1 install \
   --git https://github.com/agent-ix/engineering-assurance \
-  --tag v0.4.1 \
   --locked \
   --features full \
   --bin engineering-assurance
@@ -72,12 +71,12 @@ installs nothing, because the binary requires `full`.
 
 ### 2. Install the Quire module
 
-Install the module directory from the same tag. The `//engineering_assurance`
+Install the module directory. The `//engineering_assurance`
 suffix selects the module root inside this repository:
 
 ```bash
 quoin module install \
-  github:agent-ix/engineering-assurance//engineering_assurance@v0.4.1
+  github:agent-ix/engineering-assurance//engineering_assurance
 ```
 
 The installed module contains `manifest.yaml`, `schemas/`, and `skeletons/`.
@@ -92,14 +91,14 @@ OpenCode, and GitHub Copilot. Use the section for your agent.
 <summary><b>Claude Code</b></summary>
 
 ```text
-/plugin marketplace add agent-ix/engineering-assurance@v0.4.1
+/plugin marketplace add agent-ix/engineering-assurance
 /plugin install engineering-assurance@engineering-assurance
 ```
 
 From a shell or a script:
 
 ```bash
-claude plugin marketplace add agent-ix/engineering-assurance@v0.4.1
+claude plugin marketplace add agent-ix/engineering-assurance
 claude plugin install engineering-assurance@engineering-assurance
 ```
 
@@ -109,7 +108,7 @@ claude plugin install engineering-assurance@engineering-assurance
 <summary><b>OpenAI Codex</b></summary>
 
 ```bash
-codex plugin marketplace add agent-ix/engineering-assurance --ref v0.4.1
+codex plugin marketplace add agent-ix/engineering-assurance
 codex plugin add engineering-assurance@engineering-assurance
 ```
 
@@ -127,7 +126,6 @@ GitHub CLI so it is available in every repository:
 ```bash
 gh skill install agent-ix/engineering-assurance \
   engineering_assurance/skills/assurance-onboarding \
-  --pin v0.4.1 \
   --scope user \
   --agent opencode
 ```
@@ -149,7 +147,6 @@ If you want the skills-only route, use GitHub CLI instead:
 ```bash
 gh skill install agent-ix/engineering-assurance \
   engineering_assurance/skills/assurance-onboarding \
-  --pin v0.4.1 \
   --scope user \
   --agent github-copilot
 ```
@@ -166,7 +163,7 @@ module.
 
 | Piece | Check | Ready when |
 | --- | --- | --- |
-| Quire module | `quoin module list` | `engineering-assurance` is listed with `ref` set to the tag you installed, such as `v0.4.1`. A bare commit SHA means it came from an untagged commit. |
+| Quire module | `quoin module list` | `engineering-assurance` is listed with `ref` set to the tag you installed. A bare commit SHA means it came from an untagged commit. |
 | Native CLI | `engineering-assurance --version` | It prints the same version. `command not found` means `~/.cargo/bin` is not on `PATH`. |
 | Claude Code plugin | `claude plugin list` (or `/plugin` in a session) | `engineering-assurance@engineering-assurance` is listed as enabled at the same version. |
 | Codex plugin | `codex plugin list \| grep engineering-assurance` | `engineering-assurance@engineering-assurance` shows `installed, enabled` at the same version. |
@@ -176,19 +173,13 @@ GitHub Copilot, confirm the skill appears in that agent's skill list. An agent
 finds a newly installed plugin's skill only in a new session, so restart it
 after installing.
 
-The `@v0.4.1` suffix on `marketplace add` pins the plugin to that tag. Without
-it, the marketplace follows this repository's default branch and can move past
-the tag you installed for the module and the CLI.
-
 ## Upgrading artifacts from an earlier release
-
-Documents written against v0.3.x or earlier can fail the current schemas.
 
 - **AssuranceProfile `profile_version`.** The field is now `schema_version`.
   Only a `status: retired` profile may keep `profile_version`. On any other
   profile Quire reports `{"required":["profile_version"]} is not allowed`;
   rename the field to fix it.
-- **MeasurementPlan fields.** From v0.3.1 to v0.4.x:
+- **MeasurementPlan fields.**
   - `statistical_design.estimator` changed from free text to one of
     `proportion`, `count`, `mean`, `median`, `ratio`;
   - `statistical_design.decision_rule` changed from a string to an object:
