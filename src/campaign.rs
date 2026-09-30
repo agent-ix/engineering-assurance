@@ -221,6 +221,10 @@ pub enum CampaignError {
         /// Invalid source-tree component.
         field: &'static str,
     },
+    /// This host cannot verify a source tree: it needs descriptor-relative,
+    /// no-follow opens, which only Unix provides.
+    #[error("source tree verification is unavailable on this host")]
+    SourceTreeUnavailable,
 }
 
 fn nonempty(value: &str, field: &'static str) -> Result<(), CampaignError> {
@@ -745,7 +749,9 @@ fn validate_member_dependencies(
 ///
 /// # Errors
 /// Returns [`CampaignError`] if any selected binding differs from the authored
-/// procedure or source graph, or if FR-019 refuses the completed request.
+/// procedure or source graph, or if FR-019 refuses the completed request. On a
+/// non-Unix host a procedure that binds a source tree is refused with
+/// [`CampaignError::SourceTreeUnavailable`].
 pub fn resolve_procedure(
     procedure: &MeasurementProcedure,
     source_graph: &[CampaignSource],

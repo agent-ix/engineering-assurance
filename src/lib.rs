@@ -31,7 +31,7 @@
 //!
 //! | Feature | Module(s) | Other features it enables | Extra dependencies |
 //! |---|---|---|---|
-//! | `atomic-publish` | `atomic_publish` | | `rustix`, `thiserror` |
+//! | `atomic-publish` | `atomic_publish` (Unix only) | | `rustix`, `thiserror` |
 //! | `claim-strength` | `claim_strength` | | `serde` |
 //! | `compatibility` | `compatibility` | | `serde`, `serde_json`, `thiserror` |
 //! | `compatibility-corpus` | `compatibility_corpus` | `content-digest` | `serde`, `serde_json`, `thiserror` |
@@ -54,13 +54,13 @@
 //! | `structured-yaml` | `structured_yaml` | | `serde_json`, `yaml_serde` |
 //! | `workflow` | `workflow` | | `serde`, `serde_json`, `thiserror` |
 //! | `workflow-invariants` | `workflow_invariants` | | `serde`, `serde_json`, `thiserror`, `time` |
-//! | `campaign` | `campaign` | `measurement`, `producer-execution` | the generated campaign crate, `sha1`, `sha2` |
+//! | `campaign` | `campaign` (source-tree verification Unix only) | `measurement`, `producer-execution` | the generated campaign crate, `sha1`, `sha2` |
 //! | `exact-numbers` | none (opt-in) | | `serde_json/arbitrary_precision` |
 //! | `full` | all of the above, plus the binary | every feature above | `clap`, `cap-std`, `tar`, `zip`, `flate2`, `tempfile` |
 
 #![forbid(unsafe_code)]
 
-#[cfg(feature = "atomic-publish")]
+#[cfg(all(feature = "atomic-publish", unix))]
 pub mod atomic_publish;
 #[cfg(feature = "campaign")]
 pub mod campaign;
@@ -82,7 +82,7 @@ pub mod evaluation;
 pub mod evaluation_reports;
 #[cfg(feature = "evidence")]
 pub mod evidence;
-#[cfg(feature = "campaign")]
+#[cfg(all(feature = "campaign", unix))]
 mod git_object_id;
 #[cfg(feature = "manifest")]
 pub mod manifest;

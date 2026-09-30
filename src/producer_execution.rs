@@ -12,18 +12,21 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::File,
-    io::{self, Read, Seek, SeekFrom},
+    io::{self, Seek, SeekFrom},
     path::{Component, Path},
-    process::ExitStatus,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
-    time::Duration,
 };
 
 #[cfg(unix)]
-use std::{process::Command, thread, time::Instant};
+use std::{
+    io::Read,
+    process::{Command, ExitStatus},
+    thread,
+    time::{Duration, Instant},
+};
 
 #[cfg(target_os = "linux")]
 use std::{
@@ -2967,7 +2970,7 @@ mod host_context_tests {
     }
 }
 
-#[cfg(feature = "campaign")]
+#[cfg(all(feature = "campaign", unix))]
 mod campaign_source_projection {
     use super::{
         BTreeSet, Component, ContentDigest, File, InputBinding, MAX_ARTIFACTS, MAX_INPUT_BYTES,
@@ -3273,5 +3276,20 @@ mod campaign_source_projection {
     }
 }
 
-#[cfg(feature = "campaign")]
+#[cfg(all(feature = "campaign", unix))]
 pub(crate) use campaign_source_projection::validate_source_tree;
+
+/// Source-tree verification opens every path component relative to a held
+/// directory descriptor without following links; there is no such primitive
+/// here, so the campaign is refused rather than verified by path.
+#[cfg(all(feature = "campaign", not(unix)))]
+pub(crate) fn validate_source_tree(
+    _tree: &crate::campaign::SourceTreeBinding,
+    _source: &crate::campaign::CampaignSource,
+    _root: &str,
+) -> Result<
+    (Vec<InputBinding>, Vec<crate::campaign::OmittedSourceLink>),
+    crate::campaign::CampaignError,
+> {
+    Err(crate::campaign::CampaignError::SourceTreeUnavailable)
+}
