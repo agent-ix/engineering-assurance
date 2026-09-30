@@ -5,24 +5,15 @@
 //!
 //! Each artifact type has ONE JSON Schema 2020-12 file, which is both its
 //! manifest `frontmatter_schema_ref` and its exported `data_schema`; there is no
-//! second copy to drift. Quoin accepts an export only when the schema's bytes
-//! hash to the recorded digest and its `$id` sits under the module's version;
-//! quoin enforces that at install, so this file does not repeat it.
+//! second copy to drift.
 //!
 //! The schema describes the type's frontmatter. Body sections stay quire's
 //! `body_extraction`; quire-rs applies a `data_schema` only to the declaration
 //! record of an archetype named by a document's `object:` key, never to a
 //! `type:`-backed document (see FR-003).
-//!
-//! After a version bump, rewrite the schemas' `$id` version and every manifest
-//! digest with
-//! `EA_BLESS=1 cargo test --features full --test semantic_exports -- --ignored bless`. That test
-//! is `#[ignore]`d so it can neither race the checks nor count as coverage, and
-//! it changes nothing but `$id` lines and digests.
 
 use std::{
     collections::BTreeSet,
-    fmt::Write as _,
     fs,
     path::{Path, PathBuf},
 };
@@ -32,7 +23,6 @@ use engineering_assurance::content_rights::{
 };
 use ix_trace_rs::trace;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 
 // Assembled from parts so the content-rights URL scan does not see a literal.
 const DRAFT_2020_12: &str = concat!("https:", "//json-schema.org/draft/2020-12/schema");
@@ -92,23 +82,8 @@ fn manifest() -> Value {
     yaml_serde::from_str(&text).expect("manifest is YAML")
 }
 
-fn manifest_version(manifest: &Value) -> String {
-    manifest["version"]
-        .as_str()
-        .expect("manifest version is a string")
-        .to_owned()
-}
-
-fn sha256(bytes: &[u8]) -> String {
-    let mut hex = String::from("sha256:");
-    for byte in Sha256::digest(bytes) {
-        write!(hex, "{byte:02x}").expect("writing to a String cannot fail");
-    }
-    hex
-}
-
-fn derived_id(version: &str, file: &str) -> String {
-    format!("{ID_BASE}{version}/{file}")
+fn schema_id(file: &str) -> String {
+    format!("{ID_BASE}{file}")
 }
 
 fn declared_types(manifest: &Value) -> Vec<&Value> {
@@ -117,73 +92,6 @@ fn declared_types(manifest: &Value) -> Vec<&Value> {
         .filter_map(|key| manifest[key].as_array())
         .flatten()
         .collect()
-}
-
-/// Rewrites the `"$id"` line of a schema file for `version`; touches nothing else.
-fn with_id(text: &str, version: &str, file: &str) -> String {
-    let mut out = String::new();
-    for line in text.lines() {
-        if line.trim_start().starts_with("\"$id\":") {
-            let indent = &line[..line.len() - line.trim_start().len()];
-            let _ = writeln!(out, "{indent}\"$id\": \"{}\",", derived_id(version, file));
-        } else {
-            out.push_str(line);
-            out.push('\n');
-        }
-    }
-    out
-}
-
-/// Rewrites every `digest:` line in the manifest text to the hash of the schema
-/// named on the preceding `schema:` line.
-fn with_digests(manifest_text: &str) -> String {
-    let mut lines: Vec<String> = manifest_text.lines().map(str::to_owned).collect();
-    let mut schema_path: Option<String> = None;
-    for line in &mut lines {
-        let trimmed = line.trim_start();
-        if let Some(path) = trimmed.strip_prefix("schema: ") {
-            schema_path = Some(path.trim().to_owned());
-        } else if trimmed.starts_with("digest: ")
-            && let Some(path) = schema_path.take()
-        {
-            let indent = &line[..line.len() - trimmed.len()];
-            let digest = sha256(&fs::read(module_root().join(&path)).expect("schema reads"));
-            *line = format!("{indent}digest: {digest}");
-        }
-    }
-    let mut text = lines.join("\n");
-    text.push('\n');
-    text
-}
-
-/// After a version bump: rewrites each exported schema's `$id` version and every
-/// manifest digest. Changes nothing else. Run alone with
-/// `EA_BLESS=1 cargo test --features full --test semantic_exports -- --ignored bless`. It keeps a
-/// trace tag because the repository's source audit requires one on every test.
-/// Tag-based tools may therefore count TC-194 as covered by it. Quoin enforces
-/// the digest and `$id` at install; this test only writes those values.
-#[test]
-#[ignore = "rewrites committed files; run alone with EA_BLESS=1"]
-#[trace("TC-194", "FR-003-AC-7")]
-fn bless_rewrites_schema_ids_and_manifest_digests() {
-    assert!(
-        std::env::var_os("EA_BLESS").is_some_and(|value| value == "1"),
-        "set EA_BLESS=1 to rewrite the schema ids and digests"
-    );
-    let manifest_path = module_root().join("manifest.yaml");
-    let manifest_value = manifest();
-    let version = manifest_version(&manifest_value);
-    for entry in declared_types(&manifest_value) {
-        let Some(relative) = entry["data_schema"]["schema"].as_str() else {
-            continue;
-        };
-        let path = module_root().join(relative);
-        let file = relative.strip_prefix("schemas/").expect("under schemas/");
-        let text = fs::read_to_string(&path).expect("schema reads");
-        fs::write(&path, with_id(&text, &version, file)).expect("schema writes");
-    }
-    let text = fs::read_to_string(&manifest_path).expect("manifest reads");
-    fs::write(&manifest_path, with_digests(&text)).expect("manifest writes");
 }
 
 #[trace("TC-194", "FR-003-AC-7")]
@@ -300,31 +208,6 @@ fn artifact_schemas_use_2020_12_forms_only_and_every_format_is_paired_with_its_p
     assert_eq!(
         plan["$defs"]["decision_rule"]["dependentRequired"],
         json!({"margin": ["baseline"], "margin_mode": ["margin"]})
-    );
-}
-
-#[trace("TC-194", "FR-003-AC-7")]
-#[test]
-fn digested_schemas_carry_no_carriage_return_and_are_excluded_from_line_ending_conversion() {
-    let manifest = manifest();
-    for entry in declared_types(&manifest) {
-        let Some(relative) = entry["data_schema"]["schema"].as_str() else {
-            continue;
-        };
-        let bytes = fs::read(module_root().join(relative)).expect("schema reads");
-        assert!(
-            !bytes.contains(&b'\r'),
-            "{relative} contains a carriage return"
-        );
-    }
-    let attributes =
-        fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".gitattributes"))
-            .expect(".gitattributes exists");
-    assert!(
-        attributes
-            .lines()
-            .any(|line| line.trim() == "engineering_assurance/schemas/*.json -text"),
-        "digested schemas must be excluded from line-ending conversion"
     );
 }
 
@@ -530,9 +413,8 @@ fn url_findings(path: &str, text: &str) -> Vec<ContentRightsCategory> {
 
 #[trace("TC-194", "FR-003-AC-7")]
 #[test]
-fn content_rights_admits_exactly_the_manifest_data_schema_files_at_the_current_version() {
+fn content_rights_admits_exactly_the_manifest_data_schema_files() {
     let manifest = manifest();
-    let version = manifest_version(&manifest);
     for entry in declared_types(&manifest) {
         let Some(relative) = entry["data_schema"]["schema"].as_str() else {
             continue;
@@ -543,21 +425,15 @@ fn content_rights_admits_exactly_the_manifest_data_schema_files_at_the_current_v
         assert_eq!(url_findings(&path, &text), vec![], "{path}");
 
         let file = relative.strip_prefix("schemas/").expect("under schemas/");
-        let id_line = |version: &str| format!("{{\"$id\": \"{}\"}}", derived_id(version, file));
-        // The same `$id` at another version is refused, even at an allowed path.
-        assert_eq!(
-            url_findings(&path, &id_line("9.9.9")),
-            vec![ContentRightsCategory::UnapprovedExternalUrl],
-            "{path}: a stale $id must be flagged"
-        );
-        assert_eq!(url_findings(&path, &id_line(&version)), vec![], "{path}");
+        let id_line = format!("{{\"$id\": \"{}\"}}", schema_id(file));
+        assert_eq!(url_findings(&path, &id_line), vec![], "{path}");
         // A nested directory is not the listed file.
         for nested in [
             format!("engineering_assurance/schemas/sub/{file}"),
             format!("schemas/sub/{file}"),
         ] {
             assert_eq!(
-                url_findings(&nested, &id_line(&version)),
+                url_findings(&nested, &id_line),
                 vec![ContentRightsCategory::UnapprovedExternalUrl],
                 "{nested}"
             );
@@ -581,7 +457,7 @@ fn content_rights_admits_exactly_the_manifest_data_schema_files_at_the_current_v
             continue;
         }
         unlisted += 1;
-        let text = format!("{{\"$id\": \"{}\"}}", derived_id(&version, &file));
+        let text = format!("{{\"$id\": \"{}\"}}", schema_id(&file));
         assert_eq!(
             url_findings(&format!("engineering_assurance/schemas/{file}"), &text),
             vec![ContentRightsCategory::UnapprovedExternalUrl],
