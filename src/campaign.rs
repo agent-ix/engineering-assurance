@@ -749,7 +749,9 @@ fn validate_member_dependencies(
 ///
 /// # Errors
 /// Returns [`CampaignError`] if any selected binding differs from the authored
-/// procedure or source graph, or if FR-019 refuses the completed request.
+/// procedure or source graph, or if FR-019 refuses the completed request. On a
+/// non-Unix host a procedure that binds a source tree is refused with
+/// [`CampaignError::SourceTreeUnavailable`].
 pub fn resolve_procedure(
     procedure: &MeasurementProcedure,
     source_graph: &[CampaignSource],
