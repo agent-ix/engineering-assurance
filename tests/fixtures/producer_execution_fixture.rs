@@ -125,7 +125,13 @@ fn escape(arguments: &mut impl Iterator<Item = OsString>) {
 }
 
 fn escape_child(arguments: &mut impl Iterator<Item = OsString>) {
-    rustix::process::setsid().unwrap_or_else(|_| fail("cannot create fixture session"));
+    #[cfg(unix)]
+    let session = rustix::process::setsid().is_ok();
+    #[cfg(not(unix))]
+    let session = false;
+    if !session {
+        fail("cannot create fixture session");
+    }
     fs::write(argument(arguments), process::id().to_string())
         .unwrap_or_else(|_| fail("cannot write escaped pid"));
     thread::sleep(Duration::from_secs(10));

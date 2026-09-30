@@ -221,6 +221,10 @@ pub enum CampaignError {
         /// Invalid source-tree component.
         field: &'static str,
     },
+    /// This host cannot verify a source tree: it needs descriptor-relative,
+    /// no-follow opens, which only Unix provides.
+    #[error("source tree verification is unavailable on this host")]
+    SourceTreeUnavailable,
 }
 
 fn nonempty(value: &str, field: &'static str) -> Result<(), CampaignError> {
