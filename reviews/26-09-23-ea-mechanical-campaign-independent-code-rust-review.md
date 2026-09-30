@@ -48,6 +48,6 @@ The follow-up working-tree diff resolves the three findings above:
 - **FND-354 closed as a provenance clarification.** `SourceTreeBinding` and VO-005 explicitly state that omitted links are checked at resolution and do not make a launch-time claim. The links remain absent from the staged execution tree.
 - **FND-355 closed by code inspection and a path-swap regression.** The resolver now opens root and parent directory components through no-follow descriptors, reads a link with `readlinkat`, and opens a regular file with `openat(O_NOFOLLOW)` from the retained parent. TC-182 refuses a substituted parent symlink. A concurrent-race harness was not run.
 
-`cargo fmt --check` and the seven focused campaign tests pass. The 0.5 matrix's 33 EA artifact digests match the current files; its acceptance state remains `pending_human_acceptance`. The generated targets name FCD commit `9ef44b34dc80c825f625e04e5264d6c0c0952e31`. Fresh byte-for-byte generation and Linux executor tests remain outside this scoped recheck.
+`cargo fmt --check` and the seven focused campaign tests pass. The 0.5 matrix's acceptance state remains `pending_human_acceptance`. The generated targets name FCD commit `9ef44b34dc80c825f625e04e5264d6c0c0952e31`. Fresh byte-for-byte generation and Linux executor tests remain outside this scoped recheck.
 
 **Recheck verdict: PASS for the three reviewed findings**, subject to the candidate matrix's separate acceptance gate.

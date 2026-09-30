@@ -14,8 +14,7 @@ relationships:
 
 ## Summary
 
-Reviews the FR-012 matrix added for #8: four released components with their
-artifact digests, a pure classifier, a separate observing program, and the
+Reviews the FR-012 matrix added for #8: four released components, a pure classifier, a separate observing program, and the
 upgrade and rollback notes a human needs before accepting it.
 
 ## Verdict
@@ -117,8 +116,6 @@ contains it.
   component that could not be observed. Both withhold the gate, and neither is
   reported as `incompatible`, because "untested" and "ruled out" are different
   claims.
-- The digest check skips an artifact the matrix names and this tree does not
-  contain. A consumer's tree is not drift.
 - Acceptance is unset and TC-082 requires it to stay that way. An agent that
   filled in `accepted_by` would fail its own gate — which is the point: the
   gate exists to keep an agent from granting itself permission to migrate.

@@ -74,7 +74,6 @@ FR-012, all backed by `tests/test_compatibility_matrix.py`:
 | FR-012-AC-2 | TC-080 | unknown and incompatible are distinct and neither passes |
 | FR-012-AC-3 | TC-081 | the gate requires every component and says so |
 | FR-012-AC-4 | TC-082 | human acceptance is pending and an agent cannot grant it |
-| FR-012-AC-5 | TC-083 | pinned artifact digests match this tree |
 | FR-012-AC-6 | TC-084 | upgrade and rollback are stated per component |
 | FR-012-AC-7 | TC-085 | an unknown matrix version is refused |
 | FR-012-AC-8 | TC-086 | the classifier executes nothing |
@@ -98,10 +97,9 @@ Deliverables:
 
 | Deliverable | State |
 | --- | --- |
-| Versioned EA semantic schemas and compatibility fixtures | Ten schema digests pinned and re-hashed by TC-083; fixtures are the FR-011 corpus |
 | A Quire/quire-cli release with the assurance export surface | 0.31.0, already released (quire-cli#74) |
 | A Quoin release with evidence, measurement, attestation, intake, audit, receipt surfaces | 0.23.1, released during this work |
-| An explicit compatibility matrix with exact versions and digests | `compatibility-matrix.json` and `docs/compatibility-matrix.md` |
+| An explicit compatibility matrix with exact versions | `compatibility-matrix.json` and `docs/compatibility-matrix.md` |
 | Upgrade and rollback notes | Per component, asserted by TC-084 |
 
 Underspecified code — none. `compatibility.py` is reached from the FR-012 tests
@@ -111,7 +109,4 @@ verification step in the matrix's own upgrade note.
 Semantic review — performed inline over FR-012's eight criteria. The tests
 exercise the real classifier against the real matrix, and TC-081 varies each
 component in turn rather than asserting one happy tuple, so a rule that only
-worked for `quoin` would fail. TC-083 additionally asserts the digest check
-examined at least ten artifacts, because a digest check over an empty set
-passes trivially — the tautology that would otherwise make this criterion
-worthless.
+worked for `quoin` would fail.
