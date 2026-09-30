@@ -79,7 +79,7 @@
         "@relationships as empty list",
         "@relationships.0 dropped"
       ],
-      "cases": 303
+      "cases": 284
     },
     "MeasurementPlan": {
       "accepted": [

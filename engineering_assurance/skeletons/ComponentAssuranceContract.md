@@ -10,8 +10,6 @@ inputs: [accepted request identity, retained result identity]
 outputs: [matched outcome, missing-result alert]
 invariants: [one terminal classification per accepted request]
 failure_behaviors: [emit an unhealthy state when either input stream is unavailable]
-version_pins:
-  monitor: fictional-monitor-v1
 controls:
   surfaces: [disable switch, alert route, health endpoint]
   fallback: stop accepting new requests
