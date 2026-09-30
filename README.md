@@ -54,8 +54,7 @@ rustup toolchain install 1.98.1
 
 Versions are published as Git tags. GitHub Releases are not cut for every tag,
 so use `git tag` or the repository's tags page, not the Releases page, to find
-the newest version. v0.5.0 is prepared but not yet tagged, so the snippets
-below stay on `v0.4.1` until it is.
+the newest version.
 
 Install the native CLI from the tagged source checkout:
 

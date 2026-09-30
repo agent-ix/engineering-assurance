@@ -88,8 +88,8 @@ Rust library and CLI.
   refusal removes the staged file and leaves existing repository bytes
   unchanged.
 - Delegate run state, transitions, and terminal decision history to ix-flow.
-- Parse ix-flow's JSON `ok`, `state`, `error`, run data, gates, and events rather than
-  treating process exit status or diagnostic prose as the contract.
+- Parse ix-flow's JSON `ok`, `state`, `error`, run data, gates, and events
+  rather than treating process exit status or diagnostic prose as the contract.
 - For a new run, invoke ix-flow with the canonical skill and no gate-mode or
   per-transition override, then add exactly one complete `run_binding` item.
   If interruption leaves a newly created run without that item, repair it only

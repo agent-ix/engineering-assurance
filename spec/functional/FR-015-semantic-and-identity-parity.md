@@ -19,9 +19,9 @@ relationships:
 
 ## Description
 
-Engineering Assurance SHALL port accepted-corpus access, evidence-state classification, verification-semantic validation,
-bounded projections, and fixture generation to Rust without changing observable
-identities or ownership.
+Engineering Assurance SHALL port accepted-corpus access, evidence-state
+classification, verification-semantic validation, bounded projections, and
+fixture generation to Rust without changing observable identities or ownership.
 
 ## Inputs
 
