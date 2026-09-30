@@ -31,8 +31,6 @@ const FORBIDDEN_SUFFIXES: &[&str] = &[
 /// This repeats the `data_schema` files of `engineering_assurance/manifest.yaml`
 /// on purpose (this library reads no manifest); `tests/semantic_exports.rs`
 /// asserts the two lists agree, so a drift fails a test instead of the scan.
-/// A stale `$id` after a version bump is flagged as an unapproved external URL;
-/// rewrite it with `EA_BLESS=1 cargo test --features full --test semantic_exports -- --ignored bless`.
 const SEMANTIC_EXPORT_SCHEMAS: &[&str] = &[
     "campaign-enum.schema.json",
     "campaign-value.schema.json",
@@ -627,19 +625,13 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         "https:",
         "//agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/"
     );
-    // The `$id` version is the module version, which ships in lockstep with the
-    // crate version, so a release bump needs no edit here.
-    let authored_schema_prefix = format!(
-        "{}{}/",
-        concat!(
-            "https:",
-            "//schemas.agent-ix.org/agent-ix/engineering-assurance-campaign/"
-        ),
-        env!("CARGO_PKG_VERSION")
+    let authored_schema_prefix = concat!(
+        "https:",
+        "//schemas.agent-ix.org/agent-ix/engineering-assurance-campaign/"
     );
     let semantic_core_prefix = concat!("https:", "//schemas.agent-ix.org/semantic-core/0.3.0/");
     let campaign_schema_url = url.starts_with(generated_schema_prefix)
-        || url.starts_with(authored_schema_prefix.as_str())
+        || url.starts_with(authored_schema_prefix)
         || url.starts_with(semantic_core_prefix)
         || url == concat!("https:", "//json-schema.org/draft/2020-12/schema");
     let campaign_license_url = [

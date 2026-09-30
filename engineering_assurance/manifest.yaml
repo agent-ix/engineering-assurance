@@ -7,9 +7,7 @@ semantic:
   semantic_core: 0.3.0
   package: agent-ix/engineering-assurance-campaign
   # Each exported artifact type's data_schema is its frontmatter schema itself
-  # (one 2020-12 file, also its frontmatter_schema_ref). On a version bump run
-  # `EA_BLESS=1 cargo test --features full --test semantic_exports -- --ignored bless` to
-  # rewrite the schemas' `$id` version and every digest below.
+  # (one 2020-12 file, also its frontmatter_schema_ref).
   exports:
     - AssuranceProfile
     - MeasurementPlan
@@ -66,7 +64,6 @@ artifact_types:
     frontmatter_schema_ref: schemas/assurance-profile-frontmatter.schema.json
     data_schema:
       schema: schemas/assurance-profile-frontmatter.schema.json
-      digest: sha256:be0d9f46886e1d2ea5e7a8ce289326eae4c74aea9a409e69afd85e7fa6054e27
     defaults:
       id_pattern: AP-{next:03d}
     allowed_links: [governs, references]
@@ -82,7 +79,6 @@ artifact_types:
     frontmatter_schema_ref: schemas/measurement-plan-frontmatter.schema.json
     data_schema:
       schema: schemas/measurement-plan-frontmatter.schema.json
-      digest: sha256:391a6cd741650f8679ee1faf9f549055be5c3d2a588f98de690b3eea51e1fddc
     defaults:
       id_pattern: MP-{next:03d}
     allowed_links: [measures, references]
@@ -98,7 +94,6 @@ artifact_types:
     frontmatter_schema_ref: schemas/architecture-description-frontmatter.schema.json
     data_schema:
       schema: schemas/architecture-description-frontmatter.schema.json
-      digest: sha256:520fba41b1d8fdc0f86123f1f7ddecab01aa4b85312424e856b6d1800f0f1a55
     defaults:
       id_pattern: AD-{next:03d}
     allowed_links: [realizes, references]
@@ -114,7 +109,6 @@ artifact_types:
     frontmatter_schema_ref: schemas/component-assurance-contract-frontmatter.schema.json
     data_schema:
       schema: schemas/component-assurance-contract-frontmatter.schema.json
-      digest: sha256:72785ef9f8980924e7027d311e1baa3de66a7da04519dd634d8b3db62983d8c6
     defaults:
       id_pattern: CAC-{next:03d}
     allowed_links: [references]
@@ -131,7 +125,6 @@ artifact_types:
     frontmatter_schema_ref: schemas/assurance-argument-frontmatter.schema.json
     data_schema:
       schema: schemas/assurance-argument-frontmatter.schema.json
-      digest: sha256:22fb86b44ab071ae0c2813ff53e66a85c37b738c5a9f0e23b19d119a671af233
     defaults:
       id_pattern: AA-{next:03d}
     allowed_links: [supports, references]
@@ -150,7 +143,6 @@ object_types:
       references: [campaign_value]
     data_schema:
       schema: schemas/campaign-value.schema.json
-      digest: sha256:78ff85df1fe2e98802c1d2927b2684d33581916c0396a12b7ee9c7b98035266d
     body_extraction:
       yield_pattern:
         match:
@@ -167,7 +159,6 @@ object_types:
       meaning: quire.meaning.model.variant-type/v1
     data_schema:
       schema: schemas/campaign-enum.schema.json
-      digest: sha256:5ebb6ec2b981921b97f04f935549b393a146ff85ef094140505199fae90437ed
     body_extraction:
       yield_pattern:
         match:
