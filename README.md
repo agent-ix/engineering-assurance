@@ -52,16 +52,11 @@ npm install --global \
 rustup toolchain install 1.98.1
 ```
 
-Versions are published as Git tags. GitHub Releases are not cut for every tag,
-so use `git tag` or the repository's tags page, not the Releases page, to find
-the newest version.
-
-Install the native CLI from the tagged source checkout:
+Install the native CLI:
 
 ```bash
 cargo +1.98.1 install \
   --git https://github.com/agent-ix/engineering-assurance \
-  --tag v0.4.1 \
   --locked \
   --features full \
   --bin engineering-assurance
@@ -72,12 +67,12 @@ installs nothing, because the binary requires `full`.
 
 ### 2. Install the Quire module
 
-Install the module directory from the same tag. The `//engineering_assurance`
+Install the module directory. The `//engineering_assurance`
 suffix selects the module root inside this repository:
 
 ```bash
 quoin module install \
-  github:agent-ix/engineering-assurance//engineering_assurance@v0.4.1
+  github:agent-ix/engineering-assurance//engineering_assurance
 ```
 
 The installed module contains `manifest.yaml`, `schemas/`, and `skeletons/`.
@@ -92,14 +87,14 @@ OpenCode, and GitHub Copilot. Use the section for your agent.
 <summary><b>Claude Code</b></summary>
 
 ```text
-/plugin marketplace add agent-ix/engineering-assurance@v0.4.1
+/plugin marketplace add agent-ix/engineering-assurance
 /plugin install engineering-assurance@engineering-assurance
 ```
 
 From a shell or a script:
 
 ```bash
-claude plugin marketplace add agent-ix/engineering-assurance@v0.4.1
+claude plugin marketplace add agent-ix/engineering-assurance
 claude plugin install engineering-assurance@engineering-assurance
 ```
 
@@ -109,7 +104,7 @@ claude plugin install engineering-assurance@engineering-assurance
 <summary><b>OpenAI Codex</b></summary>
 
 ```bash
-codex plugin marketplace add agent-ix/engineering-assurance --ref v0.4.1
+codex plugin marketplace add agent-ix/engineering-assurance
 codex plugin add engineering-assurance@engineering-assurance
 ```
 
@@ -127,7 +122,6 @@ GitHub CLI so it is available in every repository:
 ```bash
 gh skill install agent-ix/engineering-assurance \
   engineering_assurance/skills/assurance-onboarding \
-  --pin v0.4.1 \
   --scope user \
   --agent opencode
 ```
@@ -149,7 +143,6 @@ If you want the skills-only route, use GitHub CLI instead:
 ```bash
 gh skill install agent-ix/engineering-assurance \
   engineering_assurance/skills/assurance-onboarding \
-  --pin v0.4.1 \
   --scope user \
   --agent github-copilot
 ```
@@ -159,36 +152,27 @@ gh skill install agent-ix/engineering-assurance \
 ### 4. Verify your install
 
 Engineering Assurance has three installed pieces: the Quire module, the native
-CLI, and the agent plugin or skill. Install all three from the same tag. A
-module from one tag and a CLI from another is not detected for you, and the
-skill will drive workflows through a CLI whose schemas do not match the
-module.
+CLI, and the agent plugin or skill.
 
 | Piece | Check | Ready when |
 | --- | --- | --- |
-| Quire module | `quoin module list` | `engineering-assurance` is listed with `ref` set to the tag you installed, such as `v0.4.1`. A bare commit SHA means it came from an untagged commit. |
-| Native CLI | `engineering-assurance --version` | It prints the same version. `command not found` means `~/.cargo/bin` is not on `PATH`. |
-| Claude Code plugin | `claude plugin list` (or `/plugin` in a session) | `engineering-assurance@engineering-assurance` is listed as enabled at the same version. |
-| Codex plugin | `codex plugin list \| grep engineering-assurance` | `engineering-assurance@engineering-assurance` shows `installed, enabled` at the same version. |
+| Quire module | `quoin module list` | `engineering-assurance` is listed. |
+| Native CLI | `engineering-assurance --version` | `command not found` means `~/.cargo/bin` is not on `PATH`. |
+| Claude Code plugin | `claude plugin list` (or `/plugin` in a session) | `engineering-assurance@engineering-assurance` is listed as enabled. |
+| Codex plugin | `codex plugin list \| grep engineering-assurance` | `engineering-assurance@engineering-assurance` shows `installed, enabled`. |
 
 Check the row for each of Claude Code and Codex that you use. For OpenCode or
 GitHub Copilot, confirm the skill appears in that agent's skill list. An agent
 finds a newly installed plugin's skill only in a new session, so restart it
 after installing.
 
-The `@v0.4.1` suffix on `marketplace add` pins the plugin to that tag. Without
-it, the marketplace follows this repository's default branch and can move past
-the tag you installed for the module and the CLI.
-
 ## Upgrading artifacts from an earlier release
-
-Documents written against v0.3.x or earlier can fail the current schemas.
 
 - **AssuranceProfile `profile_version`.** The field is now `schema_version`.
   Only a `status: retired` profile may keep `profile_version`. On any other
   profile Quire reports `{"required":["profile_version"]} is not allowed`;
   rename the field to fix it.
-- **MeasurementPlan fields.** From v0.3.1 to v0.4.x:
+- **MeasurementPlan fields.**
   - `statistical_design.estimator` changed from free text to one of
     `proportion`, `count`, `mean`, `median`, `ratio`;
   - `statistical_design.decision_rule` changed from a string to an object:
@@ -321,32 +305,6 @@ number as a private marker map. `evidence`, `semantics`, `evaluation` and
 depend on exact numbers; nothing else does, and a consumer can opt in
 explicitly with `features = ["exact-numbers"]`.
 
-### Known duplicate crate versions
-
-This is EA's own graph in isolation: the default features, each capability
-feature alone, and `full`, on normal and build edges over every target (what
-`cargo deny` with `multiple-versions = "deny"` counts, dev-dependencies
-excluded). The default graph and every capability feature alone, `source-audit`
-included, resolve no duplicate except the rows below.
-`tests/duplicate_crates.rs` fails on any other duplicate and on a row that
-stops being true.
-
-It is not a consumer's union with its other dependencies, and it does not
-cover feature combinations. A consumer can add a duplicate this table does not
-show; Quoin's `cargo deny check bans` is the measurement that counts for Quoin.
-
-| Duplicated crate | Versions | Reached by | Owner and reason |
-|---|---|---|---|
-| `digest`, `block-buffer`, `crypto-common` | 0.10 and 0.11 | `campaign`, `full` | `campaign` hashes git blob object ids, so it must stay SHA-1: `sha1` 0.10 is on `digest` 0.10, `sha2` 0.11 on `digest` 0.11. `sha1` 0.11 would unify them but gives Quoin (whose `gix = "=0.87.1"` -> `gix-hash` 0.26.2 -> `sha1-checked` is on `sha1` 0.10) a second `sha1`, so it is not taken. Quoin already skips these (PLAT-1043). Revisit when Quoin moves to a `gix` whose hash crate is on `digest` 0.11 (`gix` 0.88 / `gix-hash` 0.27 reportedly uses `sha1dc`; unmeasured) |
-| `cpufeatures` | 0.2.17 and 0.3.1 | `campaign`, `full` | the same `sha1` 0.10 against `sha2` 0.11 split |
-| `syn` | 2 and 3 | `manifest`, `full` | `jsonschema` (only 0.56.0 is in the lockfile; 0.58 was tried and did not help): `strum_macros` 0.28 (syn 2, no syn 3 release), `zerocopy-derive` 0.8 via `ahash`, and on wasm targets `wasm-bindgen-macro-support`; this crate's `syn = 3` and the serde and thiserror derives are on syn 3 |
-| `io-lifetimes` | 2.0.4 and 3.0.1 | `full` | `cap-std` 4.0.3 (latest): `fs-set-times` 0.20.3 is on 2, `cap-primitives` and `io-extras` on 3 |
-| `windows-sys` | 0.59, 0.60 and 0.61 | `full` | `cap-std` subtree: `fs-set-times` and `winx` on 0.59, `io-extras` on 0.60; 0.61 is also ours (`rustix`, `tempfile`) |
-| `windows-targets` and the `windows_*` target crates | 0.52 and 0.53 | `full` | the `windows-sys` 0.59 and 0.60 split above |
-
-`cap-std` reaches only `full` (the `*_host` modules and the binary), and
-`jsonschema` reaches only `manifest`, so no other feature inherits either.
-
 ## Development
 
 ```bash
@@ -358,7 +316,7 @@ make integration-gate
 ```
 
 A bare `cargo test` runs only the tests that need no feature
-(`default_features`, `duplicate_crates`; default features are empty); use `cargo test --all-features`, which is what CI runs, for the full
+(`default_features`; default features are empty); use `cargo test --all-features`, which is what CI runs, for the full
 suite.
 
 Read [CONTENT_RIGHTS.md](CONTENT_RIGHTS.md) before adding content.

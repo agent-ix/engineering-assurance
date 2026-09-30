@@ -1,23 +1,15 @@
-# Engineering Assurance v0.4.1 consumption boundary
+# Engineering Assurance consumption boundary
 
-`v0.4.1` is the current immutable Rust-port beta. It is deliberately a
-pre-stabilization release: consumers may depend on it now, but its surface is
-expected to change in response to real consumer evidence. It is not a v1.0.0
-compatibility commitment.
+## Dependency
 
-## Pinning
-
-Use the immutable `v0.4.1` tag, never a branch name or a pull-request head.
-For a Rust consumer, pin the repository dependency by tag:
+For a Rust consumer, add the repository dependency:
 
 ```toml
-engineering-assurance = { git = "<Engineering Assurance repository remote>", tag = "v0.4.1" }
+engineering-assurance = { git = "<Engineering Assurance repository remote>" }
 ```
 
-For the configuration module or CLI, check out `v0.4.1` from this repository's
-canonical remote. The repository intentionally refuses npm publication, so a tag is the
-distribution boundary. Before adopting the tag, run the consumer's relevant
-native tests.
+For the configuration module or CLI, use this repository's
+canonical remote.
 
 ## What a consumer may use
 
@@ -30,7 +22,7 @@ native tests.
   skeletons.
 
 The Rust crate's exported symbols and the named v1 protocol discriminators are
-the public surface at this beta tag. Files under `src/` that are binary-host
+the public surface. Files under `src/` that are binary-host
 adapters, test fixtures, and internal review artifacts are implementation detail rather than a frozen consumer
 contract. No consumer should depend on an unreleased branch commit, a private
 package registry, Python implementation behavior, or generated fixture layout.
@@ -38,11 +30,11 @@ package registry, Python implementation behavior, or generated fixture layout.
 ## Stabilization feedback
 
 Report a boundary defect in the `agent-ix/engineering-assurance` issue tracker
-with the title prefix `v0.4.1 boundary:`. Include the tag, resolved commit,
+with the title prefix `boundary:`. Include the
 consumer repository, exact interface used, expected and actual typed result,
 and a minimal reproduction. The maintainers use those reports as the evidence
 set for the later v1.0.0 decision; elapsed time alone is not stabilization.
 
-When an upgrade is published, pin the new immutable tag, rerun the same
+When an upgrade is published, rerun the same
 consumer checks, and retain any observed compatibility or migration refusal as
 boundary evidence.

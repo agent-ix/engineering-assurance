@@ -97,7 +97,7 @@ Engineering Assurance does not copy or redesign that host.
 
 1. Establish the Rust package, typed errors, versioned interfaces, and required
    canonicalization behavior.
-2. Port compatibility, semantic validation, projection, and fixture logic.
+2. Port semantic validation, projection, and fixture logic.
 3. Port discovery, onboarding, run coordination, and workflow invariants.
 4. Port evaluations, aggregation, package checks, rights checks, and repository
    qualification.

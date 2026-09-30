@@ -155,7 +155,6 @@ fn input<'a>(
 ) -> ManifestQualificationInput<'a> {
     ManifestQualificationInput {
         expected_name: "engineering-assurance",
-        expected_version: "0.5.0",
         manifest_yaml: &bundle.manifest_yaml,
         manifest_schema_json: &bundle.manifest_schema_json,
         edge_registry_yaml: &bundle.edge_registry_yaml,
@@ -266,14 +265,13 @@ fn manifest_schema_identity_and_registry_failures_are_typed() {
     let mut identity = retained_bundle();
     identity.manifest_yaml = replace(
         &identity.manifest_yaml,
-        "name: engineering-assurance\nversion: 0.5.0",
-        "name: changed\nversion: 9.9.9",
+        "name: engineering-assurance",
+        "name: changed",
     );
     let views = identity.resource_views();
-    assert!(categories(&identity, &views).starts_with(&[
-        ManifestFindingCategory::ManifestNameMismatch,
-        ManifestFindingCategory::ManifestVersionMismatch,
-    ]));
+    assert!(
+        categories(&identity, &views).starts_with(&[ManifestFindingCategory::ManifestNameMismatch])
+    );
 
     let mut registry = baseline;
     registry.edge_registry_yaml = b"edge_types: {}\n".to_vec();

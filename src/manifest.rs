@@ -45,8 +45,6 @@ pub struct ManifestArtifactResource<'a> {
 pub struct ManifestQualificationInput<'a> {
     /// Exact module name expected by the caller.
     pub expected_name: &'a str,
-    /// Exact module version expected by the caller.
-    pub expected_version: &'a str,
     /// Candidate module manifest YAML bytes.
     pub manifest_yaml: &'a [u8],
     /// Authoritative module-manifest JSON Schema bytes.
@@ -83,8 +81,6 @@ pub enum ManifestFindingCategory {
     ManifestProjectionInvalid,
     /// The manifest module name differs from the caller's expected identity.
     ManifestNameMismatch,
-    /// The manifest module version differs from the caller's expected identity.
-    ManifestVersionMismatch,
     /// The edge-registry manifest is not an unambiguous required YAML mapping.
     EdgeRegistryInvalid,
     /// One artifact type name appears more than once in the manifest.
@@ -249,7 +245,6 @@ impl ManifestQualificationError {
 #[derive(Debug, Deserialize)]
 struct ManifestProjection {
     name: String,
-    version: String,
     artifact_types: Vec<ArtifactProjection>,
 }
 
@@ -376,11 +371,6 @@ fn validate_identity(
     if manifest.name != input.expected_name {
         findings.push(ManifestFinding::global(
             ManifestFindingCategory::ManifestNameMismatch,
-        ));
-    }
-    if manifest.version != input.expected_version {
-        findings.push(ManifestFinding::global(
-            ManifestFindingCategory::ManifestVersionMismatch,
         ));
     }
 }
