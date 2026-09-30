@@ -160,8 +160,8 @@ fn with_digests(manifest_text: &str) -> String {
 /// manifest digest. Changes nothing else. Run alone with
 /// `EA_BLESS=1 cargo test --features full --test semantic_exports -- --ignored bless`. It keeps a
 /// trace tag because the repository's source audit requires one on every test.
-/// Tag-based tools may therefore count TC-194 as covered by it; the live TC-194
-/// tests are what actually check the files, and this one only rewrites them.
+/// Tag-based tools may therefore count TC-194 as covered by it. Quoin enforces
+/// the digest and `$id` at install; this test only writes those values.
 #[test]
 #[ignore = "rewrites committed files; run alone with EA_BLESS=1"]
 #[trace("TC-194", "FR-003-AC-7")]

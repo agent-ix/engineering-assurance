@@ -14,7 +14,8 @@ relationships:
 ## Description
 
 Engineering Assurance SHALL publish one reviewed compatibility matrix naming
-the exact released versions of the shared assurance components, and SHALL classify an observed toolchain against it.
+the exact released versions of the shared assurance components, and SHALL
+classify an observed toolchain against it.
 
 An enforcing repository migration SHALL NOT begin until a human records
 acceptance of that matrix.
