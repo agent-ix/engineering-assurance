@@ -21,8 +21,7 @@ For the configuration module or CLI, check out `v0.4.1` from this repository's
 canonical remote and record the resolved commit alongside the consuming change.
 The repository intentionally refuses npm publication, so a tag is the
 distribution boundary. Before adopting the tag, run the consumer's relevant
-native tests and, where the compatibility matrix is in scope, run
-`engineering-assurance compatibility-observe --root <consumer-root>`.
+native tests.
 
 ## What a consumer may use
 

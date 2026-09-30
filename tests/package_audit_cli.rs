@@ -73,7 +73,6 @@ fn tc_111_real_wheel_and_npm_archives_install_and_agree() {
         "build",
         "engineering_assurance.egg-info",
         "manifest.yaml",
-        "compatibility-matrix.json",
         "contracts",
         "fixtures",
         "schemas",

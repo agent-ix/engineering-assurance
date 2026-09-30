@@ -280,9 +280,8 @@ checking, manifest validation, and qualification assertions to Rust.
   historical evidence bytes.
 - Compare complete staged package membership with explicit allowlists and reject
   missing, extra, or escaping members.
-- The npm staging adapter SHALL copy only `manifest.yaml`,
-  `compatibility-matrix.json`, `contracts/`, `fixtures/`, `schemas/`, and
-  `skeletons/` from the repository-owned `engineering_assurance/` module root
+- The npm staging adapter SHALL copy only `manifest.yaml`, `contracts/`,
+  `fixtures/`, `schemas/`, and `skeletons/` from the repository-owned `engineering_assurance/` module root
   to the package root.
 - The npm staging adapter SHALL preflight every selected source as a regular
   file or directory containing only regular files and directories.

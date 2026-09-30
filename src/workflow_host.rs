@@ -11,12 +11,9 @@ use std::{
     time::Duration,
 };
 
-use engineering_assurance::{
-    compatibility,
-    workflow::{
-        DecisionChoice, DecisionEvent, WorkflowBinding, WorkflowGate, WorkflowHostRequest,
-        WorkflowHostResult, WorkflowKind, WorkflowNextAction, WorkflowOperation, WorkflowSnapshot,
-    },
+use engineering_assurance::workflow::{
+    DecisionChoice, DecisionEvent, WorkflowBinding, WorkflowGate, WorkflowHostRequest,
+    WorkflowHostResult, WorkflowKind, WorkflowNextAction, WorkflowOperation, WorkflowSnapshot,
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Map, Value};
@@ -24,7 +21,6 @@ use thiserror::Error;
 
 use crate::process_host::{self, ProcessError, ProcessLimits};
 
-const IX_FLOW_COMPONENT: &str = "ix-flow";
 const HOST_TIMEOUT: Duration = Duration::from_secs(60);
 const MAX_HOST_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
 
@@ -55,8 +51,6 @@ pub(crate) enum WorkflowHostError {
     DecisionConflict { detail: String },
     #[error("ix-flow is unavailable: {detail}")]
     Unavailable { detail: String },
-    #[error("ix-flow version {observed:?} does not match required {expected:?}")]
-    VersionIncompatible { observed: String, expected: String },
     #[error("ix-flow command {operation:?} failed with {upstream_code:?}: {detail}")]
     CommandFailed {
         operation: String,
@@ -77,7 +71,6 @@ impl WorkflowHostError {
             Self::Transition { .. } => "workflow_transition_invalid",
             Self::DecisionConflict { .. } => "workflow_decision_conflict",
             Self::Unavailable { .. } => "ix_flow_unavailable",
-            Self::VersionIncompatible { .. } => "ix_flow_version_incompatible",
             Self::CommandFailed { .. } => "ix_flow_command_failed",
             Self::InvalidResponse { .. } => "ix_flow_response_invalid",
             Self::OutcomeIndeterminate { .. } => "ix_flow_outcome_indeterminate",
@@ -104,7 +97,6 @@ fn execute_with_limits(
     let state_dir = absolute_state_directory(&request.state_dir)?;
     let skill_root = canonical_skill_root(&request.skill_root, &request.binding, workflow)?;
     let executable = executable(&request.ix_flow_executable)?;
-    require_compatible_version(&executable, limits)?;
 
     let envelope = start_or_resume(
         &executable,
@@ -210,42 +202,6 @@ fn executable(value: &str) -> Result<OsString, WorkflowHostError> {
         });
     }
     Ok(path.as_os_str().to_owned())
-}
-
-fn require_compatible_version(
-    executable: &OsStr,
-    limits: HostLimits,
-) -> Result<(), WorkflowHostError> {
-    let expected =
-        compatibility::expected_component_version(IX_FLOW_COMPONENT).map_err(|error| {
-            WorkflowHostError::Request {
-                detail: error.to_string(),
-            }
-        })?;
-    let completed = run_process(
-        executable,
-        &[OsStr::new("--version")],
-        false,
-        "version",
-        limits,
-    )?;
-    if !completed.status.success() {
-        return Err(WorkflowHostError::InvalidResponse {
-            operation: "version".to_owned(),
-            detail: format!("process exited with {}", completed.status),
-        });
-    }
-    let observed = std::str::from_utf8(&completed.stdout)
-        .map_err(|source| WorkflowHostError::InvalidResponse {
-            operation: "version".to_owned(),
-            detail: source.to_string(),
-        })?
-        .trim()
-        .to_owned();
-    if observed != expected {
-        return Err(WorkflowHostError::VersionIncompatible { observed, expected });
-    }
-    Ok(())
 }
 
 fn start_or_resume(
@@ -713,7 +669,6 @@ fn run_process(
         },
     )
     .map(|completed| CompletedProcess {
-        status: completed.status,
         stdout: completed.stdout,
         stderr: completed.stderr,
     })
@@ -1035,7 +990,6 @@ enum RunStatus {
 
 #[derive(Debug)]
 struct CompletedProcess {
-    status: std::process::ExitStatus,
     stdout: Vec<u8>,
     stderr: Vec<u8>,
 }

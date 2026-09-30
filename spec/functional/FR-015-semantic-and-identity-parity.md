@@ -19,14 +19,13 @@ relationships:
 
 ## Description
 
-Engineering Assurance SHALL port compatibility classification, accepted-corpus
-access, evidence-state classification, verification-semantic validation,
+Engineering Assurance SHALL port accepted-corpus access, evidence-state classification, verification-semantic validation,
 bounded projections, and fixture generation to Rust without changing observable
 identities or ownership.
 
 ## Inputs
 
-- The accepted compatibility matrix and pinned corpus.
+- The pinned corpus.
 - Canonical semantic-reference and report fixtures.
 - Finite RFC 8259 JSON producer outputs, including exact integers outside the
   `i64` and `u64` ranges.
@@ -108,7 +107,7 @@ reading prose.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-015-AC-1 | Over the accepted corpus and focused fictional cases, Rust produces the declared byte-identical canonical fixtures, identity digests, compatibility classifications, and bounded reports, including exact integers beyond `i64` and `u64`; structured-identity inputs produce their declared classification or refusal. | Test (TC-100) |
+| FR-015-AC-1 | Over the accepted corpus and focused fictional cases, Rust produces the declared byte-identical canonical fixtures, identity digests, and bounded reports, including exact integers beyond `i64` and `u64`; structured-identity inputs produce their declared classification or refusal. | Test (TC-100) |
 | FR-015-AC-2 | Success, unavailable, not-computed, not-applicable, failed, inconclusive, malformed, stale, tampered, lossy, and unreadable remain distinguishable; typed state labels retain stable wire spellings and untyped labels require exactly one known state. | Test (TC-102) |
 | FR-015-AC-3 | Invalid versions, provenance, mappings, fixtures, digests, and numeric identity inputs fail without an identity digest or source-byte change; immutable `x`/`X` metadata remains accepted; every exercised semantic and PGM-01 refusal exposes its expected typed reason without inspecting diagnostic prose, and each of the six distinguishable incomplete-retention failures carries a typed reason distinct from the other five. | Test (TC-103) |
 | FR-015-AC-4 | Static ownership and execution audits find no copied portable contract family, persisted evidence family, or executable foreign-language fixture. | Test (TC-104) |

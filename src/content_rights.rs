@@ -627,8 +627,8 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         "https:",
         "//agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/"
     );
-    // The `$id` version is the module version, which `tests/version_alignment.rs`
-    // keeps equal to the crate version, so a release bump needs no edit here.
+    // The `$id` version is the module version, which ships in lockstep with the
+    // crate version, so a release bump needs no edit here.
     let authored_schema_prefix = format!(
         "{}{}/",
         concat!(

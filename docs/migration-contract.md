@@ -4,17 +4,6 @@ The reviewed procedure Agents A, B, and C apply to the eight campaign
 repositories once the shared interfaces are released. Answers
 `agent-ix/engineering-assurance#10`.
 
-**Nothing in this playbook may begin until the compatibility matrix records
-human acceptance.** That acceptance lives in `accepted_by` and `accepted_at` in
-`engineering_assurance/compatibility-matrix.json`. Do not read their current
-values from this document — read them from the file, or run
-`engineering-assurance compatibility-observe --root .`, which exits non-zero while the
-matrix records no acceptance and prints the state either way.
-
-An agent cannot grant that acceptance. It may transcribe one a named human has
-explicitly directed it to record, and the attribution must name that human;
-TC-082 fails if the record names an agent instead.
-
 ## The repositories, and who holds them
 
 | Agent | Repositories |
@@ -48,7 +37,7 @@ read at `origin/main`.
 | `validate_governance.py`, `validate_matrix_status.py` | contract-ir | **KEEP** | Governance-specific to that repository's own PGM-01 obligations, not a generic evidence family. |
 | `schemas/*-evidence-*.schema.json`, `schemas/pgm01-*` | runtime, tl-mltl, contract-ir | **DELETE, read-only-preserved** | Repository-local generic evidence schemas. Historical records stay readable through the FR-010 compatibility view; the schemas stop being written against. |
 | `assurance_chain.py` | all eight | **REPLACE** | Duplicated Python orchestration around Quoin's native sealing, retention, receipt, and audit operations. Consumer migration under `agent-ix/quire-research#59` and `#60` replaces executable logic with the shared Rust CLI and declarative local inputs; Quoin remains the evidence-schema and store owner. |
-| `check_shared_pins.py` | all eight | **REPLACE** | Duplicated local observation of the Engineering Assurance compatibility contract. Replace with the shared Rust compatibility API/CLI; each repository retains only its declared component and artifact pins. |
+| `check_shared_pins.py` | all eight | **DELETE** | Duplicated local observation of an up-front tool-version list. Engineering Assurance keeps no such list; tool identity is recorded at run time. |
 | `rust_test_census.py` | tl-parse, tl-mltl | **REPLACE** | Generic qualification that compares requirement-tagged Rust tests with Cargo's compiled census. Replace with one Engineering Assurance Rust qualification command; Quire remains authoritative for static trace relationships. |
 | `check_kani_harnesses.py`, `check_kani_mutations.py`, `run_kani_gate.py` | runtime | **KEEP** | Runtime-owned proof census, mutation oracle, and structured Kani producer. These qualify runtime semantics and do not move into a generic evidence store. |
 | `measure_footprint.py` | runtime | **KEEP** | Runtime-owned producer for its governed footprint and panic-relocation measurement. |
@@ -136,7 +125,6 @@ Per step, and none of it is irreversible:
 | If | Then |
 | --- | --- |
 | the shared path fails at the candidate revision | stop at step 9; the old machinery is still there and still runs |
-| a released component turns out to be wrong | roll it back per the matrix's rollback table; the repository is untouched by that |
 | legacy history reads as `unreadable` | that is the compatibility view working; do not edit the legacy record to make it read |
 | a domain result has no adapter | file it against `agent-ix/quoin` with a real producer and a pinned sample; do not scrape stdout as a stopgap |
 
@@ -163,8 +151,6 @@ body, not in a reviewer's head.
 - [ ] The shared path and the old path both pass at the same candidate
       revision, and the deletion commit is separate and last.
 - [ ] The Makefile is native orchestration; no target computes a verdict.
-- [ ] `engineering-assurance compatibility-observe --root .` passes in the migrating
-      repository's environment.
 - [ ] No workflow changed from manual dispatch.
 
 ## Hosted CI

@@ -17,9 +17,8 @@ use engineering_assurance::{
 };
 
 const MODULE_DIRECTORY: &str = "engineering_assurance";
-const STAGED_NAMES: [&str; 6] = [
+const STAGED_NAMES: [&str; 5] = [
     "manifest.yaml",
-    "compatibility-matrix.json",
     "contracts",
     "fixtures",
     "schemas",

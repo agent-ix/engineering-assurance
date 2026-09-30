@@ -24,7 +24,7 @@ use thiserror::Error;
 const CAPABILITY: &str = "manifest-validate";
 const PROTOCOL: &str = "engineering-assurance.manifest-validate/v1";
 const EXPECTED_MODULE_NAME: &str = "engineering-assurance";
-/// The module ships in lockstep with the crate (FR-012-AC-12), so the crate's
+/// The module ships in lockstep with the crate, so the crate's
 /// own version is the version its manifest must declare.
 const EXPECTED_MODULE_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PACKAGE_DIRECTORY: &str = "engineering_assurance";

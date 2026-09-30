@@ -783,8 +783,8 @@ fn tc_068_published_schemas_still_describe_the_values_this_library_produces() {
     // schemas before it applied a single semantic rule. The Rust port replaced
     // that with typed decoding, which is stricter about structure but says
     // nothing about the schema files — and those files are still shipped by
-    // `setup.cfg` and still named in `compatibility-matrix.json`, so they
-    // remain this repository's published description of these records. Without
+    // `setup.cfg`, so they remain this repository's published description of
+    // these records. Without
     // this test the two can drift apart indefinitely, and the first party to
     // notice would be an external consumer reading the published contract.
     let fixture_schema = packaged_validator("verification-semantics-fixture-v1.schema.json");

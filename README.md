@@ -44,21 +44,13 @@ not resolved here.
 
 ### 1. Install the toolchain
 
-These are the versions recorded in
-[`engineering_assurance/compatibility-matrix.json`](engineering_assurance/compatibility-matrix.json):
-
 ```bash
 npm install --global \
-  @agent-ix/quire-cli@0.33.0 \
-  @agent-ix/quoin@0.24.1 \
-  @agent-ix/ix-flow@0.2.3
+  @agent-ix/quire-cli \
+  @agent-ix/quoin \
+  @agent-ix/ix-flow
 rustup toolchain install 1.98.1
 ```
-
-The matrix is the live source for supported versions. A newer release that the
-matrix has not seen is classified `unknown`: untested, not rejected. It may
-work, but it has not been checked against this module. See
-[Verify your install](#4-verify-your-install) to classify what you have.
 
 Versions are published as Git tags. GitHub Releases are not cut for every tag,
 so use `git tag` or the repository's tags page, not the Releases page, to find
@@ -189,31 +181,6 @@ The `@v0.4.1` suffix on `marketplace add` pins the plugin to that tag. Without
 it, the marketplace follows this repository's default branch and can move past
 the tag you installed for the module and the CLI.
 
-Then classify the toolchain against the compatibility matrix:
-
-```bash
-engineering-assurance compatibility-observe --root .
-```
-
-It prints one verdict per component and exits non-zero unless every component
-is `compatible`. A component on a newer release the matrix has not seen
-reports `newer_untested`, with the reason "not approved and not rejected". That
-is expected when you run newer toolchain releases. It is not an install failure,
-and it is distinct from `incompatible` and from `unknown` (absent, older than the
-pin, or not a plain release).
-
-The result also carries a `module` object comparing the installed
-`engineering-assurance` Quoin module (the `version` in its `manifest.yaml`,
-under `IX_CONFIG_ROOT`, when set and non-empty, or `~/.ix`) with the binary. The gate stays closed
-unless they match, or if no module is found.
-
-The `engineering-assurance` row is the version of the running binary, so it
-does not depend on `--root`. Run it from any directory. A pass describes the
-installed executable, not the source tree `--root` points at. It is a
-build-consistency check (the binary against the matrix compiled into it), not an
-observation of your environment; the `module` comparison is the environmental
-signal for this package. `--root` is only checked to be a directory.
-
 ## Upgrading artifacts from an earlier release
 
 Documents written against v0.3.x or earlier can fail the current schemas.
@@ -321,7 +288,6 @@ protocol is versioned and documented by the schemas under
 | --- | --- |
 | `onboarding` | Inventory a repository and emit a bounded onboarding result. |
 | `workflow-host` | Coordinate a bound workflow lifecycle through ix-flow. |
-| `compatibility` / `compatibility-observe` | Classify explicit or locally observed toolchain versions. |
 | `manifest-validate` | Qualify the module against explicit repository and registry roots. |
 | `integration-evidence` | Verify Quire traceability and retained release evidence. |
 | `content-rights-tree` | Inspect a Git-selected repository tree for rights violations. |

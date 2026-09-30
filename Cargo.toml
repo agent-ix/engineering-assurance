@@ -57,19 +57,9 @@ path = "tests/claim_strength.rs"
 required-features = ["semantics"]
 
 [[test]]
-name = "compatibility_cli"
-path = "tests/compatibility_cli.rs"
-required-features = ["full"]
-
-[[test]]
 name = "compatibility_corpus"
 path = "tests/compatibility_corpus.rs"
 required-features = ["full"]
-
-[[test]]
-name = "compatibility_parity"
-path = "tests/compatibility_parity.rs"
-required-features = ["compatibility"]
 
 [[test]]
 name = "content_rights_parity"
@@ -197,11 +187,6 @@ path = "tests/traceability_reconciliation.rs"
 required-features = ["full"]
 
 [[test]]
-name = "version_alignment"
-path = "tests/version_alignment.rs"
-required-features = ["full"]
-
-[[test]]
 name = "workflow_host_cli"
 path = "tests/workflow_host_cli.rs"
 required-features = ["full"]
@@ -287,7 +272,6 @@ claim-strength = [
 # module it imports. Only `evidence`, `semantics` (and so `evaluation` and
 # `evaluation-reports`), `exact-numbers` and `full` turn on
 # `serde_json/arbitrary_precision`, through `exact-numbers`.
-compatibility = ["dep:serde", "dep:serde_json", "dep:thiserror"]
 compatibility-corpus = ["content-digest", "dep:serde", "dep:serde_json", "dep:thiserror"]
 content-rights = [
   "dep:regex",
@@ -373,7 +357,6 @@ full = [
   "atomic-publish",
   "campaign",
   "claim-strength",
-  "compatibility",
   "compatibility-corpus",
   "content-digest",
   "content-rights",
@@ -430,9 +413,6 @@ zip = { version = "8.6", default-features = false, features = ["deflate-flate2"]
 # copy carried, matching the other Agent-IX repos that consume it.
 ix-trace-rs = { git = "https://github.com/agent-ix/ix-trace-rs", rev = "2ce4ebf47f726b9d76388220545cd0abda8a5cfb", version = "=0.1.0" }
 tempfile = "3.27"
-# The `compatibility` unit tests use these; the feature itself does not.
-time = { version = "0.3", features = ["formatting", "parsing"] }
-unicode-casefold = "0.2"
 
 [workspace]
 resolver = "2"

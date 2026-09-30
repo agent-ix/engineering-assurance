@@ -88,9 +88,7 @@ Rust library and CLI.
   refusal removes the staged file and leaves existing repository bytes
   unchanged.
 - Delegate run state, transitions, and terminal decision history to ix-flow.
-- Before any workflow mutation, read the exact ix-flow release pin from the
-  compatibility matrix and require `ix-flow --version` to match it. Parse
-  ix-flow's JSON `ok`, `state`, `error`, run data, gates, and events rather than
+- Parse ix-flow's JSON `ok`, `state`, `error`, run data, gates, and events rather than
   treating process exit status or diagnostic prose as the contract.
 - For a new run, invoke ix-flow with the canonical skill and no gate-mode or
   per-transition override, then add exactly one complete `run_binding` item.
@@ -139,7 +137,7 @@ Rust library and CLI.
 
 ## Error Conditions
 
-Unavailable Quire or ix-flow tools, incompatible ix-flow versions, malformed or
+Unavailable Quire or ix-flow tools, malformed or
 oversized host responses, host timeouts, run-binding mismatches, invalid
 transitions, automatic or conflicting terminal decisions, escaping
 artifact targets, unknown invariant names, malformed instance snapshots, and
@@ -151,8 +149,7 @@ history. Onboarding machine refusals use `onboarding_request_invalid`,
 `onboarding_publication_failed`. Workflow-host refusals use
 `workflow_host_request_invalid`, `workflow_binding_invalid`,
 `workflow_transition_invalid`, `workflow_decision_conflict`,
-`ix_flow_unavailable`, `ix_flow_version_incompatible`,
-`ix_flow_command_failed`, `ix_flow_response_invalid`, or
+`ix_flow_unavailable`, `ix_flow_command_failed`, `ix_flow_response_invalid`, or
 `ix_flow_outcome_indeterminate`; invariant-evaluation refusals use
 `workflow_invariant_request_invalid`, `workflow_invariant_unknown`, or
 `workflow_binding_invalid` as applicable. Quire unavailability during inventory
@@ -177,7 +174,7 @@ Quire unavailability during staged publication refuses publication.
 | --- | --- | --- |
 | FR-016-AC-1 | For the accepted onboarding fixtures, Rust returns the declared complete sorted inventory, status, recommendation, and artifact path for existing, absent, conflicting, malformed, unavailable, unjustified, incomplete-boundary, and valid-authoring cases without executing another implementation; duplicate-key or merge-key artifact identities remain malformed; absolute or parent-traversing targets, symlink escapes, existing destinations, invalid staged artifacts, malformed requests, and unsupported artifact types refuse without publishing bytes. | Test (TC-105) |
 | FR-016-AC-2 | For every canonical invariant and focused valid boundary fixture, Rust and the retained reference produce the same complete ordered outcome set at the same explicit evaluation instant; unknown names and malformed Rust requests are refused before an outcome is emitted. | Test (TC-106) |
-| FR-016-AC-3 | Against the exact accepted ix-flow pin, start, pristine unbound-run recovery, interruption/resume, explicit acceptance, explicit rejection, missing choice, repeated same choice, opposite choice, invalid transition, run-binding mismatch, broken event chain, unavailable/incompatible host, malformed/oversized/timed-out response, and automatic-gate evidence preserve ix-flow-owned state and human-gate behavior; every successful Rust result is typed and follows an intact ix-flow chain verification, every pre-mutation refusal leaves prior history unchanged, and every ambiguous post-mutation outcome is reported as indeterminate and reconciled on retry. | Test (TC-107) |
+| FR-016-AC-3 | Start, pristine unbound-run recovery, interruption/resume, explicit acceptance, explicit rejection, missing choice, repeated same choice, opposite choice, invalid transition, run-binding mismatch, broken event chain, unavailable host, malformed/oversized/timed-out response, and automatic-gate evidence preserve ix-flow-owned state and human-gate behavior; every successful Rust result is typed and follows an intact ix-flow chain verification, every pre-mutation refusal leaves prior history unchanged, and every ambiguous post-mutation outcome is reported as indeterminate and reconciled on retry. | Test (TC-107) |
 | FR-016-AC-4 | Canonical and pilot invocations pass through Rust before either legacy JavaScript path is removed. | Test (TC-108) |
 | FR-016-AC-5 | Starting from a passing projection and breaking one binding, the Rust evaluator fails closed with that binding's code, and the retained reference agrees: every stage pair other than one step forward in the MeasurementPlan schema's stage order, and an unknown stage, yields `promotion_must_advance_one_stage`; an impact snapshot missing any change array or naming another revision, profile, or baseline yields `impact_snapshot_incomplete`; an expected but absent exception, or any recorded exception that is unowned, unjustified, without impact, expired at the evaluation instant, or undated, yields `owned_current_exception_required`; and a review for another subject, source revision, analysis, or artifact type, an invalid one, or one without a path yields `architecture_review_missing` or `code_review_missing`. | Test (TC-201) |
 
@@ -185,12 +182,6 @@ Quire unavailability during staged publication refuses publication.
 
 - **Upstream**: FR-001 through FR-005, FR-014, FR-015, and an ix-flow interface
   supported by the ix-flow owner.
-- **Compatibility gate**: ix-flow 0.2.3 is the accepted released pin and
-  retains the required JSON envelope, optimistic concurrency, resume, and
-  human-gate contracts. [FR-012](./FR-012-pinned-compatibility-matrix.md)
-  records Peter Krenesky's 2026-09-10 acceptance after TC-107 passed locally;
-  any enforcing migration or legacy removal still requires its own acceptance
-  evidence.
 - **Downstream**: FR-018 governs removal of the old paths.
 - **Sequence**: FR-016-AC-2 is an independently reviewable additive slice. It
   does not authorize the host bridge or JavaScript removal required by
