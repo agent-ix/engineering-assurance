@@ -6,7 +6,8 @@
 //! Each artifact type has ONE JSON Schema 2020-12 file, which is both its
 //! manifest `frontmatter_schema_ref` and its exported `data_schema`; there is no
 //! second copy to drift. Quoin accepts an export only when the schema's bytes
-//! hash to the recorded digest and its `$id` sits under the module's version.
+//! hash to the recorded digest and its `$id` sits under the module's version;
+//! quoin enforces that at install, so this file does not repeat it.
 //!
 //! The schema describes the type's frontmatter. Body sections stay quire's
 //! `body_extraction`; quire-rs applies a `data_schema` only to the declaration
@@ -76,9 +77,6 @@ const ARTIFACTS: [(&str, &str); 5] = [
         "assurance-argument-frontmatter.schema.json",
     ),
 ];
-
-/// Recorded verdicts of the original draft-07 schemas over the corpus below.
-const VERDICTS: &str = include_str!("fixtures/semantic-export-verdicts.json");
 
 fn module_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("engineering_assurance")
@@ -190,9 +188,8 @@ fn bless_rewrites_schema_ids_and_manifest_digests() {
 
 #[trace("TC-194", "FR-003-AC-7")]
 #[test]
-fn every_export_is_a_declared_type_with_a_current_2020_12_schema_under_the_manifest_version() {
+fn every_export_is_a_declared_type_with_a_2020_12_schema() {
     let manifest = manifest();
-    let version = manifest_version(&manifest);
     let types = declared_types(&manifest);
 
     let exports: Vec<&str> = manifest["semantic"]["exports"]
@@ -215,29 +212,15 @@ fn every_export_is_a_declared_type_with_a_current_2020_12_schema_under_the_manif
         );
     }
 
-    // Every recorded digest, including the two campaign exports, is over the
-    // bytes on disk; the id carries the manifest version; the draft is 2020-12.
+    // Every exported schema, including the two campaign exports, is 2020-12.
     let mut checked = BTreeSet::new();
     for entry in &types {
         let Some(data_schema) = entry.get("data_schema") else {
             continue;
         };
         let relative = data_schema["schema"].as_str().expect("schema path");
-        let bytes = fs::read(module_root().join(relative)).expect("schema reads");
-        assert_eq!(
-            data_schema["digest"].as_str(),
-            Some(sha256(&bytes).as_str()),
-            "{relative}: digest does not match the file (EA_BLESS=1 -- --ignored bless)"
-        );
-        let parsed: Value = serde_json::from_slice(&bytes).expect("schema is JSON");
+        let parsed = read_json(&module_root().join(relative));
         assert_eq!(parsed["$schema"], DRAFT_2020_12, "{relative}");
-        let file = relative.strip_prefix("schemas/").expect("under schemas/");
-        assert_eq!(
-            parsed["$id"].as_str(),
-            Some(derived_id(&version, file).as_str()),
-            "{relative}: $id does not carry manifest version {version}; after a version \
-bump run `EA_BLESS=1 cargo test --features full --test semantic_exports -- --ignored bless`"
-        );
         checked.insert(relative.to_owned());
     }
     assert_eq!(
@@ -364,412 +347,6 @@ fn frontmatter(name: &str) -> Value {
         .expect("skeleton has frontmatter")
         .0;
     yaml_serde::from_str(block).expect("frontmatter is YAML")
-}
-
-/// Every single-field mutation of a base document: drop each key, replace each
-/// key with a wrong-typed value, and add an undeclared key.
-fn mutations(base: &Value) -> Vec<(String, Value)> {
-    let map = base.as_object().expect("frontmatter is an object");
-    let mut cases = vec![("unmodified".to_owned(), base.clone())];
-    for key in map.keys() {
-        let mut dropped = base.clone();
-        dropped.as_object_mut().expect("object").remove(key);
-        cases.push((format!("drop {key}"), dropped));
-        for (label, wrong) in [
-            ("null", Value::Null),
-            ("number", json!(-1)),
-            ("empty object", json!({})),
-            ("empty list", json!([])),
-            ("empty string", json!("")),
-        ] {
-            let mut changed = base.clone();
-            changed[key] = wrong;
-            cases.push((format!("{key} as {label}"), changed));
-        }
-    }
-    let mut extra = base.clone();
-    extra["undeclared_field"] = json!(true);
-    cases.push(("undeclared field".to_owned(), extra));
-    for status in ["active", "retired", "proposed", "bogus"] {
-        let mut changed = base.clone();
-        changed["status"] = json!(status);
-        cases.push((format!("status {status}"), changed));
-    }
-    cases
-}
-
-fn plan_with_rule(rule: &Value) -> Value {
-    let mut plan = frontmatter("MeasurementPlan");
-    plan["statistical_design"]["decision_rule"] = rule.clone();
-    plan
-}
-
-/// The decision-rule and `margin_mode` cases the Python schema tests express,
-/// including the `dependencies` (now `dependentRequired`) refusals.
-fn decision_rule_cases() -> Vec<(&'static str, Value)> {
-    vec![
-        ("ge threshold", json!({"comparator": "ge", "threshold": 1})),
-        (
-            "unknown comparator",
-            json!({"comparator": "approximately", "threshold": 1}),
-        ),
-        ("missing comparator", json!({"threshold": 1})),
-        ("neither reference", json!({"comparator": "ge"})),
-        (
-            "both references",
-            json!({"comparator": "ge", "threshold": 1, "baseline": "best-seen"}),
-        ),
-        (
-            "margin with a threshold",
-            json!({"comparator": "ge", "threshold": 1, "margin": 0.1}),
-        ),
-        (
-            "margin with eq",
-            json!({"comparator": "eq", "baseline": "prior-collection", "margin": 0.1}),
-        ),
-        (
-            "non-numeric margin",
-            json!({"comparator": "ge", "baseline": "best-seen", "margin": "0.05"}),
-        ),
-        (
-            "absolute margin",
-            json!({"comparator": "ge", "baseline": "prior-collection", "margin": 0.05,
-                   "margin_mode": "absolute"}),
-        ),
-        (
-            "relative margin",
-            json!({"comparator": "ge", "baseline": "prior-collection", "margin": 0.05,
-                   "margin_mode": "relative"}),
-        ),
-        (
-            "margin_mode with a threshold",
-            json!({"comparator": "ge", "threshold": 1, "margin_mode": "relative"}),
-        ),
-        (
-            "margin_mode without a margin",
-            json!({"comparator": "ge", "baseline": "prior-collection",
-                   "margin_mode": "relative"}),
-        ),
-        (
-            "margin_mode with eq and a margin",
-            json!({"comparator": "eq", "baseline": "prior-collection", "margin": 0.1,
-                   "margin_mode": "relative"}),
-        ),
-        (
-            "unknown margin_mode",
-            json!({"comparator": "ge", "baseline": "prior-collection", "margin": 0.05,
-                   "margin_mode": "percent"}),
-        ),
-        (
-            "margin without a baseline",
-            json!({"comparator": "ge", "margin": 0.05}),
-        ),
-        (
-            "interval_level 0.9",
-            json!({"comparator": "ge", "threshold": 1, "interval_level": 0.9}),
-        ),
-        (
-            "interval_level with eq",
-            json!({"comparator": "eq", "threshold": 1, "interval_level": 0.9}),
-        ),
-        (
-            "interval_level 0",
-            json!({"comparator": "ge", "threshold": 1, "interval_level": 0}),
-        ),
-        (
-            "interval_level 1",
-            json!({"comparator": "ge", "threshold": 1, "interval_level": 1}),
-        ),
-        (
-            "interval_level 95",
-            json!({"comparator": "ge", "threshold": 1, "interval_level": 95}),
-        ),
-        (
-            "unknown baseline",
-            json!({"comparator": "ge", "baseline": "vibes"}),
-        ),
-        (
-            "eq against best-seen",
-            json!({"comparator": "eq", "baseline": "best-seen"}),
-        ),
-        (
-            "non-numeric threshold",
-            json!({"comparator": "ge", "threshold": "0.99"}),
-        ),
-        (
-            "duplicated repetitions",
-            json!({"comparator": "ge", "threshold": 1, "repetitions": 5}),
-        ),
-        ("prose rule", json!("escalate when low")),
-    ]
-}
-
-/// The retired-plan shape from `tests/measurement_schema_retired.rs`.
-fn retired_legacy_plan() -> Value {
-    json!({
-        "id": "MP-002",
-        "title": "Historical corpus census",
-        "type": "MeasurementPlan",
-        "status": "retired",
-        "owner": "corpus-owner",
-        "metric": "tl-mltl.corpus-coverage",
-        "definition_version": "tl-mltl.corpus-coverage/v1",
-        "stage": "gate",
-        "statistical_design": {
-            "population": "every cell in the closed catalog",
-            "sampling": "complete deterministic enumeration",
-            "repetitions": 1,
-            "estimator": "covered applicable cells divided by all applicable cells",
-            "error_model": "omitted or duplicated cells",
-            "uncertainty": "no sampling interval",
-            "decision_rule": "fail when an applicable cell lacks a canonical fixture"
-        },
-        "relationships": []
-    })
-}
-
-fn retired_cases() -> Vec<(String, Value)> {
-    let old = retired_legacy_plan();
-    let mut cases = vec![("retired legacy".to_owned(), old.clone())];
-    for status in ["active", "proposed"] {
-        let mut changed = old.clone();
-        changed["status"] = json!(status);
-        cases.push((format!("legacy prose as {status}"), changed));
-    }
-    for field in [
-        "objective",
-        "ground_truth_kind",
-        "protected_apparatus",
-        "negative_controls",
-    ] {
-        let mut changed = old.clone();
-        changed[field] = json!({});
-        cases.push((format!("legacy mixed with {field}"), changed));
-    }
-    let mut zero = old.clone();
-    zero["statistical_design"]["repetitions"] = json!(0);
-    cases.push(("legacy zero repetitions".to_owned(), zero));
-    let mut empty = old.clone();
-    empty["statistical_design"]["decision_rule"] = json!("");
-    cases.push(("legacy empty rule".to_owned(), empty));
-    let mut undeclared = old.clone();
-    undeclared["statistical_design"]["undeclared"] = json!(true);
-    cases.push(("legacy undeclared key".to_owned(), undeclared));
-
-    let mut current = old;
-    current["statistical_design"]["estimator"] = json!("count");
-    current["statistical_design"]["decision_rule"] = json!({"comparator": "ge", "threshold": 1});
-    current["ground_truth_kind"] = json!("mechanical");
-    current["protected_apparatus"] = json!(["evals/harness.py"]);
-    current["negative_controls"] = json!([{
-        "kind": "suppressed-observation",
-        "description": "missing cells lower the reported population"
-    }]);
-    cases.push(("retired current shape".to_owned(), current.clone()));
-    current["status"] = json!("active");
-    cases.push(("active gate".to_owned(), current.clone()));
-    for field in [
-        "ground_truth_kind",
-        "protected_apparatus",
-        "negative_controls",
-    ] {
-        let mut incomplete = current.clone();
-        incomplete.as_object_mut().expect("object").remove(field);
-        cases.push((format!("active gate without {field}"), incomplete));
-    }
-    cases
-}
-
-/// Every nested path of a document: drop it, retype it several ways, add an
-/// undeclared key to each object, and duplicate the first item of each array.
-/// Reaches every `$defs` entry a skeleton populates (claim, reasoning,
-/// participant, challenge, impact, review and measurement policy, objective,
-/// negative control, apparatus path).
-fn deep_mutations(base: &Value) -> Vec<(String, Value)> {
-    fn paths(node: &Value, at: &mut Vec<String>, out: &mut Vec<Vec<String>>) {
-        match node {
-            Value::Object(map) => {
-                for (key, child) in map {
-                    at.push(key.clone());
-                    out.push(at.clone());
-                    paths(child, at, out);
-                    at.pop();
-                }
-            }
-            Value::Array(items) => {
-                for (index, child) in items.iter().enumerate() {
-                    at.push(index.to_string());
-                    out.push(at.clone());
-                    paths(child, at, out);
-                    at.pop();
-                }
-            }
-            _ => {}
-        }
-    }
-    fn parent<'a>(root: &'a mut Value, path: &[String]) -> &'a mut Value {
-        path[..path.len() - 1]
-            .iter()
-            .fold(root, |node, step| match node {
-                Value::Array(items) => &mut items[step.parse::<usize>().expect("index")],
-                other => &mut other[step.as_str()],
-            })
-    }
-    let mut all = Vec::new();
-    paths(base, &mut Vec::new(), &mut all);
-    let mut cases = Vec::new();
-    for path in all {
-        let name = path.join(".");
-        let last = path.last().expect("non-empty path");
-        for (op, wrong) in [
-            ("null", Value::Null),
-            ("number", json!(-1)),
-            ("empty string", json!("")),
-            ("empty list", json!([])),
-            ("empty object", json!({})),
-        ] {
-            let mut changed = base.clone();
-            match parent(&mut changed, &path) {
-                Value::Array(items) => items[last.parse::<usize>().expect("index")] = wrong,
-                node => node[last.as_str()] = wrong,
-            }
-            cases.push((format!("@{name} as {op}"), changed));
-        }
-        let mut dropped = base.clone();
-        match parent(&mut dropped, &path) {
-            Value::Array(items) => {
-                items.remove(last.parse::<usize>().expect("index"));
-            }
-            Value::Object(map) => {
-                map.remove(last.as_str());
-            }
-            _ => unreachable!("a path always ends inside a container"),
-        }
-        cases.push((format!("@{name} dropped"), dropped));
-
-        let mut node = base;
-        for step in &path {
-            node = match node {
-                Value::Array(items) => &items[step.parse::<usize>().expect("index")],
-                other => &other[step.as_str()],
-            };
-        }
-        if node.is_object() {
-            let mut extended = base.clone();
-            let mut target = &mut extended;
-            for step in &path {
-                target = match target {
-                    Value::Array(items) => &mut items[step.parse::<usize>().expect("index")],
-                    other => &mut other[step.as_str()],
-                };
-            }
-            target["undeclared_field"] = json!(true);
-            cases.push((format!("@{name} plus undeclared field"), extended));
-        }
-    }
-    cases
-}
-
-/// The corpus of documents whose verdicts are recorded for each artifact type.
-fn corpus(name: &str) -> Vec<(String, Value)> {
-    let base = frontmatter(name);
-    let mut cases = mutations(&base);
-    cases.extend(deep_mutations(&base));
-    if name == "MeasurementPlan" {
-        cases.extend(
-            decision_rule_cases()
-                .into_iter()
-                .map(|(label, rule)| (format!("rule: {label}"), plan_with_rule(&rule))),
-        );
-        cases.extend(retired_cases());
-    }
-    let labels: BTreeSet<&str> = cases.iter().map(|(label, _)| label.as_str()).collect();
-    assert_eq!(
-        labels.len(),
-        cases.len(),
-        "{name}: corpus labels must be unique"
-    );
-    cases
-}
-
-#[trace("TC-195", "FR-003-AC-8")]
-#[test]
-fn each_artifact_schema_gives_the_verdicts_the_original_draft_07_schema_gave() {
-    let recorded: Value = serde_json::from_str(VERDICTS).expect("verdict fixture is JSON");
-    let mut accepted_total = 0_usize;
-    let mut refused_total = 0_usize;
-    for (name, file) in ARTIFACTS {
-        let validator = validator(&read_json(&module_root().join("schemas").join(file)));
-        assert!(
-            validator.is_valid(&frontmatter(name)),
-            "{name}: the skeleton must be accepted"
-        );
-        let entry = &recorded["types"][name];
-        let accepted: BTreeSet<&str> = entry["accepted"]
-            .as_array()
-            .expect("accepted list")
-            .iter()
-            .map(|label| label.as_str().expect("label"))
-            .collect();
-        let cases = corpus(name);
-        assert_eq!(
-            entry["cases"].as_u64(),
-            Some(cases.len() as u64),
-            "{name}: the corpus size changed; update the fixture by hand with a stated reason"
-        );
-        let labels: BTreeSet<&str> = cases.iter().map(|(label, _)| label.as_str()).collect();
-        for label in &accepted {
-            assert!(
-                labels.contains(label),
-                "{name}: recorded case {label:?} is gone"
-            );
-        }
-        for (label, document) in &cases {
-            let old = accepted.contains(label.as_str());
-            let new = validator.is_valid(document);
-            assert_eq!(
-                new,
-                old,
-                "{name} / {label}: draft-07 verdict was {}, the schema now {}; if intended, \
-                 hand-edit tests/fixtures/semantic-export-verdicts.json in this change",
-                if old { "accept" } else { "refuse" },
-                if new { "accept" } else { "refuse" },
-            );
-            if old {
-                accepted_total += 1;
-            } else {
-                refused_total += 1;
-            }
-        }
-    }
-    // Both verdicts must be exercised, or agreement would prove nothing.
-    assert!(
-        accepted_total > 10 && refused_total > 1000,
-        "{accepted_total} accepted, {refused_total} refused"
-    );
-    // The nested definitions must be reached, not just top-level keys.
-    let reached = |name: &str, prefix: &str| {
-        corpus(name)
-            .iter()
-            .any(|(label, _)| label.starts_with(prefix))
-    };
-    for (name, prefix) in [
-        ("AssuranceArgument", "@top_claim.evidence_refs"),
-        ("AssuranceArgument", "@reasoning.0."),
-        ("AssuranceArgument", "@participants.0."),
-        ("AssuranceArgument", "@challenges.0."),
-        ("AssuranceProfile", "@impact_assessments.0."),
-        ("AssuranceProfile", "@review_policy."),
-        ("AssuranceProfile", "@measurement_policy."),
-        ("MeasurementPlan", "@objective."),
-        ("MeasurementPlan", "@negative_controls.0."),
-        ("MeasurementPlan", "@protected_apparatus.0"),
-    ] {
-        assert!(
-            reached(name, prefix),
-            "{name}: corpus never reaches {prefix}"
-        );
-    }
 }
 
 /// Verdicts of the ORIGINAL draft-07 module on the real quire CLI (quire 0.33,

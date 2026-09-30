@@ -14,8 +14,7 @@ relationships:
 ## Description
 
 Engineering Assurance SHALL publish one reviewed compatibility matrix naming
-the exact released versions and artifact digests of the shared assurance
-components, and SHALL classify an observed toolchain against it.
+the exact released versions of the shared assurance components, and SHALL classify an observed toolchain against it.
 
 An enforcing repository migration SHALL NOT begin until a human records
 acceptance of that matrix.
@@ -26,14 +25,13 @@ acceptance of that matrix.
 - The released Quoin, providing the evidence, measurement, attestation,
   intake, audit, and receipt surfaces.
 - The released ix-flow providing human decision events.
-- This repository's own released tag and the digests of its schemas.
+- This repository's own released tag.
 - The accepted compatibility corpus, pinned as a submodule gitlink.
 
 ## Outputs
 
 - `engineering_assurance/compatibility-matrix.json`, naming each component's
-  released version, the versions it rules out and why, and an informational
-  record of the artifact digests observed at the reviewed release.
+  released version and the versions it rules out and why.
 - A classification of an observed toolchain as compatible, incompatible,
   newer-untested, or unknown, per component, with the reason.
 - Upgrade order and per-component rollback notes.

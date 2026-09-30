@@ -258,27 +258,6 @@ struct MatrixComponent {
     _observe: String,
     incompatible: Vec<String>,
     incompatible_reasons: BTreeMap<String, String>,
-    // Informational release-time record of the artifact digests observed when
-    // this component's pin was reviewed (PLAT-973). Nothing in this crate
-    // verifies a working tree against these digests: they describe what
-    // shipped at the pinned release, not what the checked-out tree currently
-    // contains, and a tree legitimately diverges from them on every schema
-    // edit that has not yet been re-released. Kept only so the embedded
-    // matrix continues to deserialize under `deny_unknown_fields`.
-    #[serde(rename = "artifacts")]
-    _artifacts: Vec<MatrixArtifact>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct MatrixArtifact {
-    #[serde(rename = "path")]
-    _path: String,
-    #[serde(rename = "sha256")]
-    _sha256: String,
-    #[serde(default)]
-    #[serde(rename = "note")]
-    _note: Option<String>,
 }
 
 /// Return one exact component pin from the embedded reviewed matrix.

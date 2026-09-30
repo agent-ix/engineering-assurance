@@ -1,6 +1,6 @@
 {
   "matrix_version": "engineering-assurance.compatibility-matrix/v1",
-  "purpose": "Candidate shared-assurance component pins for the v0.5.0 acceptance decision. The recorded engineering-assurance schema digests describe the v0.4.1 release and are informational provenance.",
+  "purpose": "Candidate shared-assurance component pins for the v0.5.0 acceptance decision.",
   "accepted": {
     "state": "pending_human_acceptance",
     "accepted_by": null,
@@ -27,8 +27,7 @@
       "provides": "Static assurance export consumed by Quoin intake (quire-cli#74).",
       "observe": "quire provenance",
       "incompatible": [],
-      "incompatible_reasons": {},
-      "artifacts": []
+      "incompatible_reasons": {}
     },
     {
       "name": "quoin",
@@ -44,8 +43,7 @@
       "incompatible_reasons": {
         "0.22.5": "predates the `quoin change-assurance` surface; seal, intake, and receipt commands do not exist",
         "0.23.0": "tagged but never published; its release run failed at the test leg on quoin#329, where an adapter accepted an inherited property name as a declared status"
-      },
-      "artifacts": []
+      }
     },
     {
       "name": "ix-flow",
@@ -57,8 +55,7 @@
       "provides": "Human decision events retained as an integrity-verified chain.",
       "observe": "ix-flow --version",
       "incompatible": [],
-      "incompatible_reasons": {},
-      "artifacts": []
+      "incompatible_reasons": {}
     },
     {
       "name": "engineering-assurance",
@@ -68,49 +65,7 @@
       "provides": "Shared verification semantics, the PGM-01 read-only compatibility mapping, the accepted compatibility corpus gate, and the Rust compatibility classifier and ix-flow lifecycle host (FR-008..FR-012, FR-016-AC-3).",
       "observe": "engineering-assurance --version",
       "incompatible": [],
-      "incompatible_reasons": {},
-      "artifacts": [
-        {
-          "path": "engineering_assurance/schemas/architecture-description-frontmatter.schema.json",
-          "sha256": "2221c25c835f000b154f1894e7902acb1a2df371ae1885a63ce13742f8b5f42e"
-        },
-        {
-          "path": "engineering_assurance/schemas/assurance-argument-frontmatter.schema.json",
-          "sha256": "a6898fdfceb83c9aaf6b6383e2b53324a708e7796ca5871f28a8d771be469148"
-        },
-        {
-          "path": "engineering_assurance/schemas/assurance-profile-frontmatter.schema.json",
-          "sha256": "78680c79250a7d0b12949da19cd7b900dc05e2b33206cb0098839003ed183dd5"
-        },
-        {
-          "path": "engineering_assurance/schemas/assurance-report-projection-v1.schema.json",
-          "sha256": "34ea5a24d2672a42ac6e3734f89e1e5c010f4a7e328c4fda6fe7cf02e64a515e"
-        },
-        {
-          "path": "engineering_assurance/schemas/component-assurance-contract-frontmatter.schema.json",
-          "sha256": "0d081f2ee3942513ed46bedfa174b9cfd3e8c3c1ef89198448a4c263231172d4"
-        },
-        {
-          "path": "engineering_assurance/schemas/measurement-plan-frontmatter.schema.json",
-          "sha256": "cb04124535f4ed7444418efea76c7032459d2e56125d5dfe61e06bf64d694ae7"
-        },
-        {
-          "path": "engineering_assurance/schemas/pgm01-compatibility-view-v1.schema.json",
-          "sha256": "317294d04e430f26612a6c7cbde937e06d9e655585a59de1f1e4a0dd66855ca6"
-        },
-        {
-          "path": "engineering_assurance/schemas/semantic-reference-v1.schema.json",
-          "sha256": "c72e7b8e4fe2dd9b845cdc90e210fb47bc36653c3bb96aee23bf24058e08e927"
-        },
-        {
-          "path": "engineering_assurance/schemas/verification-semantics-fixture-v1.schema.json",
-          "sha256": "a8f469ceb0185b29f25fc226a72cc80dfbe7f1d65c8c197ce9cadf82b520898c"
-        },
-        {
-          "path": "engineering_assurance/schemas/verification-semantics-ownership-v1.schema.json",
-          "sha256": "93ef9b5d51e659cdb39c452a45c43f34fd3a033a19ae8e118bb396f93a663c6b"
-        }
-      ]
+      "incompatible_reasons": {}
     }
   ],
   "fixtures": {
