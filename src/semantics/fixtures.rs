@@ -53,7 +53,6 @@ fn generated_case(case: CorpusCase) -> BTreeMap<&'static str, Value> {
         ("id", Value::String(case.id)),
         ("kind", Value::String(case.kind)),
         ("retained_path", Value::String(case.retained_path)),
-        ("retained_sha256", Value::String(case.retained_sha256)),
     ])
 }
 
@@ -271,7 +270,6 @@ mod tests {
                     "kind": kind,
                     "family": "pgm01-v1",
                     "retained_path": format!("records/{kind}.json"),
-                    "retained_sha256": digest,
                     "origin": null,
                     "derivation": null,
                     "expected": {"outcome": "lossy", "note": "a fictional expectation"},
@@ -290,11 +288,9 @@ mod tests {
                 "revision": "0".repeat(40),
                 "path": "tests/golden/fixture.json",
                 "feeds": "check_result",
-                "retention": "retained",
                 "note": "a fictional retained producer case",
                 "source_sha256": digest,
                 "retained_path": "producers/retained.json",
-                "retained_sha256": digest,
             }],
             "chain": {
                 "purpose": "a fictional chain",
@@ -303,11 +299,8 @@ mod tests {
                 "artifacts": [{
                     "role": "change_assurance_record",
                     "produced_by": "quoin",
-                    "retention": "retained",
                     "retained_path": "chain/record.json",
-                    "retained_sha256": digest,
                 }],
-                "referenced_inputs": [],
             },
         })
     }
@@ -401,7 +394,6 @@ mod tests {
             "id",
             "kind",
             "retained_path",
-            "retained_sha256",
         ];
         let mut emitted = Vec::new();
         let mut rest = embedded;
