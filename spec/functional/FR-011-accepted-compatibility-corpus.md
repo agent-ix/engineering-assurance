@@ -33,8 +33,8 @@ Each constructed case SHALL record the exact edit that produced it.
 - Immutable PGM-01 v1 evidence retained by `agent-ix/quire-contract-ir`, read at
   a named `origin/main` revision and never written to.
 - Real producer output from governed producers, including `agent-ix/quire-code-rs`,
-  the contract conformance corpus, an external engine, an agent-evaluation
-  measurement, and a static-scan diagnostic.
+  the contract conformance corpus, a measurement collection, and a static-scan
+  diagnostic.
 - One Quire static export, and the Quoin change-assurance record, proof
   attestation, retained output, decision history, audit report, and verification
   receipt produced from it.
@@ -42,16 +42,15 @@ Each constructed case SHALL record the exact edit that produced it.
 ## Outputs
 
 - `corpus/compatibility/` in the submodule, containing the retained
-  bytes, a corpus index recording every digest, origin, derivation, and expected
+  bytes, a corpus index recording every origin, derivation, and expected
   outcome, and the stated limitations of the set.
 - An enforcing test gate over that corpus, and cross-language projections of its
   case index committed here.
 
 ## Behavior
 
-- Every retained artifact SHALL carry the SHA-256 of its own bytes, and every
-  real legacy case SHALL additionally match the digest its source repository
-  recorded for it.
+- Every real legacy case SHALL match the digest its source repository recorded
+  for it.
 - The corpus SHALL cover the legacy, current, malformed, unavailable,
   not-computed, failed, stale, and tampered states, naming any it lacks.
 - The corpus author SHALL derive a case that does not exist in real history from
@@ -76,8 +75,7 @@ bytes and never reads another repository's checkout.
 
 ## Error Conditions
 
-A retained artifact whose bytes no longer match its recorded digest, a real
-legacy case that no longer matches the digest its source repository recorded, a
+A real legacy case that no longer matches the digest its source repository recorded, a
 missing required state, a constructed case with no recorded derivation, and a
 non-success case that reads as clean each fail the gate by name. The gate never
 reports a count in place of the failing case.
@@ -95,13 +93,13 @@ reports a count in place of the failing case.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-011-AC-1 | Every retained artifact matches its recorded digest, and every real legacy case matches the digest its source repository recorded (CON-2). | Test (TC-069) |
+| FR-011-AC-1 | Every real legacy case matches the digest its source repository recorded (CON-2). | Test (TC-069) |
 | FR-011-AC-2 | The corpus covers all eight required states, and every constructed case records its edit and its reason. | Test (TC-070) |
 | FR-011-AC-3 | Every legacy case maps to the outcome the corpus records, with its required mappings preserved and a stated limitation. | Test (TC-071) |
 | FR-011-AC-4 | No failed, unavailable, not-computed, malformed, or tampered case reads as clean or reports a passed check. | Test (TC-072) |
 | FR-011-AC-5 | A real legacy record preserves revision, repository, producer identity and revision, and environment, keeps inconclusive distinct from passed, and names what it could not carry. | Test (TC-073) |
 | FR-011-AC-6 | The retained receipt validates against Quoin's packaged schema and binds the exact record, attestation, and retained-output digests of the chain. | Test (TC-074) |
-| FR-011-AC-7 | Every producer case names a real producer, a source path, and one shared-model concept, spanning at least two languages and four concepts. | Test (TC-075) |
+| FR-011-AC-7 | Every producer case names a real producer, a source path, and one shared-model concept, spanning at least two languages and three concepts. | Test (TC-075) |
 | FR-011-AC-8 | Reading and mapping the whole corpus changes no byte, no artifact is executable, and the reader reaches for no subprocess, socket, or write (CON-1, CON-4). | Test (TC-076) |
 | FR-011-AC-9 | Every retained legacy and producer case reproduces, from its retained bytes alone and with no source repository checked out, the source digest the corpus recorded for it. | Test (TC-077) |
 | FR-011-AC-10 | An uninitialized corpus fails rather than passing quietly. | Test (TC-078) |

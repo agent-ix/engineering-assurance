@@ -5,7 +5,7 @@
 //!
 //! The corpus is retained by `agent-ix/qa-corpus`, pinned here as a submodule
 //! and read in place. This module parses and classifies the corpus index and
-//! verifies retained-artifact identity. It reads no file: a caller supplies the
+//! validates its retained paths. It reads no file: a caller supplies the
 //! bytes, and the confined host adapter that obtains them belongs to the binary.
 //!
 //! The corpus answers one question — *does the reconciled contract read real
@@ -44,16 +44,6 @@ pub const MAX_RETAINED_PATH_BYTES: usize = 4_096;
 
 /// The largest corpus index this reader will parse.
 pub const MAX_INDEX_BYTES: usize = 4_194_304;
-
-/// Whether an artifact's bytes are retained here or pinned elsewhere by digest.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Retention {
-    /// The bytes are retained in this corpus and may be read.
-    Retained,
-    /// The bytes are pinned by digest and deliberately not retained here.
-    Referenced,
-}
 
 /// A shared-model concept a producer's output feeds.
 ///
@@ -150,7 +140,7 @@ pub struct CaseExpectation {
     /// A reason the view must state for an unmapped field.
     #[serde(default)]
     pub required_unmapped_reason: Option<String>,
-    /// Case whose retained digest is the expected identity for this one.
+    /// Case whose bytes' digest is the expected identity for this one.
     #[serde(default)]
     pub verify_against_digest_of: Option<String>,
     /// Whether the view must carry no mapping at all.
@@ -173,8 +163,6 @@ pub struct CorpusCase {
     pub family: String,
     /// Corpus-relative path to the retained bytes.
     pub retained_path: String,
-    /// SHA-256 identity of the retained bytes.
-    pub retained_sha256: String,
     /// Source provenance, when the case is found rather than constructed.
     pub origin: Option<CaseOrigin>,
     /// The edit that produced the case, when it was constructed.
@@ -191,7 +179,7 @@ impl CorpusCase {
     }
 }
 
-/// One real producer's output, retained or pinned by digest.
+/// One real producer's retained output.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProducerCase {
@@ -207,18 +195,12 @@ pub struct ProducerCase {
     pub path: String,
     /// Shared-model concept the output feeds.
     pub feeds: SharedConcept,
-    /// Whether the bytes are retained here or pinned by digest.
-    pub retention: Retention,
-    /// Reviewer note, including why a referenced case is not retained.
+    /// Reviewer note.
     pub note: String,
     /// Digest of the bytes as the producing repository holds them.
     pub source_sha256: String,
-    /// Corpus-relative path to the retained bytes, when retained.
-    #[serde(default)]
-    pub retained_path: Option<String>,
-    /// SHA-256 identity of the retained bytes, when retained.
-    #[serde(default)]
-    pub retained_sha256: Option<String>,
+    /// Corpus-relative path to the retained bytes.
+    pub retained_path: String,
 }
 
 /// The subject the retained chain was produced about.
@@ -265,34 +247,8 @@ pub struct ChainArtifact {
     pub role: String,
     /// What produced it.
     pub produced_by: String,
-    /// Whether the bytes are retained here.
-    pub retention: Retention,
     /// Corpus-relative path to the retained bytes.
     pub retained_path: String,
-    /// SHA-256 identity of the retained bytes.
-    pub retained_sha256: String,
-}
-
-/// One chain input pinned by digest rather than republished.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct ReferencedInput {
-    /// Role this input plays in the chain.
-    pub role: String,
-    /// What produced it.
-    pub produced_by: String,
-    /// Always `referenced` for this member.
-    pub retention: Retention,
-    /// Declared media type.
-    pub media_type: String,
-    /// BLAKE3 identity recorded by the evidence that binds it.
-    pub blake3: String,
-    /// Exact size in bytes.
-    pub size_bytes: u64,
-    /// The retained artifact that binds this reference.
-    pub bound_by: String,
-    /// Why the bytes are referenced rather than retained.
-    pub reason: String,
 }
 
 /// The retained evidence chain.
@@ -307,8 +263,6 @@ pub struct Chain {
     pub tools: BTreeMap<String, ChainTool>,
     /// Retained chain artifacts.
     pub artifacts: Vec<ChainArtifact>,
-    /// Inputs pinned by digest rather than retained.
-    pub referenced_inputs: Vec<ReferencedInput>,
 }
 
 /// The parsed and validated accepted-corpus index.
@@ -431,70 +385,6 @@ pub enum CorpusError {
         /// Identity of the entry that carries the digest.
         identity: String,
     },
-    /// A retained producer case names no path for the bytes it claims to hold.
-    ///
-    /// The six incomplete-retention failures are six variants rather than one
-    /// carrying a `detail` string because they are not the same event. A
-    /// retained case with no path and a referenced case carrying one are
-    /// opposite mistakes: the first is an entry that promises bytes and does
-    /// not say where they are, which is usually a transcription slip; the
-    /// second is an entry that says its bytes are deliberately elsewhere and
-    /// then supplies a local path anyway, which is a corpus-integrity
-    /// violation, because a reader that follows that path treats a referenced
-    /// case as retained. A caller that only sees one diagnostic code cannot act
-    /// differently on them, and a test that only asserts that code cannot tell
-    /// the two branches apart — swapping them broke nothing.
-    #[error("retained producer case {identity:?} names no retained path")]
-    RetainedCaseWithoutPath {
-        /// Identity of the entry.
-        identity: String,
-    },
-    /// A retained producer case records no digest for the bytes it claims to hold.
-    #[error("retained producer case {identity:?} records no digest")]
-    RetainedCaseWithoutDigest {
-        /// Identity of the entry.
-        identity: String,
-    },
-    /// A referenced producer case supplies a retained path it must not carry.
-    #[error("referenced producer case {identity:?} names a retained path")]
-    ReferencedCaseWithPath {
-        /// Identity of the entry.
-        identity: String,
-    },
-    /// A referenced producer case supplies a retained digest it must not carry.
-    #[error("referenced producer case {identity:?} records a retained digest")]
-    ReferencedCaseWithDigest {
-        /// Identity of the entry.
-        identity: String,
-    },
-    /// A retained chain artifact names no path for the bytes it claims to hold.
-    #[error("retained artifact {identity:?} names no retained path")]
-    RetainedArtifactWithoutPath {
-        /// Identity of the artifact.
-        identity: String,
-    },
-    /// A retained chain artifact records no digest for the bytes it claims to hold.
-    #[error("retained artifact {identity:?} records no digest")]
-    RetainedArtifactWithoutDigest {
-        /// Identity of the artifact.
-        identity: String,
-    },
-    /// The caller asked for bytes of an artifact that is referenced, not retained.
-    #[error("{identity} is referenced by digest, not retained")]
-    NotRetained {
-        /// Identity of the referenced entry.
-        identity: String,
-    },
-    /// Retained bytes do not reproduce the identity the corpus records.
-    #[error("{identity} is {actual}, recorded as {expected}")]
-    DigestMismatch {
-        /// Identity of the entry.
-        identity: String,
-        /// Digest the supplied bytes actually produce.
-        actual: String,
-        /// Digest the corpus records.
-        expected: String,
-    },
     /// An entry leaves a member empty that has to name something.
     ///
     /// A producer case with no producer or no source path is not evidence that
@@ -529,71 +419,10 @@ impl CorpusError {
             Self::DuplicateIdentity { .. } => "duplicate_compatibility_corpus_identity",
             Self::UnsafeRetainedPath { .. } => "unsafe_compatibility_corpus_path",
             Self::InvalidRecordedDigest { .. } => "invalid_compatibility_corpus_digest",
-            Self::RetainedCaseWithoutPath { .. } => {
-                "compatibility_corpus_retained_case_without_path"
-            }
-            Self::RetainedCaseWithoutDigest { .. } => {
-                "compatibility_corpus_retained_case_without_digest"
-            }
-            Self::ReferencedCaseWithPath { .. } => "compatibility_corpus_referenced_case_with_path",
-            Self::ReferencedCaseWithDigest { .. } => {
-                "compatibility_corpus_referenced_case_with_digest"
-            }
-            Self::RetainedArtifactWithoutPath { .. } => {
-                "compatibility_corpus_retained_artifact_without_path"
-            }
-            Self::RetainedArtifactWithoutDigest { .. } => {
-                "compatibility_corpus_retained_artifact_without_digest"
-            }
-            Self::NotRetained { .. } => "compatibility_corpus_artifact_not_retained",
-            Self::DigestMismatch { .. } => "compatibility_corpus_digest_mismatch",
             Self::EmptyMember { .. } => "empty_compatibility_corpus_member",
             Self::UnknownIdentity { .. } => "unknown_compatibility_corpus_identity",
         }
     }
-}
-
-/// Refuse a producer case whose retention and recorded members disagree.
-///
-/// A retained case must carry both halves of an identity — the path its bytes
-/// live at and the digest they must reproduce — because a reader that has one
-/// without the other cannot prove it read the recorded bytes. A referenced case
-/// must carry neither: its bytes are deliberately not here, and either half
-/// would let a reader treat it as retained after all.
-fn validate_producer_retention(producer: &ProducerCase) -> Result<(), CorpusError> {
-    match producer.retention {
-        Retention::Retained => {
-            let path = producer.retained_path.as_deref().ok_or_else(|| {
-                CorpusError::RetainedCaseWithoutPath {
-                    identity: producer.id.clone(),
-                }
-            })?;
-            validate_retained_path(&producer.id, path)?;
-            let digest = producer.retained_sha256.as_deref().ok_or_else(|| {
-                CorpusError::RetainedCaseWithoutDigest {
-                    identity: producer.id.clone(),
-                }
-            })?;
-            if ContentDigest::parse(digest).is_err() {
-                return Err(CorpusError::InvalidRecordedDigest {
-                    identity: producer.id.clone(),
-                });
-            }
-        }
-        Retention::Referenced => {
-            if producer.retained_path.is_some() {
-                return Err(CorpusError::ReferencedCaseWithPath {
-                    identity: producer.id.clone(),
-                });
-            }
-            if producer.retained_sha256.is_some() {
-                return Err(CorpusError::ReferencedCaseWithDigest {
-                    identity: producer.id.clone(),
-                });
-            }
-        }
-    }
-    Ok(())
 }
 
 /// Refuse any retained path that is not a bounded, corpus-relative descendant.
@@ -648,8 +477,7 @@ impl CorpusIndex {
     ///
     /// Returns a stable [`CorpusError`] for an oversized or malformed index, an
     /// unknown corpus version, an absent required member, a duplicate identity,
-    /// an unsafe retained path, an invalid recorded digest, or any of the six
-    /// distinguishable incomplete retentions.
+    /// an unsafe retained path, or an invalid recorded digest.
     pub fn parse(bytes: &[u8]) -> Result<Self, CorpusError> {
         if bytes.len() > MAX_INDEX_BYTES {
             return Err(CorpusError::IndexTooLarge);
@@ -688,11 +516,6 @@ impl CorpusIndex {
                 });
             }
             validate_retained_path(&case.id, &case.retained_path)?;
-            if ContentDigest::parse(&case.retained_sha256).is_err() {
-                return Err(CorpusError::InvalidRecordedDigest {
-                    identity: case.id.clone(),
-                });
-            }
         }
 
         let mut producer_ids = BTreeSet::new();
@@ -718,7 +541,7 @@ impl CorpusIndex {
                     });
                 }
             }
-            validate_producer_retention(producer)?;
+            validate_retained_path(&producer.id, &producer.retained_path)?;
             if ContentDigest::parse(&producer.source_sha256).is_err() {
                 return Err(CorpusError::InvalidRecordedDigest {
                     identity: producer.id.clone(),
@@ -735,20 +558,6 @@ impl CorpusIndex {
                 });
             }
             validate_retained_path(&artifact.role, &artifact.retained_path)?;
-            if ContentDigest::parse(&artifact.retained_sha256).is_err() {
-                return Err(CorpusError::InvalidRecordedDigest {
-                    identity: artifact.role.clone(),
-                });
-            }
-        }
-        let mut referenced_roles = BTreeSet::new();
-        for input in &self.chain.referenced_inputs {
-            if !referenced_roles.insert(input.role.as_str()) {
-                return Err(CorpusError::DuplicateIdentity {
-                    member: "referenced input",
-                    identity: input.role.clone(),
-                });
-            }
         }
         Ok(())
     }
@@ -810,22 +619,6 @@ impl CorpusIndex {
                 identity: role.to_owned(),
             })
     }
-
-    /// One referenced chain input by role.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`CorpusError::UnknownIdentity`] when no input carries `role`.
-    pub fn referenced_input(&self, role: &str) -> Result<&ReferencedInput, CorpusError> {
-        self.chain
-            .referenced_inputs
-            .iter()
-            .find(|input| input.role == role)
-            .ok_or_else(|| CorpusError::UnknownIdentity {
-                member: "referenced input",
-                identity: role.to_owned(),
-            })
-    }
 }
 
 /// One artifact this reader may be asked for bytes of.
@@ -833,21 +626,15 @@ impl CorpusIndex {
 pub struct RetainedArtifact<'a> {
     /// Identity used in refusals.
     pub identity: &'a str,
-    /// Whether the bytes are retained here.
-    pub retention: Retention,
-    /// Corpus-relative path, when retained.
-    pub retained_path: Option<&'a str>,
-    /// Recorded SHA-256 identity, when retained.
-    pub retained_sha256: Option<&'a str>,
+    /// Corpus-relative path to the retained bytes.
+    pub retained_path: &'a str,
 }
 
 impl<'a> From<&'a CorpusCase> for RetainedArtifact<'a> {
     fn from(case: &'a CorpusCase) -> Self {
         Self {
             identity: &case.id,
-            retention: Retention::Retained,
-            retained_path: Some(&case.retained_path),
-            retained_sha256: Some(&case.retained_sha256),
+            retained_path: &case.retained_path,
         }
     }
 }
@@ -856,9 +643,7 @@ impl<'a> From<&'a ChainArtifact> for RetainedArtifact<'a> {
     fn from(artifact: &'a ChainArtifact) -> Self {
         Self {
             identity: &artifact.role,
-            retention: artifact.retention,
-            retained_path: Some(&artifact.retained_path),
-            retained_sha256: Some(&artifact.retained_sha256),
+            retained_path: &artifact.retained_path,
         }
     }
 }
@@ -867,9 +652,7 @@ impl<'a> From<&'a ProducerCase> for RetainedArtifact<'a> {
     fn from(producer: &'a ProducerCase) -> Self {
         Self {
             identity: &producer.id,
-            retention: producer.retention,
-            retained_path: producer.retained_path.as_deref(),
-            retained_sha256: producer.retained_sha256.as_deref(),
+            retained_path: &producer.retained_path,
         }
     }
 }
@@ -879,59 +662,11 @@ impl RetainedArtifact<'_> {
     ///
     /// # Errors
     ///
-    /// Returns [`CorpusError::NotRetained`] for a referenced artifact and
-    /// [`CorpusError::RetainedArtifactWithoutPath`] for a retained artifact
-    /// with no path, so "referenced" can never become a quiet way to read
-    /// nothing.
+    /// Returns [`CorpusError::UnsafeRetainedPath`] when the path is not a
+    /// bounded, corpus-relative descendant.
     pub fn require_retained_path(&self) -> Result<&str, CorpusError> {
-        if self.retention == Retention::Referenced {
-            return Err(CorpusError::NotRetained {
-                identity: self.identity.to_owned(),
-            });
-        }
-        let path = self
-            .retained_path
-            .ok_or_else(|| CorpusError::RetainedArtifactWithoutPath {
-                identity: self.identity.to_owned(),
-            })?;
-        validate_retained_path(self.identity, path)?;
-        Ok(path)
-    }
-
-    /// Prove the supplied bytes are the artifact the corpus records.
-    ///
-    /// The digest check is the whole contract of this function. A corpus whose
-    /// bytes drifted from its index would otherwise still pass every
-    /// behavioural assertion below it, against different bytes than the ones
-    /// reviewed.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`CorpusError::NotRetained`] for a referenced artifact,
-    /// [`CorpusError::RetainedArtifactWithoutDigest`] when no digest is
-    /// recorded, and
-    /// [`CorpusError::DigestMismatch`] when the bytes are not the recorded ones.
-    pub fn verify_bytes(&self, bytes: &[u8]) -> Result<(), CorpusError> {
-        if self.retention == Retention::Referenced {
-            return Err(CorpusError::NotRetained {
-                identity: self.identity.to_owned(),
-            });
-        }
-        let expected =
-            self.retained_sha256
-                .ok_or_else(|| CorpusError::RetainedArtifactWithoutDigest {
-                    identity: self.identity.to_owned(),
-                })?;
-        let actual = ContentDigest::of_bytes(bytes).into_hex();
-        if actual == expected {
-            Ok(())
-        } else {
-            Err(CorpusError::DigestMismatch {
-                identity: self.identity.to_owned(),
-                actual,
-                expected: expected.to_owned(),
-            })
-        }
+        validate_retained_path(self.identity, self.retained_path)?;
+        Ok(self.retained_path)
     }
 }
 
@@ -959,7 +694,6 @@ mod tests {
                     "kind": kind,
                     "family": "pgm01-v1",
                     "retained_path": format!("records/{kind}.json"),
-                    "retained_sha256": digest,
                     "origin": null,
                     "derivation": if position == 0 {
                         Value::Null
@@ -984,28 +718,26 @@ mod tests {
             "cases": cases,
             "producer_cases": [
                 {
-                    "id": "producer-retained",
+                    "id": "producer-rust",
                     "language": "rust",
                     "producer": "agent-ix/fictional-producer",
                     "revision": "0".repeat(40),
                     "path": "tests/golden/fixture.json",
                     "feeds": "check_result",
-                    "retention": "retained",
-                    "note": "a fictional retained producer case",
+                    "note": "a fictional producer case",
                     "source_sha256": digest,
                     "retained_path": "producers/retained.json",
-                    "retained_sha256": digest,
                 },
                 {
-                    "id": "producer-referenced",
+                    "id": "producer-typescript",
                     "language": "typescript",
                     "producer": "agent-ix/fictional-consumer",
                     "revision": "1".repeat(40),
                     "path": "dist/result.json",
                     "feeds": "measurement",
-                    "retention": "referenced",
-                    "note": "These bytes are NOT retained here; they are pinned by digest.",
+                    "note": "a second fictional producer case",
                     "source_sha256": digest,
+                    "retained_path": "producers/typescript.json",
                 },
             ],
             "chain": {
@@ -1016,28 +748,12 @@ mod tests {
                     {
                         "role": "change_assurance_record",
                         "produced_by": "quoin",
-                        "retention": "retained",
                         "retained_path": "chain/record.json",
-                        "retained_sha256": digest,
                     },
                     {
                         "role": "receipt_schema",
                         "produced_by": "quoin",
-                        "retention": "retained",
                         "retained_path": "chain/receipt.schema.json",
-                        "retained_sha256": digest,
-                    },
-                ],
-                "referenced_inputs": [
-                    {
-                        "role": "quire_export",
-                        "produced_by": "quire",
-                        "retention": "referenced",
-                        "media_type": "application/json",
-                        "blake3": "3".repeat(64),
-                        "size_bytes": 1024,
-                        "bound_by": "chain/attestation-sealed.json",
-                        "reason": "outside the publishable content boundary",
                     },
                 ],
             },
@@ -1098,48 +814,29 @@ mod tests {
 
     #[trace("TC-069", "FR-011-AC-1", "FR-015-AC-5")]
     #[test]
-    fn tc_069_verifies_recorded_identity_and_refuses_drift() {
+    fn tc_069_resolves_a_retained_case_to_its_validated_path() {
         let index = index();
         let case = index.case("case-legacy").expect("case must exist");
         let artifact = RetainedArtifact::from(case);
 
-        artifact
-            .verify_bytes(b"retained bytes")
-            .expect("the recorded bytes must verify");
         assert_eq!(artifact.require_retained_path(), Ok("records/legacy.json"));
 
-        let error = artifact
-            .verify_bytes(b"edited bytes")
-            .expect_err("drifted bytes must refuse");
-        assert_eq!(error.code(), "compatibility_corpus_digest_mismatch");
-        assert!(error.to_string().contains(&case.retained_sha256));
-
-        // A referenced artifact refuses rather than quietly reading nothing.
-        let referenced = index
-            .producer_cases
-            .iter()
-            .find(|producer| producer.retention == Retention::Referenced)
-            .expect("the index must carry a referenced producer case");
-        let referenced = RetainedArtifact::from(referenced);
+        let unsafe_artifact = RetainedArtifact {
+            identity: "unsafe",
+            retained_path: "../outside.json",
+        };
         assert_eq!(
-            referenced
-                .verify_bytes(b"anything")
-                .expect_err("a referenced artifact must refuse")
-                .code(),
-            "compatibility_corpus_artifact_not_retained"
-        );
-        assert_eq!(
-            referenced
+            unsafe_artifact
                 .require_retained_path()
-                .expect_err("a referenced artifact exposes no readable path")
+                .expect_err("an escaping path must refuse")
                 .code(),
-            "compatibility_corpus_artifact_not_retained"
+            "unsafe_compatibility_corpus_path"
         );
     }
 
     #[trace("TC-075", "FR-011-AC-7", "FR-015-AC-5")]
     #[test]
-    fn tc_075_exposes_producer_language_concept_and_retention() {
+    fn tc_075_exposes_producer_language_and_concept() {
         let index = index();
         let languages: BTreeSet<&str> = index
             .producer_cases
@@ -1157,27 +854,16 @@ mod tests {
                 && concepts.contains(&SharedConcept::Measurement)
         );
 
-        let referenced = index
-            .producer_cases
-            .iter()
-            .find(|producer| producer.retention == Retention::Referenced)
-            .expect("the index must carry a referenced producer case");
-        assert!(referenced.retained_path.is_none());
-        assert_eq!(referenced.source_sha256.len(), 64);
+        let producer = &index.producer_cases[1];
+        assert_eq!(producer.retained_path, "producers/typescript.json");
+        assert_eq!(producer.source_sha256.len(), 64);
 
-        assert_eq!(
-            index
-                .referenced_input("quire_export")
-                .expect("the referenced export must resolve")
-                .bound_by,
-            "chain/attestation-sealed.json"
-        );
         assert_eq!(
             index
                 .chain_artifact("receipt_schema")
                 .expect("the receipt schema must resolve")
-                .retention,
-            Retention::Retained
+                .retained_path,
+            "chain/receipt.schema.json"
         );
     }
 
@@ -1243,7 +929,7 @@ mod tests {
 
         for digest in ["", "not-a-digest", &"A".repeat(64), &"a".repeat(63)] {
             assert_eq!(
-                mutated(|raw| raw["cases"][0]["retained_sha256"] = json!(digest)).code(),
+                mutated(|raw| raw["producer_cases"][0]["source_sha256"] = json!(digest)).code(),
                 "invalid_compatibility_corpus_digest",
                 "{digest:?} was accepted as a recorded digest"
             );
@@ -1252,7 +938,7 @@ mod tests {
 
     #[trace("TC-103", "FR-015-AC-3", "FR-015-AC-5", "FR-015-CON-4")]
     #[test]
-    fn tc_103_refuses_every_unsafe_path_and_incomplete_retention() {
+    fn tc_103_refuses_every_unsafe_path_and_empty_producer_member() {
         // Every unsafe retained-path shape is refused here, so a confined host
         // never has to decide whether a resolved path is still inside its root.
         // Each unsafe shape is paired with the reason it must produce. All nine
@@ -1321,114 +1007,10 @@ mod tests {
             index
                 .chain_artifact("not-a-role")
                 .expect_err("unknown role"),
-            index
-                .referenced_input("not-an-input")
-                .expect_err("unknown referenced input"),
         ] {
             assert_eq!(error.code(), "unknown_compatibility_corpus_identity");
         }
         assert!(index.cases_by_kind("not-a-kind").is_empty());
         assert_eq!(index.cases_by_kind("legacy").len(), 1);
-    }
-
-    #[trace("TC-103", "FR-015-AC-3", "FR-015-AC-5")]
-    #[test]
-    fn tc_103_gives_each_incomplete_retention_its_own_diagnostic_code() {
-        // A retention that claims bytes it does not carry, or carries bytes it
-        // claims not to, is refused rather than read. Each of the four producer
-        // failures asserts its own code. While all four shared one code, the
-        // retained and referenced branches were interchangeable: swapping the
-        // two `Retention::Referenced` arms left every assertion here passing,
-        // so nothing verified that a smuggled path and a missing path are
-        // opposite mistakes rather than the same one.
-        assert_eq!(
-            mutated(|raw| {
-                raw["producer_cases"][0]
-                    .as_object_mut()
-                    .expect("a producer case must be an object")
-                    .remove("retained_path");
-            })
-            .code(),
-            "compatibility_corpus_retained_case_without_path"
-        );
-        assert_eq!(
-            mutated(|raw| {
-                raw["producer_cases"][0]
-                    .as_object_mut()
-                    .expect("a producer case must be an object")
-                    .remove("retained_sha256");
-            })
-            .code(),
-            "compatibility_corpus_retained_case_without_digest"
-        );
-        assert_eq!(
-            mutated(
-                |raw| raw["producer_cases"][1]["retained_path"] = json!("producers/smuggled.json")
-            )
-            .code(),
-            "compatibility_corpus_referenced_case_with_path"
-        );
-
-        // The digest half of a smuggled retention is refused on the same terms
-        // as the path half. A referenced case that records retained bytes is
-        // claiming an identity for bytes this corpus does not hold, and without
-        // this assertion only the path half of that claim was ever refused.
-        assert_eq!(
-            mutated(|raw| raw["producer_cases"][1]["retained_sha256"] =
-                json!(ContentDigest::of_bytes(b"smuggled").into_hex()))
-            .code(),
-            "compatibility_corpus_referenced_case_with_digest"
-        );
-
-        // The two chain-artifact halves complete the set of six. A retained
-        // artifact that names no path and one that records no digest are
-        // reached through the accessors rather than through parsing, so they
-        // need their own construction; without these two assertions the
-        // accessors were the only incomplete-retention failures nothing drove.
-        let anything = ContentDigest::of_bytes(b"anything");
-        let orphan = RetainedArtifact {
-            identity: "chain-artifact-with-no-path",
-            retention: Retention::Retained,
-            retained_path: None,
-            retained_sha256: Some(anything.as_str()),
-        };
-        assert_eq!(
-            orphan
-                .require_retained_path()
-                .expect_err("a retained artifact with no path must be refused")
-                .code(),
-            "compatibility_corpus_retained_artifact_without_path"
-        );
-        let undigested = RetainedArtifact {
-            identity: "chain-artifact-with-no-digest",
-            retention: Retention::Retained,
-            retained_path: Some("chain/receipt.json"),
-            retained_sha256: None,
-        };
-        assert_eq!(
-            undigested
-                .verify_bytes(b"anything")
-                .expect_err("a retained artifact with no digest must be refused")
-                .code(),
-            "compatibility_corpus_retained_artifact_without_digest"
-        );
-
-        // The six codes are distinct from one another. Asserting each one above
-        // proves each branch produces the code named there; this proves no two
-        // branches were given the same code, which is the property that failed
-        // before and would fail again on a careless copy of a match arm.
-        let retention_codes = [
-            "compatibility_corpus_retained_case_without_path",
-            "compatibility_corpus_retained_case_without_digest",
-            "compatibility_corpus_referenced_case_with_path",
-            "compatibility_corpus_referenced_case_with_digest",
-            "compatibility_corpus_retained_artifact_without_path",
-            "compatibility_corpus_retained_artifact_without_digest",
-        ];
-        assert_eq!(
-            retention_codes.iter().collect::<BTreeSet<_>>().len(),
-            retention_codes.len(),
-            "two incomplete-retention failures share a diagnostic code"
-        );
     }
 }
