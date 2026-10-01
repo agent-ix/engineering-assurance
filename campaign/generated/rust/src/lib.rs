@@ -7,7 +7,6 @@
 //! it should be hand-edited.
 
 pub mod identity;
-pub mod provenance;
 pub mod support;
 pub mod types;
 

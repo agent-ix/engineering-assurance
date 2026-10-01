@@ -5,7 +5,7 @@
   "properties": {
     "values": {
       "type": "array",
-      "items": { "$ref": "https://schemas.agent-ix.org/semantic-core/0.3.0/EnumValue.json" },
+      "items": { "$ref": "https://schemas.agent-ix.org/semantic-core/0.3.2/EnumValue.json" },
       "minItems": 1
     }
   },
