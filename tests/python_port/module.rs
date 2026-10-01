@@ -240,7 +240,7 @@ fn every_schema_uses_the_forms_of_the_dialect_it_declares() {
 #[trace("TC-194", "FR-003-AC-7")]
 fn module_inventory_is_exact() {
     let data = manifest();
-    assert_eq!(data["version"], "0.6.0");
+    assert_eq!(data["version"], "0.6.1");
     let names = |key: &str| -> Vec<String> {
         data[key]
             .as_array()
