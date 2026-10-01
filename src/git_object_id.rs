@@ -5,9 +5,7 @@
 //!
 //! This is not a content identity. A Git object id must equal what `git`
 //! reports for the blob, in Git's SHA-1 or SHA-256 object format, whatever
-//! algorithm [`crate::content_digest::ContentDigest`] uses; that is why this
-//! module, and only this module besides `content_digest`, names a hash crate
-//! (see `tests/digest_identity_audit.rs`).
+//! algorithm [`crate::content_digest::ContentDigest`] uses.
 
 use std::fmt::Write as _;
 
