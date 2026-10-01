@@ -49,13 +49,12 @@ npm install --global \
   @agent-ix/quire-cli \
   @agent-ix/quoin \
   @agent-ix/ix-flow
-rustup toolchain install 1.98.1
 ```
 
 Install the native CLI:
 
 ```bash
-cargo +1.98.1 install \
+cargo install \
   --git https://github.com/agent-ix/engineering-assurance \
   --locked \
   --features full \

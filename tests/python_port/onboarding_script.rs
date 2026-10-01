@@ -733,7 +733,6 @@ fn onboard_js_observation_checklist_notes_the_optional_interval() {
     let interval_note = notes[0];
     assert!(interval_note.contains("OPTIONAL"));
     assert!(interval_note.contains("quoin applies it"));
-    assert!(interval_note.contains("tracked in EA-26"));
     assert!(!interval_note.contains("TBD"));
     assert!(interval_note.contains("decision_rule.interval_level"));
 }

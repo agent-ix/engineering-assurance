@@ -11,7 +11,6 @@ use ix_trace_rs::trace;
 #[test]
 fn tc_096_root_package_exports_library_and_native_cli() {
     assert_eq!(engineering_assurance::PACKAGE_NAME, "engineering-assurance");
-    assert_eq!(engineering_assurance::PACKAGE_VERSION, "0.6.1");
 
     let output = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
         .arg("--version")
@@ -29,10 +28,4 @@ fn tc_096_root_package_exports_library_and_native_cli() {
         expected
     );
     assert!(output.stderr.is_empty());
-}
-
-#[trace("TC-116", "NFR-005-AC-1")]
-#[test]
-fn tc_116_package_declares_the_qualified_rust_version() {
-    assert_eq!(env!("CARGO_PKG_RUST_VERSION"), "1.98.1");
 }

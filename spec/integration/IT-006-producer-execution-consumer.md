@@ -23,7 +23,7 @@ producer is a deterministic fictional executable retained only by the test.
 
 ## Preconditions
 
-- Both repositories select exact Rust 1.98.1.
+- Both repositories select their Rust toolchain declaratively.
 - The consumer pins the accepted Engineering Assurance revision.
 - A temporary source capability root contains the declared fictional inputs
   plus undeclared and mutable control files. The exact Rust fixture producer is

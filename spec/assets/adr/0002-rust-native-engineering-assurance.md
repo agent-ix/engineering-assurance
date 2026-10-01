@@ -122,5 +122,5 @@ Engineering Assurance does not copy or redesign that host.
 Reopen this decision if a required host cannot expose a usable structured
 interface, an external contract cannot be consumed without copying its
 ownership, canonicalization would change an existing identity domain, or a
-required tool demonstrably cannot run on Rust 1.98.1. Formatting differences
+required tool demonstrably cannot run on the repository's selected Rust toolchain. Formatting differences
 and repairable lint findings are not tool incompatibilities.

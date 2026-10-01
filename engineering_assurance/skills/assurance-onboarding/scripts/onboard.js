@@ -558,8 +558,8 @@ if (wantsSummary) {
 // -- validator, with no mechanism here that would catch it drifting from   --
 // -- that source. Every line below cites the file it was read from; if     --
 // -- those crates change the contract, re-derive from the cited lines, not --
-// -- from memory of this list. Verified against agent-ix/quoin at the      --
-// -- revision current when PLAT-924 was authored:                         --
+// -- from memory of this list. Hand-restated from these agent-ix/quoin    --
+// -- files:                                                                --
 // --   rust/crates/quoin-measurement/src/validate/mod.rs                  --
 // --   rust/crates/quoin-measurement/src/validate/stack.rs                --
 // --   rust/crates/quoin-measurement/src/types/{collection,observation,ids}.rs --
@@ -588,12 +588,12 @@ const measurementRecordChecklist = {
     // Required, well-formed, whenever schemaVersion is 2 — for a STORED
     // record as much as a new one. validate/stack.rs `verification_stack()`.
     schemaVersion2VerificationStack: [
-      "configDigest — sha256:<64 LOWERCASE hex> when schemaVersion is 2 (quoin >= 0.24.0; stack.rs `config_digest_shape`)",
+      "configDigest — sha256:<64 LOWERCASE hex> when schemaVersion is 2 (stack.rs `config_digest_shape`)",
       "verificationStack — required object when schemaVersion is 2",
       "  schemaVersion — const \"verification-stack-attestation-v1\"",
       "  lockDigest, executableDigest — sha256:<64 LOWERCASE hex>; uppercase is refused (quoin-store digest.rs)",
       "  buildProfile — when present: \"debug\" or \"release\" (a stored record may omit it, or say \"debug\" — \"release\"-only is a NEW-collection-intake rule, below)",
-      "  toolchains — when present: node, rust and python are each a non-empty string, null, or absent, and at least one is set (quoin >= 0.24.0; quoin 0.23.1 requires all three, and cannot read a record that sets fewer). A stored record may omit toolchains entirely — requiring it is a NEW-collection-intake rule, below",
+      "  toolchains — when present: node, rust and python are each a non-empty string, null, or absent, and at least one is set. A stored record may omit toolchains entirely — requiring it is a NEW-collection-intake rule, below",
       "  sources — non-empty map; each entry: revision (exactly 40 LOWERCASE hex chars — a full, unabbreviated SHA, not the looser rule sourceRevision above gets), sourceState \"clean\", remote (non-empty)",
       "  capabilities — non-empty array of non-empty strings",
       "  artifacts — non-empty map of name -> sha256:<64 LOWERCASE hex> digest",
@@ -607,8 +607,8 @@ const measurementRecordChecklist = {
       "verificationStack.buildProfile must be exactly \"release\"",
       "verificationStack.toolchains must be present (its per-language rule is above)",
       "each observation's metric must resolve to an ACTIVE MeasurementPlan discovered under spec/assurance/ OR assurance/ in the target repo (both are searched — discovery.rs; a file counts only when its frontmatter says type: MeasurementPlan), at the SAME definitionVersion, and observation.planId must equal that plan's id. Plans are keyed by metric; when two share one, the higher id wins whatever its status, so keep one plan per metric",
-      "quoin >= 0.24.0, measured observations only (validate/population.rs): plan minimum_population requires population.examined >= it (QM-POPULATION-UNSTATED if absent, QM-POPULATION-BELOW-MINIMUM if smaller); plan repetitions above 1 requires population.repetitions >= it (QM-POPULATION-UNSTATED if absent, QM-REPETITIONS-SHORT if smaller)",
-      "quoin >= 0.24.0: an artifacts entry whose name is a file in the repository must carry that file's digest; `quoin measurement record --digest-from-file artifacts.<name>=<path>` fills or checks it",
+      "measured observations only (validate/population.rs): plan minimum_population requires population.examined >= it (QM-POPULATION-UNSTATED if absent, QM-POPULATION-BELOW-MINIMUM if smaller); plan repetitions above 1 requires population.repetitions >= it (QM-POPULATION-UNSTATED if absent, QM-REPETITIONS-SHORT if smaller)",
+      "an artifacts entry whose name is a file in the repository must carry that file's digest; `quoin measurement record --digest-from-file artifacts.<name>=<path>` fills or checks it",
     ],
   },
   observation: [
@@ -619,7 +619,7 @@ const measurementRecordChecklist = {
     "shape — one of: scalar, ratio, count",
     "state — one of: measured, not_computed",
     "value — when state=measured: required numeric. When state=not_computed: the `value` KEY must be present and explicitly null — an ABSENT value key is refused, it is not treated as null (mod.rs `observation()`)",
-    "interval — OPTIONAL object { lower, upper, level, method }: same unit as value, lower <= value <= upper, all finite, 0 < level < 1, method non-empty free text. This package ships the validated Interval type and quoin applies it to the observation; the minimum quoin version is set when quoin's observation interval ships, tracked in EA-26. Provide it when the governing plan's `statistical_design.decision_rule.interval_level` is set: that rule is judged at the unfavourable bound of the interval and refuses an observation with no interval or one at a lower level",
+    "interval — OPTIONAL object { lower, upper, level, method }: same unit as value, lower <= value <= upper, all finite, 0 < level < 1, method non-empty free text. This package ships the validated Interval type and quoin applies it to the observation. Provide it when the governing plan's `statistical_design.decision_rule.interval_level` is set: that rule is judged at the unfavourable bound of the interval and refuses an observation with no interval or one at a lower level",
     "no two observations in one collection may share the same (metric, sorted dimensions) pair — a duplicate is refused (mod.rs `stored_measurement_collection`)",
     "population — read only when it IS a JSON object: examined, matched, complete, identity (+ freeform extra fields, kept verbatim); a non-object population is silently treated as absent, not rejected",
     "dimensions — same silent-if-not-an-object treatment as population",

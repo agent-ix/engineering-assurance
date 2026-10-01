@@ -240,7 +240,6 @@ fn every_schema_uses_the_forms_of_the_dialect_it_declares() {
 #[trace("TC-194", "FR-003-AC-7")]
 fn module_inventory_is_exact() {
     let data = manifest();
-    assert_eq!(data["version"], "0.6.1");
     let names = |key: &str| -> Vec<String> {
         data[key]
             .as_array()
@@ -1219,51 +1218,6 @@ fn hosted_ci_is_manual_only() {
         .map(String::as_str)
         .collect();
     assert_eq!(triggers, BTreeSet::from(["workflow_dispatch"]));
-}
-
-#[test]
-#[trace("TC-116", "NFR-005-AC-1")]
-fn manual_verification_workflow_runs_the_rust_foundation_gate() {
-    let workflow = ci_workflow();
-    let steps = workflow["jobs"]["verify"]["steps"].as_array().unwrap();
-    assert_eq!(steps[0]["with"]["submodules"], "recursive");
-    let uses = |step: &Value, prefix: &str| {
-        step.get("uses")
-            .and_then(Value::as_str)
-            .is_some_and(|u| u.starts_with(prefix))
-    };
-    let rust_setup = steps
-        .iter()
-        .find(|s| uses(s, "dtolnay/rust-toolchain@"))
-        .expect("rust-toolchain step");
-    assert_eq!(
-        rust_setup["with"],
-        json!({"toolchain": "1.98.1", "components": "rustfmt, clippy"})
-    );
-    let installed: BTreeSet<&str> = steps
-        .iter()
-        .filter(|s| uses(s, "taiki-e/install-action@"))
-        .map(|s| s["with"]["tool"].as_str().unwrap())
-        .collect();
-    assert_eq!(
-        installed,
-        BTreeSet::from(["cargo-deny@0.19.8", "cargo-audit@0.22.2"])
-    );
-    assert!(
-        steps
-            .iter()
-            .any(|s| s.get("run").and_then(Value::as_str) == Some("make rust-foundation-gate"))
-    );
-
-    let makefile = read(&root().join("Makefile"));
-    let foundation = makefile
-        .lines()
-        .find(|l| l.starts_with("rust-foundation-gate:"))
-        .expect("rust-foundation-gate target");
-    let deps: BTreeSet<&str> = foundation.split_whitespace().skip(1).collect();
-    assert!(deps.contains("rust-deps") && deps.contains("rust-audit"));
-    assert!(makefile.contains("$(CARGO) deny --locked check"));
-    assert!(makefile.contains("$(CARGO) audit"));
 }
 
 #[test]

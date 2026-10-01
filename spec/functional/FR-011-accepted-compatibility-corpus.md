@@ -31,7 +31,7 @@ Each constructed case SHALL record the exact edit that produced it.
 ## Inputs
 
 - Immutable PGM-01 v1 evidence retained by `agent-ix/quire-contract-ir`, read at
-  a named `origin/main` revision and never written to.
+  a revision named by the caller and never written to.
 - Real producer output from governed producers, including `agent-ix/quire-code-rs`,
   the contract conformance corpus, a measurement collection, and a static-scan
   diagnostic.

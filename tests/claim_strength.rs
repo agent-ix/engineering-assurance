@@ -186,7 +186,7 @@ impl Consumer {
         fs::write(
             root.path().join("Cargo.toml"),
             format!(
-                "[package]\nname='claim-strength-consumer-fixture'\nversion='0.0.0'\nedition='2024'\nrust-version='1.98.1'\n[dependencies]\nengineering-assurance={{path={manifest_dir:?},default-features=false,features=['claim-strength']}}\n"
+                "[package]\nname='claim-strength-consumer-fixture'\nversion='0.0.0'\nedition='2024'\n[dependencies]\nengineering-assurance={{path={manifest_dir:?},default-features=false,features=['claim-strength']}}\n"
             ),
         )
         .expect("consumer manifest");

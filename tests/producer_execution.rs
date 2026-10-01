@@ -1413,7 +1413,7 @@ fn tc_128_minimal_downstream_compiles_only_producer_execution_feature() {
     fs::write(
         consumer.path().join("Cargo.toml"),
         format!(
-            "[package]\nname='producer-consumer-fixture'\nversion='0.0.0'\nedition='2024'\nrust-version='1.98.1'\n[dependencies]\nengineering-assurance={{path={manifest_dir:?},default-features=false,features=['producer-execution']}}\nserde={{version='=1.0.228',features=['derive']}}\n"
+            "[package]\nname='producer-consumer-fixture'\nversion='0.0.0'\nedition='2024'\n[dependencies]\nengineering-assurance={{path={manifest_dir:?},default-features=false,features=['producer-execution']}}\nserde={{version='=1.0.228',features=['derive']}}\n"
         ),
     )
     .expect("consumer manifest");
