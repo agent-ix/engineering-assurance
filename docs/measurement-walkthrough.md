@@ -99,7 +99,7 @@ A collection is one complete run of the tool that produces the number.
     "lockDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
     "executableDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
     "buildProfile": "release",
-    "toolchains": { "node": "22.12.0", "rust": "1.98.1", "python": "3.12.8" },
+    "toolchains": { "node": "22.12.0", "rust": "1.0.0", "python": "3.12.8" },
     "sources": {
       "juniper": {
         "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

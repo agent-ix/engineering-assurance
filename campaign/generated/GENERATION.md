@@ -4,15 +4,9 @@ The source of these wire types is the authored Quire bundle at
 `campaign/contract`, interpreted with the
 `engineering_assurance` module.
 
-From that FCD checkout, lift with `cargo +1.98.1 run --locked -p
-agent-ix-extraction-frontend --bin extraction-frontend -- lift --bundle
-<EA>/campaign/contract --module
-<EA>/engineering_assurance --out <scratch>/semantic-ir.json`. Generate
-with `node scripts/spec-to-targets.mjs <scratch>/semantic-ir.json
-<scratch>/generated --compile`, then run `cargo fmt --manifest-path
-<scratch>/generated/rust/Cargo.toml`. The committed `semantic-ir.json` and
-five target directories must match those results byte for byte. Python cache
-directories produced by compile checks are excluded from the retained output.
+Regenerate by lifting that bundle with the FCD extraction frontend and running
+the FCD target generator over the result. Python cache directories produced by
+compile checks are excluded from the retained output.
 
 `MeasurementProcedure.inputOrigins` is an optional migration field for exact
 producer-input provenance. When present, EA requires one declaration for every

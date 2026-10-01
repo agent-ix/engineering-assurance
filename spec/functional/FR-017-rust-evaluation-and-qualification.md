@@ -454,7 +454,7 @@ checking, manifest validation, and qualification assertions to Rust.
   staging cleanup where applicable, and SHALL fail closed if a process creates,
   removes, or changes the kind of any top-level entry. A population larger than
   4,096 entries or an unreadable entry kind SHALL fail before invocation.
-- The repository `package-audit` target SHALL invoke the exact Rust 1.98.1 CLI
+- The repository `package-audit` target SHALL invoke the Rust CLI
   declaratively.
 - When the retained Python audit becomes eligible for deletion, the repository SHALL demonstrate that the Python and Rust paths both pass at one candidate revision.
 - When the retained Python audit becomes eligible for deletion, the repository SHALL record a reversible dispatch cutover.

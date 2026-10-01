@@ -779,7 +779,7 @@ fn tc_142_a_minimal_downstream_compiles_only_the_measurement_feature() {
     fs::write(
         consumer.path().join("Cargo.toml"),
         format!(
-            "[package]\nname='measurement-consumer-fixture'\nversion='0.0.0'\nedition='2024'\nrust-version='1.98.1'\n[dependencies]\nengineering-assurance={{path={manifest_dir:?},default-features=false,features=['measurement']}}\n"
+            "[package]\nname='measurement-consumer-fixture'\nversion='0.0.0'\nedition='2024'\n[dependencies]\nengineering-assurance={{path={manifest_dir:?},default-features=false,features=['measurement']}}\n"
         ),
     )
     .expect("consumer manifest");

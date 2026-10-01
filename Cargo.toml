@@ -387,7 +387,7 @@ full = [
 ]
 
 [dependencies]
-agent-ix-engineering-assurance-campaign = { version = "0.0.0", path = "campaign/generated/rust", optional = true }
+agent-ix-engineering-assurance-campaign = { path = "campaign/generated/rust", optional = true }
 sha1 = { version = "0.10", default-features = false, optional = true }
 cap-std = { version = "4", optional = true }
 clap = { version = "4.5", default-features = false, features = ["error-context", "help", "std", "usage"], optional = true }
@@ -409,8 +409,6 @@ yaml_serde = { version = "0.10", optional = true }
 zip = { version = "8.6", default-features = false, features = ["deflate-flate2"], optional = true }
 
 [dev-dependencies]
-# Public since 2026-09-20 (PLAT-853); pinned to the same rev the vendored
-# copy carried, matching the other Agent-IX repos that consume it.
 ix-trace-rs = { git = "https://github.com/agent-ix/ix-trace-rs", rev = "2ce4ebf47f726b9d76388220545cd0abda8a5cfb", version = "=0.1.0" }
 tempfile = "3.27"
 

@@ -904,7 +904,7 @@ fn tc_138_a_minimal_downstream_compiles_only_the_source_audit_feature() {
     fs::write(
         consumer.path().join("Cargo.toml"),
         format!(
-            "[package]\nname='source-audit-consumer-fixture'\nversion='0.0.0'\nedition='2024'\nrust-version='1.98.1'\n[dependencies]\nengineering-assurance={{path={manifest_dir:?},default-features=false,features=['source-audit']}}\n"
+            "[package]\nname='source-audit-consumer-fixture'\nversion='0.0.0'\nedition='2024'\n[dependencies]\nengineering-assurance={{path={manifest_dir:?},default-features=false,features=['source-audit']}}\n"
         ),
     )
     .expect("consumer manifest");
