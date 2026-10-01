@@ -2,9 +2,7 @@
 
 The source of these wire types is the authored Quire bundle at
 `campaign/contract`, interpreted with the
-`engineering_assurance` module and Quire CLI 0.33.0 (engine 0.47.1).
-The recorded generator source is `agent-ix/filament-core-data` commit
-`9ef44b34dc80c825f625e04e5264d6c0c0952e31`.
+`engineering_assurance` module.
 
 From that FCD checkout, lift with `cargo +1.98.1 run --locked -p
 agent-ix-extraction-frontend --bin extraction-frontend -- lift --bundle

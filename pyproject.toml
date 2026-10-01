@@ -10,7 +10,5 @@ target-version = "py312"
 # the defect a case banks). Linting it would make this repository's gate depend
 # on that repository's house style and on its fixtures being valid Python,
 # which they are not allowed to be.
-# `campaign/generated/` is FCD-generated output (see its
-# GENERATION.md); its file names and import order are the generator's, not ours.
 extend-exclude = ["corpus", "campaign/generated"]
 
