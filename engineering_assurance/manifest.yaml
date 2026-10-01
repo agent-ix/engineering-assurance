@@ -1,10 +1,10 @@
 manifest_version: 1.0.0
 name: engineering-assurance
-version: 0.6.1
+version: 0.7.0
 description: Original decision-boundary and evidence-authoring contracts
 semantic:
   contract_version: 1.0.0
-  semantic_core: 0.3.0
+  semantic_core: 0.3.2
   package: agent-ix/engineering-assurance-campaign
   # Each exported artifact type's data_schema is its frontmatter schema itself
   # (one 2020-12 file, also its frontmatter_schema_ref).

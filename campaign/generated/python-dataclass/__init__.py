@@ -3,8 +3,7 @@
 
 `__all__` carries every type name exactly one module declares. Names
 several modules declare are different types that happen to share a
-local name; they are reachable as `<module>.<Name>` and are listed in
-`PROVENANCE.json` under `nameCollisions`."""
+local name; they are reachable as `<module>.<Name>`."""
 
 from .CampaignAttempt import CampaignAttempt
 from .CampaignAttemptStatus import CampaignAttemptStatus

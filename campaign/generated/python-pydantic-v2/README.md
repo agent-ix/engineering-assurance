@@ -25,8 +25,7 @@ from that register fails the qualification gate.
 ## Licence
 
 The generated source is AGPL-3.0-or-later, like the rest of this
-repository. The generator is MIT and is attributed in
-`PROVENANCE.json`.
+repository.
 
 This package is not published. The issue #23 safety gate forbids
 PyPI publication and backend consumer migration.

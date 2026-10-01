@@ -1,4 +1,4 @@
-# Generated from the semantic contract agent-ix/engineering-assurance-campaign@0.0.0.
+# Generated from the semantic contract agent-ix/engineering-assurance-campaign.
 #
 # `publish = false` is unconditional: the issue #21 safety gate forbids crate
 # publication, and a manifest that permits it is one command away from breaching

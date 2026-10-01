@@ -6,12 +6,6 @@
 //! `occurrences` and `extensions`. An `operation` reaches the crate as
 //! data and never as a Rust function: it has no body in the IR, so a
 //! generated function would have nothing to put in one.
-//!
-//! The crate's *provenance* — what it was generated from and by — is a
-//! different concept and lives in `provenance.rs` (FR-137, ADR-0007). The two
-//! were once named `identity.rs` and `metadata.rs` here and the opposite way
-//! round in the generated TypeScript package, which is the defect that
-//! renaming repairs.
 
 /// A source locus the IR carried.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
