@@ -594,7 +594,10 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
     // had the slash from the start.
     let agent_ix_bare = concat!("https:", "//github.com/agent-ix");
     let agent_ix_org_prefix = concat!("https:", "//github.com/agent-ix/");
-    let ix_trace_rs = concat!("https:", "//github.com/agent-ix/ix-trace-rs");
+    let approved_dependencies = [
+        concat!("https:", "//github.com/agent-ix/ix-trace-rs"),
+        concat!("https:", "//github.com/agent-ix/ix-cli-kit"),
+    ];
     let project_metadata = path.ends_with("README.md")
         || path.ends_with(".claude-plugin/plugin.json")
         || path.ends_with(".codex-plugin/plugin.json")
@@ -612,15 +615,16 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
     // A first-party Agent-IX crate consumed as a rev-pinned git dependency
     // names its own GitHub URL in the manifest and lockfile, same
     // as the registry index URL already carried in Cargo.lock/deny.toml. This
-    // is an exact match on the single approved dependency URL, not an org
+    // is an exact match on the approved dependency URLs, not an org
     // prefix: an org prefix would also admit unrelated, squattable look-alike
     // orgs such as `agent-ix-evil` or `agent-ix.attacker.invalid`. Cargo.lock
     // renders the same URL with a `?rev=...#...` suffix, so a suffix starting
     // with `?` or `#` right after the exact URL is also accepted; anything
     // else immediately after (e.g. a `-evil` suffix) is not.
-    let is_ix_trace_rs_url = url
-        .strip_prefix(ix_trace_rs)
-        .is_some_and(|rest| rest.is_empty() || rest.starts_with('?') || rest.starts_with('#'));
+    let is_approved_dependency_url = approved_dependencies.iter().any(|dependency| {
+        url.strip_prefix(dependency)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('?') || rest.starts_with('#'))
+    });
     let cargo_manifest = matches!(path, "Cargo.toml" | "Cargo.lock" | "deny.toml");
     let campaign_schema = path.starts_with("campaign/generated/json-schema/")
         && std::path::Path::new(path)
@@ -656,7 +660,7 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         || campaign_schema && campaign_schema_url
         || campaign_license && campaign_license_url
         || cargo_manifest && url == cargo_registry
-        || cargo_manifest && is_ix_trace_rs_url
+        || cargo_manifest && is_approved_dependency_url
         || project_metadata && (url == discord_badge || url == discord_invite)
         || project_metadata && (url == agent_ix_bare || url.starts_with(agent_ix_org_prefix))
         || onboarding_report && url.starts_with(agent_ix_org_prefix)

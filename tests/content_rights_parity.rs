@@ -328,3 +328,23 @@ fn python_line_boundaries_and_unicode_casefold_are_preserved() {
         ContentRightsCategory::ProtectedLocalToken
     );
 }
+
+#[test]
+#[trace("TC-119", "FR-028-AC-4")]
+fn shared_cli_dependency_allowance_is_exact_and_metadata_only() {
+    let dependency = ["https:", "//github.com/agent-ix/ix-cli-kit"].concat();
+    let tokens = Vec::new();
+    for path in ["Cargo.toml", "Cargo.lock", "deny.toml"] {
+        for suffix in ["", "?rev=fictional#fictional"] {
+            assert!(findings(path, format!("{dependency}{suffix}").as_bytes(), &tokens).is_empty());
+        }
+        for suffix in ["-evil", "/unrelated"] {
+            assert!(
+                !findings(path, format!("{dependency}{suffix}").as_bytes(), &tokens).is_empty()
+            );
+        }
+    }
+    for path in ["spec/candidate.md", "nested/Cargo.toml", "nested/deny.toml"] {
+        assert!(!findings(path, dependency.as_bytes(), &tokens).is_empty());
+    }
+}

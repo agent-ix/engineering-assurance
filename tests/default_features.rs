@@ -13,7 +13,15 @@ use std::{collections::BTreeSet, path::Path, process::Command};
 use ix_trace_rs::trace;
 
 /// Crates only the binary (`full`) may resolve.
-const BINARY_ONLY_CRATES: [&str; 6] = ["cap-std", "clap", "tar", "zip", "flate2", "tempfile"];
+const BINARY_ONLY_CRATES: [&str; 7] = [
+    "cap-std",
+    "clap",
+    "tar",
+    "zip",
+    "flate2",
+    "tempfile",
+    "ix-cli-kit",
+];
 
 /// `cargo tree` stdout for `args` in the crate root, or a failure naming them.
 fn tree(root: &Path, args: &[&str]) -> String {
@@ -49,7 +57,7 @@ fn crates(root: &Path, args: &[&str]) -> BTreeSet<String> {
 /// is the resolution a consumer that depends on the crate without naming a
 /// feature gets for this package. The binary still needs `full`.
 #[test]
-#[trace("TC-197", "FR-014-AC-9")]
+#[trace("TC-197", "FR-014-AC-9", "FR-028-AC-3")]
 fn tc_197_default_features_are_empty_and_resolve_nothing_optional() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let default = crates(root, &[]);

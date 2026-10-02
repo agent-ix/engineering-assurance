@@ -380,6 +380,7 @@ full = [
   "exact-numbers",
   "dep:cap-std",
   "dep:clap",
+  "dep:ix-cli-kit",
   "dep:flate2",
   "dep:tar",
   "dep:tempfile",
@@ -387,6 +388,7 @@ full = [
 ]
 
 [dependencies]
+ix-cli-kit = { git = "https://github.com/agent-ix/ix-cli-kit", rev = "cc69a934f887966f955440bff8c356e3da449bee", optional = true }
 agent-ix-engineering-assurance-campaign = { path = "campaign/generated/rust", optional = true }
 sha1 = { version = "0.10", default-features = false, optional = true }
 cap-std = { version = "4", optional = true }

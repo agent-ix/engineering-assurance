@@ -21,7 +21,7 @@ mod workflow_host;
 
 use std::{
     fmt::Write as _,
-    io::{self, Read, Write},
+    io::{self, Read},
     path::PathBuf,
     process::ExitCode,
 };
@@ -288,7 +288,7 @@ fn run_manifest_validate(arguments: &ArgMatches) -> ExitCode {
     };
     let exit = result.exit_code();
     match manifest_host::to_json_line(&result) {
-        Ok(encoded) => match write_stdout(&encoded) {
+        Ok(encoded) => match ix_cli_kit::streams::write_primary_stdout(&encoded) {
             Ok(()) => exit,
             Err(error) => {
                 eprintln!("failed to write manifest-validate result: {error}");
@@ -322,7 +322,7 @@ fn run_agent_evals(arguments: &ArgMatches) -> ExitCode {
         report,
     }) {
         Ok((code, stdout, stderr)) => {
-            let _ = write_stdout(&stdout);
+            let _ = ix_cli_kit::streams::write_primary_stdout(&stdout);
             eprint!("{}", String::from_utf8_lossy(&stderr));
             code
         }
@@ -350,7 +350,7 @@ fn run_agent_evals_provider(arguments: &ArgMatches) -> ExitCode {
         Err(exit_code) => return exit_code,
     };
     match agent_evals_provider::execute(root, &bytes) {
-        Ok(response) => match write_stdout(&response) {
+        Ok(response) => match ix_cli_kit::streams::write_primary_stdout(&response) {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
                 eprintln!("failed to write agent-evals provider response: {error}");
@@ -412,7 +412,7 @@ fn run_integration_evidence(arguments: &ArgMatches) -> ExitCode {
                     "integration evidence passed: traceability complete; evaluations {complete}/{required}\n"
                 ),
             };
-            match write_stdout(message.as_bytes()) {
+            match ix_cli_kit::streams::write_primary_stdout(message.as_bytes()) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
                     eprintln!("failed to write integration-evidence summary: {error}");
@@ -459,7 +459,9 @@ fn run_evaluation_aggregate_verify(arguments: &ArgMatches) -> ExitCode {
     };
     match evaluation_report_host::verify_artifact(root, workspace_root, artifact, source_revision) {
         Ok(()) => {
-            match write_stdout(b"evaluation aggregate verification: retained bytes match\n") {
+            match ix_cli_kit::streams::write_primary_stdout(
+                b"evaluation aggregate verification: retained bytes match\n",
+            ) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
                     eprintln!("failed to write evaluation aggregate verification: {error}");
@@ -560,7 +562,7 @@ fn run_evaluation_aggregate(arguments: &ArgMatches) -> ExitCode {
     for failure in artifact.failures() {
         let _ = writeln!(&mut rendered, "- {failure}");
     }
-    if let Err(error) = write_stdout(rendered.as_bytes()) {
+    if let Err(error) = ix_cli_kit::streams::write_primary_stdout(rendered.as_bytes()) {
         eprintln!("failed to write evaluation aggregate summary: {error}");
         return ExitCode::from(2);
     }
@@ -586,7 +588,7 @@ fn run_package_audit(arguments: &ArgMatches) -> ExitCode {
         }
     };
     match result.to_json_line() {
-        Ok(encoded) => match write_stdout(&encoded) {
+        Ok(encoded) => match ix_cli_kit::streams::write_primary_stdout(&encoded) {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
                 eprintln!("failed to write package-audit result: {error}");
@@ -617,7 +619,7 @@ fn run_content_rights_tree(arguments: &ArgMatches) -> ExitCode {
     };
     let outcome = result.outcome();
     match result.to_json_line() {
-        Ok(encoded) => match write_stdout(&encoded) {
+        Ok(encoded) => match ix_cli_kit::streams::write_primary_stdout(&encoded) {
             Ok(()) if outcome == ContentRightsTreeOutcome::Accepted => ExitCode::SUCCESS,
             Ok(()) => ExitCode::from(1),
             Err(error) => {
@@ -679,7 +681,7 @@ fn run_package_lifecycle(arguments: &ArgMatches) -> ExitCode {
         return ExitCode::SUCCESS;
     }
     match result.to_json_line() {
-        Ok(encoded) => match write_stdout(&encoded) {
+        Ok(encoded) => match ix_cli_kit::streams::write_primary_stdout(&encoded) {
             Ok(()) if refused => {
                 eprintln!("public package publication is disabled for engineering-assurance");
                 ExitCode::from(1)
@@ -725,7 +727,7 @@ fn run_workflow_host() -> ExitCode {
         }
     };
     match result.to_json_line() {
-        Ok(encoded) => match write_stdout(&encoded) {
+        Ok(encoded) => match ix_cli_kit::streams::write_primary_stdout(&encoded) {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
                 eprintln!("failed to write workflow-host result: {error}");
@@ -754,7 +756,7 @@ fn run_onboarding() -> ExitCode {
         }
     };
     match result.to_json_line() {
-        Ok(encoded) => match write_stdout(&encoded) {
+        Ok(encoded) => match ix_cli_kit::streams::write_primary_stdout(&encoded) {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
                 eprintln!("failed to write onboarding result: {error}");
@@ -775,7 +777,7 @@ fn run_workflow_invariants() -> ExitCode {
     };
     match workflow_invariants::evaluate_request_bytes(&bytes) {
         Ok(result) => match result.to_json_line() {
-            Ok(encoded) => match write_stdout(&encoded) {
+            Ok(encoded) => match ix_cli_kit::streams::write_primary_stdout(&encoded) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
                     eprintln!("failed to write workflow-invariant result: {error}");
@@ -825,8 +827,9 @@ fn emit_error(capability: &'static str, code: &str, message: &str) -> ExitCode {
         code,
         message,
     };
-    let encoded = match serde_json::to_vec(&result) {
-        Ok(mut bytes) => {
+    let encoded = match ix_cli_kit::json::encode(&result, false) {
+        Ok(encoded) => {
+            let mut bytes = encoded.into_bytes();
             bytes.push(b'\n');
             bytes
         }
@@ -835,16 +838,10 @@ fn emit_error(capability: &'static str, code: &str, message: &str) -> ExitCode {
         )
         .into_bytes(),
     };
-    if let Err(error) = write_stdout(&encoded) {
+    if let Err(error) = ix_cli_kit::streams::write_primary_stdout(&encoded) {
         eprintln!("{message}; failed to write error result: {error}");
     } else {
         eprintln!("{message}");
     }
     ExitCode::from(2)
-}
-
-fn write_stdout(bytes: &[u8]) -> io::Result<()> {
-    let mut stdout = io::stdout().lock();
-    stdout.write_all(bytes)?;
-    stdout.flush()
 }

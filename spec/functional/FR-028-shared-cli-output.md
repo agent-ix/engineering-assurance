@@ -32,6 +32,10 @@ and append its existing newline. Domain documents, error codes, exit statuses
 and stream selection SHALL remain unchanged. Minimal library consumers SHALL
 NOT enable the shared CLI dependency unless the full CLI feature is requested.
 
+The content-rights policy SHALL admit the exact shared dependency URL, with
+Cargo revision fragments, only in root Cargo.toml, Cargo.lock and deny.toml.
+Other paths and look-alike repository URLs SHALL remain refused.
+
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
@@ -39,6 +43,7 @@ NOT enable the shared CLI dependency unless the full CLI feature is requested.
 | FR-028-AC-1 | Successful and rejected fictional workflow requests retain their exact primary document bytes, stderr role and exit status through the real CLI process. | Test |
 | FR-028-AC-2 | A malformed fictional stdin request emits the existing typed machine error document with exactly one final newline. | Test |
 | FR-028-AC-3 | The empty default and each individual library feature continue to compile without enabling the shared CLI dependency. | Test |
+| FR-028-AC-4 | The shared dependency URL is accepted only in root Cargo metadata and source policy; prose, nested manifests and look-alike URLs are refused. | Test |
 
 ## Dependencies
 
