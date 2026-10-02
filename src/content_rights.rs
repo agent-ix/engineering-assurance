@@ -600,7 +600,7 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         || path.ends_with(".codex-plugin/plugin.json")
         || path.ends_with(".github/plugin/plugin.json")
         || path.ends_with(".dist-info/METADATA");
-    // The assurance-onboarding skill's one onboarding report (PLAT-924) points
+    // The assurance-onboarding skill's one onboarding report points
     // at the sibling first-party repos a decision boundary actually needs —
     // the qa-corpus measurement examples and a live consumer's spec/assurance/
     // — the same first-party-only linking `project_metadata` already grants
@@ -610,7 +610,7 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
     let onboarding_report =
         path == "engineering_assurance/skills/assurance-onboarding/scripts/onboard.js";
     // A first-party Agent-IX crate consumed as a rev-pinned git dependency
-    // (PLAT-853) names its own GitHub URL in the manifest and lockfile, same
+    // names its own GitHub URL in the manifest and lockfile, same
     // as the registry index URL already carried in Cargo.lock/deny.toml. This
     // is an exact match on the single approved dependency URL, not an org
     // prefix: an org prefix would also admit unrelated, squattable look-alike

@@ -126,7 +126,7 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
 #[test]
 #[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
 fn onboarding_report_url_exemption_is_scoped_to_its_exact_path() {
-    // The assurance-onboarding skill's onboarding report (PLAT-924) may link
+    // The assurance-onboarding skill's onboarding report may link
     // sibling first-party repos, by its exact path only.
     let tokens: Vec<String> = Vec::new();
     let onboarding_report_path =
@@ -165,8 +165,7 @@ fn project_metadata_agent_ix_exemption_refuses_look_alike_orgs() {
     // plugin manifests' own `author.url`) and any URL under it must both be
     // admitted in project-metadata files, but a look-alike org must still be
     // refused — the same property the onboarding-report exemption already
-    // had, that this one lacked until PLAT-924 added the sibling exemption
-    // next to it and exposed the gap.
+    // had, that this one lacked.
     let tokens: Vec<String> = Vec::new();
     let bare_org_url = ["https:", "//github.com/agent-ix"].concat();
     let org_prefixed_url = ["https:", "//github.com/agent-ix/quoin"].concat();
