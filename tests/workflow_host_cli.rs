@@ -280,7 +280,7 @@ fn gate_token(payload: &Value, outcome: &str) -> String {
         .to_owned()
 }
 
-#[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-5")]
+#[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-5", "FR-028-AC-1")]
 #[trace("TC-026", "FR-005-AC-1", "US-003-EX-1")]
 #[test]
 fn tc_107_new_resume_and_pristine_interruption_recovery_preserve_binding() {
@@ -295,6 +295,9 @@ fn tc_107_new_resume_and_pristine_interruption_recovery_preserve_binding() {
     let resumed = run_host(&request(state.path(), "new-run", "start_or_resume", None));
     assert!(resumed.status.success());
     assert_eq!(result(&resumed), first_result);
+    assert_eq!(resumed.stdout, first.stdout);
+    assert!(first.stderr.is_empty());
+    assert!(resumed.stderr.is_empty());
 
     // Resuming an unchanged run proves idempotence but not that a completed
     // phase survives. FR-005-AC-1 is about the operator who stopped partway:
@@ -709,7 +712,7 @@ fn tc_107_retries_after_gate_defer_and_acknowledgement_converge() {
     }
 }
 
-#[trace("TC-107", "FR-016-AC-3", "FR-016-CON-5", "FR-016-CON-7")]
+#[trace("TC-107", "FR-016-AC-3", "FR-016-CON-5", "FR-016-CON-7", "FR-028-AC-2")]
 #[test]
 fn tc_107_unavailable_and_malformed_inputs_fail_before_state() {
     let state = TestDirectory::new("host-errors");
@@ -721,6 +724,15 @@ fn tc_107_unavailable_and_malformed_inputs_fail_before_state() {
     let output = run_host(&unavailable);
     assert_eq!(result(&output)["code"], "ix_flow_unavailable");
     assert_eq!(tree_digest(state.path()), before);
+
+    let malformed = run_host_bytes(b"{not-json");
+    assert_eq!(malformed.status.code(), Some(2));
+    assert_eq!(malformed.stdout, br#"{"protocol":"engineering-assurance.error/v1","capability":"workflow-host","code":"workflow_host_request_invalid","message":"invalid workflow-host request: key must be a string at line 1 column 2"}
+"#);
+    assert_eq!(
+        malformed.stderr,
+        b"invalid workflow-host request: key must be a string at line 1 column 2\n"
+    );
 
     for encoded in [b"{not-json".to_vec(), vec![b' '; 8 * 1024 * 1024 + 1]] {
         let output = run_host_bytes(&encoded);
