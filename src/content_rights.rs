@@ -583,7 +583,7 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         "https:",
         "//img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white"
     );
-    let discord_invite = concat!("https:", "//discord.gg/6qsdhSPE");
+    let discord_invite = concat!("https:", "//discord.gg/k8DVhuYBR2");
     // `agent_ix_bare` admits the org's own root URL exactly (the plugin
     // manifests' `author.url`); `agent_ix_org_prefix` admits anything under
     // it. Both are needed: requiring the trailing `/` on the bare form would
