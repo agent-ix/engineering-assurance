@@ -1,6 +1,7 @@
 # Engineering Assurance
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white)](https://discord.gg/6qsdhSPE)
+[![Agent IX Plugins](https://github.com/agent-ix/agent-plugins/raw/refs/heads/main/assets/agent-ix-plugins.svg)](https://github.com/agent-ix/agent-plugins)
 
 Engineering Assurance is the Agent IX assurance module for making engineering
 decisions explicit, reviewable, and owned by a person. It gives a coding agent
@@ -16,13 +17,13 @@ evidence sufficiency, and terminal decision.
 
 Engineering Assurance is a small part of the Agent IX documentation toolchain:
 
-| Component | Responsibility |
-| --- | --- |
-| [quire-rs](https://github.com/agent-ix/quire-rs) | Rust engine that parses and validates Markdown documents against Quire modules. |
-| [quire-cli](https://github.com/agent-ix/quire-cli) | CLI distribution of the quire-rs engine used by the validation commands below. |
-| [Quoin](https://github.com/agent-ix/quoin) | Installs Quire modules and provides specification, evidence, and planning skills. |
-| [ix-flow](https://github.com/agent-ix/ix-flow) | Owns resumable workflow state, event history, and human gates. |
-| Engineering Assurance | Supplies assurance artifact schemas, skeletons, onboarding, and governed workflows. |
+| Component                                          | Responsibility                                                                      |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [quire-rs](https://github.com/agent-ix/quire-rs)   | Rust engine that parses and validates Markdown documents against Quire modules.     |
+| [quire-cli](https://github.com/agent-ix/quire-cli) | CLI distribution of the quire-rs engine used by the validation commands below.      |
+| [Quoin](https://github.com/agent-ix/quoin)         | Installs Quire modules and provides specification, evidence, and planning skills.   |
+| [ix-flow](https://github.com/agent-ix/ix-flow)     | Owns resumable workflow state, event history, and human gates.                      |
+| Engineering Assurance                              | Supplies assurance artifact schemas, skeletons, onboarding, and governed workflows. |
 
 Quire-rs validates the artifacts, Quoin installs and composes the modules, and
 ix-flow records the workflow lifecycle.
@@ -35,7 +36,7 @@ Those live in that project's own repo, validated against the schemas this
 module ships as an installed Quire module. `agent-ix/quoin`'s
 [`spec/assurance/`](https://github.com/agent-ix/quoin/tree/main/spec/assurance)
 is a working example: quoin's own `AssuranceProfile` and `MeasurementPlan`
-instances. Whether quoin should also *consume* this module's evidence-accounting
+instances. Whether quoin should also _consume_ this module's evidence-accounting
 and measurement code, not just its schemas, is a separate, still-open question
 tracked at [`agent-ix/engineering-assurance#98`](https://github.com/agent-ix/engineering-assurance/issues/98) —
 not resolved here.
@@ -86,15 +87,15 @@ OpenCode, and GitHub Copilot. Use the section for your agent.
 <summary><b>Claude Code</b></summary>
 
 ```text
-/plugin marketplace add agent-ix/engineering-assurance
-/plugin install engineering-assurance@engineering-assurance
+/plugin marketplace add agent-ix/agent-plugins
+/plugin install engineering-assurance@agent-ix-public
 ```
 
 From a shell or a script:
 
 ```bash
-claude plugin marketplace add agent-ix/engineering-assurance
-claude plugin install engineering-assurance@engineering-assurance
+claude plugin marketplace add agent-ix/agent-plugins
+claude plugin install engineering-assurance@agent-ix-public
 ```
 
 </details>
@@ -103,8 +104,8 @@ claude plugin install engineering-assurance@engineering-assurance
 <summary><b>OpenAI Codex</b></summary>
 
 ```bash
-codex plugin marketplace add agent-ix/engineering-assurance
-codex plugin add engineering-assurance@engineering-assurance
+codex plugin marketplace add agent-ix/agent-plugins
+codex plugin add engineering-assurance@agent-ix-public
 ```
 
 You can also install it from the Codex `/plugins` menu after adding the
@@ -153,12 +154,12 @@ gh skill install agent-ix/engineering-assurance \
 Engineering Assurance has three installed pieces: the Quire module, the native
 CLI, and the agent plugin or skill.
 
-| Piece | Check | Ready when |
-| --- | --- | --- |
-| Quire module | `quoin module list` | `engineering-assurance` is listed. |
-| Native CLI | `engineering-assurance --version` | `command not found` means `~/.cargo/bin` is not on `PATH`. |
-| Claude Code plugin | `claude plugin list` (or `/plugin` in a session) | `engineering-assurance@engineering-assurance` is listed as enabled. |
-| Codex plugin | `codex plugin list \| grep engineering-assurance` | `engineering-assurance@engineering-assurance` shows `installed, enabled`. |
+| Piece              | Check                                             | Ready when                                                          |
+| ------------------ | ------------------------------------------------- | ------------------------------------------------------------------- |
+| Quire module       | `quoin module list`                               | `engineering-assurance` is listed.                                  |
+| Native CLI         | `engineering-assurance --version`                 | `command not found` means `~/.cargo/bin` is not on `PATH`.          |
+| Claude Code plugin | `claude plugin list` (or `/plugin` in a session)  | `engineering-assurance@agent-ix-public` is listed as enabled.       |
+| Codex plugin       | `codex plugin list \| grep engineering-assurance` | `engineering-assurance@agent-ix-public` shows `installed, enabled`. |
 
 Check the row for each of Claude Code and Codex that you use. For OpenCode or
 GitHub Copilot, confirm the skill appears in that agent's skill list. An agent
@@ -185,6 +186,7 @@ after installing.
 
   The [MeasurementPlan skeleton](engineering_assurance/skeletons/MeasurementPlan.md)
   shows every field in its current shape.
+
 - **MeasurementPlan with a prose `statistical_design`.** Current plans need
   the typed estimator and decision rule. When the old design cannot be
   expressed in them faithfully, set the plan to `status: retired`, which keeps
@@ -203,13 +205,13 @@ after installing.
 The module supplies Quire schemas and Markdown skeletons for five artifact
 types:
 
-| Type | Purpose |
-| --- | --- |
-| `AssuranceProfile` | State a decision boundary, impacts, evidence policy, and exceptions. |
-| `MeasurementPlan` | Define a measure, its population, collection procedure, and interpretation. |
-| `ArchitectureDescription` | Record system boundaries, views, architecture decisions, and risks. |
+| Type                         | Purpose                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------- |
+| `AssuranceProfile`           | State a decision boundary, impacts, evidence policy, and exceptions.            |
+| `MeasurementPlan`            | Define a measure, its population, collection procedure, and interpretation.     |
+| `ArchitectureDescription`    | Record system boundaries, views, architecture decisions, and risks.             |
 | `ComponentAssuranceContract` | State required component behavior, failure handling, controls, and replacement. |
-| `AssuranceArgument` | Record a claim, reasoning, sufficiency decision, and challenges. |
+| `AssuranceArgument`          | Record a claim, reasoning, sufficiency decision, and challenges.                |
 
 ### Agent skill and workflows
 
@@ -235,12 +237,12 @@ existing artifacts.
 
 It routes bounded work through these ix-flow definitions:
 
-| Workflow | Use it for | Terminal decisions |
-| --- | --- | --- |
-| `assurance-intake` | Decide which assurance artifacts a bounded subject needs. | `accepted` / `rejected` |
-| `architecture-evaluation` | Evaluate an architecture against declared scenarios. | `accepted` / `rejected` |
-| `measurement-promotion` | Decide whether a recorded measure advances one stage. | `promoted` / `not_promoted` |
-| `change-assurance` | Decide a bounded change from impact, review, and assurance records. | `approved` / `rejected` |
+| Workflow                  | Use it for                                                          | Terminal decisions          |
+| ------------------------- | ------------------------------------------------------------------- | --------------------------- |
+| `assurance-intake`        | Decide which assurance artifacts a bounded subject needs.           | `accepted` / `rejected`     |
+| `architecture-evaluation` | Evaluate an architecture against declared scenarios.                | `accepted` / `rejected`     |
+| `measurement-promotion`   | Decide whether a recorded measure advances one stage.               | `promoted` / `not_promoted` |
+| `change-assurance`        | Decide a bounded change from impact, review, and assurance records. | `approved` / `rejected`     |
 
 Example prompt:
 
@@ -266,17 +268,17 @@ The native CLI is primarily an automation boundary. Every stdin/stdout
 protocol is versioned and documented by the schemas under
 `engineering_assurance/schemas/`.
 
-| Command group | Purpose |
-| --- | --- |
-| `onboarding` | Inventory a repository and emit a bounded onboarding result. |
-| `workflow-host` | Coordinate a bound workflow lifecycle through ix-flow. |
-| `manifest-validate` | Qualify the module against explicit repository and registry roots. |
-| `integration-evidence` | Verify Quire traceability and retained release evidence. |
-| `content-rights-tree` | Inspect a Git-selected repository tree for rights violations. |
-| `agent-evals` / `agent-evals-provider` | Run or serve the Engineering Assurance evaluation contract. |
-| `evaluation-aggregate` / `evaluation-aggregate-verify` | Build or re-check retained evaluation aggregates. |
-| `package-audit` / `package-lifecycle` | Audit private distributions and stage or refuse npm publication. |
-| `workflow-invariants` | Evaluate a closed workflow projection against named invariants. |
+| Command group                                          | Purpose                                                            |
+| ------------------------------------------------------ | ------------------------------------------------------------------ |
+| `onboarding`                                           | Inventory a repository and emit a bounded onboarding result.       |
+| `workflow-host`                                        | Coordinate a bound workflow lifecycle through ix-flow.             |
+| `manifest-validate`                                    | Qualify the module against explicit repository and registry roots. |
+| `integration-evidence`                                 | Verify Quire traceability and retained release evidence.           |
+| `content-rights-tree`                                  | Inspect a Git-selected repository tree for rights violations.      |
+| `agent-evals` / `agent-evals-provider`                 | Run or serve the Engineering Assurance evaluation contract.        |
+| `evaluation-aggregate` / `evaluation-aggregate-verify` | Build or re-check retained evaluation aggregates.                  |
+| `package-audit` / `package-lifecycle`                  | Audit private distributions and stage or refuse npm publication.   |
+| `workflow-invariants`                                  | Evaluate a closed workflow projection against named invariants.    |
 
 Run `engineering-assurance --help` or
 `engineering-assurance <command> --help` for argument details. Maintainer-only
@@ -325,3 +327,21 @@ until separate, explicit authorization is given.
 ## License
 
 AGPL-3.0-or-later
+
+The standalone marketplace remains available for existing installations. When
+switching an installed plugin, follow the [migration guide](https://github.com/agent-ix/agent-plugins/blob/main/docs/migration.md)
+to avoid loading the old and new identities together.
+
+## Related Agent IX plugins
+
+Browse the [Agent IX public marketplace](https://github.com/agent-ix/agent-plugins)
+for independently installable Claude Code and Codex plugins:
+
+- [Quoin](https://github.com/agent-ix/quoin) authors, reviews, and plans specifications.
+- [Quire CLI](https://github.com/agent-ix/quire-cli) explores, writes, validates, links, and traces Markdown artifacts.
+- [Engineering Assurance](https://github.com/agent-ix/engineering-assurance) prepares governed assurance decisions and evidence.
+- [IX Flow](https://github.com/agent-ix/ix-flow) runs and authors resumable agent workflows.
+- [CLI Agent Evals](https://github.com/agent-ix/cli-agent-evals) runs and authors coding-agent evaluation suites.
+
+Plugin installation adds agent skills. Install each tool's CLI and any required
+Quire modules separately, following its own installation instructions.
