@@ -8,6 +8,8 @@ contributes:
 
 # Assurance onboarding
 
+If this plugin is not initialized or an Agent IX command fails, read [the engineering-assurance setup guide](https://github.com/agent-ix/engineering-assurance/blob/main/setup.md) for its prerequisites and local diagnosis.
+
 Use this skill when an operator asks what engineering-assurance work applies to
 an existing repository or wants to enter one of the governed assurance
 workflows.
