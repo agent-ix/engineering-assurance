@@ -12,6 +12,14 @@ calculate a trust score, import external rules, or approve a release. The
 decision owner remains responsible for the boundary, claims, exceptions,
 evidence sufficiency, and terminal decision.
 
+## Setup
+
+If this plugin is uninitialized or a command fails, follow the [plugin setup guide](setup.md) for its required CLIs, configuration, and local diagnosis.
+
+## Community help
+
+If the setup checks leave a reproducible Agent IX engineering-assurance bug that blocks progress, [join the Agent IX Discord](https://discord.gg/k8DVhuYBR2). Community help is a last resort for Agent IX product bugs, not a help desk for local credentials, machine setup, third party tools, or unrelated projects. See [setup.md](setup.md#community-help) for what to include.
+
 ## How it fits
 
 Engineering Assurance is a small part of the Agent IX documentation toolchain:
@@ -86,15 +94,15 @@ OpenCode, and GitHub Copilot. Use the section for your agent.
 <summary><b>Claude Code</b></summary>
 
 ```text
-/plugin marketplace add agent-ix/engineering-assurance
-/plugin install engineering-assurance@engineering-assurance
+/plugin marketplace add agent-ix/agent-plugins
+/plugin install engineering-assurance@agent-ix
 ```
 
 From a shell or a script:
 
 ```bash
-claude plugin marketplace add agent-ix/engineering-assurance
-claude plugin install engineering-assurance@engineering-assurance
+claude plugin marketplace add agent-ix/agent-plugins
+claude plugin install engineering-assurance@agent-ix
 ```
 
 </details>
@@ -103,8 +111,8 @@ claude plugin install engineering-assurance@engineering-assurance
 <summary><b>OpenAI Codex</b></summary>
 
 ```bash
-codex plugin marketplace add agent-ix/engineering-assurance
-codex plugin add engineering-assurance@engineering-assurance
+codex plugin marketplace add agent-ix/agent-plugins
+codex plugin add engineering-assurance@agent-ix
 ```
 
 You can also install it from the Codex `/plugins` menu after adding the

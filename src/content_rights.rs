@@ -594,6 +594,11 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
     // had the slash from the start.
     let agent_ix_bare = concat!("https:", "//github.com/agent-ix");
     let agent_ix_org_prefix = concat!("https:", "//github.com/agent-ix/");
+    let plugin_setup_url = concat!(
+        "https:",
+        "//github.com/agent-ix/engineering-assurance/blob/main/setup.md"
+    );
+    let marketplace_url = concat!("https:", "//github.com/agent-ix/agent-plugins");
     let approved_dependencies = [
         concat!("https:", "//github.com/agent-ix/ix-trace-rs"),
         concat!("https:", "//github.com/agent-ix/ix-cli-kit"),
@@ -612,6 +617,10 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
     // would let an unrelated file inherit the exemption by choosing its name.
     let onboarding_report =
         path == "engineering_assurance/skills/assurance-onboarding/scripts/onboard.js";
+    let plugin_help_doc = matches!(
+        path,
+        "setup.md" | "engineering_assurance/skills/assurance-onboarding/SKILL.md"
+    );
     // A first-party Agent-IX crate consumed as a rev-pinned git dependency
     // names its own GitHub URL in the manifest and lockfile, same
     // as the registry index URL already carried in Cargo.lock/deny.toml. This
@@ -664,6 +673,8 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         || project_metadata && (url == discord_badge || url == discord_invite)
         || project_metadata && (url == agent_ix_bare || url.starts_with(agent_ix_org_prefix))
         || onboarding_report && url.starts_with(agent_ix_org_prefix)
+        || plugin_help_doc
+            && (url == plugin_setup_url || url == marketplace_url || url == discord_invite)
 }
 
 fn contains_encoded_payload(line: &str) -> bool {
