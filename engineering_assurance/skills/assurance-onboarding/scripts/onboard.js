@@ -189,6 +189,9 @@ const describeCondition = (condition, prefix = "") => {
     if (def.properties) return describeCondition(def, `${prop}.`);
     return `${prop} is present`;
   });
+  if (clauses.length === 0 && Array.isArray(condition?.required) && condition.required.length > 0) {
+    return condition.required.map((name) => `${prefix}${name} is present`).join(" and ");
+  }
   return clauses.length > 0 ? clauses.join(" and ") : "(unrecognized condition)";
 };
 

@@ -179,8 +179,10 @@ series rather than re-judging the old one.
 labels, corpus, or answer key, the file that selects the population, and the
 checker configuration. A change that edits one of them changed the
 measurement, not the thing measured, and earns no credit toward the objective.
-A gate-stage plan must list them, and so must any plan that declares an
-`apparatus-edit` negative control.
+A plan with its own `execution_procedure` or an `apparatus-edit` negative
+control must list them. A gate over independently produced admitted evidence
+can omit the list while retaining its ground-truth kind, negative controls,
+and decision rule.
 
 Each entry is either a repository-relative file path or a directory entry
 ending in `/**`, which names every file under that directory, recursively
