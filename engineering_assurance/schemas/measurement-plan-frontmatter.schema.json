@@ -65,7 +65,7 @@
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "description": "The files that produce this plan's number (FR-024): the measurement harness, the labels, corpus, or answer key, the file that selects the population, and the checker configuration. Each entry is a repository-relative file path or a directory entry `<directory>/**`. Quoin's intake resolves the entries to files (case-sensitive, dotfiles included, symlinks refused and never followed, a directory entry must contain at least one file, an entry that names no file refuses the collection) and records the resolved set of (path, digest) pairs; a different set between collections -- a file added, removed, or edited under an entry -- is an apparatus change. Required when `stage` is `gate`, and whenever a `negative_controls` entry has kind `apparatus-edit`. Part of the measurement definition: adding, removing, or changing an entry, or any change to the resolved set, requires a new `definition_version`.",
+      "description": "When the plan governs its own producer, the files that produce its number (FR-024): the measurement harness, labels, corpus or answer key, population selector, and checker configuration. Each entry is a repository-relative file path or a directory entry `<directory>/**`. Quoin's intake resolves entries to files and records (path, digest) pairs; a different set between collections is an apparatus change. Required when `execution_procedure` is declared or a `negative_controls` entry has kind `apparatus-edit`. An independently produced evidence gate can omit the list while retaining its ground-truth kind, negative controls, typed decision rule, and admitted observations. When declared, the list and its resolved set are part of the measurement definition and changes require a new `definition_version`.",
       "items": { "$ref": "#/$defs/apparatus_path" }
     },
     "negative_controls": {
@@ -96,7 +96,7 @@
         "required": ["stage", "status"]
       },
       "then": {
-        "required": ["ground_truth_kind", "negative_controls", "protected_apparatus"]
+        "required": ["ground_truth_kind", "negative_controls"]
       }
     },
     {

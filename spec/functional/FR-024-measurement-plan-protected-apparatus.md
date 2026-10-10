@@ -16,11 +16,14 @@ relationships:
 ## Description
 
 The MeasurementPlan schema SHALL accept a `protected_apparatus` naming the
-files that produce the plan's number, and SHALL require it, together with
-`negative_controls` declaring at least one gaming scenario the plan guards
-against, when a non-retired plan's `stage` is `gate`. A change that edits the apparatus
-has changed the measurement rather than the thing measured, so it earns no
-credit toward the plan's objective.
+files that produce the plan's number. It SHALL require that list when the plan
+declares its own `execution_procedure` or an `apparatus-edit` control. A
+non-retired `stage: gate` plan SHALL declare `negative_controls` and
+`ground_truth_kind` whether or not it owns a producer. A gate over independently
+produced, admitted evidence can omit the file list; its typed decision rule and
+evidence requirements still determine the gate. A change that edits declared
+apparatus has changed the measurement rather than the thing measured, so it
+earns no credit toward the plan's objective.
 
 ## Inputs
 
@@ -46,16 +49,15 @@ credit toward the plan's objective.
 
 ## Behavior
 
-- `protected_apparatus` SHALL list the files that produce the plan's number:
-  the measurement harness, the labels, corpus, or answer key, the file that
-  selects the population, and the checker configuration.
+- When a plan governs its own producer, `protected_apparatus` SHALL list the
+  files that produce the plan's number: the measurement harness, labels, corpus
+  or answer key, population selector, and checker configuration.
 - `protected_apparatus` SHALL be a non-empty list with no repeated entry when
   present.
-- The schema SHALL require `protected_apparatus` when `stage` is `gate`
-  and `status` is not `retired`, and,
-  at every stage, when any `negative_controls` entry has kind
-  `apparatus-edit`: an apparatus-edit control over no declared apparatus
-  guards nothing.
+- The schema SHALL require `protected_apparatus` at every stage when
+  `execution_procedure` is declared or any `negative_controls` entry has kind
+  `apparatus-edit`: an apparatus-edit control over no declared apparatus guards
+  nothing. `stage: gate` alone SHALL not require it.
 - Each entry SHALL be either a repository-relative file path or a directory
   entry `<directory>/**`, which names every file under that directory,
   recursively. Segments are separated by `/`. `*` SHALL appear only in that
@@ -74,8 +76,8 @@ credit toward the plan's objective.
   `a.json` followed by a newline. The refused characters keep Windows drive
   and separator forms out and leave no entry that can name a file outside the
   repository.
-- A plan SHALL protect its population through the file that selects or
-  enumerates it, listed as a `protected_apparatus` entry. The
+- A plan declaring `protected_apparatus` SHALL protect its population through
+  the file that selects or enumerates it. The
   `statistical_design.population` field stays prose and is not part of the
   protected apparatus: it describes the population to a reader, while the
   selecting file decides which items are counted, and only a file can be
@@ -137,7 +139,7 @@ credit toward the plan's objective.
   `tests/fixtures/apparatus-paths.json`, in which each refused entry names
   its `ApparatusPathError` variant.
 - The onboarding checklist SHALL list both lists' shape and the entry
-  description, the control kinds, and the gate-stage and apparatus-edit
+  description, the control kinds, and the procedure and apparatus-edit
   requirements, and the MeasurementPlan skeleton and onboarding skill SHALL
   show both fields.
 - `ApparatusPath`, `ProtectedApparatus`, `NegativeControlKind`,
@@ -160,7 +162,7 @@ credit toward the plan's objective.
 An unsafe or malformed entry, an empty or repeated `protected_apparatus` list,
 an unknown control kind, a control with a missing or empty description or an
 extra key, an empty or repeated `negative_controls` list, a gate-stage plan
-without `negative_controls`, `protected_apparatus`, or `ground_truth_kind`,
+without `negative_controls` or `ground_truth_kind`,
 an unknown `ground_truth_kind`, a malformed or extended `preregistration`, and
 a plan with an `apparatus-edit` control but no `protected_apparatus` fail
 validation or construction. An edit to
@@ -176,9 +178,9 @@ rather than being accepted silently.
 | FR-024-AC-3 | The Rust `ApparatusPath` accepts every accepted entry of the shared case table, reporting its directory for a directory entry, and refuses every refused entry with the typed error the table names, through construction, parsing, and deserialization, and the schema's entry pattern agrees on every case; `ProtectedApparatus` refuses an empty or repeated list, compares as a set, and round-trips in sorted order. | Test (TC-156) |
 | FR-024-AC-4 | The schema's control kinds equal the Rust `NegativeControlKind` wire names in order, `ALL` covers every variant, and the non-retired gate-stage `then` requires `negative_controls`; `NegativeControl` and `NegativeControls` refuse an empty description, an empty list, and a repeated control with typed errors, refuse unknown kinds and extra keys on deserialization, and round-trip. | Test (TC-157) |
 | FR-024-AC-5 | Given two plan definitions with an equal `definition_version`, a protected entry added, removed, or changed, or the list added or removed, yields one typed finding naming `protected_apparatus`; the same edit with a different `definition_version`, and a reordered list, yield no finding. | Test (TC-158, TC-141) |
-| FR-024-AC-6 | The MeasurementPlan skeleton carries a valid `protected_apparatus` and `negative_controls` with sections explaining both, the onboarding skill describes both, and the onboarding checklist lists both lists' shape, the entry description rather than the raw pattern, the control kinds, and the gate-stage and apparatus-edit requirements; it omits lists with nothing to say, and no artifact type has a warning. | Test (TC-159) |
+| FR-024-AC-6 | The MeasurementPlan skeleton carries a valid `protected_apparatus` and `negative_controls` with sections explaining both, the onboarding skill describes both, and the onboarding checklist lists both lists' shape, the entry description rather than the raw pattern, the control kinds, and the procedure and apparatus-edit requirements; it omits lists with nothing to say, and no artifact type has a warning. | Test (TC-159) |
 | FR-024-AC-7 | A minimal consumer with only the `measurement` feature reaches `ApparatusPath`, `ProtectedApparatus`, `NegativeControlKind`, `NegativeControl`, and `NegativeControls`, and resolves no `serde_json`. | Test (TC-142) |
-| FR-024-AC-8 | The schema refuses a non-retired gate-stage plan without `protected_apparatus`, and a plan at any stage with an `apparatus-edit` negative control but no `protected_apparatus`; it accepts both with a protected list, and a below-gate plan whose controls are of other kinds without one. | Test (TC-155) |
+| FR-024-AC-8 | The schema accepts a non-retired gate-stage plan without `protected_apparatus` when it has no `execution_procedure` or `apparatus-edit` control and declares ground truth and controls; it refuses a plan at any stage with a procedure or `apparatus-edit` control but no `protected_apparatus`. A missing typed decision rule never yields a passing gate verdict. | Test (TC-155) |
 | FR-024-AC-9 | A retired gate-stage plan under the prose contract remains valid without fields added later for new gate plans; the same omission is refused for a proposed or active gate-stage plan, and a retired current-shape plan remains valid. | Test (TC-172) |
 | FR-024-AC-10 | The schema accepts an absent `execution_procedure` and safe repository-relative JSON file paths with `protected_apparatus` declared; it refuses absolute, traversing, malformed, wildcard, non-JSON, and non-string paths, and refuses a procedure path without `protected_apparatus`. Exact protected-path membership and source-byte binding remain Quoin obligations. | Test (TC-185) |
 | FR-024-AC-11 | The schema accepts each of `human-labelled`, `agent-labelled`, and `mechanical` at gate and below gate, requires `ground_truth_kind` at gate with no other finding, leaves it optional below gate, and refuses any other value, including a case variant and an empty string, at every stage. | Test (TC-203) |
