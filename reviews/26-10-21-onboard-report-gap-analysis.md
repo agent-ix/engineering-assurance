@@ -3,7 +3,7 @@ id: SR-141
 title: "Gap analysis — native onboarding report port"
 type: SpecReview
 analysis: gap-analysis
-scope: "spec/functional/FR-001-inventory-before-proposal.md, spec/functional/FR-020*, spec/functional/FR-021*, spec/functional/FR-025*, src/onboard_report.rs, tests/python_port/onboarding_script.rs, tests/python_port/module.rs, tests/content_rights_parity.rs"
+scope: "spec/functional/FR-001-inventory-before-proposal.md, spec/functional/FR-020*, spec/functional/FR-021*, spec/functional/FR-024*, spec/functional/FR-025*, src/onboard_report.rs, tests/python_port/onboarding_script.rs, tests/python_port/module.rs, tests/content_rights_parity.rs"
 review_set: subset
 relationships:
   - target: "ix://agent-ix/engineering-assurance/FR-001"
@@ -34,6 +34,7 @@ Audited the STD-228 onboarding report diff against the computed Test Matrix, tag
 
 - Reconciliation: `quire matrix --scope . --format json` on the candidate worktree; 247 criteria across 32 documents, 217 tagged, 24 untagged, 6 method-only.
 - Changed report criteria FR-001-AC-8 and FR-001-AC-9 have six and four native test binders respectively. Schema checklist criteria FR-020-AC-1, FR-021-AC-12, and FR-025-AC-7 also have native binders; the new order regression test adds another FR-020-AC-1 binder.
+- Follow-up review on `e723041`: the required-only condition fallback is owned by the MeasurementPlan checklist criterion FR-024-AC-6 and is exercised by a tagged test through the native CLI. The test asserts the ordered `when` text and the required field; direct differential comparison with the proposed EA PR #181 JavaScript returned the same conditional-required JSON. No new unowned behavior, stub, or inflated trace was found.
 - Direct code-to-requirement review found no new stub, unowned behavior, or trace inflation in the diff. The measurement-record prose checklist remains the same content previously present in this repository's JavaScript report.
 - Plan completion: not assessed
 - Optional semantic review: skipped; scoped code-to-test alignment was reviewed in SR-140.

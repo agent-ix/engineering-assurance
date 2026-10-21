@@ -13,7 +13,7 @@ Reviewed the STD-228 replacement of the onboarding report script with the native
 
 ## Verdict
 
-**PASS** — no introduced code-review findings in this diff. The full Rust and JavaScript reports match exactly as parsed JSON and as 190 lines of human text on the same checkout; focused native report tests, strict Clippy, and the content-rights regression pass. Full repository gates run separately before PR opening and merge.
+**PASS** — no introduced code-review findings in this diff. The full Rust and JavaScript reports match exactly as parsed JSON and as 190 lines of human text on the same checkout; focused native report tests, strict Clippy, and the content-rights regression pass. The applicable full gate runs once on the final reviewed PR head before merge.
 
 ## Findings
 
@@ -25,5 +25,6 @@ Reviewed the STD-228 replacement of the onboarding report script with the native
 
 - The removed JavaScript implementation is absent from active skill and documentation commands. The new CLI keeps the existing inventory-only `onboarding` command separate from the orientation report.
 - Schema requirements, nested refs, conditional clauses, warnings, enum/list presentation order, help and usage errors, and summary exit states are exercised by tagged Rust tests.
+- Follow-up Rust/code review on `e723041` found no new issue in the `if.required` fallback: it applies only when no property clause was described, and the tagged probe exercises the real CLI with two ordered required names. The conditional-required JSON matches the JavaScript implementation proposed in EA PR #181 for that probe. The focused onboarding suite passed 20 tests, as did strict Clippy and formatting.
 - The schema reader uses bounded file and process output, confines schema paths to the selected module, and does not write to the selected repository.
 - No applicable `spec/assurance/AssuranceProfile` exists in this repository.
