@@ -684,10 +684,20 @@ fn describe_condition(condition: &Value, prefix: &str, orders: &ObjectOrders) ->
             format!("{path} is present")
         })
         .collect::<Vec<_>>();
-    if clauses.is_empty() {
-        "(unrecognized condition)".to_owned()
-    } else {
+    if !clauses.is_empty() {
         clauses.join(" and ")
+    } else if let Some(required) = condition
+        .get("required")
+        .and_then(Value::as_array)
+        .filter(|required| !required.is_empty())
+    {
+        required
+            .iter()
+            .map(|name| format!("{prefix}{} is present", value_text(name)))
+            .collect::<Vec<_>>()
+            .join(" and ")
+    } else {
+        "(unrecognized condition)".to_owned()
     }
 }
 

@@ -138,6 +138,31 @@ fn onboard_report_preserves_schema_member_order_in_checklist_arrays() {
 }
 
 #[test]
+#[trace("TC-159", "FR-024-AC-6")]
+fn onboard_report_describes_required_only_conditions() {
+    let cli = native_cli();
+    let tmp = TempDir::new().expect("temporary module");
+    let checklist = probe_report(
+        &cli,
+        tmp.path(),
+        &json!({
+            "type": "object",
+            "allOf": [{
+                "if": {"required": ["execution_procedure", "plan_id"]},
+                "then": {"required": ["protected_apparatus"]},
+            }],
+        }),
+    );
+    assert!(contains(
+        &checklist["conditionalRequired"],
+        &json!({
+            "when": "execution_procedure is present and plan_id is present",
+            "required": ["protected_apparatus"],
+        }),
+    ));
+}
+
+#[test]
 #[trace("TC-139", "FR-020-AC-1")]
 fn onboard_report_json_checklist_lists_nested_objective_requirements() {
     let node = native_cli();
