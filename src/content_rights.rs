@@ -643,10 +643,7 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
             .strip_prefix("engineering_assurance/schemas/")
             .or_else(|| path.strip_prefix("schemas/"))
             .is_some_and(|file| SEMANTIC_EXPORT_SCHEMAS.contains(&file));
-    let campaign_license = matches!(
-        path,
-        "campaign/generated/rust/LICENSE" | "campaign/generated/typescript/LICENSE"
-    );
+    let campaign_license = path == "campaign/generated/rust/LICENSE";
     let generated_schema_prefix = concat!(
         "https:",
         "//agent-ix.dev/schema/agent-ix/engineering-assurance-campaign/"
