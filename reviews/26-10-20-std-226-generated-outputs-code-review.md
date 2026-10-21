@@ -13,7 +13,7 @@ Reviewed the STD-226 deletion of unused generated Python and TypeScript outputs,
 
 ## Verdict
 
-**PASS** — no findings in the changed files. `make integration-gate` passed lint, formatting, Clippy, tests, documentation, dependency policy, and advisory audit; its final traceability reconciliation failed on existing coverage gaps (408/429 backed) outside this diff.
+**PASS** — no findings in the changed files. Two `make integration-gate` runs passed lint, formatting, Clippy, tests, documentation, dependency policy, and advisory audit; final traceability reconciliation failed on existing coverage gaps (408/429 backed) outside this diff. After rebasing onto current main, lint, package audit, the minimal downstream consumer, and the standalone traceability check reproduced the same result.
 
 ## Findings
 
