@@ -991,7 +991,6 @@ fn negative_controls_are_closed_and_required_at_gate_stage() {
 
     let gate_without = plan_errors(json!({"stage": "gate", "ground_truth_kind": "mechanical"}));
     assert!(gate_without.contains(&required_msg("negative_controls")));
-    assert!(gate_without.contains(&required_msg("protected_apparatus")));
     let nc = negative_control();
     let refused = [
         ("empty list", json!([])),
@@ -1022,7 +1021,7 @@ fn negative_controls_are_closed_and_required_at_gate_stage() {
 
 #[test]
 #[trace("TC-155", "FR-024-AC-8")]
-fn gate_and_apparatus_edit_plans_require_protected_apparatus() {
+fn procedure_and_apparatus_edit_plans_require_protected_apparatus() {
     let control = json!({"kind": "suppressed-observation", "description": "d"});
     let edit = json!({"kind": "apparatus-edit", "description": "d"});
     let gate = json!({"stage": "gate", "ground_truth_kind": "mechanical"});
@@ -1031,6 +1030,13 @@ fn gate_and_apparatus_edit_plans_require_protected_apparatus() {
     assert!(
         plan_errors(merged(
             json!({"negative_controls": [control]}),
+            gate.clone()
+        ))
+        .is_empty()
+    );
+    assert!(
+        plan_errors(merged(
+            json!({"negative_controls": [control], "execution_procedure": "evals/run.json"}),
             gate.clone()
         ))
         .contains(&missing)

@@ -1494,11 +1494,7 @@ fn tc_157_negative_controls_are_closed_non_empty_and_distinct() {
     assert_eq!(NegativeControlKind::ALL.len(), 5);
     assert_eq!(
         schema["allOf"][1]["then"]["required"],
-        serde_json::json!([
-            "ground_truth_kind",
-            "negative_controls",
-            "protected_apparatus"
-        ]),
+        serde_json::json!(["ground_truth_kind", "negative_controls"]),
         "a gate-stage plan requires negative_controls"
     );
 

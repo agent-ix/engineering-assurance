@@ -330,7 +330,14 @@ fn onboard_js_json_checklist_lists_protected_apparatus_and_negative_controls() {
         conditional,
         &json!({
             "when": "stage = gate and status is not retired",
-            "required": ["ground_truth_kind", "negative_controls", "protected_apparatus"],
+            "required": ["ground_truth_kind", "negative_controls"],
+        })
+    ));
+    assert!(contains(
+        conditional,
+        &json!({
+            "when": "execution_procedure is present",
+            "required": ["protected_apparatus"],
         })
     ));
     assert!(contains(

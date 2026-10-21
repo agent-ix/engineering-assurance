@@ -134,21 +134,22 @@ then required; do not restate `metric`, `repetitions`, or
 do not invent a threshold or margin the owner has not stated. `population`,
 `sampling`, `error_model`, and `uncertainty` remain prose.
 
-List the files that produce the plan's number in `protected_apparatus`: the
-harness, the labels, corpus, or answer key, the file that selects the
-population, and the checker configuration. Each entry is a repository-relative
+When the plan governs its own producer, list the files that produce its number
+in `protected_apparatus`: the harness, labels, corpus or answer key, population
+selector, and checker configuration. Each entry is a repository-relative
 file path or a directory entry ending in `/**` (every file under that
 directory, recursively); no other wildcard is allowed, `**` alone is refused,
 and so are absolute paths, `.`/`..` segments, empty segments, control
-characters, and `\ ? [ ] { } :`. The list is non-empty with no repeats, and a
-gate-stage plan, or any plan declaring an `apparatus-edit` control, must have
-one. Quoin's intake resolves each entry (case-sensitive, dotfiles included,
+characters, and `\ ? [ ] { } :`. The list is non-empty with no repeats. A plan
+with `execution_procedure` or an `apparatus-edit` control must have one. A gate
+over independently produced admitted evidence can omit it. Quoin's intake
+resolves each declared entry (case-sensitive, dotfiles included,
 symlinks refused, a directory entry must hold at least one file, an entry that
 names nothing refuses the collection) and records the (path, digest) set; any
 difference in that set is an apparatus change. A change that edits a
 protected file changed the measurement, not the thing measured, and earns no
-credit. Protect the population through the file that selects it;
-`statistical_design.population` stays prose.
+credit. When the list is declared, protect the population through the file
+that selects it; `statistical_design.population` stays prose.
 
 A gate-stage plan also declares at least one `negative_controls` entry,
 `{ kind, description }`: a gaming scenario the plan says it guards against and
