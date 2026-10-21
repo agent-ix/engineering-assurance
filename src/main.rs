@@ -11,6 +11,7 @@ mod content_rights_host;
 mod evaluation_report_host;
 mod integration_evidence_host;
 mod manifest_host;
+mod onboard_report;
 mod onboarding_host;
 mod package_archive;
 mod package_audit_host;
@@ -44,6 +45,7 @@ const EVALUATION_AGGREGATE_VERIFY_CAPABILITY: &str = "evaluation-aggregate-verif
 const INTEGRATION_EVIDENCE_CAPABILITY: &str = "integration-evidence";
 const MANIFEST_VALIDATE_CAPABILITY: &str = "manifest-validate";
 const ONBOARDING_CAPABILITY: &str = "onboarding";
+const ONBOARD_REPORT_CAPABILITY: &str = "onboard-report";
 const PACKAGE_AUDIT_CAPABILITY: &str = "package-audit";
 const PACKAGE_LIFECYCLE_CAPABILITY: &str = "package-lifecycle";
 const WORKFLOW_INVARIANTS_CAPABILITY: &str = "workflow-invariants";
@@ -116,6 +118,10 @@ fn command() -> Command {
         .subcommand(
             Command::new(ONBOARDING_CAPABILITY)
                 .about("Inventory a selected repository and produce a bounded onboarding result"),
+        )
+        .subcommand(
+            Command::new(ONBOARD_REPORT_CAPABILITY)
+                .about("Explain the installed assurance schemas and inventory a repository"),
         )
         .subcommand(
             Command::new(PACKAGE_AUDIT_CAPABILITY)
@@ -244,6 +250,12 @@ fn npm_hook_arg() -> Arg {
 }
 
 fn main() -> ExitCode {
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|argument| argument == ONBOARD_REPORT_CAPABILITY)
+    {
+        return onboard_report::run_argv();
+    }
     let matches = command().get_matches();
     match matches.subcommand() {
         Some((AGENT_EVALS_CAPABILITY, arguments)) => run_agent_evals(arguments),

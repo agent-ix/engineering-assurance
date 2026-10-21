@@ -151,7 +151,7 @@ Quoin owns the rest of the collection format and names the failing field when
 it refuses a record. The onboarding report restates the full field contract:
 
 ```bash
-node engineering_assurance/skills/assurance-onboarding/scripts/onboard.js --repo <repo_root>
+engineering-assurance onboard-report --module-root engineering_assurance --repo <repo_root>
 ```
 
 ## 3. Record it

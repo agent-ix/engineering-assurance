@@ -589,9 +589,7 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
     // it. Both are needed: requiring the trailing `/` on the bare form would
     // refuse the plugin manifests' own author URL, and dropping it from the
     // prefix form would let an org-prefix match admit a look-alike org such
-    // as `agent-ix-evil` — that gap stood here for every `project_metadata`
-    // file until this fix; only the newer `onboarding_report` exemption below
-    // had the slash from the start.
+    // as `agent-ix-evil`.
     let agent_ix_bare = concat!("https:", "//github.com/agent-ix");
     let agent_ix_org_prefix = concat!("https:", "//github.com/agent-ix/");
     let plugin_setup_url = concat!(
@@ -608,15 +606,6 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         || path.ends_with(".codex-plugin/plugin.json")
         || path.ends_with(".github/plugin/plugin.json")
         || path.ends_with(".dist-info/METADATA");
-    // The assurance-onboarding skill's one onboarding report points
-    // at the sibling first-party repos a decision boundary actually needs —
-    // the qa-corpus measurement examples and a live consumer's spec/assurance/
-    // — the same first-party-only linking `project_metadata` already grants
-    // README.md. Named by its exact path, not a directory-wide suffix match,
-    // for the same reason `cargo_manifest` below is exact: a suffix match
-    // would let an unrelated file inherit the exemption by choosing its name.
-    let onboarding_report =
-        path == "engineering_assurance/skills/assurance-onboarding/scripts/onboard.js";
     let plugin_help_doc = matches!(
         path,
         "setup.md" | "engineering_assurance/skills/assurance-onboarding/SKILL.md"
@@ -669,7 +658,6 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         || cargo_manifest && is_approved_dependency_url
         || project_metadata && (url == discord_badge || url == discord_invite)
         || project_metadata && (url == agent_ix_bare || url.starts_with(agent_ix_org_prefix))
-        || onboarding_report && url.starts_with(agent_ix_org_prefix)
         || plugin_help_doc
             && (url == plugin_setup_url || url == marketplace_url || url == discord_invite)
 }
