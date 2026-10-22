@@ -1,7 +1,4 @@
-//! Port of `tests/test_onboarding_script.py`: `onboard.js` driven through node.
-//!
-//! Each test returns early (printing a SKIP line) when node is not installed,
-//! as the Python suite skipped.
+//! Native onboarding report checks formerly exercised through Node.
 use ix_trace_rs::trace;
 use std::fs;
 use std::os::unix::fs::{PermissionsExt, symlink};
@@ -13,29 +10,13 @@ use tempfile::TempDir;
 
 use super::common::{manifest, package_root, read, schema, truthy};
 
-fn onboard_js() -> PathBuf {
+fn onboard_report() -> PathBuf {
     package_root()
-        .join("skills")
-        .join("assurance-onboarding")
-        .join("scripts")
-        .join("onboard.js")
 }
 
-/// Path of `node` on `PATH`, if installed.
-fn node() -> Option<PathBuf> {
-    super::common::find_on_path("node")
-}
-
-macro_rules! require_node {
-    () => {
-        match node() {
-            Some(node) => node,
-            None => {
-                eprintln!("SKIP: node is not installed");
-                return;
-            }
-        }
-    };
+/// Path of the native report command.
+fn native_cli() -> PathBuf {
+    PathBuf::from(env!("CARGO_BIN_EXE_engineering-assurance"))
 }
 
 fn stdout(output: &Output) -> String {
@@ -46,29 +27,41 @@ fn stderr(output: &Output) -> String {
     String::from_utf8(output.stderr.clone()).expect("utf-8 stderr")
 }
 
-/// Run `node script args...` and require success (Python `check=True`).
+/// Run the native report and require success.
 fn run_ok(node: &Path, script: &Path, args: &[&Path], extra: &[&str]) -> Output {
     let output = Command::new(node)
+        .arg("onboard-report")
+        .arg("--module-root")
         .arg(script)
         .args(args)
         .args(extra)
         .output()
-        .expect("node runs");
-    assert!(output.status.success(), "node failed: {}", stderr(&output));
+        .expect("native report runs");
+    assert!(
+        output.status.success(),
+        "native report failed: {}",
+        stderr(&output)
+    );
     output
 }
 
-fn run_onboard_json(node: &Path, tmp: &Path) -> Value {
+fn run_onboard_reporton(node: &Path, tmp: &Path) -> Value {
     let target_repo = tmp.join("consumer");
     fs::create_dir(&target_repo).expect("mkdir consumer");
     let output = Command::new(node)
-        .arg(onboard_js())
+        .arg("onboard-report")
+        .arg("--module-root")
+        .arg(onboard_report())
         .arg("--repo")
         .arg(&target_repo)
         .arg("--json")
         .output()
-        .expect("node runs");
-    assert!(output.status.success(), "node failed: {}", stderr(&output));
+        .expect("native report runs");
+    assert!(
+        output.status.success(),
+        "native report failed: {}",
+        stderr(&output)
+    );
     serde_json::from_str(&stdout(&output)).expect("json report")
 }
 
@@ -84,13 +77,10 @@ fn any_warning_mentions(checklist: &Value, needle: &str) -> bool {
         .any(|w| w.as_str().is_some_and(|s| s.contains(needle)))
 }
 
-/// A throwaway module copy with one probe schema, plus its `onboard.js`.
+/// A throwaway module with one probe schema.
 fn probe_module(tmp: &Path, probe_schema: &Value) -> PathBuf {
     let module = tmp.join("engineering_assurance");
-    let script_dir = module.join("skills/assurance-onboarding/scripts");
-    fs::create_dir_all(&script_dir).expect("mkdir script dir");
-    fs::copy(onboard_js(), script_dir.join("onboard.js")).expect("copy onboard.js");
-    fs::create_dir(module.join("skeletons")).expect("mkdir skeletons");
+    fs::create_dir_all(module.join("skeletons")).expect("mkdir skeletons");
     fs::create_dir(module.join("schemas")).expect("mkdir schemas");
     fs::write(
         module.join("manifest.yaml"),
@@ -102,7 +92,7 @@ fn probe_module(tmp: &Path, probe_schema: &Value) -> PathBuf {
         probe_schema.to_string(),
     )
     .expect("write schema");
-    script_dir.join("onboard.js")
+    module
 }
 
 fn probe_report(node: &Path, tmp: &Path, probe_schema: &Value) -> Value {
@@ -121,10 +111,63 @@ fn probe_report(node: &Path, tmp: &Path, probe_schema: &Value) -> Value {
 
 #[test]
 #[trace("TC-139", "FR-020-AC-1")]
-fn onboard_js_json_checklist_lists_nested_objective_requirements() {
-    let node = require_node!();
+fn onboard_report_preserves_schema_member_order_in_checklist_arrays() {
+    let cli = native_cli();
+    let tmp = TempDir::new().expect("temporary module");
+    let module = probe_module(tmp.path(), &json!({"type": "object"}));
+    fs::write(
+        module.join("schemas/probe.schema.json"),
+        r#"{"type":"object","properties":{"z":{"type":"object","properties":{},"required":["first"]},"a":{"type":"object","properties":{},"required":["second"]}},"allOf":[{"if":{"properties":{"mode":{"const":"x"}}},"then":{"properties":{"z":{"not":{"const":"bad"}},"a":{"not":{"const":"bad"}}}}}]}"#,
+    ).expect("ordered probe schema");
+    let repo = tmp.path().join("consumer");
+    fs::create_dir(&repo).expect("consumer");
+    let output = run_ok(&cli, &module, &[Path::new("--repo"), &repo], &["--json"]);
+    let report: Value = serde_json::from_slice(&output.stdout).expect("report JSON");
+    let checklist = &report["artifactChecklists"]["Probe"];
+    assert_eq!(
+        checklist["conditionalRequired"],
+        json!([
+            {"when":"z is present","required":["z.first"]},
+            {"when":"a is present","required":["a.second"]}
+        ])
+    );
+    assert_eq!(
+        checklist["conditionalConstraints"][0]["constraint"],
+        "z must not be bad and a must not be bad"
+    );
+}
+
+#[test]
+#[trace("TC-159", "FR-024-AC-6")]
+fn onboard_report_describes_required_only_conditions() {
+    let cli = native_cli();
+    let tmp = TempDir::new().expect("temporary module");
+    let checklist = probe_report(
+        &cli,
+        tmp.path(),
+        &json!({
+            "type": "object",
+            "allOf": [{
+                "if": {"required": ["execution_procedure", "plan_id"]},
+                "then": {"required": ["protected_apparatus"]},
+            }],
+        }),
+    );
+    assert!(contains(
+        &checklist["conditionalRequired"],
+        &json!({
+            "when": "execution_procedure is present and plan_id is present",
+            "required": ["protected_apparatus"],
+        }),
+    ));
+}
+
+#[test]
+#[trace("TC-139", "FR-020-AC-1")]
+fn onboard_report_json_checklist_lists_nested_objective_requirements() {
+    let node = native_cli();
     let tmp = TempDir::new().unwrap();
-    let report = run_onboard_json(&node, tmp.path());
+    let report = run_onboard_reporton(&node, tmp.path());
     let conditional = &report["artifactChecklists"]["MeasurementPlan"]["conditionalRequired"];
 
     let objective_entries: Vec<&Value> = conditional
@@ -144,10 +187,10 @@ fn onboard_js_json_checklist_lists_nested_objective_requirements() {
 
 #[test]
 #[trace("TC-149", "FR-021-AC-6")]
-fn onboard_js_json_checklist_lists_the_decision_rule_vocabulary() {
-    let node = require_node!();
+fn onboard_report_json_checklist_lists_the_decision_rule_vocabulary() {
+    let node = native_cli();
     let tmp = TempDir::new().unwrap();
-    let report = run_onboard_json(&node, tmp.path());
+    let report = run_onboard_reporton(&node, tmp.path());
     let plan = &report["artifactChecklists"]["MeasurementPlan"];
     let enums = &plan["enums"];
     assert_eq!(
@@ -244,8 +287,8 @@ fn onboard_js_json_checklist_lists_the_decision_rule_vocabulary() {
 
 #[test]
 #[trace("TC-149", "FR-021-AC-6")]
-fn onboard_js_reports_combined_then_and_warns_on_an_empty_one_of() {
-    let node = require_node!();
+fn onboard_report_reports_combined_then_and_warns_on_an_empty_one_of() {
+    let node = native_cli();
     let tmp = TempDir::new().unwrap();
     let probe = probe_report(
         &node,
@@ -292,12 +335,12 @@ fn onboard_js_reports_combined_then_and_warns_on_an_empty_one_of() {
 
 #[test]
 #[trace("TC-159", "FR-024-AC-6")]
-fn onboard_js_json_checklist_lists_protected_apparatus_and_negative_controls() {
-    let node = require_node!();
+fn onboard_report_json_checklist_lists_protected_apparatus_and_negative_controls() {
+    let node = native_cli();
     let tmp = TempDir::new().unwrap();
     let apparatus_path =
         schema("measurement-plan-frontmatter.schema")["$defs"]["apparatus_path"].clone();
-    let report = run_onboard_json(&node, tmp.path());
+    let report = run_onboard_reporton(&node, tmp.path());
     let plan = &report["artifactChecklists"]["MeasurementPlan"];
     assert_eq!(
         plan["arrays"]["protected_apparatus"],
@@ -352,10 +395,10 @@ fn onboard_js_json_checklist_lists_protected_apparatus_and_negative_controls() {
 
 #[test]
 #[trace("TC-159", "FR-024-AC-6")]
-fn onboard_js_reports_no_warning_for_any_artifact_type() {
-    let node = require_node!();
+fn onboard_report_reports_no_warning_for_any_artifact_type() {
+    let node = native_cli();
     let tmp = TempDir::new().unwrap();
-    let report = run_onboard_json(&node, tmp.path());
+    let report = run_onboard_reporton(&node, tmp.path());
     let checklists = report["artifactChecklists"].as_object().expect("object");
     assert!(checklists.contains_key("MeasurementPlan"));
     for (artifact_type, checklist) in checklists {
@@ -381,7 +424,7 @@ fn onboard_js_reports_no_warning_for_any_artifact_type() {
     fs::create_dir(&target_repo).unwrap();
     let text = stdout(&run_ok(
         &node,
-        &onboard_js(),
+        &onboard_report(),
         &[Path::new("--repo"), &target_repo],
         &[],
     ));
@@ -397,10 +440,10 @@ fn onboard_js_reports_no_warning_for_any_artifact_type() {
 
 #[test]
 #[trace("TC-165", "FR-025-AC-7")]
-fn onboard_js_lists_the_profile_measurement_policy() {
-    let node = require_node!();
+fn onboard_report_lists_the_profile_measurement_policy() {
+    let node = native_cli();
     let tmp = TempDir::new().unwrap();
-    let report = run_onboard_json(&node, tmp.path());
+    let report = run_onboard_reporton(&node, tmp.path());
     let profile = &report["artifactChecklists"]["AssuranceProfile"];
     assert_eq!(
         profile["enums"]["measurement_policy.mode"],
@@ -452,43 +495,47 @@ fn onboard_js_lists_the_profile_measurement_policy() {
 }
 
 fn help_prints_usage_not_a_report(flag: &str) {
-    let node = require_node!();
+    let node = native_cli();
     let tmp = TempDir::new().unwrap();
     let output = Command::new(&node)
-        .arg(onboard_js())
+        .arg("onboard-report")
+        .arg("--module-root")
+        .arg(onboard_report())
         .arg(flag)
         .current_dir(tmp.path())
         .output()
-        .expect("node runs");
+        .expect("native report runs");
     let out = stdout(&output);
     assert_eq!(output.status.code(), Some(0));
     assert!(out.starts_with("Usage: "));
-    assert!(out.contains("--repo <path>"));
+    assert!(out.contains("--repo"));
     assert!(!out.contains("onboarding report"));
 }
 
 #[test]
 #[trace("TC-174", "FR-001-AC-8")]
-fn onboard_js_help_prints_usage_not_a_report_long_flag() {
+fn onboard_report_help_prints_usage_not_a_report_long_flag() {
     help_prints_usage_not_a_report("--help");
 }
 
 #[test]
 #[trace("TC-174", "FR-001-AC-8")]
-fn onboard_js_help_prints_usage_not_a_report_short_flag() {
+fn onboard_report_help_prints_usage_not_a_report_short_flag() {
     help_prints_usage_not_a_report("-h");
 }
 
 fn refuses_a_usage_error(arguments: &[&str], message: &str) {
-    let node = require_node!();
+    let node = native_cli();
     let tmp = TempDir::new().unwrap();
     let repo = tmp.path().to_str().expect("utf-8 tmp path");
     let output = Command::new(&node)
-        .arg(onboard_js())
+        .arg("onboard-report")
+        .arg("--module-root")
+        .arg(onboard_report())
         .args(arguments.iter().map(|arg| arg.replace("{repo}", repo)))
         .current_dir(tmp.path())
         .output()
-        .expect("node runs");
+        .expect("native report runs");
     assert_eq!(output.status.code(), Some(2));
     assert_eq!(stdout(&output), "");
     assert!(stderr(&output).contains(message), "{}", stderr(&output));
@@ -497,7 +544,7 @@ fn refuses_a_usage_error(arguments: &[&str], message: &str) {
 
 #[test]
 #[trace("TC-174", "FR-001-AC-8")]
-fn onboard_js_refuses_a_usage_error_unknown_argument() {
+fn onboard_report_refuses_a_usage_error_unknown_argument() {
     refuses_a_usage_error(
         &["--repo", "{repo}", "--bogus"],
         "unknown argument: --bogus",
@@ -506,19 +553,19 @@ fn onboard_js_refuses_a_usage_error_unknown_argument() {
 
 #[test]
 #[trace("TC-174", "FR-001-AC-8")]
-fn onboard_js_refuses_a_usage_error_repo_without_path() {
+fn onboard_report_refuses_a_usage_error_repo_without_path() {
     refuses_a_usage_error(&["--repo"], "--repo requires a path argument");
 }
 
 #[test]
 #[trace("TC-174", "FR-001-AC-8")]
-fn onboard_js_refuses_a_usage_error_repo_followed_by_flag() {
+fn onboard_report_refuses_a_usage_error_repo_followed_by_flag() {
     refuses_a_usage_error(&["--repo", "--json"], "--repo requires a path argument");
 }
 
 #[test]
 #[trace("TC-174", "FR-001-AC-8")]
-fn onboard_js_refuses_a_usage_error_repo_given_twice() {
+fn onboard_report_refuses_a_usage_error_repo_given_twice() {
     refuses_a_usage_error(
         &["--repo", "{repo}", "--repo", "{repo}"],
         "--repo may be given only once",
@@ -540,7 +587,9 @@ fn run_summary(node: &Path, tmp: &Path, path_env: &str, extra: &[&str]) -> Outpu
     )
     .unwrap();
     Command::new(node)
-        .arg(onboard_js())
+        .arg("onboard-report")
+        .arg("--module-root")
+        .arg(onboard_report())
         .arg("--repo")
         .arg(&target_repo)
         .arg("--summary")
@@ -549,13 +598,13 @@ fn run_summary(node: &Path, tmp: &Path, path_env: &str, extra: &[&str]) -> Outpu
         .env("PATH", path_env)
         .env("HOME", tmp)
         .output()
-        .expect("node runs")
+        .expect("native report runs")
 }
 
 #[test]
 #[trace("TC-202", "FR-001-AC-9")]
-fn onboard_js_summary_reports_validation_and_toolchain() {
-    let node = require_node!();
+fn onboard_report_summary_reports_validation_and_toolchain() {
+    let node = native_cli();
     let tmp = TempDir::new().unwrap();
     let tmp_path = tmp.path();
     // Fake quire/quoin first on PATH make the validation and toolchain answers
@@ -589,7 +638,9 @@ echo "  measurement record  Record."
     }
 
     let output = Command::new(&node)
-        .arg(onboard_js())
+        .arg("onboard-report")
+        .arg("--module-root")
+        .arg(onboard_report())
         .arg("--repo")
         .arg(&target_repo)
         .args(["--summary", "--json"])
@@ -597,7 +648,7 @@ echo "  measurement record  Record."
         .env("PATH", format!("{}:/usr/bin:/bin", bin_dir.display()))
         .env("HOME", tmp_path)
         .output()
-        .expect("node runs");
+        .expect("native report runs");
     assert_eq!(
         output.status.code(),
         Some(1),
@@ -641,8 +692,8 @@ echo "  measurement record  Record."
 
 #[test]
 #[trace("TC-202", "FR-001-AC-9")]
-fn onboard_js_summary_exits_nonzero_when_validation_is_unavailable() {
-    let node = require_node!();
+fn onboard_report_summary_exits_nonzero_when_validation_is_unavailable() {
+    let node = native_cli();
     let tmp = TempDir::new().unwrap();
     // No quire on PATH: nothing was validated, so the summary must not pass.
     // Only node itself is reachable, so a real quire beside it cannot be found.
@@ -661,8 +712,8 @@ fn onboard_js_summary_exits_nonzero_when_validation_is_unavailable() {
 
 #[test]
 #[trace("TC-202", "FR-001-AC-9")]
-fn onboard_js_summary_exits_zero_only_when_every_artifact_validates() {
-    let node = require_node!();
+fn onboard_report_summary_exits_zero_only_when_every_artifact_validates() {
+    let node = native_cli();
     let tmp = TempDir::new().unwrap();
     let bin_dir = tmp.path().join("bin");
     fs::create_dir(&bin_dir).unwrap();
@@ -689,8 +740,8 @@ fn onboard_js_summary_exits_zero_only_when_every_artifact_validates() {
 
 #[test]
 #[trace("TC-202", "FR-001-AC-9")]
-fn onboard_js_summary_marks_truncated_findings_and_labels_the_module() {
-    let node = require_node!();
+fn onboard_report_summary_marks_truncated_findings_and_labels_the_module() {
+    let node = native_cli();
     let tmp = TempDir::new().unwrap();
     let bin_dir = tmp.path().join("bin");
     fs::create_dir(&bin_dir).unwrap();
@@ -718,10 +769,10 @@ exit 1
 
 #[test]
 #[trace("TC-149", "FR-021-AC-6")]
-fn onboard_js_observation_checklist_notes_the_optional_interval() {
-    let node = require_node!();
+fn onboard_report_observation_checklist_notes_the_optional_interval() {
+    let node = native_cli();
     let tmp = TempDir::new().unwrap();
-    let report = run_onboard_json(&node, tmp.path());
+    let report = run_onboard_reporton(&node, tmp.path());
     let notes: Vec<&str> = report["measurementRecordChecklist"]["observation"]
         .as_array()
         .expect("observation checklist")
@@ -739,8 +790,8 @@ fn onboard_js_observation_checklist_notes_the_optional_interval() {
 
 #[test]
 #[trace("TC-188", "FR-021-AC-12")]
-fn onboard_js_reads_dependent_required_and_warns_on_a_malformed_entry() {
-    let node = require_node!();
+fn onboard_report_reads_dependent_required_and_warns_on_a_malformed_entry() {
+    let node = native_cli();
     let tmp = TempDir::new().unwrap();
     let probe = probe_report(
         &node,

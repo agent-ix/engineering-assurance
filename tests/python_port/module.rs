@@ -53,14 +53,6 @@ fn skeleton_path(name: &str) -> PathBuf {
     package_root().join("skeletons").join(name)
 }
 
-fn onboarding_script() -> PathBuf {
-    package_root()
-        .join("skills")
-        .join("assurance-onboarding")
-        .join("scripts")
-        .join("onboard.js")
-}
-
 fn onboarding_skill() -> String {
     read(
         &package_root()
@@ -71,19 +63,21 @@ fn onboarding_skill() -> String {
 }
 
 fn run_onboard() -> Value {
-    let completed = Command::new("node")
-        .arg(onboarding_script())
+    let completed = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
+        .arg("onboard-report")
+        .arg("--module-root")
+        .arg(package_root())
         .args(["--repo"])
         .arg(root())
         .arg("--json")
         .output()
-        .expect("run node");
+        .expect("run native report");
     assert!(
         completed.status.success(),
-        "onboard.js failed: {}",
+        "native onboarding report failed: {}",
         String::from_utf8_lossy(&completed.stderr)
     );
-    serde_json::from_slice(&completed.stdout).expect("onboard.js json")
+    serde_json::from_slice(&completed.stdout).expect("onboarding report json")
 }
 
 fn strs(value: &Value) -> Vec<&str> {
@@ -1163,7 +1157,7 @@ fn supported_claim_must_reference_evidence() {
 #[trace("TC-143", "FR-023-AC-1")]
 fn onboarding_checklist_reports_the_nested_evidence_refs_condition() {
     //
-    // `onboard.js` derives conditional requirements from a schema's `allOf`.
+    // `onboard-report` derives conditional requirements from a schema's `allOf`.
     // The claim's `evidence_refs` requirement sits inside `$defs/claim`,
     // reached only through `top_claim`'s `$ref`. Assert the checklist walks
     // that `$ref` and surfaces the condition.

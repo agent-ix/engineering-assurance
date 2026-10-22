@@ -225,7 +225,7 @@ The first time `assurance-onboarding` is used in a repository, run its
 `onboard` report once:
 
 ```bash
-node engineering_assurance/skills/assurance-onboarding/scripts/onboard.js --repo <repo_root>
+engineering-assurance onboard-report --module-root engineering_assurance --repo <repo_root>
 ```
 
 It explains how this module's `schemas/`/`skeletons/` relate to the target
