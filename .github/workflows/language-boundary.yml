@@ -1,0 +1,16 @@
+name: Language boundary
+
+on:
+  pull_request_target:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    uses: ./.github/workflows/language-boundary-reusable.yml
+    with:
+      repository: ${{ github.repository }}
+      pull_number: ${{ github.event.pull_request.number }}
+      base_sha: ${{ github.event.pull_request.base.sha }}
+      head_sha: ${{ github.event.pull_request.head.sha }}
