@@ -373,7 +373,7 @@ fn onboard_report_json_checklist_lists_protected_apparatus_and_negative_controls
         conditional,
         &json!({
             "when": "stage = gate and status is not retired",
-            "required": ["ground_truth_kind", "negative_controls"],
+            "required": ["ground_truth_kind", "negative_controls", "statistical_design"],
         })
     ));
     assert!(contains(

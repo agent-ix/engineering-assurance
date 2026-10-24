@@ -96,7 +96,10 @@
         "required": ["stage", "status"]
       },
       "then": {
-        "required": ["ground_truth_kind", "negative_controls"]
+        "required": ["ground_truth_kind", "negative_controls", "statistical_design"],
+        "properties": {
+          "statistical_design": { "required": ["decision_rule"] }
+        }
       }
     },
     {

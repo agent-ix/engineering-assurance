@@ -104,7 +104,7 @@ fn minimal_profile(over: Value) -> Value {
 }
 
 fn minimal_measurement_plan(over: Value) -> Value {
-    merged(
+    let mut plan = merged(
         json!({
             "id": "MP-900",
             "title": "t",
@@ -115,7 +115,12 @@ fn minimal_measurement_plan(over: Value) -> Value {
             "relationships": [],
         }),
         over,
-    )
+    );
+    if plan["stage"] == "gate" && plan.get("statistical_design").is_none() {
+        plan["metric"] = json!("gate.pass_rate");
+        plan["statistical_design"] = statistical_design(json!({}));
+    }
+    plan
 }
 
 fn negative_control() -> Value {

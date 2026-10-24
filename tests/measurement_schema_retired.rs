@@ -91,11 +91,7 @@ fn retired_prose_is_readable_but_cannot_become_an_active_gate() {
     assert!(validator.is_valid(&current), "retired current-shape plan");
     current["status"] = json!("active");
     assert!(validator.is_valid(&current), "complete active gate");
-    for field in [
-        "ground_truth_kind",
-        "protected_apparatus",
-        "negative_controls",
-    ] {
+    for field in ["ground_truth_kind", "negative_controls"] {
         let mut incomplete = current.clone();
         incomplete
             .as_object_mut()
@@ -105,5 +101,64 @@ fn retired_prose_is_readable_but_cannot_become_an_active_gate() {
             !validator.is_valid(&incomplete),
             "active gate requires {field}"
         );
+    }
+}
+
+#[test]
+#[trace("TC-155", "FR-024-AC-8")]
+fn independent_evidence_gates_require_truth_controls_and_a_typed_rule() {
+    let validator = validator();
+    let mut gate = legacy();
+    gate["statistical_design"]["estimator"] = json!("count");
+    gate["statistical_design"]["decision_rule"] = json!({"comparator": "ge", "threshold": 1});
+    gate["ground_truth_kind"] = json!("mechanical");
+    gate["negative_controls"] = json!([{
+        "kind": "suppressed-observation",
+        "description": "a missing failing observation prevents a pass"
+    }]);
+    for status in ["proposed", "active"] {
+        gate["status"] = json!(status);
+        assert!(validator.is_valid(&gate), "{status} evidence-only gate");
+        for field in [
+            "ground_truth_kind",
+            "negative_controls",
+            "statistical_design",
+        ] {
+            let mut missing = gate.clone();
+            missing.as_object_mut().expect("object").remove(field);
+            assert!(!validator.is_valid(&missing), "{status} requires {field}");
+        }
+        let mut no_rule = gate.clone();
+        no_rule["statistical_design"]
+            .as_object_mut()
+            .expect("design")
+            .remove("decision_rule");
+        assert!(
+            !validator.is_valid(&no_rule),
+            "{status} requires typed rule"
+        );
+        for trigger in ["procedure", "apparatus-edit"] {
+            let mut protected = gate.clone();
+            if trigger == "procedure" {
+                protected["execution_procedure"] = json!("harness/run.json");
+            } else {
+                protected["negative_controls"] = json!([{
+                    "kind": "apparatus-edit", "description": "changed answer key refuses"
+                }]);
+            }
+            assert!(
+                !validator.is_valid(&protected),
+                "{trigger} requires apparatus"
+            );
+            for invalid in [json!([]), json!([""]), json!(["../answers.json"])] {
+                protected["protected_apparatus"] = invalid;
+                assert!(
+                    !validator.is_valid(&protected),
+                    "{trigger} invalid apparatus"
+                );
+            }
+            protected["protected_apparatus"] = json!(["harness/run.json"]);
+            assert!(validator.is_valid(&protected), "{trigger} valid apparatus");
+        }
     }
 }
