@@ -125,16 +125,15 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
 
 #[test]
 #[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
-fn onboarding_report_url_exemption_is_scoped_to_its_exact_path() {
-    // The assurance-onboarding skill's onboarding report may link
-    // sibling first-party repos, by its exact path only.
+fn removed_onboarding_script_path_has_no_url_exemption() {
+    // The retired JavaScript path must no longer have a special exemption.
     let tokens: Vec<String> = Vec::new();
     let onboarding_report_path =
         "engineering_assurance/skills/assurance-onboarding/scripts/onboard.js";
     let sibling_repo_url = ["https:", "//github.com/agent-ix/qa-corpus/tree/main"].concat();
     assert!(
-        findings(onboarding_report_path, sibling_repo_url.as_bytes(), &tokens).is_empty(),
-        "the onboarding report must be able to link a first-party sibling repository"
+        !findings(onboarding_report_path, sibling_repo_url.as_bytes(), &tokens).is_empty(),
+        "the retired script path must not retain a URL exemption"
     );
     assert!(
         !findings("candidate.md", sibling_repo_url.as_bytes(), &tokens).is_empty(),
@@ -144,8 +143,7 @@ fn onboarding_report_url_exemption_is_scoped_to_its_exact_path() {
         !findings("other/onboard.js", sibling_repo_url.as_bytes(), &tokens).is_empty(),
         "a same-named file elsewhere must not inherit the exemption by suffix match"
     );
-    // The exemption is an org-prefix match, not an exact single URL, but must
-    // still refuse a look-alike, squattable org such as `agent-ix-evil`.
+    // A look-alike, squattable org must also be refused.
     let onboarding_look_alike_url = ["https:", "//github.com/agent-ix-evil/x"].concat();
     assert!(
         !findings(
@@ -154,7 +152,7 @@ fn onboarding_report_url_exemption_is_scoped_to_its_exact_path() {
             &tokens
         )
         .is_empty(),
-        "a look-alike agent-ix org URL must not be admitted by the onboarding-report exemption"
+        "a look-alike agent-ix org URL must be refused"
     );
 }
 

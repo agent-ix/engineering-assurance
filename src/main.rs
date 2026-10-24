@@ -10,7 +10,10 @@ mod agent_evals_provider;
 mod content_rights_host;
 mod evaluation_report_host;
 mod integration_evidence_host;
+mod language_boundary;
+mod language_boundary_host;
 mod manifest_host;
+mod onboard_report;
 mod onboarding_host;
 mod package_archive;
 mod package_audit_host;
@@ -42,8 +45,10 @@ const CONTENT_RIGHTS_TREE_CAPABILITY: &str = "content-rights-tree";
 const EVALUATION_AGGREGATE_CAPABILITY: &str = "evaluation-aggregate";
 const EVALUATION_AGGREGATE_VERIFY_CAPABILITY: &str = "evaluation-aggregate-verify";
 const INTEGRATION_EVIDENCE_CAPABILITY: &str = "integration-evidence";
+const LANGUAGE_BOUNDARY_CAPABILITY: &str = "language-boundary";
 const MANIFEST_VALIDATE_CAPABILITY: &str = "manifest-validate";
 const ONBOARDING_CAPABILITY: &str = "onboarding";
+const ONBOARD_REPORT_CAPABILITY: &str = "onboard-report";
 const PACKAGE_AUDIT_CAPABILITY: &str = "package-audit";
 const PACKAGE_LIFECYCLE_CAPABILITY: &str = "package-lifecycle";
 const WORKFLOW_INVARIANTS_CAPABILITY: &str = "workflow-invariants";
@@ -112,10 +117,15 @@ fn command() -> Command {
                 ),
         )
         .subcommand(integration_evidence_command())
+        .subcommand(language_boundary_command())
         .subcommand(manifest_validate_command())
         .subcommand(
             Command::new(ONBOARDING_CAPABILITY)
                 .about("Inventory a selected repository and produce a bounded onboarding result"),
+        )
+        .subcommand(
+            Command::new(ONBOARD_REPORT_CAPABILITY)
+                .about("Explain the installed assurance schemas and inventory a repository"),
         )
         .subcommand(
             Command::new(PACKAGE_AUDIT_CAPABILITY)
@@ -160,6 +170,15 @@ fn agent_evals_provider_command() -> Command {
     Command::new(AGENT_EVALS_PROVIDER_CAPABILITY)
         .about("Serve Engineering Assurance evaluation semantics to cli-agent-evals")
         .arg(required_path_arg("root"))
+}
+
+fn language_boundary_command() -> Command {
+    Command::new(LANGUAGE_BOUNDARY_CAPABILITY)
+        .about("Reject new non-Rust executable surfaces relative to a Git base")
+        .arg(required_path_arg("root"))
+        .arg(Arg::new("repository").long("repository").required(true))
+        .arg(Arg::new("base-revision").long("base-revision"))
+        .arg(Arg::new("head-revision").long("head-revision"))
 }
 
 fn agent_evals_command() -> Command {
@@ -244,6 +263,12 @@ fn npm_hook_arg() -> Arg {
 }
 
 fn main() -> ExitCode {
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|argument| argument == ONBOARD_REPORT_CAPABILITY)
+    {
+        return onboard_report::run_argv();
+    }
     let matches = command().get_matches();
     match matches.subcommand() {
         Some((AGENT_EVALS_CAPABILITY, arguments)) => run_agent_evals(arguments),
@@ -254,6 +279,7 @@ fn main() -> ExitCode {
             run_evaluation_aggregate_verify(arguments)
         }
         Some((INTEGRATION_EVIDENCE_CAPABILITY, arguments)) => run_integration_evidence(arguments),
+        Some((LANGUAGE_BOUNDARY_CAPABILITY, arguments)) => run_language_boundary(arguments),
         Some((MANIFEST_VALIDATE_CAPABILITY, arguments)) => run_manifest_validate(arguments),
         Some((ONBOARDING_CAPABILITY, _)) => run_onboarding(),
         Some((PACKAGE_AUDIT_CAPABILITY, arguments)) => run_package_audit(arguments),
@@ -632,6 +658,58 @@ fn run_content_rights_tree(arguments: &ArgMatches) -> ExitCode {
             error.code(),
             &error.to_string(),
         ),
+    }
+}
+
+fn run_language_boundary(arguments: &ArgMatches) -> ExitCode {
+    let (Some(root), Some(repository)) = (
+        arguments.get_one::<PathBuf>("root"),
+        arguments.get_one::<String>("repository"),
+    ) else {
+        return emit_error(
+            LANGUAGE_BOUNDARY_CAPABILITY,
+            "language_boundary_arguments_invalid",
+            "language-boundary requires a root and repository name",
+        );
+    };
+    let result = match language_boundary_host::execute(
+        root,
+        repository,
+        arguments
+            .get_one::<String>("base-revision")
+            .map(String::as_str),
+        arguments
+            .get_one::<String>("head-revision")
+            .map(String::as_str),
+    ) {
+        Ok(result) => result,
+        Err(error) => {
+            return emit_error(
+                LANGUAGE_BOUNDARY_CAPABILITY,
+                error.code(),
+                &error.to_string(),
+            );
+        }
+    };
+    let refused = result.refused();
+    let mut encoded = match serde_json::to_string(&result) {
+        Ok(encoded) => encoded,
+        Err(error) => {
+            return emit_error(
+                LANGUAGE_BOUNDARY_CAPABILITY,
+                "language_boundary_serialization_failed",
+                &error.to_string(),
+            );
+        }
+    };
+    encoded.push('\n');
+    match ix_cli_kit::streams::write_primary_stdout(encoded.as_bytes()) {
+        Ok(()) if refused => ExitCode::from(1),
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("failed to write language-boundary result: {error}");
+            ExitCode::from(2)
+        }
     }
 }
 

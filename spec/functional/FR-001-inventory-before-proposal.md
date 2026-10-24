@@ -28,7 +28,7 @@ MeasurementPlan, or governed workflow.
   producers, and unresolved inputs.
 - A bounded recommendation that names existing artifacts to reuse, justified
   artifacts to author, a workflow to enter, or no applicable assurance work.
-- The onboarding report (`scripts/onboard.js` in the skill), which a reader
+- The onboarding report (`engineering-assurance onboard-report` in the skill), which a reader
   runs once before authoring to see how the module relates to the
   repository and what each artifact type requires.
 - With `--summary`, a compact report of the module version, each
