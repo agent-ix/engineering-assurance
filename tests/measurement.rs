@@ -1497,7 +1497,7 @@ fn tc_157_negative_controls_are_closed_non_empty_and_distinct() {
         serde_json::json!([
             "ground_truth_kind",
             "negative_controls",
-            "protected_apparatus"
+            "statistical_design"
         ]),
         "a gate-stage plan requires negative_controls"
     );

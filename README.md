@@ -187,7 +187,10 @@ after installing.
     `margin`;
   - a plan with a `statistical_design` must state its `metric`;
   - a `gate`-stage plan that is not retired must have `ground_truth_kind`,
-    `negative_controls`, and `protected_apparatus`;
+    `negative_controls`, and a `statistical_design` with a typed `decision_rule`;
+  - `protected_apparatus` is required when the plan declares
+    `execution_procedure` or an `apparatus-edit` negative control; otherwise
+    it is optional, including at `stage: gate`;
   - `objective`, `subject_identity`, and `preregistration` are new and
     optional.
 
