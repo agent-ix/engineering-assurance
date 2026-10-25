@@ -137,6 +137,11 @@ fn independent_evidence_gates_require_truth_controls_and_a_typed_rule() {
             !validator.is_valid(&no_rule),
             "{status} requires typed rule"
         );
+        assert_eq!(
+            validator.iter_errors(&no_rule).count(),
+            1,
+            "{status} reports the missing decision rule once"
+        );
         for trigger in ["procedure", "apparatus-edit"] {
             let mut protected = gate.clone();
             if trigger == "procedure" {

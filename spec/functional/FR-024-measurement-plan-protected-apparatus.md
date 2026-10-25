@@ -50,9 +50,16 @@ earns no credit toward the plan's objective.
 
 ## Behavior
 
-- When a plan governs its own producer, `protected_apparatus` SHALL list the
-  files that produce the plan's number: the measurement harness, labels, corpus
-  or answer key, population selector, and checker configuration.
+Declaring `execution_procedure` is how a plan elects to govern a producer.
+The schema does not infer producer ownership from repository layout. The two
+apparatus requirement triggers are that field and an `apparatus-edit` control;
+an author can also elect to declare the list without either trigger. Every
+declared list receives the same entry validation and integrity protection.
+
+Schema admission validates the plan definition, not a passing execution result.
+Quoin's [FR-108](ix://agent-ix/quoin/FR-108) evaluates gate verdicts over
+admitted collections; missing or inconclusive evidence does not become a pass.
+
 - `protected_apparatus` SHALL be a non-empty list with no repeated entry when
   present.
 - The schema SHALL require `protected_apparatus` at every stage when
@@ -181,7 +188,7 @@ rather than being accepted silently.
 | FR-024-AC-5 | Given two plan definitions with an equal `definition_version`, a protected entry added, removed, or changed, or the list added or removed, yields one typed finding naming `protected_apparatus`; the same edit with a different `definition_version`, and a reordered list, yield no finding. | Test (TC-158, TC-141) |
 | FR-024-AC-6 | The MeasurementPlan skeleton carries a valid `protected_apparatus` and `negative_controls` with sections explaining both, the onboarding skill describes both, and the onboarding checklist lists both lists' shape, the entry description rather than the raw pattern, the control kinds, and the procedure and apparatus-edit requirements; it omits lists with nothing to say, and no artifact type has a warning. | Test (TC-159) |
 | FR-024-AC-7 | A minimal consumer with only the `measurement` feature reaches `ApparatusPath`, `ProtectedApparatus`, `NegativeControlKind`, `NegativeControl`, and `NegativeControls`, and resolves no `serde_json`. | Test (TC-142) |
-| FR-024-AC-8 | The schema accepts a non-retired gate-stage plan without `protected_apparatus` when it has no `execution_procedure` or `apparatus-edit` control and declares ground truth, controls, and a typed statistical decision rule; it refuses a non-retired gate missing any of those three, and a plan at any stage with a procedure or `apparatus-edit` control but no `protected_apparatus`. An admitted plan alone is not a passing gate verdict. | Test (TC-155) |
+| FR-024-AC-8 | The schema accepts a non-retired gate-stage plan without `protected_apparatus` when it has no `execution_procedure` or `apparatus-edit` control and declares ground truth, controls, and a typed statistical decision rule; it refuses a non-retired gate missing any of those three, and a plan at any stage with a procedure or `apparatus-edit` control but no `protected_apparatus`. | Test (TC-155) |
 | FR-024-AC-9 | A retired gate-stage plan under the prose contract remains valid without fields added later for new gate plans; the same omission is refused for a proposed or active gate-stage plan, and a retired current-shape plan remains valid. | Test (TC-172) |
 | FR-024-AC-10 | The schema accepts an absent `execution_procedure` and safe repository-relative JSON file paths with `protected_apparatus` declared; it refuses absolute, traversing, malformed, wildcard, non-JSON, and non-string paths, and refuses a procedure path without `protected_apparatus`. Exact protected-path membership and source-byte binding remain Quoin obligations. | Test (TC-185) |
 | FR-024-AC-11 | The schema accepts each of `human-labelled`, `agent-labelled`, and `mechanical` at gate and below gate, requires `ground_truth_kind` at gate with no other finding, leaves it optional below gate, and refuses any other value, including a case variant and an empty string, at every stage. | Test (TC-203) |

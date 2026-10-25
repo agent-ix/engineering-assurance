@@ -179,8 +179,10 @@ series rather than re-judging the old one.
 labels, corpus, or answer key, the file that selects the population, and the
 checker configuration. A change that edits one of them changed the
 measurement, not the thing measured, and earns no credit toward the objective.
-A plan with its own `execution_procedure` or an `apparatus-edit` negative
-control must list them. A gate over independently produced admitted evidence
+A plan elects to govern a producer by declaring `execution_procedure`;
+repository layout alone does not imply ownership. A plan declaring that field
+or an `apparatus-edit` negative control must list its apparatus. A gate over
+independently produced admitted evidence
 can omit the list while retaining its ground-truth kind, negative controls,
 and decision rule.
 

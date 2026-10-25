@@ -134,7 +134,9 @@ then required; do not restate `metric`, `repetitions`, or
 do not invent a threshold or margin the owner has not stated. `population`,
 `sampling`, `error_model`, and `uncertainty` remain prose.
 
-When the plan governs its own producer, list the files that produce its number
+Declaring `execution_procedure` elects to govern a producer; repository layout
+does not imply ownership. When declaring `protected_apparatus`, list the files
+that produce its number
 in `protected_apparatus`: the harness, labels, corpus or answer key, population
 selector, and checker configuration. Each entry is a repository-relative
 file path or a directory entry ending in `/**` (every file under that
