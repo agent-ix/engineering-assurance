@@ -75,6 +75,160 @@ pub(crate) fn needs_content(path: &str, mode: &str) -> bool {
         || !path.rsplit('/').next().unwrap_or(path).contains('.')
 }
 
+/// Compare complete revisions, retaining dependency findings except for a
+/// proven version-only release of an existing repository-owned package family.
+pub(crate) fn classify_delta(
+    repository: &str,
+    before: &[Entry],
+    after: &[Entry],
+) -> Result<Vec<Finding>, ClassificationError> {
+    let base_findings = classify(repository, before)?;
+    let head_findings = classify(repository, after)?;
+    let base_packages: BTreeMap<_, _> = before
+        .iter()
+        .filter(|entry| entry.path == "package.json" || entry.path.ends_with("/package.json"))
+        .map(|entry| (entry.path.as_str(), entry))
+        .collect();
+    let mut release_versions = BTreeSet::new();
+    for head in after {
+        if let Some(base) = base_packages.get(head.path.as_str()) {
+            release_versions.extend(owned_release_versions(repository, base, head));
+        }
+    }
+    Ok(head_findings
+        .difference(&base_findings)
+        .filter(|finding| !release_versions.contains(*finding))
+        .cloned()
+        .collect())
+}
+
+fn owned_release_versions(repository: &str, base: &Entry, head: &Entry) -> BTreeSet<Finding> {
+    let mut versions = BTreeSet::new();
+    if base.mode != "100644" || head.mode != base.mode {
+        return versions;
+    }
+    let (Ok(before), Ok(mut after)) = (
+        serde_json::from_slice::<serde_json::Value>(&base.bytes),
+        serde_json::from_slice::<serde_json::Value>(&head.bytes),
+    ) else {
+        return versions;
+    };
+    let owner_name = format!("@agent-ix/{repository}");
+    let owner_url = format!(
+        "{}{repository}.git",
+        concat!("git+https:", "//github.com/agent-ix/")
+    );
+    if before.get("name").and_then(serde_json::Value::as_str) != Some(&owner_name)
+        || before
+            .pointer("/repository/type")
+            .and_then(serde_json::Value::as_str)
+            != Some("git")
+        || before
+            .pointer("/repository/url")
+            .and_then(serde_json::Value::as_str)
+            != Some(&owner_url)
+        || before
+            .get("private")
+            .is_some_and(|value| value != &serde_json::Value::Bool(false))
+        || before
+            .get("bin")
+            .and_then(serde_json::Value::as_object)
+            .is_none_or(serde_json::Map::is_empty)
+        || before
+            .pointer("/publishConfig/registry")
+            .is_some_and(|registry| {
+                registry.as_str() != Some(concat!("https:", "//registry.npmjs.org/"))
+            })
+    {
+        return versions;
+    }
+    let (Some(old_version), Some(new_version)) = (
+        before.get("version").and_then(serde_json::Value::as_str),
+        after.get("version").and_then(serde_json::Value::as_str),
+    ) else {
+        return versions;
+    };
+    if old_version == new_version || !release_version(old_version) || !release_version(new_version)
+    {
+        return versions;
+    }
+    let new_version = new_version.to_owned();
+    let Some(dependencies) = before
+        .get("optionalDependencies")
+        .and_then(serde_json::Value::as_object)
+    else {
+        return versions;
+    };
+    let prefix = format!("{owner_name}-");
+    let family: Vec<_> = dependencies
+        .iter()
+        .filter(|(name, value)| {
+            name.strip_prefix(&prefix)
+                .is_some_and(|suffix| !suffix.is_empty())
+                && value.as_str() == Some(old_version)
+        })
+        .map(|(name, _)| name)
+        .collect();
+    if family.is_empty() {
+        return versions;
+    }
+    for name in family {
+        let Some(value) = after
+            .get_mut("optionalDependencies")
+            .and_then(serde_json::Value::as_object_mut)
+            .and_then(|dependencies| dependencies.get_mut(name))
+        else {
+            return BTreeSet::new();
+        };
+        if value.as_str() != Some(new_version.as_str()) {
+            return BTreeSet::new();
+        }
+        versions.insert(Finding {
+            path: head.path.clone(),
+            kind: "npm-dependency",
+            evidence: format!("optionalDependencies:{name}:{new_version}"),
+        });
+        *value = serde_json::Value::String(old_version.to_owned());
+    }
+    after["version"] = serde_json::Value::String(old_version.to_owned());
+    if after != before {
+        versions.clear();
+    }
+    versions
+}
+
+fn release_version(value: &str) -> bool {
+    fn identifier(value: &str) -> bool {
+        !value.is_empty()
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+    }
+    fn number(value: &str) -> bool {
+        !value.is_empty()
+            && value.bytes().all(|byte| byte.is_ascii_digit())
+            && (value.len() == 1 || !value.starts_with('0'))
+    }
+    let (version, build) = value
+        .split_once('+')
+        .map_or((value, None), |(version, build)| (version, Some(build)));
+    if build.is_some_and(|build| !build.split('.').all(identifier)) {
+        return false;
+    }
+    let (core, pre) = version
+        .split_once('-')
+        .map_or((version, None), |(core, pre)| (core, Some(pre)));
+    if pre.is_some_and(|pre| {
+        !pre.split('.').all(|part| {
+            identifier(part) && (!part.bytes().all(|byte| byte.is_ascii_digit()) || number(part))
+        })
+    }) {
+        return false;
+    }
+    let mut parts = core.split('.');
+    matches!((parts.next(), parts.next(), parts.next(), parts.next()), (Some(major), Some(minor), Some(patch), None) if number(major) && number(minor) && number(patch))
+}
+
 /// Classify one complete selected revision. Existing findings are compared by
 /// the caller against the base revision; no catalog or frozen baseline exists.
 pub(crate) fn classify(

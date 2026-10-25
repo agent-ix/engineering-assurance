@@ -1036,3 +1036,121 @@ fn new_shell_source_helper_is_a_structured_finding() {
             .any(|item| item["path"] == "lib/helper.sh" && item["kind"] == "foreign-source")
     );
 }
+
+fn platform_release_manifest(version: &str) -> Value {
+    serde_json::json!({
+        "name": "@agent-ix/toolbox",
+        "version": version,
+        "repository": {"type": "git", "url": concat!("git+https:", "//github.com/agent-ix/toolbox.git")},
+        "bin": {"toolbox": "bin/toolbox.js"},
+        "optionalDependencies": {
+            "@agent-ix/toolbox-darwin-arm64": version,
+            "@agent-ix/toolbox-linux-arm64": version,
+            "@agent-ix/toolbox-linux-x64": version,
+            "@agent-ix/toolbox-win32-x64": version
+        }
+    })
+}
+
+#[test]
+#[trace("TC-210", "NFR-005-AC-7", "TC-209", "NFR-005-AC-6")]
+fn platform_release_updates_only_existing_owned_versions() {
+    let repo = Repository::new();
+    let mut before = platform_release_manifest("1.2.3");
+    before["optionalDependencies"]["foreign-helper"] = Value::from("4.5.6");
+    repo.write("npm/toolbox/package.json", &before.to_string());
+    let base = repo.commit();
+    let mut after = platform_release_manifest("1.2.4");
+    after["optionalDependencies"]["foreign-helper"] = Value::from("4.5.6");
+    repo.write("npm/toolbox/package.json", &after.to_string());
+    let head = repo.commit();
+    let output = guard(repo.root(), "toolbox", Some(&base), Some(&head));
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert_schema(&output);
+    assert_eq!(findings(&output), Vec::<Value>::new());
+}
+
+#[test]
+#[trace("TC-210", "NFR-005-AC-7")]
+fn platform_release_does_not_authorize_foreign_new_or_spoofed_dependencies() {
+    for scenario in [
+        "new-foreign",
+        "new-own-looking",
+        "rename",
+        "foreign-bump",
+        "spoof-owner",
+        "unsynchronized",
+        "no-wrapper-bump",
+        "changed-launcher",
+    ] {
+        let repo = Repository::new();
+        let mut before = platform_release_manifest("1.2.3");
+        before["optionalDependencies"]["foreign-helper"] = Value::from("4.5.6");
+        repo.write("npm/toolbox/package.json", &before.to_string());
+        let base = repo.commit();
+        let mut after = platform_release_manifest("1.2.4");
+        after["optionalDependencies"]["foreign-helper"] = Value::from("4.5.6");
+        match scenario {
+            "new-foreign" => after["optionalDependencies"]["foreign-new"] = Value::from("1.2.4"),
+            "new-own-looking" => {
+                after["optionalDependencies"]["@agent-ix/toolbox-linux-spoof"] =
+                    Value::from("1.2.4");
+            }
+            "rename" => {
+                let dependencies = after["optionalDependencies"]
+                    .as_object_mut()
+                    .expect("fixture dependencies");
+                dependencies.remove("@agent-ix/toolbox-linux-x64");
+                dependencies.insert(
+                    "@agent-ix/toolbox-linux-x64-renamed".into(),
+                    Value::from("1.2.4"),
+                );
+            }
+            "foreign-bump" => {
+                after["optionalDependencies"]["foreign-helper"] = Value::from("4.5.7");
+            }
+            "spoof-owner" => {
+                after["repository"]["url"] =
+                    Value::from(concat!("git+https:", "//github.com/foreign/toolbox.git"));
+            }
+            "unsynchronized" => {
+                after["optionalDependencies"]["@agent-ix/toolbox-linux-x64"] = Value::from("1.2.5");
+            }
+            "no-wrapper-bump" => after["version"] = Value::from("1.2.3"),
+            "changed-launcher" => after["bin"]["toolbox"] = Value::from("bin/foreign.js"),
+            _ => unreachable!("closed fixture scenarios"),
+        }
+        repo.write("npm/toolbox/package.json", &after.to_string());
+        let head = repo.commit();
+        let output = guard(repo.root(), "toolbox", Some(&base), Some(&head));
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "{scenario}: {}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+        assert_schema(&output);
+        let expected = match scenario {
+            "new-foreign" => "optionalDependencies:foreign-new:1.2.4",
+            "new-own-looking" => "optionalDependencies:@agent-ix/toolbox-linux-spoof:1.2.4",
+            "rename" => "optionalDependencies:@agent-ix/toolbox-linux-x64-renamed:1.2.4",
+            "foreign-bump" => "optionalDependencies:foreign-helper:4.5.7",
+            "unsynchronized" => "optionalDependencies:@agent-ix/toolbox-linux-x64:1.2.5",
+            "spoof-owner" | "no-wrapper-bump" | "changed-launcher" => {
+                "optionalDependencies:@agent-ix/toolbox-linux-x64:1.2.4"
+            }
+            _ => unreachable!("closed fixture scenarios"),
+        };
+        assert!(
+            findings(&output)
+                .iter()
+                .any(|item| item["kind"] == "npm-dependency" && item["evidence"] == expected),
+            "{scenario}: {expected}"
+        );
+    }
+}

@@ -108,9 +108,9 @@ pub(crate) fn execute(
         revision(&canonical, "HEAD")?
     };
     let base = choose_base(&canonical, &head, explicit_base)?;
-    let before = language_boundary::classify(repository, &read_tree(&canonical, &base)?)?;
-    let after = language_boundary::classify(repository, &read_tree(&canonical, &head)?)?;
-    let findings = after.difference(&before).cloned().collect::<Vec<_>>();
+    let before = read_tree(&canonical, &base)?;
+    let after = read_tree(&canonical, &head)?;
+    let findings = language_boundary::classify_delta(repository, &before, &after)?;
     Ok(GuardResult {
         protocol: "engineering-assurance.language-boundary/v1",
         repository: repository.to_owned(),

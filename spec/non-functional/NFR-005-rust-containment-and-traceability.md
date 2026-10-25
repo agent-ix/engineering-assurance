@@ -24,6 +24,36 @@ The Rust language-boundary checker applies the same containment policy to
 tracked changes in participating repositories, using their own Git history as
 the baseline.
 
+## Existing npm package release transitions
+
+The Git-delta checker SHALL distinguish a version-only release of a
+repository-owned npm launcher family from adding or expanding a foreign
+dependency. Authority SHALL come from the selected safe base, not names or
+metadata introduced only in the proposed head.
+
+The sanctioned transition SHALL require the same regular `100644` manifest
+path in both revisions, with the base package named `@agent-ix/<repository>`
+and its Git repository declared using the `git+https` scheme, the
+`github.com` host and the `agent-ix/<repository>.git` path, without a port,
+user information, query or fragment. The base SHALL have a
+nonempty bin map, no private-package flag except absent or false, and no
+non-default npm registry. An existing optional dependency belongs to this
+release family only when its name extends the exact base package name with
+a nonempty hyphen suffix and its exact version equals the base launcher
+version. The transition SHALL require a nonempty family, valid complete
+SemVer values, a changed launcher version, and every family member changing
+to that same new exact version.
+
+After restoring only the launcher version and those existing family-member
+versions to their base values, the head manifest SHALL equal the base
+manifest as a JSON value. A changed dependency name, added dependency,
+changed owner, launcher command, registry, third-party version or other
+manifest member SHALL NOT qualify. Only the exact corresponding family
+version findings SHALL be absent from the Git delta; all other source,
+launch, dependency and unsafe-input findings SHALL retain their existing
+classification. This transition SHALL NOT authorize publication or attest
+that a registry release occurred.
+
 ## Measurement and Evaluation
 
 | Metric | Target | Threshold | Method |
