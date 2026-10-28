@@ -204,7 +204,7 @@ implemented and reviewed.
 | NFR-001 | Install, discovery, digest comparison, and static scan | TC-038 | ✅ Passing |
 | NFR-002 | Agent evaluation against fixture-authorized outcomes | TC-039 | 🚧 No evaluation aggregate is retained in this repository, so no test here decides the three measured counts; the aggregate gate that refuses an unsupported addition or an inferred terminal decision is backed by TC-032, TC-034, and TC-049 |
 | NFR-003 | Wheel/npm member audit plus compatibility invocation | TC-040 | ✅ Passing |
-| NFR-005 | Exact toolchain build, unsafe audit, executable-path audit, Quire reconciliation, matrix row integrity, and Git-delta containment | TC-115..TC-118, TC-205, TC-209..TC-211 | 🚧 Git-delta containment backed; final zero-debt audit remains pending |
+| NFR-005 | Exact toolchain build, unsafe audit, executable-path audit, Quire reconciliation, matrix row integrity | TC-115..TC-118, TC-205 | 🚧 Final zero-debt audit remains pending |
 
 ### Constraint Coverage
 
@@ -428,9 +428,6 @@ implemented and reviewed.
 | TC-206 | Publishing bytes to an absent destination creates it with exactly those bytes, and no `.tmp-` sidecar remains in the directory | Unit | P0 | FR-027-AC-1 | ✅ `src/atomic_publish.rs` passing |
 | TC-207 | Publishing over an identical existing file succeeds and leaves it untouched; over a different file, a directory or a symbolic link it returns the typed collision with the destination unchanged; a destination appearing before the commit step is handled the same way; the sidecar is removed in every case | Unit | P0 | FR-027-AC-2 | ✅ `src/atomic_publish.rs` passing |
 | TC-208 | Verifying a list of declared references with a size mismatch, a digest mismatch, a missing file, a symbolic link, a directory and an escaping path reports one typed finding per mismatch at its own JSON Pointer, does not stop at the first, and reports nothing for matching references | Unit | P0 | FR-027-AC-3 | ✅ `src/reference_verifier.rs` passing |
-| TC-209 | Git-tree comparison selects a safe full-history base, rejects missing, shallow, divergent or unsafe bases, and reports only newly introduced path-and-context findings | Integration | P0 | NFR-005-AC-6 | ✅ `tests/language_boundary_cli.rs` base-selection and delta cases passing |
-| TC-210 | New or expanded non-Rust source, executable paths, package launch/dependency metadata, Make and Actions launchers, action runtimes, Rust process wrappers, and opaque submodules yield typed findings; malformed selected inputs fail closed | Integration | P0 | NFR-005-AC-7 | ✅ `tests/language_boundary_cli.rs` refusal cases passing |
-| TC-211 | Named fixture inputs, PyO3 binding tests, plugin doubles, and the documentation figure are exempt; Actions checkout and exact Rust reusable-workflow references remain trusted launchers; accepted and refused results satisfy the versioned schema | Integration | P0 | NFR-005-AC-8 | ✅ `tests/language_boundary_cli.rs` exception, workflow-reference, and schema cases passing |
 
 ## Option Permutation Matrix
 

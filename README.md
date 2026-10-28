@@ -284,7 +284,6 @@ protocol is versioned and documented by the schemas under
 | `manifest-validate` | Qualify the module against explicit repository and registry roots. |
 | `integration-evidence` | Verify Quire traceability and retained release evidence. |
 | `content-rights-tree` | Inspect a Git-selected repository tree for rights violations. |
-| `language-boundary` | Reject new non-Rust executable entrypoints against a Git revision. |
 | `agent-evals` / `agent-evals-provider` | Run or serve the Engineering Assurance evaluation contract. |
 | `evaluation-aggregate` / `evaluation-aggregate-verify` | Build or re-check retained evaluation aggregates. |
 | `package-audit` / `package-lifecycle` | Audit private distributions and stage or refuse npm publication. |
@@ -294,24 +293,6 @@ Run `engineering-assurance --help` or
 `engineering-assurance <command> --help` for argument details. Maintainer-only
 commands do not make a release decision and should not be invoked as a
 substitute for the human workflow gates.
-
-The language guard compares complete Git trees, not a copied file catalog.
-On a local branch it uses the merge base with `origin/main`; on local `main`
-it uses the first parent. A PR caller passes trusted base and head commit IDs:
-
-```bash
-engineering-assurance language-boundary --root /path/to/repository \
-  --repository quire-rs --base-revision BASE_SHA --head-revision HEAD_SHA
-```
-
-It emits `engineering-assurance.language-boundary/v1` JSON. Exit code 0 means
-no new executable surface, 1 reports new path/kind/evidence findings, and 2
-means the base, Git tree, or bounded classification could not be trusted. It
-examines tracked Git blobs without executing the selected source. Existing
-unmodified non-Rust entrypoints remain in the live base; changes to a script
-entrypoint, a new Make/Actions/npm launcher, or a Rust wrapper launching an
-interpreter create new findings. Static inspection cannot prove the runtime
-meaning of an existing UI source module's body.
 
 ## Using as a library: Cargo features
 

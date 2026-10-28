@@ -107,11 +107,6 @@ path = "tests/integration_evidence_cli.rs"
 required-features = ["full"]
 
 [[test]]
-name = "language_boundary_cli"
-path = "tests/language_boundary_cli.rs"
-required-features = ["full"]
-
-[[test]]
 name = "manifest_host_cli"
 path = "tests/manifest_host_cli.rs"
 required-features = ["full"]
