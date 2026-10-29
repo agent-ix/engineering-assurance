@@ -107,7 +107,6 @@ fn contract(kind: &str) -> ContractBinding {
         kind: kind.to_owned(),
         version: "1".to_owned(),
         revision: "commit-1".to_owned(),
-        digest: ContentDigest::of_bytes(kind.as_bytes()),
     }
 }
 
@@ -118,7 +117,6 @@ fn bindings() -> ProcedureBindings {
             version: "1.0".to_owned(),
             source_revision: "commit-1".to_owned(),
             executable: "/fictional/bin/producer".to_owned(),
-            executable_digest: ContentDigest::of_bytes(b"executable"),
         },
         caller: contract("fictional.caller"),
         capability_root: "/fictional/sandbox".to_owned(),
@@ -583,24 +581,6 @@ fn tc_180_resolved_request_identity_changes_with_every_selected_binding() {
             .identity
             .digest
     );
-    let mut altered = bindings();
-    altered.producer.executable_digest = ContentDigest::of_bytes(b"changed executable");
-    assert_ne!(
-        baseline.identity.digest,
-        resolve_procedure(&procedure, &source_graph, altered)
-            .expect("executable variant")
-            .identity
-            .digest
-    );
-    let mut altered = bindings();
-    altered.response_adapter.digest = ContentDigest::of_bytes(b"changed adapter");
-    assert_ne!(
-        baseline.identity.digest,
-        resolve_procedure(&procedure, &source_graph, altered)
-            .expect("adapter variant")
-            .identity
-            .digest
-    );
     let mut altered = procedure.clone();
     altered.arguments.as_mut().expect("arguments")[0].value = "--other".to_owned();
     assert_ne!(
@@ -666,12 +646,6 @@ fn tc_186_retained_request_requires_exact_typed_shape_and_valid_structure() {
     assert_eq!(
         ProducerExecutionRequest::from_retained_value(&explicit_default),
         Err(RetainedRequestError::Shape)
-    );
-    let mut bad_digest = original.clone();
-    bad_digest["producer"]["executableDigest"] = json!("bad");
-    assert_eq!(
-        ProducerExecutionRequest::from_retained_value(&bad_digest),
-        Err(RetainedRequestError::Wire)
     );
     let mut wrong_protocol = original;
     wrong_protocol["protocol"] = json!("other");

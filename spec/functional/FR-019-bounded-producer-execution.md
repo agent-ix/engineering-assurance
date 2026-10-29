@@ -23,12 +23,10 @@ typed result to the caller-owned response adapter.
 - One closed `engineering-assurance.producer-execution-request/v1` request
   containing:
   - a stable producer name, exact version and source revision;
-  - an absolute producer executable path and the expected SHA-256 digest of
-    the bytes read from the executable descriptor before that path is
-    executed;
-  - an exact kind/version/revision/digest binding for the caller's domain
+  - an absolute producer executable path;
+  - an exact kind/version/revision binding for the caller's domain
     request or context;
-  - an exact kind/version/revision/digest binding for the response adapter;
+  - an exact kind/version/revision binding for the response adapter;
   - a direct procedure, explicit capability root, ordered argument bindings,
     normalized environment map, ordered input bindings, closed stdin binding,
     ordered output-artifact bindings, cooperative-confinement contract, exact
@@ -61,7 +59,7 @@ unique within their respective request collections.
   request identity or execution result.
 - A structurally valid request produces one
   `ProducerExecutionResult<T>` carrying the exact request identity, producer
-  provenance, observed executable digest when available, monotonic timing,
+  provenance, monotonic timing,
   cancellation binding/event, optional bounded raw process evidence, exact
   output-artifact references/digests with immutable retained-byte readers, and
   one closed execution state. A launched Linux result also carries the
@@ -90,9 +88,8 @@ unique within their respective request collections.
   or unsupported protocol fields are structurally invalid.
 - For a structurally valid request, the executor SHALL open the absolute
   capability root and executable without following symbolic links in any path
-  component, hash the bytes read from that executable descriptor, and, when
-  the digest matches, execute the pinned absolute path without ambient `PATH`
-  resolution.
+  component, refuse an executable that is not a regular file, and otherwise
+  execute the absolute path without ambient `PATH` resolution.
 - The executor SHALL open each declared input relative to the retained
   capability-root descriptor without following symbolic links, copy its exact
   observed bytes into a sealed retained descriptor, and hash that snapshot
@@ -193,8 +190,8 @@ unique within their respective request collections.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-019-AC-1 | A valid Rust synthetic producer request executes once through the public Rust library, and the typed completed result carries the exact `sha256-jcs` request identity, executable digest, producer provenance, bounded raw evidence, monotonic timing, immutable retained output artifacts, and adapter-produced observation; every portable result-field/state mutation changes its canonical result bytes and identity. | Test (TC-122) |
-| FR-019-AC-2 | Every request field is JCS-identity-significant, ordered and set collections have their declared semantics, structurally invalid input mints no identity, an identity-bearing digest, capability, input, adapter, or cancellation mismatch refuses before producer launch, and a declared input changed after preflight is still read as the verified bytes through its descriptor argument. | Test (TC-123) |
+| FR-019-AC-1 | A valid Rust synthetic producer request executes once through the public Rust library, and the typed completed result carries the exact `sha256-jcs` request identity, producer provenance, bounded raw evidence, monotonic timing, immutable retained output artifacts, and adapter-produced observation; every portable result-field/state mutation changes its canonical result bytes and identity. | Test (TC-122) |
+| FR-019-AC-2 | Every request field is JCS-identity-significant, ordered and set collections have their declared semantics, structurally invalid input mints no identity, an identity-bearing capability, input, adapter, or cancellation mismatch refuses before producer launch, and a declared input changed after preflight is still read as the verified bytes through its descriptor argument. | Test (TC-123) |
 | FR-019-AC-3 | Unavailable, refused, failed, timed-out, malformed-response, containment-failure, cancelled, and completed remain distinguishable and canonically serializable; launched failures retain bounded raw evidence where observable; and only completed carries `T`. | Test (TC-124) |
 | FR-019-AC-4 | Exact wall-clock, stream, input-byte, output-count/byte and concurrency boundaries are admitted while the next value is structurally invalid or terminated; an admitted non-zero exit reaches the adapter; ordinary descendants are reaped and an escaping-descendant mutant produces `containment_failure`. | Test (TC-125) |
 | FR-019-AC-5 | A caller-owned typed response adapter receives the exact bound terminal evidence without requiring the consumer to parse CLI stdout, and Engineering Assurance contains no domain oracle, qualification verdict, evidence store, or Quoin record clone. | Test (TC-127) |

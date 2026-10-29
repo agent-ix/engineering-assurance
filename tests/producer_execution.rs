@@ -122,7 +122,6 @@ fn contract(kind: &str) -> ContractBinding {
         kind: kind.to_owned(),
         version: "1".to_owned(),
         revision: "fixture-revision".to_owned(),
-        digest: ContentDigest::of_bytes(kind.as_bytes()),
     }
 }
 
@@ -143,8 +142,6 @@ fn request(root: &Path, arguments: &[&str]) -> ProducerExecutionRequest {
             version: "1.0.0".to_owned(),
             source_revision: "fixture-revision".to_owned(),
             executable: executable.display().to_string(),
-            executable_digest: ContentDigest::of_file(&executable)
-                .expect("fixture executable must be hashable"),
         },
         caller: contract("fixture.request"),
         procedure: ExecutionProcedure::Direct,
@@ -344,15 +341,9 @@ fn assert_descriptor_identity(base: &ProducerExecutionRequest) {
     assert_identity_changes(base, |value| value.producer.version.push('x'));
     assert_identity_changes(base, |value| value.producer.source_revision.push('x'));
     assert_identity_changes(base, |value| value.producer.executable.push('x'));
-    assert_identity_changes(base, |value| {
-        value.producer.executable_digest = ContentDigest::of_bytes(b"other executable");
-    });
     assert_identity_changes(base, |value| value.caller.kind.push('x'));
     assert_identity_changes(base, |value| value.caller.version.push('x'));
     assert_identity_changes(base, |value| value.caller.revision.push('x'));
-    assert_identity_changes(base, |value| {
-        value.caller.digest = ContentDigest::of_bytes(b"other caller");
-    });
     assert_identity_changes(base, |value| value.capability_root.push_str("/other"));
 }
 
@@ -394,11 +385,6 @@ fn assert_control_identity(base: &ProducerExecutionRequest) {
     assert_identity_changes(base, |value| match &mut value.containment {
         ContainmentBinding::ProcessGroupV1 { contract } => contract.revision.push('x'),
     });
-    assert_identity_changes(base, |value| match &mut value.containment {
-        ContainmentBinding::ProcessGroupV1 { contract } => {
-            contract.digest = ContentDigest::of_bytes(b"other confinement");
-        }
-    });
     assert_identity_changes(base, |value| match &mut value.cancellation {
         CancellationBinding::Disabled => unreachable!("fixture binds cancellation"),
         CancellationBinding::Event { authority, .. } => authority.push('x'),
@@ -421,15 +407,9 @@ fn assert_response_identity(base: &ProducerExecutionRequest) {
     assert_identity_changes(base, |value| value.response.protocol.kind.push('x'));
     assert_identity_changes(base, |value| value.response.protocol.version.push('x'));
     assert_identity_changes(base, |value| value.response.protocol.revision.push('x'));
-    assert_identity_changes(base, |value| {
-        value.response.protocol.digest = ContentDigest::of_bytes(b"other response");
-    });
     assert_identity_changes(base, |value| value.response.adapter.kind.push('x'));
     assert_identity_changes(base, |value| value.response.adapter.version.push('x'));
     assert_identity_changes(base, |value| value.response.adapter.revision.push('x'));
-    assert_identity_changes(base, |value| {
-        value.response.adapter.digest = ContentDigest::of_bytes(b"other adapter");
-    });
     assert_identity_changes(base, |value| {
         value.response.exit_codes = ExitCodeBinding::Exact(BTreeSet::from([0, 8]));
     });
@@ -794,10 +774,6 @@ fn assert_result_metadata_identity(result: &ProducerExecutionResult<String>) {
     assert_result_identity_changes(result, |value| value.producer.source_revision.push('x'));
     assert_result_identity_changes(result, |value| value.producer.executable.push('x'));
     assert_result_identity_changes(result, |value| {
-        value.producer.executable_digest = ContentDigest::of_bytes(b"other executable");
-    });
-    assert_result_identity_changes(result, |value| value.observed_executable_digest = None);
-    assert_result_identity_changes(result, |value| {
         value.cancellation_event = Some(CancellationBinding::Disabled);
     });
     assert_result_identity_changes(result, |value| value.timing.preflight_nanos += 1);
@@ -1114,7 +1090,7 @@ fn tc_124_all_closed_states_are_distinct_canonical_and_retain_evidence() {
     unavailable.producer.executable = root.path().join("missing").display().to_string();
     results.push(execute(&unavailable, &adapter));
     let mut refused = request(root.path(), &["emit", "accepted"]);
-    refused.producer.executable_digest = ContentDigest::of_bytes(b"wrong");
+    refused.producer.executable = root.path().display().to_string();
     results.push(execute(&refused, &adapter));
     results.push(execute(
         &request(root.path(), &["exit", "1", "failed"]),
@@ -1355,8 +1331,6 @@ fn tc_187_producer_finds_its_own_path_sibling_and_reexecution_target() {
     let observe = |arguments: &[&str]| {
         let mut request = request(root.path(), arguments);
         request.producer.executable = producer.display().to_string();
-        request.producer.executable_digest =
-            ContentDigest::of_file(&producer).expect("producer must be hashable");
         execute_staged(&request, &adapter())
     };
 
@@ -1394,8 +1368,6 @@ fn tc_187_script_producer_sees_its_pinned_path_as_dollar_zero() {
 
     let mut request = request(root.path(), &[]);
     request.producer.executable = script.display().to_string();
-    request.producer.executable_digest =
-        ContentDigest::of_file(&script).expect("script must be hashable");
 
     assert!(matches!(
         execute_staged(&request, &adapter()),

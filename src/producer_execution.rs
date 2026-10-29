@@ -120,8 +120,6 @@ pub struct ContractBinding {
     pub version: String,
     /// Exact source revision.
     pub revision: String,
-    /// SHA-256 identity of the retained contract or implementation bytes.
-    pub digest: ContentDigest,
 }
 
 /// Exact identity and provenance for the selected producer executable.
@@ -136,9 +134,6 @@ pub struct ProducerDescriptor {
     pub source_revision: String,
     /// Absolute executable path; ambient `PATH` lookup is forbidden.
     pub executable: String,
-    /// Expected SHA-256 identity of the executable bytes read from the opened
-    /// executable descriptor before the pinned path is executed.
-    pub executable_digest: ContentDigest,
 }
 
 /// The closed invocation procedure.
@@ -574,9 +569,8 @@ pub struct MalformedResponse;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionRefusal {
-    /// The executable bytes read before the pinned path is executed differ from
-    /// the request.
-    ExecutableIdentity,
+    /// The producer executable is not a regular file.
+    Executable,
     /// The capability root cannot be safely opened.
     CapabilityRoot,
     /// An input is missing, linked, unreadable, over-budget or has wrong bytes.
@@ -713,9 +707,6 @@ pub struct ProducerExecutionResult<T> {
     pub request_identity: RequestIdentity,
     /// Exact caller-supplied producer provenance.
     pub producer: ProducerDescriptor,
-    /// SHA-256 of the executable bytes read before the pinned path is executed,
-    /// when preflight reached it.
-    pub observed_executable_digest: Option<ContentDigest>,
     /// Bound cancellation event when it was observed.
     pub cancellation_event: Option<CancellationBinding>,
     /// Measured monotonic durations.
@@ -828,7 +819,6 @@ impl ProducerExecutor {
                 call_started,
                 request_identity,
                 producer,
-                None,
                 ProducerExecutionState::Refused {
                     reason: ExecutionRefusal::AdapterBinding,
                 },
@@ -839,7 +829,6 @@ impl ProducerExecutor {
                 call_started,
                 request_identity,
                 producer,
-                None,
                 ProducerExecutionState::Refused {
                     reason: ExecutionRefusal::CancellationBinding,
                 },
@@ -850,7 +839,6 @@ impl ProducerExecutor {
                 call_started,
                 request_identity,
                 producer,
-                None,
                 ProducerExecutionState::Refused {
                     reason: ExecutionRefusal::Concurrency,
                 },
@@ -872,7 +860,6 @@ impl ProducerExecutor {
                 call_started,
                 request_identity,
                 producer,
-                None,
                 ProducerExecutionState::ContainmentFailure,
             ))
         }
@@ -912,7 +899,6 @@ impl ProducerExecutor {
                 );
             }
         };
-        let observed = Some(validated.executable_digest.clone());
         let _slot = match self.try_acquire() {
             Ok(slot) => slot,
             Err(failure) => {
@@ -920,7 +906,6 @@ impl ProducerExecutor {
                     call_started,
                     request_identity,
                     producer,
-                    observed,
                     failure,
                 );
             }
@@ -945,7 +930,6 @@ impl ProducerExecutor {
             protocol: PRODUCER_EXECUTION_RESULT_PROTOCOL,
             request_identity,
             producer,
-            observed_executable_digest: observed,
             cancellation_event,
             timing: ExecutionTiming {
                 preflight_nanos,
@@ -995,7 +979,6 @@ enum AcquireFailure {
 struct ValidatedExecution {
     root: File,
     inputs: Vec<ValidatedInput>,
-    executable_digest: ContentDigest,
 }
 
 #[cfg(target_os = "linux")]
@@ -1005,10 +988,11 @@ struct ValidatedInput {
 }
 
 #[cfg(target_os = "linux")]
+#[derive(Clone, Copy)]
 enum PreflightFailure {
     Unavailable,
-    Refused(ExecutionRefusal, Option<ContentDigest>),
-    Cancelled(Option<ContentDigest>),
+    Refused(ExecutionRefusal),
+    Cancelled,
 }
 
 #[cfg(target_os = "linux")]
@@ -1024,21 +1008,18 @@ fn preflight_failure_result<T>(
             started,
             request_identity,
             producer,
-            None,
             ProducerExecutionState::Unavailable,
         ),
-        PreflightFailure::Refused(reason, observed) => prelaunch_result(
+        PreflightFailure::Refused(reason) => prelaunch_result(
             started,
             request_identity,
             producer,
-            observed,
             ProducerExecutionState::Refused { reason },
         ),
-        PreflightFailure::Cancelled(observed) => prelaunch_result_with_observed_cancellation(
+        PreflightFailure::Cancelled => prelaunch_result_with_cancellation(
             started,
             request_identity,
             producer,
-            observed,
             cancellation.clone(),
         ),
     }
@@ -1049,7 +1030,6 @@ fn acquisition_failure_result<T>(
     started: Instant,
     request_identity: RequestIdentity,
     producer: ProducerDescriptor,
-    observed: Option<ContentDigest>,
     failure: AcquireFailure,
 ) -> ProducerExecutionResult<T> {
     let state = match failure {
@@ -1058,7 +1038,7 @@ fn acquisition_failure_result<T>(
         },
         AcquireFailure::Poisoned => ProducerExecutionState::ContainmentFailure,
     };
-    prelaunch_result(started, request_identity, producer, observed, state)
+    prelaunch_result(started, request_identity, producer, state)
 }
 
 #[cfg(target_os = "linux")]
@@ -1398,13 +1378,9 @@ fn validate_capabilities(
     cancellation: &CancellationToken,
 ) -> Result<ValidatedExecution, PreflightFailure> {
     let root = open_capability_root(&request.capability_root)?;
-    let executable_digest = open_executable(request, cancellation)?;
-    let inputs = open_inputs(request, &root, &executable_digest, cancellation)?;
-    Ok(ValidatedExecution {
-        root,
-        inputs,
-        executable_digest,
-    })
+    open_executable(request)?;
+    let inputs = open_inputs(request, &root, cancellation)?;
+    Ok(ValidatedExecution { root, inputs })
 }
 
 /// Removes each declared fixed output that exists beneath the capability root,
@@ -1423,12 +1399,7 @@ fn remove_declared_outputs(
         io::Errno,
     };
 
-    let refused = || {
-        PreflightFailure::Refused(
-            ExecutionRefusal::Output,
-            Some(validated.executable_digest.clone()),
-        )
-    };
+    let refused = || PreflightFailure::Refused(ExecutionRefusal::Output);
     for output in &request.outputs {
         let (directory, name) = output
             .path
@@ -1460,8 +1431,8 @@ fn remove_declared_outputs(
 fn open_capability_root(path: &str) -> Result<File, PreflightFailure> {
     use rustix::fs::{Mode, OFlags, ResolveFlags, openat2};
 
-    let slash = File::open("/")
-        .map_err(|_| PreflightFailure::Refused(ExecutionRefusal::CapabilityRoot, None))?;
+    let slash =
+        File::open("/").map_err(|_| PreflightFailure::Refused(ExecutionRefusal::CapabilityRoot))?;
     let root_relative = path.trim_start_matches('/');
     let root_fd = openat2(
         &slash,
@@ -1470,15 +1441,12 @@ fn open_capability_root(path: &str) -> Result<File, PreflightFailure> {
         Mode::empty(),
         ResolveFlags::BENEATH | ResolveFlags::NO_MAGICLINKS | ResolveFlags::NO_SYMLINKS,
     )
-    .map_err(|_| PreflightFailure::Refused(ExecutionRefusal::CapabilityRoot, None))?;
+    .map_err(|_| PreflightFailure::Refused(ExecutionRefusal::CapabilityRoot))?;
     Ok(File::from(root_fd))
 }
 
 #[cfg(target_os = "linux")]
-fn open_executable(
-    request: &ProducerExecutionRequest,
-    cancellation: &CancellationToken,
-) -> Result<ContentDigest, PreflightFailure> {
+fn open_executable(request: &ProducerExecutionRequest) -> Result<(), PreflightFailure> {
     use rustix::fs::{Mode, OFlags, ResolveFlags, openat2};
 
     let slash = File::open("/").map_err(|_| PreflightFailure::Unavailable)?;
@@ -1491,53 +1459,28 @@ fn open_executable(
         ResolveFlags::BENEATH | ResolveFlags::NO_MAGICLINKS | ResolveFlags::NO_SYMLINKS,
     )
     .map_err(|_| PreflightFailure::Unavailable)?;
-    let mut selected = File::from(executable_fd);
-    let executable_metadata = selected
+    let executable_metadata = File::from(executable_fd)
         .metadata()
         .map_err(|_| PreflightFailure::Unavailable)?;
-    if !executable_metadata.is_file() || executable_metadata.len() > MAX_EXECUTABLE_BYTES {
-        return Err(PreflightFailure::Refused(
-            ExecutionRefusal::ExecutableIdentity,
-            None,
-        ));
+    if !executable_metadata.is_file() {
+        return Err(PreflightFailure::Refused(ExecutionRefusal::Executable));
     }
-    let executable_digest = ContentDigest::of_reader(&mut selected, MAX_EXECUTABLE_BYTES, || {
-        cancellation.is_cancelled()
-    })
-    .map_err(|failure| match failure {
-        DigestError::Cancelled => PreflightFailure::Cancelled(None),
-        DigestError::Invalid
-        | DigestError::UnknownAlgorithm
-        | DigestError::Unavailable
-        | DigestError::NotRegular
-        | DigestError::TooLarge
-        | DigestError::Unreadable => {
-            PreflightFailure::Refused(ExecutionRefusal::ExecutableIdentity, None)
-        }
-    })?;
-    if executable_digest != request.producer.executable_digest {
-        return Err(PreflightFailure::Refused(
-            ExecutionRefusal::ExecutableIdentity,
-            Some(executable_digest),
-        ));
-    }
-    Ok(executable_digest)
+    Ok(())
 }
 
 #[cfg(target_os = "linux")]
 fn open_inputs(
     request: &ProducerExecutionRequest,
     root: &File,
-    executable_digest: &ContentDigest,
     cancellation: &CancellationToken,
 ) -> Result<Vec<ValidatedInput>, PreflightFailure> {
     let mut remaining = request.budget.max_input_bytes;
     let mut inputs = Vec::with_capacity(request.inputs.len());
     for input in &request.inputs {
         if cancellation.is_cancelled() {
-            return Err(PreflightFailure::Cancelled(Some(executable_digest.clone())));
+            return Err(PreflightFailure::Cancelled);
         }
-        let file = open_input(input, root, executable_digest, cancellation, &mut remaining)?;
+        let file = open_input(input, root, cancellation, &mut remaining)?;
         inputs.push(ValidatedInput {
             role: input.role.clone(),
             file,
@@ -1550,14 +1493,12 @@ fn open_inputs(
 fn open_input(
     input: &InputBinding,
     root: &File,
-    executable_digest: &ContentDigest,
     cancellation: &CancellationToken,
     remaining: &mut u64,
 ) -> Result<File, PreflightFailure> {
     use rustix::fs::{Mode, OFlags, ResolveFlags, openat2};
 
-    let refused =
-        || PreflightFailure::Refused(ExecutionRefusal::Input, Some(executable_digest.clone()));
+    let refused = || PreflightFailure::Refused(ExecutionRefusal::Input);
     let fd = openat2(
         root,
         &input.path,
@@ -1579,7 +1520,7 @@ fn open_input(
         "producer-input",
     )
     .map_err(|failure| match failure {
-        DigestError::Cancelled => PreflightFailure::Cancelled(Some(executable_digest.clone())),
+        DigestError::Cancelled => PreflightFailure::Cancelled,
         DigestError::Invalid
         | DigestError::UnknownAlgorithm
         | DigestError::Unavailable
@@ -2699,7 +2640,6 @@ fn prelaunch_result<T>(
     started: std::time::Instant,
     request_identity: RequestIdentity,
     producer: ProducerDescriptor,
-    observed_executable_digest: Option<ContentDigest>,
     state: ProducerExecutionState<T>,
 ) -> ProducerExecutionResult<T> {
     let total_nanos = elapsed_nanos(started);
@@ -2707,7 +2647,6 @@ fn prelaunch_result<T>(
         protocol: PRODUCER_EXECUTION_RESULT_PROTOCOL,
         request_identity,
         producer,
-        observed_executable_digest,
         cancellation_event: None,
         timing: ExecutionTiming {
             preflight_nanos: total_nanos,
@@ -2727,27 +2666,10 @@ fn prelaunch_result_with_cancellation<T>(
     producer: ProducerDescriptor,
     cancellation: CancellationBinding,
 ) -> ProducerExecutionResult<T> {
-    prelaunch_result_with_observed_cancellation(
-        started,
-        request_identity,
-        producer,
-        None,
-        cancellation,
-    )
-}
-
-fn prelaunch_result_with_observed_cancellation<T>(
-    started: std::time::Instant,
-    request_identity: RequestIdentity,
-    producer: ProducerDescriptor,
-    observed: Option<ContentDigest>,
-    cancellation: CancellationBinding,
-) -> ProducerExecutionResult<T> {
     let mut result = prelaunch_result(
         started,
         request_identity,
         producer,
-        observed,
         ProducerExecutionState::Cancelled,
     );
     result.cancellation_event = Some(cancellation);
