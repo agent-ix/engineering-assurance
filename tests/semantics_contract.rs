@@ -274,13 +274,7 @@ fn tc_058_absent_confused_self_and_omitted_links_each_refuse_distinctly() {
 #[trace("TC-062", "FR-009-AC-3")]
 #[test]
 fn tc_060_producer_tuple_is_complete_over_a_non_empty_population() {
-    let expected_fields = [
-        "identity",
-        "version",
-        "source_revision",
-        "environment",
-        "definition_version",
-    ];
+    let expected_fields = ["identity", "version", "environment", "definition_version"];
     let accepted = canonical_fixture();
     for reference in &accepted.references {
         let Some(producer) = &reference.producer else {
@@ -323,7 +317,7 @@ fn tc_060_producer_tuple_is_complete_over_a_non_empty_population() {
             value["references"][1]["producer"]
                 .as_object_mut()
                 .expect("a producer tuple must be an object")
-                .remove("source_revision");
+                .remove("version");
         })
         .kind(),
         SemanticErrorKind::InvalidInputEncoding
@@ -452,8 +446,8 @@ fn projected(
 fn tc_065_pgm01_v1_preserves_identity_results_outputs_and_declared_gaps() {
     let view = map_pgm01_bytes(&fixture("pgm01-v1.json")).expect("v1 fixture must map");
     assert_eq!(
-        projected(&view, "/subjectRevision"),
-        [serde_json::json!("b".repeat(40))]
+        projected(&view, "/repository"),
+        [serde_json::json!("ix://fictional/contract-ir")]
     );
     assert_eq!(
         projected(&view, "/collector/implementation"),

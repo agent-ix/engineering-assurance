@@ -322,8 +322,6 @@ pub struct SemanticProducer {
     pub identity: String,
     /// Immutable producer version.
     pub version: String,
-    /// Exact source revision.
-    pub source_revision: String,
     /// Non-empty structured execution environment.
     pub environment: Map<String, Value>,
     /// Governing definition version.
@@ -501,7 +499,6 @@ fn validate_source(source: &SemanticSource) -> Result<(), SemanticError> {
 fn validate_producer(producer: &SemanticProducer) -> Result<(), SemanticError> {
     non_empty(&producer.identity, "producer identity")?;
     non_empty(&producer.version, "producer version")?;
-    non_empty(&producer.source_revision, "producer source_revision")?;
     if producer.environment.is_empty() {
         return Err(SemanticError::new(
             SemanticErrorKind::EmptyProducerEnvironment,

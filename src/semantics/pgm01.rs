@@ -150,7 +150,6 @@ fn unmapped(path: &str, reason: impl Into<String>) -> Pgm01Unmapped {
 #[serde(rename_all = "camelCase")]
 struct Pgm01V1 {
     record_id: String,
-    subject_revision: String,
     repository: String,
     collector: Pgm01V1Collector,
     environment: Map<String, Value>,
@@ -165,7 +164,6 @@ struct Pgm01V1 {
 #[serde(rename_all = "camelCase")]
 struct Pgm01V1Collector {
     implementation: String,
-    implementation_revision: String,
     #[serde(flatten)]
     _unmapped: Map<String, Value>,
 }
@@ -181,7 +179,6 @@ struct Pgm01V1Check {
 #[serde(rename_all = "camelCase")]
 struct Pgm01V2 {
     record_id: String,
-    subject_revision: String,
     repository: String,
     collector: Pgm01V2Collector,
     commands: Vec<Pgm01V2Command>,
@@ -293,14 +290,6 @@ fn map_pgm01_v1(record: Pgm01V1) -> Result<Pgm01View, SemanticError> {
             Value::String(record_id.to_owned()),
         ),
         mapping(
-            "/subjectRevision",
-            SemanticConcept::VerificationExecution,
-            "source_revision",
-            Value::String(
-                required_legacy_string(&record.subject_revision, "/subjectRevision")?.to_owned(),
-            ),
-        ),
-        mapping(
             "/repository",
             SemanticConcept::VerificationExecution,
             "repository",
@@ -314,18 +303,6 @@ fn map_pgm01_v1(record: Pgm01V1) -> Result<Pgm01View, SemanticError> {
                 required_legacy_string(
                     &record.collector.implementation,
                     "/collector/implementation",
-                )?
-                .to_owned(),
-            ),
-        ),
-        mapping(
-            "/collector/implementationRevision",
-            SemanticConcept::VerificationExecution,
-            "producer.source_revision",
-            Value::String(
-                required_legacy_string(
-                    &record.collector.implementation_revision,
-                    "/collector/implementationRevision",
                 )?
                 .to_owned(),
             ),
@@ -396,14 +373,6 @@ fn map_pgm01_v2(record: Pgm01V2) -> Result<Pgm01View, SemanticError> {
             SemanticConcept::Report,
             "legacy_record_id",
             Value::String(record_id.to_owned()),
-        ),
-        mapping(
-            "/subjectRevision",
-            SemanticConcept::VerificationExecution,
-            "source_revision",
-            Value::String(
-                required_legacy_string(&record.subject_revision, "/subjectRevision")?.to_owned(),
-            ),
         ),
         mapping(
             "/repository",

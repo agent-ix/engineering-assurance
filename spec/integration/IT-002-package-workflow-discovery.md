@@ -32,7 +32,7 @@ ix-flow are installed at recorded exact versions.
 
 ## Inputs
 
-- One wheel and one npm archive built from the same source revision.
+- One wheel and one npm archive built from the same source.
 - A fictional valid module skeleton document.
 - Each canonical and pilot workflow name.
 

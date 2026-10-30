@@ -91,7 +91,6 @@ A collection is one complete run of the tool that produces the number.
   "toolIdentity": "juniper retention harness",
   "toolVersion": "1.0.0",
   "timestamp": "2026-09-23T12:00:00.000Z",
-  "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "environment": { "runner": "local" },
   "verificationStack": {
     "schemaVersion": "verification-stack-attestation-v1",
@@ -99,7 +98,6 @@ A collection is one complete run of the tool that produces the number.
     "toolchains": { "node": "22.12.0", "rust": "1.0.0", "python": "3.12.8" },
     "sources": {
       "juniper": {
-        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "sourceState": "clean",
         "remote": "origin"
       }
@@ -197,7 +195,6 @@ Other views:
 | Command | Shows |
 | --- | --- |
 | `quoin report --series request_retention_rate` | Every recorded value of one metric. |
-| `quoin report --since <sourceRevision>` | The latest record compared with the record whose `sourceRevision` equals the argument. The string is matched as recorded, not resolved through Git, so `HEAD` or a short SHA finds nothing. |
 | `quoin report --format json` | The same data as JSON. |
 
 To decide whether a recorded measure moves the plan to its next `stage`, use

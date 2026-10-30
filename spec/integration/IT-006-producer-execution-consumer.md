@@ -24,7 +24,7 @@ producer is a deterministic fictional executable retained only by the test.
 ## Preconditions
 
 - Both repositories select their Rust toolchain declaratively.
-- The consumer pins the accepted Engineering Assurance revision.
+- The consumer depends on the Engineering Assurance version under test.
 - A temporary source capability root contains the declared fictional inputs
   plus undeclared and mutable control files. The exact Rust fixture producer is
   opened and executed through one retained no-follow descriptor with the
@@ -43,8 +43,8 @@ producer is a deterministic fictional executable retained only by the test.
 
 ## Test Procedure
 
-1. Compile the synthetic consumer against the accepted Engineering Assurance
-   revision.
+1. Compile the synthetic consumer against the Engineering Assurance
+   version under test.
    - IT-006-SC-01: the consumer uses only the `producer-execution` Cargo feature
      with default features disabled, contains no direct process launch or
      Engineering Assurance CLI-output parser, and resolves none of the
@@ -88,7 +88,7 @@ and evidence persistence stay with their authoritative owners.
 ## Dependencies
 
 The provider implementation and consumer request/result contracts must both be
-available at accepted revisions. No hosted CI or public package publication is
+available. No hosted CI or public package publication is
 required.
 
 ## Notes

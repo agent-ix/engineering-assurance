@@ -33,7 +33,7 @@ its authoritative Quire, Quoin, native-producer, or ix-flow representation.
 ## Behavior
 
 - Definitions SHALL identify the governing definition version and source.
-- Executions SHALL retain candidate revision, command, tool/config/environment,
+- Executions SHALL retain the candidate, command, tool/config/environment,
   and time without being treated as a result or decision.
 - Results SHALL preserve the native producer state and link to their execution
   and definition.

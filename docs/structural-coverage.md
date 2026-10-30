@@ -5,7 +5,7 @@ an explicit outcome. It is an accounting discipline, not a quality score.
 
 A coverage scope must identify:
 
-- the owned set and the revision that defines it;
+- the owned set and the definition that defines it;
 - the event or decision that makes an item applicable;
 - the evidence that can discharge it;
 - permitted disposition states and their accountable owners; and

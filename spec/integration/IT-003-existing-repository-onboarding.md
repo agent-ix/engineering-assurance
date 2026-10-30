@@ -29,9 +29,9 @@ the Quoin evidence/reporting command surface used by the onboarding result.
 
 ## Preconditions
 
-Four fictional repository fixtures are checked out at fixed revisions. The
+Four fictional repository fixtures are checked out. The
 onboarding bundle, agent harness, Quire, Quoin, and required fixture producers are
-installed with exact versions recorded by the test runner.
+installed at explicit versions.
 
 ## Inputs
 

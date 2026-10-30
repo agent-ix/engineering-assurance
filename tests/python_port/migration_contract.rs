@@ -147,7 +147,6 @@ fn domain_validation_and_evidence_intake_have_distinct_owners() {
     for owner in [
         "the domain repository, in its own tests",
         "Quoin intake",
-        "Quoin audit",
         "a human, through ix-flow",
     ] {
         assert!(CONTRACT.contains(owner), "no row names {owner}");

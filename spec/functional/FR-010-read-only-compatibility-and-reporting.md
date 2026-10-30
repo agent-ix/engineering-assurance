@@ -46,7 +46,7 @@ rewriting history or creating a parallel evidence schema.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-010-AC-1 | Mapping a legacy fixture leaves every source byte unchanged. | Test (TC-064) |
-| FR-010-AC-2 | Known fields preserve source revision, producer/config identity, result state, retained-output identity, and limitations. | Test (TC-065) |
+| FR-010-AC-2 | Known fields preserve producer/config identity, result state, retained output, and limitations. | Test (TC-065) |
 | FR-010-AC-3 | Ambiguous, unreadable, malformed, stale, and tampered fixtures remain non-successful with explicit reasons. | Test (TC-066) |
 | FR-010-AC-4 | JSON and Markdown reports expose claims, evidence, counterevidence, gaps, owner, and action with no overall trust score. | Test (TC-067) |
 

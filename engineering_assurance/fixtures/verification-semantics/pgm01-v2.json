@@ -1,7 +1,6 @@
 {
   "schemaVersion": "quire.pgm01-evidence/v2",
   "recordId": "pgm-02-abcdefabcdef-123456789abc",
-  "subjectRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "repository": "ix://fictional/contract-ir",
   "collectedAt": "2030-01-01T00:00:00Z",
   "profile": {"path": "profile.json", "bytes": 128},

@@ -7,19 +7,17 @@
       "toolIdentity — non-empty string",
       "toolVersion — non-empty string",
       "timestamp — non-empty string (no format is enforced beyond non-empty)",
-      "sourceRevision — non-empty string (no format is enforced here — this is NOT the same rule as verificationStack.sources.*.revision below)",
       "scope — present (any JSON value; producer-defined)",
       "environment — a JSON object",
       "rawEvidence — present (any JSON value; complete producer output)",
-      "observations — non-empty array (see below)",
-      "corpusRevision — optional string"
+      "observations — non-empty array (see below)"
     ],
     "schemaVersion2VerificationStack": [
       "verificationStack — required object when schemaVersion is 2",
       "  schemaVersion — const \"verification-stack-attestation-v1\"",
       "  buildProfile — when present: \"debug\" or \"release\" (a stored record may omit it, or say \"debug\" — \"release\"-only is a NEW-collection-intake rule, below)",
       "  toolchains — when present: node, rust and python are each a non-empty string, null, or absent, and at least one is set. A stored record may omit toolchains entirely — requiring it is a NEW-collection-intake rule, below",
-      "  sources — non-empty map; each entry: revision (exactly 40 LOWERCASE hex chars — a full, unabbreviated SHA, not the looser rule sourceRevision above gets), sourceState \"clean\", remote (non-empty)",
+      "  sources — non-empty map; each entry: sourceState \"clean\", remote (non-empty)",
       "  capabilities — non-empty array of non-empty strings"
     ],
     "newCollectionIntakeOnly": [
