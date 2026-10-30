@@ -34,7 +34,7 @@ maintenance in the owning module.
 | Metric | Target | Threshold | Method |
 |--------|--------|-----------|--------|
 | Supported discovery surfaces resolving the canonical skill | 4 of 4 | 4 of 4 | integration-testing |
-| Promoted workflows with identical canonical digests across hosts | 4 of 4 | 4 of 4 | property-based-testing |
+| Promoted workflows with identical canonical bytes across hosts | 4 of 4 | 4 of 4 | property-based-testing |
 | Agent-specific behavioral copies | 0 | 0 | architecture-conformance |
 
 ## Acceptance Criteria
@@ -48,7 +48,7 @@ maintenance in the owning module.
 ## Verification
 
 Install the bundle from each supported source, resolve each host surface, and
-compare the resolved canonical file paths and content digests. Scan host manifests
+compare the resolved canonical file paths and bytes. Scan host manifests
 for behavioral sections prohibited by the thin-manifest contract.
 
 ## Dependencies

@@ -4,12 +4,11 @@
   "description": "A mapping result over immutable legacy bytes; not a rewritten evidence record.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["mapping_version", "source_schema_version", "source_record_id", "source_digest", "outcome", "mappings", "unmapped_fields", "limitations"],
+  "required": ["mapping_version", "source_schema_version", "source_record_id", "outcome", "mappings", "unmapped_fields", "limitations"],
   "properties": {
     "mapping_version": {"const": "engineering-assurance.pgm01-compatibility-view/v1"},
     "source_schema_version": {"type": "string", "minLength": 1},
     "source_record_id": {"type": "string", "minLength": 1},
-    "source_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "outcome": {"enum": ["compatible", "lossy", "incompatible", "unreadable"]},
     "mappings": {"type": "array", "items": {"$ref": "#/definitions/mapping"}},
     "unmapped_fields": {"type": "array", "items": {"$ref": "#/definitions/unmapped"}},

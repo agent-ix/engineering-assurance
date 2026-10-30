@@ -13,11 +13,8 @@ use engineering_assurance::{
 use ix_trace_rs::trace;
 use serde_json::{Value, json};
 
-const DIGEST: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const SOURCE_REVISION: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-
 fn identity(name: &str) -> Value {
-    json!({"name": name, "version": "1.2.3", "digest": DIGEST})
+    json!({"name": name, "version": "1.2.3"})
 }
 
 fn governing() -> Value {
@@ -38,9 +35,6 @@ fn evaluation_result() -> Value {
     json!({
         "host": "codex",
         "host_version": "1.2.3",
-        "source_revision": SOURCE_REVISION,
-        "suite_revision": "suite-v1",
-        "fixture_revision": "fixtures-v1",
         "governing": governing(),
         "command_count": 4,
         "elapsed_ms": 1000,
@@ -74,7 +68,6 @@ fn sample(ok: bool) -> Value {
         "failures": if ok { json!([]) } else { json!(["result envelope unreadable"]) },
         "workDir": "/workspace/codex-existing-profile",
         "sessionId": "session-1",
-        "transcriptDigest": DIGEST,
         "transcriptRetention": if ok { "retained" } else { "not-retained" },
         "transcriptPath": ".cli-agent-evals/transcripts/sample.transcript"
     });
@@ -110,11 +103,8 @@ fn report(ok: bool) -> Value {
 fn decode(
     value: &Value,
 ) -> Result<engineering_assurance::evaluation_reports::DecodedEvaluationReport, String> {
-    decode_cli_eval_report(
-        &serde_json::to_vec(value).expect("fixture must encode"),
-        SOURCE_REVISION,
-    )
-    .map_err(|error| error.code().to_owned())
+    decode_cli_eval_report(&serde_json::to_vec(value).expect("fixture must encode"))
+        .map_err(|error| error.code().to_owned())
 }
 
 #[test]
@@ -128,7 +118,6 @@ fn tc_129_decodes_one_retained_success_into_a_typed_envelope() {
         DecodedEvaluationSample::Retained {
             work_dir,
             transcript_path,
-            transcript_digest,
             envelope,
         },
     ] = decoded.samples()
@@ -140,7 +129,6 @@ fn tc_129_decodes_one_retained_success_into_a_typed_envelope() {
         transcript_path,
         ".cli-agent-evals/transcripts/sample.transcript"
     );
-    assert_eq!(transcript_digest, DIGEST);
     assert_eq!(envelope.host, EvaluationHost::Codex);
     assert_eq!(envelope.scenario, EvaluationScenario::ExistingProfile);
     assert!(envelope.errors().is_empty());
@@ -185,9 +173,6 @@ fn tc_129_rejects_open_or_malformed_nested_shapes() {
     let mut result = report(true);
     result["results"][0]["unexpected"] = json!(true);
     cases.push(result);
-    let mut run = report(true);
-    run["results"][0]["runs"][0]["unexpected"] = json!(true);
-    cases.push(run);
     let mut usage = report(true);
     usage["results"][0]["runs"][0]["tokenUsage"]["unexpected"] = json!(true);
     cases.push(usage);
@@ -221,10 +206,6 @@ fn tc_129_rejects_version_outcome_and_identity_contradictions() {
             "/results/0/runs/0/checks/evaluation_result/host",
             json!("claude"),
         ),
-        (
-            "/results/0/runs/0/checks/evaluation_result/source_revision",
-            json!("cccccccccccccccccccccccccccccccccccccccc"),
-        ),
     ] {
         let mut value = report(true);
         *value
@@ -235,14 +216,11 @@ fn tc_129_rejects_version_outcome_and_identity_contradictions() {
             Err("evaluation_report_contract_invalid".to_owned())
         );
     }
-    let bytes = serde_json::to_vec(&report(true)).expect("fixture must encode");
-    let error = decode_cli_eval_report(&bytes, "main").expect_err("mutable source must refuse");
-    assert_eq!(error.code(), "evaluation_report_contract_invalid");
 }
 
 #[test]
 #[trace("TC-129", "FR-017-AC-1", "FR-017-CON-1")]
-fn tc_129_rejects_unsafe_or_contradictory_retention_identity() {
+fn tc_129_rejects_unsafe_or_contradictory_retention_state() {
     for path in [
         "",
         "/absolute",
@@ -261,9 +239,6 @@ fn tc_129_rejects_unsafe_or_contradictory_retention_identity() {
         );
     }
 
-    let mut uppercase = report(true);
-    uppercase["results"][0]["runs"][0]["transcriptDigest"] = json!("A".repeat(64));
-    assert!(decode(&uppercase).is_err());
     let mut unavailable = report(true);
     unavailable["results"][0]["runs"][0]["transcriptRetention"] = json!("unavailable");
     assert!(decode(&unavailable).is_err());
@@ -271,15 +246,6 @@ fn tc_129_rejects_unsafe_or_contradictory_retention_identity() {
     null_path["results"][0]["runs"][0]["transcriptPath"] = Value::Null;
     assert_eq!(
         decode(&null_path),
-        Err("evaluation_report_invalid".to_owned())
-    );
-    let mut missing_digest = report(true);
-    missing_digest["results"][0]["runs"][0]
-        .as_object_mut()
-        .expect("sample fixture must be an object")
-        .remove("transcriptDigest");
-    assert_eq!(
-        decode(&missing_digest),
         Err("evaluation_report_invalid".to_owned())
     );
 }
@@ -290,10 +256,9 @@ fn tc_129_enforces_predecode_and_result_population_ceilings() {
     let encoded = serde_json::to_vec(&report(true)).expect("fixture must encode");
     let mut exact = encoded;
     exact.resize(MAX_CLI_REPORT_BYTES, b' ');
-    decode_cli_eval_report(&exact, SOURCE_REVISION)
-        .expect("a valid report exactly at the byte ceiling must decode");
+    decode_cli_eval_report(&exact).expect("a valid report exactly at the byte ceiling must decode");
     let oversized = vec![b' '; MAX_CLI_REPORT_BYTES + 1];
-    let error = decode_cli_eval_report(&oversized, SOURCE_REVISION)
+    let error = decode_cli_eval_report(&oversized)
         .expect_err("one byte beyond the report ceiling must refuse");
     assert_eq!(error.code(), "evaluation_report_too_large");
 

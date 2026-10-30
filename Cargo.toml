@@ -57,11 +57,6 @@ path = "tests/claim_strength.rs"
 required-features = ["semantics"]
 
 [[test]]
-name = "compatibility_corpus"
-path = "tests/compatibility_corpus.rs"
-required-features = ["full"]
-
-[[test]]
 name = "content_rights_parity"
 path = "tests/content_rights_parity.rs"
 required-features = ["content-rights"]
@@ -212,18 +207,11 @@ required-features = ["workflow-invariants"]
 # builds only the test targets that need no capability; the rest declare
 # `required-features`.
 default = []
-# FR-027: atomic no-replace publish, and the declared-reference verifier. Both
-# are filesystem modules, so like `producer-execution` they are exempt from the
-# FR-014-AC-4 I/O-freedom audit. The publisher needs `thiserror` and `rustix` (O_NOFOLLOW); the
-# verifier reuses `ContentDigest::of_file`, which lives in `producer-execution`.
+# FR-027: atomic no-replace publish. A filesystem module, so like
+# `producer-execution` it is exempt from the FR-014-AC-4 I/O-freedom audit. The
+# publisher needs `thiserror` and `rustix` (O_NOFOLLOW).
 atomic-publish = ["dep:rustix", "dep:thiserror"]
-reference-verifier = ["producer-execution"]
-# `content-digest` is the one evidence-byte identity (`ContentDigest`); every
-# capability that hashes retained bytes implies it rather than carrying its own
-# `sha2` use.
-content-digest = ["dep:serde", "dep:sha2", "dep:thiserror"]
 producer-execution = [
-  "content-digest",
   "dep:rustix",
   "dep:serde",
   "dep:serde_json",
@@ -255,8 +243,6 @@ campaign = [
   "measurement",
   "producer-execution",
   "dep:agent-ix-engineering-assurance-campaign",
-  "dep:sha1",
-  "dep:sha2",
 ]
 # `claim_strength` is the FR-022 claim-strength vocabulary. It needs only
 # serde, so a consumer that records a strength (Quire, Quoin) must not have to
@@ -272,7 +258,6 @@ claim-strength = [
 # module it imports. Only `evidence`, `semantics` (and so `evaluation` and
 # `evaluation-reports`), `exact-numbers` and `full` turn on
 # `serde_json/arbitrary_precision`, through `exact-numbers`.
-compatibility-corpus = ["content-digest", "dep:serde", "dep:serde_json", "dep:thiserror"]
 content-rights = [
   "dep:regex",
   "dep:serde",
@@ -282,7 +267,6 @@ content-rights = [
 ]
 discovery = ["workflow", "dep:serde", "dep:serde_json", "dep:thiserror"]
 evaluation = [
-  "content-digest",
   "evidence",
   "workflow",
   "dep:serde",
@@ -291,7 +275,6 @@ evaluation = [
   "dep:time",
 ]
 evaluation-reports = [
-  "content-digest",
   "evaluation",
   "evidence",
   "workflow",
@@ -299,12 +282,11 @@ evaluation-reports = [
   "dep:serde_json",
   "dep:thiserror",
 ]
-# `evidence` and `semantics` (and so `evaluation`, `evaluation-reports`) hash
+# `evidence` and `semantics` (and so `evaluation`, `evaluation-reports`) read
 # and compare numbers that only stay exact with `serde_json/arbitrary_precision`
 # (integers beyond u64, refusal of `1e309`); measured by running
 # `evidence_parity` and `semantics_parity` with and without it.
 evidence = [
-  "content-digest",
   "exact-numbers",
   "dep:serde",
   "dep:serde_json",
@@ -328,8 +310,6 @@ package-lifecycle = ["dep:serde", "dep:serde_json", "dep:thiserror"]
 package-membership = ["dep:serde", "dep:thiserror"]
 semantics = [
   "claim-strength",
-  "compatibility-corpus",
-  "content-digest",
   "exact-numbers",
   "dep:serde",
   "dep:serde_json",
@@ -357,8 +337,6 @@ full = [
   "atomic-publish",
   "campaign",
   "claim-strength",
-  "compatibility-corpus",
-  "content-digest",
   "content-rights",
   "discovery",
   "evaluation",
@@ -371,7 +349,6 @@ full = [
   "package-lifecycle",
   "package-membership",
   "producer-execution",
-  "reference-verifier",
   "semantics",
   "source-audit",
   "structured-yaml",
@@ -390,7 +367,6 @@ full = [
 [dependencies]
 ix-cli-kit = { git = "https://github.com/agent-ix/ix-cli-kit", branch = "main", version = "0.1.0", optional = true }
 agent-ix-engineering-assurance-campaign = { path = "campaign/generated/rust", version = "0.0.0", optional = true }
-sha1 = { version = "0.10", default-features = false, optional = true }
 cap-std = { version = "4", optional = true }
 clap = { version = "4.5", default-features = false, features = ["error-context", "help", "std", "usage"], optional = true }
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"], optional = true }
@@ -400,7 +376,6 @@ rustix = { version = "1.1", features = ["fs", "process"], optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }
 serde_json_canonicalizer = { version = "0.3", optional = true }
-sha2 = { version = "0.11", default-features = false, optional = true }
 syn = { version = "3.0", features = ["full", "visit"], optional = true }
 tar = { version = "0.4", default-features = false, optional = true }
 tempfile = { version = "3.27", optional = true }

@@ -1,4 +1,4 @@
-.PHONY: rust-features rust-feature-list lint content-rights-tree test manifest-validate package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-evidence integration-gate release-gate
+.PHONY: rust-features rust-feature-list lint content-rights-tree test manifest-validate package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-gate release-gate
 
 EVAL_AGENT ?= codex
 EVAL_RUN ?= canary
@@ -9,7 +9,6 @@ EVAL_REPORT ?= evals/reports/$(EVAL_AGENT)-$(EVAL_RUN).json
 EVAL_REPORTS ?=
 EVAL_AGGREGATE_REPORT ?=
 EVAL_WORKSPACE_ROOT ?=
-EVAL_SOURCE_REVISION ?= $(shell git rev-parse HEAD)
 MANIFEST_SCHEMA_ROOT ?=
 MANIFEST_REGISTRY_ROOT ?=
 PYTHON ?= python3
@@ -79,7 +78,7 @@ rust-audit:
 # which runs tests/feature_matrix.rs (TC-190), which runs this target.
 # The derivation is a `$(shell)` so `make -n` prints the commands without
 # running them; an empty or failed derivation is an error, not a pass. Cargo
-# parallelism is pinned by CARGO_BUILD_JOBS, so no `+` jobserver prefix (it
+# parallelism is set by CARGO_BUILD_JOBS, so no `+` jobserver prefix (it
 # would make `make -n` execute the cargo lines).
 EA_FEATURES = $(shell $(CARGO) metadata --no-deps --format-version 1 --locked 2>/dev/null | python3 -c 'import json,sys; p=next(p for p in json.load(sys.stdin)["packages"] if p["name"]=="engineering-assurance"); [print(f) for f in sorted(p["features"]) if f not in ("default","full")]' 2>/dev/null)
 
@@ -126,32 +125,15 @@ agent-evals-aggregate:
 		--root . \
 		--workspace-root "$(EVAL_WORKSPACE_ROOT)" \
 		$(foreach report,$(EVAL_REPORTS),--report "$(report)") \
-		--source-revision "$(EVAL_SOURCE_REVISION)" \
 		--output "$(EVAL_AGGREGATE_REPORT)"
 
 integration-traceability:
 	CARGO_BUILD_JOBS=2 $(CARGO) run --locked --quiet --features full -- integration-evidence \
 		--root . \
-		--quire "$(QUIRE)" \
-		--traceability-only
-
-integration-evidence:
-	@test -n "$(strip $(EVAL_AGGREGATE_REPORT))" || { \
-		echo "EVAL_AGGREGATE_REPORT is required for real-agent release evidence" >&2; \
-		exit 2; \
-	}
-	@test -n "$(strip $(EVAL_WORKSPACE_ROOT))" || { \
-		echo "EVAL_WORKSPACE_ROOT is required for retained transcript confinement" >&2; \
-		exit 2; \
-	}
-	CARGO_BUILD_JOBS=2 $(CARGO) run --locked --quiet --features full -- integration-evidence \
-		--root . \
-		--quire "$(QUIRE)" \
-		--artifact "$(EVAL_AGGREGATE_REPORT)" \
-		--workspace-root "$(EVAL_WORKSPACE_ROOT)"
+		--quire "$(QUIRE)"
 
 integration-gate: lint content-rights-tree package-audit validate-docs rust-foundation-gate integration-traceability
 # python_port runs once, inside rust-foundation-gate -> rust-tests; `test` is the
 # CI entry point that runs it standalone.
 
-release-gate: integration-gate integration-evidence
+release-gate: integration-gate

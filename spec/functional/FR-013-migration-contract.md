@@ -42,7 +42,7 @@ pull request is judged against.
 - The contract SHALL preserve legacy evidence directories byte for byte and
   read them only through the compatibility view.
 - The contract SHALL delete old generic machinery only after the shared path
-  passes at the same candidate revision.
+  passes.
 - The contract SHALL require every non-success state to be demonstrated.
 - The contract SHALL leave every campaign workflow on manual dispatch.
 - The contract SHALL make no certification, accreditation, authorization,
@@ -77,7 +77,6 @@ fail its gate.
 
 ## Dependencies
 
-- **Upstream**: [FR-010](./FR-010-read-only-compatibility-and-reporting.md) and
-  [FR-011](./FR-011-accepted-compatibility-corpus.md).
+- **Upstream**: [FR-010](./FR-010-read-only-compatibility-and-reporting.md).
 - **Downstream**: the eight repository migrations, each of which is reviewed
   against this contract's checklist.

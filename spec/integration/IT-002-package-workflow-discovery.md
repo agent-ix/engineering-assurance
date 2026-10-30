@@ -28,11 +28,11 @@ boundary is exercised with real archives and real command-line tools.
 ## Preconditions
 
 The package audit passes, an isolated installation root is empty, and Quire and
-ix-flow are installed at recorded exact versions.
+ix-flow are installed.
 
 ## Inputs
 
-- One wheel and one npm archive built from the same source revision.
+- One wheel and one npm archive built from the same source.
 - A fictional valid module skeleton document.
 - Each canonical and pilot workflow name.
 

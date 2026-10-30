@@ -29,7 +29,6 @@ use engineering_assurance::discovery::{
 };
 use ix_trace_rs::trace;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 
 /// The largest bundle file this adapter will read.
 ///
@@ -178,20 +177,6 @@ impl BundleRoot {
     }
 }
 
-/// Lowercase hexadecimal digest of one byte string.
-fn digest(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    hasher
-        .finalize()
-        .iter()
-        .fold(String::new(), |mut text, byte| {
-            use std::fmt::Write as _;
-            write!(text, "{byte:02x}").expect("a String write cannot fail");
-            text
-        })
-}
-
 /// Resolve every supported host against this repository's real manifests.
 fn resolve_bundle(bundle: &BundleRoot) -> Vec<ResolvedSkill> {
     validate_surface_set(&HOST_SURFACES).expect("the declared host set must be the supported set");
@@ -278,33 +263,32 @@ fn tc_038_supported_hosts_install_the_same_canonical_bytes() {
     let resolved = resolve_bundle(&bundle);
 
     // Host parity is asserted over the bytes each host would install, not over
-    // the digest set of a path list. Discovery returns the same path for every
-    // host by construction, so a digest set built from those paths has one
-    // member whatever the bundle contains and can never fail.
+    // a path list. Discovery returns the same path for every host by
+    // construction, so a set built from those paths has one member whatever
+    // the bundle contains and can never fail.
     let skill_bytes = bundle.read(CANONICAL_SKILL_FILE);
     assert!(!skill_bytes.is_empty());
-    let canonical_digest = digest(&skill_bytes);
     for entry in &resolved {
         // The path read here is the one this host's own manifest named, not a
         // constant. A manifest redirected to a second in-bundle skill tree
-        // therefore hashes different bytes and this comparison fails, which is
-        // the whole point of comparing digests at all.
+        // therefore reads different bytes and this comparison fails, which is
+        // the whole point of comparing bytes at all.
         assert!(entry.skill_file.starts_with(&entry.skill_source));
         assert_eq!(entry.skill_file, CANONICAL_SKILL_FILE);
-        assert_eq!(digest(&bundle.read(&entry.skill_file)), canonical_digest);
+        assert_eq!(bundle.read(&entry.skill_file), skill_bytes);
     }
 
     // NFR-001-AC-2 is about the promoted workflow definitions rather than the
     // skill file, and nothing was checking it. Every host installs one skill
     // tree, so the definitions are shared only if each promoted name resolves
-    // to bytes inside that tree; four distinct digests prove four distinct
+    // to bytes inside that tree; four distinct files prove four distinct
     // definitions rather than one file found four times.
     let definitions = expected_workflows()
         .into_iter()
         .map(|name| {
             let relative =
                 format!("{CANONICAL_WORKFLOWS_DIRECTORY}/{name}/{WORKFLOW_DEFINITION_NAME}");
-            (name, digest(&bundle.read(&relative)))
+            (name, bundle.read(&relative))
         })
         .collect::<BTreeMap<_, _>>();
     assert_eq!(definitions.len(), 4);

@@ -22,11 +22,11 @@ typed result to the caller-owned response adapter.
 
 - One closed `engineering-assurance.producer-execution-request/v1` request
   containing:
-  - a stable producer name, exact version and source revision;
+  - a stable producer name and exact version;
   - an absolute producer executable path;
-  - an exact kind/version/revision binding for the caller's domain
+  - an exact kind/version binding for the caller's domain
     request or context;
-  - an exact kind/version/revision binding for the response adapter;
+  - an exact kind/version binding for the response adapter;
   - a direct procedure, explicit capability root, ordered argument bindings,
     normalized environment map, ordered input bindings, closed stdin binding,
     ordered output-artifact bindings, cooperative-confinement contract, exact
@@ -38,53 +38,41 @@ typed result to the caller-owned response adapter.
   process observation into the consumer's typed serializable domain result.
 - One cancellation handle carrying the request's exact authority/event binding.
 
-Argument, input and output collections are identity-significant ordered lists.
+Argument, input and output collections are significant ordered lists.
 Environment keys and exact admitted exit codes are normalized sets represented
 in deterministic key or numeric order. Input-role and output-role names are
 unique within their respective request collections.
 
 ## Outputs
 
-- A request identity represented as `sha256-jcs` of the RFC 8785 canonical
-  JSON bytes of the complete closed request, including its protocol domain and
-  version.
-- RFC 8785 canonical JSON bytes and a `sha256-jcs` identity for the complete
-  closed result artifact. Canonicalization includes every portable result
-  field and the caller-owned serializable observation when present; it excludes
-  only live operating-system handles whose role, path, length and byte digest
-  are represented in the canonical artifact. An observation that cannot be
-  represented canonically produces a typed encoding refusal and no result
-  identity.
+- RFC 8785 canonical JSON bytes for the complete closed result artifact.
+  Canonicalization includes every portable result field and the caller-owned
+  serializable observation when present; it excludes only live
+  operating-system handles whose role, path and length are represented in the
+  canonical artifact. An observation that cannot be represented canonically
+  produces a typed encoding refusal and no canonical bytes.
 - Structurally invalid input produces a typed `InvalidExecutionRequest` and no
-  request identity or execution result.
+  execution result.
 - A structurally valid request produces one
-  `ProducerExecutionResult<T>` carrying the exact request identity, producer
-  provenance, monotonic timing,
+  `ProducerExecutionResult<T>` carrying producer provenance, monotonic timing,
   cancellation binding/event, optional bounded raw process evidence, exact
-  output-artifact references/digests with immutable retained-byte readers, and
+  output-artifact references with immutable retained-byte readers, and
   one closed execution state. A launched Linux result also carries the
   executor-observed host context when every required host field can be sampled:
-  an opaque domain-separated digest of the host's high-entropy machine ID,
   operating system, kernel release, architecture, CPU model, available CPU
-  count, physical memory and runtime class. If a machine ID is unavailable,
-  a separately domain-separated kernel boot ID identifies only that boot, and
-  an opaque digest binds the process's observed CPU affinity. When ARM CPU-ID
-  tuples supply the processor model, the executor SHALL use the CPUs in that
-  affinity set and withhold host context if their tuples differ or any selected
-  CPU is missing. ARM CPU-ID observations bind affinity even when a machine ID
-  is available. Such observations cannot establish comparability across boots
-  or different CPU sets. Raw
-  machine and boot IDs are never exposed.
-  An unavailable field makes the complete context absent; consumers cannot
-  infer same-host comparability from caller-supplied values.
+  count, physical memory and runtime class. When ARM CPU-ID
+  tuples supply the processor model, the executor SHALL use the CPUs in the
+  process's affinity set and withhold host context if their tuples differ or
+  any selected CPU is missing. An unavailable field makes the complete context
+  absent; consumers cannot infer same-host comparability from the context or
+  from caller-supplied values.
 - Every launched-process state may carry bounded raw process evidence and
   validated output-artifact references. Only `completed` carries the caller
   adapter's typed domain observation.
 
 ## Behavior
 
-- The executor SHALL validate the closed request structure before minting its
-  identity. Empty, over-limit, internally inconsistent, non-relative artifact,
+- The executor SHALL validate the closed request structure before launch. Empty, over-limit, internally inconsistent, non-relative artifact,
   or unsupported protocol fields are structurally invalid.
 - For a structurally valid request, the executor SHALL open the absolute
   capability root and executable without following symbolic links in any path
@@ -92,13 +80,11 @@ unique within their respective request collections.
   execute the absolute path without ambient `PATH` resolution.
 - The executor SHALL open each declared input relative to the retained
   capability-root descriptor without following symbolic links, copy its exact
-  observed bytes into a sealed retained descriptor, and hash that snapshot
-  against the declared digest before launch. Descriptor arguments and stdin
-  SHALL expose the same sealed input snapshots.
+  observed bytes into an immutable retained descriptor. Descriptor arguments
+  and stdin SHALL expose the same input snapshots.
 - For campaign source-tree binding, the capability root SHALL still contain
   every tracked Git symlink at preflight. The resolver reads its target bytes
-  without following the link and verifies the link's Git blob OID. It then
-  records the path and digest as omitted link metadata.
+  without following the link and records the path as omitted link metadata.
 - Before launch the executor removes any existing file at each declared fixed
   output path beneath the capability root, without following links, so each
   declared fixed output is absent when the producer starts.
@@ -110,9 +96,8 @@ unique within their respective request collections.
   declared path relative to the retained capability-root descriptor without
   following links, reporting whatever bytes are there. A required output tree
   that is absent after execution is an executor failure. It SHALL copy each
-  exact observed output into a sealed retained descriptor and compute the
-  returned role, declared relative path, byte length and SHA-256 digest from
-  that same immutable snapshot. Each returned output artifact SHALL provide
+  exact observed output into an immutable retained descriptor and return the
+  role, declared relative path and byte length from that same snapshot. Each returned output artifact SHALL provide
   the response adapter and caller a reader for that retained snapshot without
   reopening the producer pathname.
 - When a valid slot is available, the executor SHALL launch the executable path named in the
@@ -169,7 +154,7 @@ unique within their respective request collections.
 | State | Exact boundary |
 | --- | --- |
 | `unavailable` | A structurally valid request selects an executable that cannot be opened or the executable named in the request cannot be launched. |
-| `refused` | An identity-bearing request fails a pre-launch identity, capability, adapter, input, output-parent, cancellation-binding, or concurrency admission check, or an entry at a declared fixed output path cannot be removed before launch (for example a directory). |
+| `refused` | A request fails a pre-launch capability, adapter, input, output-parent, cancellation-binding, or concurrency admission check, or an entry at a declared fixed output path cannot be removed before launch (for example a directory). |
 | `failed` | A launched process has a rejected normal exit, signal termination, stream overflow/read failure, process observation failure, or output-artifact failure. |
 | `timed_out` | Monotonic elapsed execution time reaches the request deadline before terminal observation. |
 | `malformed_response` | The exact request-bound caller adapter rejects an otherwise admitted bounded terminal response. |
@@ -190,17 +175,17 @@ unique within their respective request collections.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-019-AC-1 | A valid Rust synthetic producer request executes once through the public Rust library, and the typed completed result carries the exact `sha256-jcs` request identity, producer provenance, bounded raw evidence, monotonic timing, immutable retained output artifacts, and adapter-produced observation; every portable result-field/state mutation changes its canonical result bytes and identity. | Test (TC-122) |
-| FR-019-AC-2 | Every request field is JCS-identity-significant, ordered and set collections have their declared semantics, structurally invalid input mints no identity, an identity-bearing capability, input, adapter, or cancellation mismatch refuses before producer launch, and a declared input changed after preflight is still read as the verified bytes through its descriptor argument. | Test (TC-123) |
+| FR-019-AC-1 | A valid Rust synthetic producer request executes once through the public Rust library, and the typed completed result carries producer provenance, bounded raw evidence, monotonic timing, immutable retained output artifacts, and adapter-produced observation, and serializes to canonical RFC 8785 bytes. | Test (TC-122) |
+| FR-019-AC-2 | Every request field is significant, ordered and set collections have their declared semantics, structurally invalid input produces no result, a capability, input, adapter, or cancellation mismatch refuses before producer launch, and a declared input changed after preflight is still read as the preflight snapshot through its descriptor argument. | Test (TC-123) |
 | FR-019-AC-3 | Unavailable, refused, failed, timed-out, malformed-response, containment-failure, cancelled, and completed remain distinguishable and canonically serializable; launched failures retain bounded raw evidence where observable; and only completed carries `T`. | Test (TC-124) |
 | FR-019-AC-4 | Exact wall-clock, stream, input-byte, output-count/byte and concurrency boundaries are admitted while the next value is structurally invalid or terminated; an admitted non-zero exit reaches the adapter; ordinary descendants are reaped and an escaping-descendant mutant produces `containment_failure`. | Test (TC-125) |
 | FR-019-AC-5 | A caller-owned typed response adapter receives the exact bound terminal evidence without requiring the consumer to parse CLI stdout, and Engineering Assurance contains no domain oracle, qualification verdict, evidence store, or Quoin record clone. | Test (TC-127) |
 | FR-019-AC-7 | A minimal consumer compiles the existing crate with default features disabled, only `producer-execution` enabled, and an exact semver-compatible shared-dependency version older than Engineering Assurance's locked version; every normal Engineering Assurance dependency declares a compatible range rather than an exact `=` requirement; Engineering Assurance activates no direct dependency used solely for package/archive, onboarding, CLI, YAML, regex, or source-audit behavior, while dependencies shared with the producer API remain admissible and the `full` feature preserves the existing package library and CLI gates. | Test (TC-128) |
-| FR-019-AC-8 | For a launched Linux invocation, the executor samples a complete, bounded host context before launch and binds it into canonical result identity; stable machine identity or explicitly boot-scoped identity is represented only by a domain-separated digest, boot-scoped and ARM CPU-ID observations additionally bind observed CPU affinity, heterogeneous or missing selected ARM CPU-ID tuples withhold context, and unavailable host context is explicit and cannot substantiate comparability. | Test (TC-175) |
+| FR-019-AC-8 | For a launched Linux invocation, the executor samples a complete, bounded host context before launch and carries it in the result; heterogeneous or missing selected ARM CPU-ID tuples withhold context, and unavailable host context is explicit and cannot substantiate comparability. | Test (TC-175) |
 | FR-019-AC-9 | The FCD-generated procedure and campaign records have closed wire fields; procedures validate roles and bounds, campaign plans resolve at exact versions, and dependency graphs are finite and acyclic. | Test (TC-177, TC-179) |
-| FR-019-AC-10 | Declared fixed and tree output roles, dynamic input prefixes, executable path, arguments, environment, and response adapter bind to one exact FR-019 request identity; near-match undeclared roles refuse. | Test (TC-178, TC-180, TC-183) |
-| FR-019-AC-11 | A campaign run binds its definition and source graph and refuses stale or unknown attempts; a source projection verifies the complete Git tree inventory and every file or omitted symlink blob before request creation. | Test (TC-181, TC-182) |
-| FR-019-AC-12 | Retained producer-request parsing preserves every field through typed round-trip serialization and validates the request structure; malformed digests, unknown fields and explicit elided defaults refuse. A campaign verifier can compare this exact request with a source-bound reconstructed request. | Test (TC-186) |
+| FR-019-AC-10 | Declared fixed and tree output roles, dynamic input prefixes, executable path, arguments, environment, and response adapter are carried by one exact FR-019 request; near-match undeclared roles refuse. | Test (TC-178, TC-180, TC-183) |
+| FR-019-AC-11 | A campaign run refuses unknown attempts; a source projection expands the complete Git tree inventory and reads every file or omitted symlink before request creation. | Test (TC-181, TC-182) |
+| FR-019-AC-12 | Retained producer-request parsing preserves every field through typed round-trip serialization and validates the request structure; unknown fields and explicit elided defaults refuse. A campaign verifier can compare this exact request with a source-bound reconstructed request. | Test (TC-186) |
 | FR-019-AC-13 | A producer executed through the executor sees its own executable path, `argv[0]` and a script's `$0` as the executable path exactly as named in the request, so a producer that locates a sibling executable next to itself and one that re-executes itself both complete. | Test (TC-187) |
 
 ## Dependencies

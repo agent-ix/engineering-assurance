@@ -17,9 +17,7 @@ use std::{
     time::Duration,
 };
 
-use engineering_assurance::{
-    content_digest::ContentDigest, evidence::GoverningVersions, workflow::DecisionEvent,
-};
+use engineering_assurance::{evidence::GoverningVersions, workflow::DecisionEvent};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use thiserror::Error;
@@ -168,9 +166,6 @@ struct Assertion {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Fixture {
-    suite_revision: String,
-    #[serde(rename = "fixture_revision")]
-    revision: String,
     scenarios: BTreeMap<String, FixtureScenario>,
 }
 
@@ -199,7 +194,6 @@ struct FixtureInput {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct GoverningSnapshot {
-    source_revision: String,
     host: VersionIdentity,
     governing: GoverningWithoutWorkflow,
     workflows: BTreeMap<String, VersionIdentity>,
@@ -210,7 +204,6 @@ struct GoverningSnapshot {
 struct VersionIdentity {
     name: String,
     version: String,
-    digest: String,
 }
 
 #[derive(Deserialize)]
@@ -229,8 +222,6 @@ struct GoverningWithoutWorkflow {
 #[derive(Serialize)]
 struct EvaluationInput<'a> {
     scenario: &'a str,
-    suite_revision: &'a str,
-    fixture_revision: &'a str,
     input: &'a FixtureInput,
     result_contract: ResultContract,
 }
@@ -238,16 +229,12 @@ struct EvaluationInput<'a> {
 #[derive(Serialize)]
 struct ResultContract {
     revision: &'static str,
-    required_top_level_fields: [&'static str; 14],
+    required_top_level_fields: [&'static str; 11],
     host: String,
     host_version: String,
-    source_revision: String,
-    suite_revision: String,
-    fixture_revision: String,
     governing: GoverningVersions,
     governing_identities: [&'static str; 9],
-    governing_identity_fields: [&'static str; 3],
-    governing_digest_format: &'static str,
+    governing_identity_fields: [&'static str; 2],
     observed_outcome: String,
     terminal_event_contract: TerminalContract,
     unsupported_additions: Vec<String>,
@@ -284,9 +271,6 @@ struct TerminalContract {
 struct EvaluationResult {
     host: String,
     host_version: String,
-    source_revision: String,
-    suite_revision: String,
-    fixture_revision: String,
     governing: GoverningVersions,
     command_count: i64,
     elapsed_ms: i64,
@@ -349,11 +333,9 @@ fn prepare(root: &Path, context: &ProviderContext) -> Result<Vec<u8>, AgentEvals
     let workspace = workspace(context)?;
     copy_skill(root, &workspace)?;
     let snapshot = snapshot(root)?;
-    let contract = contract(&fixture, expected, &snapshot)?;
+    let contract = contract(expected, &snapshot)?;
     let input = EvaluationInput {
         scenario,
-        suite_revision: &fixture.suite_revision,
-        fixture_revision: &fixture.revision,
         input: &expected.input,
         result_contract: contract,
     };
@@ -381,7 +363,7 @@ fn assert_result(
         .ok_or(AgentEvalsProviderError::ScenarioUnsupported)?;
     let workspace = workspace(context)?;
     let snapshot = snapshot(root)?;
-    let contract = contract(&fixture, expected, &snapshot)?;
+    let contract = contract(expected, &snapshot)?;
     let bytes = read_bounded(&workspace.join("EVALUATION_RESULT.json"), MAX_FIXTURE_BYTES)
         .map_err(|()| AgentEvalsProviderError::ResultInvalid)?;
     let raw: Value =
@@ -543,7 +525,6 @@ fn json_proof(
     json!({
         "run_id": run_id,
         "state_dir": state_dir.strip_prefix(workspace).ok().map(|value| value.to_string_lossy().replace('\\', "/")),
-        "history_digest": history.as_ref().ok().and_then(|value| serde_json::to_vec(value).ok()).map(|bytes| ContentDigest::of_bytes(&bytes).into_hex()),
         "history_ok": history.is_ok(),
         "verification_ok": verification.as_ref().ok().and_then(|value| value.get("ok")).and_then(Value::as_bool) == Some(true),
     })
@@ -658,7 +639,6 @@ fn snapshot(root: &Path) -> Result<GoverningSnapshot, AgentEvalsProviderError> {
 }
 
 fn contract(
-    fixture: &Fixture,
     expected: &FixtureScenario,
     snapshot: &GoverningSnapshot,
 ) -> Result<ResultContract, AgentEvalsProviderError> {
@@ -726,9 +706,6 @@ fn contract(
         required_top_level_fields: [
             "host",
             "host_version",
-            "source_revision",
-            "suite_revision",
-            "fixture_revision",
             "governing",
             "command_count",
             "elapsed_ms",
@@ -741,16 +718,12 @@ fn contract(
         ],
         host: snapshot.host.name.clone(),
         host_version: snapshot.host.version.clone(),
-        source_revision: snapshot.source_revision.clone(),
-        suite_revision: fixture.suite_revision.clone(),
-        fixture_revision: fixture.revision.clone(),
         governing,
         governing_identities: [
             "module", "plugin", "skill", "workflow", "quire", "quoin", "ix_flow", "schema",
             "producer",
         ],
-        governing_identity_fields: ["name", "version", "digest"],
-        governing_digest_format: "lowercase sha256",
+        governing_identity_fields: ["name", "version"],
         observed_outcome: expected.expected.clone(),
         terminal_event_contract,
         unsupported_additions: Vec::new(),
@@ -776,7 +749,6 @@ fn identity(value: VersionIdentity) -> engineering_assurance::evidence::VersionI
     engineering_assurance::evidence::VersionIdentity {
         name: value.name,
         version: value.version,
-        digest: value.digest,
     }
 }
 
@@ -787,21 +759,6 @@ fn verify_result(result: &EvaluationResult, contract: &ResultContract, failures:
             "host_version",
             result.host_version.as_str(),
             contract.host_version.as_str(),
-        ),
-        (
-            "source_revision",
-            result.source_revision.as_str(),
-            contract.source_revision.as_str(),
-        ),
-        (
-            "suite_revision",
-            result.suite_revision.as_str(),
-            contract.suite_revision.as_str(),
-        ),
-        (
-            "fixture_revision",
-            result.fixture_revision.as_str(),
-            contract.fixture_revision.as_str(),
         ),
         (
             "observed_outcome",
@@ -1071,30 +1028,4 @@ fn encode<T: Serialize>(
     .map_err(|_| AgentEvalsProviderError::ResponseInvalid)?;
     bytes.push(b'\n');
     Ok(bytes)
-}
-
-#[cfg(test)]
-mod tests {
-    use std::path::Path;
-
-    use ix_trace_rs::trace;
-    use serde_json::json;
-
-    use super::json_proof;
-
-    #[test]
-    #[trace("TC-199", "FR-014-AC-11")]
-    fn tc_199_history_digest_is_pinned() {
-        let proof = json_proof(
-            &Ok(json!({"a": 1})),
-            &Ok(json!({"ok": true})),
-            "run",
-            Path::new("/w/state"),
-            Path::new("/w"),
-        );
-        assert_eq!(
-            proof["history_digest"],
-            "015abd7f5cc57a2dd94b7590f04ad8084273905ee33ec5cebeae62276a97f862"
-        );
-    }
 }

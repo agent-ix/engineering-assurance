@@ -4,42 +4,6 @@
 	"title": "CampaignAttempt",
 	"type": "object",
 	"properties": {
-		"checkerRequestDigest": {
-			"type": "string",
-			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-008/checkerRequestDigest",
-			"x-agent-ix-origin": {
-				"source": {
-					"path": "spec/functional/VO-008-campaign-attempt.md",
-					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
-					"startColumn": 3,
-					"startLine": 23
-				}
-			}
-		},
-		"checkerResultDigest": {
-			"type": "string",
-			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-008/checkerResultDigest",
-			"x-agent-ix-origin": {
-				"source": {
-					"path": "spec/functional/VO-008-campaign-attempt.md",
-					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
-					"startColumn": 3,
-					"startLine": 24
-				}
-			}
-		},
-		"collectionDigest": {
-			"type": "string",
-			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-008/collectionDigest",
-			"x-agent-ix-origin": {
-				"source": {
-					"path": "spec/functional/VO-008-campaign-attempt.md",
-					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
-					"startColumn": 3,
-					"startLine": 20
-				}
-			}
-		},
 		"collectionId": {
 			"type": "string",
 			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-008/collectionId",
@@ -48,19 +12,7 @@
 					"path": "spec/functional/VO-008-campaign-attempt.md",
 					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 					"startColumn": 3,
-					"startLine": 19
-				}
-			}
-		},
-		"domainVerdictDigest": {
-			"type": "string",
-			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-008/domainVerdictDigest",
-			"x-agent-ix-origin": {
-				"source": {
-					"path": "spec/functional/VO-008-campaign-attempt.md",
-					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
-					"startColumn": 3,
-					"startLine": 22
+					"startLine": 17
 				}
 			}
 		},
@@ -137,7 +89,7 @@
 					"path": "spec/functional/VO-008-campaign-attempt.md",
 					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 					"startColumn": 3,
-					"startLine": 25
+					"startLine": 18
 				}
 			}
 		},
@@ -149,31 +101,7 @@
 					"path": "spec/functional/VO-008-campaign-attempt.md",
 					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 					"startColumn": 3,
-					"startLine": 27
-				}
-			}
-		},
-		"requestDigest": {
-			"type": "string",
-			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-008/requestDigest",
-			"x-agent-ix-origin": {
-				"source": {
-					"path": "spec/functional/VO-008-campaign-attempt.md",
-					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
-					"startColumn": 3,
-					"startLine": 17
-				}
-			}
-		},
-		"resultDigest": {
-			"type": "string",
-			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-008/resultDigest",
-			"x-agent-ix-origin": {
-				"source": {
-					"path": "spec/functional/VO-008-campaign-attempt.md",
-					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
-					"startColumn": 3,
-					"startLine": 18
+					"startLine": 20
 				}
 			}
 		},
@@ -185,19 +113,7 @@
 					"path": "spec/functional/VO-008-campaign-attempt.md",
 					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 					"startColumn": 3,
-					"startLine": 26
-				}
-			}
-		},
-		"verdictDigest": {
-			"type": "string",
-			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-008/verdictDigest",
-			"x-agent-ix-origin": {
-				"source": {
-					"path": "spec/functional/VO-008-campaign-attempt.md",
-					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
-					"startColumn": 3,
-					"startLine": 21
+					"startLine": 19
 				}
 			}
 		}

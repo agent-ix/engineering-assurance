@@ -1,7 +1,7 @@
 {
   "projection_type": "engineering-assurance.assurance-report-projection/v1",
   "report_id": "report-001",
-  "subject": "fictional candidate revision 4444444",
+  "subject": "fictional candidate service",
   "claims": [
     {
       "claim_id": "claim-001",

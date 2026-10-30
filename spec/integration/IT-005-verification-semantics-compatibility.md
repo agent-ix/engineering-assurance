@@ -38,7 +38,7 @@ variants with exact version premises.
 1. Validate the ownership registry and canonical reference fixture.
 2. Validate JSON and generated Rust, TypeScript, and Python projections for
    semantic equality.
-3. Map PGM-01 v1/v2 fixtures read-only and compare source digests before/after.
+3. Map PGM-01 v1/v2 fixtures read-only and confirm the source bytes are unchanged.
 4. Exercise every non-success, unknown-version, and missing-provenance case.
 5. Render JSON and Markdown reports and inspect the required bounded sections.
 

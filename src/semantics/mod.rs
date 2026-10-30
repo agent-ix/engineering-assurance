@@ -66,8 +66,6 @@ pub enum SemanticErrorKind {
     EmptyProducerEnvironment,
     /// A required textual field is empty.
     EmptyRequiredField,
-    /// A digest is not a lowercase SHA-256 value.
-    InvalidDigest,
     /// Two semantic references declare the same identity.
     DuplicateSemanticIdentity,
     /// A semantic relationship names an absent reference.
@@ -100,14 +98,10 @@ pub enum SemanticErrorKind {
     InvalidLegacyField,
     /// A legacy PGM-01 numeric field is not a non-negative integer.
     InvalidLegacyInteger,
-    /// A caller-supplied expected digest is invalid.
-    InvalidExpectedDigest,
     /// A generated PGM-01 view has the wrong mapping protocol.
     InvalidMappingVersion,
     /// A generated PGM-01 view has an empty source identity.
     EmptySourceIdentity,
-    /// A generated PGM-01 view does not preserve its source digest.
-    ChangedSourceDigest,
     /// A generated PGM-01 field mapping is invalid.
     InvalidFieldMapping,
     /// A generated PGM-01 unmapped-field record is invalid.
@@ -300,7 +294,7 @@ pub enum SemanticState {
     Suspect,
     /// Vacuous result.
     Vacuous,
-    /// Digest-mismatched input.
+    /// Input altered after it was retained.
     Tampered,
     /// Unreadable input.
     Unreadable,
@@ -316,25 +310,18 @@ pub struct SemanticSource {
     pub schema_version: String,
     /// Stable record identity.
     pub record_id: String,
-    /// Optional retained-record digest.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub record_digest: Option<String>,
     /// JSON-pointer-like path into the retained record.
     pub field_path: String,
 }
 
-/// Complete immutable producer tuple for producer-derived concepts.
+/// Complete producer tuple for producer-derived concepts.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SemanticProducer {
     /// Producer identity.
     pub identity: String,
-    /// Immutable producer version.
+    /// Producer version.
     pub version: String,
-    /// Configuration digest.
-    pub configuration_digest: String,
-    /// Exact source revision.
-    pub source_revision: String,
     /// Non-empty structured execution environment.
     pub environment: Map<String, Value>,
     /// Governing definition version.
@@ -500,9 +487,6 @@ fn validate_source(source: &SemanticSource) -> Result<(), SemanticError> {
     non_empty(&source.schema_identity, "source schema_identity")?;
     non_empty(&source.schema_version, "source schema_version")?;
     validate_identity(&source.record_id, "source record_id")?;
-    if let Some(digest) = &source.record_digest {
-        validate_digest(digest, "source record_digest")?;
-    }
     if !source.field_path.starts_with('/') {
         return Err(SemanticError::new(
             SemanticErrorKind::InvalidSourcePath,
@@ -515,11 +499,6 @@ fn validate_source(source: &SemanticSource) -> Result<(), SemanticError> {
 fn validate_producer(producer: &SemanticProducer) -> Result<(), SemanticError> {
     non_empty(&producer.identity, "producer identity")?;
     non_empty(&producer.version, "producer version")?;
-    validate_digest(
-        &producer.configuration_digest,
-        "producer configuration_digest",
-    )?;
-    non_empty(&producer.source_revision, "producer source_revision")?;
     if producer.environment.is_empty() {
         return Err(SemanticError::new(
             SemanticErrorKind::EmptyProducerEnvironment,
@@ -553,20 +532,6 @@ fn validate_identity(value: &str, field: &str) -> Result<(), SemanticError> {
         return Err(SemanticError::new(
             SemanticErrorKind::InvalidIdentity,
             format!("{field} is not a valid identity"),
-        ));
-    }
-    Ok(())
-}
-
-fn validate_digest(value: &str, field: &str) -> Result<(), SemanticError> {
-    if value.len() != 64
-        || !value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    {
-        return Err(SemanticError::new(
-            SemanticErrorKind::InvalidDigest,
-            format!("{field} must be a SHA-256 digest"),
         ));
     }
     Ok(())

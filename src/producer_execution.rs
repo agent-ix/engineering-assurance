@@ -42,18 +42,12 @@ use std::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::content_digest::{ContentDigest, DigestError, hash_reader};
-
 /// Closed producer-execution request protocol.
 pub const PRODUCER_EXECUTION_REQUEST_PROTOCOL: &str =
     "engineering-assurance.producer-execution-request/v1";
 /// Closed producer-execution result protocol.
 pub const PRODUCER_EXECUTION_RESULT_PROTOCOL: &str =
     "engineering-assurance.producer-execution-result/v1";
-/// Request-identity scheme.
-pub const REQUEST_IDENTITY_SCHEME: &str = "sha256-jcs";
-/// Result-identity scheme.
-pub const RESULT_IDENTITY_SCHEME: &str = "sha256-jcs";
 /// Maximum accepted wall-clock budget in milliseconds (24 hours).
 pub const MAX_TIMEOUT_MILLIS: u64 = 86_400_000;
 /// Maximum accepted capture budget for either process stream.
@@ -73,40 +67,6 @@ pub const MAX_ENVIRONMENT: usize = 512;
 /// Maximum executor-wide concurrent process population.
 pub const MAX_CONCURRENCY: usize = 64;
 const MAX_TEXT_BYTES: usize = 32_768;
-const MAX_EXECUTABLE_BYTES: u64 = 1_073_741_824;
-
-impl ContentDigest {
-    /// Computes a fixture or caller-side file identity.
-    ///
-    /// Defined here, not in `content_digest`, because this module owns the
-    /// crate's filesystem access (FR-014-AC-4). Execution does not hash
-    /// the executable and does not use this helper. Checks `symlink_metadata` before opening and
-    /// refuses a symbolic link or anything that is not a regular file, refuses
-    /// files above 1 GiB, and fails when the bytes read differ from the
-    /// file's length. Limitation: the check and the open are separate steps
-    /// and the open does not use `O_NOFOLLOW`, so a path swapped between them
-    /// is followed.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`DigestError`] when the path is unavailable, linked, not a
-    /// bounded regular file, or cannot be read completely.
-    pub fn of_file(path: &Path) -> Result<Self, DigestError> {
-        let metadata = std::fs::symlink_metadata(path).map_err(|_| DigestError::Unavailable)?;
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
-            return Err(DigestError::NotRegular);
-        }
-        if metadata.len() > MAX_EXECUTABLE_BYTES {
-            return Err(DigestError::TooLarge);
-        }
-        let mut file = File::open(path).map_err(|_| DigestError::Unreadable)?;
-        let (digest, total) = hash_reader(&mut file, metadata.len(), || false)?;
-        if total != metadata.len() {
-            return Err(DigestError::Unreadable);
-        }
-        Ok(digest)
-    }
-}
 
 /// Exact versioned identity of a caller contract or implementation.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -116,8 +76,6 @@ pub struct ContractBinding {
     pub kind: String,
     /// Exact contract version.
     pub version: String,
-    /// Exact source revision.
-    pub revision: String,
 }
 
 /// Exact identity and provenance for the selected producer executable.
@@ -128,8 +86,6 @@ pub struct ProducerDescriptor {
     pub name: String,
     /// Exact producer version governed by the caller.
     pub version: String,
-    /// Exact source revision governed by the caller.
-    pub source_revision: String,
     /// Absolute executable path; ambient `PATH` lookup is forbidden.
     pub executable: String,
 }
@@ -163,7 +119,7 @@ pub enum ArgumentBinding {
     },
 }
 
-/// One selected regular-file input bound into the request identity.
+/// One selected regular-file input.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InputBinding {
@@ -171,9 +127,7 @@ pub struct InputBinding {
     pub role: String,
     /// Normal relative path beneath the capability root.
     pub path: String,
-    /// Expected identity of the selected input bytes.
-    pub digest: ContentDigest,
-    /// Declared executable mode; part of request identity and not enforced.
+    /// Declared executable mode; not enforced.
     #[serde(default, skip_serializing_if = "is_false")]
     pub executable: bool,
 }
@@ -314,7 +268,7 @@ pub struct ProducerExecutionRequest {
     pub stdin: StdinBinding,
     /// Ordered output-artifact bindings.
     pub outputs: Vec<OutputBinding>,
-    /// Dynamic output trees, whose files are individually sealed and hashed.
+    /// Dynamic output trees, whose files are individually snapshotted.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub output_trees: Vec<OutputTreeBinding>,
     /// Explicit cooperative confinement contract.
@@ -341,24 +295,18 @@ impl ProducerExecutionRequest {
         if serde_json::to_value(&request).map_err(|_| RetainedRequestError::Wire)? != *value {
             return Err(RetainedRequestError::Shape);
         }
-        request.identity()?;
+        request.validate()?;
         Ok(request)
     }
 
-    /// Validates the closed structure and computes its RFC 8785 identity.
+    /// Validates the closed request structure.
     ///
     /// # Errors
     ///
-    /// Returns [`InvalidExecutionRequest`] before minting an identity when any
-    /// closed request field is structurally invalid.
-    pub fn identity(&self) -> Result<RequestIdentity, InvalidExecutionRequest> {
-        validate_structure(self)?;
-        let canonical = serde_json_canonicalizer::to_vec(self)
-            .map_err(|_| InvalidExecutionRequest::IdentityEncoding)?;
-        Ok(RequestIdentity {
-            scheme: REQUEST_IDENTITY_SCHEME,
-            digest: ContentDigest::of_bytes(&canonical),
-        })
+    /// Returns [`InvalidExecutionRequest`] when any closed request field is
+    /// structurally invalid.
+    pub fn validate(&self) -> Result<(), InvalidExecutionRequest> {
+        validate_structure(self)
     }
 }
 
@@ -376,17 +324,7 @@ pub enum RetainedRequestError {
     Structure(#[from] InvalidExecutionRequest),
 }
 
-/// RFC 8785 canonical request identity.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RequestIdentity {
-    /// Exact identity algorithm and canonicalization scheme.
-    pub scheme: &'static str,
-    /// SHA-256 digest of the canonical request bytes.
-    pub digest: ContentDigest,
-}
-
-/// Structurally invalid requests mint no request identity or result.
+/// Structurally invalid requests produce no result.
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
 pub enum InvalidExecutionRequest {
     /// The request protocol is unsupported.
@@ -422,9 +360,6 @@ pub enum InvalidExecutionRequest {
     /// A cancellation binding is invalid.
     #[error("invalid cancellation binding")]
     Cancellation,
-    /// Canonical JSON encoding failed.
-    #[error("request identity encoding failed")]
-    IdentityEncoding,
 }
 
 /// Cooperative cancellation shared between a caller and an execution.
@@ -464,8 +399,6 @@ impl CancellationToken {
 pub struct CapturedStream {
     /// Retained bytes, never exceeding the request limit.
     pub bytes: Vec<u8>,
-    /// SHA-256 identity of the retained bytes.
-    pub digest: ContentDigest,
     /// Whether additional bytes existed beyond the retained limit.
     pub truncated: bool,
 }
@@ -502,9 +435,7 @@ pub struct OutputArtifact {
     pub path: String,
     /// Observed regular-file byte length.
     pub byte_length: u64,
-    /// SHA-256 identity of the observed retained bytes.
-    pub digest: ContentDigest,
-    /// Sealed descriptor for the exact bytes represented by the metadata.
+    /// Snapshot descriptor for the exact bytes represented by the metadata.
     #[serde(skip)]
     snapshot: Arc<File>,
 }
@@ -528,10 +459,7 @@ impl OutputArtifact {
 
 impl PartialEq for OutputArtifact {
     fn eq(&self, other: &Self) -> bool {
-        self.role == other.role
-            && self.path == other.path
-            && self.byte_length == other.byte_length
-            && self.digest == other.digest
+        self.role == other.role && self.path == other.path && self.byte_length == other.byte_length
     }
 }
 
@@ -647,16 +575,10 @@ pub struct ExecutionTiming {
 
 /// Executor-observed host class for comparable native measurements.
 ///
-/// The machine identifier is never serialized. Its digest is domain-separated
-/// from other uses of the host's high-entropy identifier.
+/// No machine identifier is read or recorded.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ObservedHostContext {
-    /// Opaque identity of the execution host for the recorded source and scope.
-    pub machine_digest: ContentDigest,
-    /// Present when the digest identifies one kernel boot, rather than a stable machine ID.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub identity_source: Option<HostIdentitySource>,
     /// Operating-system class.
     pub os: String,
     /// Running kernel release.
@@ -668,23 +590,12 @@ pub struct ObservedHostContext {
     /// Present when `cpu_model` is an ARM CPU-ID tuple rather than a model name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cpu_model_source: Option<CpuModelSource>,
-    /// Exact process CPU affinity for boot-scoped identity, represented opaquely.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cpu_affinity_digest: Option<ContentDigest>,
     /// CPUs available to this process at sampling time.
     pub logical_cpus: u32,
     /// Kernel-reported total physical memory in bytes.
     pub memory_bytes: u64,
     /// Executor runtime and confinement class.
     pub runtime_class: String,
-}
-
-/// Explicit narrower scope used when a stable machine identifier is absent.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum HostIdentitySource {
-    /// Linux's kernel boot UUID; stable only for the lifetime of that boot.
-    KernelBootId,
 }
 
 /// Explicit origin for a CPU descriptor that is not a model name.
@@ -695,14 +606,12 @@ pub enum CpuModelSource {
     ArmCpuId,
 }
 
-/// Identity-bound result of one structurally valid producer-execution attempt.
+/// Result of one structurally valid producer-execution attempt.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProducerExecutionResult<T> {
     /// Exact result contract discriminator.
     pub protocol: &'static str,
-    /// RFC 8785 canonical identity of the complete request.
-    pub request_identity: RequestIdentity,
     /// Exact caller-supplied producer provenance.
     pub producer: ProducerDescriptor,
     /// Bound cancellation event when it was observed.
@@ -723,7 +632,7 @@ impl<T: Serialize> ProducerExecutionResult<T> {
     /// Returns RFC 8785 canonical JSON bytes for every portable result field.
     ///
     /// The live descriptors retained by output artifacts are deliberately not
-    /// encoded; their role, path, byte length and digest are encoded instead.
+    /// encoded; their role, path and byte length are encoded instead.
     ///
     /// # Errors
     ///
@@ -732,30 +641,6 @@ impl<T: Serialize> ProducerExecutionResult<T> {
     pub fn canonical_bytes(&self) -> Result<Vec<u8>, ResultEncodingError> {
         serde_json_canonicalizer::to_vec(self).map_err(|_| ResultEncodingError)
     }
-
-    /// Computes the `sha256-jcs` identity of the canonical result bytes.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ResultEncodingError`] when canonical encoding fails. No result
-    /// identity is returned in that case.
-    pub fn identity(&self) -> Result<ResultIdentity, ResultEncodingError> {
-        let canonical = self.canonical_bytes()?;
-        Ok(ResultIdentity {
-            scheme: RESULT_IDENTITY_SCHEME,
-            digest: ContentDigest::of_bytes(&canonical),
-        })
-    }
-}
-
-/// RFC 8785 canonical identity of a complete portable execution result.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResultIdentity {
-    /// Exact identity algorithm and canonicalization scheme.
-    pub scheme: &'static str,
-    /// SHA-256 digest of the canonical result bytes.
-    pub digest: ContentDigest,
 }
 
 /// The complete portable result could not be represented canonically.
@@ -800,7 +685,7 @@ impl ProducerExecutor {
     ///
     /// # Errors
     ///
-    /// Returns [`InvalidExecutionRequest`] without a result or request identity
+    /// Returns [`InvalidExecutionRequest`] without a result
     /// when the closed request structure is invalid.
     pub fn execute<A: ProducerResponseAdapter>(
         &self,
@@ -809,13 +694,12 @@ impl ProducerExecutor {
         adapter: &A,
     ) -> Result<ProducerExecutionResult<A::Observation>, InvalidExecutionRequest> {
         let call_started = monotonic_now();
-        let request_identity = request.identity()?;
+        request.validate()?;
         let producer = request.producer.clone();
 
         if adapter.binding() != &request.response {
             return Ok(prelaunch_result(
                 call_started,
-                request_identity,
                 producer,
                 ProducerExecutionState::Refused {
                     reason: ExecutionRefusal::AdapterBinding,
@@ -825,7 +709,6 @@ impl ProducerExecutor {
         if cancellation.binding != request.cancellation {
             return Ok(prelaunch_result(
                 call_started,
-                request_identity,
                 producer,
                 ProducerExecutionState::Refused {
                     reason: ExecutionRefusal::CancellationBinding,
@@ -835,7 +718,6 @@ impl ProducerExecutor {
         if request.budget.max_concurrency != self.maximum_concurrency {
             return Ok(prelaunch_result(
                 call_started,
-                request_identity,
                 producer,
                 ProducerExecutionState::Refused {
                     reason: ExecutionRefusal::Concurrency,
@@ -845,7 +727,6 @@ impl ProducerExecutor {
         if cancellation.is_cancelled() {
             return Ok(prelaunch_result_with_cancellation(
                 call_started,
-                request_identity,
                 producer,
                 request.cancellation.clone(),
             ));
@@ -856,7 +737,6 @@ impl ProducerExecutor {
             let _ = (adapter, cancellation);
             Ok(prelaunch_result(
                 call_started,
-                request_identity,
                 producer,
                 ProducerExecutionState::ContainmentFailure,
             ))
@@ -864,14 +744,7 @@ impl ProducerExecutor {
 
         #[cfg(target_os = "linux")]
         {
-            Ok(self.execute_linux(
-                request,
-                cancellation,
-                adapter,
-                call_started,
-                request_identity,
-                producer,
-            ))
+            Ok(self.execute_linux(request, cancellation, adapter, call_started, producer))
         }
     }
 
@@ -882,7 +755,6 @@ impl ProducerExecutor {
         cancellation: &CancellationToken,
         adapter: &A,
         call_started: Instant,
-        request_identity: RequestIdentity,
         producer: ProducerDescriptor,
     ) -> ProducerExecutionResult<A::Observation> {
         let validated = match validate_capabilities(request, cancellation) {
@@ -890,7 +762,6 @@ impl ProducerExecutor {
             Err(failure) => {
                 return preflight_failure_result(
                     call_started,
-                    request_identity,
                     producer,
                     &request.cancellation,
                     failure,
@@ -900,18 +771,12 @@ impl ProducerExecutor {
         let _slot = match self.try_acquire() {
             Ok(slot) => slot,
             Err(failure) => {
-                return acquisition_failure_result(
-                    call_started,
-                    request_identity,
-                    producer,
-                    failure,
-                );
+                return acquisition_failure_result(call_started, producer, failure);
             }
         };
         if let Err(failure) = remove_declared_outputs(request, &validated) {
             return preflight_failure_result(
                 call_started,
-                request_identity,
                 producer,
                 &request.cancellation,
                 failure,
@@ -926,7 +791,6 @@ impl ProducerExecutor {
             finish_outcome(request, adapter, outcome);
         ProducerExecutionResult {
             protocol: PRODUCER_EXECUTION_RESULT_PROTOCOL,
-            request_identity,
             producer,
             cancellation_event,
             timing: ExecutionTiming {
@@ -996,37 +860,28 @@ enum PreflightFailure {
 #[cfg(target_os = "linux")]
 fn preflight_failure_result<T>(
     started: Instant,
-    request_identity: RequestIdentity,
     producer: ProducerDescriptor,
     cancellation: &CancellationBinding,
     failure: PreflightFailure,
 ) -> ProducerExecutionResult<T> {
     match failure {
-        PreflightFailure::Unavailable => prelaunch_result(
-            started,
-            request_identity,
-            producer,
-            ProducerExecutionState::Unavailable,
-        ),
+        PreflightFailure::Unavailable => {
+            prelaunch_result(started, producer, ProducerExecutionState::Unavailable)
+        }
         PreflightFailure::Refused(reason) => prelaunch_result(
             started,
-            request_identity,
             producer,
             ProducerExecutionState::Refused { reason },
         ),
-        PreflightFailure::Cancelled => prelaunch_result_with_cancellation(
-            started,
-            request_identity,
-            producer,
-            cancellation.clone(),
-        ),
+        PreflightFailure::Cancelled => {
+            prelaunch_result_with_cancellation(started, producer, cancellation.clone())
+        }
     }
 }
 
 #[cfg(target_os = "linux")]
 fn acquisition_failure_result<T>(
     started: Instant,
-    request_identity: RequestIdentity,
     producer: ProducerDescriptor,
     failure: AcquireFailure,
 ) -> ProducerExecutionResult<T> {
@@ -1036,7 +891,7 @@ fn acquisition_failure_result<T>(
         },
         AcquireFailure::Poisoned => ProducerExecutionState::ContainmentFailure,
     };
-    prelaunch_result(started, request_identity, producer, state)
+    prelaunch_result(started, producer, state)
 }
 
 #[cfg(target_os = "linux")]
@@ -1183,11 +1038,7 @@ fn validate_structure(request: &ProducerExecutionRequest) -> Result<(), InvalidE
         ContainmentBinding::ProcessGroupV1 { contract } => contract,
     };
     validate_contract(confinement_contract)?;
-    for value in [
-        &request.producer.name,
-        &request.producer.version,
-        &request.producer.source_revision,
-    ] {
+    for value in [&request.producer.name, &request.producer.version] {
         validate_text(value).map_err(|()| InvalidExecutionRequest::Provenance)?;
     }
     validate_absolute_normal_path(&request.capability_root)?;
@@ -1301,7 +1152,7 @@ fn validate_artifact_bindings(
 }
 
 fn validate_contract(binding: &ContractBinding) -> Result<(), InvalidExecutionRequest> {
-    for value in [&binding.kind, &binding.version, &binding.revision] {
+    for value in [&binding.kind, &binding.version] {
         validate_text(value).map_err(|()| InvalidExecutionRequest::Contract)?;
     }
     Ok(())
@@ -1511,72 +1362,70 @@ fn open_input(
         return Err(refused());
     }
     *remaining = remaining.checked_sub(metadata.len()).ok_or_else(refused)?;
-    let (file, observed) = snapshot_reader(
+    snapshot_reader(
         &mut selected,
         metadata.len(),
         cancellation,
         "producer-input",
     )
     .map_err(|failure| match failure {
-        DigestError::Cancelled => PreflightFailure::Cancelled,
-        DigestError::Invalid
-        | DigestError::UnknownAlgorithm
-        | DigestError::Unavailable
-        | DigestError::NotRegular
-        | DigestError::TooLarge
-        | DigestError::Unreadable => refused(),
-    })?;
-    if observed != input.digest {
-        return Err(refused());
-    }
-    Ok(file)
+        SnapshotError::Cancelled => PreflightFailure::Cancelled,
+        SnapshotError::TooLarge | SnapshotError::Unreadable => refused(),
+    })
 }
 
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy)]
+enum SnapshotError {
+    Cancelled,
+    TooLarge,
+    Unreadable,
+}
+
+/// Copies a bounded reader into an immutable in-memory snapshot descriptor.
 #[cfg(target_os = "linux")]
 fn snapshot_reader(
     source: &mut impl Read,
     maximum: u64,
     cancellation: &CancellationToken,
     name: &str,
-) -> Result<(File, ContentDigest), DigestError> {
+) -> Result<File, SnapshotError> {
     use rustix::fs::{MemfdFlags, SealFlags, fcntl_add_seals, memfd_create};
 
     let descriptor = memfd_create(name, MemfdFlags::CLOEXEC | MemfdFlags::ALLOW_SEALING)
-        .map_err(|_| DigestError::Unreadable)?;
+        .map_err(|_| SnapshotError::Unreadable)?;
     let mut snapshot = File::from(descriptor);
-    let mut hasher = ContentDigest::hasher();
     let mut total = 0_u64;
     let mut buffer = [0_u8; 16 * 1024];
     loop {
         if cancellation.is_cancelled() {
-            return Err(DigestError::Cancelled);
+            return Err(SnapshotError::Cancelled);
         }
         let read = source
             .read(&mut buffer)
-            .map_err(|_| DigestError::Unreadable)?;
+            .map_err(|_| SnapshotError::Unreadable)?;
         if read == 0 {
             break;
         }
         total = total
-            .checked_add(u64::try_from(read).map_err(|_| DigestError::TooLarge)?)
-            .ok_or(DigestError::TooLarge)?;
+            .checked_add(u64::try_from(read).map_err(|_| SnapshotError::TooLarge)?)
+            .ok_or(SnapshotError::TooLarge)?;
         if total > maximum {
-            return Err(DigestError::TooLarge);
+            return Err(SnapshotError::TooLarge);
         }
-        hasher.update(&buffer[..read]);
         snapshot
             .write_all(&buffer[..read])
-            .map_err(|_| DigestError::Unreadable)?;
+            .map_err(|_| SnapshotError::Unreadable)?;
     }
     fcntl_add_seals(
         &snapshot,
         SealFlags::SEAL | SealFlags::SHRINK | SealFlags::GROW | SealFlags::WRITE,
     )
-    .map_err(|_| DigestError::Unreadable)?;
+    .map_err(|_| SnapshotError::Unreadable)?;
     snapshot
         .seek(SeekFrom::Start(0))
-        .map_err(|_| DigestError::Unreadable)?;
-    Ok((snapshot, hasher.finalize()))
+        .map_err(|_| SnapshotError::Unreadable)?;
+    Ok(snapshot)
 }
 
 #[cfg(target_os = "linux")]
@@ -1899,12 +1748,11 @@ fn snapshot_output(
     collector: &mut OutputCollector,
     cancellation: &CancellationToken,
     label: &str,
-) -> Option<(File, ContentDigest, u64)> {
-    let (snapshot, digest) =
-        snapshot_reader(file, collector.remaining, cancellation, label).ok()?;
+) -> Option<(File, u64)> {
+    let snapshot = snapshot_reader(file, collector.remaining, cancellation, label).ok()?;
     let length = snapshot.metadata().ok()?.len();
     collector.remaining = collector.remaining.checked_sub(length)?;
-    Some((snapshot, digest, length))
+    Some((snapshot, length))
 }
 
 #[cfg(target_os = "linux")]
@@ -1947,7 +1795,7 @@ fn observe_fixed_outputs(
         if !metadata.is_file() {
             return true;
         }
-        let Some((snapshot, digest, byte_length)) =
+        let Some((snapshot, byte_length)) =
             snapshot_output(&mut file, collector, cancellation, "producer-output")
         else {
             return true;
@@ -1956,7 +1804,6 @@ fn observe_fixed_outputs(
             role: output.role.clone(),
             path: output.path.clone(),
             byte_length,
-            digest,
             snapshot: Arc::new(snapshot),
         });
     }
@@ -2024,7 +1871,7 @@ fn observe_output_trees(
                 {
                     return true;
                 }
-                let Some((snapshot, digest, byte_length)) =
+                let Some((snapshot, byte_length)) =
                     snapshot_output(&mut file, collector, cancellation, "producer-output-tree")
                 else {
                     return true;
@@ -2039,7 +1886,6 @@ fn observe_output_trees(
                     role: format!("{}/{relative}", tree.role),
                     path: child,
                     byte_length,
-                    digest,
                     snapshot: Arc::new(snapshot),
                 });
             }
@@ -2169,7 +2015,6 @@ struct CapturedBytes {
 #[cfg(target_os = "linux")]
 fn captured_stream(captured: CapturedBytes) -> CapturedStream {
     CapturedStream {
-        digest: ContentDigest::of_bytes(&captured.bytes),
         bytes: captured.bytes,
         truncated: captured.truncated,
     }
@@ -2442,20 +2287,12 @@ fn read_host_text(path: &str, maximum: u64) -> Option<String> {
 
 #[cfg(target_os = "linux")]
 fn observe_host_context() -> Option<ObservedHostContext> {
-    let machine_id =
-        read_host_text("/etc/machine-id", 128).filter(|value| !value.trim().is_empty());
-    let boot_id = machine_id
-        .is_none()
-        .then(|| read_host_text("/proc/sys/kernel/random/boot_id", 128))
-        .flatten();
     let kernel_release = read_host_text("/proc/sys/kernel/osrelease", 256)?;
     let cpuinfo = read_host_text("/proc/cpuinfo", 1_048_576)?;
     let status = read_host_text("/proc/self/status", 65_536);
     let logical_cpus = u32::try_from(std::thread::available_parallelism().ok()?.get()).ok()?;
     let meminfo = read_host_text("/proc/meminfo", 65_536)?;
     parse_host_context(
-        machine_id.as_deref(),
-        boot_id.as_deref(),
         &kernel_release,
         &cpuinfo,
         status.as_deref(),
@@ -2466,39 +2303,12 @@ fn observe_host_context() -> Option<ObservedHostContext> {
 
 #[cfg(any(test, target_os = "linux"))]
 fn parse_host_context(
-    machine_id: Option<&str>,
-    boot_id: Option<&str>,
     kernel_release: &str,
     cpuinfo: &str,
     status: Option<&str>,
     meminfo: &str,
     logical_cpus: u32,
 ) -> Option<ObservedHostContext> {
-    let mut identity_bytes = b"engineering-assurance.observed-host/v1\0".to_vec();
-    let identity_source = if let Some(machine_id) = machine_id {
-        let machine_id = machine_id.trim();
-        if machine_id.len() != 32 || !machine_id.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-            return None;
-        }
-        identity_bytes.extend_from_slice(machine_id.as_bytes());
-        None
-    } else {
-        let boot_id = boot_id?.trim();
-        if boot_id.len() != 36
-            || !boot_id.bytes().enumerate().all(|(index, byte)| {
-                if matches!(index, 8 | 13 | 18 | 23) {
-                    byte == b'-'
-                } else {
-                    byte.is_ascii_hexdigit()
-                }
-            })
-        {
-            return None;
-        }
-        identity_bytes.extend_from_slice(b"kernel-boot-id\0");
-        identity_bytes.extend_from_slice(boot_id.as_bytes());
-        Some(HostIdentitySource::KernelBootId)
-    };
     let kernel_release = kernel_release.trim().to_owned();
     let reported_model = cpuinfo
         .lines()
@@ -2512,26 +2322,19 @@ fn parse_host_context(
         line.split_once(':')
             .is_some_and(|(name, _)| name.trim() == "CPU implementer")
     });
-    let affinity = if identity_source.is_some() || arm_ids_present || reported_model.is_none() {
+    let affinity = if arm_ids_present || reported_model.is_none() {
         Some(parse_cpu_affinity(status?)?)
     } else {
         None
     };
     let (cpu_model, cpu_model_source) = if arm_ids_present || reported_model.is_none() {
-        let (_, selected) = affinity.as_ref()?;
+        let selected = affinity.as_ref()?;
         (
             arm_cpu_id(cpuinfo, selected)?,
             Some(CpuModelSource::ArmCpuId),
         )
     } else {
         (reported_model?, None)
-    };
-    let cpu_affinity_digest = if let Some((allowed, _)) = affinity {
-        let mut bytes = b"engineering-assurance.observed-host-cpu-affinity/v1\0".to_vec();
-        bytes.extend_from_slice(allowed.as_bytes());
-        Some(ContentDigest::of_bytes(&bytes))
-    } else {
-        None
     };
     let memory_kib = meminfo.lines().find_map(|line| {
         let value = line.strip_prefix("MemTotal:")?;
@@ -2547,14 +2350,11 @@ fn parse_host_context(
         return None;
     }
     Some(ObservedHostContext {
-        machine_digest: ContentDigest::of_bytes(&identity_bytes),
-        identity_source,
         os: "linux".to_owned(),
         kernel_release,
         architecture: std::env::consts::ARCH.to_owned(),
         cpu_model,
         cpu_model_source,
-        cpu_affinity_digest,
         logical_cpus,
         memory_bytes,
         runtime_class: "linux-process-group-v1".to_owned(),
@@ -2562,7 +2362,7 @@ fn parse_host_context(
 }
 
 #[cfg(any(test, target_os = "linux"))]
-fn parse_cpu_affinity(status: &str) -> Option<(&str, std::collections::BTreeSet<u32>)> {
+fn parse_cpu_affinity(status: &str) -> Option<std::collections::BTreeSet<u32>> {
     let allowed = status
         .lines()
         .find_map(|line| line.strip_prefix("Cpus_allowed_list:").map(str::trim))?;
@@ -2585,7 +2385,7 @@ fn parse_cpu_affinity(status: &str) -> Option<(&str, std::collections::BTreeSet<
             }
         }
     }
-    Some((allowed, selected))
+    Some(selected)
 }
 
 #[cfg(any(test, target_os = "linux"))]
@@ -2636,14 +2436,12 @@ fn arm_cpu_id(cpuinfo: &str, selected: &std::collections::BTreeSet<u32>) -> Opti
 
 fn prelaunch_result<T>(
     started: std::time::Instant,
-    request_identity: RequestIdentity,
     producer: ProducerDescriptor,
     state: ProducerExecutionState<T>,
 ) -> ProducerExecutionResult<T> {
     let total_nanos = elapsed_nanos(started);
     ProducerExecutionResult {
         protocol: PRODUCER_EXECUTION_RESULT_PROTOCOL,
-        request_identity,
         producer,
         cancellation_event: None,
         timing: ExecutionTiming {
@@ -2660,86 +2458,49 @@ fn prelaunch_result<T>(
 
 fn prelaunch_result_with_cancellation<T>(
     started: std::time::Instant,
-    request_identity: RequestIdentity,
     producer: ProducerDescriptor,
     cancellation: CancellationBinding,
 ) -> ProducerExecutionResult<T> {
-    let mut result = prelaunch_result(
-        started,
-        request_identity,
-        producer,
-        ProducerExecutionState::Cancelled,
-    );
+    let mut result = prelaunch_result(started, producer, ProducerExecutionState::Cancelled);
     result.cancellation_event = Some(cancellation);
     result
 }
 
 #[cfg(test)]
 mod host_context_tests {
-    use super::{CpuModelSource, HostIdentitySource, parse_host_context};
+    use super::{CpuModelSource, parse_host_context};
     use ix_trace_rs::trace;
+
+    const ARM: &str = "processor : 0\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x000\nCPU revision : 0\n\nprocessor : 1\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x001\nCPU revision : 0\n\nHardware : Fictional Board\n";
+    const MEMORY: &str = "MemTotal: 32768 kB\n";
 
     #[test]
     #[trace("TC-175", "FR-019-AC-8")]
-    fn tc_175_host_context_is_complete_stable_and_opaque() {
-        let machine = "0123456789abcdef0123456789abcdef";
+    fn tc_175_host_context_is_complete_and_records_no_machine_identifier() {
         let cpu = "processor : 0\nmodel name : Fictional CPU\n";
-        let memory = "MemTotal: 32768 kB\n";
-        let first = parse_host_context(Some(machine), None, "6.1.0", cpu, None, memory, 4)
+        let first = parse_host_context("6.1.0", cpu, None, MEMORY, 4)
             .expect("complete synthetic host context");
-        let second = parse_host_context(Some(machine), None, "6.1.0", cpu, None, memory, 4)
-            .expect("stable synthetic host context");
-        assert_eq!(first, second);
         assert_eq!(first.memory_bytes, 33_554_432);
         assert_eq!(first.cpu_model, "Fictional CPU");
-        assert_eq!(first.identity_source, None);
         assert_eq!(first.cpu_model_source, None);
-        assert_eq!(first.cpu_affinity_digest, None);
         let serialized = serde_json::to_value(&first).expect("serialize");
-        assert!(serialized.get("identitySource").is_none());
         assert!(serialized.get("cpuModelSource").is_none());
-        assert!(serialized.get("cpuAffinityDigest").is_none());
-        assert_ne!(first.machine_digest.as_str(), machine);
-        assert!(
-            !serde_json::to_string(&first)
-                .expect("serialize")
-                .contains(machine)
-        );
-        assert!(parse_host_context(Some("bad"), None, "6.1.0", cpu, None, memory, 4).is_none());
-        assert!(parse_host_context(Some(machine), None, "6.1.0", cpu, None, "", 4).is_none());
-        assert!(parse_host_context(Some(machine), None, "6.1.0", cpu, None, memory, 0).is_none());
+        assert!(parse_host_context("6.1.0", cpu, None, "", 4).is_none());
+        assert!(parse_host_context("6.1.0", cpu, None, MEMORY, 0).is_none());
     }
 
     #[test]
     #[trace("TC-175", "FR-019-AC-8")]
-    fn tc_175_arm_container_uses_boot_scoped_identity_and_exact_cpu_id() {
-        let boot = "01234567-89ab-4cde-8123-0123456789ab";
-        let cpu = "processor : 0\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x000\nCPU revision : 0\n\nprocessor : 1\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x000\nCPU revision : 0\n";
+    fn tc_175_arm_container_uses_the_exact_cpu_id() {
+        let cpu = "processor : 0\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x000\nCPU revision : 0\n";
         let affinity = "Name:\tfictional\nCpus_allowed_list:\t0\n";
-        let memory = "MemTotal: 32768 kB\n";
-        let first =
-            parse_host_context(None, Some(boot), "6.1.0", cpu, Some(affinity), memory, 4).unwrap();
-        let second =
-            parse_host_context(None, Some(boot), "6.1.0", cpu, Some(affinity), memory, 4).unwrap();
-        assert_eq!(first, second);
+        let first = parse_host_context("6.1.0", cpu, Some(affinity), MEMORY, 4).unwrap();
         let blank_model = format!("Hardware : \n{cpu}");
         assert_eq!(
-            parse_host_context(
-                None,
-                Some(boot),
-                "6.1.0",
-                &blank_model,
-                Some(affinity),
-                memory,
-                4
-            )
-            .unwrap()
-            .cpu_model,
+            parse_host_context("6.1.0", &blank_model, Some(affinity), MEMORY, 4)
+                .unwrap()
+                .cpu_model,
             first.cpu_model
-        );
-        assert_eq!(
-            first.identity_source,
-            Some(HostIdentitySource::KernelBootId)
         );
         assert_eq!(first.cpu_model_source, Some(CpuModelSource::ArmCpuId));
         assert_eq!(
@@ -2747,125 +2508,39 @@ mod host_context_tests {
             "arm-cpu-id:implementer=0x61,architecture=8,variant=0x0,part=0x000,revision=0"
         );
         let serialized = serde_json::to_value(&first).unwrap();
-        assert_eq!(serialized["identitySource"], "kernel_boot_id");
         assert_eq!(serialized["cpuModelSource"], "arm_cpu_id");
-        assert!(serialized.get("cpuAffinityDigest").is_some());
-        assert!(!serialized.to_string().contains(boot));
         assert!(!serialized.to_string().contains("Cpus_allowed_list"));
-        let different_affinity = parse_host_context(
-            None,
-            Some(boot),
-            "6.1.0",
-            cpu,
-            Some("Cpus_allowed_list:\t1\n"),
-            memory,
-            4,
-        )
-        .unwrap();
-        assert_ne!(
-            first.cpu_affinity_digest,
-            different_affinity.cpu_affinity_digest
-        );
-        let next_boot = parse_host_context(
-            None,
-            Some("01234567-89ab-4cde-8123-0123456789ac"),
-            "6.1.0",
-            cpu,
-            Some(affinity),
-            memory,
-            4,
-        )
-        .unwrap();
-        assert_ne!(first.machine_digest, next_boot.machine_digest);
     }
 
     #[test]
     #[trace("TC-175", "FR-019-AC-8")]
     fn tc_175_arm_affinity_selects_the_observed_cpu_class() {
-        let machine = "0123456789abcdef0123456789abcdef";
-        let boot = "01234567-89ab-4cde-8123-0123456789ab";
-        let cpu = "processor : 0\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x000\nCPU revision : 0\n\nprocessor : 1\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x001\nCPU revision : 0\n\nHardware : Fictional Board\n";
-        let memory = "MemTotal: 32768 kB\n";
-        let observe = |machine_id, allowed| {
-            parse_host_context(
-                machine_id,
-                Some(boot),
-                "6.1.0",
-                cpu,
-                Some(allowed),
-                memory,
-                1,
-            )
-        };
-        let first = observe(Some(machine), "Cpus_allowed_list:\t0\n").unwrap();
-        let second = observe(Some(machine), "Cpus_allowed_list:\t1\n").unwrap();
+        let observe = |allowed| parse_host_context("6.1.0", ARM, Some(allowed), MEMORY, 1);
+        let first = observe("Cpus_allowed_list:\t0\n").unwrap();
+        let second = observe("Cpus_allowed_list:\t1\n").unwrap();
         assert_ne!(first.cpu_model, second.cpu_model);
-        assert_ne!(first.cpu_affinity_digest, second.cpu_affinity_digest);
-        assert_eq!(first.identity_source, None);
         assert_eq!(second.cpu_model_source, Some(CpuModelSource::ArmCpuId));
-        assert!(observe(Some(machine), "Cpus_allowed_list:\t0-1\n").is_none());
-        assert!(observe(None, "Cpus_allowed_list:\t0-1\n").is_none());
-        assert!(observe(Some(machine), "Cpus_allowed_list:\t2\n").is_none());
-        assert!(parse_host_context(Some(machine), None, "6.1.0", cpu, None, memory, 1).is_none());
+        assert!(observe("Cpus_allowed_list:\t0-1\n").is_none());
+        assert!(observe("Cpus_allowed_list:\t2\n").is_none());
+        assert!(parse_host_context("6.1.0", ARM, None, MEMORY, 1).is_none());
     }
 
     #[test]
     #[trace("TC-175", "FR-019-AC-8")]
-    fn tc_175_boot_scoped_host_refuses_missing_or_malformed_inputs() {
-        let boot = "01234567-89ab-4cde-8123-0123456789ab";
+    fn tc_175_arm_host_refuses_missing_or_malformed_inputs() {
         let cpu = "processor : 0\nCPU implementer : 0x61\nCPU architecture : 8\nCPU variant : 0x0\nCPU part : 0x000\nCPU revision : 0\n";
         let affinity = "Cpus_allowed_list:\t0\n";
-        let memory = "MemTotal: 32768 kB\n";
-        assert!(parse_host_context(None, None, "6.1.0", cpu, Some(affinity), memory, 4).is_none());
+        assert!(parse_host_context("6.1.0", cpu, None, MEMORY, 4).is_none());
         assert!(
-            parse_host_context(None, Some("bad"), "6.1.0", cpu, Some(affinity), memory, 4)
-                .is_none()
+            parse_host_context("6.1.0", cpu, Some("Cpus_allowed_list: 0-x"), MEMORY, 4).is_none()
         );
+        assert!(parse_host_context("6.1.0", "processor : 0", Some(affinity), MEMORY, 4).is_none());
         assert!(
             parse_host_context(
-                Some("bad"),
-                Some(boot),
-                "6.1.0",
-                cpu,
-                Some(affinity),
-                memory,
-                4
-            )
-            .is_none()
-        );
-        assert!(parse_host_context(None, Some(boot), "6.1.0", cpu, None, memory, 4).is_none());
-        assert!(
-            parse_host_context(
-                None,
-                Some(boot),
-                "6.1.0",
-                cpu,
-                Some("Cpus_allowed_list: 0-x"),
-                memory,
-                4
-            )
-            .is_none()
-        );
-        assert!(
-            parse_host_context(
-                None,
-                Some(boot),
-                "6.1.0",
-                "processor : 0",
-                Some(affinity),
-                memory,
-                4
-            )
-            .is_none()
-        );
-        assert!(
-            parse_host_context(
-                None,
-                Some(boot),
                 "6.1.0",
                 &cpu.replace("0x61", "0xx"),
                 Some(affinity),
-                memory,
+                MEMORY,
                 4
             )
             .is_none()
@@ -2874,35 +2549,21 @@ mod host_context_tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    #[ignore = "run in a provisioned Linux host or container with observed identity files"]
+    #[ignore = "run in a provisioned Linux host or container with observable host files"]
     #[trace("TC-175", "FR-019-AC-8")]
-    fn tc_175_live_linux_host_observation_is_explicit() {
-        let observed = super::observe_host_context().expect("complete observed Linux host");
-        if super::read_host_text("/etc/machine-id", 128).is_none_or(|value| value.trim().is_empty())
-        {
-            assert_eq!(
-                observed.identity_source,
-                Some(HostIdentitySource::KernelBootId)
-            );
-        } else {
-            assert_eq!(observed.identity_source, None);
-        }
+    fn tc_175_live_linux_host_observation_is_complete() {
+        assert!(super::observe_host_context().is_some());
     }
 }
 
 #[cfg(all(feature = "campaign", unix))]
 mod campaign_source_projection {
-    use super::{
-        BTreeSet, Component, ContentDigest, File, InputBinding, MAX_ARTIFACTS, MAX_INPUT_BYTES,
-        Path, Read,
-    };
+    use super::{BTreeSet, Component, File, InputBinding, MAX_ARTIFACTS, MAX_INPUT_BYTES, Path};
     use crate::campaign::{CampaignError, CampaignSource, OmittedSourceLink, SourceTreeBinding};
-    use crate::git_object_id::GitBlobHasher;
-    use std::io::Cursor;
 
-    /// Expands and verifies an exact Git tree into FR-019 regular-file inputs.
-    /// The executor repeats the SHA-256 check against sealed descriptors before
-    /// launch, so a mutation between resolution and execution is refused.
+    /// Expands an exact Git tree inventory into FR-019 regular-file inputs.
+    /// Every listed file is opened beneath the capability root without
+    /// following links.
     pub(crate) fn validate_source_tree(
         tree: &SourceTreeBinding,
         source: &CampaignSource,
@@ -2919,11 +2580,6 @@ mod campaign_source_projection {
         {
             return Err(CampaignError::SourceTree { field: "manifest" });
         }
-        if ContentDigest::of_bytes(&tree.manifest).as_str() != source.digest {
-            return Err(CampaignError::Binding {
-                field: "sourceTree.manifestDigest",
-            });
-        }
         let root = Path::new(root);
         if !root.is_absolute() {
             return Err(CampaignError::SourceTree {
@@ -2935,7 +2591,7 @@ mod campaign_source_projection {
         let mut omitted_links = Vec::new();
         let mut total = 0_u64;
         for record in tree.manifest[..tree.manifest.len() - 1].split(|byte| *byte == 0) {
-            let (mode, oid, path) = parse_source_record(record)?;
+            let (mode, path) = parse_source_record(record)?;
             if !seen.insert(path) {
                 return Err(CampaignError::Duplicate {
                     kind: "source path",
@@ -2948,13 +2604,12 @@ mod campaign_source_projection {
                 });
             }
             if mode == "120000" {
-                omitted_links.push(verify_source_link(root, path, oid, &mut total)?);
+                omitted_links.push(verify_source_link(root, path, &mut total)?);
                 continue;
             }
             inputs.push(verify_source_file(
                 root,
                 path,
-                oid,
                 mode == "100755",
                 &mut total,
             )?);
@@ -2967,7 +2622,7 @@ mod campaign_source_projection {
         Ok((inputs, omitted_links))
     }
 
-    fn parse_source_record(record: &[u8]) -> Result<(&str, &str, &str), CampaignError> {
+    fn parse_source_record(record: &[u8]) -> Result<(&str, &str), CampaignError> {
         let separator =
             record
                 .iter()
@@ -2980,7 +2635,7 @@ mod campaign_source_projection {
             field: "manifest header",
         })?;
         let mut tokens = header.split(' ');
-        let (Some(mode), Some(kind), Some(oid), None) =
+        let (Some(mode), Some(kind), Some(_object), None) =
             (tokens.next(), tokens.next(), tokens.next(), tokens.next())
         else {
             return Err(CampaignError::SourceTree {
@@ -2990,15 +2645,6 @@ mod campaign_source_projection {
         if kind != "blob" || !matches!(mode, "100644" | "100755" | "120000") {
             return Err(CampaignError::SourceTree {
                 field: "unsupported Git mode",
-            });
-        }
-        if !matches!(oid.len(), 40 | 64)
-            || !oid
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-        {
-            return Err(CampaignError::SourceTree {
-                field: "Git blob OID",
             });
         }
         let path =
@@ -3016,13 +2662,12 @@ mod campaign_source_projection {
                 field: "source path",
             });
         }
-        Ok((mode, oid, path))
+        Ok((mode, path))
     }
 
     fn verify_source_link(
         root: &Path,
         path: &str,
-        oid: &str,
         total: &mut u64,
     ) -> Result<OmittedSourceLink, CampaignError> {
         let (parent, leaf) = source_parent(root, path)?;
@@ -3045,17 +2690,14 @@ mod campaign_source_projection {
                 field: "source byte population",
             });
         }
-        let digest = hash_source_blob(&mut Cursor::new(target.as_bytes()), length, oid)?;
         Ok(OmittedSourceLink {
             path: path.to_owned(),
-            digest,
         })
     }
 
     fn verify_source_file(
         root: &Path,
         path: &str,
-        oid: &str,
         executable: bool,
         total: &mut u64,
     ) -> Result<InputBinding, CampaignError> {
@@ -3071,7 +2713,7 @@ mod campaign_source_projection {
         .map_err(|_| CampaignError::SourceTree {
             field: "source file open",
         })?;
-        let mut file = File::from(descriptor);
+        let file = File::from(descriptor);
         let metadata = file.metadata().map_err(|_| CampaignError::SourceTree {
             field: "source file metadata",
         })?;
@@ -3090,7 +2732,6 @@ mod campaign_source_projection {
                 field: "source byte population",
             });
         }
-        let digest = hash_source_blob(&mut file, metadata.len(), oid)?;
         let role = if executable {
             format!("source-exec/{path}")
         } else {
@@ -3099,7 +2740,6 @@ mod campaign_source_projection {
         Ok(InputBinding {
             role,
             path: path.to_owned(),
-            digest,
             executable,
         })
     }
@@ -3146,53 +2786,6 @@ mod campaign_source_projection {
             directory = open_directory(directory, std::ffi::OsStr::new(name))?;
         }
         Ok((directory, leaf))
-    }
-
-    fn hash_source_blob<R: Read>(
-        file: &mut R,
-        length: u64,
-        oid: &str,
-    ) -> Result<ContentDigest, CampaignError> {
-        let mut git = GitBlobHasher::new(length, oid.len());
-        let mut content = ContentDigest::hasher();
-        let mut read_total = 0_u64;
-        let mut buffer = [0_u8; 16 * 1024];
-        loop {
-            let count = file
-                .read(&mut buffer)
-                .map_err(|_| CampaignError::SourceTree {
-                    field: "source file read",
-                })?;
-            if count == 0 {
-                break;
-            }
-            read_total = read_total
-                .checked_add(u64::try_from(count).map_err(|_| CampaignError::Limit {
-                    field: "source byte population",
-                })?)
-                .ok_or(CampaignError::Limit {
-                    field: "source byte population",
-                })?;
-            if read_total > length {
-                return Err(CampaignError::SourceTree {
-                    field: "source file changed",
-                });
-            }
-            git.update(&buffer[..count]);
-            content.update(&buffer[..count]);
-        }
-        if read_total != length {
-            return Err(CampaignError::SourceTree {
-                field: "source file changed",
-            });
-        }
-        let observed_oid = git.finalize();
-        if observed_oid != oid {
-            return Err(CampaignError::SourceTree {
-                field: "Git blob mismatch",
-            });
-        }
-        Ok(content.finalize())
     }
 }
 

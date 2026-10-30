@@ -143,8 +143,8 @@ same canonical bundle and do not redefine these responsibilities.
   producer tuple, definition version, and every non-success state.
 - [FR-010](./functional/FR-010-read-only-compatibility-and-reporting.md) — map
   historical PGM-01 records read-only and define bounded reports.
-- [FR-011](./functional/FR-011-accepted-compatibility-corpus.md) — retain the
-  accepted real-record corpus and enforce it as the migration gate.
+- FR-011 — withdrawn (compatibility corpus gate). The identifier, FR-011-CON-1..4 and
+  FR-011-AC-1..10 are not reused.
 - [FR-013](./functional/FR-013-migration-contract.md) — publish the reviewed
   migration contract the eight repositories are migrated against.
 - [FR-014](./functional/FR-014-versioned-rust-boundary.md) — expose the shared
@@ -176,9 +176,8 @@ same canonical bundle and do not redefine these responsibilities.
 - [FR-026](./functional/FR-026-measurement-plan-objective-steering-fields.md) —
   declare optional `weight`, `value_half_life`, and `budget` steering fields
   on a MeasurementPlan objective, advisory only and never a gate.
-- [FR-027](./functional/FR-027-atomic-publish-and-reference-verification.md) —
-  publish evidence files without replacement and verify declared file
-  references, reporting every mismatch.
+- [FR-027](./functional/FR-027-atomic-publish.md) —
+  publish evidence files without replacement.
 
 ### Non-Functional Requirements
 
@@ -241,8 +240,8 @@ Static contract tests verify canonical ownership, manifest thinness, package
 membership, and compatibility paths. Integration tests install from real local
 and package sources, invoke real filesystem discovery, validate with Quire, and
 run real ix-flow definitions. Agent evaluations exercise the five required
-scenario classes across all supported hosts and record immutable module, plugin,
-skill, workflow, executable, schema, and producer versions; transcript digests;
+scenario classes across all supported hosts and record module, plugin,
+skill, workflow, executable, schema, and producer versions; transcript paths;
 commands; elapsed time; human-interaction counts; outcomes; and explicit positive
 and negative human decisions.
 

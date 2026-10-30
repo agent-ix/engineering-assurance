@@ -6,11 +6,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::content_digest::ContentDigest;
-
-use super::{
-    PGM01_MAPPING_PROTOCOL, SemanticConcept, SemanticError, SemanticErrorKind, validate_digest,
-};
+use super::{PGM01_MAPPING_PROTOCOL, SemanticConcept, SemanticError, SemanticErrorKind};
 
 /// One traceable field mapping from a historical PGM-01 record.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -60,8 +56,6 @@ pub struct Pgm01View {
     pub source_schema_version: String,
     /// Source record identity or explicit placeholder.
     pub source_record_id: String,
-    /// SHA-256 digest of the exact source bytes.
-    pub source_digest: String,
     /// Mapping outcome.
     pub outcome: Pgm01Outcome,
     /// Preserved field mappings.
@@ -73,12 +67,11 @@ pub struct Pgm01View {
 }
 
 impl Pgm01View {
-    fn base(raw: &[u8], schema_version: impl Into<String>, record_id: impl Into<String>) -> Self {
+    fn base(schema_version: impl Into<String>, record_id: impl Into<String>) -> Self {
         Self {
             mapping_version: PGM01_MAPPING_PROTOCOL.to_owned(),
             source_schema_version: schema_version.into(),
             source_record_id: record_id.into(),
-            source_digest: ContentDigest::of_bytes(raw).into_hex(),
             outcome: Pgm01Outcome::Lossy,
             mappings: Vec::new(),
             unmapped_fields: Vec::new(),
@@ -86,7 +79,7 @@ impl Pgm01View {
         }
     }
 
-    fn validate_contract(self, raw: &[u8]) -> Result<Self, SemanticError> {
+    fn validate_contract(self) -> Result<Self, SemanticError> {
         if self.mapping_version != PGM01_MAPPING_PROTOCOL {
             return Err(SemanticError::new(
                 SemanticErrorKind::InvalidMappingVersion,
@@ -97,14 +90,6 @@ impl Pgm01View {
             return Err(SemanticError::new(
                 SemanticErrorKind::EmptySourceIdentity,
                 "generated PGM-01 view has an empty source identity",
-            ));
-        }
-        if self.source_digest != ContentDigest::of_bytes(raw).as_str()
-            || validate_digest(&self.source_digest, "generated PGM-01 source digest").is_err()
-        {
-            return Err(SemanticError::new(
-                SemanticErrorKind::ChangedSourceDigest,
-                "generated PGM-01 view changed the source identity",
             ));
         }
         if self
@@ -165,7 +150,6 @@ fn unmapped(path: &str, reason: impl Into<String>) -> Pgm01Unmapped {
 #[serde(rename_all = "camelCase")]
 struct Pgm01V1 {
     record_id: String,
-    subject_revision: String,
     repository: String,
     collector: Pgm01V1Collector,
     environment: Map<String, Value>,
@@ -180,7 +164,6 @@ struct Pgm01V1 {
 #[serde(rename_all = "camelCase")]
 struct Pgm01V1Collector {
     implementation: String,
-    implementation_revision: String,
     #[serde(flatten)]
     _unmapped: Map<String, Value>,
 }
@@ -196,11 +179,8 @@ struct Pgm01V1Check {
 #[serde(rename_all = "camelCase")]
 struct Pgm01V2 {
     record_id: String,
-    subject_revision: String,
     repository: String,
     collector: Pgm01V2Collector,
-    parameters: DigestObject,
-    profile: DigestObject,
     commands: Vec<Pgm01V2Command>,
     overall_status: Pgm01State,
     historical_disposition: HistoricalDisposition,
@@ -213,14 +193,6 @@ struct Pgm01V2 {
 struct Pgm01V2Collector {
     id: String,
     version: String,
-    sha256: String,
-    #[serde(flatten)]
-    _unmapped: Map<String, Value>,
-}
-
-#[derive(Debug, Deserialize)]
-struct DigestObject {
-    sha256: String,
     #[serde(flatten)]
     _unmapped: Map<String, Value>,
 }
@@ -237,7 +209,6 @@ struct Pgm01V2Command {
 #[derive(Debug, Deserialize)]
 struct RetainedStream {
     path: String,
-    sha256: String,
     bytes: Value,
     #[serde(flatten)]
     _unmapped: Map<String, Value>,
@@ -296,12 +267,6 @@ fn compatibility_identity(value: Option<&Value>, fallback: &str) -> String {
     }
 }
 
-fn required_legacy_digest<'a>(value: &'a str, path: &str) -> Result<&'a str, SemanticError> {
-    let value = required_legacy_string(value, path)?;
-    validate_digest(value, &format!("legacy field {path}"))?;
-    Ok(value)
-}
-
 fn required_non_negative_integer(value: &Value, path: &str) -> Result<Value, SemanticError> {
     let token = value.as_number().map(ToString::to_string);
     match token.as_deref() {
@@ -314,23 +279,15 @@ fn required_non_negative_integer(value: &Value, path: &str) -> Result<Value, Sem
     }
 }
 
-fn map_pgm01_v1(raw: &[u8], record: Pgm01V1) -> Result<Pgm01View, SemanticError> {
+fn map_pgm01_v1(record: Pgm01V1) -> Result<Pgm01View, SemanticError> {
     let record_id = required_legacy_string(&record.record_id, "/recordId")?;
-    let mut view = Pgm01View::base(raw, "quire.pgm01-evidence/v1", record_id);
+    let mut view = Pgm01View::base("quire.pgm01-evidence/v1", record_id);
     view.mappings.extend([
         mapping(
             "/recordId",
             SemanticConcept::Report,
             "legacy_record_id",
             Value::String(record_id.to_owned()),
-        ),
-        mapping(
-            "/subjectRevision",
-            SemanticConcept::VerificationExecution,
-            "source_revision",
-            Value::String(
-                required_legacy_string(&record.subject_revision, "/subjectRevision")?.to_owned(),
-            ),
         ),
         mapping(
             "/repository",
@@ -346,18 +303,6 @@ fn map_pgm01_v1(raw: &[u8], record: Pgm01V1) -> Result<Pgm01View, SemanticError>
                 required_legacy_string(
                     &record.collector.implementation,
                     "/collector/implementation",
-                )?
-                .to_owned(),
-            ),
-        ),
-        mapping(
-            "/collector/implementationRevision",
-            SemanticConcept::VerificationExecution,
-            "producer.source_revision",
-            Value::String(
-                required_legacy_string(
-                    &record.collector.implementation_revision,
-                    "/collector/implementationRevision",
                 )?
                 .to_owned(),
             ),
@@ -406,16 +351,8 @@ fn finish_pgm01_v1(view: &mut Pgm01View) {
             "PGM-01 v1 did not record a distinct producer version",
         ),
         unmapped(
-            "/configurationDigest",
-            "PGM-01 v1 did not record a configuration digest",
-        ),
-        unmapped(
             "/definitionVersion",
             "PGM-01 v1 did not record a governing definition version",
-        ),
-        unmapped(
-            "/outputs/*/digest",
-            "output digests live in a separate checksum file, not this manifest",
         ),
         unmapped(
             "/decision",
@@ -427,23 +364,15 @@ fn finish_pgm01_v1(view: &mut Pgm01View) {
     );
 }
 
-fn map_pgm01_v2(raw: &[u8], record: Pgm01V2) -> Result<Pgm01View, SemanticError> {
+fn map_pgm01_v2(record: Pgm01V2) -> Result<Pgm01View, SemanticError> {
     let record_id = required_legacy_string(&record.record_id, "/recordId")?;
-    let mut view = Pgm01View::base(raw, "quire.pgm01-evidence/v2", record_id);
+    let mut view = Pgm01View::base("quire.pgm01-evidence/v2", record_id);
     view.mappings.extend([
         mapping(
             "/recordId",
             SemanticConcept::Report,
             "legacy_record_id",
             Value::String(record_id.to_owned()),
-        ),
-        mapping(
-            "/subjectRevision",
-            SemanticConcept::VerificationExecution,
-            "source_revision",
-            Value::String(
-                required_legacy_string(&record.subject_revision, "/subjectRevision")?.to_owned(),
-            ),
         ),
         mapping(
             "/repository",
@@ -465,30 +394,6 @@ fn map_pgm01_v2(raw: &[u8], record: Pgm01V2) -> Result<Pgm01View, SemanticError>
             "producer.version",
             Value::String(
                 required_legacy_string(&record.collector.version, "/collector/version")?.to_owned(),
-            ),
-        ),
-        mapping(
-            "/collector/sha256",
-            SemanticConcept::VerificationExecution,
-            "producer.executable_digest",
-            Value::String(
-                required_legacy_digest(&record.collector.sha256, "/collector/sha256")?.to_owned(),
-            ),
-        ),
-        mapping(
-            "/parameters/sha256",
-            SemanticConcept::VerificationExecution,
-            "producer.configuration_digest",
-            Value::String(
-                required_legacy_digest(&record.parameters.sha256, "/parameters/sha256")?.to_owned(),
-            ),
-        ),
-        mapping(
-            "/profile/sha256",
-            SemanticConcept::VerificationDefinition,
-            "definition_version",
-            Value::String(
-                required_legacy_digest(&record.profile.sha256, "/profile/sha256")?.to_owned(),
             ),
         ),
         mapping(
@@ -548,7 +453,6 @@ fn map_retained_stream(
 ) -> Result<(), SemanticError> {
     let path_prefix = format!("/commands/{command_index}/{stream_name}");
     let path = required_legacy_string(&stream.path, &format!("{path_prefix}/path"))?;
-    let digest = required_legacy_digest(&stream.sha256, &format!("{path_prefix}/sha256"))?;
     let bytes = required_non_negative_integer(&stream.bytes, &format!("{path_prefix}/bytes"))?;
     view.mappings.extend([
         mapping(
@@ -556,12 +460,6 @@ fn map_retained_stream(
             SemanticConcept::Evidence,
             "retained_output.path",
             Value::String(path.to_owned()),
-        ),
-        mapping(
-            format!("{path_prefix}/sha256"),
-            SemanticConcept::Evidence,
-            "retained_output.sha256",
-            Value::String(digest.to_owned()),
         ),
         mapping(
             format!("{path_prefix}/bytes"),
@@ -595,41 +493,17 @@ fn finish_pgm01_v2(view: &mut Pgm01View) {
 ///
 /// # Errors
 ///
-/// Returns [`SemanticError`] only when the caller supplies an invalid expected
-/// digest. Malformed, unknown, and tampered source bytes receive explicit views.
-pub fn map_pgm01_bytes(
-    raw: &[u8],
-    expected_digest: Option<&str>,
-) -> Result<Pgm01View, SemanticError> {
-    let digest = ContentDigest::of_bytes(raw).into_hex();
-    if let Some(expected) = expected_digest {
-        if validate_digest(expected, "expected digest").is_err() {
-            return Err(SemanticError::new(
-                SemanticErrorKind::InvalidExpectedDigest,
-                "expected digest must be a SHA-256 digest",
-            ));
-        }
-        if digest != expected {
-            let mut view = Pgm01View::base(raw, "unknown", "tampered-source");
-            view.outcome = Pgm01Outcome::Incompatible;
-            view.unmapped_fields.push(unmapped(
-                "/",
-                "tampered source digest differs from expected identity",
-            ));
-            view.limitations
-                .push("No field from the altered source was interpreted.".to_owned());
-            return view.validate_contract(raw);
-        }
-    }
-
+/// Returns [`SemanticError`] when a generated view violates its own contract.
+/// Malformed and unknown source bytes receive explicit views.
+pub fn map_pgm01_bytes(raw: &[u8]) -> Result<Pgm01View, SemanticError> {
     let decoded: Value = match serde_json::from_slice(raw) {
         Ok(decoded) => decoded,
         Err(error) => {
-            return unreadable_view(raw, format!("invalid JSON: {error}")).validate_contract(raw);
+            return unreadable_view(format!("invalid JSON: {error}")).validate_contract();
         }
     };
     let Some(record) = decoded.as_object() else {
-        return unreadable_view(raw, "legacy record must be a JSON object").validate_contract(raw);
+        return unreadable_view("legacy record must be a JSON object").validate_contract();
     };
     let schema_version_value = record.get("schemaVersion");
     let record_id_value = record.get("recordId");
@@ -648,7 +522,7 @@ pub fn map_pgm01_bytes(
                     format!("invalid PGM-01 v1 record: {error}"),
                 )
             })
-            .and_then(|record| map_pgm01_v1(raw, record)),
+            .and_then(map_pgm01_v1),
         Some("quire.pgm01-evidence/v2") => serde_json::from_value::<Pgm01V2>(decoded)
             .map_err(|error| {
                 SemanticError::new(
@@ -656,27 +530,27 @@ pub fn map_pgm01_bytes(
                     format!("invalid PGM-01 v2 record: {error}"),
                 )
             })
-            .and_then(|record| map_pgm01_v2(raw, record)),
+            .and_then(map_pgm01_v2),
         _ => {
-            let mut view = Pgm01View::base(raw, source_schema_version, source_record_id);
+            let mut view = Pgm01View::base(source_schema_version, source_record_id);
             view.outcome = Pgm01Outcome::Incompatible;
             view.unmapped_fields
                 .push(unmapped("/schemaVersion", "unknown PGM-01 schema version"));
             view.limitations
                 .push("No unknown schema was treated as empty or current.".to_owned());
-            return view.validate_contract(raw);
+            return view.validate_contract();
         }
     };
 
     match mapped {
         Ok(view) => view,
-        Err(error) => malformed_view(raw, &source_schema_version, &unreadable_record_id, &error),
+        Err(error) => malformed_view(&source_schema_version, &unreadable_record_id, &error),
     }
-    .validate_contract(raw)
+    .validate_contract()
 }
 
-fn unreadable_view(raw: &[u8], reason: impl Into<String>) -> Pgm01View {
-    let mut view = Pgm01View::base(raw, "unknown", "unreadable-source");
+fn unreadable_view(reason: impl Into<String>) -> Pgm01View {
+    let mut view = Pgm01View::base("unknown", "unreadable-source");
     view.outcome = Pgm01Outcome::Unreadable;
     view.unmapped_fields.push(unmapped("/", reason));
     view.limitations
@@ -684,13 +558,8 @@ fn unreadable_view(raw: &[u8], reason: impl Into<String>) -> Pgm01View {
     view
 }
 
-fn malformed_view(
-    raw: &[u8],
-    schema_version: &str,
-    record_id: &str,
-    error: &SemanticError,
-) -> Pgm01View {
-    let mut view = Pgm01View::base(raw, schema_version, record_id);
+fn malformed_view(schema_version: &str, record_id: &str, error: &SemanticError) -> Pgm01View {
+    let mut view = Pgm01View::base(schema_version, record_id);
     view.outcome = Pgm01Outcome::Unreadable;
     view.unmapped_fields.push(unmapped("/", error.to_string()));
     view.limitations
@@ -704,15 +573,13 @@ mod tests {
 
     use super::*;
 
-    const RAW: &[u8] = br#"{"schemaVersion":"test","recordId":"record-1"}"#;
-
     fn valid_view() -> Pgm01View {
-        Pgm01View::base(RAW, "test", "record-1")
+        Pgm01View::base("test", "record-1")
     }
 
     fn assert_contract_error(view: Pgm01View, expected: SemanticErrorKind) {
         let error = view
-            .validate_contract(RAW)
+            .validate_contract()
             .expect_err("invalid generated view must be refused");
         assert_eq!(error.code(), "invalid_semantic_contract");
         assert_eq!(error.kind(), expected);
@@ -722,7 +589,7 @@ mod tests {
     #[test]
     fn tc_103_generated_pgm01_view_refuses_each_invalid_field_family() {
         valid_view()
-            .validate_contract(RAW)
+            .validate_contract()
             .expect("baseline generated view must satisfy its contract");
 
         let mut view = valid_view();
@@ -732,10 +599,6 @@ mod tests {
         let mut view = valid_view();
         view.source_record_id.clear();
         assert_contract_error(view, SemanticErrorKind::EmptySourceIdentity);
-
-        let mut view = valid_view();
-        view.source_digest = "0".repeat(64);
-        assert_contract_error(view, SemanticErrorKind::ChangedSourceDigest);
 
         let mut view = valid_view();
         view.mappings.push(Pgm01Mapping {

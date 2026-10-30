@@ -4,7 +4,7 @@
 //! Pure evaluation-envelope validation and complete-only matrix aggregation.
 //!
 //! This module owns no host execution, filesystem access, transcript loading,
-//! evidence persistence, current-revision observation, or release decision.
+//! evidence persistence, current-checkout observation, or release decision.
 
 use std::{collections::BTreeMap, fmt};
 
@@ -13,7 +13,6 @@ use thiserror::Error;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
-    content_digest::ContentDigest,
     evidence::GoverningVersions,
     workflow::{DecisionChoice, DecisionEvent},
 };
@@ -162,26 +161,18 @@ pub enum ExecutionStatus {
 /// One typed completeness failure for an individual evaluation envelope.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EnvelopeFailure {
-    /// The suite revision is blank or mutable.
-    SuiteRevisionNotImmutable,
-    /// The fixture revision is blank or mutable.
-    FixtureRevisionNotImmutable,
-    /// The source revision is blank or mutable.
-    SourceRevisionNotImmutable,
     /// The required scenario did not execute.
     ScenarioNotExecuted,
     /// A non-executed scenario has no diagnostic.
     NotExecutedDiagnosticMissing,
-    /// The host version is absent, blank, or mutable.
-    HostVersionNotImmutable,
+    /// The host version is absent or blank.
+    HostVersionMissing,
     /// No complete governing tuple was supplied.
     GoverningVersionsMissing,
     /// One governing identity failed its existing typed validator.
     GoverningIdentity(String),
     /// The transcript path is absent, absolute, or traversing.
     TranscriptPathInvalid,
-    /// The transcript digest is not lowercase SHA-256.
-    TranscriptDigestInvalid,
     /// The command count is absent or negative.
     CommandCountInvalid,
     /// The elapsed duration is absent or negative.
@@ -211,16 +202,12 @@ impl EnvelopeFailure {
     #[must_use]
     pub fn code(&self) -> &str {
         match self {
-            Self::SuiteRevisionNotImmutable => "suite-revision-not-immutable",
-            Self::FixtureRevisionNotImmutable => "fixture-revision-not-immutable",
-            Self::SourceRevisionNotImmutable => "source-revision-not-immutable",
             Self::ScenarioNotExecuted => "scenario-not-executed",
             Self::NotExecutedDiagnosticMissing => "not-executed-diagnostic-missing",
-            Self::HostVersionNotImmutable => "host-version-not-immutable",
+            Self::HostVersionMissing => "host-version-missing",
             Self::GoverningVersionsMissing => "governing-versions-missing",
             Self::GoverningIdentity(code) => code,
             Self::TranscriptPathInvalid => "transcript-path-invalid",
-            Self::TranscriptDigestInvalid => "transcript-digest-invalid",
             Self::CommandCountInvalid => "command-count-invalid",
             Self::ElapsedCountInvalid => "elapsed-count-invalid",
             Self::HumanPromptCountInvalid => "human-prompt-count-invalid",
@@ -250,12 +237,6 @@ pub enum EvaluationFailure {
         /// Typed envelope failure.
         failure: EnvelopeFailure,
     },
-    /// Source revisions differ across the matrix.
-    MatrixSourceRevisionMismatch,
-    /// Suite revisions differ across the matrix.
-    MatrixSuiteRevisionMismatch,
-    /// Fixture revisions differ across the matrix.
-    MatrixFixtureRevisionMismatch,
     /// Non-workflow governing identities differ across the matrix.
     MatrixGoverningVersionsMismatch,
     /// Workflow identities differ within one scenario.
@@ -286,15 +267,6 @@ impl fmt::Display for EvaluationFailure {
                 cell.scenario.as_str(),
                 failure.code()
             ),
-            Self::MatrixSourceRevisionMismatch => {
-                formatter.write_str("matrix-source-revision-mismatch")
-            }
-            Self::MatrixSuiteRevisionMismatch => {
-                formatter.write_str("matrix-suite-revision-mismatch")
-            }
-            Self::MatrixFixtureRevisionMismatch => {
-                formatter.write_str("matrix-fixture-revision-mismatch")
-            }
             Self::MatrixGoverningVersionsMismatch => {
                 formatter.write_str("matrix-governing-versions-mismatch")
             }
@@ -338,20 +310,12 @@ pub struct EvaluationEnvelope {
     pub execution_status: ExecutionStatus,
     /// Whether the host reported the scenario as passing.
     pub passed: bool,
-    /// Immutable suite revision.
-    pub suite_revision: String,
-    /// Immutable fixture revision.
-    pub fixture_revision: String,
-    /// Immutable source revision.
-    pub source_revision: String,
     /// Exact host version, required for executed cells.
     pub host_version: Option<String>,
     /// Complete governing identity tuple, required for executed cells.
     pub governing: Option<GoverningVersions>,
     /// Relative retained transcript path, required for executed cells.
     pub transcript_path: Option<String>,
-    /// Lowercase SHA-256 transcript digest, required for executed cells.
-    pub transcript_digest: Option<String>,
     /// Commands issued during the scenario.
     pub command_count: Option<i64>,
     /// Elapsed wall time in milliseconds.
@@ -386,25 +350,6 @@ impl EvaluationEnvelope {
     #[must_use]
     pub fn errors(&self) -> Vec<EnvelopeFailure> {
         let mut errors = Vec::new();
-        for (failure, revision) in [
-            (
-                EnvelopeFailure::SuiteRevisionNotImmutable,
-                self.suite_revision.as_str(),
-            ),
-            (
-                EnvelopeFailure::FixtureRevisionNotImmutable,
-                self.fixture_revision.as_str(),
-            ),
-            (
-                EnvelopeFailure::SourceRevisionNotImmutable,
-                self.source_revision.as_str(),
-            ),
-        ] {
-            if !is_immutable_revision(revision) {
-                errors.push(failure);
-            }
-        }
-
         if self.execution_status == ExecutionStatus::NotExecuted {
             errors.push(EnvelopeFailure::ScenarioNotExecuted);
             if self.diagnostic.as_deref().is_none_or(str::is_empty) {
@@ -416,9 +361,9 @@ impl EvaluationEnvelope {
         if self
             .host_version
             .as_deref()
-            .is_none_or(|version| !is_immutable_revision(version))
+            .is_none_or(|version| version.trim().is_empty())
         {
-            errors.push(EnvelopeFailure::HostVersionNotImmutable);
+            errors.push(EnvelopeFailure::HostVersionMissing);
         }
         match self.governing.as_ref() {
             Some(governing) => errors.extend(
@@ -435,13 +380,6 @@ impl EvaluationEnvelope {
             .is_none_or(|path| !is_safe_transcript_reference(path))
         {
             errors.push(EnvelopeFailure::TranscriptPathInvalid);
-        }
-        if self
-            .transcript_digest
-            .as_deref()
-            .is_none_or(|digest| ContentDigest::parse(digest).is_err())
-        {
-            errors.push(EnvelopeFailure::TranscriptDigestInvalid);
         }
         for (failure, count) in [
             (EnvelopeFailure::CommandCountInvalid, self.command_count),
@@ -673,15 +611,6 @@ fn append_aggregate_identity_failures(
     envelopes: &[EvaluationEnvelope],
     failures: &mut Vec<EvaluationFailure>,
 ) {
-    if values_differ(envelopes, |item| &item.source_revision) {
-        failures.push(EvaluationFailure::MatrixSourceRevisionMismatch);
-    }
-    if values_differ(envelopes, |item| &item.suite_revision) {
-        failures.push(EvaluationFailure::MatrixSuiteRevisionMismatch);
-    }
-    if values_differ(envelopes, |item| &item.fixture_revision) {
-        failures.push(EvaluationFailure::MatrixFixtureRevisionMismatch);
-    }
     let first = envelopes.first().and_then(|item| item.governing.as_ref());
     if envelopes
         .iter()
@@ -743,19 +672,7 @@ fn valid_terminal_pair(acceptance: &EvaluationEnvelope, rejection: &EvaluationEn
     acceptance_event.choice == DecisionChoice::Accept
         && rejection_event.choice == DecisionChoice::Reject
         && acceptance_event.run_id != rejection_event.run_id
-        && acceptance.fixture_revision == rejection.fixture_revision
-        && acceptance.source_revision == rejection.source_revision
         && acceptance.governing == rejection.governing
-}
-
-fn values_differ<T: PartialEq>(
-    values: &[EvaluationEnvelope],
-    select: impl Fn(&EvaluationEnvelope) -> &T,
-) -> bool {
-    let Some(first) = values.first().map(&select) else {
-        return false;
-    };
-    values.iter().skip(1).any(|value| select(value) != first)
 }
 
 fn same_shared_governing(
@@ -776,37 +693,6 @@ fn same_shared_governing(
         }
         (None, Some(_)) | (Some(_), None) => false,
     }
-}
-
-/// Return whether a revision or version is nonblank and contains no mutable selector.
-#[must_use]
-pub fn is_immutable_revision(value: &str) -> bool {
-    !value.trim().is_empty() && !contains_mutable_revision(value)
-}
-
-fn contains_mutable_revision(value: &str) -> bool {
-    let lower = value.to_ascii_lowercase();
-    value
-        .bytes()
-        .any(|byte| matches!(byte, b'>' | b'<' | b'^' | b'~' | b'*'))
-        || lower
-            .split(['.', '-', '_'])
-            .any(|component| component == "x")
-        || ["latest", "main", "master", "head", "current", "nightly"]
-            .into_iter()
-            .any(|candidate| {
-                lower.match_indices(candidate).any(|(start, matched)| {
-                    let end = start + matched.len();
-                    boundary(
-                        lower.as_bytes().get(start.wrapping_sub(1)).copied(),
-                        start == 0,
-                    ) && boundary(lower.as_bytes().get(end).copied(), end == lower.len())
-                })
-            })
-}
-
-fn boundary(byte: Option<u8>, at_edge: bool) -> bool {
-    at_edge || byte.is_some_and(|value| matches!(value, b'-' | b'_' | b'.'))
 }
 
 /// Return whether a transcript reference uses the portable relative grammar.

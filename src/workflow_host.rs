@@ -628,16 +628,10 @@ fn verify_chain(
             "successful verification contains no chain result",
         )
     })?;
-    let has_all_break_fields = verification.first_break_index.is_some()
-        && verification.expected_hash.is_some()
-        && verification.actual_hash.is_some();
-    let has_any_break_field = verification.first_break_index.is_some()
-        || verification.expected_hash.is_some()
-        || verification.actual_hash.is_some();
-    if verification.ok && !has_any_break_field {
+    if verification.ok && verification.first_break_index.is_none() {
         return Ok(());
     }
-    if verification.ok || !has_all_break_fields {
+    if verification.ok || verification.first_break_index.is_none() {
         return Err(WorkflowHostError::InvalidResponse {
             operation: "verify-chain".to_owned(),
             detail: "chain result has an inconsistent success/break shape".to_owned(),
@@ -646,10 +640,7 @@ fn verify_chain(
     Err(WorkflowHostError::CommandFailed {
         operation: "verify-chain".to_owned(),
         upstream_code: "event_chain_invalid".to_owned(),
-        detail: format!(
-            "chain break at event {:?}: expected {:?}, actual {:?}",
-            verification.first_break_index, verification.expected_hash, verification.actual_hash
-        ),
+        detail: format!("chain break at event {:?}", verification.first_break_index),
     })
 }
 
@@ -763,7 +754,6 @@ fn validate_run_envelope(
         || envelope.current_phase.as_deref() != Some(&data.phase)
         || envelope.state_version != Some(data.state_version)
         || envelope.open_gates.as_deref() != Some(data.open_gates.as_slice())
-        || envelope.def_hash.as_deref() != Some(&data.def_hash)
         || summary.id != data.id
         || summary.def_name != data.def_name
         || summary.def_version != data.def_version
@@ -1013,7 +1003,6 @@ enum GateMode {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 struct IxEnvelope<T = IxInstance> {
     ok: bool,
     command: String,
@@ -1036,9 +1025,6 @@ struct IxEnvelope<T = IxInstance> {
     open_gates: Option<Vec<WorkflowGate>>,
     #[serde(default)]
     state_version: Option<u64>,
-    #[serde(default)]
-    #[serde(rename = "def_hash")]
-    def_hash: Option<String>,
     #[serde(default, rename = "cli_version")]
     _cli_version: Option<String>,
     next_actions: Vec<WorkflowNextAction>,
@@ -1061,15 +1047,11 @@ struct IxError {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 struct IxChainVerification {
     ok: bool,
     #[serde(default, rename = "firstBreakIndex")]
     first_break_index: Option<u64>,
-    #[serde(default, rename = "expectedHash")]
-    expected_hash: Option<String>,
-    #[serde(default, rename = "actualHash")]
-    actual_hash: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1092,13 +1074,11 @@ struct IxAutomaticGateEvent {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 struct IxInstance {
     id: String,
     def_name: String,
     def_version: String,
-    #[serde(rename = "defHash")]
-    def_hash: String,
     #[serde(rename = "writerVersion")]
     _writer_version: String,
     #[serde(rename = "name")]
@@ -1145,7 +1125,6 @@ struct IxSkillPath {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 struct IxEvent {
     #[serde(rename = "id")]
     _id: String,
@@ -1155,10 +1134,6 @@ struct IxEvent {
     _actor: IxActor,
     kind: String,
     payload: Value,
-    #[serde(rename = "prevHash")]
-    _prev_hash: String,
-    #[serde(rename = "hash")]
-    _hash: String,
 }
 
 #[derive(Debug, Deserialize)]

@@ -47,7 +47,6 @@ fn tc_111_cli_accepts_typed_complete_traceability_only_evidence() {
             root.path().to_str().expect("root must be UTF-8"),
             "--quire",
             quire.to_str().expect("quire fixture must be UTF-8"),
-            "--traceability-only",
         ])
         .output()
         .expect("integration-evidence command must terminate");
@@ -74,40 +73,11 @@ fn tc_111_cli_refuses_non_passing_matrix_markers_after_complete_coverage() {
             root.path().to_str().expect("root must be UTF-8"),
             "--quire",
             quire.to_str().expect("quire fixture must be UTF-8"),
-            "--traceability-only",
         ])
         .output()
         .expect("integration-evidence command must terminate");
     assert_eq!(output.status.code(), Some(2));
     assert!(
         String::from_utf8_lossy(&output.stdout).contains("integration_evidence_matrix_invalid")
-    );
-}
-
-#[test]
-#[trace("TC-111", "FR-017-AC-3")]
-fn tc_111_cli_refuses_release_mode_without_an_immutable_source_revision() {
-    let root = fixture_root(None);
-    let quire = quire_fixture(&root);
-    let workspace = TempDir::new().expect("workspace fixture must be available");
-    let output = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
-        .args([
-            "integration-evidence",
-            "--root",
-            root.path().to_str().expect("root must be UTF-8"),
-            "--quire",
-            quire.to_str().expect("quire fixture must be UTF-8"),
-            "--artifact",
-            "artifacts/aggregate.json",
-            "--workspace-root",
-            workspace.path().to_str().expect("workspace must be UTF-8"),
-        ])
-        .output()
-        .expect("integration-evidence command must terminate");
-    assert_eq!(output.status.code(), Some(2));
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        stdout.contains("integration_evidence_revision_unavailable"),
-        "{stdout}"
     );
 }

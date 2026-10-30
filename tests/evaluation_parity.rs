@@ -14,9 +14,6 @@ use engineering_assurance::{
 use ix_trace_rs::trace;
 use serde_json::json;
 
-const DIGEST: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-const SOURCE_REVISION: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-
 /// The declared qualification population, not every host the type can name.
 const REQUIRED_CELLS: usize = EvaluationHost::QUALIFIED.len() * EvaluationScenario::ALL.len();
 
@@ -24,7 +21,6 @@ fn identity(name: &str) -> VersionIdentity {
     VersionIdentity {
         name: name.to_owned(),
         version: "1.2.3".to_owned(),
-        digest: DIGEST.to_owned(),
     }
 }
 
@@ -78,9 +74,6 @@ fn envelope(host: EvaluationHost, scenario: EvaluationScenario) -> EvaluationEnv
         scenario,
         execution_status: ExecutionStatus::Executed,
         passed: true,
-        suite_revision: "suite-v1".to_owned(),
-        fixture_revision: "fixtures-v1".to_owned(),
-        source_revision: SOURCE_REVISION.to_owned(),
         host_version: Some("1.2.3".to_owned()),
         governing: Some(governing(scenario)),
         transcript_path: Some(format!(
@@ -88,7 +81,6 @@ fn envelope(host: EvaluationHost, scenario: EvaluationScenario) -> EvaluationEnv
             host.as_str(),
             scenario.as_str()
         )),
-        transcript_digest: Some(DIGEST.to_owned()),
         command_count: Some(4),
         elapsed_ms: Some(1_200),
         human_prompt_count: Some(i64::from(terminal(host, scenario).is_some())),
@@ -129,9 +121,6 @@ fn complete_matrix_preserves_declared_aggregation_outcomes() {
     let mut duplicate = complete.clone();
     duplicate.push(duplicate[0].clone());
     let failed = changed(&complete, 0, |item| item.passed = false);
-    let drifted = changed(&complete, 0, |item| {
-        item.source_revision = "c".repeat(40);
-    });
     let unavailable = changed(&complete, 0, |item| {
         item.execution_status = ExecutionStatus::NotExecuted;
         item.passed = false;
@@ -155,7 +144,6 @@ fn complete_matrix_preserves_declared_aggregation_outcomes() {
             "duplicate:claude:existing-profile",
         ),
         (failed, REQUIRED_CELLS - 1, "scenario-failed"),
-        (drifted, REQUIRED_CELLS, "matrix-source-revision-mismatch"),
         (unavailable, REQUIRED_CELLS - 1, "scenario-not-executed"),
     ];
     for (matrix, complete_cells, failure) in cases {
@@ -182,9 +170,6 @@ fn every_incomplete_semantic_class_withholds_aggregation() {
 
     let cases = [
         changed(&complete, 0, |item| {
-            item.source_revision = "main".to_owned();
-        }),
-        changed(&complete, 0, |item| {
             item.governing
                 .as_mut()
                 .expect("fixture governing")
@@ -205,10 +190,7 @@ fn every_incomplete_semantic_class_withholds_aggregation() {
         }),
         changed(&complete, 0, |item| item.command_count = Some(-1)),
         changed(&complete, 0, |item| {
-            item.host_version = Some("nightly".to_owned());
-        }),
-        changed(&complete, 0, |item| {
-            item.source_revision = "release-1.x".to_owned();
+            item.host_version = Some("  ".to_owned());
         }),
         changed(&complete, 0, |item| {
             item.observed_outcome = Some("invented".to_owned());
@@ -244,15 +226,13 @@ fn every_incomplete_semantic_class_withholds_aggregation() {
     // moment a second host is declared, which is why the failure variant is
     // kept rather than deleted.
     let expected_codes = [
-        "source-revision-not-immutable",
         "matrix-governing-versions-mismatch",
         "unsupported-assurance-addition",
         "transcript-path-invalid",
         "transcript-path-invalid",
         "transcript-path-invalid",
         "command-count-invalid",
-        "host-version-not-immutable",
-        "source-revision-not-immutable",
+        "host-version-missing",
         "observed-outcome-mismatch",
         "scenario-failed",
         "scenario-not-executed",
@@ -353,13 +333,9 @@ fn closed_request_refuses_malformed_unsupported_or_open_input() {
             "scenario": "existing-profile",
             "execution_status": "not_executed",
             "passed": false,
-            "suite_revision": "suite-v1",
-            "fixture_revision": "fixtures-v1",
-            "source_revision": SOURCE_REVISION,
             "host_version": null,
             "governing": null,
             "transcript_path": null,
-            "transcript_digest": null,
             "command_count": null,
             "elapsed_ms": null,
             "human_prompt_count": null,
@@ -399,15 +375,11 @@ fn tc_032_an_executed_scenario_without_a_complete_observation_is_refused() {
         ),
         (
             changed(&complete, 0, |item| item.host_version = None),
-            "host-version-not-immutable",
+            "host-version-missing",
         ),
         (
             changed(&complete, 0, |item| item.transcript_path = None),
             "transcript-path-invalid",
-        ),
-        (
-            changed(&complete, 0, |item| item.transcript_digest = None),
-            "transcript-digest-invalid",
         ),
         (
             changed(&complete, 0, |item| item.command_count = None),
@@ -432,12 +404,6 @@ fn tc_032_an_executed_scenario_without_a_complete_observation_is_refused() {
         (
             changed(&complete, 0, |item| item.observed_outcome = None),
             "observed-outcome-mismatch",
-        ),
-        (
-            changed(&complete, 0, |item| {
-                item.fixture_revision = "latest".to_owned();
-            }),
-            "fixture-revision-not-immutable",
         ),
         (
             changed(&complete, 5, |item| item.terminal_event = None),

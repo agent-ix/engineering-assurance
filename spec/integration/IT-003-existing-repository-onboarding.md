@@ -29,9 +29,9 @@ the Quoin evidence/reporting command surface used by the onboarding result.
 
 ## Preconditions
 
-Four fictional repository fixtures are checked out at fixed revisions. The
+Four fictional repository fixtures are checked out. The
 onboarding bundle, agent harness, Quire, Quoin, and required fixture producers are
-installed with exact versions recorded by the test runner.
+installed at explicit versions.
 
 ## Inputs
 
@@ -53,8 +53,8 @@ installed with exact versions recorded by the test runner.
    - IT-003-SC-04: the result is `unavailable` with the process failure category.
 5. Inspect all filesystem changes, Quoin records, transcripts, and observations.
    - IT-003-SC-05: all changes are fixture-authorized and every scenario records
-     the complete immutable governing-version tuple, commands, human-interaction
-     counts, elapsed time, transcript digest, and outcomes.
+     the complete governing-version tuple, commands, human-interaction
+     counts, elapsed time, transcript path, and outcomes.
 
 ## Expected Results
 

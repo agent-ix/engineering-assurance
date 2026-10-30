@@ -28,7 +28,7 @@ read at `origin/main`.
 | `check_linked_footprint.sh` | runtime | **KEEP** | Domain check on linked size. Same transcription path. |
 | `measure_rlib_size.sh` | runtime | **KEEP** | Produces a measurement. Feeds `quoin measurement record`; it is not evidence intake. |
 | `generate_conformance_corpus.py` | contract-ir | **KEEP** | Domain corpus generator. The corpus is a verification *definition*. |
-| `build_evidence_envelope.py` | runtime, tl-mltl | **DELETE** | A repository-local PGM-01 envelope, manifest, and canonical form — the parallel generic evidence family the campaign exists to remove. Replaced by `quoin change-assurance seal-record` and `seal-attestation`. |
+| `build_evidence_envelope.py` | runtime, tl-mltl | **DELETE** | A repository-local PGM-01 envelope, manifest, and canonical form — the parallel generic evidence family the campaign exists to remove. Replaced by native Quoin change-assurance intake. |
 | `collect_evidence.sh` | runtime, tl-mltl | **DELETE** | A generic collector that runs commands and retains their stdout, stderr, and exit status as the record. Replaced by native runners plus `quoin change-assurance intake`. |
 | `verify_evidence.sh`, `verify_evidence.py` | tl-mltl, contract-ir | **DELETE** | A repository-local verifier over the local envelope. Replaced by `quoin change-assurance receipt` and `verify-receipt`. |
 | `finalize_collection.py` | tl-mltl | **DELETE** | Closes the local collection. Nothing to close once intake owns retention. |
@@ -36,17 +36,18 @@ read at `origin/main`.
 | `validate_json_schema.py` | runtime, tl-mltl | **REPLACE** | Generic schema validation. Spec artifacts are validated by `quire validate`; retained records by Quoin's packaged schemas. |
 | `validate_governance.py`, `validate_matrix_status.py` | contract-ir | **KEEP** | Governance-specific to that repository's own PGM-01 obligations, not a generic evidence family. |
 | `schemas/*-evidence-*.schema.json`, `schemas/pgm01-*` | runtime, tl-mltl, contract-ir | **DELETE, read-only-preserved** | Repository-local generic evidence schemas. Historical records stay readable through the FR-010 compatibility view; the schemas stop being written against. |
-| `assurance_chain.py` | all eight | **REPLACE** | Duplicated Python orchestration around Quoin's native sealing, retention, receipt, and audit operations. Consumer migration under `agent-ix/quire-research#59` and `#60` replaces executable logic with the shared Rust CLI and declarative local inputs; Quoin remains the evidence-schema and store owner. |
+| `assurance_chain.py` | all eight | **REPLACE** | Duplicated Python orchestration around Quoin's native retention, receipt, and audit operations. Consumer migration under `agent-ix/quire-research#59` and `#60` replaces executable logic with the shared Rust CLI and declarative local inputs; Quoin remains the evidence-schema and store owner. |
 | `check_shared_pins.py` | all eight | **DELETE** | Duplicated local observation of an up-front tool-version list. Engineering Assurance keeps no such list; tool identity is recorded at run time. |
 | `rust_test_census.py` | tl-parse, tl-mltl | **REPLACE** | Generic qualification that compares requirement-tagged Rust tests with Cargo's compiled census. Replace with one Engineering Assurance Rust qualification command; Quire remains authoritative for static trace relationships. |
 | `check_kani_harnesses.py`, `check_kani_mutations.py`, `run_kani_gate.py` | runtime | **KEEP** | Runtime-owned proof census, mutation oracle, and structured Kani producer. These qualify runtime semantics and do not move into a generic evidence store. |
 | `measure_footprint.py` | runtime | **KEEP** | Runtime-owned producer for its governed footprint and panic-relocation measurement. |
 | `run_feature_matrix.py` | runtime | **KEEP** | Runtime-owned feature and compilation matrix over its public crate surface. |
-| `check_upstream_pins.py` | codegen | **KEEP** | Codegen-owned check that its declared IR/runtime revisions match the dependencies and generated manifests it ships. |
+| `check_upstream_pins.py` | codegen | **DELETE** | Checks declared IR/runtime revisions against the dependencies and generated manifests the repository ships. Recorded revisions are removed together with their checks; dependency versions live only in the package manager manifests and lockfiles. |
 | `check_default_dependencies.py` | tl-syntax | **KEEP** | Syntax-owned no-std dependency and feature-boundary qualification. |
 | `check_spec_id_uniqueness.py`, `test_check_spec_id_uniqueness.py` | tl-syntax | **KEEP** | Syntax-owned requirement-identity check and its regression test. |
 | `test_corpus_gate.py`, `validate_corpus.py` | tl-syntax | **KEEP** | Syntax-owned corpus schema, horizon, semantic-oracle, and mutation checks. |
-| `check_checksum_manifest.py`, `run_fuzz_smoke.sh` | tl-parse | **KEEP** | Parser-owned fuzz-corpus integrity and native fuzz execution. |
+| `check_checksum_manifest.py` | tl-parse | **DELETE** | A recorded-checksum check over the fuzz corpus. Recorded checksums are removed together with their checks. |
+| `run_fuzz_smoke.sh` | tl-parse | **KEEP** | Parser-owned native fuzz execution. |
 | `check_make_execution_control.sh` | tl-parse | **KEEP** | Parser-owned check that the Make entrypoints execute their declared gates. |
 | `check_provenance.py` | tl-rewrite | **KEEP** | Rewrite-owned corpus and compiled-dependency provenance producer. |
 | `test_check_unsafe_comments.sh` | contract-codegen | **KEEP** | Regression test for the repository's unsafe-comment audit. |
@@ -75,8 +76,7 @@ They are different jobs and they stay in different places.
 | Question | Owner |
 | --- | --- |
 | Is this a well-formed contract package / MLTL formula / temporal rewrite? | the domain repository, in its own tests |
-| Did this producer run, at this revision, producing these exact bytes? | Quoin intake |
-| Do the retained bytes still hash to what was recorded? | Quoin audit |
+| Did this producer run, and what did it produce? | Quoin intake |
 | Was the evidence sufficient to accept the change? | a human, through ix-flow |
 
 A migration that moves domain validation into Quoin has misread this table. A
@@ -115,7 +115,7 @@ other way.
    repository's own evidence. A migration that only demonstrates pass has
    demonstrated nothing about the states that matter.
 9. **Delete last.** Old generic code is removed only after the shared path
-   passes at the **same exact candidate revision**. Until then both exist, and
+   passes. Until then both exist, and
    the old one is the fallback.
 
 ## Rollback
@@ -124,9 +124,9 @@ Per step, and none of it is irreversible:
 
 | If | Then |
 | --- | --- |
-| the shared path fails at the candidate revision | stop at step 9; the old machinery is still there and still runs |
+| the shared path fails | stop at step 9; the old machinery is still there and still runs |
 | legacy history reads as `unreadable` | that is the compatibility view working; do not edit the legacy record to make it read |
-| a domain result has no adapter | file it against `agent-ix/quoin` with a real producer and a pinned sample; do not scrape stdout as a stopgap |
+| a domain result has no adapter | file it against `agent-ix/quoin` with a real producer and a real sample; do not scrape stdout as a stopgap |
 
 Legacy history is never rewritten in any of these paths.
 
@@ -148,8 +148,7 @@ body, not in a reviewer's head.
       records, and its `lossy` and `unreadable` outcomes are shown.
 - [ ] Pass, fail, unavailable, not-computed, malformed, stale, and tampered are
       each demonstrated.
-- [ ] The shared path and the old path both pass at the same candidate
-      revision, and the deletion commit is separate and last.
+- [ ] The shared path and the old path both pass, and the deletion commit is separate and last.
 - [ ] The Makefile is native orchestration; no target computes a verdict.
 - [ ] No workflow changed from manual dispatch.
 
@@ -163,5 +162,4 @@ automatic CI is out of scope regardless of its other merits.
 
 It makes no certification, accreditation, authorization, identity, or
 non-repudiation claim, and completing it does not qualify any repository for
-anything. Digests establish content integrity; recorded actor labels are
-attribution. Qualification is use-specific and lives outside this campaign.
+anything. Recorded actor labels are attribution. Qualification is use-specific and lives outside this campaign.

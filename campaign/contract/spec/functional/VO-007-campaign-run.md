@@ -14,7 +14,5 @@ name: CampaignRun
 |-------|------|--------------|-------------|
 | schemaVersion | String | 1 | nonEmpty |
 | id | String | 1 | nonEmpty |
-| definitionDigest | String | 1 | nonEmpty |
-| sourceGraphDigest | String | 1 | nonEmpty |
 | attempts | CampaignAttempt | * | |
 | verdict | CampaignVerdict | 1 | |

@@ -47,8 +47,8 @@ adapters are available to the smoke-test harness.
    - IT-001-SC-02: all four adapters resolve the canonical onboarding skill.
 3. Resolve workflow contributions from each discovered skill.
    - IT-001-SC-03: every host returns the same four canonical workflow files.
-4. Compare canonical paths, content digests, and host manifest bodies.
-   - IT-001-SC-04: canonical digests match and host manifests contain no copied
+4. Compare canonical paths, canonical file bytes, and host manifest bodies.
+   - IT-001-SC-04: canonical file bytes match and host manifests contain no copied
      behavioral instructions.
 
 ## Expected Results

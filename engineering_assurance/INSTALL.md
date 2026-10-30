@@ -25,17 +25,16 @@ and `skeletons/`.
 
 ## Repository-source module installation
 
-Obtain a checkout of the public repository, pin its revision, and install that
-checkout into an isolated target:
+Obtain a checkout of the public repository and install that checkout into an
+isolated target:
 
 ```bash
 python -m pip install --no-deps --target <module-root> <repository-source>
 npm install --ignore-scripts <repository-source>
 ```
 
-Record the selected revision with the consuming repository. A registry package
-is a distinct distribution source and must not be substituted unless its
-published identity is explicitly selected and pinned.
+A registry package is a distinct distribution source and must not be
+substituted unless it is explicitly selected.
 
 ## Local-source agent-plugin installation
 
@@ -55,7 +54,7 @@ the bundle intact; do not copy `SKILL.md` into four host-specific trees.
 
 ## Repository-source agent-plugin installation
 
-Check out the public repository at a pinned revision, then register the checkout
+Check out the public repository, then register the checkout
 root with each host's repository or local-path plugin mechanism.
 The four host manifests must remain beside the canonical
 `engineering_assurance/skills` directory they reference.

@@ -69,7 +69,7 @@ in parallel; TASK-005 joins the onboarding and workflow contracts before eval wo
 - Integration tests use real local/repository installs, package archives, Quire,
   Quoin, and ix-flow boundaries without redefining their contracts.
 - Agent evaluations execute seven variants on Claude Code, Codex, opencode, and
-  GitHub Copilot, retaining the full immutable version tuple, transcript digest,
+  GitHub Copilot, retaining the full version tuple, transcript path,
   effort, commands, decisions, and outcomes.
 - Existing package/content-rights gates remain mandatory; the manifest validator's
   stale sibling-schema lookup is repaired as part of the installation contract.
@@ -83,12 +83,12 @@ in parallel; TASK-005 joins the onboarding and workflow contracts before eval wo
 | TASK-003 | C | Wheel/npm membership, source installs, documentation | FR-003; NFR-003; TC-014..TC-019; TC-040 |
 | TASK-004 | D | Evidence availability, provenance, and Quoin delegation | FR-004; TC-020..TC-025; TC-046 |
 | TASK-005 | E | ix-flow interruption, binding, acceptance/rejection gates | FR-005; TC-026..TC-030; TC-047..TC-048 |
-| TASK-006 | F | Four-host agent-evaluation harness and aggregate gate | FR-006; NFR-002; TC-031..TC-034; TC-039; TC-049..TC-051 |
+| TASK-006 | F | Four-host agent-evaluation harness and aggregate gate | FR-006; NFR-002; TC-031..TC-034; TC-039; TC-049 |
 | TASK-007 | Gate | Cross-source/host E2E and final traceability gate | StR-001; NFR-001; TC-001..TC-003; TC-038; IT-001..IT-004 |
 
 ## Completion Gates
 
-- Every TC-001..TC-051 row carries a real tracking tag and passing evidence.
+- Every active TC-001..TC-049 row carries a real tracking tag and passing evidence.
 - All 28 host-scenario evaluation cells have complete, version-bound envelopes.
 - `quire validate --scope . "spec/**/*.md" "plan/**/*.md"` passes.
 - Content-rights, Ruff, pytest, manifest validation, package audit, and any declared

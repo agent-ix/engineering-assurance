@@ -14,11 +14,7 @@ use cap_std::{
     fs::{Dir, OpenOptions},
 };
 use engineering_assurance::{
-    content_digest::ContentDigest,
-    evaluation::{
-        EvaluationEnvelope, EvaluationFailure, EvaluationHost, EvaluationScenario,
-        aggregate_evaluations, is_immutable_revision,
-    },
+    evaluation::{EvaluationEnvelope, EvaluationFailure, EvaluationHost, aggregate_evaluations},
     evaluation_reports::{DecodedEvaluationSample, MAX_CLI_REPORT_BYTES, decode_cli_eval_report},
 };
 use serde::{Deserialize, Serialize};
@@ -27,7 +23,7 @@ use thiserror::Error;
 pub(crate) const MAX_REPORT_COLLECTION: usize = 64;
 pub(crate) const MAX_TRANSCRIPT_BYTES: usize = 64 * 1024 * 1024;
 
-const ARTIFACT_REVISION: &str = "evaluation-aggregate-v1";
+const ARTIFACT_SCHEMA: &str = "evaluation-aggregate-v1";
 
 #[derive(Clone, Copy, Debug, Error)]
 pub(crate) enum EvaluationReportHostError {
@@ -35,8 +31,6 @@ pub(crate) enum EvaluationReportHostError {
     RepositoryRootInvalid,
     #[error("evaluation workspace root is invalid")]
     WorkspaceRootInvalid,
-    #[error("expected source revision is not immutable")]
-    SourceRevisionInvalid,
     #[error("evaluation report collection exceeds its fixed limit")]
     ReportCollectionTooLarge,
     #[error("evaluation aggregate output path is invalid")]
@@ -45,16 +39,6 @@ pub(crate) enum EvaluationReportHostError {
     OutputWriteFailed,
     #[error("evaluation aggregate artifact could not be encoded")]
     ArtifactEncodingFailed,
-    #[error("evaluation aggregate artifact path is invalid")]
-    ArtifactPathInvalid,
-    #[error("evaluation aggregate artifact could not be read")]
-    ArtifactReadFailed,
-    #[error("evaluation aggregate artifact is invalid")]
-    ArtifactInvalid,
-    #[error("evaluation aggregate artifact does not match retained reports")]
-    ArtifactMismatch,
-    #[error("evaluation aggregate artifact is not complete release evidence")]
-    ArtifactIncomplete,
 }
 
 impl EvaluationReportHostError {
@@ -62,48 +46,20 @@ impl EvaluationReportHostError {
         match self {
             Self::RepositoryRootInvalid => "evaluation_report_repository_root_invalid",
             Self::WorkspaceRootInvalid => "evaluation_report_workspace_root_invalid",
-            Self::SourceRevisionInvalid => "evaluation_report_source_revision_invalid",
             Self::ReportCollectionTooLarge => "evaluation_report_collection_too_large",
             Self::OutputPathInvalid => "evaluation_report_output_path_invalid",
             Self::OutputWriteFailed => "evaluation_report_output_write_failed",
             Self::ArtifactEncodingFailed => "evaluation_report_artifact_encoding_failed",
-            Self::ArtifactPathInvalid => "evaluation_report_artifact_path_invalid",
-            Self::ArtifactReadFailed => "evaluation_report_artifact_read_failed",
-            Self::ArtifactInvalid => "evaluation_report_artifact_invalid",
-            Self::ArtifactMismatch => "evaluation_report_artifact_mismatch",
-            Self::ArtifactIncomplete => "evaluation_report_artifact_incomplete",
         }
     }
-}
-
-/// The governing identities retained by complete evaluation evidence.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct RetainedGoverning {
-    pub(crate) module: engineering_assurance::evidence::VersionIdentity,
-    pub(crate) plugin: engineering_assurance::evidence::VersionIdentity,
-    pub(crate) skill: engineering_assurance::evidence::VersionIdentity,
-    pub(crate) quire: engineering_assurance::evidence::VersionIdentity,
-    pub(crate) quoin: engineering_assurance::evidence::VersionIdentity,
-    pub(crate) ix_flow: engineering_assurance::evidence::VersionIdentity,
-    pub(crate) schema: engineering_assurance::evidence::VersionIdentity,
-    pub(crate) producer: engineering_assurance::evidence::VersionIdentity,
-    pub(crate) workflows: BTreeMap<String, engineering_assurance::evidence::VersionIdentity>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct EvaluationReportIdentity {
-    path: String,
-    digest: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct EvaluationAggregateArtifact {
-    revision: String,
+    schema: String,
     generated_at: String,
-    source_revision: String,
-    reports: Vec<EvaluationReportIdentity>,
+    reports: Vec<String>,
     models: BTreeMap<String, String>,
     failed_attempts: Vec<String>,
     required_cells: usize,
@@ -141,14 +97,10 @@ pub(crate) fn execute(
     repository_root: &Path,
     workspace_root: &Path,
     report_paths: &[PathBuf],
-    source_revision: &str,
     generated_at: String,
 ) -> Result<EvaluationAggregateArtifact, EvaluationReportHostError> {
     if report_paths.len() > MAX_REPORT_COLLECTION {
         return Err(EvaluationReportHostError::ReportCollectionTooLarge);
-    }
-    if !is_immutable_revision(source_revision) {
-        return Err(EvaluationReportHostError::SourceRevisionInvalid);
     }
     let (_repository_root, repository) = open_root(
         repository_root,
@@ -159,7 +111,7 @@ pub(crate) fn execute(
         EvaluationReportHostError::WorkspaceRootInvalid,
     )?;
 
-    let mut identities = Vec::new();
+    let mut reports = Vec::new();
     let mut envelopes = Vec::new();
     let mut failed_attempts = Vec::new();
     let mut diagnostics = Vec::new();
@@ -177,11 +129,8 @@ pub(crate) fn execute(
                 continue;
             }
         };
-        identities.push(EvaluationReportIdentity {
-            path: relative.to_owned(),
-            digest: ContentDigest::of_bytes(&bytes).into_hex(),
-        });
-        let decoded = match decode_cli_eval_report(&bytes, source_revision) {
+        reports.push(relative.to_owned());
+        let decoded = match decode_cli_eval_report(&bytes) {
             Ok(decoded) => decoded,
             Err(error) => {
                 diagnostics.push(format!("{relative}:{}", error.code()));
@@ -219,21 +168,16 @@ pub(crate) fn execute(
         }
     }
 
-    identities.sort_by(|left, right| {
-        left.path
-            .cmp(&right.path)
-            .then_with(|| left.digest.cmp(&right.digest))
-    });
+    reports.sort();
     failed_attempts.sort();
     diagnostics.sort();
     let aggregate = aggregate_evaluations(&envelopes);
     let mut failures = diagnostics;
     failures.extend(retained_aggregate_failures(&aggregate.failures));
     Ok(EvaluationAggregateArtifact {
-        revision: ARTIFACT_REVISION.to_owned(),
+        schema: ARTIFACT_SCHEMA.to_owned(),
         generated_at,
-        source_revision: source_revision.to_owned(),
-        reports: identities,
+        reports,
         models,
         failed_attempts,
         required_cells: aggregate.required_cells,
@@ -241,183 +185,6 @@ pub(crate) fn execute(
         ok: failures.is_empty() && aggregate.ok,
         failures,
     })
-}
-
-/// Recompute a retained aggregate from its referenced reports and transcripts.
-///
-/// The caller supplies the expected immutable source revision instead of relying
-/// on an ambient checkout. Successful verification proves every retained report
-/// byte, transcript byte, host model, failed attempt, and aggregate field still
-/// corresponds to the artifact.
-pub(crate) fn verify_artifact(
-    repository_root: &Path,
-    workspace_root: &Path,
-    artifact_path: &Path,
-    expected_source_revision: &str,
-) -> Result<(), EvaluationReportHostError> {
-    if !is_immutable_revision(expected_source_revision) {
-        return Err(EvaluationReportHostError::SourceRevisionInvalid);
-    }
-    let (_, repository) = open_root(
-        repository_root,
-        EvaluationReportHostError::RepositoryRootInvalid,
-    )?;
-    let Some(relative) = safe_relative_text(artifact_path) else {
-        return Err(EvaluationReportHostError::ArtifactPathInvalid);
-    };
-    let bytes = read_rooted_file(&repository, Path::new(relative), MAX_CLI_REPORT_BYTES)
-        .map_err(|_| EvaluationReportHostError::ArtifactReadFailed)?;
-    let artifact: EvaluationAggregateArtifact =
-        serde_json::from_slice(&bytes).map_err(|_| EvaluationReportHostError::ArtifactInvalid)?;
-    if artifact.revision != ARTIFACT_REVISION
-        || artifact.source_revision != expected_source_revision
-        || artifact.reports.len() > MAX_REPORT_COLLECTION
-    {
-        return Err(EvaluationReportHostError::ArtifactInvalid);
-    }
-    let report_paths = artifact
-        .reports
-        .iter()
-        .map(|identity| PathBuf::from(&identity.path))
-        .collect::<Vec<_>>();
-    let recomputed = execute(
-        repository_root,
-        workspace_root,
-        &report_paths,
-        expected_source_revision,
-        artifact.generated_at.clone(),
-    )?;
-    if recomputed == artifact {
-        Ok(())
-    } else {
-        Err(EvaluationReportHostError::ArtifactMismatch)
-    }
-}
-
-/// Verify that an artifact is byte-reproducible and satisfies the complete
-/// release-evidence population.  The returned identities are intentionally
-/// derived from the retained reports, so the integration host can compare them
-/// to the current governed files and selected executables without reparsing
-/// untyped JSON.
-pub(crate) fn verify_complete_artifact(
-    repository_root: &Path,
-    workspace_root: &Path,
-    artifact_path: &Path,
-    expected_source_revision: &str,
-) -> Result<RetainedGoverning, EvaluationReportHostError> {
-    verify_artifact(
-        repository_root,
-        workspace_root,
-        artifact_path,
-        expected_source_revision,
-    )?;
-    let (_, repository) = open_root(
-        repository_root,
-        EvaluationReportHostError::RepositoryRootInvalid,
-    )?;
-    let Some(relative) = safe_relative_text(artifact_path) else {
-        return Err(EvaluationReportHostError::ArtifactPathInvalid);
-    };
-    let bytes = read_rooted_file(&repository, Path::new(relative), MAX_CLI_REPORT_BYTES)
-        .map_err(|_| EvaluationReportHostError::ArtifactReadFailed)?;
-    let artifact: EvaluationAggregateArtifact =
-        serde_json::from_slice(&bytes).map_err(|_| EvaluationReportHostError::ArtifactInvalid)?;
-    if artifact.revision != ARTIFACT_REVISION
-        || artifact.source_revision != expected_source_revision
-        || !artifact.ok
-        || !artifact.failures.is_empty()
-        || artifact.required_cells
-            != EvaluationHost::QUALIFIED.len() * EvaluationScenario::ALL.len()
-        || artifact.complete_cells != artifact.required_cells
-        || artifact.models.len() != EvaluationHost::QUALIFIED.len()
-        || EvaluationHost::QUALIFIED.iter().any(|host| {
-            artifact
-                .models
-                .get(host.as_str())
-                .is_none_or(String::is_empty)
-        })
-    {
-        return Err(EvaluationReportHostError::ArtifactIncomplete);
-    }
-    retained_governing(&repository, &artifact.reports, expected_source_revision)
-}
-
-fn retained_governing(
-    repository: &Dir,
-    identities: &[EvaluationReportIdentity],
-    expected_source_revision: &str,
-) -> Result<RetainedGoverning, EvaluationReportHostError> {
-    let mut retained: Option<RetainedGoverning> = None;
-    for identity in identities {
-        let bytes = read_rooted_file(repository, Path::new(&identity.path), MAX_CLI_REPORT_BYTES)
-            .map_err(|_| EvaluationReportHostError::ArtifactMismatch)?;
-        if ContentDigest::of_bytes(&bytes).as_str() != identity.digest {
-            return Err(EvaluationReportHostError::ArtifactMismatch);
-        }
-        let report = decode_cli_eval_report(&bytes, expected_source_revision)
-            .map_err(|_| EvaluationReportHostError::ArtifactMismatch)?;
-        for sample in report.samples() {
-            let DecodedEvaluationSample::Retained { envelope, .. } = sample else {
-                continue;
-            };
-            let Some(governing) = envelope.governing.as_ref() else {
-                return Err(EvaluationReportHostError::ArtifactMismatch);
-            };
-            let candidate = RetainedGoverning {
-                module: governing.module.clone(),
-                plugin: governing.plugin.clone(),
-                skill: governing.skill.clone(),
-                quire: governing.quire.clone(),
-                quoin: governing.quoin.clone(),
-                ix_flow: governing.ix_flow.clone(),
-                schema: governing.schema.clone(),
-                producer: governing.producer.clone(),
-                workflows: BTreeMap::from([(
-                    governing.workflow.name.clone(),
-                    governing.workflow.clone(),
-                )]),
-            };
-            match retained.as_mut() {
-                None => retained = Some(candidate),
-                Some(current) => {
-                    if (
-                        current.module.clone(),
-                        current.plugin.clone(),
-                        current.skill.clone(),
-                        current.quire.clone(),
-                        current.quoin.clone(),
-                        current.ix_flow.clone(),
-                        current.schema.clone(),
-                        current.producer.clone(),
-                    ) != (
-                        candidate.module,
-                        candidate.plugin,
-                        candidate.skill,
-                        candidate.quire,
-                        candidate.quoin,
-                        candidate.ix_flow,
-                        candidate.schema,
-                        candidate.producer,
-                    ) {
-                        return Err(EvaluationReportHostError::ArtifactMismatch);
-                    }
-                    match current.workflows.get(&governing.workflow.name) {
-                        Some(existing) if existing != &governing.workflow => {
-                            return Err(EvaluationReportHostError::ArtifactMismatch);
-                        }
-                        Some(_) => {}
-                        None => {
-                            current.workflows.insert(
-                                governing.workflow.name.clone(),
-                                governing.workflow.clone(),
-                            );
-                        }
-                    }
-                }
-            }
-        }
-    }
-    retained.ok_or(EvaluationReportHostError::ArtifactIncomplete)
 }
 
 fn retained_aggregate_failures(failures: &[EvaluationFailure]) -> Vec<String> {
@@ -516,15 +283,8 @@ fn admit_samples(
             DecodedEvaluationSample::Retained {
                 work_dir,
                 transcript_path,
-                transcript_digest,
                 envelope,
-            } => match verify_transcript(
-                workspace_root,
-                workspace,
-                work_dir,
-                transcript_path,
-                transcript_digest,
-            ) {
+            } => match locate_transcript(workspace_root, workspace, work_dir, transcript_path) {
                 Ok(()) => envelopes.push((**envelope).clone()),
                 Err(code) => diagnostics.push(format!(
                     "{report_path}:{}:{}:{code}",
@@ -536,12 +296,11 @@ fn admit_samples(
     }
 }
 
-fn verify_transcript(
+fn locate_transcript(
     workspace_root: &Path,
     workspace: &Dir,
     reported_work_dir: &str,
     transcript_path: &str,
-    expected_digest: &str,
 ) -> Result<(), &'static str> {
     let work_dir = Path::new(reported_work_dir);
     if !work_dir.is_absolute()
@@ -559,16 +318,19 @@ fn verify_transcript(
     let work_directory = workspace
         .open_dir(relative_work_dir)
         .map_err(|_| "transcript-workdir-invalid")?;
-    let bytes = read_rooted_file(
-        &work_directory,
-        Path::new(transcript_path),
-        MAX_TRANSCRIPT_BYTES,
-    )?;
-    if ContentDigest::of_bytes(&bytes).as_str() == expected_digest {
-        Ok(())
-    } else {
-        Err("transcript-digest-mismatch")
+    let relative = Path::new(transcript_path);
+    require_file_path(&work_directory, relative)?;
+    let metadata = work_directory
+        .open(relative)
+        .and_then(|file| file.metadata())
+        .map_err(|_| "file-unreadable")?;
+    if !metadata.is_file() {
+        return Err("file-kind-invalid");
     }
+    if metadata.len() > u64::try_from(MAX_TRANSCRIPT_BYTES).unwrap_or(u64::MAX) {
+        return Err("file-too-large");
+    }
+    Ok(())
 }
 
 fn open_root(
@@ -746,13 +508,11 @@ mod tests {
 
     use super::*;
 
-    const SOURCE_REVISION: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-
     fn identity(name: &str) -> Value {
-        json!({"name": name, "version": "1.2.3", "digest": "a".repeat(64)})
+        json!({"name": name, "version": "1.2.3"})
     }
 
-    fn report(work_dir: &Path, digest: &str, model: Option<&str>) -> Value {
+    fn report(work_dir: &Path, model: Option<&str>) -> Value {
         let governing = json!({
             "module": identity("engineering-assurance"),
             "plugin": identity("engineering-assurance-plugin"),
@@ -767,9 +527,6 @@ mod tests {
         let observation = json!({
             "host": "claude",
             "host_version": "1.2.3",
-            "source_revision": SOURCE_REVISION,
-            "suite_revision": "suite-v1",
-            "fixture_revision": "fixtures-v1",
             "governing": governing,
             "command_count": 1,
             "elapsed_ms": 1,
@@ -800,7 +557,6 @@ mod tests {
             "failures": [],
             "workDir": work_dir,
             "sessionId": "session-1",
-            "transcriptDigest": digest,
             "transcriptRetention": "retained",
             "transcriptPath": ".cli-agent-evals/transcripts/sample.transcript"
         });
@@ -846,12 +602,7 @@ mod tests {
             .expect("report parent must be creatable");
         fs::write(
             &report_path,
-            serde_json::to_vec(&report(
-                &work_dir,
-                "705dcda7f899b8b581a0cb3f47cd1fd60136a99bdc984b3c84ed4557c3c95d3c",
-                model,
-            ))
-            .expect("report fixture must encode"),
+            serde_json::to_vec(&report(&work_dir, model)).expect("report fixture must encode"),
         )
         .expect("report fixture must be writable");
         (repository, workspace, report_path, transcript)
@@ -866,7 +617,6 @@ mod tests {
             repository.path(),
             workspace.path(),
             paths,
-            SOURCE_REVISION,
             "2026-09-10T00:00:00Z".to_owned(),
         )
         .expect("fixture roots must be accepted")
@@ -874,7 +624,7 @@ mod tests {
 
     #[test]
     #[trace("TC-129", "FR-017-AC-1", "FR-017-CON-1", "FR-017-CON-3")]
-    fn tc_129_verifies_exact_transcript_bytes_beneath_the_workspace_root() {
+    fn tc_129_admits_retained_transcripts_beneath_the_workspace_root() {
         let (repository, workspace, _, _) = fixture(None);
         let artifact = execute_fixture(
             &repository,
@@ -887,7 +637,7 @@ mod tests {
             artifact.models.get("claude"),
             Some(&"runner-default".to_owned())
         );
-        assert_eq!(artifact.reports.len(), 1);
+        assert_eq!(artifact.reports, ["reports/claude.json"]);
         assert!(!artifact.ok);
         assert!(
             artifact
@@ -905,22 +655,8 @@ mod tests {
 
     #[test]
     #[trace("TC-129", "FR-017-AC-1", "FR-017-CON-3")]
-    fn tc_129_withholds_changed_missing_linked_and_non_regular_transcripts() {
+    fn tc_129_withholds_missing_linked_and_non_regular_transcripts() {
         let (repository, workspace, _, transcript) = fixture(Some("model-a"));
-        fs::write(&transcript, b"changed").expect("transcript must be mutable");
-        let changed = execute_fixture(
-            &repository,
-            &workspace,
-            &[PathBuf::from("reports/claude.json")],
-        );
-        assert_eq!(changed.complete_cells, 0);
-        assert!(
-            changed
-                .failures
-                .iter()
-                .any(|value| value.ends_with("transcript-digest-mismatch"))
-        );
-
         fs::remove_file(&transcript).expect("transcript must be removable");
         let missing = execute_fixture(
             &repository,
@@ -1029,7 +765,6 @@ mod tests {
             repository.path(),
             workspace.path(),
             &exact_paths,
-            SOURCE_REVISION,
             "2026-09-10T00:00:00Z".to_owned(),
         )
         .expect("the exact report collection ceiling must be accepted");
@@ -1038,7 +773,6 @@ mod tests {
             repository.path(),
             workspace.path(),
             &paths,
-            SOURCE_REVISION,
             "2026-09-10T00:00:00Z".to_owned(),
         )
         .expect_err("one report above the collection ceiling must refuse");
@@ -1146,7 +880,7 @@ mod tests {
         let encoded = fs::read(repository.path().join("artifacts/aggregate.json"))
             .expect("aggregate output must be readable");
         let observed: Value = serde_json::from_slice(&encoded).expect("aggregate must decode");
-        assert_eq!(observed["revision"], json!(ARTIFACT_REVISION));
+        assert_eq!(observed["schema"], json!(ARTIFACT_SCHEMA));
 
         let stale = repository
             .path()

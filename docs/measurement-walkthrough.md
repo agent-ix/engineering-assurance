@@ -5,7 +5,7 @@ it back. It uses Quoin's `quoin measurement record` and `quoin report`
 commands. Engineering Assurance supplies the `MeasurementPlan` type; Quoin owns
 the collection format and the measurement store.
 
-The service, harness, and digests are fictional. Run the commands from the
+The service and harness are fictional. Run the commands from the
 repository root, or pass `--repo <repo_root>`.
 
 ## 1. Write the plan
@@ -90,27 +90,19 @@ A collection is one complete run of the tool that produces the number.
   "scope": { "requestClasses": ["standard", "bulk"] },
   "toolIdentity": "juniper retention harness",
   "toolVersion": "1.0.0",
-  "configDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
   "timestamp": "2026-09-23T12:00:00.000Z",
-  "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "environment": { "runner": "local" },
   "verificationStack": {
     "schemaVersion": "verification-stack-attestation-v1",
-    "lockDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-    "executableDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
     "buildProfile": "release",
     "toolchains": { "node": "22.12.0", "rust": "1.0.0", "python": "3.12.8" },
     "sources": {
       "juniper": {
-        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "sourceState": "clean",
         "remote": "origin"
       }
     },
-    "capabilities": ["juniper.retention"],
-    "artifacts": {
-      "harness-config": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
-    }
+    "capabilities": ["juniper.retention"]
   },
   "observations": [
     {
@@ -191,7 +183,7 @@ quoin report
 
 Corpus gaps: not_computed
 
-- 2026-09-23T12:00:00.000Z — juniper retention harness 1.0.0; source aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; corpus n/a; config sha256:3333333333333333333333333333333333333333333333333333333333333333
+- 2026-09-23T12:00:00.000Z — juniper retention harness 1.0.0
 
 ## Attention
 
@@ -203,7 +195,6 @@ Other views:
 | Command | Shows |
 | --- | --- |
 | `quoin report --series request_retention_rate` | Every recorded value of one metric. |
-| `quoin report --since <sourceRevision>` | The latest record compared with the record whose `sourceRevision` equals the argument. The string is matched as recorded, not resolved through Git, so `HEAD` or a short SHA finds nothing. |
 | `quoin report --format json` | The same data as JSON. |
 
 To decide whether a recorded measure moves the plan to its next `stage`, use

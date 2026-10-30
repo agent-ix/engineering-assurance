@@ -27,7 +27,7 @@ then update this repository's direct invocation and remove the old path.
 
 - The executable-path matrix in ADR-002.
 - The reviewed Rust library, CLI, and supported host interfaces.
-- Same-revision differential, package, rights, and integration evidence.
+- Differential, package, rights, and integration evidence.
 
 ## Outputs
 
@@ -37,12 +37,11 @@ then update this repository's direct invocation and remove the old path.
 ## Behavior
 
 - Follow ADR-002's port and cutover order.
-- Keep an old path until its Rust replacement passes locally at the same
-  candidate revision.
+- Keep an old path until its Rust replacement passes locally.
 - Update direct Engineering Assurance invocations and supported host
   configuration before deleting the replaced path.
 - For the content-rights tree capability, compare the retained Python and Rust
-  gates at one candidate revision over the same Git-selected population and
+  gates over the same Git-selected population and
   record identical accepted/refused status plus exact path, line, and category
   tuples before changing the direct `make test` invocation.
 - Keep the content-rights checker and its tests recoverable while proving that
@@ -51,7 +50,7 @@ then update this repository's direct invocation and remove the old path.
   after the Rust dispatch passes independently and the package/archive audit no
   longer imports the retained classifier.
 - For the package/archive capability, run the retained Python audit and the Rust
-  adapter successfully at one candidate revision, record a reversible
+  adapter successfully, record a reversible
   `package-audit` dispatch cutover, and then remove `scripts/audit_packages.py`,
   `tests/test_packages.py`, `scripts/check_content_rights.py`, and
   `tests/test_content_rights.py` together with all executable test imports or
@@ -60,7 +59,7 @@ then update this repository's direct invocation and remove the old path.
 - For the verification-semantics capability, keep the retained Python until
   native Rust semantic-reference and fixture validation, ownership-registry
   validation, historical PGM-01 mapping, and bounded report rendering all pass
-  locally at one candidate revision; replace every Python-backed Rust
+  locally; replace every Python-backed Rust
   differential for that capability with expected fixtures captured once from the
   retained implementation and committed to this repository, so no Python is
   executed as a test oracle after cutover; carry every acceptance criterion the
@@ -77,7 +76,7 @@ then update this repository's direct invocation and remove the old path.
   name set from the retained discovery module. Keep the retained Python until
   Rust host-surface manifest validation, canonical skill and workflow inventory,
   bounded bundle-relative target resolution, and the ix-flow lifecycle adapter
-  all pass locally at one candidate revision; restate every criterion the
+  all pass locally; restate every criterion the
   retired Python tests carried against a Rust assertion that fails when the
   property is violated, including interrupted-run resume from a completed phase,
   the human gate configured on every canonical terminal transition, and each
@@ -99,7 +98,7 @@ then update this repository's direct invocation and remove the old path.
 
 ## Error Conditions
 
-Missing parity evidence, mismatched candidate revisions, unavailable replacement
+Missing parity evidence, unavailable replacement
 hosts, changed historical bytes, and unresolved path dispositions block removal.
 
 ## Constraints
@@ -115,7 +114,7 @@ hosts, changed historical bytes, and unresolved path dispositions block removal.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-018-AC-1 | Every first-party executable-path matrix row records one current state and one final disposition. | Test (TC-097) |
-| FR-018-AC-2 | Removal is refused unless old and new paths pass at the same candidate revision and direct invocations use the Rust interface. | Test (TC-113) |
+| FR-018-AC-2 | Removal is refused unless old and new paths agree and direct invocations use the Rust interface. | Test (TC-113) |
 | FR-018-AC-3 | Before deletion, a failed Rust cutover can restore the previous invocation without rewriting historical evidence or corpus bytes. | Test (TC-114) |
 | FR-018-AC-4 | Final inventory and static scans find no unapproved first-party non-Rust semantic or assertion logic and exclude inert fixture samples from executable debt. | Test (TC-115) |
 

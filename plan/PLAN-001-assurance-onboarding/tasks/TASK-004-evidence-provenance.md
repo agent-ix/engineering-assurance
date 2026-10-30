@@ -22,14 +22,14 @@ relationships:
 
 ## Scope
 
-Implement the onboarding evidence-state envelope, immutable governing-version
+Implement the onboarding evidence-state envelope, governing-version
 tuple, producer validation, operator observations, and explicit Quoin handoff.
 
 ## TDD Work
 
 - Write TC-020..TC-025 and TC-046 first, including generated state combinations.
 - Require exactly one of observed, unavailable, not-computed, and not-applicable.
-- Refuse malformed output and missing/mutable module, plugin, skill, workflow,
+- Refuse malformed output and missing module, plugin, skill, workflow,
   executable, schema, or producer identity.
 - Preserve invocation failures and observations without converting them to evidence;
   delegate any persisted evidence record to Quoin.
@@ -37,5 +37,5 @@ tuple, producer validation, operator observations, and explicit Quoin handoff.
 ## Exit Criteria
 
 - Every considered producer has exactly one explicit availability state.
-- Observed evidence carries the complete immutable tuple and raw observation detail.
+- Observed evidence carries the complete tuple and raw observation detail.
 - No unavailable/deferred/excluded producer is represented as successful evidence.

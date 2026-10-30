@@ -175,8 +175,7 @@ history; they cannot govern new measurement collections.
 - A decision rule edited after results were seen therefore needs a new
   `definition_version`, and Quoin's measurement intake refuses to compare
   results across definition versions, so the edited rule never re-judges the
-  earlier results. `preregistration.bar_digest` is unchanged by this
-  requirement.
+  earlier results.
 - The onboarding checklist SHALL list the estimator, comparator, and baseline
   sets, the one-of choice between `threshold` and `baseline`, `margin`'s
   dependency on `baseline`, the direction and estimator consistency rules,

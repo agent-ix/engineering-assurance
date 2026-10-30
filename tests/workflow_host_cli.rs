@@ -18,7 +18,6 @@ use engineering_assurance::{
 };
 use ix_trace_rs::trace;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 
 static TEST_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -58,7 +57,7 @@ fn skill_root() -> PathBuf {
 fn binding(run_id: &str) -> Value {
     json!({
         "run_id": run_id,
-        "repository_id": "fictional-repository@revision-1",
+        "repository_id": "fictional-repository",
         "workflow": "architecture-evaluation",
         "workflow_version": "0.1.0",
         "decision_boundary": "one fictional architecture boundary",
@@ -209,7 +208,7 @@ fn populate_decision_inputs(state_dir: &Path, run_id: &str) {
     );
 }
 
-fn tree_digest(root: &Path) -> Vec<u8> {
+fn tree_snapshot(root: &Path) -> Vec<(PathBuf, Vec<u8>)> {
     let mut files = Vec::new();
     let mut pending = vec![root.to_owned()];
     while let Some(directory) = pending.pop() {
@@ -227,17 +226,17 @@ fn tree_digest(root: &Path) -> Vec<u8> {
         }
     }
     files.sort();
-    let mut digest = Sha256::new();
-    for path in files {
-        digest.update(
-            path.strip_prefix(root)
+    files
+        .into_iter()
+        .map(|path| {
+            let bytes = fs::read(&path).expect("state file must be readable");
+            let relative = path
+                .strip_prefix(root)
                 .expect("state path must be relative")
-                .as_os_str()
-                .as_encoded_bytes(),
-        );
-        digest.update(fs::read(path).expect("state file must be readable"));
-    }
-    digest.finalize().to_vec()
+                .to_owned();
+            (relative, bytes)
+        })
+        .collect()
 }
 
 fn copy_tree(source: &Path, destination: &Path) {
@@ -258,10 +257,6 @@ fn copy_tree(source: &Path, destination: &Path) {
             fs::copy(entry.path(), target).expect("source skill file must be copied");
         }
     }
-}
-
-fn run_state_path(state_dir: &Path, run_id: &str) -> PathBuf {
-    state_dir.join("instances").join(format!("{run_id}.json"))
 }
 
 fn gate_token(payload: &Value, outcome: &str) -> String {
@@ -465,7 +460,7 @@ fn tc_107_stale_pristine_run_is_refused_before_binding_mutation() {
             "stale-pristine-run",
         ],
     );
-    let before = tree_digest(state.path());
+    let before = tree_snapshot(state.path());
 
     let output = run_host(&request(
         state.path(),
@@ -475,45 +470,72 @@ fn tc_107_stale_pristine_run_is_refused_before_binding_mutation() {
     ));
     assert_eq!(output.status.code(), Some(2));
     assert_eq!(result(&output)["code"], "workflow_binding_invalid");
-    assert_eq!(tree_digest(state.path()), before);
+    assert_eq!(tree_snapshot(state.path()), before);
     assert_eq!(
         ix_flow(state.path(), &["status", "stale-pristine-run"])["data"]["stateVersion"],
         0
     );
 }
 
+/// An `ix-flow` stand-in that answers `verify` with a failed chain result and
+/// forwards every other subcommand to the real executable, so the host is
+/// driven through a verification failure without editing any persisted state.
+#[cfg(unix)]
+fn chain_failing_ix_flow(directory: &Path, verify_envelope: &str) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+
+    let script = directory.join("ix-flow-chain-stub");
+    fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\nfor argument in \"$@\"; do\n  if [ \"$argument\" = verify ]; then\n    printf '%s\\n' '{verify_envelope}'\n    exit 0\n  fi\ndone\nexec ix-flow \"$@\"\n"
+        ),
+    )
+    .expect("stub must be writable");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755))
+        .expect("stub must be executable");
+    script
+}
+
+#[cfg(unix)]
 #[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-6")]
 #[test]
-fn tc_107_broken_event_chain_is_refused_without_state_mutation() {
-    let state = TestDirectory::new("broken-chain");
-    let run_id = "broken-chain-run";
+fn tc_107_a_failed_chain_verification_is_refused_without_state_mutation() {
+    let state = TestDirectory::new("chain-verify-fails");
+    let stub_directory = TestDirectory::new("chain-verify-stub");
+    let run_id = "chain-verify-run";
     let started = run_host(&request(state.path(), run_id, "start_or_resume", None));
     assert!(started.status.success());
+    let before = tree_snapshot(state.path());
 
-    let state_path = run_state_path(state.path(), run_id);
-    let mut persisted: Value = serde_json::from_slice(
-        &fs::read(&state_path).expect("persisted ix-flow run must be readable"),
-    )
-    .expect("persisted ix-flow run must be JSON");
-    let events = persisted["events"]
-        .as_array_mut()
-        .expect("persisted events must be an array");
-    let first = events
-        .first_mut()
-        .expect("persisted run must contain a creation event");
-    first["hash"] = Value::String("0".repeat(64));
-    fs::write(
-        &state_path,
-        serde_json::to_vec_pretty(&persisted).expect("tampered run must serialize"),
-    )
-    .expect("test must be able to tamper the persisted fixture");
-    let before = tree_digest(state.path());
-
-    let output = run_host(&request(state.path(), run_id, "start_or_resume", None));
-    assert_eq!(output.status.code(), Some(2));
-    assert_eq!(result(&output)["code"], "ix_flow_command_failed");
-    assert!(String::from_utf8_lossy(&output.stderr).contains("event_chain_invalid"));
-    assert_eq!(tree_digest(state.path()), before);
+    let cases = [
+        (
+            "a reported break",
+            r#"{"ok":true,"command":"verify-chain","data":{"ok":false,"firstBreakIndex":3},"events":[],"next_actions":[],"nextActions":[]}"#,
+            "event_chain_invalid",
+        ),
+        (
+            "a failed verify command",
+            r#"{"ok":false,"command":"verify-chain","error":{"code":"verify_failed","message":"cannot verify"},"data":null,"events":[],"next_actions":[],"nextActions":[]}"#,
+            "verify_failed",
+        ),
+    ];
+    for (label, envelope, upstream_code) in cases {
+        let mut refused = request(state.path(), run_id, "start_or_resume", None);
+        refused["ix_flow_executable"] = Value::String(
+            chain_failing_ix_flow(stub_directory.path(), envelope)
+                .display()
+                .to_string(),
+        );
+        let output = run_host(&refused);
+        assert_eq!(output.status.code(), Some(2), "{label}");
+        assert_eq!(result(&output)["code"], "ix_flow_command_failed", "{label}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(upstream_code),
+            "{label}"
+        );
+        assert_eq!(tree_snapshot(state.path()), before, "{label}");
+    }
 }
 
 #[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-6")]
@@ -523,7 +545,7 @@ fn tc_107_binding_and_phase_refusals_leave_ix_flow_history_unchanged() {
     let state = TestDirectory::new("refusal");
     let started = run_host(&request(state.path(), "bound-run", "start_or_resume", None));
     assert!(started.status.success());
-    let before = tree_digest(state.path());
+    let before = tree_snapshot(state.path());
 
     // Every field of the binding is exercised, not one of them. The binding
     // exists to keep one run from governing a second decision boundary, and a
@@ -531,7 +553,7 @@ fn tc_107_binding_and_phase_refusals_leave_ix_flow_history_unchanged() {
     // the contamination the criterion names — each was refused by code no
     // assertion reached.
     for (field, value) in [
-        ("repository_id", "other@revision"),
+        ("repository_id", "other"),
         ("decision_boundary", "a different architecture boundary"),
         ("workflow_version", "0.1.1"),
         ("workflow", "assurance-intake"),
@@ -546,7 +568,7 @@ fn tc_107_binding_and_phase_refusals_leave_ix_flow_history_unchanged() {
         );
         assert_eq!(result(&mismatch)["code"], "workflow_binding_invalid");
         assert_eq!(
-            tree_digest(state.path()),
+            tree_snapshot(state.path()),
             before,
             "a refused {field} mismatch changed ix-flow state"
         );
@@ -563,7 +585,7 @@ fn tc_107_binding_and_phase_refusals_leave_ix_flow_history_unchanged() {
         result(&invalid_phase)["code"],
         "workflow_transition_invalid"
     );
-    assert_eq!(tree_digest(state.path()), before);
+    assert_eq!(tree_snapshot(state.path()), before);
 }
 
 #[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-5")]
@@ -589,7 +611,7 @@ fn tc_107_explicit_decisions_are_human_attributed_idempotent_and_conflict_safe()
             "a decision was already acknowledged before the owner chose"
         );
 
-        let before_choice = tree_digest(state.path());
+        let before_choice = tree_snapshot(state.path());
         let no_choice = run_host(&request(state.path(), run_id, "decide", None));
         assert!(no_choice.status.success());
         let waiting = result(&no_choice)["snapshot"].clone();
@@ -602,7 +624,7 @@ fn tc_107_explicit_decisions_are_human_attributed_idempotent_and_conflict_safe()
             Some(0),
             "an undecided run must leave no gate open"
         );
-        assert_eq!(tree_digest(state.path()), before_choice);
+        assert_eq!(tree_snapshot(state.path()), before_choice);
 
         let decided = run_host(&request(state.path(), run_id, "decide", Some(choice)));
         assert!(
@@ -624,12 +646,12 @@ fn tc_107_explicit_decisions_are_human_attributed_idempotent_and_conflict_safe()
                 .ends_with('Z'),
             "the decision timestamp must be recorded in universal time"
         );
-        let after_choice = tree_digest(state.path());
+        let after_choice = tree_snapshot(state.path());
 
         let repeated = run_host(&request(state.path(), run_id, "decide", Some(choice)));
         assert!(repeated.status.success());
         assert_eq!(result(&repeated)["decision"], event);
-        assert_eq!(tree_digest(state.path()), after_choice);
+        assert_eq!(tree_snapshot(state.path()), after_choice);
 
         let opposite = if choice == "accept" {
             "reject"
@@ -639,7 +661,7 @@ fn tc_107_explicit_decisions_are_human_attributed_idempotent_and_conflict_safe()
         let conflict = run_host(&request(state.path(), run_id, "decide", Some(opposite)));
         assert_eq!(conflict.status.code(), Some(2));
         assert_eq!(result(&conflict)["code"], "workflow_decision_conflict");
-        assert_eq!(tree_digest(state.path()), after_choice);
+        assert_eq!(tree_snapshot(state.path()), after_choice);
 
         let status = ix_flow(state.path(), &["status", run_id]);
         assert_eq!(acknowledgements(&status).len(), 1);
@@ -716,14 +738,14 @@ fn tc_107_retries_after_gate_defer_and_acknowledgement_converge() {
 #[test]
 fn tc_107_unavailable_and_malformed_inputs_fail_before_state() {
     let state = TestDirectory::new("host-errors");
-    let before = tree_digest(state.path());
+    let before = tree_snapshot(state.path());
 
     let mut unavailable = request(state.path(), "unavailable", "start_or_resume", None);
     unavailable["ix_flow_executable"] =
         Value::String(state.path().join("missing-ix-flow").display().to_string());
     let output = run_host(&unavailable);
     assert_eq!(result(&output)["code"], "ix_flow_unavailable");
-    assert_eq!(tree_digest(state.path()), before);
+    assert_eq!(tree_snapshot(state.path()), before);
 
     let malformed = run_host_bytes(b"{not-json");
     assert_eq!(malformed.status.code(), Some(2));
@@ -739,7 +761,7 @@ fn tc_107_unavailable_and_malformed_inputs_fail_before_state() {
         assert_eq!(output.status.code(), Some(2));
         assert_eq!(result(&output)["code"], "workflow_host_request_invalid");
     }
-    assert_eq!(tree_digest(state.path()), before);
+    assert_eq!(tree_snapshot(state.path()), before);
 
     let production = include_str!("../src/workflow_host.rs")
         .split("#[cfg(test)]")
@@ -776,7 +798,7 @@ fn tc_107_unavailable_and_malformed_inputs_fail_before_state() {
 fn promotion_binding(run_id: &str) -> Value {
     json!({
         "run_id": run_id,
-        "repository_id": "fictional-repository@revision-1",
+        "repository_id": "fictional-repository",
         "workflow": "measurement-promotion",
         "workflow_version": "0.1.0",
         "decision_boundary": "one fictional measurement promotion",
@@ -946,14 +968,14 @@ fn promotion_require_mode_blocks_then_accept_unblocks() {
         "measurement_policy",
         &promotion_policy_item("require"),
     );
-    let before = tree_digest(blocked_run.path());
+    let before = tree_snapshot(blocked_run.path());
     let blocked = ix_flow_raw(blocked_run.path(), &["advance", run_id, "decision_ready"]);
     assert_eq!(blocked["state"], "invariant_failed");
     assert_eq!(
         blocked["error"]["details"]["invariantCode"],
         "promotion_checker_missing"
     );
-    assert_eq!(tree_digest(blocked_run.path()), before);
+    assert_eq!(tree_snapshot(blocked_run.path()), before);
     assert_eq!(
         ix_flow(blocked_run.path(), &["status", run_id])["data"]["phase"],
         "evidence_ready"
@@ -1084,12 +1106,12 @@ fn tc_107_automatic_terminal_gate_configuration_is_refused_without_mutation() {
         blocked["error"]["details"]["invariantCode"],
         "terminal_gate_override"
     );
-    let before = tree_digest(state.path());
+    let before = tree_snapshot(state.path());
 
     let output = run_host(&request(state.path(), run_id, "decide", Some("accept")));
     assert_eq!(output.status.code(), Some(2));
     assert_eq!(result(&output)["code"], "workflow_decision_conflict");
-    assert_eq!(tree_digest(state.path()), before);
+    assert_eq!(tree_snapshot(state.path()), before);
     assert_eq!(
         ix_flow(state.path(), &["status", run_id])["data"]["phase"],
         "scenarios_ready"

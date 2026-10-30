@@ -101,10 +101,6 @@ fn tc_190_each_capability_feature_compiles_alone() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let (declared, full_members) = metadata_features(root);
     assert!(
-        declared.len() >= 5,
-        "metadata found too few features: {declared:?}"
-    );
-    assert!(
         full_members.is_subset(&declared),
         "`full` enables features the matrix does not check: {:?}",
         full_members.difference(&declared).collect::<Vec<_>>()
@@ -164,7 +160,7 @@ const BINARY_ONLY_CRATES: [&str; 6] = ["cap-std", "clap", "tar", "zip", "flate2"
 
 /// Features whose code needs `serde_json/arbitrary_precision`, measured by
 /// running `evidence_parity` and `semantics_parity` with and without it:
-/// large integers change identity digests and `1e309` stops being refused.
+/// large integers change classification and `1e309` stops being refused.
 /// `evaluation` and `evaluation-reports` reach it through `evidence`. The
 /// `exact-numbers` feature is the switch itself, and `full` includes it.
 const EXACT_NUMBERS: [&str; 6] = [

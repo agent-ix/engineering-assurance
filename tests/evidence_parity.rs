@@ -3,8 +3,6 @@
 
 //! Native Rust coverage for evidence classification and canonical identity.
 
-use std::collections::BTreeSet;
-
 use engineering_assurance::evidence::{
     AvailabilityState, EvidenceEnvelope, GoverningVersions, OperatorObservation, ProducerAttempt,
     VersionIdentity, classify_producer, validate_state_labels,
@@ -12,13 +10,10 @@ use engineering_assurance::evidence::{
 use ix_trace_rs::trace;
 use serde_json::{Value, json};
 
-const DIGEST: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-
 fn identity(name: &str, version: &str) -> VersionIdentity {
     VersionIdentity {
         name: name.to_owned(),
         version: version.to_owned(),
-        digest: DIGEST.to_owned(),
     }
 }
 
@@ -97,10 +92,6 @@ fn with_producer_version(source: &ProducerAttempt, version: &str) -> ProducerAtt
 
 fn generated_identity_corpus() -> Vec<String> {
     let mut raw_values = vec![
-        include_str!("../corpus/compatibility/producers/producer-code-graph.json").to_owned(),
-        include_str!("../corpus/compatibility/producers/producer-measurement.json").to_owned(),
-        include_str!("../corpus/compatibility/producers/producer-contract-conformance.json")
-            .to_owned(),
         r#"{"v":18446744073709551615}"#.to_owned(),
         r#"{"v":18446744073709551616}"#.to_owned(),
         r#"{"v":-9223372036854775808}"#.to_owned(),
@@ -154,7 +145,7 @@ fn parity_cases() -> Vec<ProducerAttempt> {
         not_computed.clone(),
         not_applicable.clone(),
         changed(&base, |case| case.output_valid = false),
-        with_producer_version(&base, "latest"),
+        with_producer_version(&base, " "),
         changed(&base, |case| case.quoin_reference = None),
         changed(&base, |case| " ".clone_into(&mut case.producer_id)),
         changed(&base, |case| case.observation.command = Vec::new()),
@@ -186,7 +177,6 @@ fn parity_cases() -> Vec<ProducerAttempt> {
                 .producer = VersionIdentity {
                 name: " ".to_owned(),
                 version: " ".to_owned(),
-                digest: "bad".to_owned(),
             };
         }),
         changed(&base, |case| {
@@ -223,10 +213,6 @@ fn tc_100_evidence_classification_preserves_accepted_state_fixtures() {
             Some(AvailabilityState::NotComputed),
             Some(AvailabilityState::NotApplicable),
         ]
-    );
-    assert_eq!(
-        results[0].output_digest.as_deref(),
-        Some("013ad71438e02c083ba28636ab02fae1eb6196ecfd773ddbe3b1d7a0b865071f")
     );
 }
 
@@ -278,7 +264,7 @@ fn tc_103_evidence_malformed_and_missing_provenance_fail_explicitly() {
     assert_eq!(results[0].validation_errors, ["producer-output-malformed"]);
     assert_eq!(
         results[1].validation_errors,
-        ["producer:identity-version-mutable"]
+        ["producer:identity-version-missing"]
     );
     assert_eq!(results[2].validation_errors, ["quoin-handoff-missing"]);
     assert_eq!(results[3].validation_errors, ["producer-id-missing"]);
@@ -291,68 +277,13 @@ fn tc_103_evidence_malformed_and_missing_provenance_fail_explicitly() {
 
 #[trace("TC-100", "FR-015-AC-1")]
 #[test]
-fn tc_100_accepted_and_generated_json_values_match_canonical_identity_fixtures() {
+fn tc_100_accepted_and_generated_json_values_are_classified_valid() {
     let raw_values = generated_identity_corpus();
     for raw in &raw_values {
         let output: Value = serde_json::from_str(raw).expect("identity fixture must be valid JSON");
         let attempt = changed(&observed(), |case| case.output = Some(output));
         let result = classify_producer(&attempt);
         assert!(result.is_valid(), "valid identity input was refused: {raw}");
-    }
-
-    for (raw, expected_digest) in [
-        (
-            r#"{"v":18446744073709551615}"#,
-            "846afd99dea73da7038d6689d7f3295477e36ca591b3f7e5d2a7c10aef8d601a",
-        ),
-        (
-            r#"{"v":18446744073709551616}"#,
-            "f429894757452b732330279b4314a7ff3140fba29799935078a0328d544343c3",
-        ),
-        (
-            r#"{"v":-9223372036854775808}"#,
-            "9e52feb18cdc447ae70062ecd2e763c4d1cfac1607ac1b1499738f28cae639fb",
-        ),
-        (
-            r#"{"v":-9223372036854775809}"#,
-            "17b3cb5dec17af647887b3ce0d336fbbe9c7335c4d2ab86c156b50a729ee0c9f",
-        ),
-        (
-            r#"{"v":1234567890123456789012345}"#,
-            "afbf326118eedf9766b39b6ae455697437642bfbfee0a9fbd9692a05e3162001",
-        ),
-        (
-            r#"{"v":-1234567890123456789012345}"#,
-            "38c88e8f9ceff3d3095b7104bdc569b88b4511cabeb6a49966eb7e2b804589fd",
-        ),
-        (
-            r#"{"v":-0}"#,
-            "ec4f95abcb4e2e3dbe856c3eb2f81995eacb3823d40aa2e78ed4c5e1798f664d",
-        ),
-        (
-            r#"{"v":1.2300}"#,
-            "a3b18e44bc2c41c0d44c6a475749f2127d38b39d2448ff95653a1fd4407ee86c",
-        ),
-        (
-            r#"{"v":1E+09}"#,
-            "416d2d40c79a32ea746f530b4857832aa2ee4b57203cfcf4bd8b0cea37b27818",
-        ),
-        (
-            r#"{"v":-0.0}"#,
-            "3804efdcecdab4b071c214185d5593cb6c3f0d386b6dd057bacd0e3740459dff",
-        ),
-        (
-            r#"{"nested":[{"v":99999999999999999999999999999999999999}]}"#,
-            "3e0e8486a2c981ce467e866ff023449d2b5734eb68e508d3e538942ec183631c",
-        ),
-    ] {
-        let output = serde_json::from_str(raw).expect("canonical fixture must parse");
-        let result = classify_producer(&changed(&observed(), |case| case.output = Some(output)));
-        assert_eq!(
-            result.output_digest.as_deref(),
-            Some(expected_digest),
-            "digest drift for {raw}"
-        );
     }
 }
 
@@ -377,7 +308,6 @@ fn tc_103_non_finite_and_overflowing_numeric_identity_inputs_are_refused() {
             result.validation_errors,
             ["producer-output-number-non-finite"]
         );
-        assert_eq!(result.output_digest, None);
         assert!(!result.is_valid());
         assert_eq!(attempt.output, Some(retained_output));
     }
@@ -385,91 +315,24 @@ fn tc_103_non_finite_and_overflowing_numeric_identity_inputs_are_refused() {
 
 #[trace("TC-103", "FR-015-AC-3")]
 #[test]
-fn tc_103_version_identity_rejects_actual_mutability_without_rejecting_metadata() {
-    let fixture: Value = serde_json::from_str(include_str!(
-        "../engineering_assurance/fixtures/evidence-version-policy.json"
-    ))
-    .expect("version-policy fixture must be valid JSON");
+fn tc_103_version_identity_rejects_blank_and_unprintable_tokens_and_accepts_the_rest() {
     assert_eq!(
-        fixture["schema_version"],
-        "engineering-assurance.evidence-version-policy/v1"
+        identity("producer", "").errors(),
+        ["identity-version-missing"]
     );
-    let mut classes = BTreeSet::new();
-    for case in fixture["cases"]
-        .as_array()
-        .expect("version-policy cases must be an array")
-    {
-        let class = case["class"]
-            .as_str()
-            .expect("fixture class must be a string");
-        classes.insert(class);
-        let version = case["version"]
-            .as_str()
-            .expect("fixture version must be a string");
-        let accepted_errors = case["accepted_errors"]
-            .as_array()
-            .expect("accepted errors must be an array")
-            .iter()
-            .map(|error| error.as_str().expect("fixture error must be a string"))
-            .collect::<Vec<_>>();
-        let prior_errors = case["prior_errors"]
-            .as_array()
-            .expect("prior errors must be an array")
-            .iter()
-            .map(|error| error.as_str().expect("fixture error must be a string"))
-            .collect::<Vec<_>>();
-        assert_eq!(
-            prior_errors != accepted_errors,
-            case["policy_changed"]
-                .as_bool()
-                .expect("policy_changed must be a boolean"),
-            "policy-change marker disagrees for {version}"
-        );
+    for version in [" 1.2.3", "1.2.3 ", "1.2.3 rc", "1.2.3\n", "Straße"] {
         assert_eq!(
             identity("producer", version).errors(),
-            accepted_errors,
-            "accepted version policy drifted for {version}"
+            ["identity-version-invalid-character"],
+            "{version:?}"
         );
     }
-    assert_eq!(
-        classes,
-        BTreeSet::from([
-            "ascii-control",
-            "ascii-space",
-            "ascii-space-interior",
-            "empty-token",
-            "immutable-exact",
-            "immutable-x-metadata",
-            "immutable-x-metadata-uppercase",
-            "mutable-alias",
-            "non-ascii",
-            "range-operator",
-            "wildcard-component",
-        ]),
-        "version-policy fixture omitted or invented a governed input class"
-    );
-
-    for version in ["1.x", "^1.2.3", "latest", "Straße", "1.2.3 beta"] {
-        assert!(!identity("producer", version).errors().is_empty());
+    for version in ["1.2.3", "1.x", "^1.2.3", "latest", "1.2.3+linux-x86_64"] {
+        assert!(
+            identity("producer", version).errors().is_empty(),
+            "{version}"
+        );
     }
-    assert_eq!(
-        identity("producer", "Straße").errors(),
-        ["identity-version-invalid-character"]
-    );
-}
-
-#[trace("TC-100", "FR-015-AC-1")]
-#[test]
-fn tc_100_canonical_json_digest_fixture_is_stable() {
-    let result = classify_producer(&observed());
-    assert_eq!(
-        result.output_digest.as_deref(),
-        Some("013ad71438e02c083ba28636ab02fae1eb6196ecfd773ddbe3b1d7a0b865071f")
-    );
-    assert_eq!(
-        Value::String("observed".to_owned()),
-        serde_json::to_value(result.availability).expect("availability must serialize")
-    );
 }
 
 #[trace("TC-020", "FR-004-AC-1", "US-004-EX-2")]
@@ -477,18 +340,14 @@ fn tc_100_canonical_json_digest_fixture_is_stable() {
 fn tc_020_observed_evidence_retains_the_governing_tuple_and_operator_observation() {
     // An `observed` record is the only state that asserts a producer actually
     // ran, so it is the state that must carry enough provenance for a reader to
-    // re-derive the claim. Asserting the retained tuple, the operator
-    // observation and the output digest together prevents a classifier that
+    // re-derive the claim. Asserting the retained tuple and the operator
+    // observation together prevents a classifier that
     // labels a result `observed` while dropping the identities that make the
     // label checkable.
     let result = classify_producer(&observed());
     assert_eq!(result.availability, Some(AvailabilityState::Observed));
     assert_eq!(result.governing.as_ref(), Some(&governing()));
     assert_eq!(result.observation, observation("succeeded", Some(0), None));
-    assert_eq!(
-        result.output_digest.as_deref(),
-        Some("013ad71438e02c083ba28636ab02fae1eb6196ecfd773ddbe3b1d7a0b865071f")
-    );
     assert!(result.is_valid());
 
     // Without the tuple the same otherwise-valid attempt must refuse rather
@@ -603,29 +462,5 @@ fn tc_025_observed_evidence_delegates_its_record_to_quoin() {
         }));
         assert_eq!(result.validation_errors, ["quoin-handoff-missing"]);
         assert_eq!(result.availability, None);
-    }
-}
-
-#[trace("TC-199", "FR-014-AC-11")]
-#[test]
-fn tc_199_output_digest_golden_values_are_pinned() {
-    let long = format!("{{\"k\":\"{}\"}}", "a".repeat(65_600));
-    for (raw, expected) in [
-        (
-            "{}",
-            "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
-        ),
-        (
-            r#"{"a":1}"#,
-            "015abd7f5cc57a2dd94b7590f04ad8084273905ee33ec5cebeae62276a97f862",
-        ),
-        (
-            long.as_str(),
-            "c1f9ca861ec84c5c1665cdcc2d1f1a2b17b2db1679f57b5cffbd3002635a87a4",
-        ),
-    ] {
-        let output = serde_json::from_str(raw).expect("golden output parses");
-        let result = classify_producer(&changed(&observed(), |case| case.output = Some(output)));
-        assert_eq!(result.output_digest.as_deref(), Some(expected));
     }
 }

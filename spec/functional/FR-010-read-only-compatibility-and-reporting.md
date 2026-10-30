@@ -46,13 +46,11 @@ rewriting history or creating a parallel evidence schema.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-010-AC-1 | Mapping a legacy fixture leaves every source byte unchanged. | Test (TC-064) |
-| FR-010-AC-2 | Known fields preserve source revision, producer/config identity, result state, retained-output identity, and limitations. | Test (TC-065) |
+| FR-010-AC-2 | Known fields preserve producer/config identity, result state, retained output, and limitations. | Test (TC-065) |
 | FR-010-AC-3 | Ambiguous, unreadable, malformed, stale, and tampered fixtures remain non-successful with explicit reasons. | Test (TC-066) |
 | FR-010-AC-4 | JSON and Markdown reports expose claims, evidence, counterevidence, gaps, owner, and action with no overall trust score. | Test (TC-067) |
 
 ## Dependencies
 
-FR-008 and FR-009. The representative compatibility fixture gate is
-[FR-011](./FR-011-accepted-compatibility-corpus.md) and is enforcing: the
-accepted corpus of real legacy records, real producer output, and one exact
-Quire-to-Quoin receipt chain is retained and checked on every run.
+FR-008 and FR-009. The compatibility corpus gate that FR-011 described is
+withdrawn.

@@ -1,6 +1,6 @@
 ---
 id: FR-027
-title: "Publish files without replacement and verify declared file references"
+title: "Publish files without replacement"
 type: FR
 relationships:
   - target: "ix://agent-ix/engineering-assurance/US-005"
@@ -11,32 +11,25 @@ relationships:
     type: "requires"
 ---
 
-# FR-027: Publish files without replacement and verify declared file references
+# FR-027: Publish files without replacement
 
 ## Description
 
-Engineering Assurance SHALL expose two small filesystem capabilities, each
-behind its own Cargo feature, that a consumer uses to retain evidence files: an
-atomic publish that never replaces an existing file, and a verifier that
-re-checks every declared file reference against the bytes now on disk.
+Engineering Assurance SHALL expose one small filesystem capability, behind its
+own Cargo feature, that a consumer uses to retain evidence files: an atomic
+publish that never replaces an existing file.
 
 ## Inputs
 
 - Publish: a destination path, the bytes to publish, and a caller-supplied
   collision value returned when a different file already occupies the
   destination.
-- Verify: a capability root directory, a JSON Pointer prefix naming the
-  collection, and an ordered list of declared references, each a relative
-  `path`, a `size_bytes` and a `sha256` `digest`.
 
 ## Outputs
 
 - Publish: success, or a typed `PublishError` that is either a collision
   carrying the destination path and the caller's collision value, or an I/O
   failure naming the failed operation and path.
-- Verify: an ordered list of typed findings, each carrying a JSON Pointer
-  (for example `/raw_evidence/3/digest`) and the expected and observed values.
-  An empty list means every reference matched.
 
 ## Behavior
 
@@ -54,21 +47,14 @@ re-checks every declared file reference against the bytes now on disk.
 - Publish SHALL retry a taken sidecar name a bounded number of times, and SHALL
   compare an existing destination through one descriptor opened without
   following links.
-- Verify SHALL re-resolve each path beneath the capability root, refusing an
-  absolute path or one with a parent component; open it with no path component
-  following a symbolic link (Linux `openat2`), refuse a non-regular file; take
-  size and digest from that one descriptor; and report every mismatch of size
-  and of digest rather than stopping at the first.
-- An unresolvable or unreadable reference SHALL be a typed finding at that
-  reference's pointer, not an error that ends verification.
-- The two modules are filesystem modules, like `producer_execution`, and are
+- The module is a filesystem module, like `producer_execution`, and is
   exempt from the I/O-freedom audit of [FR-014](./FR-014-versioned-rust-boundary.md).
 
 ## Constraints
 
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
-| FR-027-CON-1 | Neither capability SHALL spawn a process. | Security | Test (TC-127) |
+| FR-027-CON-1 | The capability SHALL NOT spawn a process. | Security | Test (TC-127) |
 
 ## Acceptance Criteria
 
@@ -76,8 +62,9 @@ re-checks every declared file reference against the bytes now on disk.
 | --- | --- | --- |
 | FR-027-AC-1 | Publishing to an absent destination creates it with exactly the given bytes and leaves no sidecar in the directory. | Test (TC-206) |
 | FR-027-AC-2 | Publishing over an identical existing file succeeds; over a different file, a directory or a symbolic link it returns the typed collision with the destination unchanged; a destination that appears before the commit step is handled the same way; the sidecar is removed in every case. | Test (TC-207) |
-| FR-027-AC-3 | Verification reports every size and digest mismatch, and every missing, linked, non-regular or path-escaping reference, each at its own JSON Pointer with typed expected and observed fields, and reports nothing for matching references. | Test (TC-208) |
+
+FR-027-AC-3 is withdrawn. Its row is removed and the identifier is not reused.
 
 ## Dependencies
 
-- **Upstream**: [FR-014](./FR-014-versioned-rust-boundary.md) for the Cargo feature discipline and `ContentDigest`, and [FR-019](./FR-019-bounded-producer-execution.md) for `ContentDigest::of_file`.
+- **Upstream**: [FR-014](./FR-014-versioned-rust-boundary.md) for the Cargo feature discipline.

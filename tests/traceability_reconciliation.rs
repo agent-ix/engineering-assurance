@@ -10,7 +10,6 @@
 
 use std::{
     collections::BTreeSet,
-    fs,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -20,30 +19,6 @@ use serde_json::Value;
 
 fn repository() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
-}
-
-/// Submodule directories declared by the repository root `.gitmodules`.
-///
-/// A marker inside a submodule belongs to that submodule's own repository. The
-/// qa-corpus detection fixtures deliberately carry ids that bind to nothing —
-/// that is what they exist to test — so they are not this repository's markers.
-fn submodule_paths(root: &Path) -> Vec<String> {
-    let Ok(text) = fs::read_to_string(root.join(".gitmodules")) else {
-        return Vec::new();
-    };
-    text.lines()
-        .filter_map(|line| line.trim().strip_prefix("path"))
-        .filter_map(|rest| rest.trim().strip_prefix('='))
-        .map(|value| value.trim().trim_end_matches('/').to_owned())
-        .filter(|value| !value.is_empty())
-        .collect()
-}
-
-fn is_first_party(path: &str, submodules: &[String]) -> bool {
-    let path = path.trim_start_matches("./");
-    !submodules
-        .iter()
-        .any(|prefix| path == prefix || path.starts_with(&format!("{prefix}/")))
 }
 
 fn coverage(root: &Path) -> Value {
@@ -89,11 +64,6 @@ fn is_rust(path: &str) -> bool {
 #[trace("TC-118", "NFR-005-AC-3")]
 fn tc_118_quire_reconciles_every_rust_marker_without_missing_orphaned_or_duplicate_bindings() {
     let root = repository();
-    let submodules = submodule_paths(root);
-    assert!(
-        !submodules.is_empty(),
-        "the repository declares submodules whose markers are not reconciled here"
-    );
     let document = coverage(root);
 
     // Orphaned: a marker in this repository naming a target the matrix never minted.
@@ -101,7 +71,7 @@ fn tc_118_quire_reconciles_every_rust_marker_without_missing_orphaned_or_duplica
         .iter()
         .filter(|entry| {
             let path = text(entry, "path");
-            is_first_party(&path, &submodules) && is_rust(&path)
+            is_rust(&path)
         })
         .map(|entry| {
             format!(
@@ -125,7 +95,7 @@ fn tc_118_quire_reconciles_every_rust_marker_without_missing_orphaned_or_duplica
         .iter()
         .filter(|entry| {
             let path = text(entry, "path");
-            is_first_party(&path, &submodules) && is_rust(&path)
+            is_rust(&path)
         })
         .map(|entry| {
             format!(
@@ -150,7 +120,7 @@ fn tc_118_quire_reconciles_every_rust_marker_without_missing_orphaned_or_duplica
         let trace_id = text(shared, "trace_id");
         for symbol in entries(shared, "symbols") {
             let path = text(symbol, "path");
-            if !is_first_party(&path, &submodules) || !is_rust(&path) {
+            if !is_rust(&path) {
                 continue;
             }
             let binding = (trace_id.clone(), path, text(symbol, "symbol"));

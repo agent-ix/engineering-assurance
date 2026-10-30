@@ -4,8 +4,8 @@
 //! Pure decoding of retained cli-agent-evals reports into typed observations.
 //!
 //! This module owns the closed report shape and its conversion to evaluation
-//! envelopes. Filesystem traversal and transcript-byte verification remain in
-//! the binary host adapter.
+//! envelopes. Filesystem traversal and transcript retrieval remain in the
+//! binary host adapter.
 
 use std::collections::BTreeMap;
 
@@ -14,10 +14,9 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::{
-    content_digest::ContentDigest,
     evaluation::{
         EvaluationEnvelope, EvaluationHost, EvaluationScenario, ExecutionStatus,
-        is_immutable_revision, is_safe_transcript_reference,
+        is_safe_transcript_reference,
     },
     evidence::GoverningVersions,
     workflow::DecisionEvent,
@@ -35,7 +34,7 @@ pub const MAX_CLI_REPORT_RESULTS: usize = 256;
 /// Stable model identity used when the runner selected its host default.
 pub const RUNNER_DEFAULT_MODEL: &str = "runner-default";
 
-/// One decoded report whose samples are ready for host transcript verification.
+/// One decoded report whose samples are ready for host transcript retrieval.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DecodedEvaluationReport {
     host: EvaluationHost,
@@ -73,15 +72,13 @@ pub enum DecodedEvaluationSample {
         /// Stable diagnostic assembled from the runner outcome.
         diagnostic: String,
     },
-    /// A successful sample requiring host-side transcript verification.
+    /// A successful sample requiring host-side transcript retrieval.
     Retained {
         /// Reported work directory, still untrusted until host confinement.
         work_dir: String,
         /// Safe portable path relative to the work directory.
         transcript_path: String,
-        /// Reported lowercase SHA-256 transcript identity.
-        transcript_digest: String,
-        /// Typed envelope to admit only after transcript verification.
+        /// Typed envelope to admit only after the transcript is found.
         envelope: Box<EvaluationEnvelope>,
     },
 }
@@ -138,11 +135,10 @@ impl EvaluationReportError {
 /// # Errors
 ///
 /// Returns [`EvaluationReportError`] when the byte ceiling, JSON shape,
-/// protocol, closed populations, outcome relationships, retention identity,
+/// protocol, closed populations, outcome relationships, retention state,
 /// or Engineering Assurance result observation is invalid.
 pub fn decode_cli_eval_report(
     bytes: &[u8],
-    expected_source_revision: &str,
 ) -> Result<DecodedEvaluationReport, EvaluationReportError> {
     if bytes.len() > MAX_CLI_REPORT_BYTES {
         return Err(EvaluationReportError::ReportTooLarge {
@@ -154,18 +150,10 @@ pub fn decode_cli_eval_report(
         serde_json::from_slice(bytes).map_err(|error| EvaluationReportError::InvalidReport {
             detail: error.to_string(),
         })?;
-    decode_report(report, expected_source_revision)
+    decode_report(report)
 }
 
-fn decode_report(
-    report: RawReport,
-    expected_source_revision: &str,
-) -> Result<DecodedEvaluationReport, EvaluationReportError> {
-    if !is_immutable_revision(expected_source_revision) {
-        return Err(EvaluationReportError::Contract(
-            "expected-source-revision-not-immutable",
-        ));
-    }
+fn decode_report(report: RawReport) -> Result<DecodedEvaluationReport, EvaluationReportError> {
     let RawReport {
         report_version,
         ok,
@@ -196,7 +184,7 @@ fn decode_report(
     }
     let samples = results
         .into_iter()
-        .map(|result| decode_result(host, result, expected_source_revision))
+        .map(|result| decode_result(host, result))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(DecodedEvaluationReport {
         host,
@@ -210,7 +198,6 @@ fn decode_report(
 fn decode_result(
     host: EvaluationHost,
     result: RawResult,
-    expected_source_revision: &str,
 ) -> Result<DecodedEvaluationSample, EvaluationReportError> {
     let RawResult {
         id,
@@ -232,14 +219,13 @@ fn decode_result(
     if ok != run.ok || pass_rate != if run.ok { "1/1" } else { "0/1" } {
         return Err(EvaluationReportError::Contract("result-outcome-mismatch"));
     }
-    decode_sample(host, scenario, run, expected_source_revision)
+    decode_sample(host, scenario, run)
 }
 
 fn decode_sample(
     host: EvaluationHost,
     scenario: EvaluationScenario,
     run: RawSample,
-    expected_source_revision: &str,
 ) -> Result<DecodedEvaluationSample, EvaluationReportError> {
     let RawSample {
         ok,
@@ -254,7 +240,6 @@ fn decode_sample(
         failures,
         work_dir,
         session_id,
-        transcript_digest,
         transcript_retention,
         transcript_path,
     } = run;
@@ -267,11 +252,7 @@ fn decode_sample(
         classified,
     );
     drop(session_id);
-    validate_retention(
-        transcript_retention,
-        transcript_digest.as_deref(),
-        transcript_path.as_deref(),
-    )?;
+    validate_retention(transcript_retention, transcript_path.as_deref())?;
     if !ok {
         let detail = if failures.is_empty() {
             "unspecified failure".to_owned()
@@ -301,18 +282,7 @@ fn decode_sample(
     let transcript_path = transcript_path.ok_or(EvaluationReportError::Contract(
         "retained-transcript-path-missing",
     ))?;
-    let transcript_digest = transcript_digest.ok_or(EvaluationReportError::Contract(
-        "retained-transcript-digest-missing",
-    ))?;
-    decode_retained_sample(
-        host,
-        scenario,
-        work_dir,
-        transcript_path,
-        transcript_digest,
-        checks,
-        expected_source_revision,
-    )
+    decode_retained_sample(host, scenario, work_dir, transcript_path, checks)
 }
 
 fn decode_retained_sample(
@@ -320,9 +290,7 @@ fn decode_retained_sample(
     scenario: EvaluationScenario,
     work_dir: String,
     transcript_path: String,
-    transcript_digest: String,
     mut checks: BTreeMap<String, Value>,
-    expected_source_revision: &str,
 ) -> Result<DecodedEvaluationSample, EvaluationReportError> {
     let result_value = checks
         .remove("evaluation_result")
@@ -336,23 +304,14 @@ fn decode_retained_sample(
     if observation.host != host.as_str() {
         return Err(EvaluationReportError::Contract("result-host-mismatch"));
     }
-    if observation.source_revision != expected_source_revision {
-        return Err(EvaluationReportError::Contract(
-            "result-source-revision-mismatch",
-        ));
-    }
     let envelope = EvaluationEnvelope {
         host,
         scenario,
         execution_status: ExecutionStatus::Executed,
         passed: true,
-        suite_revision: observation.suite_revision,
-        fixture_revision: observation.fixture_revision,
-        source_revision: observation.source_revision,
         host_version: Some(observation.host_version),
         governing: Some(observation.governing),
         transcript_path: Some(transcript_path.clone()),
-        transcript_digest: Some(transcript_digest.clone()),
         command_count: Some(observation.command_count),
         elapsed_ms: Some(observation.elapsed_ms),
         human_prompt_count: Some(observation.human_prompt_count),
@@ -366,31 +325,23 @@ fn decode_retained_sample(
     Ok(DecodedEvaluationSample::Retained {
         work_dir,
         transcript_path,
-        transcript_digest,
         envelope: Box::new(envelope),
     })
 }
 
 fn validate_retention(
     retention: RawTranscriptRetention,
-    digest: Option<&str>,
     path: Option<&str>,
 ) -> Result<(), EvaluationReportError> {
     let valid = match retention {
-        RawTranscriptRetention::Retained => {
-            digest.is_some_and(|value| ContentDigest::parse(value).is_ok())
-                && path.is_some_and(is_safe_transcript_reference)
-        }
-        RawTranscriptRetention::NotRetained => {
-            digest.is_some_and(|value| ContentDigest::parse(value).is_ok()) && path.is_none()
-        }
-        RawTranscriptRetention::Unavailable => digest.is_none() && path.is_none(),
+        RawTranscriptRetention::Retained => path.is_some_and(is_safe_transcript_reference),
+        RawTranscriptRetention::NotRetained | RawTranscriptRetention::Unavailable => path.is_none(),
     };
     if valid {
         Ok(())
     } else {
         Err(EvaluationReportError::Contract(
-            "transcript-retention-identity-mismatch",
+            "transcript-retention-mismatch",
         ))
     }
 }
@@ -492,8 +443,10 @@ struct RawSummary {
     p95: Option<f64>,
 }
 
+// The foreign report schema may carry fields this adapter does not read, so
+// unknown fields are not rejected here.
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 struct RawSample {
     ok: bool,
     latency_ms: f64,
@@ -508,8 +461,6 @@ struct RawSample {
     failures: Vec<String>,
     work_dir: String,
     session_id: String,
-    #[serde(deserialize_with = "deserialize_nullable")]
-    transcript_digest: Option<String>,
     transcript_retention: RawTranscriptRetention,
     #[serde(default, deserialize_with = "deserialize_optional_nonnull")]
     transcript_path: Option<String>,
@@ -584,9 +535,6 @@ impl RawExitReason {
 struct EvaluationResultObservation {
     host: String,
     host_version: String,
-    source_revision: String,
-    suite_revision: String,
-    fixture_revision: String,
     governing: GoverningVersions,
     command_count: i64,
     elapsed_ms: i64,

@@ -28,8 +28,7 @@
     "change_request": [{
       "interviewId": "change-1",
       "profile_path": "assurance/profile.yaml",
-      "baseline_id": "baseline-1",
-      "source_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "baseline_id": "baseline-1"
     }],
     "artifact_validation": [{
       "artifact_type": "ArchitectureDescription",
@@ -55,7 +54,6 @@
         "artifact_type": "SpecReview",
         "analysis": "code-review",
         "path": "reviews/code.md",
-        "source_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "valid": true
       }
     ],
@@ -104,7 +102,6 @@
       }
     }],
     "impact_snapshot": [{
-      "source_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "profile_path": "assurance/profile.yaml",
       "baseline_id": "baseline-1",
       "changed_nodes": [],
@@ -115,16 +112,13 @@
       "unknowns": []
     }],
     "assurance_snapshot": [{
-      "source_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "discharge_schema": "clause-discharge-v1",
-      "discharge_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "binding_open": 0,
       "applicability_unresolved": 0,
       "argument_schema": "authored-assurance-view-v1",
       "argument_id": "argument-1",
-      "argument_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "top_claim_status": "supported",
-      "evidence_record_ids": ["sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+      "evidence_record_ids": ["evidence-record-1"],
       "verified_at": "2026-09-10T12:00:00Z"
     }],
     "exception": [{

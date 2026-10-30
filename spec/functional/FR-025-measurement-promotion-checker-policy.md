@@ -84,10 +84,9 @@ choice ([FR-005](./FR-005-resumable-human-decisions.md)).
 - A read result SHALL match when its `definitionVersion` equals the
   evidence's `definition_version` and its `candidate` equals the evidence's
   non-empty `candidate`.
-- The checker's document names the candidate by collection id and carries no
-  collection digest, so the collection id SHALL be the binding between the
-  result and the evidence; the evaluator SHALL NOT recompute collection
-  content.
+- The checker's document names the candidate by collection id, so the
+  collection id SHALL be the binding between the result and the evidence; the
+  evaluator SHALL NOT recompute collection content.
 - When results are read but none matches, the invariant SHALL report the
   status `mismatch`.
 - A matching result SHALL have status `accepted` when its `verdict` is
