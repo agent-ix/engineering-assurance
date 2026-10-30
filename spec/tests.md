@@ -119,7 +119,6 @@ implemented and reviewed.
 | FR-014 | FR-014-AC-7 | TC-190 | ✅ `tests/feature_matrix.rs` metadata/list equality, empty-derivation refusal, and `make rust-features` compile of each feature alone passing; enforced in CI through the existing `rust-tests` target |
 | FR-014 | FR-014-AC-8 | TC-196 | ✅ `tests/feature_matrix.rs`: no feature graph other than `full` resolves a binary-only crate; `serde_json/arbitrary_precision` is on exactly for the `exact-numbers` features |
 | FR-014 | FR-014-AC-9 | TC-197 | ✅ `tests/default_features.rs`: the default graph equals the empty-feature graph, resolves none of the binary-only crates and no `serde_json`; `--features full` still resolves the binary's crates |
-| FR-014 | FR-014-AC-11 | TC-199 | ✅ `ContentDigest` unit and wire-form cases passing |
 | FR-015 | FR-015-AC-1 | TC-100 | 🚧 Fixture-generation and report slices are backed against reference bytes captured once from the retired implementation and committed to this repository; no retained implementation is executed as a differential oracle in this row's qualification path; aggregate pending |
 | FR-015 | FR-015-AC-2 | TC-102 | 🚧 Evidence-availability and semantic-reference state vocabularies backed; aggregate pending |
 | FR-015 | FR-015-AC-3 | TC-103 | 🚧 Evidence, semantic, PGM, and accepted-corpus path refusals plus bounded population/depth checks backed; aggregate pending |
@@ -191,13 +190,12 @@ implemented and reviewed.
 | FR-026 | FR-026-AC-6 | TC-142 | ✅ Minimal `measurement` consumer reaches the steering-field accessors without `serde_json` |
 | FR-027 | FR-027-AC-1 | TC-206 | ✅ Atomic publish creation and sidecar-cleanup cases passing |
 | FR-027 | FR-027-AC-2 | TC-207 | ✅ Identical, different, directory, symlink and pre-commit-race collision cases passing |
-| FR-027 | FR-027-AC-3 | TC-208 | ✅ Every-mismatch reference verification with JSON Pointer findings passing |
 
 ### Non-Functional Requirement Coverage
 
 | Non-Functional Req | Verification Method | Evidence/Test Cases | Status |
 |--------------------|---------------------|---------------------|--------|
-| NFR-001 | Install, discovery, digest comparison, and static scan | TC-038 | ✅ Passing |
+| NFR-001 | Install, discovery, byte comparison, and static scan | TC-038 | ✅ Passing |
 | NFR-002 | Agent evaluation against fixture-authorized outcomes | TC-039 | 🚧 No evaluation aggregate is retained in this repository, so no test here decides the three measured counts; the aggregate gate that refuses an unsupported addition or an inferred terminal decision is backed by TC-032, TC-034, and TC-049 |
 | NFR-003 | Wheel/npm member audit plus compatibility invocation | TC-040 | ✅ Passing |
 | NFR-005 | Exact toolchain build, unsafe audit, executable-path audit, Quire reconciliation, matrix row integrity | TC-115..TC-118, TC-205 | 🚧 Final zero-debt audit remains pending |
@@ -401,14 +399,12 @@ implemented and reviewed.
 | TC-195 | Each artifact schema is a valid schema that accepts its skeleton; the `review_by` pattern alone gives the verdicts the consumer gave the original `format` check on 40 measured values and agrees with a format-asserting validator over a generated calendar, time, offset, fraction and separator set, with the leap-second and space-separator differences documented | Unit | P1 | FR-003-AC-8 | ✅ `tests/semantic_exports.rs` and `tests/python_port/module.rs` passing |
 | TC-196 | For every feature, the normal-dependency graph (default features off) contains none of `cap-std`, `clap`, `tar`, `zip`, `flate2`, `tempfile` (only `full` may), and `serde_json/arbitrary_precision` is on exactly for the features that imply `exact-numbers` (`evidence`, `semantics`, `evaluation`, `evaluation-reports`, `exact-numbers`, `full`); `manifest` and `source-audit` keep the dependencies their modules need | Static | P0 | FR-014-AC-8 | ✅ `tests/feature_matrix.rs` passing (`cargo tree` per feature); mutation-checked with banned crates added to `evidence` and `exact-numbers` added to and removed from a feature |
 | TC-197 | The `default` feature set is empty: the default-feature `cargo tree` (normal edges, and feature edges) equals the `--no-default-features` one, contains none of `cap-std`, `clap`, `tar`, `zip`, `flate2`, `tempfile` and no `serde_json` (so no `serde_json/arbitrary_precision`), while `--features full` still resolves `clap` and `serde_json` | Static | P0 | FR-014-AC-9 | ✅ `tests/default_features.rs` passing; mutation-checked with a capability added to `default` |
-| TC-199 | `of_file` refuses links, non-regular and absent paths; the reader refuses over-ceiling and cancelled reads; the algorithm is carried by the value; the `sha256:<hex>` form round-trips and the parser refuses an unknown algorithm, uppercase, wrong length and a missing prefix while the bare parser refuses the prefixed form; the serialized form is the bare hex string | Unit | P0 | FR-014-AC-11 | ✅ `src/content_digest.rs` and `tests/producer_execution.rs` passing |
 | TC-201 | From a passing projection with one binding broken, the Rust evaluator and the retained provider agree on a failed outcome with that binding's code: any stage pair but one step forward in the MeasurementPlan schema's stage order, or an unknown stage, is `promotion_must_advance_one_stage`; an impact snapshot missing a change array or naming another profile or baseline is `impact_snapshot_incomplete`; an expected but absent exception, or a recorded one unowned, unjustified, without impact, expired or undated whether or not expected, is `owned_current_exception_required`; a review for another subject, analysis or artifact type, an invalid one or one without a path is `architecture_review_missing` or `code_review_missing`; each unbroken projection passes | Unit | P0 | FR-016-AC-5 | ✅ `tests/workflow_invariants_parity.rs` passing; mutation-checked by reordering two stages and dropping the architecture subject binding |
 | TC-202 | `engineering-assurance onboard-report --summary` with stub Quire and Quoin reports a valid and an invalid artifact with its findings, caps findings at ten with a `+N more` line, labels this checkout's module version, reports `null` for an absent tool, omits the orientation sections, and exits 1 on an invalid artifact, 3 with a stated reason without Quire, and 0 when every artifact validates | Integration | P1 | FR-001-AC-9 | ✅ `tests/python_port/onboarding_script.rs` summary cases passing |
 | TC-203 | The MeasurementPlan schema accepts each ground-truth kind at and below gate, requires `ground_truth_kind` at gate as the only finding, leaves it optional below gate, and refuses an unknown, case-variant or empty value at every stage | Unit | P1 | FR-024-AC-11 | ✅ `tests/python_port/module.rs` schema cases passing |
 | TC-205 | Every TC id named by a requirement coverage row has a Test Case Summary row, matching rows whatever their cell padding, with no allowlist of exceptions; a synthetic coverage row naming an absent TC is detected | Static | P1 | NFR-005-AC-5 | ✅ `tests/python_port/module.rs` matrix-integrity case passing |
 | TC-206 | Publishing bytes to an absent destination creates it with exactly those bytes, and no `.tmp-` sidecar remains in the directory | Unit | P0 | FR-027-AC-1 | ✅ `src/atomic_publish.rs` passing |
 | TC-207 | Publishing over an identical existing file succeeds and leaves it untouched; over a different file, a directory or a symbolic link it returns the typed collision with the destination unchanged; a destination appearing before the commit step is handled the same way; the sidecar is removed in every case | Unit | P0 | FR-027-AC-2 | ✅ `src/atomic_publish.rs` passing |
-| TC-208 | Verifying a list of declared references with a size mismatch, a digest mismatch, a missing file, a symbolic link, a directory and an escaping path reports one typed finding per mismatch at its own JSON Pointer, does not stop at the first, and reports nothing for matching references | Unit | P0 | FR-027-AC-3 | ✅ `src/reference_verifier.rs` passing |
 
 ## Option Permutation Matrix
 
@@ -510,7 +506,6 @@ become reachable again the moment a second host is declared.
 | EC-010 | Artifact target or manifest reference escapes its selected root | FR-001, FR-003 | TC-018, TC-045 | Installation or onboarding writes/loads unowned content |
 | EC-011 | Run id is reused for a different repository or workflow | FR-005 | TC-048 | One run contaminates another decision boundary |
 | EC-012 | Valid output lacks an immutable governing version | FR-004 | TC-024 | Unreproducible evidence is admitted as observed |
-| EC-013 | Existing digest domain is silently changed to another canonicalization | FR-015 | TC-100, TC-103 | Historical identities change without a version boundary |
 | EC-014 | ix-flow or cli-agent-evals cannot load a structured external provider | FR-016, FR-017 | TC-108, TC-109 | JavaScript remains an undeclared permanent dependency |
 | EC-018 | A provider response serializes an absent optional field as a null the consuming host refuses | FR-017 | TC-136 | The described catalogue is rejected and no evaluation cell can run |
 | EC-015 | A legacy path is deleted before its Rust replacement and direct invocation pass | FR-018 | TC-113 | Qualification or onboarding becomes unavailable |
@@ -593,8 +588,9 @@ selected host commands, models, governing versions, transcripts, and outcomes.
 TC-052..TC-068 are backed natively by the Rust semantic library, whose
 tracking-tagged tests carry every criterion the retired
 `tests/test_verification_semantics.py` used to carry. TC-050, TC-051 and TC-069..TC-078 are
-withdrawn together with FR-006-AC-6, FR-006-AC-7, FR-011 and FR-015-AC-5; their ids are not
-reused. TC-087..TC-094
+withdrawn together with FR-006-AC-6, FR-006-AC-7, FR-011 and FR-015-AC-5; TC-199, TC-204 and
+TC-208 are withdrawn together with FR-014-AC-11, FR-024-AC-12 and FR-027-AC-3; EC-013 is
+withdrawn; their ids are not reused. TC-087..TC-094
 remain in `tests/python_port/migration_contract.rs`, which reads the contract document
 directly.
 

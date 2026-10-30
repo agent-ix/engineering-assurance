@@ -36,7 +36,7 @@ producer is a deterministic fictional executable retained only by the test.
   producer-execution request with exact adapter and confinement bindings.
 - One consumer-owned response adapter and typed observation.
 - Null and retained-input stdin cases; one declared output artifact; and
-  invalid digest, unavailable executable, timeout, malformed response,
+  absent input, unavailable executable, timeout, malformed response,
   cancellation, admitted/rejected non-zero exit, containment-breach,
   source-root mutation, output-path replacement, and non-canonical observation
   variants of the same fictional case.
@@ -50,16 +50,16 @@ producer is a deterministic fictional executable retained only by the test.
      Engineering Assurance CLI-output parser, and resolves none of the
      unrelated direct full-package dependencies.
 2. Execute the valid fictional case through the shared executor.
-   - IT-006-SC-02: exactly one typed completed result preserves the JCS request,
+   - IT-006-SC-02: exactly one typed completed result preserves the
      caller, adapter and producer identities and carries bounded raw evidence,
      immutable retained artifact bytes and the consumer-owned observation; the
-     complete result has canonical bytes and a stable result identity.
+     complete result has canonical bytes.
 3. Execute each non-completion variant.
    - IT-006-SC-03: every variant returns its distinct executor state, only
      admitted exits reach the adapter, non-completed states carry no typed
      observation, and no ordinary descendant or invocation-owned state remains;
      the escaping-descendant case returns `containment_failure` without a
-     full-tree-containment claim; every state has canonical bytes and identity.
+     full-tree-containment claim; every state has canonical bytes.
 4. Inspect the consumer and provider boundaries.
    - IT-006-SC-04: neither repository introduces a duplicate evidence store,
      Quoin record schema, generic stdout verdict scraper, or domain oracle in
@@ -67,15 +67,15 @@ producer is a deterministic fictional executable retained only by the test.
 5. Mutate the source capability root and observed output paths around launch
    and observation.
    - IT-006-SC-05: a declared input mutated after preflight is still read as
-     its verified bytes through the descriptor argument, and the
+     its preflight snapshot through the descriptor argument, and the
      adapter/consumer reads the same immutable output snapshot whose
-     digest appears in the canonical result without reopening a mutable path.
+     length appears in the canonical result without reopening a mutable path.
 
 ## Expected Results
 
 The real consumer compiles the lightweight feature and executes the fictional
 Rust producer only through the shared boundary. Completed and non-completed
-outcomes remain typed, canonically serializable and identity-bound; retained
+outcomes remain typed, canonically serializable; retained
 output bytes remain readable without a path race; and domain interpretation
 and evidence persistence stay with their authoritative owners.
 

@@ -26,32 +26,31 @@
 //! global, and it changes how a `serde_json::Value` bridges to non-JSON
 //! serializers: yaml, toml and ciborium re-serialise a number as a private
 //! marker map instead of a number. It is the explicit opt-in, and only the
-//! features marked "implies `exact-numbers`" below enable it: their identity
-//! digests and refusals (integers beyond `u64`, `1e309`) change without it.
+//! features marked "implies `exact-numbers`" below enable it: their
+//! refusals (integers beyond `u64`, `1e309`) change without it.
 //!
 //! | Feature | Module(s) | Other features it enables | Extra dependencies |
 //! |---|---|---|---|
 //! | `atomic-publish` | `atomic_publish` (Unix only) | | `rustix`, `thiserror` |
 //! | `claim-strength` | `claim_strength` | | `serde` |
-//! | `content-digest` | `content_digest` | | `serde`, `sha2`, `thiserror` |
 //! | `content-rights` | `content_rights` | | `regex`, `serde`, `serde_json`, `thiserror`, `unicode-casefold` |
 //! | `discovery` | `discovery` | `workflow` | `serde`, `serde_json`, `thiserror` |
-//! | `evaluation` | `evaluation` | `content-digest`, `evidence`, `workflow` (implies `exact-numbers`) | `serde`, `serde_json`, `thiserror`, `time` |
-//! | `evaluation-reports` | `evaluation_reports` | `content-digest`, `evaluation`, `evidence`, `workflow` (implies `exact-numbers`) | `serde`, `serde_json`, `thiserror` |
-//! | `evidence` | `evidence` | `content-digest`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
+//! | `evaluation` | `evaluation` | `evidence`, `workflow` (implies `exact-numbers`) | `serde`, `serde_json`, `thiserror`, `time` |
+//! | `evaluation-reports` | `evaluation_reports` | `evaluation`, `evidence`, `workflow` (implies `exact-numbers`) | `serde`, `serde_json`, `thiserror` |
+//! | `evidence` | `evidence` | `exact-numbers` | `serde`, `serde_json`, `thiserror` |
 //! | `manifest` | `manifest` | `structured-yaml` | `jsonschema`, `serde`, `serde_json`, `thiserror` |
 //! | `measurement` | `measurement` | | `serde`, `thiserror` |
 //! | `onboarding` | `onboarding` | | `serde`, `serde_json`, `thiserror`, `yaml_serde` |
 //! | `package-audit` | `package_audit` | | `serde`, `serde_json`, `thiserror` |
 //! | `package-lifecycle` | `package_lifecycle` | | `serde`, `serde_json`, `thiserror` |
 //! | `package-membership` | `package_membership` | | `serde`, `thiserror` |
-//! | `producer-execution` | `producer_execution` | `content-digest` | `rustix`, `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
-//! | `semantics` | `semantics` | `claim-strength`, `content-digest`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
+//! | `producer-execution` | `producer_execution` | | `rustix`, `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
+//! | `semantics` | `semantics` | `claim-strength`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
 //! | `source-audit` | `source_audit` | | `serde`, `syn`, `thiserror` |
 //! | `structured-yaml` | `structured_yaml` | | `serde_json`, `yaml_serde` |
 //! | `workflow` | `workflow` | | `serde`, `serde_json`, `thiserror` |
 //! | `workflow-invariants` | `workflow_invariants` | | `serde`, `serde_json`, `thiserror`, `time` |
-//! | `campaign` | `campaign` (source-tree verification Unix only) | `measurement`, `producer-execution` | the generated campaign crate, `sha1`, `sha2` |
+//! | `campaign` | `campaign` (source-tree verification Unix only) | `measurement`, `producer-execution` | the generated campaign crate |
 //! | `exact-numbers` | none (opt-in) | | `serde_json/arbitrary_precision` |
 //! | `full` | all of the above, plus the binary | every feature above | `clap`, `cap-std`, `tar`, `zip`, `flate2`, `tempfile` |
 
@@ -63,8 +62,6 @@ pub mod atomic_publish;
 pub mod campaign;
 #[cfg(feature = "claim-strength")]
 pub mod claim_strength;
-#[cfg(feature = "content-digest")]
-pub mod content_digest;
 #[cfg(feature = "content-rights")]
 pub mod content_rights;
 #[cfg(feature = "discovery")]

@@ -837,7 +837,6 @@ fn tc_138_a_minimal_downstream_compiles_only_the_source_audit_feature() {
         "regex",
         "rustix",
         "serde_json_canonicalizer",
-        "sha2",
         "tar",
         "tempfile",
         "time",

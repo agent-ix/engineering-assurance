@@ -40,12 +40,9 @@ fixture generation to Rust without changing observable identities or ownership.
   it to success.
 - Preserve source-field references and declared lossy or unmapped limitations
   in historical views.
-- Preserve legacy canonical JSON bytes and identity digests. Exact integer
-  values SHALL NOT pass through binary floating-point conversion.
-- Reject non-finite or overflowing numeric identity inputs without producing an
-  identity digest.
-- Treat canonical output bytes and their digest, rather than parsed structural
-  equality, as evidence identity.
+- Exact integer values SHALL NOT pass through binary floating-point
+  conversion.
+- Reject non-finite or overflowing numeric identity inputs.
 - Expose stable typed availability spellings, exact-one validation for untyped
   labels, result validity, one stable top-level semantic-error category, and an
   exhaustive typed refusal reason without formatted-output parsing.
@@ -80,9 +77,9 @@ diagnostic prose is not the discriminator.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-015-AC-1 | Over focused fictional cases, Rust produces the declared byte-identical canonical fixtures, identity digests, and bounded reports, including exact integers beyond `i64` and `u64`; structured-identity inputs produce their declared classification or refusal. | Test (TC-100) |
+| FR-015-AC-1 | Over focused fictional cases, Rust produces the declared canonical fixtures and bounded reports, including exact integers beyond `i64` and `u64`; structured-identity inputs produce their declared classification or refusal. | Test (TC-100) |
 | FR-015-AC-2 | Success, unavailable, not-computed, not-applicable, failed, inconclusive, malformed, stale, tampered, lossy, and unreadable remain distinguishable; typed state labels retain stable wire spellings and untyped labels require exactly one known state. | Test (TC-102) |
-| FR-015-AC-3 | Invalid versions, provenance, mappings, fixtures, and numeric identity inputs fail without an identity digest or source-byte change; immutable `x`/`X` metadata remains accepted; every exercised semantic and PGM-01 refusal exposes its expected typed reason without inspecting diagnostic prose. | Test (TC-103) |
+| FR-015-AC-3 | Invalid versions, provenance, mappings, fixtures, and numeric identity inputs fail without a source-byte change; immutable `x`/`X` metadata remains accepted; every exercised semantic and PGM-01 refusal exposes its expected typed reason without inspecting diagnostic prose. | Test (TC-103) |
 | FR-015-AC-4 | Static ownership and execution audits find no copied portable contract family, persisted evidence family, or executable foreign-language fixture. | Test (TC-104) |
 
 FR-015-AC-5 and FR-015-CON-4 are withdrawn. Their rows are removed and the identifiers are not reused.

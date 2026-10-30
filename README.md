@@ -311,7 +311,7 @@ unifies features across the whole build, so a default that enabled it would
 switch it on for every crate in a consumer's workspace. Serializers other than
 `serde_json` (yaml, toml, ciborium) then re-serialise a `serde_json::Value`
 number as a private marker map. `evidence`, `semantics`, `evaluation` and
-`evaluation-reports` imply `exact-numbers` because their digests and refusals
+`evaluation-reports` imply `exact-numbers` because their refusals
 depend on exact numbers; nothing else does, and a consumer can opt in
 explicitly with `features = ["exact-numbers"]`.
 

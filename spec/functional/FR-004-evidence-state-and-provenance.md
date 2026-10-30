@@ -19,7 +19,7 @@ onboarding.
 
 - Selected evidence producer identity and invocation result.
 - Exact immutable module, plugin, skill, workflow, Quire, Quoin, ix-flow, schema,
-  and producer versions or content digests that govern the observation.
+  and producer versions that govern the observation.
 - Operator-observed command, elapsed time, exit outcome, and diagnostic category.
 - Applicability decision for the selected assurance boundary.
 
