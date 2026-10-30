@@ -12,7 +12,7 @@ relationships:
 ## Description
 
 Every mapped execution, result, evidence reference, and measurement SHALL
-preserve the applicable producer identity and version, configuration digest,
+preserve the applicable producer identity and version,
 source revision, environment, definition version, and availability/result
 state supplied by its authoritative record.
 

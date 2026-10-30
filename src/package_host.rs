@@ -501,25 +501,4 @@ mod tests {
         assert_eq!(fs::read(&unowned).unwrap(), b"preserve");
         fs::remove_dir_all(root).unwrap();
     }
-
-    #[test]
-    #[trace("TC-199", "FR-014-AC-11")]
-    fn tc_199_planned_file_digest_is_pinned() {
-        let root = std::env::temp_dir().join(format!(
-            "engineering-assurance-digest-{}-{}",
-            std::process::id(),
-            TEST_SEQUENCE.fetch_add(1, Ordering::Relaxed)
-        ));
-        fs::create_dir_all(&root).unwrap();
-        let path = root.join("value");
-        fs::write(&path, b"abc").unwrap();
-        let mut budget = Budget::default();
-        let (length, digest) = inspect_bounded_file(&path, &mut budget).unwrap();
-        assert_eq!(length, 3);
-        assert_eq!(
-            digest.as_str(),
-            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-        );
-        fs::remove_dir_all(root).unwrap();
-    }
 }

@@ -11,8 +11,8 @@ use engineering_assurance::{
     campaign::{
         CAMPAIGN_DEFINITION_VERSION, CampaignAttemptStatus, CampaignDefinition, CampaignError,
         CampaignRun, CampaignSource, MeasurementProcedure, PlanRegistration, ProcedureBindings,
-        SourceTreeBinding, canonical_digest, resolve_procedure, validate_definition,
-        validate_procedure, validate_run,
+        SourceTreeBinding, resolve_procedure, validate_definition, validate_procedure,
+        validate_run,
     },
     content_digest::ContentDigest,
     producer_execution::{
@@ -56,11 +56,7 @@ fn sample_definition() -> CampaignDefinition {
         "id": "fictional-campaign",
         "subjectName": "fictional.subject",
         "subjectVersion": "commit-1",
-        "sourceGraph": [{
-            "repository": "fictional/source",
-            "revision": "commit-1",
-            "digest": ContentDigest::of_bytes(b"tree inventory").as_str()
-        }],
+        "sourceGraph": [{"repository": "fictional/source"}],
         "members": [
             {"name":"build", "group":"stage-a", "planId":"MP-001", "definitionVersion":"v1", "required":true},
             {"name":"verify", "group":"stage-a", "planId":"MP-002", "definitionVersion":"v1", "dependsOn":["build"], "required":true}
@@ -106,7 +102,6 @@ fn contract(kind: &str) -> ContractBinding {
     ContractBinding {
         kind: kind.to_owned(),
         version: "1".to_owned(),
-        revision: "commit-1".to_owned(),
     }
 }
 
@@ -115,7 +110,6 @@ fn bindings() -> ProcedureBindings {
         producer: ProducerDescriptor {
             name: "fictional.producer".to_owned(),
             version: "1.0".to_owned(),
-            source_revision: "commit-1".to_owned(),
             executable: "/fictional/bin/producer".to_owned(),
         },
         caller: contract("fictional.caller"),
@@ -591,14 +585,6 @@ fn tc_180_resolved_request_identity_changes_with_every_selected_binding() {
             .digest
     );
     let mut altered = bindings();
-    altered.producer.source_revision = "stale".to_owned();
-    assert_eq!(
-        resolve_procedure(&procedure, &source_graph, altered).err(),
-        Some(CampaignError::Binding {
-            field: "producer.sourceRevision"
-        })
-    );
-    let mut altered = bindings();
     altered
         .environment
         .insert("MIRIFLAGS".to_owned(), "unsafe-flag".to_owned());
@@ -659,16 +645,15 @@ fn tc_186_retained_request_requires_exact_typed_shape_and_valid_structure() {
 
 #[test]
 #[trace("TC-181", "FR-019-AC-11", "VO-007")]
-fn tc_181_run_inventory_rejects_stale_digest_and_unknown_attempt() {
+fn tc_181_run_inventory_rejects_unknown_attempt() {
     let definition = sample_definition();
     let mut run: CampaignRun = serde_json::from_value(json!({
         "schemaVersion":"engineering-assurance.campaign-run/v1",
         "id":"run-1",
-        "definitionDigest":canonical_digest(&definition).expect("definition digest").as_str(),
-        "sourceGraphDigest":canonical_digest(&definition.source_graph).expect("graph digest").as_str(),
         "attempts":[{"member":"build","index":1,"status":"invalid_request"}],
         "verdict":"inconclusive"
-    })).expect("valid run wire");
+    }))
+    .expect("valid run wire");
     validate_run(&run, &definition).expect("valid inventory");
     assert_eq!(
         run.attempts.as_ref().expect("attempts")[0].status,
@@ -682,18 +667,6 @@ fn tc_181_run_inventory_rejects_stale_digest_and_unknown_attempt() {
             ..
         })
     ));
-    run = serde_json::from_value(json!({
-        "schemaVersion":"engineering-assurance.campaign-run/v1", "id":"run-1",
-        "definitionDigest":"0".repeat(64),
-        "sourceGraphDigest":canonical_digest(&definition.source_graph).expect("graph digest").as_str(),
-        "verdict":"inconclusive"
-    })).expect("stale run wire");
-    assert_eq!(
-        validate_run(&run, &definition),
-        Err(CampaignError::Binding {
-            field: "definitionDigest"
-        })
-    );
 }
 
 fn git(root: &std::path::Path, args: &[&str]) -> Vec<u8> {
@@ -755,19 +728,9 @@ fn tc_182_source_projection_checks_complete_git_blob_inventory() {
             "fixture",
         ],
     );
-    let revision = String::from_utf8(git(repo.path(), &["rev-parse", "HEAD"]))
-        .expect("revision UTF-8")
-        .trim()
-        .to_owned();
-    let manifest = git(
-        repo.path(),
-        &["ls-tree", "-r", "-z", "--full-tree", &revision],
-    );
-    let source: CampaignSource = serde_json::from_value(json!({
-        "repository":"fictional/source", "revision":revision,
-        "digest":ContentDigest::of_bytes(&manifest).as_str()
-    }))
-    .expect("source wire");
+    let manifest = git(repo.path(), &["ls-tree", "-r", "-z", "--full-tree", "HEAD"]);
+    let source: CampaignSource =
+        serde_json::from_value(json!({"repository":"fictional/source"})).expect("source wire");
     let mut procedure = procedure();
     procedure.inputs = None;
     procedure
@@ -782,7 +745,6 @@ fn tc_182_source_projection_checks_complete_git_blob_inventory() {
         .expect("canonical temporary root")
         .display()
         .to_string();
-    bindings.producer.source_revision = revision;
     bindings.inputs.clear();
     bindings.source_tree = Some(SourceTreeBinding {
         repository: "fictional/source".to_owned(),
@@ -792,7 +754,6 @@ fn tc_182_source_projection_checks_complete_git_blob_inventory() {
         .expect("sealed source tree");
     assert_eq!(resolved.request.inputs.len(), 2);
     assert_eq!(resolved.omitted_source_links.len(), 1);
-    assert_source_digests_pinned(&resolved);
     assert_required_source_prefix(&procedure, &source, bindings.clone());
     assert_eq!(
         resolved.omitted_source_links[0].path,
@@ -815,34 +776,6 @@ fn tc_182_source_projection_checks_complete_git_blob_inventory() {
     );
 
     assert_source_tampering_rejected(repo.path(), &procedure, &source, bindings);
-}
-
-/// Pinned through the source projection's content digest (independent SHA-256
-/// of the fixture bytes) and its omitted-link digest.
-fn assert_source_digests_pinned(resolved: &engineering_assurance::campaign::ResolvedProcedure) {
-    let digest_of = |role: &str| {
-        resolved
-            .request
-            .inputs
-            .iter()
-            .find(|input| input.role == role)
-            .map(|input| input.digest.as_str().to_owned())
-    };
-    assert_eq!(
-        digest_of("source/Cargo.toml").as_deref(),
-        Some("2565c4efa751f1b2c642d1b92c4b7b6d42590f7b116008c11d625d49074b5e4f")
-    );
-    #[cfg(unix)]
-    {
-        assert_eq!(
-            digest_of("source-exec/scripts/check.sh").as_deref(),
-            Some("306c6ca7407560340797866e077e053627ad409277d1b9da58106fce4cf717cb")
-        );
-        assert_eq!(
-            resolved.omitted_source_links[0].digest.as_str(),
-            "708abeebc2fda1162fadd2407640cf05d757304ec0086b811a0123690b67f305"
-        );
-    }
 }
 
 fn assert_required_source_prefix(
@@ -888,14 +821,6 @@ fn assert_source_tampering_rejected(
         resolve_procedure(procedure, std::slice::from_ref(source), bindings.clone()).err(),
         Some(CampaignError::SourceTree {
             field: "Git blob mismatch"
-        })
-    );
-    let mut altered = bindings.clone();
-    altered.source_tree.as_mut().expect("tree").manifest.push(0);
-    assert_eq!(
-        resolve_procedure(procedure, std::slice::from_ref(source), altered).err(),
-        Some(CampaignError::Binding {
-            field: "sourceTree.manifestDigest"
         })
     );
     fs::remove_file(repo.join("scripts/manifest-link")).expect("remove changed link");

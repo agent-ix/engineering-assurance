@@ -4,36 +4,6 @@
 	"title": "CampaignSource",
 	"type": "object",
 	"properties": {
-		"digest": {
-			"type": "string",
-			"minLength": 1,
-			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-005/digest",
-			"x-agent-ix-origin": {
-				"source": {
-					"path": "spec/functional/VO-005-campaign-source.md",
-					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
-					"startColumn": 3,
-					"startLine": 30
-				}
-			},
-			"x-agent-ix-constraints": [
-				{
-					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-005/digest",
-					"diagnosticCode": "agent-ix.engineering-assurance-campaign.CAMPAIGNSOURCE_DIGEST_NONEMPTY",
-					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-005-digest-nonEmpty",
-					"keyword": "nonEmpty",
-					"operands": {},
-					"origin": {
-						"source": {
-							"path": "spec/functional/VO-005-campaign-source.md",
-							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
-							"startColumn": 3,
-							"startLine": 30
-						}
-					}
-				}
-			]
-		},
 		"repository": {
 			"type": "string",
 			"minLength": 1,
@@ -43,7 +13,7 @@
 					"path": "spec/functional/VO-005-campaign-source.md",
 					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 					"startColumn": 3,
-					"startLine": 28
+					"startLine": 21
 				}
 			},
 			"x-agent-ix-constraints": [
@@ -58,37 +28,7 @@
 							"path": "spec/functional/VO-005-campaign-source.md",
 							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
 							"startColumn": 3,
-							"startLine": 28
-						}
-					}
-				}
-			]
-		},
-		"revision": {
-			"type": "string",
-			"minLength": 1,
-			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-005/revision",
-			"x-agent-ix-origin": {
-				"source": {
-					"path": "spec/functional/VO-005-campaign-source.md",
-					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
-					"startColumn": 3,
-					"startLine": 29
-				}
-			},
-			"x-agent-ix-constraints": [
-				{
-					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-005/revision",
-					"diagnosticCode": "agent-ix.engineering-assurance-campaign.CAMPAIGNSOURCE_REVISION_NONEMPTY",
-					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-005-revision-nonEmpty",
-					"keyword": "nonEmpty",
-					"operands": {},
-					"origin": {
-						"source": {
-							"path": "spec/functional/VO-005-campaign-source.md",
-							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
-							"startColumn": 3,
-							"startLine": 29
+							"startLine": 21
 						}
 					}
 				}
@@ -96,9 +36,7 @@
 		}
 	},
 	"required": [
-		"digest",
-		"repository",
-		"revision"
+		"repository"
 	],
 	"additionalProperties": false,
 	"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-005",

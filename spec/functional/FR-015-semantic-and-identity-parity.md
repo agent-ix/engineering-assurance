@@ -9,8 +9,6 @@ relationships:
     type: "requires"
   - target: "ix://agent-ix/engineering-assurance/FR-010"
     type: "requires"
-  - target: "ix://agent-ix/engineering-assurance/FR-011"
-    type: "requires"
   - target: "ix://agent-ix/engineering-assurance/FR-014"
     type: "requires"
 ---
@@ -19,13 +17,12 @@ relationships:
 
 ## Description
 
-Engineering Assurance SHALL port accepted-corpus access, evidence-state
+Engineering Assurance SHALL port evidence-state
 classification, verification-semantic validation, bounded projections, and
 fixture generation to Rust without changing observable identities or ownership.
 
 ## Inputs
 
-- The corpus.
 - Canonical semantic-reference and report fixtures.
 - Finite RFC 8259 JSON producer outputs, including exact integers outside the
   `i64` and `u64` ranges.
@@ -60,23 +57,12 @@ fixture generation to Rust without changing observable identities or ownership.
 - Assign a new explicit version to a different canonicalization algorithm.
 - Keep generated foreign-language fixtures as inert data from one canonical
   semantic source.
-- Read the accepted compatibility corpus only through one explicit
-  caller-selected corpus root, and SHALL NOT discover a root from the ambient
-  environment.
-- Refuse an absolute retained path, a parent-traversing retained path, a
-  symlinked or non-regular retained entry, a missing retained entry, a duplicate
-  case or chain-role identity, an unknown corpus version, and a malformed corpus
-  index, each as a distinct typed refusal.
-- If an accepted-corpus input exceeds a declared ceiling on index bytes,
-  retained artifact bytes, retained path bytes, entry population, or directory
-  nesting depth, then the accepted-corpus reader SHALL refuse that input as a
-  typed error before reading or allocating beyond the ceiling.
 - Consume portable verification contracts by version rather than copying them
   into a second contract family.
 
 ## Error Conditions
 
-Unknown versions, missing provenance, ambiguous mappings, digest mismatch,
+Unknown versions, missing provenance, ambiguous mappings,
 malformed fixtures, invalid governing versions, unsupported canonicalization,
 and non-finite or overflowing numeric inputs fail explicitly while preserving
 the original input bytes. Each semantic failure exposes a typed refusal reason;
@@ -89,20 +75,20 @@ diagnostic prose is not the discriminator.
 | FR-015-CON-1 | Compatibility access SHALL be read-only. | Data Integrity | Test |
 | FR-015-CON-2 | Generated foreign-language fixtures SHALL NOT be executed by qualification. | Security | Test (TC-104) |
 | FR-015-CON-3 | The implementation SHALL NOT define a second persisted verification or evidence record family. | Responsibility | Test (TC-104) |
-| FR-015-CON-4 | The accepted-corpus reader SHALL refuse, as a typed error and before allocating for it, any input beyond its declared ceiling on index bytes, retained artifact bytes, retained path bytes, entry population, or directory nesting depth. | Resource | Test |
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-015-AC-1 | Over the accepted corpus and focused fictional cases, Rust produces the declared byte-identical canonical fixtures, identity digests, and bounded reports, including exact integers beyond `i64` and `u64`; structured-identity inputs produce their declared classification or refusal. | Test (TC-100) |
+| FR-015-AC-1 | Over focused fictional cases, Rust produces the declared byte-identical canonical fixtures, identity digests, and bounded reports, including exact integers beyond `i64` and `u64`; structured-identity inputs produce their declared classification or refusal. | Test (TC-100) |
 | FR-015-AC-2 | Success, unavailable, not-computed, not-applicable, failed, inconclusive, malformed, stale, tampered, lossy, and unreadable remain distinguishable; typed state labels retain stable wire spellings and untyped labels require exactly one known state. | Test (TC-102) |
-| FR-015-AC-3 | Invalid versions, provenance, mappings, fixtures, digests, and numeric identity inputs fail without an identity digest or source-byte change; immutable `x`/`X` metadata remains accepted; every exercised semantic and PGM-01 refusal exposes its expected typed reason without inspecting diagnostic prose. | Test (TC-103) |
+| FR-015-AC-3 | Invalid versions, provenance, mappings, fixtures, and numeric identity inputs fail without an identity digest or source-byte change; immutable `x`/`X` metadata remains accepted; every exercised semantic and PGM-01 refusal exposes its expected typed reason without inspecting diagnostic prose. | Test (TC-103) |
 | FR-015-AC-4 | Static ownership and execution audits find no copied portable contract family, persisted evidence family, or executable foreign-language fixture. | Test (TC-104) |
-| FR-015-AC-5 | Native accepted-corpus access reads every retained artifact from one explicit corpus root, covers every required corpus state, and refuses absolute or parent-traversing paths, symlinked or non-regular entries, missing entries, duplicate identities, unknown corpus versions, and malformed indexes without writing a byte. Every resource bound the reader enforces — index size, retained-entry size, enumerated population, and directory depth — is refused at exactly one unit past the bound and honoured at exactly the bound, so neither removing a bound nor shifting its comparison passes. | Test (TC-069, TC-070, TC-071, TC-072, TC-073, TC-074, TC-075, TC-076, TC-078) |
+
+FR-015-AC-5 and FR-015-CON-4 are withdrawn. Their rows are removed and the identifiers are not reused.
 
 ## Dependencies
 
-- **Upstream**: FR-008 through FR-011, FR-014, and any accepted portable
+- **Upstream**: FR-008 through FR-010, FR-014, and any accepted portable
   verification-contract release consumed by the implementation.
 - **Downstream**: FR-016 and FR-017 reuse these types and classifiers.

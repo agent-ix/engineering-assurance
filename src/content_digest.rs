@@ -290,59 +290,8 @@ mod tests {
 
     use super::{ContentDigest, DigestAlgorithm, DigestError};
 
-    const EMPTY: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-    const ABC: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
-    // 65_537 bytes `i % 251`: one byte past 64 KiB, so it spans five 16 KiB reads.
-    const PAST_64_KIB: &str = "237356e18b503616912abb8ffaed3a72591e397d4ac294c4637917d48a3f529d";
-
-    fn past_64_kib() -> Vec<u8> {
-        (0..65_537_u32)
-            .map(|index| u8::try_from(index % 251).expect("remainder fits a byte"))
-            .collect()
-    }
-
-    /// A reader that yields at most `chunk` bytes per call.
-    struct Chunked<'a> {
-        bytes: &'a [u8],
-        chunk: usize,
-    }
-
-    impl std::io::Read for Chunked<'_> {
-        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-            let count = self.chunk.min(buffer.len()).min(self.bytes.len());
-            buffer[..count].copy_from_slice(&self.bytes[..count]);
-            self.bytes = &self.bytes[count..];
-            Ok(count)
-        }
-    }
-
-    #[trace("TC-199", "FR-014-AC-11")]
-    #[test]
-    fn tc_199_golden_hex_is_pinned_for_bytes_reader_and_hasher() {
-        let long = past_64_kib();
-        for (input, expected) in [
-            (&b""[..], EMPTY),
-            (&b"abc"[..], ABC),
-            (&long[..], PAST_64_KIB),
-        ] {
-            assert_eq!(ContentDigest::of_bytes(input).as_str(), expected);
-            let streamed = ContentDigest::of_reader(
-                &mut Chunked {
-                    bytes: input,
-                    chunk: 7,
-                },
-                u64::MAX,
-                || false,
-            )
-            .expect("streaming succeeds");
-            assert_eq!(streamed.as_str(), expected);
-            let mut hasher = ContentDigest::hasher();
-            for piece in input.chunks(1000) {
-                hasher.update(piece);
-            }
-            assert_eq!(hasher.finalize().as_str(), expected);
-        }
-    }
+    /// A well-formed 64-character lowercase hexadecimal sample for parser cases.
+    const SAMPLE: &str = "abababababababababababababababababababababababababababababababab";
 
     #[trace("TC-199", "FR-014-AC-11")]
     #[test]
@@ -353,9 +302,8 @@ mod tests {
         );
         assert_eq!(
             ContentDigest::of_reader(&mut Cursor::new(b"abc"), 3, || false)
-                .expect("exactly at the ceiling")
-                .as_str(),
-            ABC
+                .expect("exactly at the ceiling"),
+            ContentDigest::of_bytes(b"abc")
         );
         assert_eq!(
             ContentDigest::of_reader(&mut Cursor::new(b"abc"), 3, || true),
@@ -366,27 +314,27 @@ mod tests {
     #[trace("TC-199", "FR-014-AC-11")]
     #[test]
     fn tc_199_algorithm_is_carried_and_prefixed_form_is_strict_and_additive() {
-        let digest = ContentDigest::of_bytes(b"abc");
+        let digest = ContentDigest::parse(SAMPLE).expect("sample parses");
         assert_eq!(digest.algorithm(), DigestAlgorithm::Sha256);
         assert_eq!(DigestAlgorithm::CURRENT.name(), "sha256");
-        assert_eq!(digest.as_str(), ABC);
-        assert_eq!(digest.prefixed(), format!("sha256:{ABC}"));
+        assert_eq!(digest.as_str(), SAMPLE);
+        assert_eq!(digest.prefixed(), format!("sha256:{SAMPLE}"));
         assert_eq!(
             ContentDigest::parse_prefixed(&digest.prefixed()),
             Ok(digest.clone())
         );
-        assert_eq!(ContentDigest::parse(ABC), Ok(digest));
+        assert_eq!(ContentDigest::parse(SAMPLE), Ok(digest));
 
-        let upper = ABC.to_uppercase();
+        let upper = SAMPLE.to_uppercase();
         for (value, expected) in [
-            (format!("blake3:{ABC}"), DigestError::UnknownAlgorithm),
-            (format!("SHA256:{ABC}"), DigestError::UnknownAlgorithm),
-            (format!(":{ABC}"), DigestError::UnknownAlgorithm),
-            (ABC.to_owned(), DigestError::Invalid),
+            (format!("blake3:{SAMPLE}"), DigestError::UnknownAlgorithm),
+            (format!("SHA256:{SAMPLE}"), DigestError::UnknownAlgorithm),
+            (format!(":{SAMPLE}"), DigestError::UnknownAlgorithm),
+            (SAMPLE.to_owned(), DigestError::Invalid),
             (format!("sha256:{upper}"), DigestError::Invalid),
-            (format!("sha256:{}", &ABC[1..]), DigestError::Invalid),
-            (format!("sha256:{ABC}0"), DigestError::Invalid),
-            (format!("sha256:{}g", &ABC[1..]), DigestError::Invalid),
+            (format!("sha256:{}", &SAMPLE[1..]), DigestError::Invalid),
+            (format!("sha256:{SAMPLE}0"), DigestError::Invalid),
+            (format!("sha256:{}g", &SAMPLE[1..]), DigestError::Invalid),
             (String::new(), DigestError::Invalid),
         ] {
             assert_eq!(
@@ -397,7 +345,7 @@ mod tests {
         }
         // The bare parser stays the bare form: a prefixed value is not accepted.
         assert_eq!(
-            ContentDigest::parse(&format!("sha256:{ABC}")),
+            ContentDigest::parse(&format!("sha256:{SAMPLE}")),
             Err(DigestError::Invalid)
         );
         assert_eq!(ContentDigest::parse(&upper), Err(DigestError::Invalid));

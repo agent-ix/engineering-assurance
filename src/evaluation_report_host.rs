@@ -749,7 +749,7 @@ mod tests {
     const SOURCE_REVISION: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
     fn identity(name: &str) -> Value {
-        json!({"name": name, "version": "1.2.3", "digest": "a".repeat(64)})
+        json!({"name": name, "version": "1.2.3"})
     }
 
     fn report(work_dir: &Path, digest: &str, model: Option<&str>) -> Value {

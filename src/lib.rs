@@ -33,7 +33,6 @@
 //! |---|---|---|---|
 //! | `atomic-publish` | `atomic_publish` (Unix only) | | `rustix`, `thiserror` |
 //! | `claim-strength` | `claim_strength` | | `serde` |
-//! | `compatibility-corpus` | `compatibility_corpus` | `content-digest` | `serde`, `serde_json`, `thiserror` |
 //! | `content-digest` | `content_digest` | | `serde`, `sha2`, `thiserror` |
 //! | `content-rights` | `content_rights` | | `regex`, `serde`, `serde_json`, `thiserror`, `unicode-casefold` |
 //! | `discovery` | `discovery` | `workflow` | `serde`, `serde_json`, `thiserror` |
@@ -48,7 +47,7 @@
 //! | `package-membership` | `package_membership` | | `serde`, `thiserror` |
 //! | `producer-execution` | `producer_execution` | `content-digest` | `rustix`, `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
 //! | `reference-verifier` | `reference_verifier` (Linux only) | `producer-execution` | none beyond `producer-execution`'s |
-//! | `semantics` | `semantics` | `claim-strength`, `compatibility-corpus`, `content-digest`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
+//! | `semantics` | `semantics` | `claim-strength`, `content-digest`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
 //! | `source-audit` | `source_audit` | | `serde`, `syn`, `thiserror` |
 //! | `structured-yaml` | `structured_yaml` | | `serde_json`, `yaml_serde` |
 //! | `workflow` | `workflow` | | `serde`, `serde_json`, `thiserror` |
@@ -65,8 +64,6 @@ pub mod atomic_publish;
 pub mod campaign;
 #[cfg(feature = "claim-strength")]
 pub mod claim_strength;
-#[cfg(feature = "compatibility-corpus")]
-pub mod compatibility_corpus;
 #[cfg(feature = "content-digest")]
 pub mod content_digest;
 #[cfg(feature = "content-rights")]

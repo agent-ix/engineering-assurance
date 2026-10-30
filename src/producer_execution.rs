@@ -116,8 +116,6 @@ pub struct ContractBinding {
     pub kind: String,
     /// Exact contract version.
     pub version: String,
-    /// Exact source revision.
-    pub revision: String,
 }
 
 /// Exact identity and provenance for the selected producer executable.
@@ -128,8 +126,6 @@ pub struct ProducerDescriptor {
     pub name: String,
     /// Exact producer version governed by the caller.
     pub version: String,
-    /// Exact source revision governed by the caller.
-    pub source_revision: String,
     /// Absolute executable path; ambient `PATH` lookup is forbidden.
     pub executable: String,
 }
@@ -1183,11 +1179,7 @@ fn validate_structure(request: &ProducerExecutionRequest) -> Result<(), InvalidE
         ContainmentBinding::ProcessGroupV1 { contract } => contract,
     };
     validate_contract(confinement_contract)?;
-    for value in [
-        &request.producer.name,
-        &request.producer.version,
-        &request.producer.source_revision,
-    ] {
+    for value in [&request.producer.name, &request.producer.version] {
         validate_text(value).map_err(|()| InvalidExecutionRequest::Provenance)?;
     }
     validate_absolute_normal_path(&request.capability_root)?;
@@ -1301,7 +1293,7 @@ fn validate_artifact_bindings(
 }
 
 fn validate_contract(binding: &ContractBinding) -> Result<(), InvalidExecutionRequest> {
-    for value in [&binding.kind, &binding.version, &binding.revision] {
+    for value in [&binding.kind, &binding.version] {
         validate_text(value).map_err(|()| InvalidExecutionRequest::Contract)?;
     }
     Ok(())
@@ -2918,11 +2910,6 @@ mod campaign_source_projection {
             || !tree.manifest.ends_with(&[0])
         {
             return Err(CampaignError::SourceTree { field: "manifest" });
-        }
-        if ContentDigest::of_bytes(&tree.manifest).as_str() != source.digest {
-            return Err(CampaignError::Binding {
-                field: "sourceTree.manifestDigest",
-            });
         }
         let root = Path::new(root);
         if !root.is_absolute() {

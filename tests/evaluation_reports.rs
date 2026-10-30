@@ -17,7 +17,7 @@ const DIGEST: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 const SOURCE_REVISION: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
 fn identity(name: &str) -> Value {
-    json!({"name": name, "version": "1.2.3", "digest": DIGEST})
+    json!({"name": name, "version": "1.2.3"})
 }
 
 fn governing() -> Value {

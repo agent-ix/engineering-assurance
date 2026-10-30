@@ -106,7 +106,6 @@ implemented and reviewed.
 | FR-006 | FR-006-AC-3 | TC-033 | ✅ Passing |
 | FR-006 | FR-006-AC-4 | TC-034 | ✅ Passing |
 | FR-006 | FR-006-AC-5 | TC-049 | ✅ Passing |
-| FR-006 | FR-006-AC-6 | TC-050 | ✅ Passing |
 | FR-006 | FR-006-AC-7 | TC-051 | ✅ Passing |
 | FR-007 | FR-007-AC-1 | TC-035 | ✅ Passing |
 | FR-007 | FR-007-AC-2 | TC-036 | ✅ Passing |
@@ -121,12 +120,11 @@ implemented and reviewed.
 | FR-014 | FR-014-AC-7 | TC-190 | ✅ `tests/feature_matrix.rs` metadata/list equality, empty-derivation refusal, and `make rust-features` compile of each feature alone passing; enforced in CI through the existing `rust-tests` target |
 | FR-014 | FR-014-AC-8 | TC-196 | ✅ `tests/feature_matrix.rs`: no feature graph other than `full` resolves a binary-only crate; `serde_json/arbitrary_precision` is on exactly for the `exact-numbers` features |
 | FR-014 | FR-014-AC-9 | TC-197 | ✅ `tests/default_features.rs`: the default graph equals the empty-feature graph, resolves none of the binary-only crates and no `serde_json`; `--features full` still resolves the binary's crates |
-| FR-014 | FR-014-AC-11 | TC-199 | ✅ `ContentDigest` unit, wire-form and per-call-site golden cases passing |
-| FR-015 | FR-015-AC-1 | TC-100 | 🚧 Fixture-generation, PGM-01, and report slices are all backed against reference bytes captured once from the retired implementation and committed to this repository; no retained implementation is executed as a differential oracle in this row's qualification path; aggregate pending |
+| FR-014 | FR-014-AC-11 | TC-199 | ✅ `ContentDigest` unit and wire-form cases passing |
+| FR-015 | FR-015-AC-1 | TC-100 | 🚧 Fixture-generation and report slices are backed against reference bytes captured once from the retired implementation and committed to this repository; no retained implementation is executed as a differential oracle in this row's qualification path; aggregate pending |
 | FR-015 | FR-015-AC-2 | TC-102 | 🚧 Evidence-availability and semantic-reference state vocabularies backed; aggregate pending |
 | FR-015 | FR-015-AC-3 | TC-103 | 🚧 Evidence, semantic, PGM, and accepted-corpus path refusals plus bounded population/depth checks backed; aggregate pending |
 | FR-015 | FR-015-AC-4 | TC-104 | 🚧 Semantic ownership, contract-family, library-capability, and inert-fixture static slices backed; aggregate executable-language audit pending |
-| FR-015 | FR-015-AC-5 | TC-069..TC-076, TC-078 | 🚧 Native Rust accepted-corpus access and bounded-path refusals backed; aggregate pending |
 | FR-016 | FR-016-AC-1 | TC-105 | ✅ Rust onboarding core, CLI, retained-reference parity, and confined publication backed |
 | FR-016 | FR-016-AC-2 | TC-106 | ✅ Rust evaluator and CLI parity backed |
 | FR-016 | FR-016-AC-3 | TC-107 | 🚧 Rust lifecycle host and adverse cases pass |
@@ -141,8 +139,8 @@ implemented and reviewed.
 | FR-017 | FR-017-AC-6 | TC-120 | ✅ Typed Rust policy, retained-Python differential, adverse boundaries, ordering, resource ceilings, and mutation probes passing |
 | FR-017 | FR-017-AC-7 | TC-121 | ✅ Rust manifest classifier backed by locally authored, non-authoritative fixture schema and registry (PLAT-992); real conformance of the retained manifest to the FR-035 schema and upstream edge registry is additionally asserted by the `#[ignore]`d `tests/manifest_host_cli.rs::tc_121_real_manifest_conforms_to_the_authoritative_schema_and_edge_registry`, run with explicit operator-supplied schema/registry roots (PLAT-994) |
 | FR-018 | FR-018-AC-1 | TC-097 | 🚧 Pending implementation |
-| FR-018 | FR-018-AC-2 | TC-113 | 🚧 Content-rights, package-audit, and compatibility/corpus/fixture-generation same-revision cutovers plus their deletion candidates backed; aggregate removal population pending |
-| FR-018 | FR-018-AC-3 | TC-114 | 🚧 Content-rights, package-audit, and compatibility/corpus dispatch rollback/reapplication backed; aggregate rollback population pending |
+| FR-018 | FR-018-AC-2 | TC-113 | 🚧 Content-rights, package-audit, and compatibility/fixture-generation same-revision cutovers plus their deletion candidates backed; aggregate removal population pending |
+| FR-018 | FR-018-AC-3 | TC-114 | 🚧 Content-rights, package-audit, and compatibility dispatch rollback/reapplication backed; aggregate rollback population pending |
 | FR-018 | FR-018-AC-4 | TC-115 | 🚧 Python slice backed (`tests/python_port/module.rs`: only the configuration-only package `__init__.py` remains); JavaScript onboarding/invariant providers remain, aggregate audit pending |
 | FR-020 | FR-020-AC-1 | TC-139 | ✅ Schema accept/refuse cases and skeleton validation passing |
 | FR-020 | FR-020-AC-2 | TC-140 | ✅ Rust construction/deserialization refusals and schema/enum wire-set equality passing |
@@ -213,14 +211,12 @@ implemented and reviewed.
 | FR-002-CON-1 | TC-041 | ✅ Passing |
 | FR-002-CON-2 | TC-042 | ✅ Passing |
 | FR-007-CON-1 | TC-043 | ✅ Passing |
-| FR-011-CON-3 | TC-070 | ✅ Passing; the corpus index states plainly that it does not re-observe the source repositories |
 | FR-014-CON-1 | TC-101 | ✅ Parsed library-module containment audit passing |
 | FR-014-CON-2 | TC-101 | ✅ Parsed library-module containment audit passing |
 | FR-014-CON-3 | TC-096 | ✅ Rust package foundation backed |
-| FR-015-CON-1 | TC-076, TC-103 | 🚧 Read-only corpus, evidence, and semantic/PGM slices backed; aggregate pending |
+| FR-015-CON-1 | TC-103 | 🚧 Read-only evidence and semantic/PGM slices backed; aggregate pending |
 | FR-015-CON-2 | TC-104 | 🚧 Inert generated-fixture slice backed natively against the committed projections; aggregate pending |
 | FR-015-CON-3 | TC-104 | 🚧 Semantic-contract slice backed over a counted contract population; aggregate pending |
-| FR-015-CON-4 | TC-103 | 🚧 Index-byte, retained-path, retained-byte, entry-count, and nesting-depth ceilings backed; aggregate pending |
 | FR-016-CON-1 | TC-107 | ✅ Delegated ix-flow state/chain behavior passes |
 | FR-016-CON-2 | TC-115 | 🚧 Pending owner disposition |
 | FR-016-CON-3 | TC-106 | ✅ Deterministic I/O-free Rust evaluator backed |
@@ -288,7 +284,6 @@ implemented and reviewed.
 | TC-047 | Explicit acceptance records one attributed event and no prior acceptance state | Integration | P0 | FR-005-AC-6 | ✅ |
 | TC-048 | A run-id binding mismatch is refused without changing either run | Property | P0 | FR-005-AC-7 | ✅ |
 | TC-049 | Equivalent runs retain explicit acceptance and rejection on every host | E2E | P0 | FR-006-AC-5 | ✅ |
-| TC-050 | Evaluation agents and post-run verification use the snapshotted full ix-flow runtime package | Unit | P0 | FR-006-AC-6 | ✅ |
 | TC-051 | Release verification rejects an aggregate retained for a different repository revision | Unit | P0 | FR-006-AC-7 | ✅ |
 | TC-052 | Complete cross-component semantic fixture validates, keeps every semantic identity distinct, covers all eight concepts, and retains `measurement_plan` as an external authoritative link | Integration | P0 | StR-002-VC-1, IT-005 | ✅ Native Rust fixture validation |
 | TC-053 | Ownership/type-fit registry names all eight concepts exactly once, assigns each the reviewed authority, and stays non-executing; an incomplete, duplicated, re-assigned, or executing registry is refused with its typed reason | Static | P0 | US-005-AC-1 | ✅ Native Rust registry validation with refusal mutants |
@@ -302,21 +297,11 @@ implemented and reviewed.
 | TC-061 | A non-empty declared non-success-state set survives every language projection without collapsing, and the committed projections agree across Python, TypeScript, and Rust | Property | P0 | FR-009-AC-2 | ✅ Native Rust state and projection comparison |
 | TC-062 | Unknown versions and missing provenance fail explicitly | Property | P0 | FR-009-AC-3 | ✅ Native Rust fixture and mapping refusals |
 | TC-063 | Every projected value cites its source record and field path | Property | P0 | FR-009-AC-4 | ✅ Native Rust mapping over a non-empty mapping population |
-| TC-064 | PGM-01 source bytes and their independently recomputed digest are unchanged after mapping | Integration | P0 | FR-010-AC-1 | ✅ Native Rust mapping |
-| TC-065 | Legacy identity, result states, retained outputs, configuration and definition digests, and declared limitations are preserved field by field for v1 and v2 | Unit | P0 | FR-010-AC-2 | ✅ Native Rust mapping |
-| TC-066 | Ambiguous, unreadable, malformed, non-integer, stale, and tampered inputs stay non-successful, and an invalid caller-supplied expected digest refuses before any mapping | Property | P0 | FR-010-AC-3 | ✅ Native Rust mapping refusals |
+| TC-064 | PGM-01 source bytes are unchanged after mapping | Integration | P0 | FR-010-AC-1 | ✅ Native Rust mapping |
+| TC-065 | Legacy identity, result states, retained outputs, and declared limitations are preserved field by field for v1 and v2 | Unit | P0 | FR-010-AC-2 | ✅ Native Rust mapping |
+| TC-066 | Ambiguous, unreadable, malformed, non-integer, stale, and tampered inputs stay non-successful | Property | P0 | FR-010-AC-3 | ✅ Native Rust mapping refusals |
 | TC-067 | JSON and Markdown projections preserve bounded report semantics and match reference bytes captured once from the retired implementation | Unit | P0 | FR-010-AC-4 | ✅ Native Rust rendering against committed reference bytes |
 | TC-068 | Schema/ownership audit reads a non-empty contract population and finds no duplicate record family, and every value this library produces still conforms to the schemas this repository publishes for it | Static | P0 | NFR-004-AC-1 | ✅ Native Rust contract audit and published-schema conformance |
-| TC-069 | Every retained corpus artifact is readable through its validated path, and every real legacy case matches the digest its source repository recorded | Integration | P0 | FR-011-AC-1, FR-011-CON-2, FR-015-AC-5 | ✅ Native Rust corpus host |
-| TC-070 | The corpus covers all eight required states and every constructed case records its edit and reason, and states plainly that it makes no claim about the live state of the source repositories | Static | P0 | FR-011-AC-2, FR-011-CON-3, FR-015-AC-5 | ✅ Native Rust corpus index |
-| TC-071 | Each legacy case maps to its recorded outcome with required mappings preserved and a stated limitation | Property | P0 | FR-011-AC-3, FR-015-AC-5 | ✅ Native Rust corpus host over the Rust PGM-01 mapper |
-| TC-072 | No failed, unavailable, not-computed, malformed, or tampered case reads as clean or reports a passed check | Property | P0 | FR-011-AC-4, FR-015-AC-5 | ✅ Native Rust corpus host over the Rust PGM-01 mapper |
-| TC-073 | A real legacy record preserves revision, repository, producer identity, and environment, keeps inconclusive distinct, and names what it could not carry | Unit | P0 | FR-011-AC-5, FR-015-AC-5 | ✅ Native Rust corpus host |
-| TC-074 | The retained receipt validates against Quoin's packaged schema and binds the exact chain digests | Integration | P0 | FR-011-AC-6, FR-015-AC-5 | ✅ Native Rust corpus host |
-| TC-075 | Every producer case names a real producer, source path, and shared-model concept across languages | Integration | P0 | FR-011-AC-7, FR-015-AC-5 | ✅ Native Rust corpus host; the closed concept vocabulary and non-empty producer/path rules are refused at parse time by the corpus index |
-| TC-076 | Reading and mapping the corpus changes no byte, no artifact is executable, and the reader reaches for no subprocess, socket, or write | Static | P0 | FR-011-AC-8, FR-011-CON-1, FR-011-CON-4, FR-015-AC-5, FR-015-CON-1 | ✅ Native Rust corpus host; the pure corpus index module is covered by the TC-101 library-capability audit |
-| TC-077 | Every retained legacy and producer case reproduces, from its retained bytes alone, the source digest the corpus recorded for it | Integration | P0 | FR-011-AC-9 | ✅ `tests/compatibility_corpus.rs` (legacy cases in TC-069's test, producer cases in TC-075's); regenerating the corpus from source repositories is owned by `agent-ix/qa-corpus` |
-| TC-078 | An uninitialized corpus fails rather than passing quietly | Integration | P0 | FR-011-AC-10, FR-015-AC-5 | ✅ Native Rust corpus host |
 | TC-087 | Every family in the decision table carries exactly one of keep, delete, or replace | Static | P0 | FR-013-AC-1 | ✅ |
 | TC-088 | The decision table accounts for every recurring script family present in the eight repositories, and states when the sources cannot be read | Integration | P0 | FR-013-AC-2 | ✅ |
 | TC-089 | Repository-local generic evidence schemas and stdout-derived verdicts are forbidden by name, and a domain-output schema is permitted | Static | P0 | FR-013-AC-3 | ✅ |
@@ -329,10 +314,10 @@ implemented and reviewed.
 | TC-097 | Every first-party executable path in this repository has one current state and final disposition | Static | P0 | StR-003-VC-2, FR-018-AC-1 | 🚧 pending implementation |
 | TC-098 | Machine CLI output obeys the versioned stdout/stderr contract | Property | P0 | FR-014-AC-2 | 🚧 pending implementation |
 | TC-099 | Invalid protocol, input, root, host, and host response fail before side effects | Property | P0 | FR-014-AC-3 | 🚧 pending implementation |
-| TC-100 | For each ADR-002 semantic/projection/fixture capability row, Rust agrees byte-for-byte with the accepted identity and report reference over the named corpus and focused adverse cases, including generated arbitrary-precision integer boundaries; the accepted corpus is read natively | Integration | P0 | StR-003-VC-3, FR-015-AC-1 | 🚧 Fixture-generation, PGM-01, and report slices are all backed against reference bytes captured once from the retired implementation and committed to this repository; no retained implementation is executed as a differential oracle in this row's qualification path; aggregate pending |
+| TC-100 | For each ADR-002 semantic/projection/fixture capability row, Rust agrees byte-for-byte with the accepted identity and report reference over focused fictional and adverse cases, including generated arbitrary-precision integer boundaries | Integration | P0 | StR-003-VC-3, FR-015-AC-1 | 🚧 Fixture-generation and report slices are backed against reference bytes captured once from the retired implementation and committed to this repository; no retained implementation is executed as a differential oracle in this row's qualification path; aggregate pending |
 | TC-101 | Parsed Rust syntax for every reusable-library module rejects filesystem, environment, child-program, network, persistence, and arbitrary-stdout capability paths, including lexical aliases declared in that source, without treating comments or literals as code or claiming cross-document compiler resolution | Static | P0 | FR-014-AC-4, FR-014-CON-1, FR-014-CON-2 | ✅ AST audit, closed findings, adverse scope/alias cases, and mutation evidence passing |
 | TC-102 | Every successful and non-successful semantic state remains distinct; typed state spellings and exact-one untyped-label validation remain callable without string parsing | Integration | P0 | FR-015-AC-2 | 🚧 evidence-availability and semantic-reference state vocabularies backed; aggregate pending |
-| TC-103 | Invalid semantic inputs, including non-finite/retained-domain-overflow numbers, invalid/mutable version tokens, and structured PGM-01 identities, fail or classify read-only without an identity digest or source-byte change; unknown corpus versions, missing index members, unavailable corpora, absolute or parent-traversing retained paths, symlinked or non-regular entries, missing entries, and duplicate identities refuse explicitly without reading or writing outside the supplied corpus root; an index or retained path beyond its declared ceiling refuses before allocating for it; every enumerated-population and directory-depth bound is honoured at exactly the bound and refused one unit past it; independent fixture classes retain leading/trailing and interior ASCII space plus lowercase/uppercase immutable `x` metadata boundaries; every exercised semantic and PGM-01 refusal exposes a typed reason without diagnostic-prose matching | Integration | P0 | FR-015-AC-3, FR-015-CON-1, FR-015-CON-4 | 🚧 evidence, semantic, PGM, bounded population/depth, and corpus path refusals backed; aggregate pending |
+| TC-103 | Invalid semantic inputs, including non-finite/retained-domain-overflow numbers, invalid/mutable version tokens, and structured PGM-01 identities, fail or classify read-only without an identity digest or source-byte change; independent fixture classes retain leading/trailing and interior ASCII space plus lowercase/uppercase immutable `x` metadata boundaries; every exercised semantic and PGM-01 refusal exposes a typed reason without diagnostic-prose matching | Integration | P0 | FR-015-AC-3, FR-015-CON-1 | 🚧 evidence, semantic, and PGM refusals backed; aggregate pending |
 | TC-104 | Contract ownership and inert foreign-language fixtures remain bounded over non-empty audited populations | Static | P0 | FR-015-AC-4, FR-015-CON-2, FR-015-CON-3 | 🚧 semantic ownership, contract-family, library-capability, and inert-fixture slices backed; aggregate audit pending |
 | TC-105 | Rust onboarding produces the declared complete sorted inventory, status, recommendation, and artifact path for accepted existing, absent, conflicting, malformed, unavailable, unjustified, incomplete-boundary, and valid-authoring fixtures without executing another implementation; duplicate-key and merge-key artifact identities remain malformed; newly authored artifacts retain the declared parsed frontmatter and Markdown body and pass Quire, while malformed requests, unsupported types, absolute or parent-traversing targets, symlink escapes, existing destinations, and invalid staged artifacts publish nothing | Property | P0 | FR-016-AC-1, FR-016-CON-4 | ✅ Native explicit-oracle core/CLI, fail-closed YAML identity, real Quire validation, confined publication, and legacy lane removal passing |
 | TC-106 | Rust and the retained invariant provider return the same ordered typed outcomes for all eleven canonical invariants and valid boundary fixtures at one explicit evaluation instant; unknown invariant names and malformed Rust requests fail before an outcome | Integration | P0 | FR-016-AC-2, FR-016-CON-3 | ✅ Rust evaluator, retained-reference parity, fail-closed probes, and CLI boundary passing |
@@ -403,12 +388,12 @@ implemented and reviewed.
 | TC-178 | An authored output-tree role requires an exact runtime binding; changing its selected path changes the EA request identity | Unit | P0 | FR-019-AC-10, VO-001 | ✅ `tests/campaign.rs` declaration/binding cases passing |
 | TC-179 | A campaign rejects stale or absent plan procedures, unresolved dependencies, and dependency cycles without recursive graph traversal | Unit | P0 | FR-019-AC-9, VO-004 | ✅ `tests/campaign.rs` graph cases passing |
 | TC-180 | A procedure resolves into an EA bounded execution request whose identity changes with selected input, arguments, environment, and source inputs | Unit | P0 | FR-019-AC-10, VO-001 | ✅ `tests/campaign.rs` resolver cases passing |
-| TC-181 | A run rejects stale definition/source digests, unknown members, and malformed attempt inventories | Unit | P0 | FR-019-AC-11, VO-007 | ✅ `tests/campaign.rs` run-shape cases passing |
-| TC-182 | A complete Git tree manifest binds tracked regular files, executable mode, and omitted symlink targets by Git blob OID and SHA-256; tampering or unsupported modes refuse source projection | Integration | P0 | FR-019-AC-11, VO-005 | ✅ `tests/campaign.rs` real temporary Git repository cases passing |
+| TC-181 | A run rejects unknown members and malformed attempt inventories | Unit | P0 | FR-019-AC-11, VO-007 | ✅ `tests/campaign.rs` run-shape cases passing |
+| TC-182 | A complete Git tree manifest binds tracked regular files, executable mode, and omitted symlink targets by Git blob OID; tampering or unsupported modes refuse source projection | Integration | P0 | FR-019-AC-11, VO-005 | ✅ `tests/campaign.rs` real temporary Git repository cases passing |
 | TC-183 | Dynamic dependency input role prefixes accept only declared path components, require a matching sealed input when marked required, and reject undeclared near matches or malformed prefixes | Unit | P0 | FR-019-AC-10, VO-011 | ✅ `tests/campaign.rs` prefix binding cases passing |
 | TC-184 | A declared producer input origin names a campaign source or declared member and output artifact, matches the selected runtime role and exact origin, and rejects an undeclared dynamic input | Integration | P0 | FR-019-AC-10, VO-012, EN-006 | ✅ `tests/campaign.rs` origin context and binding cases passing; independent Quoin byte replay pending |
 | TC-185 | The MeasurementPlan schema accepts a missing or safe repository-relative JSON `execution_procedure` with `protected_apparatus` declared, refuses unsafe or non-JSON paths and a missing protected list, and leaves exact protected-path membership and source-byte checks to Quoin | Unit | P0 | FR-024-AC-10 | ✅ `tests/python_port/campaign_measurement_plan.rs` schema cases passing |
-| TC-186 | A source-bound EA request parses from its retained JSON with identical typed fields and identity; malformed digests, unknown fields, explicit elided defaults and an invalid protocol refuse before replay | Unit | P0 | FR-019-AC-12 | ✅ `tests/campaign.rs` retained-request accept/refuse cases passing |
+| TC-186 | A source-bound EA request parses from its retained JSON with identical typed fields and identity; unknown fields, explicit elided defaults and an invalid protocol refuse before replay | Unit | P0 | FR-019-AC-12 | ✅ `tests/campaign.rs` retained-request accept/refuse cases passing |
 | TC-187 | A Rust fixture copied beside a sibling fixture and pinned by absolute path reports its own resolved executable path and `argv[0]` as the executable path exactly as pinned in the request, re-executes itself through that path, and runs its sibling from the same directory, and a `#!` script pinned by absolute path sees that path as `$0`, each completing through the executor | Integration | P0 | FR-019-AC-13 | ✅ self-path, `argv[0]`, self re-execution, sibling execution and `#!` script `$0` cases passing |
 | TC-188 | A relative margin moves the baseline value by the margin times its absolute value in the direction of improvement, including for negative baselines and baselines of different scale; an absent margin mode is absolute and an absolute rule does not emit the key; a margin mode without a margin, on a threshold, or with an unknown value is refused; and the schema's margin_mode enum equals the Rust wire names | Unit | P1 | FR-021-AC-12 | ✅ evaluation, validation, round-trip and wire-parity cases passing |
 | TC-189 | The requirement-test source audit is told one trace grammar. Under `DocComment`, `/// Trace:` lines whose identifiers are requirement-family ids pass; an absent line yields `DocTraceMissing`, and an empty list, malformed entry, test-case id or placeholder yields `DocTraceIdInvalid`; block, `#[doc]`, multi-line, inner-doc, lowercase-key, aliased-import and serialized-name cases are covered; under either grammar the other grammar's form does not satisfy the audit, and import-shape findings appear only under `Attribute` | Static | P0 | FR-014-AC-6 | ✅ `tests/source_audit.rs` doc-comment and grammar-exclusivity cases passing |
@@ -419,7 +404,7 @@ implemented and reviewed.
 | TC-195 | Each artifact schema is a valid schema that accepts its skeleton; the `review_by` pattern alone gives the verdicts the consumer gave the original `format` check on 40 measured values and agrees with a format-asserting validator over a generated calendar, time, offset, fraction and separator set, with the leap-second and space-separator differences documented | Unit | P1 | FR-003-AC-8 | ✅ `tests/semantic_exports.rs` and `tests/python_port/module.rs` passing |
 | TC-196 | For every feature, the normal-dependency graph (default features off) contains none of `cap-std`, `clap`, `tar`, `zip`, `flate2`, `tempfile` (only `full` may), and `serde_json/arbitrary_precision` is on exactly for the features that imply `exact-numbers` (`evidence`, `semantics`, `evaluation`, `evaluation-reports`, `exact-numbers`, `full`); `manifest` and `source-audit` keep the dependencies their modules need | Static | P0 | FR-014-AC-8 | ✅ `tests/feature_matrix.rs` passing (`cargo tree` per feature); mutation-checked with banned crates added to `evidence` and `exact-numbers` added to and removed from a feature |
 | TC-197 | The `default` feature set is empty: the default-feature `cargo tree` (normal edges, and feature edges) equals the `--no-default-features` one, contains none of `cap-std`, `clap`, `tar`, `zip`, `flate2`, `tempfile` and no `serde_json` (so no `serde_json/arbitrary_precision`), while `--features full` still resolves `clap` and `serde_json` | Static | P0 | FR-014-AC-9 | ✅ `tests/default_features.rs` passing; mutation-checked with a capability added to `default` |
-| TC-199 | `ContentDigest` pins the bare lowercase hex for empty, `abc` and 65,537-byte inputs through bytes, streaming reader, incremental hasher, `of_file` and PGM-01 `source_digest`; three JSON outputs through the evidence `output_digest`; one fixed input each through the history digest, governing file and runtime identity, package staging digest, executor snapshot, retained transcript and the campaign source projection; the evaluation-report identity digest is not pinned (a report embeds its temporary work directory); `of_file` refuses links, non-regular and absent paths; the reader refuses over-ceiling and cancelled reads; the algorithm is carried by the value; the `sha256:<hex>` form round-trips and the parser refuses an unknown algorithm, uppercase, wrong length and a missing prefix while the bare parser refuses the prefixed form; the serialized form is the bare hex string | Unit | P0 | FR-014-AC-11 | ✅ `src/content_digest.rs`, `tests/evidence_parity.rs`, `tests/semantics_parity.rs`, `tests/campaign.rs`, `tests/producer_execution.rs` and the host-module unit tests passing |
+| TC-199 | `of_file` refuses links, non-regular and absent paths; the reader refuses over-ceiling and cancelled reads; the algorithm is carried by the value; the `sha256:<hex>` form round-trips and the parser refuses an unknown algorithm, uppercase, wrong length and a missing prefix while the bare parser refuses the prefixed form; the serialized form is the bare hex string | Unit | P0 | FR-014-AC-11 | ✅ `src/content_digest.rs` and `tests/producer_execution.rs` passing |
 | TC-201 | From a passing projection with one binding broken, the Rust evaluator and the retained provider agree on a failed outcome with that binding's code: any stage pair but one step forward in the MeasurementPlan schema's stage order, or an unknown stage, is `promotion_must_advance_one_stage`; an impact snapshot missing a change array or naming another revision, profile or baseline is `impact_snapshot_incomplete`; an expected but absent exception, or a recorded one unowned, unjustified, without impact, expired or undated whether or not expected, is `owned_current_exception_required`; a review for another subject, revision, analysis or artifact type, an invalid one or one without a path is `architecture_review_missing` or `code_review_missing`; each unbroken projection passes | Unit | P0 | FR-016-AC-5 | ✅ `tests/workflow_invariants_parity.rs` passing; mutation-checked by reordering two stages and dropping the architecture subject binding |
 | TC-202 | `engineering-assurance onboard-report --summary` with stub Quire and Quoin reports a valid and an invalid artifact with its findings, caps findings at ten with a `+N more` line, labels this checkout's module version, reports `null` for an absent tool, omits the orientation sections, and exits 1 on an invalid artifact, 3 with a stated reason without Quire, and 0 when every artifact validates | Integration | P1 | FR-001-AC-9 | ✅ `tests/python_port/onboarding_script.rs` summary cases passing |
 | TC-203 | The MeasurementPlan schema accepts each ground-truth kind at and below gate, requires `ground_truth_kind` at gate as the only finding, leaves it optional below gate, and refuses an unknown, case-variant or empty value at every stage | Unit | P1 | FR-024-AC-11 | ✅ `tests/python_port/module.rs` schema cases passing |
@@ -593,16 +578,6 @@ become reachable again the moment a second host is declared.
 | FR-010 | FR-010-AC-2 | TC-065 | ✅ Passing |
 | FR-010 | FR-010-AC-3 | TC-066 | ✅ Passing |
 | FR-010 | FR-010-AC-4 | TC-067 | ✅ Passing |
-| FR-011 | FR-011-AC-1 | TC-069 | ✅ Passing |
-| FR-011 | FR-011-AC-2 | TC-070 | ✅ Passing |
-| FR-011 | FR-011-AC-3 | TC-071 | ✅ Passing |
-| FR-011 | FR-011-AC-4 | TC-072 | ✅ Passing |
-| FR-011 | FR-011-AC-5 | TC-073 | ✅ Passing |
-| FR-011 | FR-011-AC-6 | TC-074 | ✅ Passing |
-| FR-011 | FR-011-AC-7 | TC-075 | ✅ Passing |
-| FR-011 | FR-011-AC-8 | TC-076 | ✅ Passing |
-| FR-011 | FR-011-AC-9 | TC-077 | ✅ Passing |
-| FR-011 | FR-011-AC-10 | TC-078 | ✅ Passing |
 | FR-013 | FR-013-AC-1 | TC-087 | ✅ Passing |
 | FR-013 | FR-013-AC-2 | TC-088 | ✅ Passing |
 | FR-013 | FR-013-AC-3 | TC-089 | ✅ Passing |
@@ -621,12 +596,9 @@ to real tracking-tagged symbols, and the retained declared-population aggregate 
 selected host commands, models, governing versions, transcripts, and outcomes.
 TC-052..TC-068 are backed natively by the Rust semantic library, whose
 tracking-tagged tests carry every criterion the retired
-`tests/test_verification_semantics.py` used to carry. TC-069..TC-078 are backed natively by
-the Rust accepted-corpus index and corpus host, which enforce the accepted
-compatibility corpus that FR-010 previously deferred. Reproducing the corpus from its recorded source repositories is not a gate of
-this repository: it belongs to the `agent-ix/qa-corpus` repository, whose
-own builder owns it, and this repository's corpus gate never reads another
-repository's checkout. TC-077 is backed by the in-repo digest comparison. TC-087..TC-094
+`tests/test_verification_semantics.py` used to carry. TC-050 and TC-069..TC-078 are
+withdrawn together with FR-006-AC-6, FR-011 and FR-015-AC-5; their ids are not
+reused. TC-087..TC-094
 remain in `tests/python_port/migration_contract.rs`, which reads the contract document
 directly.
 

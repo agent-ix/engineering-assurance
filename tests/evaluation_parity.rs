@@ -24,7 +24,6 @@ fn identity(name: &str) -> VersionIdentity {
     VersionIdentity {
         name: name.to_owned(),
         version: "1.2.3".to_owned(),
-        digest: DIGEST.to_owned(),
     }
 }
 

@@ -2,11 +2,9 @@
 
 ## Setup
 
-A fresh clone or `git worktree add` does not check out the `corpus/`
-submodule (`qa-corpus`) on its own. Run this once per worktree before any of
-the checks below -- without it, `rust-clippy`/`rust-tests` fail on missing
-`corpus/compatibility/...` fixtures with a "No such file or directory" that
-has nothing to do with whatever change is actually being reviewed:
+The `corpus/` submodule (`qa-corpus`) is optional. No lint or test gate reads
+it. Only the onboarding measurement-example listing reads
+`corpus/spec/evidence/measurements` when present. To check it out:
 
 ```bash
 git submodule update --init --recursive

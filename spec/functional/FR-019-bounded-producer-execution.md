@@ -22,11 +22,11 @@ typed result to the caller-owned response adapter.
 
 - One closed `engineering-assurance.producer-execution-request/v1` request
   containing:
-  - a stable producer name, exact version and source revision;
+  - a stable producer name and exact version;
   - an absolute producer executable path;
-  - an exact kind/version/revision binding for the caller's domain
+  - an exact kind/version binding for the caller's domain
     request or context;
-  - an exact kind/version/revision binding for the response adapter;
+  - an exact kind/version binding for the response adapter;
   - a direct procedure, explicit capability root, ordered argument bindings,
     normalized environment map, ordered input bindings, closed stdin binding,
     ordered output-artifact bindings, cooperative-confinement contract, exact
@@ -199,8 +199,8 @@ unique within their respective request collections.
 | FR-019-AC-8 | For a launched Linux invocation, the executor samples a complete, bounded host context before launch and binds it into canonical result identity; stable machine identity or explicitly boot-scoped identity is represented only by a domain-separated digest, boot-scoped and ARM CPU-ID observations additionally bind observed CPU affinity, heterogeneous or missing selected ARM CPU-ID tuples withhold context, and unavailable host context is explicit and cannot substantiate comparability. | Test (TC-175) |
 | FR-019-AC-9 | The FCD-generated procedure and campaign records have closed wire fields; procedures validate roles and bounds, campaign plans resolve at exact versions, and dependency graphs are finite and acyclic. | Test (TC-177, TC-179) |
 | FR-019-AC-10 | Declared fixed and tree output roles, dynamic input prefixes, executable path, arguments, environment, and response adapter bind to one exact FR-019 request identity; near-match undeclared roles refuse. | Test (TC-178, TC-180, TC-183) |
-| FR-019-AC-11 | A campaign run binds its definition and source graph and refuses stale or unknown attempts; a source projection verifies the complete Git tree inventory and every file or omitted symlink blob before request creation. | Test (TC-181, TC-182) |
-| FR-019-AC-12 | Retained producer-request parsing preserves every field through typed round-trip serialization and validates the request structure; malformed digests, unknown fields and explicit elided defaults refuse. A campaign verifier can compare this exact request with a source-bound reconstructed request. | Test (TC-186) |
+| FR-019-AC-11 | A campaign run refuses unknown attempts; a source projection verifies the complete Git tree inventory and every file or omitted symlink blob before request creation. | Test (TC-181, TC-182) |
+| FR-019-AC-12 | Retained producer-request parsing preserves every field through typed round-trip serialization and validates the request structure; unknown fields and explicit elided defaults refuse. A campaign verifier can compare this exact request with a source-bound reconstructed request. | Test (TC-186) |
 | FR-019-AC-13 | A producer executed through the executor sees its own executable path, `argv[0]` and a script's `$0` as the executable path exactly as named in the request, so a producer that locates a sibling executable next to itself and one that re-executes itself both complete. | Test (TC-187) |
 
 ## Dependencies

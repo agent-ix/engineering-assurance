@@ -7,36 +7,6 @@ use serde::{Deserialize, Serialize};
 /// The fields of `CampaignSource`, in the order the contract declares them.
 pub const FIELDS: &[crate::identity::FieldMeta] = &[
     crate::identity::FieldMeta {
-        identity: "ix://agent-ix/engineering-assurance-campaign/VO-005/digest",
-        name: "digest",
-        rust_name: "digest",
-        type_ref: "ix://quire/native/String",
-        rust_type: "String",
-        row: "field:single/non-null/required",
-        presence: "required",
-        nullable: false,
-        multiplicity: crate::identity::MultiplicityMeta {
-            lower: 1,
-            upper: Some(1),
-            ordered: Some(false),
-            unique: Some(false),
-        },
-        unit: None,
-        default_kind: "none",
-        default_value: None,
-        origin: crate::identity::OriginMeta {
-            source: Some(crate::identity::SourceLocusMeta {
-                source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
-                path: "spec/functional/VO-005-campaign-source.md",
-                start_line: 30,
-                start_column: 3,
-                end_line: None,
-                end_column: None,
-            }),
-            generated: None,
-        },
-    },
-    crate::identity::FieldMeta {
         identity: "ix://agent-ix/engineering-assurance-campaign/VO-005/repository",
         name: "repository",
         rust_name: "repository",
@@ -58,37 +28,7 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
             source: Some(crate::identity::SourceLocusMeta {
                 source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
                 path: "spec/functional/VO-005-campaign-source.md",
-                start_line: 28,
-                start_column: 3,
-                end_line: None,
-                end_column: None,
-            }),
-            generated: None,
-        },
-    },
-    crate::identity::FieldMeta {
-        identity: "ix://agent-ix/engineering-assurance-campaign/VO-005/revision",
-        name: "revision",
-        rust_name: "revision",
-        type_ref: "ix://quire/native/String",
-        rust_type: "String",
-        row: "field:single/non-null/required",
-        presence: "required",
-        nullable: false,
-        multiplicity: crate::identity::MultiplicityMeta {
-            lower: 1,
-            upper: Some(1),
-            ordered: Some(false),
-            unique: Some(false),
-        },
-        unit: None,
-        default_kind: "none",
-        default_value: None,
-        origin: crate::identity::OriginMeta {
-            source: Some(crate::identity::SourceLocusMeta {
-                source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
-                path: "spec/functional/VO-005-campaign-source.md",
-                start_line: 29,
+                start_line: 21,
                 start_column: 3,
                 end_line: None,
                 end_column: None,
@@ -105,18 +45,10 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
 /// Roles: engineering-assurance:campaign_value.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CampaignSource {
-    /// digest
-    ///
-    /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-005/digest.
-    pub digest: String,
     /// repository
     ///
     /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-005/repository.
     pub repository: String,
-    /// revision
-    ///
-    /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-005/revision.
-    pub revision: String,
 }
 
 /// The deserialization shape of `CampaignSource`.
@@ -127,25 +59,15 @@ pub struct CampaignSource {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CampaignSourceWire {
-    digest: String,
     repository: String,
-    revision: String,
 }
 
 impl CampaignSource {
     /// Builds the record, enforcing every bound and uniqueness rule the
     /// contract declares on its members. Deserialization routes through
     /// this constructor.
-    pub fn try_new(
-        digest: String,
-        repository: String,
-        revision: String,
-    ) -> Result<Self, crate::support::ValidationError> {
-        Ok(Self {
-            digest,
-            repository,
-            revision,
-        })
+    pub fn try_new(repository: String) -> Result<Self, crate::support::ValidationError> {
+        Ok(Self { repository })
     }
 
     /// The non-blocking diagnostics this value carries.
@@ -160,6 +82,6 @@ impl<'de> Deserialize<'de> for CampaignSource {
         D: serde::Deserializer<'de>,
     {
         let wire = CampaignSourceWire::deserialize(deserializer)?;
-        Self::try_new(wire.digest, wire.repository, wire.revision).map_err(serde::de::Error::custom)
+        Self::try_new(wire.repository).map_err(serde::de::Error::custom)
     }
 }

@@ -12,13 +12,10 @@ use engineering_assurance::evidence::{
 use ix_trace_rs::trace;
 use serde_json::{Value, json};
 
-const DIGEST: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-
 fn identity(name: &str, version: &str) -> VersionIdentity {
     VersionIdentity {
         name: name.to_owned(),
         version: version.to_owned(),
-        digest: DIGEST.to_owned(),
     }
 }
 
@@ -97,10 +94,6 @@ fn with_producer_version(source: &ProducerAttempt, version: &str) -> ProducerAtt
 
 fn generated_identity_corpus() -> Vec<String> {
     let mut raw_values = vec![
-        include_str!("../corpus/compatibility/producers/producer-code-graph.json").to_owned(),
-        include_str!("../corpus/compatibility/producers/producer-measurement.json").to_owned(),
-        include_str!("../corpus/compatibility/producers/producer-contract-conformance.json")
-            .to_owned(),
         r#"{"v":18446744073709551615}"#.to_owned(),
         r#"{"v":18446744073709551616}"#.to_owned(),
         r#"{"v":-9223372036854775808}"#.to_owned(),
@@ -186,7 +179,6 @@ fn parity_cases() -> Vec<ProducerAttempt> {
                 .producer = VersionIdentity {
                 name: " ".to_owned(),
                 version: " ".to_owned(),
-                digest: "bad".to_owned(),
             };
         }),
         changed(&base, |case| {
@@ -603,29 +595,5 @@ fn tc_025_observed_evidence_delegates_its_record_to_quoin() {
         }));
         assert_eq!(result.validation_errors, ["quoin-handoff-missing"]);
         assert_eq!(result.availability, None);
-    }
-}
-
-#[trace("TC-199", "FR-014-AC-11")]
-#[test]
-fn tc_199_output_digest_golden_values_are_pinned() {
-    let long = format!("{{\"k\":\"{}\"}}", "a".repeat(65_600));
-    for (raw, expected) in [
-        (
-            "{}",
-            "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
-        ),
-        (
-            r#"{"a":1}"#,
-            "015abd7f5cc57a2dd94b7590f04ad8084273905ee33ec5cebeae62276a97f862",
-        ),
-        (
-            long.as_str(),
-            "c1f9ca861ec84c5c1665cdcc2d1f1a2b17b2db1679f57b5cffbd3002635a87a4",
-        ),
-    ] {
-        let output = serde_json::from_str(raw).expect("golden output parses");
-        let result = classify_producer(&changed(&observed(), |case| case.output = Some(output)));
-        assert_eq!(result.output_digest.as_deref(), Some(expected));
     }
 }

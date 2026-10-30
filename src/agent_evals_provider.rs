@@ -17,9 +17,7 @@ use std::{
     time::Duration,
 };
 
-use engineering_assurance::{
-    content_digest::ContentDigest, evidence::GoverningVersions, workflow::DecisionEvent,
-};
+use engineering_assurance::{evidence::GoverningVersions, workflow::DecisionEvent};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use thiserror::Error;
@@ -210,7 +208,6 @@ struct GoverningSnapshot {
 struct VersionIdentity {
     name: String,
     version: String,
-    digest: String,
 }
 
 #[derive(Deserialize)]
@@ -246,8 +243,7 @@ struct ResultContract {
     fixture_revision: String,
     governing: GoverningVersions,
     governing_identities: [&'static str; 9],
-    governing_identity_fields: [&'static str; 3],
-    governing_digest_format: &'static str,
+    governing_identity_fields: [&'static str; 2],
     observed_outcome: String,
     terminal_event_contract: TerminalContract,
     unsupported_additions: Vec<String>,
@@ -543,7 +539,6 @@ fn json_proof(
     json!({
         "run_id": run_id,
         "state_dir": state_dir.strip_prefix(workspace).ok().map(|value| value.to_string_lossy().replace('\\', "/")),
-        "history_digest": history.as_ref().ok().and_then(|value| serde_json::to_vec(value).ok()).map(|bytes| ContentDigest::of_bytes(&bytes).into_hex()),
         "history_ok": history.is_ok(),
         "verification_ok": verification.as_ref().ok().and_then(|value| value.get("ok")).and_then(Value::as_bool) == Some(true),
     })
@@ -749,8 +744,7 @@ fn contract(
             "module", "plugin", "skill", "workflow", "quire", "quoin", "ix_flow", "schema",
             "producer",
         ],
-        governing_identity_fields: ["name", "version", "digest"],
-        governing_digest_format: "lowercase sha256",
+        governing_identity_fields: ["name", "version"],
         observed_outcome: expected.expected.clone(),
         terminal_event_contract,
         unsupported_additions: Vec::new(),
@@ -776,7 +770,6 @@ fn identity(value: VersionIdentity) -> engineering_assurance::evidence::VersionI
     engineering_assurance::evidence::VersionIdentity {
         name: value.name,
         version: value.version,
-        digest: value.digest,
     }
 }
 
@@ -1071,30 +1064,4 @@ fn encode<T: Serialize>(
     .map_err(|_| AgentEvalsProviderError::ResponseInvalid)?;
     bytes.push(b'\n');
     Ok(bytes)
-}
-
-#[cfg(test)]
-mod tests {
-    use std::path::Path;
-
-    use ix_trace_rs::trace;
-    use serde_json::json;
-
-    use super::json_proof;
-
-    #[test]
-    #[trace("TC-199", "FR-014-AC-11")]
-    fn tc_199_history_digest_is_pinned() {
-        let proof = json_proof(
-            &Ok(json!({"a": 1})),
-            &Ok(json!({"ok": true})),
-            "run",
-            Path::new("/w/state"),
-            Path::new("/w"),
-        );
-        assert_eq!(
-            proof["history_digest"],
-            "015abd7f5cc57a2dd94b7590f04ad8084273905ee33ec5cebeae62276a97f862"
-        );
-    }
 }

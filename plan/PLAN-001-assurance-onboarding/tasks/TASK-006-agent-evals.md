@@ -50,6 +50,5 @@ agent hosts, plus version-bound envelopes and a complete-only aggregate gate.
 
 - All 28 cells execute through their real installed host binary.
 - Equivalent runs retain explicit acceptance and rejection on every host.
-- Snapshot and post-run verification bind the complete ix-flow runtime package.
 - Release evidence is rejected when its revision differs from repository `HEAD`.
 - The aggregate passes only with 28 complete passing, non-inventing envelopes.

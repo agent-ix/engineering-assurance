@@ -10,7 +10,6 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::Serialize;
 use thiserror::Error;
 
 pub use agent_ix_engineering_assurance_campaign::{
@@ -97,8 +96,8 @@ pub struct ProcedureBindings {
 /// A Git source tree selected for sealed per-file inputs by FR-019.
 ///
 /// `manifest` is the exact NUL-delimited stdout of
-/// `git ls-tree -r -z --full-tree <revision>`. Its SHA-256 must equal the
-/// `CampaignSource` digest. Every regular tracked file is opened under the
+/// `git ls-tree -r -z --full-tree <revision>` for the source the caller
+/// selected. Every regular tracked file is opened under the
 /// capability root and checked against its Git blob OID before selection as
 /// an [`InputBinding`] with `role = "source/" + path`. FR-019 later rechecks
 /// its SHA-256 before launch. Tracked symlinks must be present at preflight:
@@ -106,9 +105,6 @@ pub struct ProcedureBindings {
 /// and recorded as omitted link metadata. Omitted-link identity is resolution
 /// evidence; it is not checked again at launch. The producer runs in the
 /// capability root. Other modes refuse the tree.
-/// The caller and independent checker must establish that these manifest bytes
-/// came from `CampaignSource.revision` in the retained Git repository; this
-/// pure binding alone cannot derive a commit's tree from its self-reported ID.
 #[derive(Clone, Debug)]
 pub struct SourceTreeBinding {
     /// Repository identity in the campaign source graph.
@@ -491,8 +487,6 @@ pub fn validate_definition(
     let mut sources = BTreeSet::new();
     for source in &definition.source_graph {
         nonempty(&source.repository, "sourceGraph.repository")?;
-        nonempty(&source.revision, "sourceGraph.revision")?;
-        digest(&source.digest, "sourceGraph.digest")?;
         if !sources.insert(source.repository.as_str()) {
             return Err(CampaignError::Duplicate {
                 kind: "source repository",
@@ -765,12 +759,6 @@ pub fn resolve_procedure(
             kind: "procedure source repository",
             name: procedure.source_repository.clone(),
         })?;
-    digest(&source.digest, "sourceGraph.digest")?;
-    if source.revision != bindings.producer.source_revision {
-        return Err(CampaignError::Binding {
-            field: "producer.sourceRevision",
-        });
-    }
     if procedure.producer_name != bindings.producer.name
         || procedure.producer_version != bindings.producer.version
     {
@@ -1082,23 +1070,13 @@ fn validate_required_inputs(
     Ok(())
 }
 
-/// RFC 8785 SHA-256 identity of a generated `CampaignDefinition` or source graph.
-///
-/// # Errors
-/// Returns [`CampaignError::Encoding`] if the value cannot be represented in
-/// canonical JSON.
-pub fn canonical_digest<T: Serialize>(value: &T) -> Result<ContentDigest, CampaignError> {
-    let bytes = serde_json_canonicalizer::to_vec(value).map_err(|_| CampaignError::Encoding)?;
-    Ok(ContentDigest::of_bytes(&bytes))
-}
-
-/// Checks a retained run's identity bindings and attempt inventory shape.
+/// Checks a retained run's attempt inventory shape.
 /// Domain verdicts and raw bytes must be checked by Quoin and the domain
 /// checker; this structural check never promotes evidence on its own.
 ///
 /// # Errors
-/// Returns [`CampaignError`] for a wrong version, stale identities, duplicate
-/// attempts or unknown members, or malformed digest references.
+/// Returns [`CampaignError`] for a wrong version, duplicate attempts or
+/// unknown members, or malformed digest references.
 pub fn validate_run(
     run: &CampaignRun,
     definition: &CampaignDefinition,
@@ -1110,16 +1088,6 @@ pub fn validate_run(
         });
     }
     nonempty(&run.id, "run.id")?;
-    if run.definition_digest != canonical_digest(definition)?.as_str() {
-        return Err(CampaignError::Binding {
-            field: "definitionDigest",
-        });
-    }
-    if run.source_graph_digest != canonical_digest(&definition.source_graph)?.as_str() {
-        return Err(CampaignError::Binding {
-            field: "sourceGraphDigest",
-        });
-    }
     let members: BTreeSet<_> = definition
         .members
         .iter()

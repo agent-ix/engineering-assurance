@@ -28,36 +28,6 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
             source: Some(crate::identity::SourceLocusMeta {
                 source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
                 path: "spec/functional/VO-007-campaign-run.md",
-                start_line: 19,
-                start_column: 3,
-                end_line: None,
-                end_column: None,
-            }),
-            generated: None,
-        },
-    },
-    crate::identity::FieldMeta {
-        identity: "ix://agent-ix/engineering-assurance-campaign/VO-007/definitionDigest",
-        name: "definitionDigest",
-        rust_name: "definition_digest",
-        type_ref: "ix://quire/native/String",
-        rust_type: "String",
-        row: "field:single/non-null/required",
-        presence: "required",
-        nullable: false,
-        multiplicity: crate::identity::MultiplicityMeta {
-            lower: 1,
-            upper: Some(1),
-            ordered: Some(false),
-            unique: Some(false),
-        },
-        unit: None,
-        default_kind: "none",
-        default_value: None,
-        origin: crate::identity::OriginMeta {
-            source: Some(crate::identity::SourceLocusMeta {
-                source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
-                path: "spec/functional/VO-007-campaign-run.md",
                 start_line: 17,
                 start_column: 3,
                 end_line: None,
@@ -127,11 +97,11 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
         },
     },
     crate::identity::FieldMeta {
-        identity: "ix://agent-ix/engineering-assurance-campaign/VO-007/sourceGraphDigest",
-        name: "sourceGraphDigest",
-        rust_name: "source_graph_digest",
-        type_ref: "ix://quire/native/String",
-        rust_type: "String",
+        identity: "ix://agent-ix/engineering-assurance-campaign/VO-007/verdict",
+        name: "verdict",
+        rust_name: "verdict",
+        type_ref: "ix://agent-ix/engineering-assurance-campaign/EN-003",
+        rust_type: "crate::CampaignVerdict",
         row: "field:single/non-null/required",
         presence: "required",
         nullable: false,
@@ -156,36 +126,6 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
             generated: None,
         },
     },
-    crate::identity::FieldMeta {
-        identity: "ix://agent-ix/engineering-assurance-campaign/VO-007/verdict",
-        name: "verdict",
-        rust_name: "verdict",
-        type_ref: "ix://agent-ix/engineering-assurance-campaign/EN-003",
-        rust_type: "crate::CampaignVerdict",
-        row: "field:single/non-null/required",
-        presence: "required",
-        nullable: false,
-        multiplicity: crate::identity::MultiplicityMeta {
-            lower: 1,
-            upper: Some(1),
-            ordered: Some(false),
-            unique: Some(false),
-        },
-        unit: None,
-        default_kind: "none",
-        default_value: None,
-        origin: crate::identity::OriginMeta {
-            source: Some(crate::identity::SourceLocusMeta {
-                source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
-                path: "spec/functional/VO-007-campaign-run.md",
-                start_line: 20,
-                start_column: 3,
-                end_line: None,
-                end_column: None,
-            }),
-            generated: None,
-        },
-    },
 ];
 
 /// CampaignRun
@@ -200,11 +140,6 @@ pub struct CampaignRun {
     /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-007/attempts.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attempts: Option<Vec<crate::CampaignAttempt>>,
-    /// definitionDigest
-    ///
-    /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-007/definitionDigest.
-    #[serde(rename = "definitionDigest")]
-    pub definition_digest: String,
     /// id
     ///
     /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-007/id.
@@ -214,11 +149,6 @@ pub struct CampaignRun {
     /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-007/schemaVersion.
     #[serde(rename = "schemaVersion")]
     pub schema_version: String,
-    /// sourceGraphDigest
-    ///
-    /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-007/sourceGraphDigest.
-    #[serde(rename = "sourceGraphDigest")]
-    pub source_graph_digest: String,
     /// verdict
     ///
     /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-007/verdict.
@@ -235,13 +165,9 @@ pub struct CampaignRun {
 struct CampaignRunWire {
     #[serde(default)]
     attempts: Option<Vec<crate::CampaignAttempt>>,
-    #[serde(rename = "definitionDigest")]
-    definition_digest: String,
     id: String,
     #[serde(rename = "schemaVersion")]
     schema_version: String,
-    #[serde(rename = "sourceGraphDigest")]
-    source_graph_digest: String,
     verdict: crate::CampaignVerdict,
 }
 
@@ -251,18 +177,14 @@ impl CampaignRun {
     /// this constructor.
     pub fn try_new(
         attempts: Option<Vec<crate::CampaignAttempt>>,
-        definition_digest: String,
         id: String,
         schema_version: String,
-        source_graph_digest: String,
         verdict: crate::CampaignVerdict,
     ) -> Result<Self, crate::support::ValidationError> {
         Ok(Self {
             attempts,
-            definition_digest,
             id,
             schema_version,
-            source_graph_digest,
             verdict,
         })
     }
@@ -281,10 +203,8 @@ impl<'de> Deserialize<'de> for CampaignRun {
         let wire = CampaignRunWire::deserialize(deserializer)?;
         Self::try_new(
             wire.attempts,
-            wire.definition_digest,
             wire.id,
             wire.schema_version,
-            wire.source_graph_digest,
             wire.verdict,
         )
         .map_err(serde::de::Error::custom)

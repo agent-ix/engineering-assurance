@@ -143,8 +143,8 @@ same canonical bundle and do not redefine these responsibilities.
   producer tuple, definition version, and every non-success state.
 - [FR-010](./functional/FR-010-read-only-compatibility-and-reporting.md) — map
   historical PGM-01 records read-only and define bounded reports.
-- [FR-011](./functional/FR-011-accepted-compatibility-corpus.md) — retain the
-  accepted real-record corpus and enforce it as the migration gate.
+- FR-011 — withdrawn (compatibility corpus gate). The identifier, FR-011-CON-1..4 and
+  FR-011-AC-1..10 are not reused.
 - [FR-013](./functional/FR-013-migration-contract.md) — publish the reviewed
   migration contract the eight repositories are migrated against.
 - [FR-014](./functional/FR-014-versioned-rust-boundary.md) — expose the shared

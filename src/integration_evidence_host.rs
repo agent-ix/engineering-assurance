@@ -17,7 +17,7 @@ use std::{
     time::Duration,
 };
 
-use engineering_assurance::{content_digest::ContentDigest, evidence::VersionIdentity};
+use engineering_assurance::evidence::VersionIdentity;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -31,8 +31,6 @@ const VERSION_TIMEOUT: Duration = Duration::from_secs(15);
 const GIT_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_MATRIX_BYTES: u64 = 8 * 1024 * 1024;
-const MAX_RUNTIME_FILES: usize = 16_384;
-const MAX_RUNTIME_BYTES: u64 = 64 * 1024 * 1024;
 #[derive(Debug, Error)]
 pub(crate) enum IntegrationEvidenceError {
     #[error("integration-evidence repository root is invalid")]
@@ -301,36 +299,23 @@ pub(crate) fn agent_evals_snapshot(
             .join("def.yaml");
         workflows.insert(
             name.to_owned(),
-            file_identity(name, yaml_version(&definition)?, &definition)?,
+            version_identity(name, yaml_version(&definition)?),
         );
     }
     Ok(AgentEvalsSnapshot {
         source_revision: source_revision(&root)?,
         host: executable_identity(agent, &path)?,
         governing: AgentEvalsGoverning {
-            module: file_identity(
-                "engineering-assurance",
-                module_version,
-                &root.join("engineering_assurance/manifest.yaml"),
-            )?,
-            plugin: file_identity(
-                "engineering-assurance-plugin",
-                plugin_version.clone(),
-                &root.join(".codex-plugin/plugin.json"),
-            )?,
-            skill: file_identity(
-                "assurance-onboarding",
-                plugin_version,
-                &root.join("engineering_assurance/skills/assurance-onboarding/SKILL.md"),
-            )?,
+            module: version_identity("engineering-assurance", module_version),
+            plugin: version_identity("engineering-assurance-plugin", plugin_version.clone()),
+            skill: version_identity("assurance-onboarding", plugin_version),
             quire: executable_identity("quire", &path)?,
             quoin: executable_identity("quoin", &path)?,
             ix_flow: runtime_identity("ix-flow", &path)?,
-            schema: file_identity(
+            schema: version_identity(
                 "evaluation-result-contract",
                 "evaluation-result-v1".to_owned(),
-                &root.join("src/agent_evals_provider.rs"),
-            )?,
+            ),
             producer: runtime_identity("cli-evals", &path)?,
         },
         workflows,
@@ -635,27 +620,17 @@ fn validate_governing(
     root: &Path,
     retained: &RetainedGoverning,
 ) -> Result<(), IntegrationEvidenceError> {
-    let module = file_identity(
+    let module = version_identity(
         "engineering-assurance",
         yaml_version(&root.join("engineering_assurance/manifest.yaml"))?,
-        &root.join("engineering_assurance/manifest.yaml"),
-    )?;
+    );
     let plugin_version = json_version(&root.join(".codex-plugin/plugin.json"))?;
-    let plugin = file_identity(
-        "engineering-assurance-plugin",
-        plugin_version.clone(),
-        &root.join(".codex-plugin/plugin.json"),
-    )?;
-    let skill = file_identity(
-        "assurance-onboarding",
-        plugin_version,
-        &root.join("engineering_assurance/skills/assurance-onboarding/SKILL.md"),
-    )?;
-    let schema = file_identity(
+    let plugin = version_identity("engineering-assurance-plugin", plugin_version.clone());
+    let skill = version_identity("assurance-onboarding", plugin_version);
+    let schema = version_identity(
         "evaluation-result-contract",
         "evaluation-result-v1".to_owned(),
-        &root.join("src/agent_evals_provider.rs"),
-    )?;
+    );
     if (module, plugin, skill, schema)
         != (
             retained.module.clone(),
@@ -674,7 +649,7 @@ fn validate_governing(
             .join("engineering_assurance/skills/assurance-onboarding/workflows")
             .join(name)
             .join("def.yaml");
-        let current = file_identity(name, yaml_version(&path)?, &path)?;
+        let current = version_identity(name, yaml_version(&path)?);
         if current != *expected {
             return Err(IntegrationEvidenceError::GoverningIdentityChanged);
         }
@@ -721,18 +696,11 @@ fn json_version(path: &Path) -> Result<String, IntegrationEvidenceError> {
     Ok(document.version)
 }
 
-fn file_identity(
-    name: &str,
-    version: String,
-    path: &Path,
-) -> Result<VersionIdentity, IntegrationEvidenceError> {
-    Ok(VersionIdentity {
+fn version_identity(name: &str, version: String) -> VersionIdentity {
+    VersionIdentity {
         name: name.to_owned(),
         version,
-        digest: ContentDigest::of_file(path)
-            .map_err(|_| IntegrationEvidenceError::GoverningIdentityChanged)?
-            .into_hex(),
-    })
+    }
 }
 
 fn selected_path(root: &Path) -> OsString {
@@ -755,10 +723,7 @@ fn executable_identity(
         find_executable(name, path).ok_or(IntegrationEvidenceError::GoverningExecutableInvalid)?;
     let version =
         command_version(&executable).ok_or(IntegrationEvidenceError::GoverningExecutableInvalid)?;
-    let executable = fs::canonicalize(executable)
-        .map_err(|_| IntegrationEvidenceError::GoverningExecutableInvalid)?;
-    file_identity(name, version, &executable)
-        .map_err(|_| IntegrationEvidenceError::GoverningExecutableInvalid)
+    Ok(version_identity(name, version))
 }
 
 fn runtime_identity(name: &str, path: &OsStr) -> Result<VersionIdentity, IntegrationEvidenceError> {
@@ -766,95 +731,7 @@ fn runtime_identity(name: &str, path: &OsStr) -> Result<VersionIdentity, Integra
         find_executable(name, path).ok_or(IntegrationEvidenceError::GoverningRuntimeInvalid)?;
     let version =
         command_version(&executable).ok_or(IntegrationEvidenceError::GoverningRuntimeInvalid)?;
-    let executable = fs::canonicalize(executable)
-        .map_err(|_| IntegrationEvidenceError::GoverningRuntimeInvalid)?;
-    let package = executable
-        .parent()
-        .and_then(Path::parent)
-        .ok_or(IntegrationEvidenceError::GoverningRuntimeInvalid)?
-        .to_path_buf();
-    let manifest = package.join("package.json");
-    let dist = package.join("dist");
-    if !manifest.is_file() || !dist.is_dir() {
-        return Err(IntegrationEvidenceError::GoverningRuntimeInvalid);
-    }
-    let mut files = vec![manifest, executable];
-    let mut runtime_bytes = 0_u64;
-    for file in &files {
-        admit_runtime_file(file, &mut runtime_bytes)?;
-    }
-    collect_runtime_files(&dist, &mut files, &mut runtime_bytes)?;
-    files.sort();
-    files.dedup();
-    let mut hasher = ContentDigest::hasher();
-    for file in files {
-        let relative = file
-            .strip_prefix(&package)
-            .map_err(|_| IntegrationEvidenceError::GoverningRuntimeInvalid)?;
-        hasher.update(relative.to_string_lossy().replace('\\', "/").as_bytes());
-        hasher.update(&[0]);
-        hasher.update(
-            &fs::read(file).map_err(|_| IntegrationEvidenceError::GoverningRuntimeInvalid)?,
-        );
-        hasher.update(&[0]);
-    }
-    Ok(VersionIdentity {
-        name: name.to_owned(),
-        version,
-        digest: hasher.finalize().into_hex(),
-    })
-}
-
-fn collect_runtime_files(
-    directory: &Path,
-    files: &mut Vec<PathBuf>,
-    total_bytes: &mut u64,
-) -> Result<(), IntegrationEvidenceError> {
-    for entry in
-        fs::read_dir(directory).map_err(|_| IntegrationEvidenceError::GoverningRuntimeInvalid)?
-    {
-        let entry = entry.map_err(|_| IntegrationEvidenceError::GoverningRuntimeInvalid)?;
-        let path = entry.path();
-        let metadata = fs::symlink_metadata(&path)
-            .map_err(|_| IntegrationEvidenceError::GoverningRuntimeInvalid)?;
-        if metadata.file_type().is_symlink() {
-            return Err(IntegrationEvidenceError::GoverningRuntimeInvalid);
-        }
-        if metadata.is_dir() {
-            collect_runtime_files(&path, files, total_bytes)?;
-        } else if metadata.is_file() {
-            if files.len() >= MAX_RUNTIME_FILES {
-                return Err(IntegrationEvidenceError::GoverningRuntimeInvalid);
-            }
-            admit_runtime_metadata(&metadata, total_bytes)?;
-            files.push(path);
-        } else {
-            return Err(IntegrationEvidenceError::GoverningRuntimeInvalid);
-        }
-    }
-    Ok(())
-}
-
-fn admit_runtime_file(path: &Path, total_bytes: &mut u64) -> Result<(), IntegrationEvidenceError> {
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|_| IntegrationEvidenceError::GoverningRuntimeInvalid)?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err(IntegrationEvidenceError::GoverningRuntimeInvalid);
-    }
-    admit_runtime_metadata(&metadata, total_bytes)
-}
-
-fn admit_runtime_metadata(
-    metadata: &fs::Metadata,
-    total_bytes: &mut u64,
-) -> Result<(), IntegrationEvidenceError> {
-    *total_bytes = total_bytes
-        .checked_add(metadata.len())
-        .ok_or(IntegrationEvidenceError::GoverningRuntimeInvalid)?;
-    if *total_bytes > MAX_RUNTIME_BYTES {
-        return Err(IntegrationEvidenceError::GoverningRuntimeInvalid);
-    }
-    Ok(())
+    Ok(version_identity(name, version))
 }
 
 fn find_executable(name: &str, path: &OsStr) -> Option<PathBuf> {
@@ -1104,122 +981,6 @@ mod tests {
         assert!(
             !rendered.contains("invalid document"),
             "a repository gap must not be described as a tool malfunction"
-        );
-    }
-
-    #[cfg(unix)]
-    fn runtime_package(marker: &str) -> tempfile::TempDir {
-        use std::os::unix::fs::PermissionsExt;
-
-        let package = tempfile::tempdir().expect("runtime package fixture must be creatable");
-        let bin = package.path().join("bin");
-        let dist = package.path().join("dist");
-        fs::create_dir_all(&bin).expect("launcher directory must be creatable");
-        fs::create_dir_all(&dist).expect("runtime directory must be creatable");
-        fs::write(
-            package.path().join("package.json"),
-            br#"{"name":"ix-flow","version":"1.2.3"}"#,
-        )
-        .expect("runtime manifest must be writable");
-        fs::write(dist.join("runtime.js"), b"module.exports = 1;\n")
-            .expect("runtime file must be writable");
-        let launcher = bin.join("ix-flow");
-        fs::write(
-            &launcher,
-            format!("#!/bin/sh\n# {marker}\necho 'ix-flow 1.2.3'\n").as_bytes(),
-        )
-        .expect("launcher must be writable");
-        fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755))
-            .expect("launcher must be executable");
-        package
-    }
-
-    #[cfg(unix)]
-    fn runtime_digest(package: &tempfile::TempDir) -> (String, String) {
-        let path =
-            env::join_paths([package.path().join("bin")]).expect("fixture launcher path must join");
-        let identity = runtime_identity("ix-flow", &path).expect("fixture runtime must resolve");
-        (identity.version, identity.digest)
-    }
-
-    #[cfg(unix)]
-    #[test]
-    #[trace("TC-050", "FR-006-AC-6")]
-    fn tc_050_runtime_identity_covers_the_manifest_launcher_and_dist_runtime() {
-        // Pinning a runtime by its launcher alone would let the code the agents
-        // actually execute change while the recorded identity stayed still,
-        // which is the failure this identity exists to prevent. Each mutation
-        // below leaves the reported version untouched and changes one governed
-        // part of the package, so an identity narrowed back to the launcher or
-        // the manifest fails here instead of silently certifying a different
-        // runtime.
-        let package = runtime_package("original");
-        let (version, baseline) = runtime_digest(&package);
-        assert_eq!(version, "ix-flow 1.2.3");
-        assert_eq!(
-            runtime_digest(&package),
-            (version.clone(), baseline.clone())
-        );
-
-        fs::write(
-            package.path().join("dist/runtime.js"),
-            b"module.exports = 2;\n",
-        )
-        .expect("runtime file must be rewritable");
-        let (changed_version, changed_runtime) = runtime_digest(&package);
-        assert_eq!(changed_version, version);
-        assert_ne!(changed_runtime, baseline);
-
-        fs::write(
-            package.path().join("dist/added.js"),
-            b"module.exports = 3;\n",
-        )
-        .expect("added runtime file must be writable");
-        let (_, extended_runtime) = runtime_digest(&package);
-        assert_ne!(extended_runtime, changed_runtime);
-
-        let manifest = package.path().join("package.json");
-        fs::write(
-            &manifest,
-            br#"{"name":"ix-flow","version":"1.2.3","main":"dist/runtime.js"}"#,
-        )
-        .expect("runtime manifest must be rewritable");
-        let (_, changed_manifest) = runtime_digest(&package);
-        assert_ne!(changed_manifest, extended_runtime);
-
-        let launcher = runtime_package("original");
-        let (_, launcher_baseline) = runtime_digest(&launcher);
-        let relaunched = runtime_package("rewritten");
-        let (relaunched_version, relaunched_digest) = runtime_digest(&relaunched);
-        assert_eq!(relaunched_version, version);
-        assert_ne!(relaunched_digest, launcher_baseline);
-
-        // A package with no runtime directory is refused outright rather than
-        // pinned to whatever the launcher happens to be.
-        fs::remove_dir_all(package.path().join("dist"))
-            .expect("runtime directory must be removable");
-        let path =
-            env::join_paths([package.path().join("bin")]).expect("fixture launcher path must join");
-        assert!(matches!(
-            runtime_identity("ix-flow", &path),
-            Err(IntegrationEvidenceError::GoverningRuntimeInvalid)
-        ));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    #[trace("TC-199", "FR-014-AC-11")]
-    fn tc_199_governing_identity_digests_are_pinned() {
-        let package = runtime_package("original");
-        assert_eq!(
-            runtime_digest(&package).1,
-            "4c76dd00c0397c8588a8b0a4806d1916c2bc6eb9a106ac03dd63d0081b7556a1"
-        );
-        let file = package.path().join("dist/runtime.js");
-        let identity = file_identity("runtime", "1".to_owned(), &file).expect("file identity");
-        assert_eq!(
-            identity.digest,
-            "6e66e366f0aefb84ad8110afcd9b2245702c643c831edf8316ff048fec739d2e"
         );
     }
 }

@@ -113,8 +113,6 @@ pub struct VersionIdentity {
     pub name: String,
     /// Exact immutable version.
     pub version: String,
-    /// Lowercase SHA-256 digest of the governed bytes.
-    pub digest: String,
 }
 
 impl VersionIdentity {
@@ -132,9 +130,6 @@ impl VersionIdentity {
             errors.push("identity-version-invalid-character".to_owned());
         } else if is_mutable_version(version) {
             errors.push("identity-version-mutable".to_owned());
-        }
-        if ContentDigest::parse(&self.digest).is_err() {
-            errors.push("identity-digest-not-sha256".to_owned());
         }
         errors
     }

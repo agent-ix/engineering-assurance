@@ -57,11 +57,6 @@ path = "tests/claim_strength.rs"
 required-features = ["semantics"]
 
 [[test]]
-name = "compatibility_corpus"
-path = "tests/compatibility_corpus.rs"
-required-features = ["full"]
-
-[[test]]
 name = "content_rights_parity"
 path = "tests/content_rights_parity.rs"
 required-features = ["content-rights"]
@@ -272,7 +267,6 @@ claim-strength = [
 # module it imports. Only `evidence`, `semantics` (and so `evaluation` and
 # `evaluation-reports`), `exact-numbers` and `full` turn on
 # `serde_json/arbitrary_precision`, through `exact-numbers`.
-compatibility-corpus = ["content-digest", "dep:serde", "dep:serde_json", "dep:thiserror"]
 content-rights = [
   "dep:regex",
   "dep:serde",
@@ -328,7 +322,6 @@ package-lifecycle = ["dep:serde", "dep:serde_json", "dep:thiserror"]
 package-membership = ["dep:serde", "dep:thiserror"]
 semantics = [
   "claim-strength",
-  "compatibility-corpus",
   "content-digest",
   "exact-numbers",
   "dep:serde",
@@ -357,7 +350,6 @@ full = [
   "atomic-publish",
   "campaign",
   "claim-strength",
-  "compatibility-corpus",
   "content-digest",
   "content-rights",
   "discovery",

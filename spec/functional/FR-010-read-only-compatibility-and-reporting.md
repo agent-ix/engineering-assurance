@@ -52,7 +52,5 @@ rewriting history or creating a parallel evidence schema.
 
 ## Dependencies
 
-FR-008 and FR-009. The representative compatibility fixture gate is
-[FR-011](./FR-011-accepted-compatibility-corpus.md) and is enforcing: the
-accepted corpus of real legacy records, real producer output, and one exact
-Quire-to-Quoin receipt chain is retained and checked on every run.
+FR-008 and FR-009. The compatibility corpus gate that FR-011 described is
+withdrawn.

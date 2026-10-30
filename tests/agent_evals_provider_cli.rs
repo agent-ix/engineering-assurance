@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 use tempfile::TempDir;
 
 fn identity(name: &str) -> Value {
-    json!({"name": name, "version": "0.2.4", "digest": "a".repeat(64)})
+    json!({"name": name, "version": "0.2.4"})
 }
 
 fn root() -> TempDir {

@@ -33,7 +33,6 @@
   },
   "definitions": {
     "identity": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"},
-    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "source": {
       "type": "object",
       "additionalProperties": false,
@@ -42,18 +41,16 @@
         "schema_identity": {"type": "string", "minLength": 1},
         "schema_version": {"type": "string", "minLength": 1},
         "record_id": {"$ref": "#/definitions/identity"},
-        "record_digest": {"$ref": "#/definitions/digest"},
         "field_path": {"type": "string", "pattern": "^/"}
       }
     },
     "producer": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["identity", "version", "configuration_digest", "source_revision", "environment", "definition_version"],
+      "required": ["identity", "version", "source_revision", "environment", "definition_version"],
       "properties": {
         "identity": {"type": "string", "minLength": 1},
         "version": {"type": "string", "minLength": 1},
-        "configuration_digest": {"$ref": "#/definitions/digest"},
         "source_revision": {"type": "string", "minLength": 1},
         "environment": {"type": "object", "minProperties": 1},
         "definition_version": {"type": "string", "minLength": 1}

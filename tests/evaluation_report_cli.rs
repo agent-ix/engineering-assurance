@@ -17,7 +17,7 @@ use tempfile::TempDir;
 const SOURCE_REVISION: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
 fn identity(name: &str) -> Value {
-    json!({"name": name, "version": "1.2.3", "digest": "a".repeat(64)})
+    json!({"name": name, "version": "1.2.3"})
 }
 
 fn valid_partial_report(work_dir: &std::path::Path, digest: &str) -> Value {

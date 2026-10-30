@@ -77,7 +77,6 @@ fail its gate.
 
 ## Dependencies
 
-- **Upstream**: [FR-010](./FR-010-read-only-compatibility-and-reporting.md) and
-  [FR-011](./FR-011-accepted-compatibility-corpus.md).
+- **Upstream**: [FR-010](./FR-010-read-only-compatibility-and-reporting.md).
 - **Downstream**: the eight repository migrations, each of which is reviewed
   against this contract's checklist.
