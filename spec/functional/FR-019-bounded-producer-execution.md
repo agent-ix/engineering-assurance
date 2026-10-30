@@ -115,8 +115,8 @@ unique within their respective request collections.
   that same immutable snapshot. Each returned output artifact SHALL provide
   the response adapter and caller a reader for that retained snapshot without
   reopening the producer pathname.
-- When a valid slot is available, the executor SHALL launch the pinned
-  executable path directly with the ordered resolved arguments, no shell, the
+- When a valid slot is available, the executor SHALL launch the executable path named in the
+  request directly with the ordered resolved arguments, no shell, the
   capability root as working directory, an empty inherited
   environment, only the request's environment entries, and the exact null or
   retained-input stdin binding.
@@ -168,7 +168,7 @@ unique within their respective request collections.
 
 | State | Exact boundary |
 | --- | --- |
-| `unavailable` | A structurally valid request selects an executable that cannot be opened or the pinned executable cannot be launched. |
+| `unavailable` | A structurally valid request selects an executable that cannot be opened or the executable named in the request cannot be launched. |
 | `refused` | An identity-bearing request fails a pre-launch identity, capability, adapter, input, output-parent, cancellation-binding, or concurrency admission check, or an entry at a declared fixed output path cannot be removed before launch (for example a directory). |
 | `failed` | A launched process has a rejected normal exit, signal termination, stream overflow/read failure, process observation failure, or output-artifact failure. |
 | `timed_out` | Monotonic elapsed execution time reaches the request deadline before terminal observation. |
@@ -198,10 +198,10 @@ unique within their respective request collections.
 | FR-019-AC-7 | A minimal consumer compiles the existing crate with default features disabled, only `producer-execution` enabled, and an exact semver-compatible shared-dependency version older than Engineering Assurance's locked version; every normal Engineering Assurance dependency declares a compatible range rather than an exact `=` requirement; Engineering Assurance activates no direct dependency used solely for package/archive, onboarding, CLI, YAML, regex, or source-audit behavior, while dependencies shared with the producer API remain admissible and the `full` feature preserves the existing package library and CLI gates. | Test (TC-128) |
 | FR-019-AC-8 | For a launched Linux invocation, the executor samples a complete, bounded host context before launch and binds it into canonical result identity; stable machine identity or explicitly boot-scoped identity is represented only by a domain-separated digest, boot-scoped and ARM CPU-ID observations additionally bind observed CPU affinity, heterogeneous or missing selected ARM CPU-ID tuples withhold context, and unavailable host context is explicit and cannot substantiate comparability. | Test (TC-175) |
 | FR-019-AC-9 | The FCD-generated procedure and campaign records have closed wire fields; procedures validate roles and bounds, campaign plans resolve at exact versions, and dependency graphs are finite and acyclic. | Test (TC-177, TC-179) |
-| FR-019-AC-10 | Declared fixed and tree output roles, dynamic input prefixes, executable identity, arguments, environment, and response adapter bind to one exact FR-019 request identity; near-match undeclared roles refuse. | Test (TC-178, TC-180, TC-183) |
+| FR-019-AC-10 | Declared fixed and tree output roles, dynamic input prefixes, executable path, arguments, environment, and response adapter bind to one exact FR-019 request identity; near-match undeclared roles refuse. | Test (TC-178, TC-180, TC-183) |
 | FR-019-AC-11 | A campaign run binds its definition and source graph and refuses stale or unknown attempts; a source projection verifies the complete Git tree inventory and every file or omitted symlink blob before request creation. | Test (TC-181, TC-182) |
 | FR-019-AC-12 | Retained producer-request parsing preserves every field through typed round-trip serialization and validates the request structure; malformed digests, unknown fields and explicit elided defaults refuse. A campaign verifier can compare this exact request with a source-bound reconstructed request. | Test (TC-186) |
-| FR-019-AC-13 | A producer executed through the executor sees its own executable path, `argv[0]` and a script's `$0` as the executable path exactly as pinned in the request, so a producer that locates a sibling executable next to itself and one that re-executes itself both complete. | Test (TC-187) |
+| FR-019-AC-13 | A producer executed through the executor sees its own executable path, `argv[0]` and a script's `$0` as the executable path exactly as named in the request, so a producer that locates a sibling executable next to itself and one that re-executes itself both complete. | Test (TC-187) |
 
 ## Dependencies
 

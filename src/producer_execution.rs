@@ -79,10 +79,8 @@ impl ContentDigest {
     /// Computes a fixture or caller-side file identity.
     ///
     /// Defined here, not in `content_digest`, because this module owns the
-    /// crate's filesystem access (FR-014-AC-4). Execution itself hashes the
-    /// executable bytes read through one capability-confined descriptor,
-    /// before the pinned path is executed, and does not rely on this
-    /// convenience helper. Checks `symlink_metadata` before opening and
+    /// crate's filesystem access (FR-014-AC-4). Execution does not hash
+    /// the executable and does not use this helper. Checks `symlink_metadata` before opening and
     /// refuses a symbolic link or anything that is not a regular file, refuses
     /// files above 1 GiB, and fails when the bytes read differ from the
     /// file's length. Limitation: the check and the open are separate steps
@@ -140,7 +138,7 @@ pub struct ProducerDescriptor {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionProcedure {
-    /// Execute the pinned absolute path directly without a shell.
+    /// Execute the executable path named in the request directly without a shell.
     Direct,
 }
 

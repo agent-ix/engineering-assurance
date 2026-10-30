@@ -667,6 +667,18 @@ fn tc_122_declared_output_written_by_producer_is_observed_with_its_bytes() {
 }
 
 #[test]
+#[trace("TC-124", "FR-019-AC-3")]
+fn tc_124_symlinked_executable_path_is_unavailable_and_never_launched() {
+    let root = tempfile::tempdir().expect("temporary root");
+    let link = root.path().join("linked-producer");
+    std::os::unix::fs::symlink(fixture_executable(), &link).expect("executable link");
+    let mut linked = request(root.path(), &["emit", "accepted"]);
+    linked.producer.executable = link.display().to_string();
+    let result = execute(&linked, &adapter());
+    assert!(matches!(result.state, ProducerExecutionState::Unavailable));
+}
+
+#[test]
 #[trace("TC-122", "FR-019-AC-1")]
 fn tc_122_symlink_at_declared_output_is_removed_and_target_untouched() {
     let root = tempfile::tempdir().expect("temporary root");
@@ -1140,7 +1152,10 @@ fn tc_124_all_closed_states_are_distinct_canonical_and_retain_evidence() {
     ));
     assert!(matches!(
         results[1].state,
-        ProducerExecutionState::Refused { .. }
+        ProducerExecutionState::Refused {
+            reason: ExecutionRefusal::Executable,
+            ..
+        }
     ));
     assert!(matches!(
         results[2].state,
