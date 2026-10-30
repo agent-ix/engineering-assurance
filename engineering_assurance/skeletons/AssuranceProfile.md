@@ -40,7 +40,7 @@ of evidence capable of reducing uncertainty about it.
 
 ## Evidence Policy
 
-Evidence must identify its producer, subject revision, collection conditions,
+Evidence must identify its producer, subject, collection conditions,
 and limitations. A measurement is not a decision by itself.
 
 ## Measurement Policy
