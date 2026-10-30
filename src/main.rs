@@ -41,7 +41,6 @@ const AGENT_EVALS_PROVIDER_CAPABILITY: &str = "agent-evals-provider";
 const AGENT_EVALS_CAPABILITY: &str = "agent-evals";
 const CONTENT_RIGHTS_TREE_CAPABILITY: &str = "content-rights-tree";
 const EVALUATION_AGGREGATE_CAPABILITY: &str = "evaluation-aggregate";
-const EVALUATION_AGGREGATE_VERIFY_CAPABILITY: &str = "evaluation-aggregate-verify";
 const INTEGRATION_EVIDENCE_CAPABILITY: &str = "integration-evidence";
 const MANIFEST_VALIDATE_CAPABILITY: &str = "manifest-validate";
 const ONBOARDING_CAPABILITY: &str = "onboarding";
@@ -81,7 +80,7 @@ fn command() -> Command {
         )
         .subcommand(
             Command::new(EVALUATION_AGGREGATE_CAPABILITY)
-                .about("Verify retained evaluation reports and build a complete-only aggregate")
+                .about("Build a complete-only aggregate of retained evaluation reports")
                 .arg(required_path_arg("root"))
                 .arg(required_path_arg("workspace-root"))
                 .arg(
@@ -92,26 +91,7 @@ fn command() -> Command {
                         .action(clap::ArgAction::Append)
                         .required(true),
                 )
-                .arg(
-                    Arg::new("source-revision")
-                        .long("source-revision")
-                        .value_name("REVISION")
-                        .required(true),
-                )
                 .arg(required_path_arg("output")),
-        )
-        .subcommand(
-            Command::new(EVALUATION_AGGREGATE_VERIFY_CAPABILITY)
-                .about("Recompute a retained evaluation aggregate without changing it")
-                .arg(required_path_arg("root"))
-                .arg(required_path_arg("workspace-root"))
-                .arg(required_path_arg("artifact"))
-                .arg(
-                    Arg::new("source-revision")
-                        .long("source-revision")
-                        .value_name("REVISION")
-                        .required(true),
-                ),
         )
         .subcommand(integration_evidence_command())
         .subcommand(manifest_validate_command())
@@ -190,31 +170,13 @@ fn agent_evals_command() -> Command {
 
 fn integration_evidence_command() -> Command {
     Command::new(INTEGRATION_EVIDENCE_CAPABILITY)
-        .about("Verify typed Quire traceability and retained release evidence")
+        .about("Verify typed Quire traceability")
         .arg(required_path_arg("root"))
         .arg(
             Arg::new("quire")
                 .long("quire")
                 .value_name("COMMAND")
                 .default_value("quire"),
-        )
-        .arg(
-            Arg::new("traceability-only")
-                .long("traceability-only")
-                .action(clap::ArgAction::SetTrue)
-                .conflicts_with_all(["artifact", "workspace-root"]),
-        )
-        .arg(
-            Arg::new("artifact")
-                .long("artifact")
-                .value_name("PATH")
-                .value_parser(clap::value_parser!(PathBuf)),
-        )
-        .arg(
-            Arg::new("workspace-root")
-                .long("workspace-root")
-                .value_name("PATH")
-                .value_parser(clap::value_parser!(PathBuf)),
         )
 }
 
@@ -262,9 +224,6 @@ fn main() -> ExitCode {
         Some((AGENT_EVALS_PROVIDER_CAPABILITY, arguments)) => run_agent_evals_provider(arguments),
         Some((CONTENT_RIGHTS_TREE_CAPABILITY, arguments)) => run_content_rights_tree(arguments),
         Some((EVALUATION_AGGREGATE_CAPABILITY, arguments)) => run_evaluation_aggregate(arguments),
-        Some((EVALUATION_AGGREGATE_VERIFY_CAPABILITY, arguments)) => {
-            run_evaluation_aggregate_verify(arguments)
-        }
         Some((INTEGRATION_EVIDENCE_CAPABILITY, arguments)) => run_integration_evidence(arguments),
         Some((MANIFEST_VALIDATE_CAPABILITY, arguments)) => run_manifest_validate(arguments),
         Some((ONBOARDING_CAPABILITY, _)) => run_onboarding(),
@@ -392,39 +351,12 @@ fn run_integration_evidence(arguments: &ArgMatches) -> ExitCode {
             "quire command is missing",
         );
     };
-    let result = if arguments.get_flag("traceability-only") {
-        integration_evidence_host::traceability(root, std::ffi::OsStr::new(quire))
-    } else {
-        let Some(artifact) = arguments.get_one::<PathBuf>("artifact") else {
-            return emit_error(
-                INTEGRATION_EVIDENCE_CAPABILITY,
-                "integration_evidence_artifact_invalid",
-                "retained evaluation artifact is required unless traceability-only is selected",
-            );
-        };
-        let Some(workspace_root) = arguments.get_one::<PathBuf>("workspace-root") else {
-            return emit_error(
-                INTEGRATION_EVIDENCE_CAPABILITY,
-                "integration_evidence_artifact_invalid",
-                "evaluation workspace root is required with retained evidence",
-            );
-        };
-        integration_evidence_host::release(
-            root,
-            workspace_root,
-            artifact,
-            std::ffi::OsStr::new(quire),
-        )
-    };
+    let result = integration_evidence_host::traceability(root, std::ffi::OsStr::new(quire));
     match result {
-        Ok(summary) => {
-            let message = match summary.evaluation_cells {
-                None => "integration evidence passed: traceability complete\n".to_owned(),
-                Some((complete, required)) => format!(
-                    "integration evidence passed: traceability complete; evaluations {complete}/{required}\n"
-                ),
-            };
-            match ix_cli_kit::streams::write_primary_stdout(message.as_bytes()) {
+        Ok(_) => {
+            match ix_cli_kit::streams::write_primary_stdout(
+                b"integration evidence passed: traceability complete\n",
+            ) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(error) => {
                     eprintln!("failed to write integration-evidence summary: {error}");
@@ -434,55 +366,6 @@ fn run_integration_evidence(arguments: &ArgMatches) -> ExitCode {
         }
         Err(error) => emit_error(
             INTEGRATION_EVIDENCE_CAPABILITY,
-            error.code(),
-            &error.to_string(),
-        ),
-    }
-}
-
-fn run_evaluation_aggregate_verify(arguments: &ArgMatches) -> ExitCode {
-    let Some(root) = arguments.get_one::<PathBuf>("root") else {
-        return emit_error(
-            EVALUATION_AGGREGATE_VERIFY_CAPABILITY,
-            "evaluation_report_repository_root_invalid",
-            "evaluation report repository root is missing",
-        );
-    };
-    let Some(workspace_root) = arguments.get_one::<PathBuf>("workspace-root") else {
-        return emit_error(
-            EVALUATION_AGGREGATE_VERIFY_CAPABILITY,
-            "evaluation_report_workspace_root_invalid",
-            "evaluation workspace root is missing",
-        );
-    };
-    let Some(artifact) = arguments.get_one::<PathBuf>("artifact") else {
-        return emit_error(
-            EVALUATION_AGGREGATE_VERIFY_CAPABILITY,
-            "evaluation_report_artifact_path_invalid",
-            "evaluation aggregate artifact path is missing",
-        );
-    };
-    let Some(source_revision) = arguments.get_one::<String>("source-revision") else {
-        return emit_error(
-            EVALUATION_AGGREGATE_VERIFY_CAPABILITY,
-            "evaluation_report_source_revision_invalid",
-            "expected source revision is missing",
-        );
-    };
-    match evaluation_report_host::verify_artifact(root, workspace_root, artifact, source_revision) {
-        Ok(()) => {
-            match ix_cli_kit::streams::write_primary_stdout(
-                b"evaluation aggregate verification: retained bytes match\n",
-            ) {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(error) => {
-                    eprintln!("failed to write evaluation aggregate verification: {error}");
-                    ExitCode::from(2)
-                }
-            }
-        }
-        Err(error) => emit_error(
-            EVALUATION_AGGREGATE_VERIFY_CAPABILITY,
             error.code(),
             &error.to_string(),
         ),
@@ -519,13 +402,6 @@ fn run_evaluation_aggregate(arguments: &ArgMatches) -> ExitCode {
             "evaluation report collection is missing",
         );
     };
-    let Some(source_revision) = arguments.get_one::<String>("source-revision") else {
-        return emit_error(
-            EVALUATION_AGGREGATE_CAPABILITY,
-            "evaluation_report_source_revision_invalid",
-            "expected source revision is missing",
-        );
-    };
     let Some(output) = arguments.get_one::<PathBuf>("output") else {
         return emit_error(
             EVALUATION_AGGREGATE_CAPABILITY,
@@ -541,22 +417,17 @@ fn run_evaluation_aggregate(arguments: &ArgMatches) -> ExitCode {
         }
     };
     let report_paths = reports.cloned().collect::<Vec<_>>();
-    let artifact = match evaluation_report_host::execute(
-        root,
-        workspace_root,
-        &report_paths,
-        source_revision,
-        generated_at,
-    ) {
-        Ok(artifact) => artifact,
-        Err(error) => {
-            return emit_error(
-                EVALUATION_AGGREGATE_CAPABILITY,
-                error.code(),
-                &error.to_string(),
-            );
-        }
-    };
+    let artifact =
+        match evaluation_report_host::execute(root, workspace_root, &report_paths, generated_at) {
+            Ok(artifact) => artifact,
+            Err(error) => {
+                return emit_error(
+                    EVALUATION_AGGREGATE_CAPABILITY,
+                    error.code(),
+                    &error.to_string(),
+                );
+            }
+        };
     if let Err(error) = evaluation_report_host::write_artifact(root, output, &artifact) {
         return emit_error(
             EVALUATION_AGGREGATE_CAPABILITY,

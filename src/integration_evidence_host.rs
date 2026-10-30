@@ -3,17 +3,17 @@
 
 //! Rust host adapter for the release qualification evidence boundary.
 //!
-//! It owns bounded Quire invocation, typed coverage decoding, immutable source
-//! revision observation, and reconciliation of retained governing identities.
-//! The evaluation-report adapter remains the sole owner of report and
-//! transcript decoding.
+//! It owns bounded Quire invocation, typed coverage decoding, and the
+//! governing tool versions handed to the agent-evals provider. The
+//! evaluation-report adapter remains the sole owner of report and transcript
+//! decoding.
 
 use std::{
     collections::BTreeMap,
     env,
     ffi::{OsStr, OsString},
     fmt, fs,
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
     time::Duration,
 };
 
@@ -21,14 +21,10 @@ use engineering_assurance::evidence::VersionIdentity;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{
-    evaluation_report_host::{self, RetainedGoverning},
-    process_host::{self, ProcessError, ProcessLimits},
-};
+use crate::process_host::{self, ProcessError, ProcessLimits};
 
 const COVERAGE_TIMEOUT: Duration = Duration::from_secs(60);
 const VERSION_TIMEOUT: Duration = Duration::from_secs(15);
-const GIT_TIMEOUT: Duration = Duration::from_secs(15);
 const MAX_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_MATRIX_BYTES: u64 = 8 * 1024 * 1024;
 #[derive(Debug, Error)]
@@ -51,14 +47,8 @@ pub(crate) enum IntegrationEvidenceError {
     CoverageRefused(CoverageRefusals),
     #[error("repository test matrix is invalid")]
     MatrixInvalid,
-    #[error("current source revision is unavailable")]
-    RevisionUnavailable,
-    #[error("current source revision is invalid")]
-    RevisionInvalid,
-    #[error("retained evaluation artifact is invalid")]
-    EvaluationArtifactInvalid,
-    #[error("retained governing identity differs from the current governed input")]
-    GoverningIdentityChanged,
+    #[error("governing version document is unavailable or invalid")]
+    GoverningVersionInvalid,
     #[error("governing executable is unavailable or invalid")]
     GoverningExecutableInvalid,
     #[error("governing runtime package is unavailable or invalid")]
@@ -77,10 +67,7 @@ impl IntegrationEvidenceError {
             Self::CoverageUnparseable(_) => "integration_evidence_coverage_unparseable",
             Self::CoverageRefused(refusals) => refusals.code(),
             Self::MatrixInvalid => "integration_evidence_matrix_invalid",
-            Self::RevisionUnavailable => "integration_evidence_revision_unavailable",
-            Self::RevisionInvalid => "integration_evidence_revision_invalid",
-            Self::EvaluationArtifactInvalid => "integration_evidence_artifact_invalid",
-            Self::GoverningIdentityChanged => "integration_evidence_governing_identity_changed",
+            Self::GoverningVersionInvalid => "integration_evidence_governing_version_invalid",
             Self::GoverningExecutableInvalid => "integration_evidence_governing_executable_invalid",
             Self::GoverningRuntimeInvalid => "integration_evidence_governing_runtime_invalid",
         }
@@ -88,9 +75,7 @@ impl IntegrationEvidenceError {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct IntegrationEvidence {
-    pub(crate) evaluation_cells: Option<(usize, usize)>,
-}
+pub(crate) struct IntegrationEvidence;
 
 /// One failing coverage condition, with its own code and the authored
 /// locations that caused it.
@@ -265,7 +250,6 @@ struct VersionDocument {
 
 #[derive(Serialize)]
 pub(crate) struct AgentEvalsSnapshot {
-    source_revision: String,
     host: VersionIdentity,
     governing: AgentEvalsGoverning,
     workflows: BTreeMap<String, VersionIdentity>,
@@ -303,7 +287,6 @@ pub(crate) fn agent_evals_snapshot(
         );
     }
     Ok(AgentEvalsSnapshot {
-        source_revision: source_revision(&root)?,
         host: executable_identity(agent, &path)?,
         governing: AgentEvalsGoverning {
             module: version_identity("engineering-assurance", module_version),
@@ -330,33 +313,7 @@ pub(crate) fn traceability(
     let coverage = run_coverage(&root, quire)?;
     validate_coverage(&coverage, &root)?;
     validate_matrix(&root)?;
-    Ok(IntegrationEvidence {
-        evaluation_cells: None,
-    })
-}
-
-pub(crate) fn release(
-    root: &Path,
-    workspace_root: &Path,
-    artifact: &Path,
-    quire: &OsStr,
-) -> Result<IntegrationEvidence, IntegrationEvidenceError> {
-    let root = canonical_root(root)?;
-    let coverage = run_coverage(&root, quire)?;
-    validate_coverage(&coverage, &root)?;
-    validate_matrix(&root)?;
-    let revision = source_revision(&root)?;
-    let retained = evaluation_report_host::verify_complete_artifact(
-        &root,
-        workspace_root,
-        artifact,
-        &revision,
-    )
-    .map_err(|_| IntegrationEvidenceError::EvaluationArtifactInvalid)?;
-    validate_governing(&root, &retained)?;
-    Ok(IntegrationEvidence {
-        evaluation_cells: Some((28, 28)),
-    })
+    Ok(IntegrationEvidence)
 }
 
 fn canonical_root(root: &Path) -> Result<PathBuf, IntegrationEvidenceError> {
@@ -592,92 +549,12 @@ fn validate_matrix(root: &Path) -> Result<(), IntegrationEvidenceError> {
     Ok(())
 }
 
-fn source_revision(root: &Path) -> Result<String, IntegrationEvidenceError> {
-    let output = process_host::run_configured(
-        OsStr::new("git"),
-        &[OsStr::new("rev-parse"), OsStr::new("HEAD")],
-        Some(root),
-        &[],
-        &[],
-        ProcessLimits {
-            timeout: GIT_TIMEOUT,
-            max_output_bytes: 128,
-        },
-    )
-    .map_err(|_| IntegrationEvidenceError::RevisionUnavailable)?;
-    if !output.status.success() {
-        return Err(IntegrationEvidenceError::RevisionUnavailable);
-    }
-    let revision = std::str::from_utf8(&output.stdout)
-        .ok()
-        .map(str::trim)
-        .filter(|value| engineering_assurance::evaluation::is_immutable_revision(value))
-        .ok_or(IntegrationEvidenceError::RevisionInvalid)?;
-    Ok(revision.to_owned())
-}
-
-fn validate_governing(
-    root: &Path,
-    retained: &RetainedGoverning,
-) -> Result<(), IntegrationEvidenceError> {
-    let module = version_identity(
-        "engineering-assurance",
-        yaml_version(&root.join("engineering_assurance/manifest.yaml"))?,
-    );
-    let plugin_version = json_version(&root.join(".codex-plugin/plugin.json"))?;
-    let plugin = version_identity("engineering-assurance-plugin", plugin_version.clone());
-    let skill = version_identity("assurance-onboarding", plugin_version);
-    let schema = version_identity(
-        "evaluation-result-contract",
-        "evaluation-result-v1".to_owned(),
-    );
-    if (module, plugin, skill, schema)
-        != (
-            retained.module.clone(),
-            retained.plugin.clone(),
-            retained.skill.clone(),
-            retained.schema.clone(),
-        )
-    {
-        return Err(IntegrationEvidenceError::GoverningIdentityChanged);
-    }
-    for (name, expected) in &retained.workflows {
-        if !safe_name(name) {
-            return Err(IntegrationEvidenceError::GoverningIdentityChanged);
-        }
-        let path = root
-            .join("engineering_assurance/skills/assurance-onboarding/workflows")
-            .join(name)
-            .join("def.yaml");
-        let current = version_identity(name, yaml_version(&path)?);
-        if current != *expected {
-            return Err(IntegrationEvidenceError::GoverningIdentityChanged);
-        }
-    }
-    let path = selected_path(root);
-    let quire = executable_identity("quire", &path)?;
-    let quoin = executable_identity("quoin", &path)?;
-    let ix_flow = runtime_identity("ix-flow", &path)?;
-    let producer = runtime_identity("cli-evals", &path)?;
-    if (quire, quoin, ix_flow, producer)
-        != (
-            retained.quire.clone(),
-            retained.quoin.clone(),
-            retained.ix_flow.clone(),
-            retained.producer.clone(),
-        )
-    {
-        return Err(IntegrationEvidenceError::GoverningIdentityChanged);
-    }
-    Ok(())
-}
-
 fn yaml_version(path: &Path) -> Result<String, IntegrationEvidenceError> {
-    let bytes = fs::read(path).map_err(|_| IntegrationEvidenceError::GoverningIdentityChanged)?;
+    let bytes = fs::read(path).map_err(|_| IntegrationEvidenceError::GoverningVersionInvalid)?;
     let document: VersionDocument = yaml_serde::from_slice(&bytes)
-        .map_err(|_| IntegrationEvidenceError::GoverningIdentityChanged)?;
+        .map_err(|_| IntegrationEvidenceError::GoverningVersionInvalid)?;
     if document.version.is_empty() {
-        return Err(IntegrationEvidenceError::GoverningIdentityChanged);
+        return Err(IntegrationEvidenceError::GoverningVersionInvalid);
     }
     Ok(document.version)
 }
@@ -687,11 +564,11 @@ fn json_version(path: &Path) -> Result<String, IntegrationEvidenceError> {
     struct PackageVersion {
         version: String,
     }
-    let bytes = fs::read(path).map_err(|_| IntegrationEvidenceError::GoverningIdentityChanged)?;
+    let bytes = fs::read(path).map_err(|_| IntegrationEvidenceError::GoverningVersionInvalid)?;
     let document: PackageVersion = serde_json::from_slice(&bytes)
-        .map_err(|_| IntegrationEvidenceError::GoverningIdentityChanged)?;
+        .map_err(|_| IntegrationEvidenceError::GoverningVersionInvalid)?;
     if document.version.is_empty() {
-        return Err(IntegrationEvidenceError::GoverningIdentityChanged);
+        return Err(IntegrationEvidenceError::GoverningVersionInvalid);
     }
     Ok(document.version)
 }
@@ -764,14 +641,6 @@ fn command_version(executable: &Path) -> Option<String> {
         .next()
         .map(str::to_owned)
         .filter(|line| !line.is_empty())
-}
-
-fn safe_name(value: &str) -> bool {
-    !value.is_empty()
-        && Path::new(value)
-            .components()
-            .all(|component| matches!(component, Component::Normal(_)))
-        && !value.contains(['/', '\\'])
 }
 
 #[cfg(test)]

@@ -166,9 +166,6 @@ struct Assertion {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Fixture {
-    suite_revision: String,
-    #[serde(rename = "fixture_revision")]
-    revision: String,
     scenarios: BTreeMap<String, FixtureScenario>,
 }
 
@@ -197,7 +194,6 @@ struct FixtureInput {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct GoverningSnapshot {
-    source_revision: String,
     host: VersionIdentity,
     governing: GoverningWithoutWorkflow,
     workflows: BTreeMap<String, VersionIdentity>,
@@ -226,8 +222,6 @@ struct GoverningWithoutWorkflow {
 #[derive(Serialize)]
 struct EvaluationInput<'a> {
     scenario: &'a str,
-    suite_revision: &'a str,
-    fixture_revision: &'a str,
     input: &'a FixtureInput,
     result_contract: ResultContract,
 }
@@ -235,12 +229,9 @@ struct EvaluationInput<'a> {
 #[derive(Serialize)]
 struct ResultContract {
     revision: &'static str,
-    required_top_level_fields: [&'static str; 14],
+    required_top_level_fields: [&'static str; 11],
     host: String,
     host_version: String,
-    source_revision: String,
-    suite_revision: String,
-    fixture_revision: String,
     governing: GoverningVersions,
     governing_identities: [&'static str; 9],
     governing_identity_fields: [&'static str; 2],
@@ -280,9 +271,6 @@ struct TerminalContract {
 struct EvaluationResult {
     host: String,
     host_version: String,
-    source_revision: String,
-    suite_revision: String,
-    fixture_revision: String,
     governing: GoverningVersions,
     command_count: i64,
     elapsed_ms: i64,
@@ -345,11 +333,9 @@ fn prepare(root: &Path, context: &ProviderContext) -> Result<Vec<u8>, AgentEvals
     let workspace = workspace(context)?;
     copy_skill(root, &workspace)?;
     let snapshot = snapshot(root)?;
-    let contract = contract(&fixture, expected, &snapshot)?;
+    let contract = contract(expected, &snapshot)?;
     let input = EvaluationInput {
         scenario,
-        suite_revision: &fixture.suite_revision,
-        fixture_revision: &fixture.revision,
         input: &expected.input,
         result_contract: contract,
     };
@@ -377,7 +363,7 @@ fn assert_result(
         .ok_or(AgentEvalsProviderError::ScenarioUnsupported)?;
     let workspace = workspace(context)?;
     let snapshot = snapshot(root)?;
-    let contract = contract(&fixture, expected, &snapshot)?;
+    let contract = contract(expected, &snapshot)?;
     let bytes = read_bounded(&workspace.join("EVALUATION_RESULT.json"), MAX_FIXTURE_BYTES)
         .map_err(|()| AgentEvalsProviderError::ResultInvalid)?;
     let raw: Value =
@@ -653,7 +639,6 @@ fn snapshot(root: &Path) -> Result<GoverningSnapshot, AgentEvalsProviderError> {
 }
 
 fn contract(
-    fixture: &Fixture,
     expected: &FixtureScenario,
     snapshot: &GoverningSnapshot,
 ) -> Result<ResultContract, AgentEvalsProviderError> {
@@ -721,9 +706,6 @@ fn contract(
         required_top_level_fields: [
             "host",
             "host_version",
-            "source_revision",
-            "suite_revision",
-            "fixture_revision",
             "governing",
             "command_count",
             "elapsed_ms",
@@ -736,9 +718,6 @@ fn contract(
         ],
         host: snapshot.host.name.clone(),
         host_version: snapshot.host.version.clone(),
-        source_revision: snapshot.source_revision.clone(),
-        suite_revision: fixture.suite_revision.clone(),
-        fixture_revision: fixture.revision.clone(),
         governing,
         governing_identities: [
             "module", "plugin", "skill", "workflow", "quire", "quoin", "ix_flow", "schema",
@@ -780,21 +759,6 @@ fn verify_result(result: &EvaluationResult, contract: &ResultContract, failures:
             "host_version",
             result.host_version.as_str(),
             contract.host_version.as_str(),
-        ),
-        (
-            "source_revision",
-            result.source_revision.as_str(),
-            contract.source_revision.as_str(),
-        ),
-        (
-            "suite_revision",
-            result.suite_revision.as_str(),
-            contract.suite_revision.as_str(),
-        ),
-        (
-            "fixture_revision",
-            result.fixture_revision.as_str(),
-            contract.fixture_revision.as_str(),
         ),
         (
             "observed_outcome",

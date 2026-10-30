@@ -1,6 +1,4 @@
 {
-  "suite_revision": "suite-v1",
-  "fixture_revision": "fixtures-v1",
   "scenarios": {
     "existing-profile": {
       "expected": "reused",

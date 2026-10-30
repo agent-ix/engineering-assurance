@@ -282,10 +282,10 @@ protocol is versioned and documented by the schemas under
 | `onboarding` | Inventory a repository and emit a bounded onboarding result. |
 | `workflow-host` | Coordinate a bound workflow lifecycle through ix-flow. |
 | `manifest-validate` | Qualify the module against explicit repository and registry roots. |
-| `integration-evidence` | Verify Quire traceability and retained release evidence. |
+| `integration-evidence` | Verify Quire traceability. |
 | `content-rights-tree` | Inspect a Git-selected repository tree for rights violations. |
 | `agent-evals` / `agent-evals-provider` | Run or serve the Engineering Assurance evaluation contract. |
-| `evaluation-aggregate` / `evaluation-aggregate-verify` | Build or re-check retained evaluation aggregates. |
+| `evaluation-aggregate` | Build a retained evaluation aggregate. |
 | `package-audit` / `package-lifecycle` | Audit private distributions and stage or refuse npm publication. |
 | `workflow-invariants` | Evaluate a closed workflow projection against named invariants. |
 

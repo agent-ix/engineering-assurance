@@ -270,13 +270,10 @@ const changeImpactReady = ({ instance }) => {
   ];
   const snapshot = values(instance, "impact_snapshot").find(
     (item) =>
-      item.source_revision === request?.source_revision &&
       item.profile_path === request?.profile_path &&
       item.baseline_id === request?.baseline_id,
   );
-  const exactRevision = /^[0-9a-f]{40}$/.test(request?.source_revision ?? "");
-  return exactRevision &&
-    nonempty(request?.profile_path) &&
+  return nonempty(request?.profile_path) &&
     nonempty(request?.baseline_id) &&
     snapshot &&
     arrays.every((field) => Array.isArray(snapshot[field]))
@@ -284,21 +281,12 @@ const changeImpactReady = ({ instance }) => {
     : failure("impact_snapshot_incomplete");
 };
 
-const digest = (value) =>
-  typeof value === "string" && /^sha256:[0-9a-f]{64}$/.test(value);
-
 const changeSnapshotReady = ({ instance }) => {
-  const request = interviewItem(instance, "change_request");
-  const snapshot = values(instance, "assurance_snapshot").find(
-    (item) => item.source_revision === request?.source_revision,
-  );
-  const valid =
-    snapshot &&
+  const valid = values(instance, "assurance_snapshot").some(
+    (snapshot) =>
     snapshot.discharge_schema === "clause-discharge-v1" &&
     snapshot.argument_schema === "authored-assurance-view-v1" &&
     nonempty(snapshot.argument_id) &&
-    digest(snapshot.discharge_digest) &&
-    digest(snapshot.argument_digest) &&
     Number.isInteger(snapshot.binding_open) &&
     snapshot.binding_open >= 0 &&
     Number.isInteger(snapshot.applicability_unresolved) &&
@@ -308,9 +296,10 @@ const changeSnapshotReady = ({ instance }) => {
     ) &&
     Array.isArray(snapshot.evidence_record_ids) &&
     snapshot.evidence_record_ids.length > 0 &&
-    snapshot.evidence_record_ids.every(digest) &&
+    snapshot.evidence_record_ids.every(nonempty) &&
     Number.isFinite(Date.parse(snapshot.verified_at)) &&
-    Date.parse(snapshot.verified_at) <= Date.now();
+    Date.parse(snapshot.verified_at) <= Date.now(),
+  );
   return valid ? true : failure("assurance_snapshot_invalid");
 };
 
@@ -320,8 +309,6 @@ const changeReviewReady = ({ instance }) =>
       item.valid === true &&
       item.artifact_type === "SpecReview" &&
       item.analysis === "code-review" &&
-      item.source_revision ===
-        interviewItem(instance, "change_request")?.source_revision &&
       nonempty(item.path),
   )
     ? true

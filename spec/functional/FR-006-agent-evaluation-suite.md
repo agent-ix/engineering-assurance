@@ -21,7 +21,7 @@ rejection scenarios.
 
 ## Inputs
 
-- Fictional repository fixtures with fixed revisions and declared expectations.
+- Fictional repository fixtures with declared expectations.
 - Installed onboarding bundle and exact supported-agent versions.
 - Real Quire, Quoin, and ix-flow executables required by each scenario.
 
@@ -30,9 +30,9 @@ rejection scenarios.
 - Per-scenario transcript, exact tool versions, command count, elapsed time,
   human-prompt count, manual-translation count, repeated-prompt count, observed
   outcome, terminal decision event when applicable, and pass or fail result.
-- A machine-readable evaluation envelope retaining suite and fixture revisions,
-  host identity/version, the complete FR-004 governing-version tuple, transcript
-  path and digest, and every operator-effort observation.
+- A machine-readable evaluation envelope retaining host identity/version, the
+  complete FR-004 governing-version tuple, the transcript path, and every
+  operator-effort observation.
 - Aggregate result that remains failed while any required scenario fails or lacks
   evidence.
 
@@ -55,22 +55,18 @@ rejection scenarios.
 - The suite SHALL bind the exact snapshotted ix-flow executable into each agent
   environment and into post-run verification so PATH normalization cannot select
   a different implementation.
-- The release gate SHALL compare the aggregate's immutable source revision with
-  the current repository `HEAD` and reject evidence retained for any other
-  revision.
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | FR-006-AC-1 | The suite executes all five required scenario classes across each of the four supported hosts, including both malformed/unavailable producer variants and both terminal choices. | Test (TC-031) |
-| FR-006-AC-2 | Every executed scenario records the immutable governing-version tuple, command and human-interaction counts, elapsed time, transcript path/digest, fixture revision, observed outcome, and terminal event when applicable. | Test (TC-032) |
+| FR-006-AC-2 | Every executed scenario records the immutable governing-version tuple, command and human-interaction counts, elapsed time, transcript path, observed outcome, and terminal event when applicable. | Test (TC-032) |
 | FR-006-AC-3 | A missing executable leaves the scenario not executed and the aggregate gate failed. | Test (TC-033) |
 | FR-006-AC-4 | The aggregate gate passes only when all required scenarios pass and have complete observations. | Test (TC-034) |
 | FR-006-AC-5 | Equivalent decision-ready fixtures retain one explicit acceptance and one explicit rejection per supported host, with no inferred terminal event. | Test (TC-049) |
-| FR-006-AC-7 | The release gate rejects an otherwise well-formed evaluation aggregate when its source revision differs from the current repository `HEAD`. | Test (TC-051) |
 
-FR-006-AC-6 is withdrawn. Its row is removed and the identifier is not reused.
+FR-006-AC-6 and FR-006-AC-7 are withdrawn. Their rows are removed and the identifiers are not reused.
 
 ## Dependencies
 

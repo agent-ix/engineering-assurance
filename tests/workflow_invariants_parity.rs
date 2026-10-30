@@ -320,24 +320,6 @@ fn tc_106_absent_binding_subjects_cannot_match_absent_evidence_fields() {
             "architecture_review_missing",
         ],
     );
-
-    let mut change = passing_projection();
-    change["items"]
-        .as_object_mut()
-        .expect("items must be an object")
-        .remove("change_request");
-    change["items"]["assurance_snapshot"][0]
-        .as_object_mut()
-        .expect("snapshot must be an object")
-        .remove("source_revision");
-    change["items"]["review_validation"][1]
-        .as_object_mut()
-        .expect("review must be an object")
-        .remove("source_revision");
-    assert_failed(
-        &request(&change, &["change.snapshot_ready", "change.review_ready"]),
-        &["assurance_snapshot_invalid", "code_review_missing"],
-    );
 }
 
 #[trace("TC-106", "FR-016-AC-2", "FR-016-CON-3")]
@@ -897,7 +879,6 @@ fn tc_201_an_impact_snapshot_must_bind_the_change_and_carry_every_array() {
     for (member, value) in [
         ("baseline_id", json!("baseline-2")),
         ("profile_path", json!("assurance/other.yaml")),
-        ("source_revision", json!("b".repeat(40))),
     ] {
         let mut projection = change_impact();
         projection["items"]["impact_snapshot"][0][member] = value;
@@ -1012,7 +993,6 @@ fn tc_201_a_review_must_bind_the_requested_subject() {
         );
     }
     for (member, value) in [
-        ("source_revision", json!("b".repeat(40))),
         ("valid", json!(false)),
         ("analysis", json!("architecture-evaluation")),
         ("artifact_type", json!("ArchitectureDescription")),

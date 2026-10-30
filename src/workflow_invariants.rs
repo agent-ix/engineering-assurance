@@ -43,11 +43,11 @@ pub enum InvariantName {
     ArchitectureReviewReady,
     /// Require exactly one adjacent measurement-maturity promotion.
     MeasurementPromotionReady,
-    /// Require a complete impact snapshot at the selected source revision.
+    /// Require a complete impact snapshot for the selected profile and baseline.
     ChangeImpactReady,
-    /// Require a current, internally consistent assurance snapshot.
+    /// Require a verified, internally consistent assurance snapshot.
     ChangeSnapshotReady,
-    /// Require a code review at the selected source revision.
+    /// Require a valid code review.
     ChangeReviewReady,
 }
 
@@ -517,7 +517,6 @@ struct ChangeRequest {
     _scope: Option<String>,
     profile_path: Option<String>,
     baseline_id: Option<String>,
-    source_revision: Option<String>,
     #[serde(rename = "owner")]
     _owner: Option<String>,
     exceptions_expected: Option<bool>,
@@ -554,7 +553,6 @@ struct ReviewValidation {
     analysis: Option<String>,
     path: Option<String>,
     subject_path: Option<String>,
-    source_revision: Option<String>,
     valid: Option<bool>,
 }
 
@@ -652,7 +650,6 @@ struct MeasurementVerdict {
 struct ImpactSnapshot {
     #[serde(rename = "id")]
     _id: Option<String>,
-    source_revision: Option<String>,
     profile_path: Option<String>,
     baseline_id: Option<String>,
     changed_nodes: Option<Vec<Value>>,
@@ -668,14 +665,11 @@ struct ImpactSnapshot {
 struct AssuranceSnapshot {
     #[serde(rename = "id")]
     _id: Option<String>,
-    source_revision: Option<String>,
     discharge_schema: Option<String>,
-    discharge_digest: Option<String>,
     binding_open: Option<i64>,
     applicability_unresolved: Option<i64>,
     argument_schema: Option<String>,
     argument_id: Option<String>,
-    argument_digest: Option<String>,
     top_claim_status: Option<String>,
     evidence_record_ids: Option<Vec<String>>,
     verified_at: Option<String>,
@@ -1163,14 +1157,8 @@ fn change_impact_ready(instance: &InvariantProjection) -> Option<Failure> {
     let Some(request) = request else {
         return Some(failure(InvariantFailureCode::ImpactSnapshotIncomplete));
     };
-    let exact_revision = request
-        .source_revision
-        .as_deref()
-        .is_some_and(is_lower_hex_revision);
     let snapshot = instance.items.impact_snapshot.iter().find(|item| {
-        item.source_revision == request.source_revision
-            && item.profile_path == request.profile_path
-            && item.baseline_id == request.baseline_id
+        item.profile_path == request.profile_path && item.baseline_id == request.baseline_id
     });
     let complete = snapshot.is_some_and(|item| {
         item.changed_nodes.is_some()
@@ -1180,8 +1168,7 @@ fn change_impact_ready(instance: &InvariantProjection) -> Option<Failure> {
             && item.suspect_evidence.is_some()
             && item.unknowns.is_some()
     });
-    (!(exact_revision
-        && nonempty(request.profile_path.as_deref())
+    (!(nonempty(request.profile_path.as_deref())
         && nonempty(request.baseline_id.as_deref())
         && complete))
         .then_some((
@@ -1194,27 +1181,10 @@ fn change_snapshot_ready(
     instance: &InvariantProjection,
     evaluated_at: OffsetDateTime,
 ) -> Option<Failure> {
-    let source_revision = instance
-        .items
-        .change_request
-        .iter()
-        .find(|item| nonempty(item.interview_id.as_deref()))
-        .and_then(|item| item.source_revision.as_deref())
-        .filter(|revision| !revision.trim().is_empty());
-    let Some(source_revision) = source_revision else {
-        return Some(failure(InvariantFailureCode::AssuranceSnapshotInvalid));
-    };
-    let snapshot = instance
-        .items
-        .assurance_snapshot
-        .iter()
-        .find(|item| item.source_revision.as_deref() == Some(source_revision));
-    let valid = snapshot.is_some_and(|item| {
+    let valid = instance.items.assurance_snapshot.iter().any(|item| {
         item.discharge_schema.as_deref() == Some("clause-discharge-v1")
             && item.argument_schema.as_deref() == Some("authored-assurance-view-v1")
             && nonempty(item.argument_id.as_deref())
-            && item.discharge_digest.as_deref().is_some_and(is_digest)
-            && item.argument_digest.as_deref().is_some_and(is_digest)
             && item.binding_open.is_some_and(|value| value >= 0)
             && item
                 .applicability_unresolved
@@ -1225,7 +1195,7 @@ fn change_snapshot_ready(
             && item
                 .evidence_record_ids
                 .as_ref()
-                .is_some_and(|ids| !ids.is_empty() && ids.iter().all(|id| is_digest(id)))
+                .is_some_and(|ids| !ids.is_empty() && ids.iter().all(|id| nonempty(Some(id))))
             && item
                 .verified_at
                 .as_deref()
@@ -1239,21 +1209,10 @@ fn change_snapshot_ready(
 }
 
 fn change_review_ready(instance: &InvariantProjection) -> Option<Failure> {
-    let source_revision = instance
-        .items
-        .change_request
-        .iter()
-        .find(|item| nonempty(item.interview_id.as_deref()))
-        .and_then(|item| item.source_revision.as_deref())
-        .filter(|revision| !revision.trim().is_empty());
-    let Some(source_revision) = source_revision else {
-        return Some(failure(InvariantFailureCode::CodeReviewMissing));
-    };
     let valid = instance.items.review_validation.iter().any(|item| {
         item.valid == Some(true)
             && item.artifact_type.as_deref() == Some("SpecReview")
             && item.analysis.as_deref() == Some("code-review")
-            && item.source_revision.as_deref() == Some(source_revision)
             && nonempty(item.path.as_deref())
     });
     (!valid).then_some((
@@ -1264,20 +1223,4 @@ fn change_review_ready(instance: &InvariantProjection) -> Option<Failure> {
 
 fn parse_instant(value: &str) -> Option<OffsetDateTime> {
     OffsetDateTime::parse(value, &Rfc3339).ok()
-}
-
-fn is_lower_hex_revision(value: &str) -> bool {
-    value.len() == 40
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-}
-
-fn is_digest(value: &str) -> bool {
-    value.strip_prefix("sha256:").is_some_and(|digest| {
-        digest.len() == 64
-            && digest
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    })
 }

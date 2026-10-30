@@ -24,8 +24,6 @@ fn root() -> TempDir {
     fs::write(
         root.path().join("evals/fixtures/suite.json"),
         r#"{
-  "suite_revision": "suite-v1",
-  "fixture_revision": "fixtures-v1",
   "scenarios": {
     "existing-profile": {"expected":"reused","input":{"decision_boundary":"one candidate","decision_owner":"owner"}},
     "human-acceptance": {"expected":"accepted","choice":"accept","input":{"decision_boundary":"one decision","decision_owner":"owner","owner_decision":"accept","run_id":"run-1","workflow_state_dir":"workflow-state"}}
@@ -53,7 +51,7 @@ fn root() -> TempDir {
         "ix_flow": identity("ix-flow"), "schema": identity("evaluation-result-contract"), "producer": identity("cli-agent-evals")
     });
     let snapshot = json!({
-        "source_revision": "b".repeat(40), "host": identity("codex"), "governing": governing,
+        "host": identity("codex"), "governing": governing,
         "workflows": {"assurance-intake": identity("assurance-intake"), "architecture-evaluation": identity("architecture-evaluation")}
     });
     fs::write(
@@ -178,12 +176,11 @@ fn tc_109_provider_prepares_and_checks_a_synthetic_native_evaluation() {
         input["result_contract"]["required_top_level_fields"]
             .as_array()
             .map(Vec::len),
-        Some(14)
+        Some(11)
     );
     let result = json!({
         "host": input["result_contract"]["host"], "host_version": input["result_contract"]["host_version"],
-        "source_revision": input["result_contract"]["source_revision"], "suite_revision": input["result_contract"]["suite_revision"],
-        "fixture_revision": input["result_contract"]["fixture_revision"], "governing": input["result_contract"]["governing"],
+        "governing": input["result_contract"]["governing"],
         "command_count": 0, "elapsed_ms": 0, "human_prompt_count": 0, "manual_translation_count": 0, "repeated_prompt_count": 0,
         "observed_outcome": "reused", "terminal_event": null, "unsupported_additions": []
     });

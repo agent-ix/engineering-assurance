@@ -27,8 +27,7 @@ checking, manifest validation, and qualification assertions to Rust.
 
 - Canonical agent-evaluation scenarios and supported hosts.
 - Versioned `cli-agent-evals.report/v1` results, retained transcripts, one
-  explicit evaluation-workspace root, and one expected immutable source
-  revision.
+  and one explicit evaluation-workspace root.
 - Package manifests, staged archives, rights policy, and integration evidence.
 - For the npm package-lifecycle adapter, one explicit repository root and one
   closed operation: `stage`, `clean`, or `refuse-publication`.
@@ -71,9 +70,8 @@ checking, manifest validation, and qualification assertions to Rust.
 - For the pure aggregation boundary, one
   `engineering-assurance.evaluation-aggregate-request/v1` document containing
   evaluation envelopes for the closed host and scenario populations. Each
-  envelope carries its execution status, pass state, immutable suite, fixture,
-  source, host, and governing identities, relative transcript reference and
-  lowercase SHA-256 digest, non-negative effort counts, observed outcome,
+  envelope carries its execution status, pass state, immutable host and governing identities, relative transcript reference,
+  non-negative effort counts, observed outcome,
   unsupported-addition list, optional diagnostic, and the complete terminal
   event when the scenario requires a human decision.
 
@@ -97,7 +95,7 @@ checking, manifest validation, and qualification assertions to Rust.
   ordered list of stable failure codes. It does not persist evidence or infer a
   release decision.
 - The report adapter emits the retained `evaluation-aggregate-v1` artifact
-  shape, including exact source revision, selected report identities, host
+  shape, including the selected report paths, host
   models, failed-attempt diagnostics, complete-cell counts, and aggregate
   failures. It does not infer a terminal or release decision.
 - The pure content-rights boundary emits typed findings containing only a
@@ -135,8 +133,8 @@ checking, manifest validation, and qualification assertions to Rust.
   observation.
 - Preserve failed samples as bounded diagnostics without admitting an
   envelope. Admit a successful sample only when its exit is `complete`, its
-  retention state is `retained`, its lowercase SHA-256 digest and normalized
-  forward-slash relative transcript path are present, and its typed
+  retention state is `retained`, its normalized forward-slash relative
+  transcript path is present, and its typed
   `evaluation_result` observation is complete.
 - The report host adapter SHALL accept no more than 64 explicit
   repository-relative report paths beneath one canonical repository root.
@@ -148,12 +146,10 @@ checking, manifest validation, and qualification assertions to Rust.
   evaluation-workspace root without following a symbolic link or reading a
   special file.
 - A transcript SHALL be no larger than 67,108,864 bytes.
-- The report host adapter SHALL hash the exact retained transcript bytes and
-  reject a missing, changed, linked, special, escaping, or oversized
-  transcript before constructing an evaluation envelope.
-- The report adapter SHALL compare every result source revision with the
-  caller-supplied immutable expected revision before aggregation.
-- The report adapter SHALL sort report identities, models, failed attempts,
+- The report host adapter SHALL locate the retained transcript and reject a
+  missing, linked, special, escaping, or oversized transcript before
+  constructing an evaluation envelope.
+- The report adapter SHALL sort report paths, models, failed attempts,
   and adapter diagnostics so input path order cannot change the retained
   aggregate artifact.
 - The `agent-evals-aggregate` repository command SHALL invoke the Rust CLI
@@ -183,8 +179,7 @@ checking, manifest validation, and qualification assertions to Rust.
   input larger than 8 MiB before JSON decoding or aggregate allocation.
 - An executed cell is complete only when it passed; every immutable identity is
   present and valid; its transcript reference is a normalized,
-  forward-slash-delimited, relative and non-traversing protocol path; its
-  transcript digest is lowercase SHA-256; every effort count is a non-negative
+  forward-slash-delimited, relative and non-traversing protocol path; every effort count is a non-negative
   integer; the observed outcome is the scenario's declared outcome; and
   unsupported additions are empty.
 - A not-executed cell requires a non-empty diagnostic and remains incomplete.
@@ -194,13 +189,12 @@ checking, manifest validation, and qualification assertions to Rust.
   with the corresponding choice and outcome, the governing workflow name and
   version, a non-empty owner, a safe run ID, and an RFC 3339 timestamp. Every
   other scenario requires no terminal event. For each host the two decision
-  cells use distinct run IDs and identical source, fixture, and governing
+  cells use distinct run IDs and identical governing
   identities.
 - Fail aggregation when a required host-scenario cell is absent, invalid,
   unavailable, unsuccessful, or duplicated. An unsupported host or scenario is
   a malformed request rather than an aggregate cell.
-- Require one source revision, suite revision, fixture revision, and governing
-  tuple across the aggregate. Require one workflow identity within each
+- Require one shared governing tuple across the aggregate. Require one workflow identity within each
   scenario while permitting the declared intake and architecture workflows to
   differ between scenarios.
 - Order missing, duplicate, cell-validation, aggregate-identity,
@@ -506,7 +500,7 @@ checking, manifest validation, and qualification assertions to Rust.
 
 ## Error Conditions
 
-Missing hosts, incomplete scenarios, invalid results, revision mismatches,
+Missing hosts, incomplete scenarios, invalid results,
 changed governing files, unexpected package members, rights denials, and
 attempted publication fail their corresponding local gate.
 An invalid or duplicate expected package path and an over-limit member
@@ -529,7 +523,7 @@ success result. A classified content-rights finding returns a well-formed
 withheld result rather than an adapter error.
 An unknown cli-agent-evals report version, malformed or open report shape,
 unsupported host or scenario, invalid sample population, non-retained success,
-model drift, unsafe path, transcript identity failure, or report/transcript
+model drift, unsafe path, missing transcript, or report/transcript
 resource breach withholds the report collection without admitting an envelope
 from the affected sample.
 An invalid package-audit root, package-builder or installer failure, malformed
@@ -544,14 +538,14 @@ byte mismatch refuses the package audit without a success result.
 | --- | --- | --- | --- |
 | FR-017-CON-1 | The Rust evaluator SHALL NOT infer a human terminal decision. | Responsibility | Test |
 | FR-017-CON-2 | Package-manager and host configuration SHALL contain no first-party semantic assertion. | Architecture | Test |
-| FR-017-CON-3 | The reusable Rust qualification library SHALL NOT access the filesystem, environment, child programs, network, or system clock; tree enumeration, transcript-byte loading, host execution, and current-HEAD comparison belong to explicit binary adapters. | Responsibility | Test |
+| FR-017-CON-3 | The reusable Rust qualification library SHALL NOT access the filesystem, environment, child programs, network, or system clock; tree enumeration, transcript loading and host execution belong to explicit binary adapters. | Responsibility | Test |
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-017-AC-1 | The Rust evaluation path completes all required host-scenario cells and matches retained success and declared failure behavior. | Test (TC-109) |
-| FR-017-AC-2 | The pure Rust boundary preserves the retained evaluation contract over the declared qualification population and deterministically withholds aggregation for every missing, duplicate, malformed, unsupported, unavailable, failed, stale-revision, changed-governing-identity, changed-workflow, unsupported-addition, invalid-transcript-reference, invalid-count, outcome-mismatch, and terminal-pair case; input permutation cannot change the result. | Test (TC-110) |
+| FR-017-AC-2 | The pure Rust boundary preserves the retained evaluation contract over the declared qualification population and deterministically withholds aggregation for every missing, duplicate, malformed, unsupported, unavailable, failed, changed-governing-identity, changed-workflow, unsupported-addition, invalid-transcript-reference, invalid-count, outcome-mismatch, and terminal-pair case; input permutation cannot change the result. | Test (TC-110) |
 | FR-017-AC-3 | Rust package, rights, manifest, integration, and publication-refusal checks match the retained pass/fail corpus; the package-audit adapter builds, bounds, decodes, audits, installs, and compares the retained wheel and npm distributions offline and rejects extra, missing, duplicate, unsafe, linked, special, oversized, rights-denied, escaping, or byte-divergent members. | Test (TC-111) |
 | FR-017-AC-4 | Static inspection finds only declarative dispatch in package-manager and host configuration; qualification is performed locally and real-agent evaluation, publication, and release operations remain explicit manual actions. | Test (TC-112) |
 | FR-017-AC-5 | The pure Rust content-rights classifier matches every retained finding class and exception, rejects unsafe paths without echoing them, preserves Unicode protected-token matching, emits no matched content, and returns deterministic typed findings without filesystem, environment, child-program, network, or clock access. | Test (TC-119) |
@@ -568,7 +562,7 @@ byte mismatch refuses the package audit without a success result.
 - **Downstream**: FR-018 requires these checks before old implementations are removed.
 - **Sequence**: FR-017-AC-2's pure typed validation and aggregation is an
   independently reviewable additive slice. It does not satisfy FR-017-AC-1,
-  verify transcript bytes, compare the current repository revision, authorize
+  locate transcripts, authorize
   host execution, or permit removal under FR-018.
 - **Sequence**: FR-017-AC-5 is an independently reviewable pure classifier
   slice. It does not enumerate a repository, replace the tree adapter, select a

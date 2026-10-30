@@ -54,7 +54,7 @@ installed with exact versions recorded by the test runner.
 5. Inspect all filesystem changes, Quoin records, transcripts, and observations.
    - IT-003-SC-05: all changes are fixture-authorized and every scenario records
      the complete immutable governing-version tuple, commands, human-interaction
-     counts, elapsed time, transcript digest, and outcomes.
+     counts, elapsed time, transcript path, and outcomes.
 
 ## Expected Results
 
