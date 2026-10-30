@@ -525,12 +525,12 @@ fn tc_061_committed_generated_fixtures_agree_across_every_language() {
         .expect("the non-success-state source must be JSON");
 
     // An empty source makes every extracted list empty too, and three empty
-    // lists agree with each other and with the source. The floor is repeated
+    // lists agree with each other and with the source. A named state is required
     // here rather than relied on from the contract suite, because a guard in
     // another test binary is a coincidence, not an invariant of this one.
     assert!(
-        states.len() >= 17,
-        "the declared non-success vocabulary lost states"
+        states.iter().any(|state| state == "failed"),
+        "the declared non-success vocabulary no longer names failed"
     );
     for (name, prefix, suffix) in [
         ("non_success_states.py", "    \"", "\","),

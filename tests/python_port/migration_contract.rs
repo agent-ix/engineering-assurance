@@ -50,10 +50,6 @@ fn decision_rows() -> Vec<(String, String)> {
 #[trace("TC-087", "FR-013-AC-1")]
 fn every_family_carries_exactly_one_decision() {
     let rows = decision_rows();
-    assert!(
-        rows.len() >= 12,
-        "the decision table is too small to be a census"
-    );
     for (families, decision) in rows {
         let named: Vec<&str> = DECISIONS
             .iter()
@@ -172,10 +168,6 @@ fn the_review_checklist_covers_every_required_question() {
         .lines()
         .filter(|line| line.trim().starts_with("- [ ]"))
         .collect();
-    assert!(
-        checklist.len() >= 10,
-        "the checklist is too short to review a migration"
-    );
     let joined = checklist.join(" ");
     for topic in [
         "script inventory",

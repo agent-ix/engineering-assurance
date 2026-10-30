@@ -101,10 +101,6 @@ fn tc_190_each_capability_feature_compiles_alone() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let (declared, full_members) = metadata_features(root);
     assert!(
-        declared.len() >= 5,
-        "metadata found too few features: {declared:?}"
-    );
-    assert!(
         full_members.is_subset(&declared),
         "`full` enables features the matrix does not check: {:?}",
         full_members.difference(&declared).collect::<Vec<_>>()

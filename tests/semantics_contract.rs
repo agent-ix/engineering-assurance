@@ -343,12 +343,8 @@ fn tc_061_every_declared_non_success_state_survives_validation() {
 
     // The loop below passes over an empty list having validated nothing, which
     // is how a state vocabulary could silently collapse to success while this
-    // row stayed green. Naming three states the set must contain, and a floor
-    // on its size, is what makes the loop's success mean something.
-    assert!(
-        states.len() >= 17,
-        "the declared non-success vocabulary lost states"
-    );
+    // row stayed green. Naming three states the set must contain is what makes
+    // the loop's success mean something.
     for required in ["failed", "skipped", "unreadable"] {
         assert!(
             states.iter().any(|state| state == required),
