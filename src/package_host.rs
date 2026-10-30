@@ -12,9 +12,7 @@ use std::{
 
 use thiserror::Error;
 
-use engineering_assurance::{
-    content_digest::ContentDigest, package_lifecycle::PackageLifecycleResult,
-};
+use engineering_assurance::package_lifecycle::PackageLifecycleResult;
 
 const MODULE_DIRECTORY: &str = "engineering_assurance";
 const STAGED_NAMES: [&str; 5] = [
@@ -32,7 +30,6 @@ const MAX_TOTAL_BYTES: usize = 16_777_216;
 struct PlannedFile {
     relative: PathBuf,
     length: usize,
-    digest: ContentDigest,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -268,7 +265,7 @@ fn inspect_root(
     }
     if metadata.is_file() {
         count_entry(budget)?;
-        let (length, digest) = inspect_bounded_file(root, budget)?;
+        let length = inspect_bounded_file(root, budget)?;
         return Ok(PlannedRoot {
             name,
             directory: false,
@@ -276,7 +273,6 @@ fn inspect_root(
             files: vec![PlannedFile {
                 relative: PathBuf::new(),
                 length,
-                digest,
             }],
         });
     }
@@ -308,11 +304,10 @@ fn inspect_root(
                 directories.push(child_relative.clone());
                 pending.push((child_path, child_relative));
             } else if child_metadata.is_file() {
-                let (length, digest) = inspect_bounded_file(&child_path, budget)?;
+                let length = inspect_bounded_file(&child_path, budget)?;
                 files.push(PlannedFile {
                     relative: child_relative,
                     length,
-                    digest,
                 });
             } else {
                 return Err(PackageHostError::EntryKindInvalid);
@@ -351,17 +346,13 @@ fn count_entry(budget: &mut Budget) -> Result<(), PackageHostError> {
     Ok(())
 }
 
-fn inspect_bounded_file(
-    path: &Path,
-    budget: &mut Budget,
-) -> Result<(usize, ContentDigest), PackageHostError> {
+fn inspect_bounded_file(path: &Path, budget: &mut Budget) -> Result<usize, PackageHostError> {
     let metadata = fs::metadata(path).map_err(|_| PackageHostError::InspectionFailed)?;
     let length = usize::try_from(metadata.len()).map_err(|_| PackageHostError::FileTooLarge)?;
     if length > MAX_FILE_BYTES {
         return Err(PackageHostError::FileTooLarge);
     }
     let mut source = fs::File::open(path).map_err(|_| PackageHostError::InspectionFailed)?;
-    let mut hasher = ContentDigest::hasher();
     let mut observed = 0_usize;
     let mut buffer = [0_u8; 8_192];
     loop {
@@ -379,12 +370,11 @@ fn inspect_bounded_file(
         if budget.bytes > MAX_TOTAL_BYTES {
             return Err(PackageHostError::TotalBytesTooLarge);
         }
-        hasher.update(&buffer[..count]);
     }
     if observed != length {
         return Err(PackageHostError::InspectionFailed);
     }
-    Ok((observed, hasher.finalize()))
+    Ok(observed)
 }
 
 fn write_plan(

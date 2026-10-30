@@ -7,8 +7,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::content_digest::ContentDigest;
-
 const MUTABLE_VERSIONS: [&str; 7] = [
     "latest", "main", "master", "head", "current", "nightly", "*",
 ];
@@ -147,123 +145,6 @@ fn is_mutable_version(version: &str) -> bool {
             .map_or(version, |(core, _)| core)
             .split(['.', '-'])
             .any(|component| component.eq_ignore_ascii_case("x"))
-}
-
-fn legacy_canonical_json(output: &Value) -> Vec<u8> {
-    let serde_encoded = output.to_string();
-    let bytes = serde_encoded.as_bytes();
-    let mut canonical = Vec::with_capacity(bytes.len());
-    let mut index = 0;
-    let mut in_string = false;
-    let mut escaped = false;
-
-    while index < bytes.len() {
-        let byte = bytes[index];
-        if in_string {
-            canonical.push(byte);
-            if escaped {
-                escaped = false;
-            } else if byte == b'\\' {
-                escaped = true;
-            } else if byte == b'"' {
-                in_string = false;
-            }
-            index += 1;
-            continue;
-        }
-        if byte == b'"' {
-            in_string = true;
-            canonical.push(b'"');
-            index += 1;
-            continue;
-        }
-        if byte == b'-' || byte.is_ascii_digit() {
-            let number_start = index;
-            index += 1;
-            while bytes.get(index).is_some_and(|candidate| {
-                candidate.is_ascii_digit() || matches!(candidate, b'.' | b'e' | b'E' | b'+' | b'-')
-            }) {
-                index += 1;
-            }
-            canonical.extend_from_slice(&python_number_token(&bytes[number_start..index]));
-            continue;
-        }
-        canonical.push(byte);
-        index += 1;
-    }
-    canonical
-}
-
-fn python_number_token(token: &[u8]) -> Vec<u8> {
-    if !token.iter().any(|byte| matches!(byte, b'.' | b'e' | b'E')) {
-        return if token == b"-0" {
-            b"0".to_vec()
-        } else {
-            token.to_vec()
-        };
-    }
-
-    let Some(value) = std::str::from_utf8(token)
-        .ok()
-        .and_then(|value| value.parse::<f64>().ok())
-        .filter(|value| value.is_finite())
-    else {
-        return token.to_vec();
-    };
-    let Some(number) = serde_json::Number::from_f64(value) else {
-        return token.to_vec();
-    };
-    normalize_python_float_token(number.to_string().as_bytes())
-}
-
-fn normalize_python_float_token(token: &[u8]) -> Vec<u8> {
-    if let Some(exponent) = token.iter().position(|byte| matches!(byte, b'e' | b'E')) {
-        let mut normalized = Vec::with_capacity(token.len() + 2);
-        normalized.extend_from_slice(&token[..exponent]);
-        normalized.push(b'e');
-        let mut cursor = exponent + 1;
-        if token
-            .get(cursor)
-            .is_some_and(|byte| matches!(byte, b'+' | b'-'))
-        {
-            normalized.push(token[cursor]);
-            cursor += 1;
-        } else {
-            normalized.push(b'+');
-        }
-        if token.len() - cursor == 1 {
-            normalized.push(b'0');
-        }
-        normalized.extend_from_slice(&token[cursor..]);
-        return normalized;
-    }
-
-    let (sign, unsigned) = token
-        .strip_prefix(b"-")
-        .map_or((&b""[..], token), |unsigned| (&b"-"[..], unsigned));
-    let Some(fraction) = unsigned.strip_prefix(b"0.") else {
-        return token.to_vec();
-    };
-    let leading_zeroes = fraction.iter().take_while(|byte| **byte == b'0').count();
-    if leading_zeroes < 4 || leading_zeroes == fraction.len() {
-        return token.to_vec();
-    }
-
-    let significant = &fraction[leading_zeroes..];
-    let mut normalized = Vec::with_capacity(token.len() + 3);
-    normalized.extend_from_slice(sign);
-    normalized.push(significant[0]);
-    if significant.len() > 1 {
-        normalized.push(b'.');
-        normalized.extend_from_slice(&significant[1..]);
-    }
-    normalized.extend_from_slice(b"e-");
-    let exponent = leading_zeroes + 1;
-    if exponent < 10 {
-        normalized.push(b'0');
-    }
-    normalized.extend_from_slice(exponent.to_string().as_bytes());
-    normalized
 }
 
 fn has_non_finite_numeric_identity(value: &Value) -> bool {
@@ -406,9 +287,6 @@ pub struct ProducerAttempt {
     /// Immutable governing identities, required for observed evidence.
     pub governing: Option<GoverningVersions>,
     /// Parsed producer output, required to be a JSON object for observed evidence.
-    ///
-    /// Its structural representation is not evidence identity; classification
-    /// derives identity from the canonical output digest.
     pub output: Option<Value>,
     /// Whether the producer output passed its owned contract.
     pub output_valid: bool,
@@ -434,8 +312,6 @@ pub struct EvidenceEnvelope {
     pub observation: OperatorObservation,
     /// Immutable governing identities retained for observed evidence and invalid attempts.
     pub governing: Option<GoverningVersions>,
-    /// SHA-256 of retained canonical JSON output bytes.
-    pub output_digest: Option<String>,
     /// Deferred next action.
     pub next_action: Option<String>,
     /// Responsible owner.
@@ -462,7 +338,6 @@ fn invalid(attempt: &ProducerAttempt, errors: Vec<String>) -> EvidenceEnvelope {
         availability: None,
         observation: attempt.observation.clone(),
         governing: attempt.governing.clone(),
-        output_digest: None,
         next_action: None,
         owner: None,
         boundary_rationale: None,
@@ -477,7 +352,6 @@ fn classified(attempt: &ProducerAttempt, availability: AvailabilityState) -> Evi
         availability: Some(availability),
         observation: attempt.observation.clone(),
         governing: None,
-        output_digest: None,
         next_action: None,
         owner: None,
         boundary_rationale: None,
@@ -560,10 +434,8 @@ pub fn classify_producer(attempt: &ProducerAttempt) -> EvidenceEnvelope {
         return invalid(attempt, vec!["quoin-handoff-missing".to_owned()]);
     }
 
-    let encoded = legacy_canonical_json(output);
     let mut result = classified(attempt, AvailabilityState::Observed);
     result.governing.clone_from(&attempt.governing);
-    result.output_digest = Some(ContentDigest::of_bytes(&encoded).into_hex());
     result.quoin_reference.clone_from(&attempt.quoin_reference);
     result
 }

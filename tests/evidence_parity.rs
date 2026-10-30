@@ -216,10 +216,6 @@ fn tc_100_evidence_classification_preserves_accepted_state_fixtures() {
             Some(AvailabilityState::NotApplicable),
         ]
     );
-    assert_eq!(
-        results[0].output_digest.as_deref(),
-        Some("013ad71438e02c083ba28636ab02fae1eb6196ecfd773ddbe3b1d7a0b865071f")
-    );
 }
 
 #[trace("TC-102", "FR-015-AC-2")]
@@ -283,68 +279,13 @@ fn tc_103_evidence_malformed_and_missing_provenance_fail_explicitly() {
 
 #[trace("TC-100", "FR-015-AC-1")]
 #[test]
-fn tc_100_accepted_and_generated_json_values_match_canonical_identity_fixtures() {
+fn tc_100_accepted_and_generated_json_values_are_classified_valid() {
     let raw_values = generated_identity_corpus();
     for raw in &raw_values {
         let output: Value = serde_json::from_str(raw).expect("identity fixture must be valid JSON");
         let attempt = changed(&observed(), |case| case.output = Some(output));
         let result = classify_producer(&attempt);
         assert!(result.is_valid(), "valid identity input was refused: {raw}");
-    }
-
-    for (raw, expected_digest) in [
-        (
-            r#"{"v":18446744073709551615}"#,
-            "846afd99dea73da7038d6689d7f3295477e36ca591b3f7e5d2a7c10aef8d601a",
-        ),
-        (
-            r#"{"v":18446744073709551616}"#,
-            "f429894757452b732330279b4314a7ff3140fba29799935078a0328d544343c3",
-        ),
-        (
-            r#"{"v":-9223372036854775808}"#,
-            "9e52feb18cdc447ae70062ecd2e763c4d1cfac1607ac1b1499738f28cae639fb",
-        ),
-        (
-            r#"{"v":-9223372036854775809}"#,
-            "17b3cb5dec17af647887b3ce0d336fbbe9c7335c4d2ab86c156b50a729ee0c9f",
-        ),
-        (
-            r#"{"v":1234567890123456789012345}"#,
-            "afbf326118eedf9766b39b6ae455697437642bfbfee0a9fbd9692a05e3162001",
-        ),
-        (
-            r#"{"v":-1234567890123456789012345}"#,
-            "38c88e8f9ceff3d3095b7104bdc569b88b4511cabeb6a49966eb7e2b804589fd",
-        ),
-        (
-            r#"{"v":-0}"#,
-            "ec4f95abcb4e2e3dbe856c3eb2f81995eacb3823d40aa2e78ed4c5e1798f664d",
-        ),
-        (
-            r#"{"v":1.2300}"#,
-            "a3b18e44bc2c41c0d44c6a475749f2127d38b39d2448ff95653a1fd4407ee86c",
-        ),
-        (
-            r#"{"v":1E+09}"#,
-            "416d2d40c79a32ea746f530b4857832aa2ee4b57203cfcf4bd8b0cea37b27818",
-        ),
-        (
-            r#"{"v":-0.0}"#,
-            "3804efdcecdab4b071c214185d5593cb6c3f0d386b6dd057bacd0e3740459dff",
-        ),
-        (
-            r#"{"nested":[{"v":99999999999999999999999999999999999999}]}"#,
-            "3e0e8486a2c981ce467e866ff023449d2b5734eb68e508d3e538942ec183631c",
-        ),
-    ] {
-        let output = serde_json::from_str(raw).expect("canonical fixture must parse");
-        let result = classify_producer(&changed(&observed(), |case| case.output = Some(output)));
-        assert_eq!(
-            result.output_digest.as_deref(),
-            Some(expected_digest),
-            "digest drift for {raw}"
-        );
     }
 }
 
@@ -369,7 +310,6 @@ fn tc_103_non_finite_and_overflowing_numeric_identity_inputs_are_refused() {
             result.validation_errors,
             ["producer-output-number-non-finite"]
         );
-        assert_eq!(result.output_digest, None);
         assert!(!result.is_valid());
         assert_eq!(attempt.output, Some(retained_output));
     }
@@ -450,37 +390,19 @@ fn tc_103_version_identity_rejects_actual_mutability_without_rejecting_metadata(
     );
 }
 
-#[trace("TC-100", "FR-015-AC-1")]
-#[test]
-fn tc_100_canonical_json_digest_fixture_is_stable() {
-    let result = classify_producer(&observed());
-    assert_eq!(
-        result.output_digest.as_deref(),
-        Some("013ad71438e02c083ba28636ab02fae1eb6196ecfd773ddbe3b1d7a0b865071f")
-    );
-    assert_eq!(
-        Value::String("observed".to_owned()),
-        serde_json::to_value(result.availability).expect("availability must serialize")
-    );
-}
-
 #[trace("TC-020", "FR-004-AC-1", "US-004-EX-2")]
 #[test]
 fn tc_020_observed_evidence_retains_the_governing_tuple_and_operator_observation() {
     // An `observed` record is the only state that asserts a producer actually
     // ran, so it is the state that must carry enough provenance for a reader to
-    // re-derive the claim. Asserting the retained tuple, the operator
-    // observation and the output digest together prevents a classifier that
+    // re-derive the claim. Asserting the retained tuple and the operator
+    // observation together prevents a classifier that
     // labels a result `observed` while dropping the identities that make the
     // label checkable.
     let result = classify_producer(&observed());
     assert_eq!(result.availability, Some(AvailabilityState::Observed));
     assert_eq!(result.governing.as_ref(), Some(&governing()));
     assert_eq!(result.observation, observation("succeeded", Some(0), None));
-    assert_eq!(
-        result.output_digest.as_deref(),
-        Some("013ad71438e02c083ba28636ab02fae1eb6196ecfd773ddbe3b1d7a0b865071f")
-    );
     assert!(result.is_valid());
 
     // Without the tuple the same otherwise-valid attempt must refuse rather
