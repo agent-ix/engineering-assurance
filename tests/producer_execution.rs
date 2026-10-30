@@ -672,10 +672,15 @@ fn tc_124_symlinked_executable_path_is_unavailable_and_never_launched() {
     let root = tempfile::tempdir().expect("temporary root");
     let link = root.path().join("linked-producer");
     std::os::unix::fs::symlink(fixture_executable(), &link).expect("executable link");
-    let mut linked = request(root.path(), &["emit", "accepted"]);
+    let marker = root.path().join("launched.marker");
+    let mut linked = request(
+        root.path(),
+        &["touch", marker.to_str().expect("UTF-8 path")],
+    );
     linked.producer.executable = link.display().to_string();
     let result = execute(&linked, &adapter());
     assert!(matches!(result.state, ProducerExecutionState::Unavailable));
+    assert!(!marker.exists(), "the linked producer must not be launched");
 }
 
 #[test]
