@@ -785,7 +785,7 @@ fn tc_142_a_minimal_downstream_compiles_only_the_measurement_feature() {
     .expect("consumer manifest");
     fs::write(
         consumer.path().join("src/main.rs"),
-        "use engineering_assurance::measurement::{ApparatusPath, Baseline, Comparator, ConfidenceLevel, DecisionRule, Interval, Direction, Estimator, NegativeControl, NegativeControlKind, NegativeControls, Objective, ProtectedApparatus, definition_change_without_version_bump};\nfn main(){let steered = Objective::with_steering(Direction::Target, Some(1.0), Some(1.0), Some(30.0), Some(50.0)).expect(\"valid\"); let level = ConfidenceLevel::new(0.95).expect(\"level\"); let interval = Interval::new(0.0, 1.0, level, \"m\").expect(\"interval\"); let rule = DecisionRule::against_threshold(Comparator::Ge, 0.5).and_then(|rule| rule.with_interval_level(level)).expect(\"rule\"); let _ = (rule.holds_on_interval(0.5, Some(&interval), None), steered.weight(), steered.value_half_life(), steered.budget(), steered.definitional(), definition_change_without_version_bump, DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, None), Estimator::Proportion, ApparatusPath::new(\"evals/**\").map(|path| ProtectedApparatus::new([path])), NegativeControl::new(NegativeControlKind::ApparatusEdit, \"digest\").map(|control| NegativeControls::new([control])));}\n",
+        "use engineering_assurance::measurement::{ApparatusPath, Baseline, Comparator, ConfidenceLevel, DecisionRule, Interval, Direction, Estimator, NegativeControl, NegativeControlKind, NegativeControls, Objective, ProtectedApparatus, definition_change_without_version_bump};\nfn main(){let steered = Objective::with_steering(Direction::Target, Some(1.0), Some(1.0), Some(30.0), Some(50.0)).expect(\"valid\"); let level = ConfidenceLevel::new(0.95).expect(\"level\"); let interval = Interval::new(0.0, 1.0, level, \"m\").expect(\"interval\"); let rule = DecisionRule::against_threshold(Comparator::Ge, 0.5).and_then(|rule| rule.with_interval_level(level)).expect(\"rule\"); let _ = (rule.holds_on_interval(0.5, Some(&interval), None), steered.weight(), steered.value_half_life(), steered.budget(), steered.definitional(), definition_change_without_version_bump, DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, None), Estimator::Proportion, ApparatusPath::new(\"evals/**\").map(|path| ProtectedApparatus::new([path])), NegativeControl::new(NegativeControlKind::ApparatusEdit, \"edit\").map(|control| NegativeControls::new([control])));}\n",
     )
     .expect("consumer source");
     let status = Command::new(env!("CARGO"))
@@ -1524,13 +1524,13 @@ fn tc_157_negative_controls_are_closed_non_empty_and_distinct() {
         })
     );
     let edit =
-        NegativeControl::new(NegativeControlKind::ApparatusEdit, "digest").expect("valid control");
+        NegativeControl::new(NegativeControlKind::ApparatusEdit, "edit").expect("valid control");
     let controls = NegativeControls::new([edit.clone(), control.clone()]).expect("valid list");
     assert_eq!(controls.as_slice(), [edit, control]);
     assert!(controls.covers(NegativeControlKind::ApparatusEdit));
     assert!(!controls.covers(NegativeControlKind::SelectiveReporting));
 
-    let yaml = "- kind: apparatus-edit\n  description: digest\n- kind: stale-evidence\n  description: subject version\n";
+    let yaml = "- kind: apparatus-edit\n  description: edit\n- kind: stale-evidence\n  description: subject version\n";
     let decoded: NegativeControls = yaml_serde::from_str(yaml).expect("controls deserialize");
     assert_eq!(decoded, controls);
     assert_eq!(yaml_serde::to_string(&decoded).expect("serializes"), yaml);

@@ -35,8 +35,7 @@ earns no credit toward the plan's objective.
     `kind` is exactly one of `suppressed-observation`, `gain-within-noise`,
     `stale-evidence`, `apparatus-edit`, or `selective-reporting`;
   - `ground_truth_kind`: one of `human-labelled`, `agent-labelled`, or
-    `mechanical`;
-  - `preregistration`: `{ bar_digest }`, a `sha256:` digest.
+    `mechanical`.
 - For the definition-change check: the plan's frontmatter before and after an
   edit, as in [FR-020](./FR-020-measurement-plan-objective.md).
 
@@ -54,7 +53,7 @@ Declaring `execution_procedure` is how a plan elects to govern a producer.
 The schema does not infer producer ownership from repository layout. The two
 apparatus requirement triggers are that field and an `apparatus-edit` control;
 an author can also elect to declare the list without either trigger. Every
-declared list receives the same entry validation and integrity protection.
+declared list receives the same entry validation.
 
 Schema admission validates the plan definition, not a passing execution result.
 Quoin's [FR-108](ix://agent-ix/quoin/FR-108) evaluates gate verdicts over
@@ -89,7 +88,7 @@ admitted collections; missing or inconclusive evidence does not become a pass.
   `statistical_design.population` field stays prose and is not part of the
   protected apparatus: it describes the population to a reader, while the
   selecting file decides which items are counted, and only a file can be
-  digested.
+  named by an entry.
 - Quoin's measurement intake SHALL resolve every entry to files when it
   writes a measurement collection, and SHALL refuse to write a collection
   whose entry names no file. This repository states the rule and does not
@@ -99,10 +98,6 @@ admitted collections; missing or inconclusive evidence does not become a pass.
 - Quoin's resolution SHALL refuse, without following it, a symlink named by
   an entry or found under a directory entry.
 - Quoin's resolution SHALL refuse a directory entry that contains no file.
-- Quoin's measurement intake SHALL record the resolved set of (path, digest)
-  pairs with each collection, and SHALL treat any difference in that set
-  between collections as an apparatus change: a protected file edited, and a
-  file added under or removed from a directory entry.
 - The plan's measurement definition SHALL include `protected_apparatus`
   alongside `objective`, `statistical_design.estimator`, and
   `statistical_design.decision_rule`.
@@ -113,19 +108,14 @@ admitted collections; missing or inconclusive evidence does not become a pass.
 - The definition-change check SHALL compare the list as a set: reordering it
   is not a change, and the Rust `ProtectedApparatus` serializes its entries in
   sorted order.
-- A change to the resolved (path, digest) set SHALL also require a new
-  `definition_version`. Quoin detects it by comparing the recorded sets
-  across collections (Linear PLAT-975); the definition-change check here sees
-  only the list and cannot detect it.
 - `negative_controls` SHALL be a non-empty list with no repeated entry when
   present. Each entry SHALL carry exactly `kind` and a non-empty
   `description` saying how the plan says it guards against that scenario.
 - A negative control SHALL be a declaration. This repository checks only its
   shape: the closed kind, the description, and the list rules. Quoin's
   measurement checker (Linear PLAT-961) exercises the kinds it can detect:
-  `selective-reporting` through its rerun-until-pass rule, and
-  `apparatus-edit` through the (path, digest) comparison (Linear PLAT-975).
-  A kind no checker exercises remains an unverified declaration.
+  `selective-reporting` through its rerun-until-pass rule. A kind no checker
+  exercises, including `apparatus-edit`, remains an unverified declaration.
 - The kinds SHALL mean: `suppressed-observation`, an unfavourable item or run
   is left out of the collected population; `gain-within-noise`, an
   improvement smaller than the plan's stated uncertainty is claimed as a gain;
@@ -156,14 +146,10 @@ admitted collections; missing or inconclusive evidence does not become a pass.
 - An optional `execution_procedure` SHALL be
   one safe repository-relative JSON file path. When present, the plan SHALL
   declare `protected_apparatus`; Quoin SHALL verify that the exact procedure
-  path is protected and bind its source bytes before execution.
+  path is protected before execution.
 - The schema SHALL admit `ground_truth_kind` only as `human-labelled`,
   `agent-labelled`, or `mechanical` at any stage, and SHALL require it for a
   gate-stage plan that is not retired.
-- An optional `preregistration` SHALL carry exactly one member, `bar_digest`,
-  a `sha256:` digest of 64 lowercase hexadecimal digits. Quoin's measurement
-  intake computes and compares that digest; this repository checks only its
-  shape.
 
 ## Error Conditions
 
@@ -171,7 +157,7 @@ An unsafe or malformed entry, an empty or repeated `protected_apparatus` list,
 an unknown control kind, a control with a missing or empty description or an
 extra key, an empty or repeated `negative_controls` list, a gate-stage plan
 without `negative_controls`, `ground_truth_kind`, or a typed statistical decision rule,
-an unknown `ground_truth_kind`, a malformed or extended `preregistration`, and
+an unknown `ground_truth_kind`, and
 a plan with an `apparatus-edit` control but no `protected_apparatus` fail
 validation or construction. An edit to
 the protected list without a `definition_version` change produces a finding
@@ -190,9 +176,10 @@ rather than being accepted silently.
 | FR-024-AC-7 | A minimal consumer with only the `measurement` feature reaches `ApparatusPath`, `ProtectedApparatus`, `NegativeControlKind`, `NegativeControl`, and `NegativeControls`, and resolves no `serde_json`. | Test (TC-142) |
 | FR-024-AC-8 | The schema accepts a non-retired gate-stage plan without `protected_apparatus` when it has no `execution_procedure` or `apparatus-edit` control and declares ground truth, controls, and a typed statistical decision rule; it refuses a non-retired gate missing any of those three, and a plan at any stage with a procedure or `apparatus-edit` control but no `protected_apparatus`. | Test (TC-155) |
 | FR-024-AC-9 | A retired gate-stage plan under the prose contract remains valid without fields added later for new gate plans; the same omission is refused for a proposed or active gate-stage plan, and a retired current-shape plan remains valid. | Test (TC-172) |
-| FR-024-AC-10 | The schema accepts an absent `execution_procedure` and safe repository-relative JSON file paths with `protected_apparatus` declared; it refuses absolute, traversing, malformed, wildcard, non-JSON, and non-string paths, and refuses a procedure path without `protected_apparatus`. Exact protected-path membership and source-byte binding remain Quoin obligations. | Test (TC-185) |
+| FR-024-AC-10 | The schema accepts an absent `execution_procedure` and safe repository-relative JSON file paths with `protected_apparatus` declared; it refuses absolute, traversing, malformed, wildcard, non-JSON, and non-string paths, and refuses a procedure path without `protected_apparatus`. Exact protected-path membership remains a Quoin obligation. | Test (TC-185) |
 | FR-024-AC-11 | The schema accepts each of `human-labelled`, `agent-labelled`, and `mechanical` at gate and below gate, requires `ground_truth_kind` at gate with no other finding, leaves it optional below gate, and refuses any other value, including a case variant and an empty string, at every stage. | Test (TC-203) |
-| FR-024-AC-12 | The schema accepts a plan without `preregistration` and one whose `preregistration` is exactly `{ bar_digest }` with a `sha256:` digest of 64 lowercase hexadecimal digits; it refuses an empty object, a bare, uppercase, short, long, or other-algorithm digest, a non-string digest, an extra member, and a non-object value. | Test (TC-204) |
+
+FR-024-AC-12 is withdrawn. Its row is removed and the identifier is not reused.
 
 ## Dependencies
 
@@ -200,9 +187,8 @@ rather than being accepted silently.
   `measurement` feature and the definition-change check;
   [FR-021](./FR-021-measurement-plan-decision-rule.md) for the rest of the
   measurement definition.
-- **Downstream**: Quoin's measurement intake, which resolves and digests each
-  protected entry when it writes a collection and reports an apparatus change
-  between compared collections (Linear PLAT-975); Quoin's measurement
+- **Downstream**: Quoin's measurement intake, which resolves each
+  protected entry to files when it writes a collection; Quoin's measurement
   checker, which exercises the negative-control kinds it can detect (Linear
   PLAT-961); change assurance, which
   gives no credit for a change that touches the protected apparatus (Linear

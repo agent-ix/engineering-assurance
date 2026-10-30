@@ -376,41 +376,6 @@ fn ground_truth_kind_is_required_only_for_gate_stage() {
     }
 }
 
-/// `preregistration` records only the digest Quoin checks the plan's
-/// "Comparison and Enforcement" section against at intake, so its one member
-/// must be a `sha256:` digest Quoin can compare byte for byte.
-#[test]
-#[trace("TC-204", "FR-024-AC-12")]
-fn preregistration_is_optional_and_requires_a_sha256_bar_digest() {
-    assert!(
-        !strs(&schema("measurement-plan-frontmatter.schema")["required"])
-            .contains(&"preregistration")
-    );
-    assert!(plan_errors(json!({})).is_empty());
-
-    let digest = format!("sha256:{}", "a".repeat(64));
-    assert!(plan_errors(json!({"preregistration": {"bar_digest": digest}})).is_empty());
-
-    let refused = [
-        json!({}),
-        json!({"bar_digest": "not-a-digest"}),
-        json!({"bar_digest": "a".repeat(64)}),
-        json!({"bar_digest": format!("sha256:{}", "A".repeat(64))}),
-        json!({"bar_digest": format!("sha256:{}", "a".repeat(63))}),
-        json!({"bar_digest": format!("sha256:{}", "a".repeat(65))}),
-        json!({"bar_digest": format!("sha512:{}", "a".repeat(64))}),
-        json!({"bar_digest": 7}),
-        json!({"bar_digest": digest, "bar_source": "elsewhere.rs"}),
-        json!(digest),
-    ];
-    for value in refused {
-        assert!(
-            !plan_errors(json!({"preregistration": value})).is_empty(),
-            "{value}"
-        );
-    }
-}
-
 #[test]
 #[trace("TC-139", "FR-020-AC-1")]
 fn objective_is_optional_and_target_requires_a_bound() {

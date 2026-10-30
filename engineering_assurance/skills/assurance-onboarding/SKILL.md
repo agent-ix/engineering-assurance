@@ -147,8 +147,7 @@ with `execution_procedure` or an `apparatus-edit` control must have one. A gate
 over independently produced admitted evidence can omit it. Quoin's intake
 resolves each declared entry (case-sensitive, dotfiles included,
 symlinks refused, a directory entry must hold at least one file, an entry that
-names nothing refuses the collection) and records the (path, digest) set; any
-difference in that set is an apparatus change. A change that edits a
+names nothing refuses the collection). A change that edits a
 protected file changed the measurement, not the thing measured, and earns no
 credit. When the list is declared, protect the population through the file
 that selects it; `statistical_design.population` stays prose.
@@ -165,8 +164,7 @@ The objective's `direction` and `bound`, `estimator`, `decision_rule`, and
 objective's steering fields are not; retuning them needs no new version): when you add, remove, or change
 any of them on an existing plan, also change `definition_version`, so results
 under the old and new definition are never compared as one series. Editing a
-protected file needs a new `definition_version` too; Quoin detects that edit
-through the file's digest.
+protected file needs a new `definition_version` too.
 
 When an artifact is justified, render it from the installed module skeleton,
 write a same-directory staging file, validate it with Quire, and expose it only

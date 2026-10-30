@@ -1465,8 +1465,7 @@ pub enum ProtectedApparatusError {
 
 /// A validated `protected_apparatus`: a non-empty set of distinct
 /// [`ApparatusPath`] entries naming the files that produce the plan's number.
-/// Only the entries are compared here; the files they resolve to, and their
-/// digests, are compared by Quoin's intake.
+/// Only the entries are compared here; the files they resolve to are not read.
 ///
 /// It is a set: two lists naming the same entries in a different order are
 /// equal, and it serializes in sorted order.
@@ -1785,7 +1784,7 @@ pub struct MeasurementDefinition {
     pub decision_rule: Option<DecisionRule>,
     /// The plan's `protected_apparatus`, when present. Compared as a set of
     /// entries: reordering the list is not a change, and an edit to a file an
-    /// entry names is not visible here (Quoin's intake digests the files).
+    /// entry names is not visible here.
     pub protected_apparatus: Option<ProtectedApparatus>,
 }
 
@@ -1825,7 +1824,7 @@ pub struct PlanDefinition<'a> {
 /// the plan's `definition_version` stayed the same.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DefinitionChangedWithoutVersionBump {
-    /// The `definition_version` shared by both plan revisions.
+    /// The `definition_version` shared by both plan versions.
     pub definition_version: Option<String>,
     /// Which members changed, in [`DefinitionMember::ALL`] order; never empty.
     pub changed: Vec<DefinitionMember>,
@@ -1836,7 +1835,7 @@ pub struct DefinitionChangedWithoutVersionBump {
 }
 
 /// Report an edit to the objective, estimator, decision rule, or protected
-/// apparatus list between two revisions of one plan that did not come with a
+/// apparatus list between two versions of one plan that did not come with a
 /// genuine `definition_version` bump.
 ///
 /// Returns `None` when no member changed, or when `after`'s

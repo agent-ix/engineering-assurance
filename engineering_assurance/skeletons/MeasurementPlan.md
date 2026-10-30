@@ -40,7 +40,7 @@ negative_controls:
   - kind: apparatus-edit
     description: >-
       the harness, checker configuration, request fixtures and population
-      file are protected, so editing one changes the recorded digests
+      file are protected, so editing one changes the measurement
 relationships:
   - target: ix://example/juniper/AP-001
     type: measures
@@ -196,14 +196,11 @@ paths, `.` and `..` segments, empty segments, control characters, and
 Quoin's measurement intake resolves the entries when it writes a collection:
 paths are case-sensitive, dotfiles are included, a symlink is refused rather
 than followed, a directory entry must contain at least one file, and an entry
-that names no file refuses the collection. It records the resolved set of
-(path, digest) pairs. Any difference in that set -- a file edited, or a file
-added or removed under a directory entry -- is an apparatus change.
+that names no file refuses the collection.
 
 The list is part of the measurement definition. Adding, removing, or changing
-an entry needs a new `definition_version`, and so does any change to the
-resolved files, which Quoin sees through their digests rather than through
-this plan. Reordering the list is not a change.
+an entry needs a new `definition_version`. Reordering the list is not a
+change.
 
 The population is protected through the file that selects it
 (`fixtures/juniper/population.yaml` here), not through
@@ -216,8 +213,7 @@ the file decides which items are counted.
 against, each a `kind` and a `description` of how. A gate-stage plan declares
 at least one. The declaration is checked for shape only; Quoin's checker
 (Linear PLAT-961) exercises the kinds it can detect -- `selective-reporting`
-through its rerun-until-pass rule, and `apparatus-edit` through the digest
-comparison (Linear PLAT-975). `kind` is one of:
+through its rerun-until-pass rule. `kind` is one of:
 
 - `suppressed-observation` -- an unfavourable item or run is left out;
 - `gain-within-noise` -- an improvement smaller than the stated uncertainty is
@@ -241,9 +237,8 @@ identities. Preserve per-run outcomes instead of only an aggregate.
 
 For a runnable Campaign member, set `execution_procedure` to one safe
 repository-relative `.json` procedure file and include that file in
-`protected_apparatus`. Changing that procedure's bytes requires a new
-`definition_version`. The Campaign records the measured source revision
-separately for each run.
+`protected_apparatus`. Changing that procedure requires a new
+`definition_version`.
 
 ## Interpretation
 
