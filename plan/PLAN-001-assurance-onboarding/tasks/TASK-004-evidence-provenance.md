@@ -29,7 +29,7 @@ tuple, producer validation, operator observations, and explicit Quoin handoff.
 
 - Write TC-020..TC-025 and TC-046 first, including generated state combinations.
 - Require exactly one of observed, unavailable, not-computed, and not-applicable.
-- Refuse malformed output and missing/mutable module, plugin, skill, workflow,
+- Refuse malformed output and missing module, plugin, skill, workflow,
   executable, schema, or producer identity.
 - Preserve invocation failures and observations without converting them to evidence;
   delegate any persisted evidence record to Quoin.

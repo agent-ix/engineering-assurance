@@ -314,7 +314,7 @@ pub struct SemanticSource {
     pub field_path: String,
 }
 
-/// Complete immutable producer tuple for producer-derived concepts.
+/// Complete producer tuple for producer-derived concepts.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SemanticProducer {
