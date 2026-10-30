@@ -69,7 +69,7 @@ in parallel; TASK-005 joins the onboarding and workflow contracts before eval wo
 - Integration tests use real local/repository installs, package archives, Quire,
   Quoin, and ix-flow boundaries without redefining their contracts.
 - Agent evaluations execute seven variants on Claude Code, Codex, opencode, and
-  GitHub Copilot, retaining the full immutable version tuple, transcript path,
+  GitHub Copilot, retaining the full version tuple, transcript path,
   effort, commands, decisions, and outcomes.
 - Existing package/content-rights gates remain mandatory; the manifest validator's
   stale sibling-schema lookup is repaired as part of the installation contract.

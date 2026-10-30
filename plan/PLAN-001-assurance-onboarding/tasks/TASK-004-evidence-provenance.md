@@ -22,7 +22,7 @@ relationships:
 
 ## Scope
 
-Implement the onboarding evidence-state envelope, immutable governing-version
+Implement the onboarding evidence-state envelope, governing-version
 tuple, producer validation, operator observations, and explicit Quoin handoff.
 
 ## TDD Work
@@ -37,5 +37,5 @@ tuple, producer validation, operator observations, and explicit Quoin handoff.
 ## Exit Criteria
 
 - Every considered producer has exactly one explicit availability state.
-- Observed evidence carries the complete immutable tuple and raw observation detail.
+- Observed evidence carries the complete tuple and raw observation detail.
 - No unavailable/deferred/excluded producer is represented as successful evidence.

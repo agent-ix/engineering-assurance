@@ -320,7 +320,7 @@ pub struct SemanticSource {
 pub struct SemanticProducer {
     /// Producer identity.
     pub identity: String,
-    /// Immutable producer version.
+    /// Producer version.
     pub version: String,
     /// Non-empty structured execution environment.
     pub environment: Map<String, Value>,

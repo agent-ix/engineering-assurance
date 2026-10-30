@@ -165,10 +165,6 @@ struct CoverageReference {
 }
 
 impl CoverageReference {
-    /// A trace tag inside a declared submodule belongs to that submodule's own
-    /// repository, not to Engineering Assurance. Vendored dependencies carry their
-    /// own. A reference with no
-    /// path is treated as first-party so the gate fails closed.
     /// `document:line row_id -> trace_id`, using whichever locators the
     /// finding carries. An error about files must say where in those files the
     /// error is, so a finding with no locator at all still names itself.
@@ -190,16 +186,6 @@ impl CoverageReference {
         }
         rendered
     }
-
-    fn is_first_party(&self, submodules: &[String]) -> bool {
-        let Some(path) = self.path.as_deref() else {
-            return true;
-        };
-        let path = path.trim_start_matches("./");
-        !submodules
-            .iter()
-            .any(|prefix| path == prefix || path.starts_with(&format!("{prefix}/")))
-    }
 }
 
 impl CoverageDiagnostic {
@@ -215,19 +201,6 @@ impl CoverageDiagnostic {
             None => format!("{place} {reason}"),
         }
     }
-}
-
-/// Submodule directories declared by the repository root `.gitmodules`.
-fn submodule_paths(root: &Path) -> Vec<String> {
-    let Ok(text) = fs::read_to_string(root.join(".gitmodules")) else {
-        return Vec::new();
-    };
-    text.lines()
-        .filter_map(|line| line.trim().strip_prefix("path"))
-        .filter_map(|rest| rest.trim().strip_prefix('='))
-        .map(|value| value.trim().trim_end_matches('/').to_owned())
-        .filter(|value| !value.is_empty())
-        .collect()
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -479,14 +452,6 @@ fn validate_coverage(
     coverage: &CoverageDocument,
     root: &Path,
 ) -> Result<(), IntegrationEvidenceError> {
-    let submodules = submodule_paths(root);
-    let orphaned = coverage
-        .untracked_symbols
-        .iter()
-        .filter(|symbol| symbol.is_first_party(&submodules))
-        .cloned()
-        .collect::<Vec<_>>();
-
     let refusals = [
         census_refusal(coverage, root),
         totals_refusal(&coverage.totals),
@@ -503,7 +468,7 @@ fn validate_coverage(
         located_refusal(
             "integration_evidence_coverage_untracked_symbols",
             "first-party trace tag(s) bind to nothing the matrix minted",
-            &orphaned,
+            &coverage.untracked_symbols,
         ),
     ]
     .into_iter()
@@ -649,15 +614,9 @@ mod tests {
 
     #[test]
     #[trace("TC-111", "FR-017-AC-3")]
-    fn tc_111_untracked_symbols_inside_declared_submodules_are_not_local_gaps() {
+    fn tc_111_any_untracked_symbol_is_a_gate_failure() {
         let root = tempfile::tempdir().expect("fixture root");
-        std::fs::write(
-            root.path().join(".gitmodules"),
-            "[submodule \"vendor/ix-trace-rs\"]\n\tpath = vendor/ix-trace-rs\n\
-             \turl = ../ix-trace-rs.git\n",
-        )
-        .expect("submodule declaration must be writable");
-        let document = |paths: &[&str]| CoverageDocument {
+        let document = |paths: &[Option<&str>]| CoverageDocument {
             totals: CoverageTotals {
                 backed: 92,
                 total: 92,
@@ -667,50 +626,24 @@ mod tests {
             untracked_symbols: paths
                 .iter()
                 .map(|path| CoverageReference {
-                    path: Some((*path).to_owned()),
+                    path: path.map(str::to_owned),
                     ..CoverageReference::default()
                 })
                 .collect(),
             diagnostics: vec![],
         };
-
-        // Fixtures inside a declared submodule are that submodule's business.
-        assert!(
-            validate_coverage(&document(&["vendor/ix-trace-rs/src/lib.rs",]), root.path(),).is_ok()
-        );
-
-        // A first-party untracked tag is still a gate failure, and it names
-        // the condition rather than a generic invalid document.
-        let orphan = validate_coverage(&document(&["src/evaluation.rs"]), root.path())
-            .expect_err("a first-party untracked tag must refuse");
+        assert!(validate_coverage(&document(&[]), root.path()).is_ok());
+        let orphan = validate_coverage(&document(&[Some("src/evaluation.rs")]), root.path())
+            .expect_err("an untracked tag must refuse");
         assert_eq!(
             orphan.code(),
             "integration_evidence_coverage_untracked_symbols"
         );
         assert!(orphan.to_string().contains("src/evaluation.rs"));
-
-        // A path-less reference fails closed.
         assert_eq!(
-            validate_coverage(
-                &CoverageDocument {
-                    untracked_symbols: vec![CoverageReference::default()],
-                    ..document(&[])
-                },
-                root.path(),
-            )
-            .expect_err("a path-less reference must fail closed")
-            .code(),
-            "integration_evidence_coverage_untracked_symbols"
-        );
-
-        // A directory that merely shares a prefix with a submodule is first-party.
-        assert_eq!(
-            validate_coverage(
-                &document(&["vendor/ix-trace-rs-tools/src/lib.rs"]),
-                root.path()
-            )
-            .expect_err("a prefix-sharing directory must refuse")
-            .code(),
+            validate_coverage(&document(&[None]), root.path())
+                .expect_err("a path-less reference must refuse")
+                .code(),
             "integration_evidence_coverage_untracked_symbols"
         );
     }

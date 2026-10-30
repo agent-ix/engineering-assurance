@@ -3,8 +3,6 @@
 
 //! Native Rust coverage for evidence classification and canonical identity.
 
-use std::collections::BTreeSet;
-
 use engineering_assurance::evidence::{
     AvailabilityState, EvidenceEnvelope, GoverningVersions, OperatorObservation, ProducerAttempt,
     VersionIdentity, classify_producer, validate_state_labels,
@@ -147,7 +145,7 @@ fn parity_cases() -> Vec<ProducerAttempt> {
         not_computed.clone(),
         not_applicable.clone(),
         changed(&base, |case| case.output_valid = false),
-        with_producer_version(&base, "latest"),
+        with_producer_version(&base, " "),
         changed(&base, |case| case.quoin_reference = None),
         changed(&base, |case| " ".clone_into(&mut case.producer_id)),
         changed(&base, |case| case.observation.command = Vec::new()),
@@ -266,7 +264,7 @@ fn tc_103_evidence_malformed_and_missing_provenance_fail_explicitly() {
     assert_eq!(results[0].validation_errors, ["producer-output-malformed"]);
     assert_eq!(
         results[1].validation_errors,
-        ["producer:identity-version-mutable"]
+        ["producer:identity-version-missing"]
     );
     assert_eq!(results[2].validation_errors, ["quoin-handoff-missing"]);
     assert_eq!(results[3].validation_errors, ["producer-id-missing"]);
@@ -317,77 +315,24 @@ fn tc_103_non_finite_and_overflowing_numeric_identity_inputs_are_refused() {
 
 #[trace("TC-103", "FR-015-AC-3")]
 #[test]
-fn tc_103_version_identity_rejects_actual_mutability_without_rejecting_metadata() {
-    let fixture: Value = serde_json::from_str(include_str!(
-        "../engineering_assurance/fixtures/evidence-version-policy.json"
-    ))
-    .expect("version-policy fixture must be valid JSON");
+fn tc_103_version_identity_rejects_blank_and_unprintable_tokens_and_accepts_the_rest() {
     assert_eq!(
-        fixture["schema_version"],
-        "engineering-assurance.evidence-version-policy/v1"
+        identity("producer", "").errors(),
+        ["identity-version-missing"]
     );
-    let mut classes = BTreeSet::new();
-    for case in fixture["cases"]
-        .as_array()
-        .expect("version-policy cases must be an array")
-    {
-        let class = case["class"]
-            .as_str()
-            .expect("fixture class must be a string");
-        classes.insert(class);
-        let version = case["version"]
-            .as_str()
-            .expect("fixture version must be a string");
-        let accepted_errors = case["accepted_errors"]
-            .as_array()
-            .expect("accepted errors must be an array")
-            .iter()
-            .map(|error| error.as_str().expect("fixture error must be a string"))
-            .collect::<Vec<_>>();
-        let prior_errors = case["prior_errors"]
-            .as_array()
-            .expect("prior errors must be an array")
-            .iter()
-            .map(|error| error.as_str().expect("fixture error must be a string"))
-            .collect::<Vec<_>>();
-        assert_eq!(
-            prior_errors != accepted_errors,
-            case["policy_changed"]
-                .as_bool()
-                .expect("policy_changed must be a boolean"),
-            "policy-change marker disagrees for {version}"
-        );
+    for version in [" 1.2.3", "1.2.3 ", "1.2.3 rc", "1.2.3\n", "Straße"] {
         assert_eq!(
             identity("producer", version).errors(),
-            accepted_errors,
-            "accepted version policy drifted for {version}"
+            ["identity-version-invalid-character"],
+            "{version:?}"
         );
     }
-    assert_eq!(
-        classes,
-        BTreeSet::from([
-            "ascii-control",
-            "ascii-space",
-            "ascii-space-interior",
-            "empty-token",
-            "immutable-exact",
-            "immutable-x-metadata",
-            "immutable-x-metadata-uppercase",
-            "mutable-alias",
-            "non-ascii",
-            "range-operator",
-            "wildcard-component",
-        ]),
-        "version-policy fixture omitted or invented a governed input class"
-    );
-
-    for version in ["1.x", "^1.2.3", "latest", "Straße", "1.2.3 beta"] {
-        assert!(!identity("producer", version).errors().is_empty());
+    for version in ["1.2.3", "1.x", "^1.2.3", "latest", "1.2.3+linux-x86_64"] {
+        assert!(
+            identity("producer", version).errors().is_empty(),
+            "{version}"
+        );
     }
-    assert_eq!(
-        identity("producer", "Straße").errors(),
-        ["identity-version-invalid-character"]
-    );
 }
 
 #[trace("TC-020", "FR-004-AC-1", "US-004-EX-2")]

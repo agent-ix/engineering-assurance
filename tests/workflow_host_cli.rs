@@ -477,6 +477,67 @@ fn tc_107_stale_pristine_run_is_refused_before_binding_mutation() {
     );
 }
 
+/// An `ix-flow` stand-in that answers `verify` with a failed chain result and
+/// forwards every other subcommand to the real executable, so the host is
+/// driven through a verification failure without editing any persisted state.
+#[cfg(unix)]
+fn chain_failing_ix_flow(directory: &Path, verify_envelope: &str) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+
+    let script = directory.join("ix-flow-chain-stub");
+    fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\nfor argument in \"$@\"; do\n  if [ \"$argument\" = verify ]; then\n    printf '%s\\n' '{verify_envelope}'\n    exit 0\n  fi\ndone\nexec ix-flow \"$@\"\n"
+        ),
+    )
+    .expect("stub must be writable");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755))
+        .expect("stub must be executable");
+    script
+}
+
+#[cfg(unix)]
+#[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-6")]
+#[test]
+fn tc_107_a_failed_chain_verification_is_refused_without_state_mutation() {
+    let state = TestDirectory::new("chain-verify-fails");
+    let stub_directory = TestDirectory::new("chain-verify-stub");
+    let run_id = "chain-verify-run";
+    let started = run_host(&request(state.path(), run_id, "start_or_resume", None));
+    assert!(started.status.success());
+    let before = tree_snapshot(state.path());
+
+    let cases = [
+        (
+            "a reported break",
+            r#"{"ok":true,"command":"verify-chain","data":{"ok":false,"firstBreakIndex":3},"events":[],"next_actions":[],"nextActions":[]}"#,
+            "event_chain_invalid",
+        ),
+        (
+            "a failed verify command",
+            r#"{"ok":false,"command":"verify-chain","error":{"code":"verify_failed","message":"cannot verify"},"data":null,"events":[],"next_actions":[],"nextActions":[]}"#,
+            "verify_failed",
+        ),
+    ];
+    for (label, envelope, upstream_code) in cases {
+        let mut refused = request(state.path(), run_id, "start_or_resume", None);
+        refused["ix_flow_executable"] = Value::String(
+            chain_failing_ix_flow(stub_directory.path(), envelope)
+                .display()
+                .to_string(),
+        );
+        let output = run_host(&refused);
+        assert_eq!(output.status.code(), Some(2), "{label}");
+        assert_eq!(result(&output)["code"], "ix_flow_command_failed", "{label}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains(upstream_code),
+            "{label}"
+        );
+        assert_eq!(tree_snapshot(state.path()), before, "{label}");
+    }
+}
+
 #[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-6")]
 #[trace("TC-048", "FR-005-AC-7")]
 #[test]

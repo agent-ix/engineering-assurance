@@ -70,7 +70,7 @@ checking, manifest validation, and qualification assertions to Rust.
 - For the pure aggregation boundary, one
   `engineering-assurance.evaluation-aggregate-request/v1` document containing
   evaluation envelopes for the closed host and scenario populations. Each
-  envelope carries its execution status, pass state, immutable host and governing identities, relative transcript reference,
+  envelope carries its execution status, pass state, host and governing identities, relative transcript reference,
   non-negative effort counts, observed outcome,
   unsupported-addition list, optional diagnostic, and the complete terminal
   event when the scenario requires a human decision.
@@ -177,7 +177,7 @@ checking, manifest validation, and qualification assertions to Rust.
   protocol, unsupported host or scenario values, and invalid scalar types are
   request errors and produce no aggregate result. The byte boundary refuses
   input larger than 8 MiB before JSON decoding or aggregate allocation.
-- An executed cell is complete only when it passed; every immutable identity is
+- An executed cell is complete only when it passed; every identity is
   present and valid; its transcript reference is a normalized,
   forward-slash-delimited, relative and non-traversing protocol path; every effort count is a non-negative
   integer; the observed outcome is the scenario's declared outcome; and

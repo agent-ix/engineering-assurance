@@ -61,7 +61,7 @@ rejection scenarios.
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | FR-006-AC-1 | The suite executes all five required scenario classes across each of the four supported hosts, including both malformed/unavailable producer variants and both terminal choices. | Test (TC-031) |
-| FR-006-AC-2 | Every executed scenario records the immutable governing-version tuple, command and human-interaction counts, elapsed time, transcript path, observed outcome, and terminal event when applicable. | Test (TC-032) |
+| FR-006-AC-2 | Every executed scenario records the governing-version tuple, command and human-interaction counts, elapsed time, transcript path, observed outcome, and terminal event when applicable. | Test (TC-032) |
 | FR-006-AC-3 | A missing executable leaves the scenario not executed and the aggregate gate failed. | Test (TC-033) |
 | FR-006-AC-4 | The aggregate gate passes only when all required scenarios pass and have complete observations. | Test (TC-034) |
 | FR-006-AC-5 | Equivalent decision-ready fixtures retain one explicit acceptance and one explicit rejection per supported host, with no inferred terminal event. | Test (TC-049) |

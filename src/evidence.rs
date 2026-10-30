@@ -1,15 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-//! Pure evidence-availability classification with immutable producer provenance.
+//! Pure evidence-availability classification with producer provenance.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
-const MUTABLE_VERSIONS: [&str; 7] = [
-    "latest", "main", "master", "head", "current", "nightly", "*",
-];
 const GOVERNING_FIELDS: [&str; 9] = [
     "module", "plugin", "skill", "workflow", "quire", "quoin", "ix_flow", "schema", "producer",
 ];
@@ -18,7 +15,7 @@ const GOVERNING_FIELDS: [&str; 9] = [
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AvailabilityState {
-    /// Valid output was observed with complete immutable provenance.
+    /// Valid output was observed with complete provenance.
     Observed,
     /// The producer was invoked but could not produce an observation.
     Unavailable,
@@ -103,13 +100,13 @@ fn format_labels(labels: &[String]) -> String {
     }
 }
 
-/// Immutable identity of one governing component.
+/// Identity of one governing component.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct VersionIdentity {
     /// Stable component name.
     pub name: String,
-    /// Exact immutable version.
+    /// Version token.
     pub version: String,
 }
 
@@ -126,25 +123,9 @@ impl VersionIdentity {
             errors.push("identity-version-missing".to_owned());
         } else if !version.bytes().all(|byte| byte.is_ascii_graphic()) {
             errors.push("identity-version-invalid-character".to_owned());
-        } else if is_mutable_version(version) {
-            errors.push("identity-version-mutable".to_owned());
         }
         errors
     }
-}
-
-fn is_mutable_version(version: &str) -> bool {
-    MUTABLE_VERSIONS
-        .into_iter()
-        .any(|candidate| version.eq_ignore_ascii_case(candidate))
-        || ['>', '<', '^', '~', '*']
-            .into_iter()
-            .any(|marker| version.contains(marker))
-        || version
-            .split_once('+')
-            .map_or(version, |(core, _)| core)
-            .split(['.', '-'])
-            .any(|component| component.eq_ignore_ascii_case("x"))
 }
 
 fn has_non_finite_numeric_identity(value: &Value) -> bool {
@@ -284,7 +265,7 @@ pub struct ProducerAttempt {
     pub invoked: bool,
     /// Direct operator observation.
     pub observation: OperatorObservation,
-    /// Immutable governing identities, required for observed evidence.
+    /// Governing identities, required for observed evidence.
     pub governing: Option<GoverningVersions>,
     /// Parsed producer output, required to be a JSON object for observed evidence.
     pub output: Option<Value>,
@@ -310,7 +291,7 @@ pub struct EvidenceEnvelope {
     pub availability: Option<AvailabilityState>,
     /// Direct operator observation.
     pub observation: OperatorObservation,
-    /// Immutable governing identities retained for observed evidence and invalid attempts.
+    /// Governing identities retained for observed evidence and invalid attempts.
     pub governing: Option<GoverningVersions>,
     /// Deferred next action.
     pub next_action: Option<String>,

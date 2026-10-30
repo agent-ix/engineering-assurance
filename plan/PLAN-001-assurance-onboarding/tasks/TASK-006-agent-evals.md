@@ -35,7 +35,7 @@ agent hosts, plus version-bound envelopes and a complete-only aggregate gate.
 
 - Write TC-031..TC-034, TC-039, and TC-049 around harness selection,
   envelope validation, runtime identity, and aggregation before live execution.
-- Record immutable module/plugin/skill/workflow/executable/schema/producer versions,
+- Record module/plugin/skill/workflow/executable/schema/producer versions,
   configuration, transcript path, commands, elapsed time, human
   interaction counts, outcome, and explicit terminal choice.
 - Fail the aggregate on a missing executable, missing cell, malformed envelope,
