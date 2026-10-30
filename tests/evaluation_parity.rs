@@ -190,7 +190,7 @@ fn every_incomplete_semantic_class_withholds_aggregation() {
         }),
         changed(&complete, 0, |item| item.command_count = Some(-1)),
         changed(&complete, 0, |item| {
-            item.host_version = Some("nightly".to_owned());
+            item.host_version = Some("  ".to_owned());
         }),
         changed(&complete, 0, |item| {
             item.observed_outcome = Some("invented".to_owned());
@@ -232,7 +232,7 @@ fn every_incomplete_semantic_class_withholds_aggregation() {
         "transcript-path-invalid",
         "transcript-path-invalid",
         "command-count-invalid",
-        "host-version-not-immutable",
+        "host-version-missing",
         "observed-outcome-mismatch",
         "scenario-failed",
         "scenario-not-executed",
@@ -375,7 +375,7 @@ fn tc_032_an_executed_scenario_without_a_complete_observation_is_refused() {
         ),
         (
             changed(&complete, 0, |item| item.host_version = None),
-            "host-version-not-immutable",
+            "host-version-missing",
         ),
         (
             changed(&complete, 0, |item| item.transcript_path = None),

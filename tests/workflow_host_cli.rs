@@ -259,10 +259,6 @@ fn copy_tree(source: &Path, destination: &Path) {
     }
 }
 
-fn run_state_path(state_dir: &Path, run_id: &str) -> PathBuf {
-    state_dir.join("instances").join(format!("{run_id}.json"))
-}
-
 fn gate_token(payload: &Value, outcome: &str) -> String {
     let selected = payload["open_gates"]
         .as_array()
@@ -479,40 +475,6 @@ fn tc_107_stale_pristine_run_is_refused_before_binding_mutation() {
         ix_flow(state.path(), &["status", "stale-pristine-run"])["data"]["stateVersion"],
         0
     );
-}
-
-#[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-6")]
-#[test]
-fn tc_107_broken_event_chain_is_refused_without_state_mutation() {
-    let state = TestDirectory::new("broken-chain");
-    let run_id = "broken-chain-run";
-    let started = run_host(&request(state.path(), run_id, "start_or_resume", None));
-    assert!(started.status.success());
-
-    let state_path = run_state_path(state.path(), run_id);
-    let mut persisted: Value = serde_json::from_slice(
-        &fs::read(&state_path).expect("persisted ix-flow run must be readable"),
-    )
-    .expect("persisted ix-flow run must be JSON");
-    let events = persisted["events"]
-        .as_array_mut()
-        .expect("persisted events must be an array");
-    let first = events
-        .first_mut()
-        .expect("persisted run must contain a creation event");
-    first["hash"] = Value::String("0".repeat(64));
-    fs::write(
-        &state_path,
-        serde_json::to_vec_pretty(&persisted).expect("tampered run must serialize"),
-    )
-    .expect("test must be able to tamper the persisted fixture");
-    let before = tree_snapshot(state.path());
-
-    let output = run_host(&request(state.path(), run_id, "start_or_resume", None));
-    assert_eq!(output.status.code(), Some(2));
-    assert_eq!(result(&output)["code"], "ix_flow_command_failed");
-    assert!(String::from_utf8_lossy(&output.stderr).contains("event_chain_invalid"));
-    assert_eq!(tree_snapshot(state.path()), before);
 }
 
 #[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-6")]

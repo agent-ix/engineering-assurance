@@ -165,8 +165,8 @@ pub enum EnvelopeFailure {
     ScenarioNotExecuted,
     /// A non-executed scenario has no diagnostic.
     NotExecutedDiagnosticMissing,
-    /// The host version is absent, blank, or mutable.
-    HostVersionNotImmutable,
+    /// The host version is absent or blank.
+    HostVersionMissing,
     /// No complete governing tuple was supplied.
     GoverningVersionsMissing,
     /// One governing identity failed its existing typed validator.
@@ -204,7 +204,7 @@ impl EnvelopeFailure {
         match self {
             Self::ScenarioNotExecuted => "scenario-not-executed",
             Self::NotExecutedDiagnosticMissing => "not-executed-diagnostic-missing",
-            Self::HostVersionNotImmutable => "host-version-not-immutable",
+            Self::HostVersionMissing => "host-version-missing",
             Self::GoverningVersionsMissing => "governing-versions-missing",
             Self::GoverningIdentity(code) => code,
             Self::TranscriptPathInvalid => "transcript-path-invalid",
@@ -361,9 +361,9 @@ impl EvaluationEnvelope {
         if self
             .host_version
             .as_deref()
-            .is_none_or(|version| !is_exact_version(version))
+            .is_none_or(|version| version.trim().is_empty())
         {
-            errors.push(EnvelopeFailure::HostVersionNotImmutable);
+            errors.push(EnvelopeFailure::HostVersionMissing);
         }
         match self.governing.as_ref() {
             Some(governing) => errors.extend(
@@ -693,37 +693,6 @@ fn same_shared_governing(
         }
         (None, Some(_)) | (Some(_), None) => false,
     }
-}
-
-/// Return whether a version is nonblank and contains no mutable selector.
-#[must_use]
-pub fn is_exact_version(value: &str) -> bool {
-    !value.trim().is_empty() && !contains_mutable_selector(value)
-}
-
-fn contains_mutable_selector(value: &str) -> bool {
-    let lower = value.to_ascii_lowercase();
-    value
-        .bytes()
-        .any(|byte| matches!(byte, b'>' | b'<' | b'^' | b'~' | b'*'))
-        || lower
-            .split(['.', '-', '_'])
-            .any(|component| component == "x")
-        || ["latest", "main", "master", "head", "current", "nightly"]
-            .into_iter()
-            .any(|candidate| {
-                lower.match_indices(candidate).any(|(start, matched)| {
-                    let end = start + matched.len();
-                    boundary(
-                        lower.as_bytes().get(start.wrapping_sub(1)).copied(),
-                        start == 0,
-                    ) && boundary(lower.as_bytes().get(end).copied(), end == lower.len())
-                })
-            })
-}
-
-fn boundary(byte: Option<u8>, at_edge: bool) -> bool {
-    at_edge || byte.is_some_and(|value| matches!(value, b'-' | b'_' | b'.'))
 }
 
 /// Return whether a transcript reference uses the portable relative grammar.

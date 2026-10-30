@@ -166,9 +166,8 @@ struct CoverageReference {
 
 impl CoverageReference {
     /// A trace tag inside a declared submodule belongs to that submodule's own
-    /// repository, not to Engineering Assurance. The qa-corpus detection
-    /// fixtures deliberately carry unminted ids — that is what they exist to
-    /// test — and vendored dependencies carry their own. A reference with no
+    /// repository, not to Engineering Assurance. Vendored dependencies carry their
+    /// own. A reference with no
     /// path is treated as first-party so the gate fails closed.
     /// `document:line row_id -> trace_id`, using whichever locators the
     /// finding carries. An error about files must say where in those files the
@@ -654,8 +653,7 @@ mod tests {
         let root = tempfile::tempdir().expect("fixture root");
         std::fs::write(
             root.path().join(".gitmodules"),
-            "[submodule \"corpus\"]\n\tpath = corpus\n\turl = ../qa-corpus.git\n\
-             [submodule \"vendor/ix-trace-rs\"]\n\tpath = vendor/ix-trace-rs\n\
+            "[submodule \"vendor/ix-trace-rs\"]\n\tpath = vendor/ix-trace-rs\n\
              \turl = ../ix-trace-rs.git\n",
         )
         .expect("submodule declaration must be writable");
@@ -678,14 +676,7 @@ mod tests {
 
         // Fixtures inside a declared submodule are that submodule's business.
         assert!(
-            validate_coverage(
-                &document(&[
-                    "corpus/cases/detection/stale-name-correct-trace/rust/input/src/lib.rs",
-                    "vendor/ix-trace-rs/src/lib.rs",
-                ]),
-                root.path(),
-            )
-            .is_ok()
+            validate_coverage(&document(&["vendor/ix-trace-rs/src/lib.rs",]), root.path(),).is_ok()
         );
 
         // A first-party untracked tag is still a gate failure, and it names
@@ -714,9 +705,12 @@ mod tests {
 
         // A directory that merely shares a prefix with a submodule is first-party.
         assert_eq!(
-            validate_coverage(&document(&["corpus-tools/src/lib.rs"]), root.path())
-                .expect_err("a prefix-sharing directory must refuse")
-                .code(),
+            validate_coverage(
+                &document(&["vendor/ix-trace-rs-tools/src/lib.rs"]),
+                root.path()
+            )
+            .expect_err("a prefix-sharing directory must refuse")
+            .code(),
             "integration_evidence_coverage_untracked_symbols"
         );
     }

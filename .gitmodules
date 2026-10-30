@@ -1,4 +1,0 @@
-[submodule "corpus"]
-	path = corpus
-	url = ../qa-corpus.git
-	branch = main

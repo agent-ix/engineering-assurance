@@ -42,7 +42,7 @@ pull request is judged against.
 - The contract SHALL preserve legacy evidence directories byte for byte and
   read them only through the compatibility view.
 - The contract SHALL delete old generic machinery only after the shared path
-  passes at the same candidate revision.
+  passes.
 - The contract SHALL require every non-success state to be demonstrated.
 - The contract SHALL leave every campaign workflow on manual dispatch.
 - The contract SHALL make no certification, accreditation, authorization,

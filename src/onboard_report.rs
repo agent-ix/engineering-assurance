@@ -192,10 +192,7 @@ struct WorkingExamples {
 #[derive(Serialize)]
 struct MeasurementCollections {
     source: &'static str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    files: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    url: Option<&'static str>,
+    url: &'static str,
 }
 
 #[derive(Serialize)]
@@ -1233,29 +1230,9 @@ fn report(repo: &Path, module_root: &Path) -> Report {
     let module_root = available.then_some(module_root);
     let assurance = repo.join("spec/assurance");
     let (exists, existing_artifacts) = artifacts(repo);
-    let local_collection = module_root
-        .map(|root| {
-            directory_files(
-                &root
-                    .parent()
-                    .unwrap_or(root)
-                    .join("corpus/spec/evidence/measurements"),
-                Some("json"),
-            )
-        })
-        .unwrap_or_default();
-    let measurement_collections = if local_collection.is_empty() {
-        MeasurementCollections {
-            source: "GitHub (not present in this install — corpus/ is engineering-assurance's own qa-corpus submodule, checked out only in a full dev clone with submodules initialized)",
-            files: None,
-            url: Some(COLLECTION_URL),
-        }
-    } else {
-        MeasurementCollections {
-            source: "local checkout",
-            files: Some(local_collection),
-            url: None,
-        }
+    let measurement_collections = MeasurementCollections {
+        source: "GitHub (agent-ix/qa-corpus)",
+        url: COLLECTION_URL,
     };
     let measurement_record_checklist: MeasurementChecklist =
         serde_json::from_str(include_str!("onboard_report_measurement.json"))
@@ -1339,17 +1316,11 @@ fn print_report(report: &Report) {
         println!("{}", report.spec_assurance.note.unwrap_or(""));
     }
     heading("3. Working examples — read these, not the Rust source");
-    if let Some(files) = &report.working_examples.measurement_collections.files {
-        println!("Valid measurement-collection records on disk:");
-        for file in files {
-            println!("  - {file}");
-        }
-    } else {
-        println!("Valid measurement-collection records (this install has no local corpus/):");
-        if let Some(url) = report.working_examples.measurement_collections.url {
-            println!("  - {url}");
-        }
-    }
+    println!("Valid measurement-collection records:");
+    println!(
+        "  - {}",
+        report.working_examples.measurement_collections.url
+    );
     println!(
         "\n{}\n  - {}",
         report.working_examples.real_artifact_instances.note,

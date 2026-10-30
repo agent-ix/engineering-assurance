@@ -233,7 +233,7 @@ engineering-assurance onboard-report --module-root engineering_assurance --repo 
 
 It explains how this module's `schemas/`/`skeletons/` relate to the target
 repository's own `spec/assurance/`, links the real worked examples in
-`corpus/spec/evidence/measurements/` and `agent-ix/quoin`'s `spec/assurance/`
+`agent-ix/qa-corpus`'s `spec/evidence/measurements/` and `agent-ix/quoin`'s `spec/assurance/`
 instead of requiring a read of `quoin-measurement`'s Rust source, and lists the
 fields each artifact type actually requires — derived live, straight from the
 installed schemas — plus the measurement-record field contract, restated (not

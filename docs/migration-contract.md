@@ -115,7 +115,7 @@ other way.
    repository's own evidence. A migration that only demonstrates pass has
    demonstrated nothing about the states that matter.
 9. **Delete last.** Old generic code is removed only after the shared path
-   passes at the **same exact candidate revision**. Until then both exist, and
+   passes. Until then both exist, and
    the old one is the fallback.
 
 ## Rollback
@@ -124,7 +124,7 @@ Per step, and none of it is irreversible:
 
 | If | Then |
 | --- | --- |
-| the shared path fails at the candidate revision | stop at step 9; the old machinery is still there and still runs |
+| the shared path fails | stop at step 9; the old machinery is still there and still runs |
 | legacy history reads as `unreadable` | that is the compatibility view working; do not edit the legacy record to make it read |
 | a domain result has no adapter | file it against `agent-ix/quoin` with a real producer and a real sample; do not scrape stdout as a stopgap |
 
@@ -148,8 +148,7 @@ body, not in a reviewer's head.
       records, and its `lossy` and `unreadable` outcomes are shown.
 - [ ] Pass, fail, unavailable, not-computed, malformed, stale, and tampered are
       each demonstrated.
-- [ ] The shared path and the old path both pass at the same candidate
-      revision, and the deletion commit is separate and last.
+- [ ] The shared path and the old path both pass, and the deletion commit is separate and last.
 - [ ] The Makefile is native orchestration; no target computes a verdict.
 - [ ] No workflow changed from manual dispatch.
 

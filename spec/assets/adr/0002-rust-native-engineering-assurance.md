@@ -102,8 +102,7 @@ Engineering Assurance does not copy or redesign that host.
 4. Port evaluations, aggregation, package checks, rights checks, and repository
    qualification.
 5. Update direct Engineering Assurance invocations and host configuration.
-6. Delete each replaced implementation after equivalent behavior passes locally
-   at the same candidate revision.
+6. Delete each replaced implementation after equivalent behavior passes locally.
 
 ## Consequences
 

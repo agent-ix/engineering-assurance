@@ -28,7 +28,7 @@ boundary is exercised with real archives and real command-line tools.
 ## Preconditions
 
 The package audit passes, an isolated installation root is empty, and Quire and
-ix-flow are installed at recorded exact versions.
+ix-flow are installed.
 
 ## Inputs
 

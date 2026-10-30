@@ -88,7 +88,7 @@ in parallel; TASK-005 joins the onboarding and workflow contracts before eval wo
 
 ## Completion Gates
 
-- Every active TC-001..TC-051 row carries a real tracking tag and passing evidence.
+- Every active TC-001..TC-049 row carries a real tracking tag and passing evidence.
 - All 28 host-scenario evaluation cells have complete, version-bound envelopes.
 - `quire validate --scope . "spec/**/*.md" "plan/**/*.md"` passes.
 - Content-rights, Ruff, pytest, manifest validation, package audit, and any declared

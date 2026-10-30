@@ -153,7 +153,7 @@ checking, manifest validation, and qualification assertions to Rust.
   and adapter diagnostics so input path order cannot change the retained
   aggregate artifact.
 - The `agent-evals-aggregate` repository command SHALL invoke the Rust CLI
-  after same-revision parity with the retained Python loader and script. The
+  after parity with the retained Python loader and script. The
   cutover SHALL be reversible before the replaced Python paths are deleted.
 - The native manifest host adapter SHALL accept one explicit non-symbolic-link
   repository root, one explicit non-symbolic-link authoritative schema root,
@@ -260,8 +260,7 @@ checking, manifest validation, and qualification assertions to Rust.
   one for a well-formed withheld result, and reserve status two for a typed
   adapter or rendering failure.
 - The repository test dispatch SHALL invoke the Rust content-rights tree
-  command declaratively. Until the Rust and retained paths agree at the same
-  candidate revision on the complete repository and the governed positive,
+  command declaratively. Until the Rust and retained paths agree on the complete repository and the governed positive,
   negative, Git-population, environment, path, file-kind, and resource cases,
   the repository SHALL retain the Python tree checker and its Python tests.
 - When that correspondence and a reversible dispatch cutover are recorded, the
@@ -450,7 +449,7 @@ checking, manifest validation, and qualification assertions to Rust.
   4,096 entries or an unreadable entry kind SHALL fail before invocation.
 - The repository `package-audit` target SHALL invoke the Rust CLI
   declaratively.
-- When the retained Python audit becomes eligible for deletion, the repository SHALL demonstrate that the Python and Rust paths both pass at one candidate revision.
+- When the retained Python audit becomes eligible for deletion, the repository SHALL demonstrate that the Python and Rust paths both pass.
 - When the retained Python audit becomes eligible for deletion, the repository SHALL record a reversible dispatch cutover.
 - The Rust manifest classifier SHALL parse both supplied manifests as YAML
   mappings and SHALL reject duplicate mapping keys or merge keys rather than
@@ -578,11 +577,11 @@ byte mismatch refuses the package audit without a success result.
   FR-017-AC-3 gate, or permit removal under FR-018.
 - **Sequence**: the package-audit adapter consumes the completed content-rights,
   membership, package-lifecycle, and manifest/discovery seams. It may cut over
-  only after same-revision correspondence and rollback evidence. Removal of the
+  only after correspondence and rollback evidence. Removal of the
   retained package audit, content-rights checker, their Python tests, temporary
   policy exemptions, and Rust-test subprocess references is the final step.
 - **Sequence**: the Rust report/transcript adapter and aggregate-command
   cutover are independently reviewable under TC-129. They do not satisfy the
   live declared-population TC-109 gate, provide the still-missing external scenario
   provider, authorize a token-bearing agent run, or permit aggregate legacy
-  removal before same-revision parity and rollback evidence.
+  removal before parity and rollback evidence.

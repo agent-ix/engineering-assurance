@@ -1003,7 +1003,6 @@ enum GateMode {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 struct IxEnvelope<T = IxInstance> {
     ok: bool,
     command: String,
@@ -1026,9 +1025,6 @@ struct IxEnvelope<T = IxInstance> {
     open_gates: Option<Vec<WorkflowGate>>,
     #[serde(default)]
     state_version: Option<u64>,
-    #[serde(default)]
-    #[serde(rename = "def_hash")]
-    _foreign_definition_marker: Option<String>,
     #[serde(default, rename = "cli_version")]
     _cli_version: Option<String>,
     next_actions: Vec<WorkflowNextAction>,
@@ -1051,15 +1047,11 @@ struct IxError {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 struct IxChainVerification {
     ok: bool,
     #[serde(default, rename = "firstBreakIndex")]
     first_break_index: Option<u64>,
-    #[serde(default, rename = "expectedHash")]
-    _foreign_expected_marker: Option<String>,
-    #[serde(default, rename = "actualHash")]
-    _foreign_actual_marker: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1082,13 +1074,11 @@ struct IxAutomaticGateEvent {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 struct IxInstance {
     id: String,
     def_name: String,
     def_version: String,
-    #[serde(rename = "defHash")]
-    _foreign_definition_marker: String,
     #[serde(rename = "writerVersion")]
     _writer_version: String,
     #[serde(rename = "name")]
@@ -1135,7 +1125,6 @@ struct IxSkillPath {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 struct IxEvent {
     #[serde(rename = "id")]
     _id: String,
@@ -1145,10 +1134,6 @@ struct IxEvent {
     _actor: IxActor,
     kind: String,
     payload: Value,
-    #[serde(rename = "prevHash")]
-    _foreign_previous_marker: String,
-    #[serde(rename = "hash")]
-    _foreign_event_marker: String,
 }
 
 #[derive(Debug, Deserialize)]

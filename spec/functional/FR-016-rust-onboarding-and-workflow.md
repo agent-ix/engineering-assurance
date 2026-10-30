@@ -187,6 +187,6 @@ Quire unavailability during staged publication refuses publication.
   FR-016-AC-4.
 - **Sequence**: FR-016-AC-1 is independently reviewable from ix-flow lifecycle
   and invariant-host integration. It does not authorize removal until FR-018's
-  same-revision gate passes.
+  parity gate passes.
 - **Sequence**: FR-016-AC-3 ports the existing lifecycle adapter and does not
   approve the JavaScript invariant-provider bridge needed by FR-016-AC-4.

@@ -47,9 +47,8 @@ It prints, in one place:
 2. **Working examples**, so nobody has to read `quoin-measurement`'s Rust
    source (`validate/mod.rs`, `validate/stack.rs`, `types/collection.rs`,
    `types/observation.rs`) to learn the measurement-record format: the real,
-   accepted measurement-collection JSON files under `corpus/spec/evidence/measurements/`
-   (local path when this module's `corpus` submodule is checked out, otherwise
-   a GitHub link to `agent-ix/qa-corpus`), plus a link to `agent-ix/quoin`'s own
+   accepted measurement-collection JSON files under `spec/evidence/measurements/`
+   (a GitHub link to `agent-ix/qa-corpus`), plus a link to `agent-ix/quoin`'s own
    `spec/assurance/` — a live consumer's real, validated `AssuranceProfile` and
    `MeasurementPlan` instances, not just skeletons.
 3. **What each artifact actually requires**, derived live from the installed

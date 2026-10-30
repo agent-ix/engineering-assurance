@@ -2,13 +2,8 @@
 
 ## Setup
 
-The `corpus/` submodule (`qa-corpus`) is optional. No lint or test gate reads
-it. Only the onboarding measurement-example listing reads
-`corpus/spec/evidence/measurements` when present. To check it out:
-
-```bash
-git submodule update --init --recursive
-```
+Measurement examples live in the separate `agent-ix/qa-corpus` repository; the
+onboarding report links to it. No lint or test gate reads it.
 
 ## Required checks
 

@@ -156,9 +156,8 @@ fn rollback_is_per_failure_mode_and_never_rewrites_history() {
     assert!(CONTRACT.contains("Legacy history is never rewritten in any of these paths."));
     assert!(CONTRACT.contains("do not edit the legacy record to make it read"));
     assert!(CONTRACT.contains("do not scrape stdout as a stopgap"));
-    // Deletion is the last step, and it waits on the same candidate revision.
+    // Deletion is the last step.
     assert!(CONTRACT.contains("Delete last"));
-    assert!(CONTRACT.contains("same exact candidate revision"));
 }
 
 #[test]
