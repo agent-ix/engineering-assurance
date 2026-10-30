@@ -4,36 +4,6 @@
 	"title": "CampaignRawArtifact",
 	"type": "object",
 	"properties": {
-		"digest": {
-			"type": "string",
-			"minLength": 1,
-			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-009/digest",
-			"x-agent-ix-origin": {
-				"source": {
-					"path": "spec/functional/VO-009-campaign-raw-artifact.md",
-					"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
-					"startColumn": 3,
-					"startLine": 16
-				}
-			},
-			"x-agent-ix-constraints": [
-				{
-					"appliesTo": "ix://agent-ix/engineering-assurance-campaign/VO-009/digest",
-					"diagnosticCode": "agent-ix.engineering-assurance-campaign.CAMPAIGNRAWARTIFACT_DIGEST_NONEMPTY",
-					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-009-digest-nonEmpty",
-					"keyword": "nonEmpty",
-					"operands": {},
-					"origin": {
-						"source": {
-							"path": "spec/functional/VO-009-campaign-raw-artifact.md",
-							"sourceIdentity": "ix://agent-ix/engineering-assurance-campaign/spec",
-							"startColumn": 3,
-							"startLine": 16
-						}
-					}
-				}
-			]
-		},
 		"role": {
 			"type": "string",
 			"minLength": 1,
@@ -66,7 +36,6 @@
 		}
 	},
 	"required": [
-		"digest",
 		"role"
 	],
 	"additionalProperties": false,

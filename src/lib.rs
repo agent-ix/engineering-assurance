@@ -46,7 +46,6 @@
 //! | `package-lifecycle` | `package_lifecycle` | | `serde`, `serde_json`, `thiserror` |
 //! | `package-membership` | `package_membership` | | `serde`, `thiserror` |
 //! | `producer-execution` | `producer_execution` | `content-digest` | `rustix`, `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
-//! | `reference-verifier` | `reference_verifier` (Linux only) | `producer-execution` | none beyond `producer-execution`'s |
 //! | `semantics` | `semantics` | `claim-strength`, `content-digest`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
 //! | `source-audit` | `source_audit` | | `serde`, `syn`, `thiserror` |
 //! | `structured-yaml` | `structured_yaml` | | `serde_json`, `yaml_serde` |
@@ -76,8 +75,6 @@ pub mod evaluation;
 pub mod evaluation_reports;
 #[cfg(feature = "evidence")]
 pub mod evidence;
-#[cfg(all(feature = "campaign", unix))]
-mod git_object_id;
 #[cfg(feature = "manifest")]
 pub mod manifest;
 #[cfg(feature = "measurement")]
@@ -92,8 +89,6 @@ pub mod package_lifecycle;
 pub mod package_membership;
 #[cfg(feature = "producer-execution")]
 pub mod producer_execution;
-#[cfg(all(feature = "reference-verifier", target_os = "linux"))]
-pub mod reference_verifier;
 #[cfg(feature = "semantics")]
 pub mod semantics;
 #[cfg(feature = "source-audit")]

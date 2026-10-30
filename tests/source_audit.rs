@@ -211,10 +211,9 @@ impl<'ast> Visit<'ast> for ChildProgramUse {
 #[trace("TC-101", "FR-014-AC-4", "FR-014-CON-1", "FR-014-CON-2")]
 fn tc_101_every_library_module_is_capability_confined() {
     // FR-014-AC-4 admits the FR-019 module wholesale (it has its own check
-    // below); the two FR-027 modules are admitted for filesystem access only.
+    // below); the FR-027 module is admitted for filesystem access only.
     let producer_execution = repository_root().join("src/producer_execution.rs");
-    let filesystem_only = ["src/atomic_publish.rs", "src/reference_verifier.rs"]
-        .map(|module| repository_root().join(module));
+    let filesystem_only = ["src/atomic_publish.rs"].map(|module| repository_root().join(module));
     for path in library_module_files() {
         if path == producer_execution {
             continue;

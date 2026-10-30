@@ -13,4 +13,3 @@ name: CampaignRawArtifact
 | Field | Type | Multiplicity | Constraints |
 |-------|------|--------------|-------------|
 | role | String | 1 | nonEmpty |
-| digest | String | 1 | nonEmpty |

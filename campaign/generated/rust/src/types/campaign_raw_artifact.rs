@@ -7,36 +7,6 @@ use serde::{Deserialize, Serialize};
 /// The fields of `CampaignRawArtifact`, in the order the contract declares them.
 pub const FIELDS: &[crate::identity::FieldMeta] = &[
     crate::identity::FieldMeta {
-        identity: "ix://agent-ix/engineering-assurance-campaign/VO-009/digest",
-        name: "digest",
-        rust_name: "digest",
-        type_ref: "ix://quire/native/String",
-        rust_type: "String",
-        row: "field:single/non-null/required",
-        presence: "required",
-        nullable: false,
-        multiplicity: crate::identity::MultiplicityMeta {
-            lower: 1,
-            upper: Some(1),
-            ordered: Some(false),
-            unique: Some(false),
-        },
-        unit: None,
-        default_kind: "none",
-        default_value: None,
-        origin: crate::identity::OriginMeta {
-            source: Some(crate::identity::SourceLocusMeta {
-                source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
-                path: "spec/functional/VO-009-campaign-raw-artifact.md",
-                start_line: 16,
-                start_column: 3,
-                end_line: None,
-                end_column: None,
-            }),
-            generated: None,
-        },
-    },
-    crate::identity::FieldMeta {
         identity: "ix://agent-ix/engineering-assurance-campaign/VO-009/role",
         name: "role",
         rust_name: "role",
@@ -75,10 +45,6 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
 /// Roles: engineering-assurance:campaign_value.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CampaignRawArtifact {
-    /// digest
-    ///
-    /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-009/digest.
-    pub digest: String,
     /// role
     ///
     /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-009/role.
@@ -93,7 +59,6 @@ pub struct CampaignRawArtifact {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CampaignRawArtifactWire {
-    digest: String,
     role: String,
 }
 
@@ -101,8 +66,8 @@ impl CampaignRawArtifact {
     /// Builds the record, enforcing every bound and uniqueness rule the
     /// contract declares on its members. Deserialization routes through
     /// this constructor.
-    pub fn try_new(digest: String, role: String) -> Result<Self, crate::support::ValidationError> {
-        Ok(Self { digest, role })
+    pub fn try_new(role: String) -> Result<Self, crate::support::ValidationError> {
+        Ok(Self { role })
     }
 
     /// The non-blocking diagnostics this value carries.
@@ -117,6 +82,6 @@ impl<'de> Deserialize<'de> for CampaignRawArtifact {
         D: serde::Deserializer<'de>,
     {
         let wire = CampaignRawArtifactWire::deserialize(deserializer)?;
-        Self::try_new(wire.digest, wire.role).map_err(serde::de::Error::custom)
+        Self::try_new(wire.role).map_err(serde::de::Error::custom)
     }
 }

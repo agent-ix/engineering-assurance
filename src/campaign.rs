@@ -20,13 +20,12 @@ pub use agent_ix_engineering_assurance_campaign::{
     ProcedureInputPrefix,
 };
 
-use crate::content_digest::ContentDigest;
 use crate::producer_execution::{
     ArgumentBinding, CancellationBinding, ContainmentBinding, ContractBinding, ExecutionBudget,
     ExecutionProcedure, ExitCodeBinding, InputBinding, InvalidExecutionRequest, MAX_ARGUMENTS,
     MAX_ARTIFACTS, MAX_TIMEOUT_MILLIS, OutputBinding, OutputTreeBinding,
     PRODUCER_EXECUTION_REQUEST_PROTOCOL, ProducerDescriptor, ProducerExecutionRequest,
-    RequestIdentity, ResponseBinding, StdinBinding, validate_source_tree,
+    ResponseBinding, StdinBinding, validate_source_tree,
 };
 
 /// The authored measurement-procedure discriminator.
@@ -93,18 +92,15 @@ pub struct ProcedureBindings {
     pub exit_codes: ExitCodeBinding,
 }
 
-/// A Git source tree selected for sealed per-file inputs by FR-019.
+/// A Git source tree selected for per-file inputs by FR-019.
 ///
 /// `manifest` is the exact NUL-delimited stdout of
 /// `git ls-tree -r -z --full-tree <revision>` for the source the caller
-/// selected. Every regular tracked file is opened under the
-/// capability root and checked against its Git blob OID before selection as
-/// an [`InputBinding`] with `role = "source/" + path`. FR-019 later rechecks
-/// its SHA-256 before launch. Tracked symlinks must be present at preflight:
-/// their target bytes are verified against their Git blob OIDs at resolution
-/// and recorded as omitted link metadata. Omitted-link identity is resolution
-/// evidence; it is not checked again at launch. The producer runs in the
-/// capability root. Other modes refuse the tree.
+/// selected. Only the mode and path of each record are read. Every regular
+/// tracked file is opened under the capability root and selected as an
+/// [`InputBinding`] with `role = "source/" + path`. Tracked symlinks must be
+/// present at preflight and are recorded as omitted links. The producer runs
+/// in the capability root. Other modes refuse the tree.
 #[derive(Clone, Debug)]
 pub struct SourceTreeBinding {
     /// Repository identity in the campaign source graph.
@@ -118,18 +114,14 @@ pub struct SourceTreeBinding {
 pub struct OmittedSourceLink {
     /// Tracked relative path.
     pub path: String,
-    /// SHA-256 of the link target bytes after Git blob OID verification.
-    pub digest: ContentDigest,
 }
 
-/// A resolved, identity-bearing FR-019 request.
+/// A resolved FR-019 request.
 #[derive(Clone, Debug)]
 pub struct ResolvedProcedure {
     /// Closed request handed to the bounded EA executor.
     pub request: ProducerExecutionRequest,
-    /// SHA-256-JCS identity of the exact request.
-    pub identity: RequestIdentity,
-    /// Tracked symlinks verified at resolution and recorded as omitted link metadata.
+    /// Tracked symlinks present at resolution and recorded as omitted link metadata.
     pub omitted_source_links: Vec<OmittedSourceLink>,
 }
 
@@ -199,13 +191,7 @@ pub enum CampaignError {
         /// Binding field.
         field: &'static str,
     },
-    /// An authored or retained digest is not lowercase SHA-256 hexadecimal.
-    #[error("invalid SHA-256 digest at {field}")]
-    Digest {
-        /// Digest field.
-        field: &'static str,
-    },
-    /// FR-019 rejected the constructed request before identity minting.
+    /// FR-019 rejected the constructed request.
     #[error("invalid resolved producer request: {0}")]
     InvalidRequest(#[from] InvalidExecutionRequest),
     /// Canonical encoding of the generated contract failed.
@@ -245,12 +231,6 @@ fn valid_input_role_prefix(value: &str) -> bool {
                     .bytes()
                     .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
         })
-}
-
-fn digest(value: &str, field: &'static str) -> Result<(), CampaignError> {
-    ContentDigest::parse(value)
-        .map(|_| ())
-        .map_err(|_| CampaignError::Digest { field })
 }
 
 /// Validates one FCD-generated authored procedure before any request is minted.
@@ -739,7 +719,7 @@ fn validate_member_dependencies(
     Ok(())
 }
 
-/// Resolves a typed procedure into one exact FR-019 request and identity.
+/// Resolves a typed procedure into one exact FR-019 request.
 ///
 /// # Errors
 /// Returns [`CampaignError`] if any selected binding differs from the authored
@@ -823,10 +803,9 @@ pub fn resolve_procedure(
             exit_codes: bindings.exit_codes,
         },
     };
-    let identity = request.identity()?;
+    request.validate()?;
     Ok(ResolvedProcedure {
         request,
-        identity,
         omitted_source_links,
     })
 }
@@ -1076,7 +1055,7 @@ fn validate_required_inputs(
 ///
 /// # Errors
 /// Returns [`CampaignError`] for a wrong version, duplicate attempts or
-/// unknown members, or malformed digest references.
+/// or unknown members.
 pub fn validate_run(
     run: &CampaignRun,
     definition: &CampaignDefinition,
@@ -1119,29 +1098,9 @@ pub fn validate_run(
                 name: format!("{}#{}", attempt.member, attempt.index),
             });
         }
-        for value in [
-            &attempt.request_digest,
-            &attempt.result_digest,
-            &attempt.collection_digest,
-            &attempt.verdict_digest,
-            &attempt.domain_verdict_digest,
-            &attempt.checker_request_digest,
-            &attempt.checker_result_digest,
-        ]
-        .into_iter()
-        .flatten()
-        {
-            digest(value, "attempt digest")?;
-        }
-        if attempt.collection_id.is_some() != attempt.collection_digest.is_some() {
-            return Err(CampaignError::Binding {
-                field: "collectionId/collectionDigest",
-            });
-        }
         let mut roles = BTreeSet::new();
         for artifact in attempt.raw_artifacts.as_deref().unwrap_or(&[]) {
             nonempty(&artifact.role, "rawArtifacts.role")?;
-            digest(&artifact.digest, "rawArtifacts.digest")?;
             if !roles.insert(artifact.role.as_str()) {
                 return Err(CampaignError::Duplicate {
                     kind: "raw artifact role",

@@ -16,15 +16,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-use engineering_assurance::content_digest::ContentDigest;
 use engineering_assurance::producer_execution::{
     ArgumentBinding, CancellationBinding, CancellationToken, ContainmentBinding, ContractBinding,
     ExecutionBudget, ExecutionFailure, ExecutionProcedure, ExecutionRefusal, ExitCodeBinding,
-    InputBinding, InvalidExecutionRequest, MalformedResponse, ObservedHostContext, OutputArtifact,
-    OutputBinding, OutputTreeBinding, PRODUCER_EXECUTION_REQUEST_PROTOCOL,
-    PRODUCER_EXECUTION_RESULT_PROTOCOL, ProcessEvidence, ProducerDescriptor,
-    ProducerExecutionRequest, ProducerExecutionResult, ProducerExecutionState, ProducerExecutor,
-    ProducerResponseAdapter, REQUEST_IDENTITY_SCHEME, RESULT_IDENTITY_SCHEME, ResponseBinding,
+    InputBinding, InvalidExecutionRequest, MalformedResponse, OutputArtifact, OutputBinding,
+    OutputTreeBinding, PRODUCER_EXECUTION_REQUEST_PROTOCOL, PRODUCER_EXECUTION_RESULT_PROTOCOL,
+    ProcessEvidence, ProducerDescriptor, ProducerExecutionRequest, ProducerExecutionResult,
+    ProducerExecutionState, ProducerExecutor, ProducerResponseAdapter, ResponseBinding,
     StdinBinding, TerminalStatus,
 };
 use ix_trace_rs::trace;
@@ -272,153 +270,9 @@ fn cargo_feature_tree(manifest_path: &Path, features: &[&str]) -> String {
     String::from_utf8(feature_tree.stdout).expect("feature tree must be UTF-8")
 }
 
-fn assert_identity_changes(
-    base: &ProducerExecutionRequest,
-    mutate: impl FnOnce(&mut ProducerExecutionRequest),
-) {
-    let identity = base.identity().expect("base identity must be valid");
-    let mut candidate = base.clone();
-    mutate(&mut candidate);
-    assert_ne!(
-        candidate.identity().expect("mutation must remain valid"),
-        identity
-    );
-}
-
-fn identity_request(root: &Path) -> ProducerExecutionRequest {
-    let mut request = request(root, &["emit", "a"]);
-    request.environment.insert("B".to_owned(), "2".to_owned());
-    request.environment.insert("A".to_owned(), "1".to_owned());
-    request.inputs = vec![
-        InputBinding {
-            role: "input-1".to_owned(),
-            path: "input-1".to_owned(),
-            digest: ContentDigest::of_bytes(b"input-1"),
-            executable: false,
-        },
-        InputBinding {
-            role: "input-2".to_owned(),
-            path: "input-2".to_owned(),
-            digest: ContentDigest::of_bytes(b"input-2"),
-            executable: false,
-        },
-    ];
-    request.arguments.push(ArgumentBinding::InputArtifact {
-        role: "input-1".to_owned(),
-    });
-    request.outputs = vec![
-        OutputBinding {
-            role: "output-1".to_owned(),
-            path: "output-1".to_owned(),
-            required: true,
-        },
-        OutputBinding {
-            role: "output-2".to_owned(),
-            path: "output-2".to_owned(),
-            required: false,
-        },
-    ];
-    request.arguments.push(ArgumentBinding::OutputArtifact {
-        role: "output-1".to_owned(),
-    });
-    request.stdin = StdinBinding::InputArtifact {
-        role: "input-1".to_owned(),
-    };
-    request.cancellation = CancellationBinding::Event {
-        authority: "fixture".to_owned(),
-        event_id: "event-1".to_owned(),
-    };
-    request.budget.max_output_artifacts = 2;
-    request.budget.max_output_bytes = 8;
-    request.response.exit_codes = ExitCodeBinding::Exact(BTreeSet::from([0, 7]));
-    request
-}
-
-fn assert_descriptor_identity(base: &ProducerExecutionRequest) {
-    assert_identity_changes(base, |value| value.producer.name.push('x'));
-    assert_identity_changes(base, |value| value.producer.version.push('x'));
-    assert_identity_changes(base, |value| value.producer.executable.push('x'));
-    assert_identity_changes(base, |value| value.caller.kind.push('x'));
-    assert_identity_changes(base, |value| value.caller.version.push('x'));
-    assert_identity_changes(base, |value| value.capability_root.push_str("/other"));
-}
-
-fn assert_io_identity(base: &ProducerExecutionRequest) {
-    assert_identity_changes(base, |value| {
-        value.arguments[0] = ArgumentBinding::Literal {
-            value: "other".to_owned(),
-        };
-    });
-    assert_identity_changes(base, |value| value.arguments.swap(0, 1));
-    assert_identity_changes(base, |value| {
-        value.environment.insert("A".to_owned(), "other".to_owned());
-    });
-    assert_identity_changes(base, |value| {
-        value.environment.remove("A");
-        value.environment.insert("C".to_owned(), "1".to_owned());
-    });
-    assert_identity_changes(base, |value| value.inputs[1].role.push('x'));
-    assert_identity_changes(base, |value| value.inputs[0].path.push('x'));
-    assert_identity_changes(base, |value| {
-        value.inputs[0].digest = ContentDigest::of_bytes(b"other input");
-    });
-    assert_identity_changes(base, |value| value.inputs[0].executable = true);
-    assert_identity_changes(base, |value| value.inputs.swap(0, 1));
-    assert_identity_changes(base, |value| value.stdin = StdinBinding::Null);
-    assert_identity_changes(base, |value| value.outputs[1].role.push('x'));
-    assert_identity_changes(base, |value| value.outputs[0].path.push('x'));
-    assert_identity_changes(base, |value| value.outputs[1].required = true);
-    assert_identity_changes(base, |value| value.outputs.swap(0, 1));
-}
-
-fn assert_control_identity(base: &ProducerExecutionRequest) {
-    assert_identity_changes(base, |value| match &mut value.containment {
-        ContainmentBinding::ProcessGroupV1 { contract } => contract.kind.push('x'),
-    });
-    assert_identity_changes(base, |value| match &mut value.containment {
-        ContainmentBinding::ProcessGroupV1 { contract } => contract.version.push('x'),
-    });
-    assert_identity_changes(base, |value| match &mut value.cancellation {
-        CancellationBinding::Disabled => unreachable!("fixture binds cancellation"),
-        CancellationBinding::Event { authority, .. } => authority.push('x'),
-    });
-    assert_identity_changes(base, |value| match &mut value.cancellation {
-        CancellationBinding::Disabled => unreachable!("fixture binds cancellation"),
-        CancellationBinding::Event { event_id, .. } => event_id.push('x'),
-    });
-    assert_identity_changes(base, |value| value.budget.timeout_millis += 1);
-    assert_identity_changes(base, |value| value.budget.max_stdout_bytes += 1);
-    assert_identity_changes(base, |value| value.budget.max_stderr_bytes += 1);
-    assert_identity_changes(base, |value| value.budget.max_input_bytes += 1);
-    assert_identity_changes(base, |value| value.budget.max_output_artifacts += 1);
-    assert_identity_changes(base, |value| value.budget.max_output_bytes += 1);
-    assert_identity_changes(base, |value| value.budget.max_descendants += 1);
-    assert_identity_changes(base, |value| value.budget.max_concurrency += 1);
-}
-
-fn assert_response_identity(base: &ProducerExecutionRequest) {
-    assert_identity_changes(base, |value| value.response.protocol.kind.push('x'));
-    assert_identity_changes(base, |value| value.response.protocol.version.push('x'));
-    assert_identity_changes(base, |value| value.response.adapter.kind.push('x'));
-    assert_identity_changes(base, |value| value.response.adapter.version.push('x'));
-    assert_identity_changes(base, |value| {
-        value.response.exit_codes = ExitCodeBinding::Exact(BTreeSet::from([0, 8]));
-    });
-}
-
-fn assert_result_identity_changes(
-    base: &ProducerExecutionResult<String>,
-    mutate: impl FnOnce(&mut ProducerExecutionResult<String>),
-) {
-    let identity = base.identity().expect("base result identity");
-    let mut candidate = base.clone();
-    mutate(&mut candidate);
-    assert_ne!(candidate.identity().expect("candidate identity"), identity);
-}
-
 #[test]
 #[trace("TC-176", "FR-019-AC-4")]
-fn tc_176_output_tree_binding_is_bounded_in_request_identity() {
+fn tc_176_output_tree_binding_refuses_overlap_and_nesting() {
     let root = tempfile::tempdir().expect("temporary root");
     let mut base = request(root.path(), &["emit"]);
     base.budget.max_output_artifacts = 2;
@@ -428,24 +282,20 @@ fn tc_176_output_tree_binding_is_bounded_in_request_identity() {
         path: "mutants.out".to_owned(),
         required: true,
     });
-    assert_identity_changes(&base, |value| {
-        value.output_trees[0].path = "other.out".to_owned();
-    });
-    assert_identity_changes(&base, |value| value.output_trees[0].required = false);
     let mut overlapping = base.clone();
     overlapping.outputs.push(OutputBinding {
         role: "nested".to_owned(),
         path: "mutants.out/result.json".to_owned(),
         required: true,
     });
-    assert_eq!(overlapping.identity(), Err(InvalidExecutionRequest::Output));
+    assert_eq!(overlapping.validate(), Err(InvalidExecutionRequest::Output));
     let mut duplicate = base;
     duplicate.output_trees.push(OutputTreeBinding {
         role: "other".to_owned(),
         path: "mutants.out/nested".to_owned(),
         required: true,
     });
-    assert_eq!(duplicate.identity(), Err(InvalidExecutionRequest::Output));
+    assert_eq!(duplicate.validate(), Err(InvalidExecutionRequest::Output));
 }
 
 #[test]
@@ -467,15 +317,7 @@ fn tc_176_live_output_tree_is_sealed_and_symlinks_refuse() {
     ));
     assert_eq!(result.artifacts.len(), 1);
     assert_eq!(result.artifacts[0].role, "mutants/nested/report.json");
-    assert_eq!(
-        result.artifacts[0].digest,
-        ContentDigest::of_bytes(b"{\"passed\":true}\n")
-    );
-    // Pinned through the executor's sealed-snapshot hashing path.
-    assert_eq!(
-        result.artifacts[0].digest.as_str(),
-        "1ea63e7fda68e7ce49b013af8410102e9228f7591e79ef602dd23d95556d03bc"
-    );
+    assert_eq!(result.artifacts[0].byte_length, 16);
     assert!(
         result.observed_host.is_some(),
         "Linux host context must be sampled"
@@ -530,14 +372,13 @@ fn tc_176_output_tree_absent_after_execution_fails_only_when_required() {
 
 #[test]
 #[trace("TC-122", "FR-019-AC-1")]
-fn tc_122_completed_result_retains_canonical_identity_evidence_and_output_snapshot() {
+fn tc_122_completed_result_retains_evidence_and_output_snapshot() {
     let root = tempfile::tempdir().expect("temporary root must be available");
     fs::write(root.path().join("input.txt"), b"accepted").expect("input fixture");
     let mut request = request(root.path(), &["copy-stdin"]);
     request.inputs.push(InputBinding {
         role: "stdin".to_owned(),
         path: "input.txt".to_owned(),
-        digest: ContentDigest::of_bytes(b"accepted"),
         executable: false,
     });
     request.stdin = StdinBinding::InputArtifact {
@@ -553,7 +394,7 @@ fn tc_122_completed_result_retains_canonical_identity_evidence_and_output_snapsh
     });
     request.budget.max_output_artifacts = 1;
     request.budget.max_output_bytes = 8;
-    let expected_request_identity = request.identity().expect("valid request has identity");
+    request.validate().expect("valid request");
     let result = ProducerExecutor::new(1)
         .expect("executor")
         .execute(
@@ -564,12 +405,6 @@ fn tc_122_completed_result_retains_canonical_identity_evidence_and_output_snapsh
         .expect("valid request");
 
     assert_eq!(result.protocol, PRODUCER_EXECUTION_RESULT_PROTOCOL);
-    assert_eq!(result.request_identity, expected_request_identity);
-    assert_eq!(result.request_identity.scheme, REQUEST_IDENTITY_SCHEME);
-    assert_eq!(
-        result.identity().expect("result identity").scheme,
-        RESULT_IDENTITY_SCHEME
-    );
     assert!(result.timing.total_nanos >= result.timing.preflight_nanos);
     assert!(matches!(
         result
@@ -579,10 +414,7 @@ fn tc_122_completed_result_retains_canonical_identity_evidence_and_output_snapsh
         Some(TerminalStatus::ExitCode(0))
     ));
     assert_eq!(result.artifacts.len(), 1);
-    assert_eq!(
-        result.artifacts[0].digest,
-        ContentDigest::of_bytes(b"accepted")
-    );
+    assert_eq!(result.artifacts[0].byte_length, 8);
     assert!(matches!(
         &result.state,
         ProducerExecutionState::Completed { observation } if observation == b"accepted"
@@ -644,10 +476,7 @@ fn tc_122_declared_output_written_by_producer_is_observed_with_its_bytes() {
     ));
     assert_eq!(result.artifacts.len(), 1);
     assert_eq!(result.artifacts[0].path, "report.json");
-    assert_eq!(
-        result.artifacts[0].digest,
-        ContentDigest::of_bytes(b"launched")
-    );
+    assert_eq!(result.artifacts[0].byte_length, 8);
     let mut retained = Vec::new();
     result.artifacts[0]
         .try_reader()
@@ -771,154 +600,9 @@ fn tc_122_symlinked_parent_of_declared_output_refuses_before_launch() {
     );
 }
 
-fn assert_result_metadata_identity(result: &ProducerExecutionResult<String>) {
-    assert_result_identity_changes(result, |value| value.protocol = "other");
-    assert_result_identity_changes(result, |value| value.request_identity.scheme = "other");
-    assert_result_identity_changes(result, |value| {
-        value.request_identity.digest = ContentDigest::of_bytes(b"other request");
-    });
-    assert_result_identity_changes(result, |value| value.producer.name.push('x'));
-    assert_result_identity_changes(result, |value| value.producer.version.push('x'));
-    assert_result_identity_changes(result, |value| value.producer.executable.push('x'));
-    assert_result_identity_changes(result, |value| {
-        value.cancellation_event = Some(CancellationBinding::Disabled);
-    });
-    assert_result_identity_changes(result, |value| value.timing.preflight_nanos += 1);
-    assert_result_identity_changes(result, |value| value.timing.execution_nanos = None);
-    assert_result_identity_changes(result, |value| value.timing.total_nanos += 1);
-    assert_result_identity_changes(result, |value| {
-        value.observed_host = Some(ObservedHostContext {
-            machine_digest: ContentDigest::of_bytes(b"fictional host"),
-            identity_source: None,
-            os: "fictional-os".to_owned(),
-            kernel_release: "1".to_owned(),
-            architecture: "fictional-arch".to_owned(),
-            cpu_model: "fictional-cpu".to_owned(),
-            cpu_model_source: None,
-            cpu_affinity_digest: None,
-            logical_cpus: 4,
-            memory_bytes: 1_024,
-            runtime_class: "fixture-runtime".to_owned(),
-        });
-    });
-}
-
-fn assert_result_process_identity(result: &ProducerExecutionResult<String>) {
-    assert_result_identity_changes(result, |value| value.process = None);
-    assert_result_identity_changes(result, |value| {
-        value
-            .process
-            .as_mut()
-            .expect("process")
-            .stdout
-            .bytes
-            .push(b'x');
-    });
-    assert_result_identity_changes(result, |value| {
-        value.process.as_mut().expect("process").terminal_status = Some(TerminalStatus::Signal(9));
-    });
-    assert_result_identity_changes(result, |value| {
-        value.process.as_mut().expect("process").stdout.digest =
-            ContentDigest::of_bytes(b"other stdout");
-    });
-    assert_result_identity_changes(result, |value| {
-        value.process.as_mut().expect("process").stdout.truncated = true;
-    });
-    assert_result_identity_changes(result, |value| {
-        value
-            .process
-            .as_mut()
-            .expect("process")
-            .stderr
-            .bytes
-            .push(b'x');
-    });
-    assert_result_identity_changes(result, |value| {
-        value.process.as_mut().expect("process").stderr.digest =
-            ContentDigest::of_bytes(b"other stderr");
-    });
-    assert_result_identity_changes(result, |value| {
-        value.process.as_mut().expect("process").stderr.truncated = true;
-    });
-}
-
-fn assert_result_artifact_and_state_identity(result: &ProducerExecutionResult<String>) {
-    assert_result_identity_changes(result, |value| value.artifacts.clear());
-    assert_result_identity_changes(result, |value| value.artifacts[0].role.push('x'));
-    assert_result_identity_changes(result, |value| value.artifacts[0].path.push('x'));
-    assert_result_identity_changes(result, |value| value.artifacts[0].byte_length += 1);
-    assert_result_identity_changes(result, |value| {
-        value.artifacts[0].digest = ContentDigest::of_bytes(b"other output");
-    });
-    assert_result_identity_changes(result, |value| match &mut value.state {
-        ProducerExecutionState::Completed { observation } => observation.push('x'),
-        _ => panic!("fixture must complete"),
-    });
-
-    let state_identities = [
-        ProducerExecutionState::Unavailable,
-        ProducerExecutionState::Refused {
-            reason: ExecutionRefusal::Input,
-        },
-        ProducerExecutionState::Failed {
-            reason: ExecutionFailure::Observation,
-        },
-        ProducerExecutionState::TimedOut,
-        ProducerExecutionState::MalformedResponse,
-        ProducerExecutionState::ContainmentFailure,
-        ProducerExecutionState::Cancelled,
-        ProducerExecutionState::Completed {
-            observation: "x".to_owned(),
-        },
-    ]
-    .into_iter()
-    .map(|state| {
-        let mut candidate = result.clone();
-        candidate.state = state;
-        candidate.identity().expect("state identity").digest
-    })
-    .collect::<BTreeSet<_>>();
-    assert_eq!(state_identities.len(), 8);
-}
-
 #[test]
 #[trace("TC-122", "FR-019-AC-1")]
-fn tc_122_every_portable_result_field_changes_canonical_identity() {
-    let root = tempfile::tempdir().expect("temporary root");
-    fs::write(root.path().join("input"), b"x").expect("input fixture");
-    let mut request = request(root.path(), &["copy-stdin"]);
-    request.inputs.push(InputBinding {
-        role: "input".to_owned(),
-        path: "input".to_owned(),
-        digest: ContentDigest::of_bytes(b"x"),
-        executable: false,
-    });
-    request.stdin = StdinBinding::InputArtifact {
-        role: "input".to_owned(),
-    };
-    request.outputs.push(OutputBinding {
-        role: "output".to_owned(),
-        path: "output".to_owned(),
-        required: true,
-    });
-    request.arguments.push(ArgumentBinding::OutputArtifact {
-        role: "output".to_owned(),
-    });
-    request.budget.max_output_artifacts = 1;
-    request.budget.max_output_bytes = 1;
-    request.cancellation = CancellationBinding::Event {
-        authority: "fixture".to_owned(),
-        event_id: "not-observed".to_owned(),
-    };
-    let result = execute(&request, &adapter());
-    assert_result_metadata_identity(&result);
-    assert_result_process_identity(&result);
-    assert_result_artifact_and_state_identity(&result);
-}
-
-#[test]
-#[trace("TC-122", "FR-019-AC-1")]
-fn tc_122_noncanonical_adapter_observation_has_no_result_identity() {
+fn tc_122_noncanonical_adapter_observation_has_no_canonical_bytes() {
     let root = tempfile::tempdir().expect("temporary root");
     let request = request(root.path(), &["emit", "accepted"]);
     let result = ProducerExecutor::new(1)
@@ -934,32 +618,6 @@ fn tc_122_noncanonical_adapter_observation_has_no_result_identity() {
         ProducerExecutionState::Completed { .. }
     ));
     assert!(result.canonical_bytes().is_err());
-    assert!(result.identity().is_err());
-}
-
-#[test]
-#[trace("TC-123", "FR-019-AC-2", "FR-019-CON-1")]
-fn tc_123_jcs_identity_covers_fields_and_declared_collection_semantics() {
-    let root = tempfile::tempdir().expect("temporary root");
-    let base = identity_request(root.path());
-    let identity = base.identity().expect("base identity");
-    let mut equivalent = base.clone();
-    equivalent.environment = [
-        ("A".to_owned(), "1".to_owned()),
-        ("B".to_owned(), "2".to_owned()),
-    ]
-    .into_iter()
-    .collect();
-    equivalent.response.exit_codes =
-        ExitCodeBinding::Exact([7, 0].into_iter().collect::<BTreeSet<_>>());
-    assert_eq!(
-        equivalent.identity().expect("normalized identity"),
-        identity
-    );
-    assert_descriptor_identity(&base);
-    assert_io_identity(&base);
-    assert_control_identity(&base);
-    assert_response_identity(&base);
 }
 
 #[test]
@@ -972,7 +630,7 @@ fn tc_123_invalid_and_mismatched_requests_refuse_without_launch() {
         &["touch", marker.to_str().expect("UTF-8 path")],
     );
     invalid.protocol = "unknown".to_owned();
-    assert_eq!(invalid.identity(), Err(InvalidExecutionRequest::Protocol));
+    assert_eq!(invalid.validate(), Err(InvalidExecutionRequest::Protocol));
     assert_eq!(
         ProducerExecutor::new(1)
             .expect("executor")
@@ -992,8 +650,7 @@ fn tc_123_invalid_and_mismatched_requests_refuse_without_launch() {
     );
     refused.inputs.push(InputBinding {
         role: "candidate".to_owned(),
-        path: "selected".to_owned(),
-        digest: ContentDigest::of_bytes(b"wrong"),
+        path: "absent".to_owned(),
         executable: false,
     });
     assert!(matches!(
@@ -1025,7 +682,6 @@ fn tc_123_declared_input_mutated_after_preflight_reads_as_verified_bytes() {
     frozen.inputs.push(InputBinding {
         role: "selected".to_owned(),
         path: "selected.txt".to_owned(),
-        digest: ContentDigest::of_bytes(b"original"),
         executable: false,
     });
     let worker = thread::spawn(move || execute(&frozen, &adapter()));
@@ -1175,11 +831,11 @@ fn tc_124_all_closed_states_are_distinct_canonical_and_retain_evidence() {
         results[7].state,
         ProducerExecutionState::Completed { .. }
     ));
-    let identities = results
+    let encodings = results
         .iter()
-        .map(|result| result.identity().expect("state must be canonical").digest)
+        .map(|result| result.canonical_bytes().expect("state must be canonical"))
         .collect::<BTreeSet<_>>();
-    assert_eq!(identities.len(), results.len());
+    assert_eq!(encodings.len(), results.len());
     assert!(results[2..5].iter().all(|result| result.process.is_some()));
     assert!(results[5].process.is_none());
 }
@@ -1194,7 +850,6 @@ fn tc_125_exact_input_stream_output_and_nonzero_exit_boundaries_are_enforced() {
     exact.inputs.push(InputBinding {
         role: "stdin".to_owned(),
         path: "input".to_owned(),
-        digest: ContentDigest::of_bytes(b"x"),
         executable: false,
     });
     exact.stdin = StdinBinding::InputArtifact {
@@ -1401,7 +1056,7 @@ fn tc_128_minimal_downstream_compiles_only_producer_execution_feature() {
     .expect("consumer manifest");
     fs::write(
         consumer.path().join("src/main.rs"),
-        "use engineering_assurance::producer_execution::RESULT_IDENTITY_SCHEME;\nfn main(){assert_eq!(RESULT_IDENTITY_SCHEME,\"sha256-jcs\");}\n",
+        "use engineering_assurance::producer_execution::ProducerExecutor;\nfn main(){assert!(ProducerExecutor::new(1).is_ok());}\n",
     )
     .expect("consumer source");
     let status = Command::new(env!("CARGO"))
@@ -1488,44 +1143,5 @@ fn tc_128_minimal_downstream_compiles_only_producer_execution_feature() {
     assert!(
         full_feature_tree.contains("arbitrary_precision"),
         "full Engineering Assurance feature set must retain serde_json arbitrary_precision"
-    );
-}
-
-#[test]
-#[trace("TC-199", "FR-014-AC-11")]
-fn tc_199_wire_form_is_the_bare_hex_string() {
-    let digest = ContentDigest::of_bytes(b"abc");
-    let bare = digest.as_str().to_owned();
-    assert_eq!(
-        serde_json::to_string(&digest).expect("digest serializes"),
-        format!("\"{bare}\"")
-    );
-    assert_eq!(
-        serde_json::from_str::<ContentDigest>(&format!("\"{bare}\"")).expect("bare form parses"),
-        digest
-    );
-    assert!(serde_json::from_str::<ContentDigest>(&format!("\"sha256:{bare}\"")).is_err());
-}
-
-#[test]
-#[trace("TC-199", "FR-014-AC-11")]
-fn tc_199_file_identity_refuses_links_and_non_files() {
-    use engineering_assurance::content_digest::DigestError;
-
-    let directory = tempfile::tempdir().expect("temporary directory");
-    let file = directory.path().join("input");
-    std::fs::write(&file, b"abc").expect("fixture writes");
-    std::os::unix::fs::symlink(&file, directory.path().join("link")).expect("symlink");
-    assert_eq!(
-        ContentDigest::of_file(&directory.path().join("link")),
-        Err(DigestError::NotRegular)
-    );
-    assert_eq!(
-        ContentDigest::of_file(directory.path()),
-        Err(DigestError::NotRegular)
-    );
-    assert_eq!(
-        ContentDigest::of_file(&directory.path().join("absent")),
-        Err(DigestError::Unavailable)
     );
 }

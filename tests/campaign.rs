@@ -14,7 +14,6 @@ use engineering_assurance::{
         SourceTreeBinding, resolve_procedure, validate_definition, validate_procedure,
         validate_run,
     },
-    content_digest::ContentDigest,
     producer_execution::{
         CancellationBinding, ContainmentBinding, ContractBinding, ExecutionBudget, ExitCodeBinding,
         InputBinding, InvalidExecutionRequest, OutputBinding, OutputTreeBinding,
@@ -124,7 +123,6 @@ fn bindings() -> ProcedureBindings {
         inputs: vec![InputBinding {
             role: "fixture".to_owned(),
             path: "input.txt".to_owned(),
-            digest: ContentDigest::of_bytes(b"input"),
             executable: false,
         }],
         input_origins: None,
@@ -274,11 +272,10 @@ fn tc_178_output_tree_is_declared_and_exactly_bound() {
         resolve_procedure(&procedure, &source_graph, bound.clone()).expect("bound output tree");
     bound.output_trees[0].path = "different.out".to_owned();
     assert_ne!(
-        resolved.identity.digest,
+        resolved.request,
         resolve_procedure(&procedure, &source_graph, bound)
             .expect("alternate path")
-            .identity
-            .digest
+            .request
     );
 }
 
@@ -301,14 +298,12 @@ fn tc_183_dynamic_input_prefixes_are_component_safe_and_required_when_declared()
     bound.inputs.push(InputBinding {
         role: "dependency/build".to_owned(),
         path: "dependency/build.json".to_owned(),
-        digest: ContentDigest::of_bytes(b"sealed dependency"),
         executable: false,
     });
     resolve_procedure(&procedure, &graph, bound.clone()).expect("declared dynamic input");
     bound.inputs.push(InputBinding {
         role: "dependency-evil/build".to_owned(),
         path: "dependency/evil.json".to_owned(),
-        digest: ContentDigest::of_bytes(b"undeclared dependency"),
         executable: false,
     });
     assert_eq!(
@@ -473,7 +468,6 @@ fn tc_184_dependency_origin_binds_declared_member_and_refuses_extra_input() {
     selected.inputs.push(InputBinding {
         role: "dependency/extra".to_owned(),
         path: "extra.txt".to_owned(),
-        digest: ContentDigest::of_bytes(b"extra"),
         executable: false,
     });
     assert_eq!(
@@ -560,29 +554,19 @@ fn tc_179_campaign_rejects_stale_missing_and_cyclic_plan_graphs() {
 
 #[test]
 #[trace("TC-180", "FR-019-AC-10", "VO-001")]
-fn tc_180_resolved_request_identity_changes_with_every_selected_binding() {
+fn tc_180_resolved_request_reflects_every_selected_binding() {
     let procedure = procedure();
     let source_graph = sample_definition().source_graph;
     let baseline =
         resolve_procedure(&procedure, &source_graph, bindings()).expect("resolved baseline");
     assert_eq!(baseline.request.budget.timeout_millis, 5_000);
-    let mut altered = bindings();
-    altered.inputs[0].digest = ContentDigest::of_bytes(b"changed input");
-    assert_ne!(
-        baseline.identity.digest,
-        resolve_procedure(&procedure, &source_graph, altered)
-            .expect("input variant")
-            .identity
-            .digest
-    );
     let mut altered = procedure.clone();
     altered.arguments.as_mut().expect("arguments")[0].value = "--other".to_owned();
     assert_ne!(
-        baseline.identity.digest,
+        baseline.request,
         resolve_procedure(&altered, &source_graph, bindings())
             .expect("argument variant")
-            .identity
-            .digest
+            .request
     );
     let mut altered = bindings();
     altered
@@ -599,11 +583,10 @@ fn tc_180_resolved_request_identity_changes_with_every_selected_binding() {
         .environment
         .insert("CARGO_HOME".to_owned(), "/other/cargo".to_owned());
     assert_ne!(
-        baseline.identity.digest,
+        baseline.request,
         resolve_procedure(&procedure, &source_graph, altered)
             .expect("runtime environment variant")
-            .identity
-            .digest
+            .request
     );
 }
 
@@ -616,10 +599,7 @@ fn tc_186_retained_request_requires_exact_typed_shape_and_valid_structure() {
     let parsed =
         ProducerExecutionRequest::from_retained_value(&original).expect("exact retained request");
     assert_eq!(parsed, resolved.request);
-    assert_eq!(
-        parsed.identity().expect("request identity"),
-        resolved.identity
-    );
+    assert_eq!(parsed.validate(), Ok(()));
 
     let mut extra = original.clone();
     extra["unclaimed"] = json!(true);
@@ -690,7 +670,7 @@ fn git(root: &std::path::Path, args: &[&str]) -> Vec<u8> {
 
 #[test]
 #[trace("TC-182", "TC-183", "FR-019-AC-10", "FR-019-AC-11", "VO-005", "VO-011")]
-fn tc_182_source_projection_checks_complete_git_blob_inventory() {
+fn tc_182_source_projection_expands_the_git_tree_inventory() {
     let temp_root = if cfg!(target_os = "macos") {
         "/private/tmp"
     } else {
@@ -751,7 +731,7 @@ fn tc_182_source_projection_checks_complete_git_blob_inventory() {
         manifest: manifest.clone(),
     });
     let resolved = resolve_procedure(&procedure, std::slice::from_ref(&source), bindings.clone())
-        .expect("sealed source tree");
+        .expect("source tree");
     assert_eq!(resolved.request.inputs.len(), 2);
     assert_eq!(resolved.omitted_source_links.len(), 1);
     assert_required_source_prefix(&procedure, &source, bindings.clone());
@@ -805,27 +785,6 @@ fn assert_source_tampering_rejected(
     source: &CampaignSource,
     bindings: ProcedureBindings,
 ) {
-    fs::write(repo.join("Cargo.toml"), b"changed source\n").expect("tamper source");
-    assert_eq!(
-        resolve_procedure(procedure, std::slice::from_ref(source), bindings.clone()).err(),
-        Some(CampaignError::SourceTree {
-            field: "Git blob mismatch"
-        })
-    );
-    fs::write(repo.join("Cargo.toml"), b"[package]\nname = \"fixture\"\n")
-        .expect("restore regular file");
-    fs::remove_file(repo.join("scripts/manifest-link")).expect("remove link");
-    std::os::unix::fs::symlink("../different", repo.join("scripts/manifest-link"))
-        .expect("changed link target");
-    assert_eq!(
-        resolve_procedure(procedure, std::slice::from_ref(source), bindings.clone()).err(),
-        Some(CampaignError::SourceTree {
-            field: "Git blob mismatch"
-        })
-    );
-    fs::remove_file(repo.join("scripts/manifest-link")).expect("remove changed link");
-    std::os::unix::fs::symlink("../Cargo.toml", repo.join("scripts/manifest-link"))
-        .expect("restore tracked link");
     fs::rename(repo.join("scripts"), repo.join("scripts-real")).expect("move original directory");
     std::os::unix::fs::symlink("scripts-real", repo.join("scripts"))
         .expect("substitute parent link");
