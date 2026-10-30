@@ -78,7 +78,7 @@ rust-audit:
 # which runs tests/feature_matrix.rs (TC-190), which runs this target.
 # The derivation is a `$(shell)` so `make -n` prints the commands without
 # running them; an empty or failed derivation is an error, not a pass. Cargo
-# parallelism is pinned by CARGO_BUILD_JOBS, so no `+` jobserver prefix (it
+# parallelism is set by CARGO_BUILD_JOBS, so no `+` jobserver prefix (it
 # would make `make -n` execute the cargo lines).
 EA_FEATURES = $(shell $(CARGO) metadata --no-deps --format-version 1 --locked 2>/dev/null | python3 -c 'import json,sys; p=next(p for p in json.load(sys.stdin)["packages"] if p["name"]=="engineering-assurance"); [print(f) for f in sorted(p["features"]) if f not in ("default","full")]' 2>/dev/null)
 

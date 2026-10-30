@@ -31,7 +31,7 @@
     },
     {
       "class": "immutable-x-metadata",
-      "version": "2.0.0-beta+exp.sha.5114f85",
+      "version": "2.0.0-beta+exp.build.5114",
       "prior_errors": ["identity-version-mutable"],
       "accepted_errors": [],
       "policy_changed": true

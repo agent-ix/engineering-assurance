@@ -49,7 +49,7 @@ TASK-008 ownership registry
   required references, producer tuples, version refusal, report shape, and all
   non-success states.
 - Mutation-style negative fixtures remove or alter each required premise.
-- PGM-01 fixture tests hash every input before and after mapping.
+- PGM-01 fixture tests compare every input byte-for-byte before and after mapping.
 - Rust, TypeScript, and Python fixtures are deterministic projections of one
   canonical JSON fixture and compare semantically.
 - Static tests inspect the package for execution, persistence, generic scraping,

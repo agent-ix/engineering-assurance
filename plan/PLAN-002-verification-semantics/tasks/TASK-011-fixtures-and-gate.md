@@ -1,6 +1,6 @@
 ---
 id: TASK-011
-title: "Seal compatibility fixtures and the issue #5 gate"
+title: "Finalize compatibility fixtures and the issue #5 gate"
 type: Task
 status: done
 relationships:
@@ -10,7 +10,7 @@ relationships:
     type: references
 ---
 
-# TASK-011: Seal compatibility fixtures and the issue #5 gate
+# TASK-011: Finalize compatibility fixtures and the issue #5 gate
 
 ## Objective
 

@@ -183,7 +183,7 @@ quoin report
 
 Corpus gaps: not_computed
 
-- 2026-09-23T12:00:00.000Z — juniper retention harness 1.0.0; source aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; corpus n/a
+- 2026-09-23T12:00:00.000Z — juniper retention harness 1.0.0
 
 ## Attention
 

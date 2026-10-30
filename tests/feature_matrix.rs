@@ -164,7 +164,7 @@ const BINARY_ONLY_CRATES: [&str; 6] = ["cap-std", "clap", "tar", "zip", "flate2"
 
 /// Features whose code needs `serde_json/arbitrary_precision`, measured by
 /// running `evidence_parity` and `semantics_parity` with and without it:
-/// large integers change identity digests and `1e309` stops being refused.
+/// large integers change classification and `1e309` stops being refused.
 /// `evaluation` and `evaluation-reports` reach it through `evidence`. The
 /// `exact-numbers` feature is the switch itself, and `full` includes it.
 const EXACT_NUMBERS: [&str; 6] = [

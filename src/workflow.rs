@@ -164,7 +164,7 @@ impl Serialize for WorkflowKind {
 pub struct WorkflowBinding {
     /// Stable ix-flow run identifier.
     pub run_id: String,
-    /// Repository and revision identity governed by the run.
+    /// Repository identity governed by the run.
     pub repository_id: String,
     /// Canonical Engineering Assurance workflow name.
     pub workflow: String,
@@ -502,7 +502,7 @@ mod tests {
             "ix_flow_executable": "ix-flow",
             "binding": {
                 "run_id": "run-1",
-                "repository_id": "example@revision",
+                "repository_id": "example",
                 "workflow": "architecture-evaluation",
                 "workflow_version": "0.1.0",
                 "decision_boundary": "one boundary",
@@ -538,7 +538,7 @@ mod tests {
     fn tc_003_a_terminal_run_cannot_be_bound_without_a_named_human_owner() {
         let named = WorkflowBinding {
             run_id: "named-owner-run".to_owned(),
-            repository_id: "fictional-repository@revision-1".to_owned(),
+            repository_id: "fictional-repository".to_owned(),
             workflow: "architecture-evaluation".to_owned(),
             workflow_version: "0.1.0".to_owned(),
             decision_boundary: "one fictional boundary".to_owned(),

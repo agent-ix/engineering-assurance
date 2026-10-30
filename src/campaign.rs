@@ -369,8 +369,8 @@ fn validate_input_origins(
     procedure: &MeasurementProcedure,
     inputs: &BTreeSet<&str>,
 ) -> Result<(), CampaignError> {
-    // Absence preserves the pre-origin contract while current source-pinned
-    // Campaigns migrate. A present declaration is always a complete inventory.
+    // Absence preserves the pre-origin contract while current
+    // campaigns migrate. A present declaration is always a complete inventory.
     let Some(origins) = &procedure.input_origins else {
         return Ok(());
     };

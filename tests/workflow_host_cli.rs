@@ -57,7 +57,7 @@ fn skill_root() -> PathBuf {
 fn binding(run_id: &str) -> Value {
     json!({
         "run_id": run_id,
-        "repository_id": "fictional-repository@revision-1",
+        "repository_id": "fictional-repository",
         "workflow": "architecture-evaluation",
         "workflow_version": "0.1.0",
         "decision_boundary": "one fictional architecture boundary",
@@ -530,7 +530,7 @@ fn tc_107_binding_and_phase_refusals_leave_ix_flow_history_unchanged() {
     // the contamination the criterion names — each was refused by code no
     // assertion reached.
     for (field, value) in [
-        ("repository_id", "other@revision"),
+        ("repository_id", "other"),
         ("decision_boundary", "a different architecture boundary"),
         ("workflow_version", "0.1.1"),
         ("workflow", "assurance-intake"),
@@ -775,7 +775,7 @@ fn tc_107_unavailable_and_malformed_inputs_fail_before_state() {
 fn promotion_binding(run_id: &str) -> Value {
     json!({
         "run_id": run_id,
-        "repository_id": "fictional-repository@revision-1",
+        "repository_id": "fictional-repository",
         "workflow": "measurement-promotion",
         "workflow_version": "0.1.0",
         "decision_boundary": "one fictional measurement promotion",

@@ -41,7 +41,7 @@ evidence, workflow, resume, and decision boundaries; then close traceability for
 
 - Implement TC-001..TC-003 and TC-038 as the top-level E2E/parity assertions.
 - Execute IT-001..IT-004 from isolated local-source and repository-source installs.
-- Compare canonical content digests across all four hosts and both sources.
+- Compare canonical file bytes across all four hosts and both sources.
 - Run content-rights, Ruff, pytest, manifest validation, package audit, Quire
   validation, all required evals, and gap analysis.
 

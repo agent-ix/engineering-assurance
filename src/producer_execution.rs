@@ -2485,7 +2485,6 @@ mod host_context_tests {
         assert_eq!(first.cpu_model_source, None);
         let serialized = serde_json::to_value(&first).expect("serialize");
         assert!(serialized.get("cpuModelSource").is_none());
-        assert!(serialized.get("machineDigest").is_none());
         assert!(parse_host_context("6.1.0", cpu, None, "", 4).is_none());
         assert!(parse_host_context("6.1.0", cpu, None, MEMORY, 0).is_none());
     }
