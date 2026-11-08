@@ -189,7 +189,9 @@ implemented and reviewed.
 | FR-026 | FR-026-AC-5 | TC-170 | ✅ Skeleton carries all three steering fields with an advisory-only section, no warning |
 | FR-026 | FR-026-AC-6 | TC-142 | ✅ Minimal `measurement` consumer reaches the steering-field accessors without `serde_json` |
 | FR-027 | FR-027-AC-1 | TC-206 | ✅ Atomic publish creation and sidecar-cleanup cases passing |
-| FR-027 | FR-027-AC-2 | TC-207 | ✅ Identical, different, directory, symlink and pre-commit-race collision cases passing |
+| FR-027 | FR-027-AC-2 | TC-207, TC-213 | ✅ Identical, different, directory, symlink, pre-commit-race and concurrent-writer cases passing |
+| FR-027 | FR-027-AC-4 | TC-211 | ✅ Written, already-present and collision outcome cases passing |
+| FR-027 | FR-027-AC-5 | TC-212 | ✅ Durable publish on written and already-present paths passing; Windows compile-checked |
 
 ### Non-Functional Requirement Coverage
 
@@ -405,6 +407,9 @@ implemented and reviewed.
 | TC-205 | Every TC id named by a requirement coverage row has a Test Case Summary row, matching rows whatever their cell padding, with no allowlist of exceptions; a synthetic coverage row naming an absent TC is detected | Static | P1 | NFR-005-AC-5 | ✅ `tests/python_port/module.rs` matrix-integrity case passing |
 | TC-206 | Publishing bytes to an absent destination creates it with exactly those bytes, and no `.tmp-` sidecar remains in the directory | Unit | P0 | FR-027-AC-1 | ✅ `src/atomic_publish.rs` passing |
 | TC-207 | Publishing over an identical existing file succeeds and leaves it untouched; over a different file, a directory or a symbolic link it returns the typed collision with the destination unchanged; a destination appearing before the commit step is handled the same way; the sidecar is removed in every case | Unit | P0 | FR-027-AC-2 | ✅ `src/atomic_publish.rs` passing |
+| TC-211 | A publish into an absent destination reports `Written`; repeating it, or a destination appearing before the commit step with identical bytes, reports `AlreadyPresent`; differing bytes remain the typed collision | Unit | P0 | FR-027-AC-4 | ✅ `src/atomic_publish.rs` passing |
+| TC-212 | A publish with the sidecar and parent-directory flushes succeeds on the written and the already-present path for a nested destination, with no sidecar left; the Windows path compiles under `cargo check --target x86_64-pc-windows-msvc` and is not executed here | Unit | P0 | FR-027-AC-5 | ✅ `src/atomic_publish.rs` passing; Windows compile-checked only |
+| TC-213 | Eight concurrent writers of differing bytes yield exactly one `Written` and seven collisions with one writer's bytes intact; eight writers of identical bytes yield exactly one `Written` and no error | Unit | P0 | FR-027-AC-2 | ✅ `src/atomic_publish.rs` passing |
 
 ## Option Permutation Matrix
 
