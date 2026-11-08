@@ -167,6 +167,11 @@ path = "tests/producer_execution.rs"
 required-features = ["producer-execution"]
 
 [[test]]
+name = "scope_footprint"
+path = "tests/scope_footprint.rs"
+required-features = ["full"]
+
+[[test]]
 name = "semantic_exports"
 path = "tests/semantic_exports.rs"
 required-features = ["full"]
@@ -327,6 +332,10 @@ onboarding = [
 package-audit = ["dep:serde", "dep:serde_json", "dep:thiserror"]
 package-lifecycle = ["dep:serde", "dep:serde_json", "dep:thiserror"]
 package-membership = ["dep:serde", "dep:thiserror"]
+# FR-032: pure declared-scope versus change-footprint verification. It borrows
+# the normalized-relative-path rule of `content-rights`, so it adds no second
+# validator; the git adapter lives in the binary.
+scope-footprint = ["content-rights", "dep:serde", "dep:thiserror"]
 semantics = [
   "claim-strength",
   "exact-numbers",
@@ -369,6 +378,7 @@ full = [
   "package-lifecycle",
   "package-membership",
   "producer-execution",
+  "scope-footprint",
   "semantics",
   "source-audit",
   "structured-yaml",

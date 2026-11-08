@@ -289,6 +289,7 @@ protocol is versioned and documented by the schemas under
 | `package-audit` / `package-lifecycle` | Audit private distributions and stage or refuse npm publication. |
 | `workflow-invariants` | Evaluate a closed workflow projection against named invariants. |
 | `producer-execute` | Run one bounded producer-execution request (`--request <json>` or `-`) and print the canonical result line; `--schema request\|result` prints the published schemas. |
+| `scope-footprint` | Compare a declared change scope with the changed paths between two git revisions (`--request <json>` or `-`) and print a `complete`, `false_scope` or `incomplete` verdict. |
 
 Run `engineering-assurance --help` or
 `engineering-assurance <command> --help` for argument details. Maintainer-only

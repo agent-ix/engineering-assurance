@@ -532,7 +532,11 @@ fn suffix(path: &str) -> String {
     }
 }
 
-fn is_normalized_relative_path(path: &str) -> bool {
+/// Reports whether `path` is a normalized repository-relative POSIX path:
+/// non-empty, not absolute, without `.`, `..` or empty segments, a backslash,
+/// a control character or a trailing slash, and not led by a drive prefix.
+#[must_use]
+pub fn is_normalized_relative_path(path: &str) -> bool {
     if path.is_empty()
         || path.starts_with('/')
         || path.ends_with('/')
