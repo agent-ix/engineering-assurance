@@ -24,7 +24,7 @@ Ticket: EA-79. The coder wrote the spec by hand without the spec skills, so this
 | FND-002 | medium | The published schemas carry neither `$schema` nor `$id`, yet FR-029 promises draft 2020-12 documents, and the repo's other published schema declares both. A consumer validator would guess the dialect. Add both, with $id under schemas.agent-ix.org/agent-ix/engineering-assurance/. | src/producer_execute_schemas/*.json | wrong-requirement |
 | FND-003 | low | The result schema was only ever checked against a `containment_failure` line on non-Linux hosts, so the `completed` and `failed` shapes and the `process` object were untested there. Added a test that serializes completed and failed results with the real library encoder and validates them against the schema on every host. Added an oversized-stdin case for `producer_execute_request_unreadable`, which FR-029 states and TC-215 did not exercise. | tests/producer_execute_cli.rs | correct-requirement-no-evidence |
 | FND-004 | low | The FR-029 index entry sat between FR-019 and FR-020, out of order. Moved after FR-027. | spec/spec.md | wrong-requirement |
-| FND-005 | info | FR-029-AC-1 and AC-3 each bundle several outcomes in one criterion. Acceptable because each is one test, but a split would make failures attributable. Not changed. | spec/functional/FR-029-producer-execute-command.md | wrong-requirement |
+| FND-005 | low | FR-029-AC-1 and AC-3 each bundle several outcomes in one criterion. Acceptable because each is one test, but a split would make failures attributable. Not changed. | spec/functional/FR-029-producer-execute-command.md | wrong-requirement |
 
 ## Verdict
 

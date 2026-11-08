@@ -20,10 +20,10 @@ Ticket: EA-79. Reviewed the PR diff only, with rust-style loaded. The adapter ow
 
 | ID | Severity | Summary | Refs | Escape Cause |
 | --- | --- | --- | --- | --- |
-| FND-001 | low | The capability constant was declared out of alphabetical order next to its neighbours. Moved. | src/main.rs | other |
-| FND-002 | low | The schemas lacked `$schema` and `$id` (see SR-16302 FND-002). Fixed. | src/producer_execute_schemas | other |
+| FND-001 | low | The capability constant was declared out of alphabetical order next to its neighbours. Moved. | src/main.rs | wrong-requirement |
+| FND-002 | low | The schemas lacked `$schema` and `$id` (see SR-16302 FND-002). Fixed. | src/producer_execute_schemas | wrong-requirement |
 | FND-003 | low | The oversized-stdin path and the completed and failed result shapes had no test off Linux. Added. | tests/producer_execute_cli.rs | correct-requirement-no-evidence |
-| FND-004 | info | Exit 0 for every closed state is consistent with FR-029 and FR-028, and the consumer reads the `state` field. A `Signal` terminal status in the adapter returns MalformedResponse, which the executor reaches only for admitted exits, so the arm is defensive. No change. | src/producer_execute_host.rs | other |
+| FND-004 | low | Exit 0 for every closed state is consistent with FR-029 and FR-028, and the consumer reads the `state` field. A `Signal` terminal status in the adapter returns MalformedResponse, which the executor reaches only for admitted exits, so the arm is defensive. No change. | src/producer_execute_host.rs | wrong-requirement |
 
 ## Verdict
 
