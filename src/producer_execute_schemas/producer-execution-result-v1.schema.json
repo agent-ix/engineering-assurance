@@ -1,0 +1,454 @@
+{
+  "type": "object",
+  "properties": {
+    "protocol": {
+      "const": "engineering-assurance.producer-execution-result/v1"
+    },
+    "producer": {
+      "$ref": "#/$defs/producer"
+    },
+    "cancellationEvent": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/cancellation"
+        }
+      ]
+    },
+    "timing": {
+      "type": "object",
+      "properties": {
+        "preflightNanos": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "executionNanos": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "totalNanos": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "preflightNanos",
+        "executionNanos",
+        "totalNanos"
+      ],
+      "additionalProperties": false
+    },
+    "observedHost": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "os": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kernelRelease": {
+              "type": "string",
+              "minLength": 1
+            },
+            "architecture": {
+              "type": "string",
+              "minLength": 1
+            },
+            "cpuModel": {
+              "type": "string",
+              "minLength": 1
+            },
+            "cpuModelSource": {
+              "const": "arm_cpu_id"
+            },
+            "logicalCpus": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "memoryBytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "runtimeClass": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "os",
+            "kernelRelease",
+            "architecture",
+            "cpuModel",
+            "logicalCpus",
+            "memoryBytes",
+            "runtimeClass"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "process": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "terminalStatus": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "exit_code",
+                        "signal"
+                      ]
+                    },
+                    "value": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "stdout": {
+              "type": "object",
+              "properties": {
+                "bytes": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  }
+                },
+                "truncated": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "bytes",
+                "truncated"
+              ],
+              "additionalProperties": false
+            },
+            "stderr": {
+              "type": "object",
+              "properties": {
+                "bytes": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  }
+                },
+                "truncated": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "bytes",
+                "truncated"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "terminalStatus",
+            "stdout",
+            "stderr"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "minLength": 1
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "byteLength": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "role",
+          "path",
+          "byteLength"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "state": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "unavailable"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "timed_out"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "malformed_response"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "containment_failure"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "cancelled"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "refused"
+            },
+            "reason": {
+              "enum": [
+                "executable",
+                "capability_root",
+                "input",
+                "output",
+                "adapter_binding",
+                "cancellation_binding",
+                "concurrency"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "failed"
+            },
+            "reason": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "exit_code",
+                        "signal"
+                      ]
+                    },
+                    "value": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "stdout_too_large",
+                        "stderr_too_large",
+                        "observation",
+                        "output_artifact"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "completed"
+            },
+            "observation": {
+              "type": "object",
+              "properties": {
+                "exitCode": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "exitCode"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "kind",
+            "observation"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "required": [
+    "protocol",
+    "producer",
+    "cancellationEvent",
+    "timing",
+    "observedHost",
+    "process",
+    "artifacts",
+    "state"
+  ],
+  "additionalProperties": false,
+  "title": "engineering-assurance.producer-execution-result/v1",
+  "description": "JSON Schema (draft 2020-12). Result line written by `engineering-assurance producer-execute`, serialized as RFC 8785 canonical JSON. Only the `completed` state carries an observation.",
+  "$defs": {
+    "producer": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "executable": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "executable"
+      ],
+      "additionalProperties": false
+    },
+    "cancellation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "disabled"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "event"
+            },
+            "authority": {
+              "type": "string",
+              "minLength": 1
+            },
+            "event_id": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "kind",
+            "authority",
+            "event_id"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}
