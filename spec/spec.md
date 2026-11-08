@@ -178,6 +178,8 @@ same canonical bundle and do not redefine these responsibilities.
   on a MeasurementPlan objective, advisory only and never a gate.
 - [FR-027](./functional/FR-027-atomic-publish.md) —
   publish evidence files without replacement.
+- [FR-029](./functional/FR-029-producer-execute-command.md) — expose the FR-019 executor as a
+  versioned `producer-execute` CLI command with published request and result schemas.
 
 ### Non-Functional Requirements
 

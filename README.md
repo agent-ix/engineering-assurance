@@ -288,6 +288,7 @@ protocol is versioned and documented by the schemas under
 | `evaluation-aggregate` | Build a retained evaluation aggregate. |
 | `package-audit` / `package-lifecycle` | Audit private distributions and stage or refuse npm publication. |
 | `workflow-invariants` | Evaluate a closed workflow projection against named invariants. |
+| `producer-execute` | Run one bounded producer-execution request (`--request <json>` or `-`) and print the canonical result line; `--schema request\|result` prints the published schemas. |
 
 Run `engineering-assurance --help` or
 `engineering-assurance <command> --help` for argument details. Maintainer-only

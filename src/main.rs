@@ -18,6 +18,7 @@ mod package_audit_host;
 mod package_host;
 mod package_install;
 mod process_host;
+mod producer_execute_host;
 mod workflow_host;
 
 use std::{
@@ -47,6 +48,7 @@ const ONBOARDING_CAPABILITY: &str = "onboarding";
 const ONBOARD_REPORT_CAPABILITY: &str = "onboard-report";
 const PACKAGE_AUDIT_CAPABILITY: &str = "package-audit";
 const PACKAGE_LIFECYCLE_CAPABILITY: &str = "package-lifecycle";
+const PRODUCER_EXECUTE_CAPABILITY: &str = "producer-execute";
 const WORKFLOW_INVARIANTS_CAPABILITY: &str = "workflow-invariants";
 const WORKFLOW_HOST_CAPABILITY: &str = "workflow-host";
 const MAX_STDIN_BYTES: usize = 8 * 1024 * 1024;
@@ -114,6 +116,7 @@ fn command() -> Command {
                         .required(true),
                 ),
         )
+        .subcommand(producer_execute_command())
         .subcommand(
             Command::new(WORKFLOW_INVARIANTS_CAPABILITY)
                 .about("Evaluate a closed workflow projection against named invariants"),
@@ -139,6 +142,26 @@ fn command() -> Command {
                         .about("Unconditionally refuse public npm publication")
                         .arg(npm_hook_arg()),
                 ),
+        )
+}
+
+fn producer_execute_command() -> Command {
+    Command::new(PRODUCER_EXECUTE_CAPABILITY)
+        .about("Run one bounded producer-execution request and print the canonical result")
+        .arg(
+            Arg::new("request")
+                .long("request")
+                .value_name("JSON")
+                .help("Producer-execution request document, or - to read it from stdin")
+                .required_unless_present("schema")
+                .conflicts_with("schema"),
+        )
+        .arg(
+            Arg::new("schema")
+                .long("schema")
+                .value_name("KIND")
+                .value_parser(["request", "result"])
+                .help("Print the published request or result JSON Schema"),
         )
 }
 
@@ -228,6 +251,7 @@ fn main() -> ExitCode {
         Some((MANIFEST_VALIDATE_CAPABILITY, arguments)) => run_manifest_validate(arguments),
         Some((ONBOARDING_CAPABILITY, _)) => run_onboarding(),
         Some((PACKAGE_AUDIT_CAPABILITY, arguments)) => run_package_audit(arguments),
+        Some((PRODUCER_EXECUTE_CAPABILITY, arguments)) => run_producer_execute(arguments),
         Some((WORKFLOW_INVARIANTS_CAPABILITY, _)) => run_workflow_invariants(),
         Some((WORKFLOW_HOST_CAPABILITY, _)) => run_workflow_host(),
         Some((PACKAGE_LIFECYCLE_CAPABILITY, arguments)) => run_package_lifecycle(arguments),
@@ -618,6 +642,57 @@ fn run_workflow_host() -> ExitCode {
             }
         },
         Err(error) => emit_error(WORKFLOW_HOST_CAPABILITY, error.code(), &error.to_string()),
+    }
+}
+
+fn run_producer_execute(arguments: &ArgMatches) -> ExitCode {
+    let output = if let Some(kind) = arguments
+        .get_one::<String>("schema")
+        .and_then(|value| producer_execute_host::SchemaKind::parse(value))
+    {
+        kind.document().to_vec()
+    } else {
+        let Some(request) = arguments.get_one::<String>("request") else {
+            return emit_error(
+                PRODUCER_EXECUTE_CAPABILITY,
+                "producer_execute_request_unreadable",
+                "producer-execute requires --request or --schema",
+            );
+        };
+        let bytes = if request == "-" {
+            match read_stdin(
+                PRODUCER_EXECUTE_CAPABILITY,
+                "producer_execute_request_unreadable",
+            ) {
+                Ok(bytes) => bytes,
+                Err(exit_code) => return exit_code,
+            }
+        } else if request.len() > MAX_STDIN_BYTES {
+            return emit_error(
+                PRODUCER_EXECUTE_CAPABILITY,
+                "producer_execute_request_unreadable",
+                "producer-execute request exceeds the input limit",
+            );
+        } else {
+            request.clone().into_bytes()
+        };
+        match producer_execute_host::execute(&bytes) {
+            Ok(line) => line,
+            Err(error) => {
+                return emit_error(
+                    PRODUCER_EXECUTE_CAPABILITY,
+                    error.code(),
+                    &error.to_string(),
+                );
+            }
+        }
+    };
+    match ix_cli_kit::streams::write_primary_stdout(&output) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("failed to write producer-execute output: {error}");
+            ExitCode::from(2)
+        }
     }
 }
 
