@@ -10,6 +10,10 @@ use std::{
     process::{Command, Output, Stdio},
 };
 
+use engineering_assurance::producer_execution::{
+    CapturedStream, ExecutionFailure, ExecutionTiming, ProcessEvidence, ProducerDescriptor,
+    ProducerExecutionResult, ProducerExecutionState, TerminalStatus,
+};
 use ix_trace_rs::trace;
 use serde_json::{Value, json};
 
@@ -278,4 +282,69 @@ fn tc_218_binary_runs_from_an_unrelated_directory_with_empty_environment() {
         value["protocol"],
         "engineering-assurance.producer-execution-result/v1"
     );
+}
+
+/// Serializes results with the real library encoder so the `completed` and
+/// `failed` shapes are checked against the published schema on every host.
+#[trace("TC-217", "FR-029-AC-4")]
+#[test]
+fn tc_217_result_schema_accepts_completed_and_failed_serializer_output() {
+    let result_schema = validator(RESULT_SCHEMA);
+    let process = || ProcessEvidence {
+        terminal_status: Some(TerminalStatus::ExitCode(0)),
+        stdout: CapturedStream {
+            bytes: b"hello".to_vec(),
+            truncated: false,
+        },
+        stderr: CapturedStream {
+            bytes: Vec::new(),
+            truncated: false,
+        },
+    };
+    let result = |state| ProducerExecutionResult {
+        protocol: "engineering-assurance.producer-execution-result/v1",
+        producer: ProducerDescriptor {
+            name: "p".to_owned(),
+            version: "1".to_owned(),
+            executable: "/bin/p".to_owned(),
+        },
+        cancellation_event: None,
+        timing: ExecutionTiming {
+            preflight_nanos: 1,
+            execution_nanos: Some(2),
+            total_nanos: 3,
+        },
+        observed_host: None,
+        process: Some(process()),
+        artifacts: Vec::new(),
+        state,
+    };
+    let completed = result(ProducerExecutionState::Completed {
+        observation: json!({"exitCode": 0}),
+    });
+    let failed = result(ProducerExecutionState::<Value>::Failed {
+        reason: ExecutionFailure::ExitCode(3),
+    });
+    for document in [completed.canonical_bytes(), failed.canonical_bytes()] {
+        let value: Value = serde_json::from_slice(&document.expect("canonical")).expect("json");
+        assert!(result_schema.is_valid(&value), "{value}");
+    }
+}
+
+#[trace("TC-215", "FR-029-AC-2")]
+#[test]
+fn tc_215_oversized_stdin_request_is_unreadable() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
+        .args(["producer-execute", "--request", "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("CLI must start");
+    let mut stdin = child.stdin.take().expect("stdin");
+    // The CLI stops reading at its limit, so a write error after that is expected.
+    let _ = stdin.write_all(&vec![b' '; 8 * 1024 * 1024 + 1024]);
+    drop(stdin);
+    let output = child.wait_with_output().expect("CLI must terminate");
+    assert_eq!(error_code(&output), "producer_execute_request_unreadable");
 }

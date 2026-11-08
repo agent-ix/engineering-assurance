@@ -159,8 +159,6 @@ same canonical bundle and do not redefine these responsibilities.
   executable paths after local parity and direct-invocation cutover.
 - [FR-019](./functional/FR-019-bounded-producer-execution.md) — execute an exact
   caller-declared producer through one bounded public Rust library boundary.
-- [FR-029](./functional/FR-029-producer-execute-command.md) — expose that executor as a
-  versioned `producer-execute` CLI command with published request and result schemas.
 - [FR-020](./functional/FR-020-measurement-plan-objective.md) — declare a
   MeasurementPlan's objective direction and bound as part of its definition.
 - [FR-021](./functional/FR-021-measurement-plan-decision-rule.md) — declare a
@@ -180,6 +178,8 @@ same canonical bundle and do not redefine these responsibilities.
   on a MeasurementPlan objective, advisory only and never a gate.
 - [FR-027](./functional/FR-027-atomic-publish.md) —
   publish evidence files without replacement.
+- [FR-029](./functional/FR-029-producer-execute-command.md) — expose the FR-019 executor as a
+  versioned `producer-execute` CLI command with published request and result schemas.
 
 ### Non-Functional Requirements
 

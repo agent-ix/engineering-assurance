@@ -192,11 +192,11 @@ implemented and reviewed.
 | FR-027 | FR-027-AC-2 | TC-207, TC-213 | ✅ Identical, different, directory, symlink, pre-commit-race and concurrent-writer cases passing |
 | FR-027 | FR-027-AC-4 | TC-211 | ✅ Written, already-present and collision outcome cases passing |
 | FR-027 | FR-027-AC-5 | TC-212 | ✅ Durable publish on written and already-present paths passing; Windows compile-checked |
-| FR-029 | FR-029-AC-1 | TC-214 | ✅ `tests/producer_execute_cli.rs` passing (completed-state assertions run on Linux only) |
-| FR-029 | FR-029-AC-2 | TC-215 | ✅ `tests/producer_execute_cli.rs` passing (completed-state assertions run on Linux only) |
-| FR-029 | FR-029-AC-3 | TC-216 | ✅ `tests/producer_execute_cli.rs` passing (completed-state assertions run on Linux only) |
-| FR-029 | FR-029-AC-4 | TC-217 | ✅ `tests/producer_execute_cli.rs` passing (completed-state assertions run on Linux only) |
-| FR-029 | FR-029-AC-5 | TC-218 | ✅ `tests/producer_execute_cli.rs` passing (completed-state assertions run on Linux only) |
+| FR-029 | FR-029-AC-1 | TC-214 | ✅ `tests/producer_execute_cli.rs` passing (completed-state assertions run on Linux only; not executed on the macOS authoring host) |
+| FR-029 | FR-029-AC-2 | TC-215 | ✅ `tests/producer_execute_cli.rs` passing (host-independent) |
+| FR-029 | FR-029-AC-3 | TC-216 | ✅ `tests/producer_execute_cli.rs` passing (`timed_out` assertion runs on Linux only; not executed on the macOS authoring host) |
+| FR-029 | FR-029-AC-4 | TC-217 | ✅ `tests/producer_execute_cli.rs` passing (live result-line schema check sees `containment_failure` off Linux; the `completed` and `failed` shapes are checked against the real serializer) |
+| FR-029 | FR-029-AC-5 | TC-218 | ✅ `tests/producer_execute_cli.rs` passing (completed-state check is Linux only; off Linux the same run reports `containment_failure`) |
 
 ### Non-Functional Requirement Coverage
 
@@ -415,11 +415,11 @@ implemented and reviewed.
 | TC-211 | A publish into an absent destination reports `Written`; repeating it, or a destination appearing before the commit step with identical bytes, reports `AlreadyPresent`; differing bytes remain the typed collision | Unit | P0 | FR-027-AC-4 | ✅ `src/atomic_publish.rs` passing |
 | TC-212 | A publish with the sidecar and parent-directory flushes succeeds on the written and the already-present path for a nested destination, with no sidecar left; the Windows path compiles under `cargo check --target x86_64-pc-windows-msvc` and is not executed here | Unit | P0 | FR-027-AC-5 | ✅ `src/atomic_publish.rs` passing; Windows compile-checked only |
 | TC-213 | Eight concurrent writers of differing bytes yield exactly one `Written` and seven collisions with one writer's bytes intact; eight writers of identical bytes yield exactly one `Written` and no error | Unit | P0 | FR-027-AC-2 | ✅ `src/atomic_publish.rs` passing |
-| TC-214 | A valid fictional Rust producer request run through the real binary prints one newline-terminated canonical result line (protocol, provenance, timing, process evidence, `completed` state with the exit-code observation on Linux), exits 0, and the line equals its RFC 8785 canonicalization | Integration | P0 | FR-029-AC-1 | ✅ `tests/producer_execute_cli.rs` passing (completed-state assertions run on Linux only) |
-| TC-215 | Unreadable, non-conforming, unknown-field and structurally invalid requests each produce the matching typed machine error and exit 2 with no producer launch | Integration | P0 | FR-029-AC-2 | ✅ `tests/producer_execute_cli.rs` passing (completed-state assertions run on Linux only) |
-| TC-216 | A foreign response binding is refused with reason `adapter_binding`, and an unavailable producer and a timed-out producer keep their own closed states, each at exit 0 | Integration | P0 | FR-029-AC-3 | ✅ `tests/producer_execute_cli.rs` passing (completed-state assertions run on Linux only) |
-| TC-217 | `--schema request` and `--schema result` print the published schemas; the request schema accepts the real request and refuses a mutant per required field; the result schema accepts the real result line | Integration | P0 | FR-029-AC-4 | ✅ `tests/producer_execute_cli.rs` passing (completed-state assertions run on Linux only) |
-| TC-218 | The installed binary runs a request from an unrelated directory with an empty environment | E2E | P0 | FR-029-AC-5 | ✅ `tests/producer_execute_cli.rs` passing (completed-state assertions run on Linux only) |
+| TC-214 | A valid fictional Rust producer request run through the real binary prints one newline-terminated canonical result line (protocol, provenance, timing, process evidence, `completed` state with the exit-code observation on Linux), exits 0, and the line equals its RFC 8785 canonicalization | Integration | P0 | FR-029-AC-1 | ✅ `tests/producer_execute_cli.rs` passing (completed-state assertions run on Linux only; not executed on the macOS authoring host) |
+| TC-215 | Unreadable, oversized-stdin, non-conforming, unknown-field and structurally invalid requests each produce the matching typed machine error and exit 2 with no producer launch | Integration | P0 | FR-029-AC-2 | ✅ `tests/producer_execute_cli.rs` passing (host-independent) |
+| TC-216 | A foreign response binding is refused with reason `adapter_binding`, and an unavailable producer and a timed-out producer keep their own closed states, each at exit 0 | Integration | P0 | FR-029-AC-3 | ✅ `tests/producer_execute_cli.rs` passing (`timed_out` assertion runs on Linux only; not executed on the macOS authoring host) |
+| TC-217 | `--schema request` and `--schema result` print the published schemas; the request schema accepts the real request and refuses a mutant per required field; the result schema accepts the real result line | Integration | P0 | FR-029-AC-4 | ✅ `tests/producer_execute_cli.rs` passing (live result-line schema check sees `containment_failure` off Linux; the `completed` and `failed` shapes are checked against the real serializer) |
+| TC-218 | The installed binary runs a request from an unrelated directory with an empty environment | E2E | P0 | FR-029-AC-5 | ✅ `tests/producer_execute_cli.rs` passing (completed-state check is Linux only; off Linux the same run reports `containment_failure`) |
 
 ## Option Permutation Matrix
 
