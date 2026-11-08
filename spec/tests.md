@@ -212,6 +212,14 @@ implemented and reviewed.
 | FR-031 | FR-031-AC-5 | TC-229 | ✅ Unbound, partial, non-regular and missing object refusals passing |
 | FR-031 | FR-031-AC-6 | TC-230 | ✅ Independent attempts and candidates passing |
 | IT-007 | IT-007-SC-01, IT-007-SC-02 | TC-231 | ✅ Real downstream consumer passing |
+| FR-032 | FR-032-AC-1 | TC-232 | ✅ `tests/scope_footprint.rs` passing |
+| FR-032 | FR-032-AC-2 | TC-233 | ✅ `tests/scope_footprint.rs` passing |
+| FR-032 | FR-032-AC-3 | TC-234 | ✅ `tests/scope_footprint.rs` passing |
+| FR-032 | FR-032-AC-4 | TC-235 | ✅ `tests/scope_footprint.rs` passing |
+| FR-032 | FR-032-AC-5 | TC-236 | ✅ `tests/scope_footprint.rs` passing |
+| FR-032 | FR-032-AC-6 | TC-237 | ✅ `tests/scope_footprint.rs` passing |
+| FR-032 | FR-032-AC-7 | TC-238 | ✅ `tests/scope_footprint.rs` passing |
+| FR-032 | FR-032-CON-1 | TC-234 | ✅ Truncated and unavailable footprints never complete |
 
 ### Non-Functional Requirement Coverage
 
@@ -448,6 +456,13 @@ implemented and reviewed.
 | TC-229 | An object under another attempt or candidate, a truncated object, a directory, a missing object and a symbolic link are refused | Integration | P0 | FR-031-AC-5 | ✅ `tests/integrator_package.rs` passing |
 | TC-230 | Attempts of one candidate and one attempt id under two candidates are independent verified objects | Integration | P0 | FR-031-AC-6 | ✅ `tests/integrator_package.rs` passing |
 | TC-231 | A downstream crate with only `integrator-package` compiles, publishes twice and reads back equal, and resolves no unrelated dependency | Integration | P0 | FR-030-AC-7, IT-007-SC-01, IT-007-SC-02 | ✅ `tests/integrator_package.rs` passing |
+| TC-232 | Exact file entries and directory prefixes covering every changed path yield `complete` with no uncovered path | Unit | P0 | FR-032-AC-1 | ✅ `tests/scope_footprint.rs` passing |
+| TC-233 | A path outside the scope, a textual-prefix sibling, and an out-of-scope path in a truncated footprint yield `false_scope` with sorted uncovered paths | Unit | P0 | FR-032-AC-2 | ✅ `tests/scope_footprint.rs` passing |
+| TC-234 | A truncated footprint with no uncovered path and an unavailable footprint yield `incomplete`, never `complete` | Unit | P0 | FR-032-AC-3, FR-032-CON-1 | ✅ `tests/scope_footprint.rs` passing |
+| TC-235 | Each malformed scope entry or changed path form, a duplicate entry and over-bound inputs are refused | Unit | P0 | FR-032-AC-4 | ✅ `tests/scope_footprint.rs` passing |
+| TC-236 | Unused scope entries are listed sorted and leave the status unchanged | Unit | P0 | FR-032-AC-5 | ✅ `tests/scope_footprint.rs` passing |
+| TC-237 | The real binary on a temporary git repository reports complete, false_scope with both rename paths, and incomplete for an unknown revision and a non-repository, each at exit 0 | Integration | P0 | FR-032-AC-6 | ✅ `tests/scope_footprint.rs` passing |
+| TC-238 | Unreadable and non-conforming requests, an invalid scope entry and a revision beginning with `-` yield machine errors at exit 2 | Integration | P0 | FR-032-AC-7 | ✅ `tests/scope_footprint.rs` passing |
 
 ## Option Permutation Matrix
 

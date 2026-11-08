@@ -188,6 +188,8 @@ same canonical bundle and do not redefine these responsibilities.
 - [FR-031](./functional/FR-031-integrator-package-publication.md) — publish an
   integrator package bound to its candidate, atomically and idempotently, with
   conflicts instead of winners.
+- [FR-032](./functional/FR-032-declared-scope-footprint-verification.md) — verify a declared
+  change scope against the candidate change footprint: complete, false scope or incomplete.
 
 ### Non-Functional Requirements
 

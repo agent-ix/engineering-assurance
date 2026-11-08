@@ -46,6 +46,7 @@
 //! | `package-lifecycle` | `package_lifecycle` | | `serde`, `serde_json`, `thiserror` |
 //! | `package-membership` | `package_membership` | | `serde`, `thiserror` |
 //! | `producer-execution` | `producer_execution` | | `rustix`, `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
+//! | `scope-footprint` | `scope_footprint` | `content-rights` | `serde`, `thiserror` |
 //! | `semantics` | `semantics` | `claim-strength`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
 //! | `source-audit` | `source_audit` | | `serde`, `syn`, `thiserror` |
 //! | `structured-yaml` | `structured_yaml` | | `serde_json`, `yaml_serde` |
@@ -91,6 +92,8 @@ pub mod package_lifecycle;
 pub mod package_membership;
 #[cfg(feature = "producer-execution")]
 pub mod producer_execution;
+#[cfg(feature = "scope-footprint")]
+pub mod scope_footprint;
 #[cfg(feature = "semantics")]
 pub mod semantics;
 #[cfg(feature = "source-audit")]
