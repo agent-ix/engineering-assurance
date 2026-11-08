@@ -155,6 +155,8 @@ required-features = ["full"]
 name = "producer_execute_cli"
 path = "tests/producer_execute_cli.rs"
 required-features = ["full"]
+
+[[test]]
 name = "integrator_package"
 path = "tests/integrator_package.rs"
 required-features = ["integrator-package"]

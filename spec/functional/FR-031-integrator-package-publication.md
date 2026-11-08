@@ -45,7 +45,7 @@ I/O-freedom audit.
   object SHALL be read back from the store and equal the published package.
 - Publishing identical bytes again SHALL succeed as `AlreadyPresent`.
 - Different bytes for an attempt that already holds a valid package SHALL NOT
-  be written. A link, directory or corrupt object at the path SHALL be reported
+  be written. Publish SHALL report a link, directory or corrupt object at the path
   as itself and SHALL NOT mark the attempt. The refused publisher SHALL record a conflict marker
   `<attempt>.conflict` beside the object. An attempt with a marker SHALL read
   and publish as a conflict for every caller, so neither version is presented
@@ -54,6 +54,12 @@ I/O-freedom audit.
   window is a documented limit, closed only by waiting for the known writers.
   The creating writer's own read-back reports the conflict if the marker is
   already present, so with non-identical writers at most one reports `Written`.
+  `Written` is therefore not a verdict. A lock held across the attempt cannot be
+  the fix, because a crashed writer would leave the attempt blocked for good, and
+  a claim-then-commit step cannot tell the first committer about a writer that
+  has not started. A consumer SHALL take the verdict of an attempt from the
+  strict read after every known writer has returned, which is a conflict whenever
+  any non-identical writer took part, whichever writer committed first.
 - Different attempts of one candidate, and different candidates, SHALL be
   independent objects.
 - The reader SHALL read an object only as a regular file (not a link or

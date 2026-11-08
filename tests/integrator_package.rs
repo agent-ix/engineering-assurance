@@ -143,7 +143,7 @@ fn tc_214_round_trip_preserves_every_fact_and_is_deterministic() {
 }
 
 #[test]
-#[trace("TC-220", "FR-030-AC-2")]
+#[trace("TC-220", "FR-030-AC-2", "FR-030-CON-1")]
 fn tc_215_open_and_negative_states_and_adopter_input_stay_as_written() {
     let read = read_package(&write_package(&package("a1")).expect("write")).expect("read");
     for state in [

@@ -28,6 +28,16 @@
 //!   with non-identical writers "at most one `Written`" is the guarantee, not
 //!   "exactly one".
 //!
+//!   The creating writer's own outcome cannot be made independent of timing
+//!   without a lock that every writer holds for the whole attempt. A lock file
+//!   is left behind by a crashed writer and would block the attempt for good,
+//!   and a claim-then-commit protocol still cannot tell the first committer
+//!   about a writer that has not started yet. So `Written` means only "this
+//!   writer committed the object"; it is not a verdict. The verdict for an
+//!   attempt is [`read_published`] after every known writer has returned: it is
+//!   a conflict when any non-identical writer took part, whichever writer
+//!   committed first and whatever each writer was told.
+//!
 //! This is a filesystem module (like `atomic_publish`), exempt from the
 //! FR-014-AC-4 I/O-freedom audit.
 

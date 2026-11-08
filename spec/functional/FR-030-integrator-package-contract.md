@@ -65,8 +65,8 @@ adopter owns. The module performs no I/O. Candidate-bound publication is
 - The reader SHALL refuse unknown fields and variants, duplicate keys, other
   protocol versions (older as a downgrade, newer as unsupported, other names as
   unknown) and any breach of the rules above.
-- The reader SHALL NOT default, repair, reorder or upgrade any content, and
-  SHALL NOT use a digest: integrity is the byte equality of the input with the
+- The reader SHALL NOT default, repair, reorder or upgrade any content.
+- The reader SHALL NOT use a digest: integrity is the byte equality of the input with the
   canonical re-encoding of what was parsed.
 - The writer SHALL apply the same rules.
 - The writer SHALL read its own output back through the reader, so it cannot
