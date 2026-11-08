@@ -1,6 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.agent-ix.org/agent-ix/engineering-assurance/producer-execution-request-v1.schema.json",
+  "$id": "urn:agent-ix:engineering-assurance:producer-execution-request:v1",
   "type": "object",
   "properties": {
     "protocol": {

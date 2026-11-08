@@ -35,7 +35,7 @@ Mergeable on the spec side after the fixes in 6aa635d. Unverified: the Linux-onl
 | FND | outcome | reason |
 | --- | --- | --- |
 | FND-001 | fixed | Per-row wording in spec/tests.md. |
-| FND-002 | fixed | `$schema` and `$id` added to both files. |
+| FND-002 | fixed | `$id` (URN) added to both files. `$schema` is omitted: the content-rights gate admits the draft URL only under schema directories, so the draft is stated in FR-029 and the validator defaults to 2020-12. |
 | FND-003 | fixed | Two tests added, both tagged. |
 | FND-004 | fixed | Entry moved. |
 | FND-005 | accepted | Left as is. |
