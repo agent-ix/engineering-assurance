@@ -33,6 +33,7 @@
 //! |---|---|---|---|
 //! | `atomic-publish` | `atomic_publish` | | `rustix`, `thiserror` |
 //! | `claim-strength` | `claim_strength` | | `serde` |
+//! | `integrator-package` | `integrator_package`, `integrator_package_store` | `atomic-publish` | `rustix`, `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
 //! | `content-rights` | `content_rights` | | `regex`, `serde`, `serde_json`, `thiserror`, `unicode-casefold` |
 //! | `discovery` | `discovery` | `workflow` | `serde`, `serde_json`, `thiserror` |
 //! | `evaluation` | `evaluation` | `evidence`, `workflow` (implies `exact-numbers`) | `serde`, `serde_json`, `thiserror`, `time` |
@@ -72,6 +73,10 @@ pub mod evaluation;
 pub mod evaluation_reports;
 #[cfg(feature = "evidence")]
 pub mod evidence;
+#[cfg(feature = "integrator-package")]
+pub mod integrator_package;
+#[cfg(feature = "integrator-package")]
+pub mod integrator_package_store;
 #[cfg(feature = "manifest")]
 pub mod manifest;
 #[cfg(feature = "measurement")]

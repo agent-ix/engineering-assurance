@@ -120,6 +120,8 @@ same canonical bundle and do not redefine these responsibilities.
   evidence states and inspect producer provenance.
 - [US-005](./usecase/US-005-correlate-definition-result-evidence.md) — correlate
   definitions, executions, results, evidence, reports, and decisions.
+- [US-006](./usecase/US-006-hand-off-source-facts-to-an-integrator.md) — hand source
+  facts to an integrator without closing the integrator's validation.
 
 ### Functional Requirements
 
@@ -180,6 +182,12 @@ same canonical bundle and do not redefine these responsibilities.
   publish evidence files without replacement.
 - [FR-029](./functional/FR-029-producer-execute-command.md) — expose the FR-019 executor as a
   versioned `producer-execute` CLI command with published request and result schemas.
+- [FR-030](./functional/FR-030-integrator-package-contract.md) — write and
+  strictly read the versioned integrator package, preserving source facts and
+  leaving adopter validation open.
+- [FR-031](./functional/FR-031-integrator-package-publication.md) — publish an
+  integrator package bound to its candidate, atomically and idempotently, with
+  conflicts instead of winners.
 
 ### Non-Functional Requirements
 
@@ -209,6 +217,8 @@ same canonical bundle and do not redefine these responsibilities.
   current and historical semantic fixtures without running producers.
 - [IT-006](./integration/IT-006-producer-execution-consumer.md) — verify that a
   real Rust consumer uses the bounded producer-execution library directly.
+- [IT-007](./integration/IT-007-integrator-package-consumer.md) — verify that a
+  real Rust consumer writes, publishes and reads an integrator package.
 
 ## Ownership Boundaries
 

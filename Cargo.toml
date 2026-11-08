@@ -157,6 +157,11 @@ path = "tests/producer_execute_cli.rs"
 required-features = ["full"]
 
 [[test]]
+name = "integrator_package"
+path = "tests/integrator_package.rs"
+required-features = ["integrator-package"]
+
+[[test]]
 name = "producer_execution"
 path = "tests/producer_execution.rs"
 required-features = ["producer-execution"]
@@ -216,6 +221,15 @@ default = []
 # `producer-execution` it is exempt from the FR-014-AC-4 I/O-freedom audit. The
 # publisher needs `thiserror` and `rustix` (O_NOFOLLOW).
 atomic-publish = ["dep:rustix", "dep:thiserror"]
+# FR-030/FR-031: the integrator-package contract and its candidate-bound store.
+# The store publishes through `atomic-publish`, so it is a filesystem module.
+integrator-package = [
+  "atomic-publish",
+  "dep:serde",
+  "dep:serde_json",
+  "dep:serde_json_canonicalizer",
+  "dep:thiserror",
+]
 producer-execution = [
   "dep:rustix",
   "dep:serde",
@@ -347,6 +361,7 @@ full = [
   "evaluation",
   "evaluation-reports",
   "evidence",
+  "integrator-package",
   "manifest",
   "measurement",
   "onboarding",
