@@ -197,6 +197,21 @@ implemented and reviewed.
 | FR-029 | FR-029-AC-3 | TC-216 | ✅ `tests/producer_execute_cli.rs` passing (`timed_out` assertion runs on Linux only; not executed on the macOS authoring host) |
 | FR-029 | FR-029-AC-4 | TC-217 | ✅ `tests/producer_execute_cli.rs` passing (live result-line schema check sees `containment_failure` off Linux; the `completed` and `failed` shapes are checked against the real serializer) |
 | FR-029 | FR-029-AC-5 | TC-218 | ✅ `tests/producer_execute_cli.rs` passing (completed-state check is Linux only; off Linux the same run reports `containment_failure`) |
+| FR-030 | FR-030-AC-1 | TC-219 | ✅ Round-trip and deterministic-bytes cases passing |
+| FR-030 | FR-030-AC-2 | TC-220 | ✅ Every state, open and attributed completed obligations preserved; acceptance members refused |
+| FR-030 | FR-030-AC-3 | TC-221 | ✅ Unknown, duplicate, non-canonical, unordered and oversize refusals passing |
+| FR-030 | FR-030-AC-4 | TC-222 | ✅ Downgrade, newer, malformed and foreign protocol refusals passing |
+| FR-030 | FR-030-AC-5 | TC-223 | ✅ Per-loss and per-improvement mutation refusals passing |
+| FR-030 | FR-030-AC-6 | TC-224 | ✅ Writer refusals passing |
+| FR-030 | FR-030-AC-7 | TC-231 | ✅ Offline downstream crate compile, run and dependency census passing |
+| FR-030 | FR-030-CON-1 | TC-220 | ✅ No acceptance member admitted |
+| FR-031 | FR-031-AC-1 | TC-225 | ✅ Candidate-bound publication, no sidecar, invalid writes nothing |
+| FR-031 | FR-031-AC-2 | TC-226 | ✅ Idempotent retry passing |
+| FR-031 | FR-031-AC-3 | TC-227 | ✅ Attempt reuse conflict and marker passing |
+| FR-031 | FR-031-AC-4 | TC-228 | ✅ Eight-writer non-identical and identical races passing |
+| FR-031 | FR-031-AC-5 | TC-229 | ✅ Unbound, partial, non-regular and missing object refusals passing |
+| FR-031 | FR-031-AC-6 | TC-230 | ✅ Independent attempts and candidates passing |
+| IT-007 | IT-007-SC-01, IT-007-SC-02 | TC-231 | ✅ Real downstream consumer passing |
 
 ### Non-Functional Requirement Coverage
 
@@ -420,6 +435,19 @@ implemented and reviewed.
 | TC-216 | A foreign response binding is refused with reason `adapter_binding`, and an unavailable producer and a timed-out producer keep their own closed states, each at exit 0 | Integration | P0 | FR-029-AC-3 | ✅ `tests/producer_execute_cli.rs` passing (`timed_out` assertion runs on Linux only; not executed on the macOS authoring host) |
 | TC-217 | `--schema request` and `--schema result` print the published schemas; the request schema accepts the real request and refuses a mutant per required field; the result schema accepts the real result line | Integration | P0 | FR-029-AC-4 | ✅ `tests/producer_execute_cli.rs` passing (live result-line schema check sees `containment_failure` off Linux; the `completed` and `failed` shapes are checked against the real serializer) |
 | TC-218 | The installed binary runs a request from an unrelated directory with an empty environment | E2E | P0 | FR-029-AC-5 | ✅ `tests/producer_execute_cli.rs` passing (completed-state check is Linux only; off Linux the same run reports `containment_failure`) |
+| TC-219 | A package with one fact of every kind and two adopter subjects reads back equal; bytes are deterministic and independent of input order | Unit | P0 | FR-030-AC-1 | ✅ `tests/integrator_package.rs` passing |
+| TC-220 | Every fact state and open and attributed completed obligations survive; open obligations are listed apart; acceptance, approval and disposition members and an accepted obligation state are refused | Unit | P0 | FR-030-AC-2, FR-030-CON-1 | ✅ `tests/integrator_package.rs` passing |
+| TC-221 | Unknown fields and variants, invalid identifiers, duplicate keys, extra whitespace, a trailing newline, unordered facts, non-JSON, non-object and oversize input are refused | Unit | P0 | FR-030-AC-3 | ✅ `tests/integrator_package.rs` passing |
+| TC-222 | Protocol versions below, above, malformed and foreign are refused as downgraded, unsupported and unknown | Unit | P0 | FR-030-AC-4 | ✅ `tests/integrator_package.rs` passing |
+| TC-223 | Each deleted fact or subject, duplicate identity, unsupported established fact, missing license value, blank text, unattributed completion and empty subject is refused | Unit | P0 | FR-030-AC-5 | ✅ `tests/integrator_package.rs` passing |
+| TC-224 | The writer refuses a missing kind, stale count, other protocol and oversize text | Unit | P0 | FR-030-AC-6 | ✅ `tests/integrator_package.rs` passing |
+| TC-225 | Publication creates the candidate and attempt path, reads back equal, leaves no sidecar; an invalid package or missing root writes nothing | Integration | P0 | FR-031-AC-1 | ✅ `tests/integrator_package.rs` passing |
+| TC-226 | Identical retries report `AlreadyPresent` and leave one unchanged object | Integration | P0 | FR-031-AC-2 | ✅ `tests/integrator_package.rs` passing |
+| TC-227 | A changed package for an existing attempt is a conflict, replaces nothing, marks the attempt, and the original retry is a conflict | Integration | P0 | FR-031-AC-3 | ✅ `tests/integrator_package.rs` passing |
+| TC-228 | Eight non-identical concurrent writers yield at most one `Written`, only conflicts otherwise and a conflict for readers; eight identical writers yield one `Written` and no error | Integration | P0 | FR-031-AC-4 | ✅ `tests/integrator_package.rs` passing |
+| TC-229 | An object under another attempt or candidate, a truncated object, a directory, a missing object and a symbolic link are refused | Integration | P0 | FR-031-AC-5 | ✅ `tests/integrator_package.rs` passing |
+| TC-230 | Attempts of one candidate and one attempt id under two candidates are independent verified objects | Integration | P0 | FR-031-AC-6 | ✅ `tests/integrator_package.rs` passing |
+| TC-231 | A downstream crate with only `integrator-package` compiles, publishes twice and reads back equal, and resolves no unrelated dependency | Integration | P0 | FR-030-AC-7, IT-007-SC-01, IT-007-SC-02 | ✅ `tests/integrator_package.rs` passing |
 
 ## Option Permutation Matrix
 
