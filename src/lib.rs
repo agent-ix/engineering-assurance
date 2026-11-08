@@ -31,7 +31,7 @@
 //!
 //! | Feature | Module(s) | Other features it enables | Extra dependencies |
 //! |---|---|---|---|
-//! | `atomic-publish` | `atomic_publish` (Unix only) | | `rustix`, `thiserror` |
+//! | `atomic-publish` | `atomic_publish` | | `rustix`, `thiserror` |
 //! | `claim-strength` | `claim_strength` | | `serde` |
 //! | `content-rights` | `content_rights` | | `regex`, `serde`, `serde_json`, `thiserror`, `unicode-casefold` |
 //! | `discovery` | `discovery` | `workflow` | `serde`, `serde_json`, `thiserror` |
@@ -56,7 +56,7 @@
 
 #![forbid(unsafe_code)]
 
-#[cfg(all(feature = "atomic-publish", unix))]
+#[cfg(feature = "atomic-publish")]
 pub mod atomic_publish;
 #[cfg(feature = "campaign")]
 pub mod campaign;
