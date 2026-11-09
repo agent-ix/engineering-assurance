@@ -1,6 +1,6 @@
 # ADR-001: Verification semantics ownership and type fit
 
-Status: accepted for specification and compatibility work
+Status: accepted for specification work
 
 ## Decision
 
@@ -41,14 +41,6 @@ The implemented types fit that vocabulary as follows:
   as a Rust type behind a `serde`-only feature, in the ownership registry, and
   as generated inert listings. A consumer that records a strength imports that
   type instead of declaring its own.
-
-## Compatibility decision
-
-PGM-01 v1/v2 history is immutable. Compatibility is a read-only mapping that
-returns source-field references, mapped authoritative targets, explicit lossy
-or unmapped fields, and an `unreadable` outcome for ambiguous records. It never
-rewrites a legacy directory or synthesizes a pass, producer identity, retained
-output identity, or human decision.
 
 ## Reconciled upstream work
 

@@ -50,5 +50,5 @@ the complete package dependency/call surface.
 
 ## Dependencies
 
-FR-008 through FR-010 and FR-019 define the constrained implementation
+FR-008, FR-009, and FR-019 define the constrained implementation
 boundary.

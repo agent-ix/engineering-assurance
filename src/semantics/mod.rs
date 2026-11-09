@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-//! Read-only verification semantics, compatibility mappings, and fixture projections.
+//! Read-only verification semantics and fixture projections.
 //!
 //! This module validates references to externally authoritative records. It does
 //! not execute a producer, access a filesystem, or persist evidence.
@@ -15,25 +15,14 @@ use thiserror::Error;
 use crate::claim_strength::ClaimStrength;
 
 mod fixtures;
-mod pgm01;
-mod report;
 
 pub use fixtures::render_generated_fixtures;
-pub use pgm01::{Pgm01Mapping, Pgm01Outcome, Pgm01Unmapped, Pgm01View, map_pgm01_bytes};
-pub use report::{
-    ReportClaim, ReportClaimStatus, ReportGap, ReportProjection, ReportReference, ReportRelation,
-    validate_report_bytes,
-};
 
 /// Protocol discriminator for semantic-reference projections.
 pub const SEMANTIC_REFERENCE_PROTOCOL: &str = "engineering-assurance.semantic-reference/v1";
 /// Protocol discriminator for interoperability fixtures.
 pub const SEMANTIC_FIXTURE_PROTOCOL: &str =
     "engineering-assurance.verification-semantics-fixture/v1";
-/// Protocol discriminator for bounded assurance reports.
-pub const REPORT_PROJECTION_PROTOCOL: &str = "engineering-assurance.assurance-report-projection/v1";
-/// Protocol discriminator for read-only PGM-01 views.
-pub const PGM01_MAPPING_PROTOCOL: &str = "engineering-assurance.pgm01-compatibility-view/v1";
 
 const OWNERSHIP_BYTES: &[u8] = include_bytes!(
     "../../engineering_assurance/contracts/verification-semantics-ownership-v1.json"
@@ -94,20 +83,6 @@ pub enum SemanticErrorKind {
     InvalidClaimStrengthVocabulary,
     /// A validated value could not be serialized.
     Serialization,
-    /// A legacy PGM-01 field violates its declared shape.
-    InvalidLegacyField,
-    /// A legacy PGM-01 numeric field is not a non-negative integer.
-    InvalidLegacyInteger,
-    /// A generated PGM-01 view has the wrong mapping protocol.
-    InvalidMappingVersion,
-    /// A generated PGM-01 view has an empty source identity.
-    EmptySourceIdentity,
-    /// A generated PGM-01 field mapping is invalid.
-    InvalidFieldMapping,
-    /// A generated PGM-01 unmapped-field record is invalid.
-    InvalidUnmappedField,
-    /// A generated PGM-01 limitation is empty.
-    EmptyLimitation,
 }
 
 /// Stable failure at the pure semantic boundary.

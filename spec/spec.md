@@ -51,8 +51,8 @@ defines their shared scope and indexes them.
   resumable workflow state, and named human terminal decisions.
 - Smoke tests and agent evaluations for supported discovery and onboarding paths.
 - Semantic ownership and link-direction definitions for verification concepts.
-- Versioned reference and report projection contracts, deterministic
-  cross-language fixtures, and read-only historical PGM-01 compatibility.
+- Versioned reference contracts, deterministic
+  cross-language fixtures.
 - A Rust library crate and native CLI that own this repository's production,
   validation, generation, evaluation, and qualification behavior.
 - Supported structured host interfaces for ix-flow and agent evaluations.
@@ -143,8 +143,8 @@ same canonical bundle and do not redefine these responsibilities.
   verification concepts and map each to its authoritative owner.
 - [FR-009](./functional/FR-009-preserve-provenance-and-states.md) — preserve the
   producer tuple, definition version, and every non-success state.
-- [FR-010](./functional/FR-010-read-only-compatibility-and-reporting.md) — map
-  historical PGM-01 records read-only and define bounded reports.
+- FR-010 — withdrawn (read-only PGM-01 compatibility and bounded reports). The
+  identifier and FR-010-AC-1..4 are not reused.
 - FR-011 — withdrawn (compatibility corpus gate). The identifier, FR-011-CON-1..4 and
   FR-011-AC-1..10 are not reused.
 - [FR-013](./functional/FR-013-migration-contract.md) — publish the reviewed
@@ -152,7 +152,7 @@ same canonical bundle and do not redefine these responsibilities.
 - [FR-014](./functional/FR-014-versioned-rust-boundary.md) — expose the shared
   library and CLI through versioned structured interfaces.
 - [FR-015](./functional/FR-015-semantic-and-identity-parity.md) — preserve
-  verification semantics, identity, canonicalization, and compatibility in Rust.
+  verification semantics, identity, and canonicalization in Rust.
 - [FR-016](./functional/FR-016-rust-onboarding-and-workflow.md) — move onboarding,
   workflow coordination, and invariants behind the Rust boundary.
 - [FR-017](./functional/FR-017-rust-evaluation-and-qualification.md) — move agent

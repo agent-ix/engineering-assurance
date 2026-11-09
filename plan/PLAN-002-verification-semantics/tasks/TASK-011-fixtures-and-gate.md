@@ -27,4 +27,4 @@ the final implementation review evidence.
 
 ## Acceptance
 
-TC-052 through TC-068 pass with no unresolved required review fix.
+TC-052, TC-053, TC-056 through TC-063, and TC-068 pass with no unresolved required review fix.

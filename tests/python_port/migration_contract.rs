@@ -173,7 +173,6 @@ fn the_review_checklist_covers_every_required_question() {
         "generic evidence schema",
         "stdout",
         "byte-identical",
-        "compatibility view",
         "not-computed",
         "manual dispatch",
     ] {
