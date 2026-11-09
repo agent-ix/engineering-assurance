@@ -2306,7 +2306,7 @@ fn tc_243_answer_families_is_a_non_empty_set_of_distinct_non_empty_families() {
         (
             "- a\n- a\n",
             AnswerFamiliesError::Duplicate {
-                family: "a".to_owned(),
+                family: AnswerFamily::new("a").expect("valid family"),
             },
         ),
         ("- a\n- ''\n", AnswerFamiliesError::EmptyFamily),
