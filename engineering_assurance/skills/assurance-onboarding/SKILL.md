@@ -130,6 +130,10 @@ against threshold 0. The rule applies to the plan's own `metric`, which is
 then required; do not restate `metric`, `repetitions`, or
 `minimum_population` inside the rule. Gate on the constant-predictor margin as
 `{ comparator: gt, baseline: constant-predictor, margin: <owner's bar> }`, and
+declare the answer-space families the owner's population has in
+`statistical_design.answer_families` (required with `constant-predictor`,
+refused with any other reference; a non-empty list of unique non-empty
+strings; the producer's item-row families must equal it exactly), and
 do not invent a threshold or margin the owner has not stated. `population`,
 `sampling`, `error_model`, and `uncertainty` remain prose.
 

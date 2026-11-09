@@ -297,8 +297,14 @@ raw rate alone. A skewed population lets a tool that reads nothing score high
 purely because one label dominates; the number that says whether the tool did
 anything is the margin over this baseline, not the raw rate by itself.
 
-**Formula.** Group the population into the answer-space families the plan's
-own Population section already states — do not invent a new grouping here.
+**Formula.** Group the population into the answer-space families the plan declares in
+`statistical_design.answer_families` — do not invent a new grouping here, and
+do not take it from the Population prose. A plan with
+`baseline: constant-predictor` must declare that list (non-empty, unique,
+non-empty strings, e.g. `answer_families: [verdict, weakness_kind]`); a plan
+with any other reference must not. The checker requires the producer's item
+rows to carry exactly those `family` values, so two declared families merged
+into one are refused rather than silently lowering the baseline.
 For family `f` with `n_f` items, and for each label `i` in that family's
 answer space, let `n_{f,i}` count every item where label `i` is the primary
 recorded reading *or* one of its recorded contested alternates (an item with

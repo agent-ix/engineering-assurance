@@ -30,7 +30,10 @@ history; they cannot govern new measurement collections.
     `baseline` (exactly one of `constant-predictor`, `prior-collection`,
     `best-seen`, or `external-reference`) with an optional numeric `margin`;
     either form may also carry an optional `interval_level`, a number
-    strictly between 0 and 1.
+    strictly between 0 and 1;
+  - `answer_families`: a non-empty list of unique, non-empty strings naming
+    the answer-space families of the population. It SHALL be present when
+    `decision_rule.baseline` is `constant-predictor` and absent otherwise.
 - For the consistency checks: a validated rule with the plan's `objective` or
   `estimator`.
 - For rule evaluation: a validated rule, the estimate, and, for a baseline
@@ -52,8 +55,9 @@ history; they cannot govern new measurement collections.
   together with which bound (lower or upper) was judged and its value, or the
   same typed refusals.
 - For the definition-change check: either no finding, or one typed finding
-  naming which of `objective`, `statistical_design.estimator`, and
-  `statistical_design.decision_rule` changed.
+  naming which of `objective`, `statistical_design.estimator`,
+  `statistical_design.decision_rule`, and `statistical_design.answer_families`
+  changed.
 
 ## Behavior
 
@@ -108,7 +112,27 @@ history; they cannot govern new measurement collections.
 - `baseline: constant-predictor` SHALL mean, for each answer family, the
   agreement rate of the highest-scoring single constant answer on the corpus
   at evaluation time, combined across families as the size-weighted mean
-  (total best-constant agreements over total items).
+  (total best-constant agreements over total items). The families SHALL be
+  the plan's `statistical_design.answer_families`, never inferred from the
+  population prose or from whatever grouping a producer wrote.
+- `statistical_design.answer_families` SHALL be required exactly when
+  `decision_rule.baseline` is `constant-predictor`; the schema SHALL refuse a
+  plan that declares that baseline without it, and SHALL refuse the field on
+  a plan whose rule has any other baseline or a threshold, because a family
+  list that no baseline reads is a claim nothing checks. Each entry SHALL be
+  a non-empty string, entries SHALL be unique, and the list SHALL be
+  non-empty.
+- Because merging two answer spaces into one family understates the baseline
+  and lets a tool clear a bar it never beat, a checker SHALL require the set
+  of distinct `family` dimension values on the producer's item rows to equal
+  `answer_families` exactly, and SHALL return a typed inconclusive reason
+  naming the missing and the undeclared families when it does not. That
+  comparison lives in Quoin's measurement checker (`quoin-measurement`), not
+  in this repository, which owns only the declared list. Forward note: the
+  Quoin follow-up for the comparison and its inconclusive reason is tracked
+  by Linear PLAT-1020 against the Quoin repository.
+- Changing `answer_families` changes the baseline, so it is part of the
+  measurement definition and needs a new `definition_version`.
 - `baseline: prior-collection` SHALL mean the plan's metric in the collection
   this result is compared against under the same `definition_version`.
 - An accepted collection SHALL mean one the measurement intake admitted rather
@@ -170,7 +194,8 @@ history; they cannot govern new measurement collections.
   exactly the wire names of the Rust `Estimator`, `Comparator`, and `Baseline`
   enums.
 - The plan's measurement definition SHALL include `objective`,
-  `statistical_design.estimator`, and `statistical_design.decision_rule`;
+  `statistical_design.estimator`, `statistical_design.decision_rule`, and
+  `statistical_design.answer_families`;
   [FR-024](./FR-024-measurement-plan-protected-apparatus.md) adds
   `protected_apparatus`.
 - When any of them is added, removed, or changed while `definition_version`
@@ -184,7 +209,8 @@ history; they cannot govern new measurement collections.
 - The onboarding checklist SHALL list the estimator, comparator, and baseline
   sets, the one-of choice between `threshold` and `baseline`, `margin`'s
   dependency on `baseline`, the direction and estimator consistency rules,
-  and the refused `eq` combinations.
+  the refused `eq` combinations, and that `answer_families` is required with
+  `baseline: constant-predictor` and refused otherwise.
 - `Estimator`, `Comparator`, `Baseline`, `DecisionRule`, and the
   definition-change check SHALL be reachable through the `measurement` Cargo
   feature.
@@ -193,7 +219,9 @@ history; they cannot govern new measurement collections.
 
 An unknown estimator, comparator, or baseline, a rule with no or two
 references, a `margin` without `baseline` or with `eq`, `eq` against
-`best-seen`, `constant-predictor` without `estimator: proportion`, a
+`best-seen`, `constant-predictor` without `estimator: proportion`,
+`constant-predictor` without `answer_families`, `answer_families` with any
+other reference, an empty or duplicate or empty-string family, a
 comparator that disagrees with the objective's direction, a non-numeric or
 non-finite `threshold` or `margin`, or an extra rule key fails validation or
 construction and is never read as a valid rule. Evaluating a baseline rule
@@ -221,6 +249,9 @@ change produces a finding rather than being accepted silently.
 | FR-021-AC-13 | The schema and the Rust `DecisionRule` accept an `interval_level` strictly between 0 and 1 with a threshold or baseline rule and every comparator but `eq`, and refuse it with `eq`, at 0 or 1, outside that range, non-numeric, or (Rust) non-finite, with distinct typed errors, through construction and deserialization; an absent level is not serialized and a stated level round-trips; the Rust `Interval` and `ConfidenceLevel` types accept a finite ordered interval at a level strictly between 0 and 1 with a non-empty method and refuse each violation with a typed `IntervalError`, and round-trip; the `interval_level` key is inside `decision_rule`, so an unknown-key reader refuses it and editing it without a `definition_version` bump yields a finding. | Test (TC-192) |
 | FR-021-AC-14 | `holds_on_interval` judges a rule at the interval's lower bound for `gt` and `ge` and its upper bound for `lt` and `le`, for higher- and lower-is-better rules and for threshold and baseline (including relative-margin) references, so a point estimate that passes but whose unfavourable bound fails is refused; an interval at a level at or above the rule's is accepted; a missing interval, a lower level, an estimate outside the interval, a rule without `interval_level`, and non-finite inputs are typed refusals; and the point-form `holds` returns a typed `IntervalRequired` error for a rule with `interval_level`. | Test (TC-193) |
 | FR-021-AC-15 | `holds_on_interval_reporting` returns, with the verdict of `holds_on_interval`, the bound it judged at and that bound's value: the lower bound for `gt` and `ge`, the upper bound for `lt` and `le`, for threshold and baseline (including relative-margin) references, whether the rule holds or not; it refuses with the same typed errors as `holds_on_interval`, and `holds_on_interval` returns exactly its verdict. | Test (TC-239) |
+| FR-021-AC-16 | The MeasurementPlan frontmatter schema requires `statistical_design.answer_families` when `decision_rule.baseline` is `constant-predictor` and refuses a plan without it; it accepts a non-empty list of unique non-empty strings and refuses an empty list, a duplicate entry, an empty-string entry, and a non-string entry; it refuses `answer_families` with any other baseline and with a threshold rule. | Test (TC-240) |
+| FR-021-AC-17 | Editing `statistical_design.answer_families` (adding, removing, or changing a family) while `definition_version` stays the same yields one definition-change finding naming `statistical_design.answer_families`; the same edit with a changed `definition_version` yields none. | Test (TC-241) |
+| FR-021-AC-18 | The MeasurementPlan skeleton's constant-predictor guidance and worked example show the `answer_families` declaration and say the families come from it rather than from the Population prose, and the onboarding checklist states the required-with-constant-predictor, refused-otherwise rule and that a producer's item-row families must equal the list. | Test (TC-242) |
 
 ## Dependencies
 

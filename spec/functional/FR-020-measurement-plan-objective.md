@@ -25,8 +25,8 @@ objective SHALL count as a change to the plan's measurement definition.
   - `bound`: an optional finite number.
 - For the definition-change check: the plan's frontmatter before and after an
   edit, each projected to its `definition_version` and its measurement
-  definition (`objective`, and the FR-021 `statistical_design.estimator` and
-  `statistical_design.decision_rule`).
+  definition (`objective`, and the FR-021 `statistical_design.estimator`,
+  `statistical_design.decision_rule`, and `statistical_design.answer_families`).
 
 ## Outputs
 
