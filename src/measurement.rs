@@ -7,7 +7,7 @@
 //! This module owns the typed form of a `MeasurementPlan`'s optional `objective`
 //! block, the closed `statistical_design.estimator` and
 //! `statistical_design.decision_rule` vocabulary with the rule's evaluation,
-//! the `protected_apparatus` path list and the closed `negative_controls`
+//! the `statistical_design.answer_families` set, the `protected_apparatus` path list and the closed `negative_controls`
 //! vocabulary, and the check that an edit to the objective, estimator, rule,
 //! or protected list came with a new `definition_version`. Only the decision rule is evaluated; an objective's
 //! `bound` is informational. The objective's `weight`, `value_half_life`, and
@@ -1579,6 +1579,143 @@ impl From<ProtectedApparatus> for Vec<ApparatusPath> {
     }
 }
 
+/// Why an [`AnswerFamily`] is invalid.
+#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+pub enum AnswerFamilyError {
+    /// The family was the empty string.
+    #[error("answer family is empty")]
+    Empty,
+}
+
+/// One `statistical_design.answer_families` entry: a non-empty string naming
+/// a value of the item-row dimension the constant-predictor baseline groups by.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct AnswerFamily(String);
+
+impl AnswerFamily {
+    /// Validate one family.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AnswerFamilyError::Empty`] for the empty string.
+    pub fn new(family: impl Into<String>) -> Result<Self, AnswerFamilyError> {
+        let family = family.into();
+        if family.is_empty() {
+            return Err(AnswerFamilyError::Empty);
+        }
+        Ok(Self(family))
+    }
+
+    /// The family as written.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl TryFrom<String> for AnswerFamily {
+    type Error = AnswerFamilyError;
+
+    fn try_from(family: String) -> Result<Self, Self::Error> {
+        Self::new(family)
+    }
+}
+
+impl From<AnswerFamily> for String {
+    fn from(family: AnswerFamily) -> Self {
+        family.0
+    }
+}
+
+/// Why a `statistical_design.answer_families` list is invalid.
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+pub enum AnswerFamiliesError {
+    /// The list was empty.
+    #[error("answer_families must name at least one family")]
+    Empty,
+    /// The same family appeared twice.
+    #[error("answer_families names `{family}` more than once")]
+    Duplicate {
+        /// The repeated family.
+        family: String,
+    },
+    /// An entry was the empty string.
+    #[error("answer_families has an empty family")]
+    EmptyFamily,
+}
+
+/// A validated `statistical_design.answer_families`: a non-empty set of
+/// distinct [`AnswerFamily`] entries the constant-predictor baseline is
+/// computed over.
+///
+/// It is a set: two lists naming the same families in a different order are
+/// equal, and it serializes in sorted order.
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(try_from = "Vec<String>", into = "Vec<String>")]
+pub struct AnswerFamilies(BTreeSet<AnswerFamily>);
+
+impl AnswerFamilies {
+    /// Build the set from its entries.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AnswerFamiliesError::EmptyFamily`] for an empty-string entry,
+    /// [`AnswerFamiliesError::Duplicate`] naming the first repeated family,
+    /// and [`AnswerFamiliesError::Empty`] for no entries.
+    pub fn new<S: Into<String>>(
+        families: impl IntoIterator<Item = S>,
+    ) -> Result<Self, AnswerFamiliesError> {
+        let mut set = BTreeSet::new();
+        for family in families {
+            let family = AnswerFamily::new(family).map_err(|AnswerFamilyError::Empty| {
+                AnswerFamiliesError::EmptyFamily
+            })?;
+            if set.contains(&family) {
+                return Err(AnswerFamiliesError::Duplicate {
+                    family: family.into(),
+                });
+            }
+            set.insert(family);
+        }
+        if set.is_empty() {
+            return Err(AnswerFamiliesError::Empty);
+        }
+        Ok(Self(set))
+    }
+
+    /// The families, in sorted order.
+    pub fn iter(&self) -> impl Iterator<Item = &AnswerFamily> {
+        self.0.iter()
+    }
+
+    /// How many families the set holds; never zero.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Always `false`: a validated set is never empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl TryFrom<Vec<String>> for AnswerFamilies {
+    type Error = AnswerFamiliesError;
+
+    fn try_from(families: Vec<String>) -> Result<Self, Self::Error> {
+        Self::new(families)
+    }
+}
+
+impl From<AnswerFamilies> for Vec<String> {
+    fn from(families: AnswerFamilies) -> Self {
+        families.0.into_iter().map(String::from).collect()
+    }
+}
+
 /// A gaming scenario a `MeasurementPlan` declares it guards against
 /// (`negative_controls[].kind`). The declaration is checked for shape only;
 /// Quoin's checker exercises the kinds it can detect.
@@ -1788,15 +1925,18 @@ pub enum DefinitionMember {
     /// The `protected_apparatus` list (the entries, not the content of the
     /// files they name).
     ProtectedApparatus,
+    /// `statistical_design.answer_families` (compared as a set).
+    AnswerFamilies,
 }
 
 impl DefinitionMember {
     /// Every member, in declaration order.
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 5] = [
         Self::Objective,
         Self::Estimator,
         Self::DecisionRule,
         Self::ProtectedApparatus,
+        Self::AnswerFamilies,
     ];
 
     /// The frontmatter path of this member.
@@ -1807,6 +1947,7 @@ impl DefinitionMember {
             Self::Estimator => "statistical_design.estimator",
             Self::DecisionRule => "statistical_design.decision_rule",
             Self::ProtectedApparatus => "protected_apparatus",
+            Self::AnswerFamilies => "statistical_design.answer_families",
         }
     }
 }
@@ -1830,6 +1971,9 @@ pub struct MeasurementDefinition {
     /// entries: reordering the list is not a change, and an edit to a file an
     /// entry names is not visible here.
     pub protected_apparatus: Option<ProtectedApparatus>,
+    /// The plan's `statistical_design.answer_families`, when present.
+    /// Compared as a set: reordering the list is not a change.
+    pub answer_families: Option<AnswerFamilies>,
 }
 
 impl MeasurementDefinition {
@@ -1849,6 +1993,7 @@ impl MeasurementDefinition {
                 DefinitionMember::ProtectedApparatus => {
                     self.protected_apparatus != other.protected_apparatus
                 }
+                DefinitionMember::AnswerFamilies => self.answer_families != other.answer_families,
             })
             .collect()
     }

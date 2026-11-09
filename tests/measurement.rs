@@ -13,7 +13,7 @@
 use std::{collections::BTreeSet, fs, path::Path, process::Command};
 
 use engineering_assurance::measurement::{
-    ApparatusPath, ApparatusPathError, Baseline, Comparator, ConfidenceLevel, ConfidenceLevelError,
+    AnswerFamilies, AnswerFamiliesError, AnswerFamily, AnswerFamilyError, ApparatusPath, ApparatusPathError, Baseline, Comparator, ConfidenceLevel, ConfidenceLevelError,
     DecisionRule, DecisionRuleError, DefinitionChangedWithoutVersionBump, DefinitionMember,
     Direction, Estimator, Interval, IntervalBound, IntervalError, MarginMode,
     MeasurementDefinition, NegativeControl, NegativeControlError, NegativeControlKind,
@@ -37,6 +37,10 @@ fn rule_threshold(comparator: Comparator, threshold: f64) -> DecisionRule {
 
 fn rule_baseline(comparator: Comparator, baseline: Baseline, margin: Option<f64>) -> DecisionRule {
     DecisionRule::against_baseline(comparator, baseline, margin).expect("valid rule")
+}
+
+fn families(entries: &[&str]) -> AnswerFamilies {
+    AnswerFamilies::new(entries.iter().copied()).expect("valid answer families")
 }
 
 fn apparatus(paths: &[&str]) -> ProtectedApparatus {
@@ -319,6 +323,7 @@ fn tc_141_definition_edit_without_a_version_bump_is_a_typed_finding_naming_the_m
         estimator: Some(Estimator::Proportion),
         decision_rule: ge_099,
         protected_apparatus: Some(apparatus(&["evals/harness.py", "labels/**"])),
+        answer_families: None,
     };
     let plan = |version, definition| PlanDefinition {
         definition_version: version,
@@ -381,6 +386,7 @@ fn tc_141_definition_edit_without_a_version_bump_is_a_typed_finding_naming_the_m
                 estimator: Some(Estimator::Mean),
                 decision_rule: ge_095,
                 protected_apparatus: None,
+                answer_families: Some(families(&["weakness_kind"])),
             },
             DefinitionMember::ALL.to_vec(),
         ),
@@ -583,6 +589,7 @@ fn tc_168_objective_steering_fields_are_excluded_from_the_measurement_definition
         estimator: Some(Estimator::Proportion),
         decision_rule: Some(rule_threshold(Comparator::Ge, 0.99)),
         protected_apparatus: None,
+        answer_families: None,
     };
     let steered = MeasurementDefinition {
         objective: Some(with_steering),
@@ -772,7 +779,7 @@ fn tc_169_steering_fields_never_change_a_decision_rules_verdict() {
 /// proves that consumer never resolves `serde_json`, so it cannot inherit the
 /// `arbitrary_precision` flip `full` carries.
 #[test]
-#[trace("TC-142", "FR-020-AC-4", "FR-021-AC-7", "FR-024-AC-7", "FR-026-AC-6")]
+#[trace("TC-142", "TC-243", "FR-020-AC-4", "FR-021-AC-7", "FR-021-AC-19", "FR-024-AC-7", "FR-026-AC-6")]
 fn tc_142_a_minimal_downstream_compiles_only_the_measurement_feature() {
     let consumer = tempfile::tempdir().expect("consumer root");
     fs::create_dir(consumer.path().join("src")).expect("consumer source directory");
@@ -786,7 +793,7 @@ fn tc_142_a_minimal_downstream_compiles_only_the_measurement_feature() {
     .expect("consumer manifest");
     fs::write(
         consumer.path().join("src/main.rs"),
-        "use engineering_assurance::measurement::{ApparatusPath, Baseline, Comparator, ConfidenceLevel, DecisionRule, Interval, Direction, Estimator, NegativeControl, NegativeControlKind, NegativeControls, Objective, ProtectedApparatus, definition_change_without_version_bump};\nfn main(){let steered = Objective::with_steering(Direction::Target, Some(1.0), Some(1.0), Some(30.0), Some(50.0)).expect(\"valid\"); let level = ConfidenceLevel::new(0.95).expect(\"level\"); let interval = Interval::new(0.0, 1.0, level, \"m\").expect(\"interval\"); let rule = DecisionRule::against_threshold(Comparator::Ge, 0.5).and_then(|rule| rule.with_interval_level(level)).expect(\"rule\"); let _ = (rule.holds_on_interval(0.5, Some(&interval), None), steered.weight(), steered.value_half_life(), steered.budget(), steered.definitional(), definition_change_without_version_bump, DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, None), Estimator::Proportion, ApparatusPath::new(\"evals/**\").map(|path| ProtectedApparatus::new([path])), NegativeControl::new(NegativeControlKind::ApparatusEdit, \"edit\").map(|control| NegativeControls::new([control])));}\n",
+        "use engineering_assurance::measurement::{AnswerFamilies, AnswerFamily, AnswerFamiliesError, ApparatusPath, Baseline, Comparator, ConfidenceLevel, DecisionRule, Interval, Direction, Estimator, NegativeControl, NegativeControlKind, NegativeControls, Objective, ProtectedApparatus, definition_change_without_version_bump};\nfn main(){let steered = Objective::with_steering(Direction::Target, Some(1.0), Some(1.0), Some(30.0), Some(50.0)).expect(\"valid\"); let level = ConfidenceLevel::new(0.95).expect(\"level\"); let interval = Interval::new(0.0, 1.0, level, \"m\").expect(\"interval\"); let rule = DecisionRule::against_threshold(Comparator::Ge, 0.5).and_then(|rule| rule.with_interval_level(level)).expect(\"rule\"); let _ = (rule.holds_on_interval(0.5, Some(&interval), None), steered.weight(), steered.value_half_life(), steered.budget(), steered.definitional(), definition_change_without_version_bump, DecisionRule::against_baseline(Comparator::Gt, Baseline::ConstantPredictor, None), Estimator::Proportion, ApparatusPath::new(\"evals/**\").map(|path| ProtectedApparatus::new([path])), NegativeControl::new(NegativeControlKind::ApparatusEdit, \"edit\").map(|control| NegativeControls::new([control])), AnswerFamilies::new([\"a\"]).map(|f| f.iter().map(AnswerFamily::as_str).count()), AnswerFamiliesError::Empty);}\n",
     )
     .expect("consumer source");
     let status = Command::new(env!("CARGO"))
@@ -1560,6 +1567,7 @@ fn tc_158_a_protected_apparatus_edit_without_a_version_bump_is_a_finding() {
         estimator: Some(Estimator::Proportion),
         decision_rule: Some(rule_threshold(Comparator::Ge, 0.99)),
         protected_apparatus: Some(apparatus(&["evals/harness.py", "labels/**"])),
+        answer_families: None,
     };
     let with = |protected_apparatus| MeasurementDefinition {
         protected_apparatus,
@@ -2243,4 +2251,114 @@ fn tc_192_confidence_level_is_eq_and_ordered() {
     assert_eq_impl::<ConfidenceLevel>();
     assert_eq!(level(0.5), level(0.5));
     assert!(level(0.5) < level(0.9));
+}
+
+#[test]
+#[trace("TC-243", "FR-021-AC-19")]
+fn tc_243_answer_families_is_a_non_empty_set_of_distinct_non_empty_families() {
+    assert_eq!(
+        AnswerFamilies::new(Vec::<String>::new()),
+        Err(AnswerFamiliesError::Empty)
+    );
+    assert_eq!(
+        AnswerFamilies::new(["a", "b", "a"]),
+        Err(AnswerFamiliesError::Duplicate {
+            family: "a".to_owned()
+        })
+    );
+    assert_eq!(
+        AnswerFamilies::new(["a", ""]),
+        Err(AnswerFamiliesError::EmptyFamily)
+    );
+    assert_eq!(AnswerFamily::new(""), Err(AnswerFamilyError::Empty));
+
+    let built = families(&["weakness_kind", "coverage"]);
+    assert_eq!(built.len(), 2);
+    assert!(!built.is_empty());
+    assert_eq!(built, families(&["coverage", "weakness_kind"]));
+    assert_eq!(
+        built.iter().map(AnswerFamily::as_str).collect::<Vec<_>>(),
+        ["coverage", "weakness_kind"]
+    );
+    let emitted = yaml_serde::to_string(&built).expect("families serialize");
+    assert_eq!(emitted, "- coverage\n- weakness_kind\n");
+    assert_eq!(
+        emitted,
+        yaml_serde::to_string(&families(&["coverage", "weakness_kind"])).expect("serializes")
+    );
+    assert_eq!(
+        yaml_serde::from_str::<AnswerFamilies>(&emitted).expect("round trip"),
+        built
+    );
+
+    // Deserialization refuses with the same typed errors.
+    for (refused, error) in [
+        ("[]\n", AnswerFamiliesError::Empty),
+        ("- a\n- a\n", AnswerFamiliesError::Duplicate { family: "a".to_owned() }),
+        ("- a\n- ''\n", AnswerFamiliesError::EmptyFamily),
+    ] {
+        let message = yaml_serde::from_str::<AnswerFamilies>(refused)
+            .expect_err("must refuse")
+            .to_string();
+        assert!(message.contains(&error.to_string()), "{refused:?}: {message}");
+    }
+    assert!(serde_json::from_value::<AnswerFamilies>(serde_json::json!([7])).is_err());
+    assert!(serde_json::from_value::<AnswerFamily>(serde_json::json!("")).is_err());
+
+    assert_eq!(
+        DefinitionMember::AnswerFamilies.path(),
+        "statistical_design.answer_families"
+    );
+    assert_eq!(
+        DefinitionMember::AnswerFamilies.to_string(),
+        "statistical_design.answer_families"
+    );
+}
+
+#[test]
+#[trace("TC-241", "FR-021-AC-17")]
+fn tc_241_an_answer_families_edit_without_a_version_bump_is_a_finding() {
+    let base = MeasurementDefinition {
+        objective: Some(objective(Direction::Higher, None)),
+        estimator: Some(Estimator::Proportion),
+        decision_rule: Some(rule_baseline(
+            Comparator::Gt,
+            Baseline::ConstantPredictor,
+            Some(0.05),
+        )),
+        protected_apparatus: None,
+        answer_families: Some(families(&["weakness_kind", "coverage"])),
+    };
+    let with = |answer_families| MeasurementDefinition {
+        answer_families,
+        ..base.clone()
+    };
+    for edited in [
+        // A family added, one removed, one changed, and the list removed.
+        with(Some(families(&["weakness_kind", "coverage", "extra"]))),
+        with(Some(families(&["weakness_kind"]))),
+        with(Some(families(&["weakness_kind", "other"]))),
+        with(None),
+    ] {
+        assert_edit_is_reported_unless_versioned(
+            &base,
+            &edited,
+            &[DefinitionMember::AnswerFamilies],
+        );
+        // The reversal covers the list being added.
+        assert_edit_is_reported_unless_versioned(
+            &edited,
+            &base,
+            &[DefinitionMember::AnswerFamilies],
+        );
+    }
+    let plan = |definition: &MeasurementDefinition| PlanDefinition {
+        definition_version: Some("retention-v1"),
+        definition: definition.clone(),
+    };
+    let reordered = with(Some(families(&["coverage", "weakness_kind"])));
+    assert_eq!(
+        definition_change_without_version_bump(&plan(&base), &plan(&reordered)),
+        None
+    );
 }

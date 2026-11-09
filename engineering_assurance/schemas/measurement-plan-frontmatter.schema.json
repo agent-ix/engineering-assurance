@@ -345,7 +345,14 @@
           "minLength": 1,
           "description": "Prose: how uncertain the estimate is and how the plan accounts for it. It is never read by a checker. To have the decision rule judge each observation's stated interval instead of its point estimate, state `decision_rule.interval_level`."
         },
-        "decision_rule": { "$ref": "#/$defs/decision_rule" }
+        "decision_rule": { "$ref": "#/$defs/decision_rule" },
+        "answer_families": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "The answer families a `constant-predictor` baseline is computed over (FR-021): a non-empty list of unique, non-empty strings, each the value of the item-row dimension the producer's rows carry. The families come from this list, never from the Population prose. Required when `decision_rule.baseline` is `constant-predictor`; refused with any other baseline and with a `threshold` rule. Part of the measurement definition: changing it (compared as a set, so reordering is not a change) requires a new `definition_version`."
+        }
       },
       "allOf": [
         {
@@ -359,7 +366,11 @@
             "required": ["decision_rule"]
           },
           "then": {
-            "properties": { "estimator": { "const": "proportion" } }
+            "properties": { "estimator": { "const": "proportion" } },
+            "required": ["answer_families"]
+          },
+          "else": {
+            "properties": { "answer_families": false }
           }
         }
       ]

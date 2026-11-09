@@ -169,6 +169,9 @@ fn sd(over: Value) -> Vec<String> {
 }
 
 fn dr(rule: Value) -> Vec<String> {
+    if rule["baseline"] == "constant-predictor" {
+        return sd(json!({ "decision_rule": rule, "answer_families": ["a"] }));
+    }
     sd(json!({ "decision_rule": rule }))
 }
 
@@ -742,10 +745,15 @@ fn decision_rule_agrees_with_objective_direction_and_estimator() {
     }
 
     let constant = json!({"comparator": "gt", "baseline": "constant-predictor", "margin": 0.05});
-    assert!(sd(json!({"estimator": "proportion", "decision_rule": constant})).is_empty());
+    let families = json!(["a", "b"]);
+    assert!(
+        sd(json!({"estimator": "proportion", "decision_rule": constant, "answer_families": families}))
+            .is_empty()
+    );
     for estimator in ["count", "mean", "median", "ratio"] {
         assert!(
-            !sd(json!({"estimator": estimator, "decision_rule": constant})).is_empty(),
+            !sd(json!({"estimator": estimator, "decision_rule": constant, "answer_families": families}))
+                .is_empty(),
             "{estimator}"
         );
         assert!(
