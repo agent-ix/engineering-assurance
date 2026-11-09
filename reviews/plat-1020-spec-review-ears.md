@@ -25,3 +25,9 @@ Ticket: PLAT-1020. Examined the new and edited FR-021 Behavior statements and th
 ## Verdict
 
 Wording-only finding; no behaviour is wrong.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fix commit b8a5d3a splits the statement into single-subject bullets; quire validate reports no grammar warning on the new statements (lines 118-146). |

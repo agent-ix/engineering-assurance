@@ -25,3 +25,9 @@ Ticket: PLAT-1020. Examined the identity and edge cases of `answer_families`: pr
 ## Verdict
 
 One medium identity gap; otherwise the failure domain is covered by AC-16's refusals and the producer-side equality.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fix commit b8a5d3a: FR-021 states set comparison for AnswerFamilies and the definition-change check; AC-17 and TC-241 add the reorder-yields-no-finding case (and list add/remove). |

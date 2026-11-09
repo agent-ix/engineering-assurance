@@ -39,3 +39,11 @@ Checked against origin/main and found consistent:
 ## Verdict
 
 The rule itself is sound and fits the schema, the FR-021 baseline semantics, the FR-020/FR-024 definition model and the Quoin producer's data shape. AC-16 and AC-18 can fail as written; AC-17 is concrete except for reordering (failure-domain FND-001). Not mergeable until the medium findings here and in the integrity and failure-domain reviews are fixed; the lows are one-line edits in the same files.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fix commit b8a5d3a: the declaration example and the worked example both use [weakness_kind, coverage], matching quoin FR-108-AC-23; the worked example now shows the declaration; no `verdict` or `adverse_case_coverage` remains outside review records. |
+| FND-002 | fixed | Fix commit b8a5d3a adds answer_families to the onboarding list, the skeleton Decision Rule sentence, and FR-024's member list. |
+| FND-003 | fixed | Fix commit b8a5d3a: the skeleton now says Quoin's checker 'is to' return a typed inconclusive reason, matching FR-021, and points at the Quoin follow-up. |

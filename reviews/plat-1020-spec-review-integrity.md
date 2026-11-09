@@ -26,3 +26,10 @@ Ticket: PLAT-1020. Examined: FR-021 Inputs, Outputs, Behavior and Error Handling
 ## Verdict
 
 Structure and traceability are clean. One medium gap: the Rust side that AC-17 and the Quoin consumer depend on is unspecified.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fix commit b8a5d3a states AnswerFamily/AnswerFamilies, AnswerFamiliesError::{Empty, Duplicate, EmptyFamily}, set compare and sorted serialization, DefinitionMember::AnswerFamilies at statistical_design.answer_families, measurement-feature reachability, and FR-021-AC-19/TC-243. Shape matches ProtectedApparatus (BTreeSet newtype, Empty/Duplicate errors, try_from/into Vec serde) and DefinitionMember::path on origin/main. |
+| FND-002 | fixed | Fix commit b8a5d3a rewrites the checker sentence as an explicit non-normative forward note with no SHALL. |
