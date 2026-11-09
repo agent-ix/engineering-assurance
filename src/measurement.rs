@@ -7,10 +7,11 @@
 //! This module owns the typed form of a `MeasurementPlan`'s optional `objective`
 //! block, the closed `statistical_design.estimator` and
 //! `statistical_design.decision_rule` vocabulary with the rule's evaluation,
-//! the `statistical_design.answer_families` set, the `protected_apparatus` path list and the closed `negative_controls`
-//! vocabulary, and the check that an edit to the objective, estimator, rule,
-//! or protected list came with a new `definition_version`. Only the decision rule is evaluated; an objective's
-//! `bound` is informational. The objective's `weight`, `value_half_life`, and
+//! the `statistical_design.answer_families` set, the `protected_apparatus`
+//! path list and the closed `negative_controls` vocabulary, and the check that
+//! an edit to the objective, estimator, rule, answer families, or protected
+//! list came with a new `definition_version`. Only the decision rule is
+//! evaluated; an objective's `bound` is informational. The objective's `weight`, `value_half_life`, and
 //! `budget` steering fields (FR-026) are advisory only: they are excluded
 //! from the definition-change check, and no decision rule evaluation ever
 //! reads them.
@@ -1614,6 +1615,12 @@ impl AnswerFamily {
     }
 }
 
+impl fmt::Display for AnswerFamily {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
 impl TryFrom<String> for AnswerFamily {
     type Error = AnswerFamilyError;
 
@@ -1638,7 +1645,7 @@ pub enum AnswerFamiliesError {
     #[error("answer_families names `{family}` more than once")]
     Duplicate {
         /// The repeated family.
-        family: String,
+        family: AnswerFamily,
     },
     /// An entry was the empty string.
     #[error("answer_families has an empty family")]
@@ -1671,9 +1678,7 @@ impl AnswerFamilies {
             let family = AnswerFamily::new(family)
                 .map_err(|AnswerFamilyError::Empty| AnswerFamiliesError::EmptyFamily)?;
             if set.contains(&family) {
-                return Err(AnswerFamiliesError::Duplicate {
-                    family: family.into(),
-                });
+                return Err(AnswerFamiliesError::Duplicate { family });
             }
             set.insert(family);
         }
@@ -2022,8 +2027,8 @@ pub struct DefinitionChangedWithoutVersionBump {
     pub after: MeasurementDefinition,
 }
 
-/// Report an edit to the objective, estimator, decision rule, or protected
-/// apparatus list between two versions of one plan that did not come with a
+/// Report an edit to the objective, estimator, decision rule, answer families,
+/// or protected apparatus list between two versions of one plan that did not come with a
 /// genuine `definition_version` bump.
 ///
 /// Returns `None` when no member changed, or when `after`'s

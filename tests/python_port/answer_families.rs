@@ -106,13 +106,28 @@ fn skeleton_and_onboarding_state_the_answer_families_rule() {
         text.contains("statistical_design.answer_families"),
         "{text}"
     );
-    let required = &checklist["conditionalRequired"];
     assert!(
-        required.as_array().expect("array").contains(&json!({
-            "when": "statistical_design.decision_rule.baseline = constant-predictor",
-            "required": ["statistical_design.answer_families"],
-        })) || text.contains("answer_families"),
-        "{required}"
+        checklist["conditionalRequired"]
+            .as_array()
+            .expect("conditionalRequired array")
+            .contains(&json!({
+                "when": "statistical_design.decision_rule.baseline = constant-predictor",
+                "required": ["statistical_design.answer_families"],
+            })),
+        "{}",
+        checklist["conditionalRequired"]
+    );
+    assert!(
+        checklist["conditionalConstraints"]
+            .as_array()
+            .expect("conditionalConstraints array")
+            .iter()
+            .any(|entry| entry["constraint"]
+                .as_str()
+                .is_some_and(|constraint| constraint
+                    .contains("statistical_design.answer_families must be absent"))),
+        "{}",
+        checklist["conditionalConstraints"]
     );
 
     let skill = read(&package_root().join("skills/assurance-onboarding/SKILL.md"));

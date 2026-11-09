@@ -2272,7 +2272,7 @@ fn tc_243_answer_families_is_a_non_empty_set_of_distinct_non_empty_families() {
     assert_eq!(
         AnswerFamilies::new(["a", "b", "a"]),
         Err(AnswerFamiliesError::Duplicate {
-            family: "a".to_owned()
+            family: AnswerFamily::new("a").expect("valid family")
         })
     );
     assert_eq!(
