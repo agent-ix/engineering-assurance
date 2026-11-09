@@ -1,6 +1,6 @@
 ---
 id: PLAN-002
-title: "Verification semantics and compatibility implementation"
+title: "Verification semantics implementation"
 type: Plan
 status: complete
 relationships:
@@ -12,7 +12,7 @@ relationships:
     type: references
 ---
 
-# PLAN-002: Verification semantics and compatibility implementation
+# PLAN-002: Verification semantics implementation
 
 ## Outcome
 
@@ -56,11 +56,11 @@ TASK-008 ownership registry
 | --- | --- | --- |
 | TASK-008 | Ownership/type-fit registry and package inventory | FR-008; TC-053, TC-056..TC-059 |
 | TASK-009 | Reference JSON schemas | FR-008; FR-009; TC-057..TC-063, TC-068 |
-| TASK-011 | Canonical, negative, and generated-language fixtures; final review | StR-002; IT-005; TC-052..TC-068 |
+| TASK-011 | Canonical, negative, and generated-language fixtures; final review | StR-002; IT-005; TC-052, TC-053, TC-056..TC-063, TC-068 |
 
 ## Completion Gates
 
-- Every TC-052..TC-068 row has a real tracking tag and passing evidence.
+- Every surviving TC-052..TC-068 row has a real tracking tag and passing evidence.
 - The complete local lint, test, package-audit, document-validation, and
   integration-traceability gates pass.
 - Code review and gap analysis are retained with no unresolved required fix.

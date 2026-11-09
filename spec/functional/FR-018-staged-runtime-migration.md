@@ -57,7 +57,7 @@ then update this repository's direct invocation and remove the old path.
   subprocess references to those paths and the two temporary Rust semantic-
   policy exemptions. Historical review references remain inert records.
 - For the verification-semantics capability, keep the retained Python until
-  native Rust semantic-reference and fixture validation, ownership-registry
+  native Rust semantic-reference and fixture validation and ownership-registry
   validation all pass locally; replace every Python-backed Rust
   differential for that capability with expected fixtures captured once from the
   retained implementation and committed to this repository, so no Python is

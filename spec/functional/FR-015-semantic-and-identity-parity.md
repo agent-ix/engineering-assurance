@@ -69,7 +69,7 @@ diagnostic prose is not the discriminator.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-015-AC-1 | Over focused fictional cases, Rust produces the declared canonical fixtures, including exact integers beyond `i64` and `u64`. | Test (TC-100) |
-| FR-015-AC-2 | Success, unavailable, not-computed, not-applicable, failed, inconclusive, malformed, stale, tampered, lossy, and unreadable remain distinguishable; typed state labels retain stable wire spellings and untyped labels require exactly one known state. | Test (TC-102) |
+| FR-015-AC-2 | Success, unavailable, not-computed, not-applicable, failed, inconclusive, malformed, stale, tampered, and unreadable remain distinguishable; typed state labels retain stable wire spellings and untyped labels require exactly one known state. | Test (TC-102) |
 | FR-015-AC-3 | Invalid versions, provenance, mappings, fixtures, and numeric identity inputs fail without a source-byte change; every exercised semantic refusal exposes its expected typed reason without inspecting diagnostic prose. | Test (TC-103) |
 | FR-015-AC-4 | Static ownership and execution audits find no copied portable contract family, persisted evidence family, or executable foreign-language fixture. | Test (TC-104) |
 

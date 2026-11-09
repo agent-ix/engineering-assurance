@@ -318,7 +318,7 @@ implemented and reviewed.
 | TC-060 | Complete producer tuple and definition version survive projection for every producer-owned concept in a non-empty population; an absent tuple, an absent tuple field, and an empty environment each refuse | Unit | P0 | FR-009-AC-1 | ✅ Native Rust reference validation |
 | TC-061 | A non-empty declared non-success-state set survives every language projection without collapsing, and the committed projections agree across Python, TypeScript, and Rust | Property | P0 | FR-009-AC-2 | ✅ Native Rust state and projection comparison |
 | TC-062 | Unknown versions and missing provenance fail explicitly | Property | P0 | FR-009-AC-3 | ✅ Native Rust fixture refusals |
-| TC-063 | Every projected value cites its source record and field path | Property | P0 | FR-009-AC-4 | ✅ Native Rust reference validation |
+| TC-063 | A reference whose source field path is not an absolute JSON pointer, or whose source record id is empty, is refused with its typed reason | Property | P0 | FR-009-AC-4 | ✅ Native Rust reference validation |
 | TC-068 | Schema/ownership audit reads a non-empty contract population and finds no duplicate record family, and every value this library produces still conforms to the schemas this repository publishes for it | Static | P0 | NFR-004-AC-1 | ✅ Native Rust contract audit and published-schema conformance |
 | TC-087 | Every family in the decision table carries exactly one of keep, delete, or replace | Static | P0 | FR-013-AC-1 | ✅ |
 | TC-088 | The decision table accounts for every recurring script family present in the eight repositories, and states when the sources cannot be read | Integration | P0 | FR-013-AC-2 | ✅ |
@@ -332,7 +332,7 @@ implemented and reviewed.
 | TC-097 | Every first-party executable path in this repository has one current state and final disposition | Static | P0 | StR-003-VC-2, FR-018-AC-1 | 🚧 pending implementation |
 | TC-098 | Machine CLI output obeys the versioned stdout/stderr contract | Property | P0 | FR-014-AC-2 | 🚧 pending implementation |
 | TC-099 | Invalid protocol, input, root, host, and host response fail before side effects | Property | P0 | FR-014-AC-3 | 🚧 pending implementation |
-| TC-100 | For each ADR-002 semantic/projection/fixture capability row, Rust agrees byte-for-byte with the accepted identity and report reference over focused fictional and adverse cases, including generated arbitrary-precision integer boundaries | Integration | P0 | StR-003-VC-3, FR-015-AC-1 | 🚧 Fixture-generation slice is backed against reference bytes captured once from the retired implementation and committed to this repository; no retained implementation is executed as a differential oracle in this row's qualification path; aggregate pending |
+| TC-100 | For each ADR-002 semantic/projection/fixture capability row, Rust agrees byte-for-byte with the accepted identity over focused fictional and adverse cases, including generated arbitrary-precision integer boundaries | Integration | P0 | StR-003-VC-3, FR-015-AC-1 | 🚧 Fixture-generation slice is backed against reference bytes captured once from the retired implementation and committed to this repository; no retained implementation is executed as a differential oracle in this row's qualification path; aggregate pending |
 | TC-101 | Parsed Rust syntax for every reusable-library module rejects filesystem, environment, child-program, network, persistence, and arbitrary-stdout capability paths, including lexical aliases declared in that source, without treating comments or literals as code or claiming cross-document compiler resolution | Static | P0 | FR-014-AC-4, FR-014-CON-1, FR-014-CON-2 | ✅ AST audit, closed findings, adverse scope/alias cases, and mutation evidence passing |
 | TC-102 | Every successful and non-successful semantic state remains distinct; typed state spellings and exact-one untyped-label validation remain callable without string parsing | Integration | P0 | FR-015-AC-2 | 🚧 evidence-availability and semantic-reference state vocabularies backed; aggregate pending |
 | TC-103 | Invalid semantic inputs, including non-finite/retained-domain-overflow numbers and invalid version tokens, fail without a source-byte change; independent cases retain leading/trailing and interior ASCII space boundaries; every exercised semantic refusal exposes a typed reason without diagnostic-prose matching | Integration | P0 | FR-015-AC-3 | 🚧 evidence and semantic refusals backed; aggregate pending |
@@ -500,7 +500,7 @@ become reachable again the moment a second host is declared.
 | Test Case | Axis | Variants | Expected |
 |---|---|---|---|
 | TC-098, TC-099 | Protocol/result | supported v1; unknown version; malformed input; escaping root; unavailable or invalid host | one versioned result for success; every adverse case fails before a write or downstream action |
-| TC-100, TC-102, TC-103 | Semantic state | success; unavailable; not-computed; not-applicable; failed; inconclusive; malformed; stale; tampered; lossy; unreadable; arbitrary-precision integer; NaN/infinity/overflow-to-non-finite; blank and invalid-character version tokens; other version tokens | success on the shared supported domain; each non-success outcome and typed refusal reason remains distinct; non-finite numeric inputs and blank or invalid-character version tokens are refused, and any other version token is accepted |
+| TC-100, TC-102, TC-103 | Semantic state | success; unavailable; not-computed; not-applicable; failed; inconclusive; malformed; stale; tampered; unreadable; arbitrary-precision integer; NaN/infinity/overflow-to-non-finite; blank and invalid-character version tokens; other version tokens | success on the shared supported domain; each non-success outcome and typed refusal reason remains distinct; non-finite numeric inputs and blank or invalid-character version tokens are refused, and any other version token is accepted |
 | TC-107 | ix-flow lifecycle host | new run; pristine unbound recovery; interrupted resume; missing/accept/reject/repeated/opposite choice; invalid phase; binding drift; intact/broken chain; absent/malformed/oversized/timed-out host; automatic-gate evidence; hostile next-action text | preserve ix-flow ownership, exact binding, verified event integrity, one attributed decision, bounded typed output, pre-mutation history on refusal, and status-reconciled state after an indeterminate mutation; pass no gate override and execute no returned command text |
 | TC-108, TC-109, TC-110 | Remaining host integration | supported request/result; absent host; malformed response; invalid transition; incomplete scenario | preserve host ownership and fail unsupported inputs explicitly |
 | TC-113, TC-114 | Cutover | old only; additive parity; direct invocation updated; parity failure | delete only after local parity and restore the prior invocation on failure |
@@ -573,7 +573,7 @@ become reachable again the moment a second host is declared.
 | INT-002 | Persist and render evidence without redefining policy | quoin | service | TC-025, TC-046 | ✅ |
 | INT-003 | Load workflows, persist runs, resume, and gate decisions | ix-flow | service | TC-026, TC-028, TC-029, TC-030, TC-035, TC-047, TC-048 | ✅ |
 | INT-004 | Discover canonical onboarding through supported hosts | agent discovery adapters | service | TC-010, TC-011, TC-038 | ✅ |
-| INT-005 | Validate shared semantic references and historical compatibility | Quire, Quoin, ix-flow, native producer fixtures | library | TC-052..TC-068 | ✅ |
+| INT-005 | Validate shared semantic references | Quire, Quoin, ix-flow, native producer fixtures | library | TC-052, TC-053, TC-056..TC-063, TC-068 | ✅ |
 | INT-006 | Load Rust workflow invariants through a structured host interface | ix-flow | service | TC-107, TC-108 | 🚧 |
 | INT-007 | Load Rust-owned scenarios and assertions through a structured host interface | cli-agent-evals | service | TC-109, TC-110 | 🚧 |
 
@@ -630,10 +630,10 @@ become reachable again the moment a second host is declared.
 The completed baseline has no open gap: Quire reconciles TC-001..TC-049
 to real tracking-tagged symbols, and the retained declared-population aggregate records the
 selected host commands, models, governing versions, transcripts, and outcomes.
-TC-052..TC-068 are backed natively by the Rust semantic library, whose
+TC-052, TC-053, TC-056..TC-063 and TC-068 are backed natively by the Rust semantic library, whose
 tracking-tagged tests carry every criterion the retired
 `tests/test_verification_semantics.py` used to carry. TC-050, TC-051 and TC-069..TC-078 are
-withdrawn together with FR-006-AC-6, FR-006-AC-7, FR-011 and FR-015-AC-5; TC-199, TC-204 and
+withdrawn together with FR-006-AC-6, FR-006-AC-7, FR-011 and FR-015-AC-5; TC-054, TC-055 and TC-064..TC-067 are withdrawn together with FR-010, US-005-AC-2, US-005-AC-3 and FR-015-CON-1; TC-199, TC-204 and
 TC-208 are withdrawn together with FR-014-AC-11, FR-024-AC-12 and FR-027-AC-3; EC-013 is
 withdrawn; their ids are not reused. TC-087..TC-094
 remain in `tests/python_port/migration_contract.rs`, which reads the contract document

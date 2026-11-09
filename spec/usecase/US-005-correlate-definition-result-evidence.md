@@ -23,6 +23,8 @@ evidence, measurements, diagnostics, reports, and an attributed human decision
 | --- | --- | --- |
 | US-005-AC-1 | A reviewer can identify the authoritative owner, schema/version premise, and link for every semantic concept without consulting a parallel generic envelope. | Inspection (TC-053) |
 
+US-005-AC-2 and US-005-AC-3 are withdrawn. Their rows are removed and the identifiers are not reused.
+
 ## Dependencies (Contextual)
 
 Quire, Quoin, native producer, and ix-flow contracts remain authoritative.

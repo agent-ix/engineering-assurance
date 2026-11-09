@@ -483,3 +483,23 @@ fn tc_068_published_schemas_still_describe_the_values_this_library_produces() {
         "the ownership registry",
     );
 }
+
+#[trace("TC-063", "FR-009-AC-4")]
+#[test]
+fn tc_063_a_reference_must_cite_an_absolute_field_path_and_a_non_empty_record() {
+    // A source citation that is relative, or names no record, points at nothing.
+    for field_path in ["", "relative/path", "state"] {
+        let error = refuse_mutated_fixture(|value| {
+            value["references"][0]["source"]["field_path"] = serde_json::json!(field_path);
+        });
+        assert_eq!(
+            error.kind(),
+            SemanticErrorKind::InvalidSourcePath,
+            "field_path {field_path:?}"
+        );
+    }
+    let error = refuse_mutated_fixture(|value| {
+        value["references"][0]["source"]["record_id"] = serde_json::json!("");
+    });
+    assert_eq!(error.kind(), SemanticErrorKind::InvalidIdentity);
+}
