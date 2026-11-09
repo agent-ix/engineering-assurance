@@ -49,7 +49,7 @@ fn forbidden_semantic_capability(source: &str) -> Option<&'static str> {
         .find(|forbidden| identifiers.contains(forbidden))
 }
 
-#[trace("TC-100", "FR-015-AC-1")]
+#[trace("TC-100", "FR-015-AC-1", "StR-003-VC-3")]
 #[trace("TC-102", "FR-015-AC-2")]
 #[test]
 fn tc_100_semantic_fixture_and_non_success_states_are_complete() {
@@ -163,7 +163,7 @@ fn tc_103_semantic_reference_failures_do_not_collapse() {
     );
 }
 
-#[trace("TC-100", "FR-015-AC-1")]
+#[trace("TC-100", "FR-015-AC-1", "StR-003-VC-3")]
 #[trace("TC-104", "FR-015-AC-4", "FR-015-CON-2")]
 #[test]
 fn tc_100_rust_generator_matches_all_committed_inert_fixtures() {

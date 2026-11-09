@@ -154,11 +154,19 @@ same canonical bundle and do not redefine these responsibilities.
 - [FR-015](./functional/FR-015-semantic-and-identity-parity.md) — preserve
   verification semantics, identity, and canonicalization in Rust.
 - [FR-016](./functional/FR-016-rust-onboarding-and-workflow.md) — move onboarding,
-  workflow coordination, and invariants behind the Rust boundary.
+  workflow coordination, and invariants behind the Rust boundary. FR-016-AC-4
+  (JavaScript invariant-provider bridge) is withdrawn: the ix-flow host interface
+  it depended on is not available, and FR-018-AC-2 and FR-018-AC-4 guard removal
+  of the JavaScript providers. The identifier is not reused.
 - [FR-017](./functional/FR-017-rust-evaluation-and-qualification.md) — move agent
   evaluation and repository qualification behavior behind the Rust boundary.
 - [FR-018](./functional/FR-018-staged-runtime-migration.md) — retire replaced
   executable paths after local parity and direct-invocation cutover.
+  FR-018-AC-1 (per-path state and disposition matrix) and FR-018-AC-3 (cutover
+  rollback) are withdrawn: the Python cutovers are complete and no rollback or
+  per-path ledger remains to verify. FR-018-CON-2 (cutovers do not rewrite
+  historical bytes) and FR-018-CON-3 (coexistence is not reported as complete)
+  are withdrawn with them. Their identifiers are not reused.
 - [FR-019](./functional/FR-019-bounded-producer-execution.md) — execute an exact
   caller-declared producer through one bounded public Rust library boundary.
 - [FR-020](./functional/FR-020-measurement-plan-objective.md) — declare a

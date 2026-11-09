@@ -734,7 +734,15 @@ fn tc_107_retries_after_gate_defer_and_acknowledgement_converge() {
     }
 }
 
-#[trace("TC-107", "FR-016-AC-3", "FR-016-CON-5", "FR-016-CON-7", "FR-028-AC-2")]
+#[trace(
+    "TC-107",
+    "FR-016-AC-3",
+    "FR-016-CON-5",
+    "FR-016-CON-7",
+    "FR-028-AC-2",
+    "TC-099",
+    "FR-014-AC-3"
+)]
 #[test]
 fn tc_107_unavailable_and_malformed_inputs_fail_before_state() {
     let state = TestDirectory::new("host-errors");

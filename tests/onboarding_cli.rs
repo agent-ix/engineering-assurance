@@ -323,7 +323,15 @@ fn tc_105_cli_authors_one_quire_validated_confined_artifact() {
     assert_no_stages(repository.path());
 }
 
-#[trace("TC-105", "FR-016-AC-1", "FR-016-CON-4", "TC-045", "FR-001-AC-7")]
+#[trace(
+    "TC-105",
+    "FR-016-AC-1",
+    "FR-016-CON-4",
+    "TC-045",
+    "FR-001-AC-7",
+    "TC-099",
+    "FR-014-AC-3"
+)]
 #[test]
 fn tc_105_cli_refuses_invalid_or_escaping_publication_without_bytes() {
     let repository = TestDirectory::new("refusals");
@@ -431,7 +439,7 @@ fn tc_105_cli_refuses_a_symlink_target_escape() {
     assert!(!outside.path().join("AP-escaped.md").exists());
 }
 
-#[trace("TC-105", "FR-016-AC-1", "FR-016-CON-4")]
+#[trace("TC-105", "FR-016-AC-1", "FR-016-CON-4", "TC-099", "FR-014-AC-3")]
 #[test]
 fn tc_105_cli_preserves_unavailable_quire_and_rejects_bad_boundaries() {
     let repository = TestDirectory::new("quire-unavailable");

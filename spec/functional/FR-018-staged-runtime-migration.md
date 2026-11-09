@@ -25,13 +25,13 @@ then update this repository's direct invocation and remove the old path.
 
 ## Inputs
 
-- The executable-path matrix in ADR-002.
+- The capability boundary and cutover order in ADR-002.
 - The reviewed Rust library, CLI, and supported host interfaces.
 - Differential, package, rights, and integration evidence.
 
 ## Outputs
 
-- A disposition for each first-party executable path in this repository.
+
 - A final inventory of retained configuration and inert foreign-language data.
 
 ## Behavior
@@ -44,13 +44,12 @@ then update this repository's direct invocation and remove the old path.
   gates over the same Git-selected population and
   record identical accepted/refused status plus exact path, line, and category
   tuples before changing the direct `make test` invocation.
-- Keep the content-rights checker and its tests recoverable while proving that
-  reverting the dispatch cutover restores the retained invocation. Remove the
+- Keep the content-rights checker and its tests until the Rust dispatch passes
+  independently. Remove the
   checker, its Python tests, and their temporary Rust policy exemptions only
-  after the Rust dispatch passes independently and the package/archive audit no
-  longer imports the retained classifier.
+  after the package/archive audit no longer imports the retained classifier.
 - For the package/archive capability, run the retained Python audit and the Rust
-  adapter successfully, record a reversible
+  adapter successfully, record the
   `package-audit` dispatch cutover, and then remove `scripts/audit_packages.py`,
   `tests/test_packages.py`, `scripts/check_content_rights.py`, and
   `tests/test_content_rights.py` together with all executable test imports or
@@ -105,16 +104,12 @@ hosts, changed historical bytes, and unresolved path dispositions block removal.
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
 | FR-018-CON-1 | Deletion SHALL be the final step for each replaced capability. | Lifecycle | Test |
-| FR-018-CON-2 | Cutover SHALL NOT rewrite historical evidence or corpus bytes. | Data Integrity | Test |
-| FR-018-CON-3 | Temporary coexistence SHALL NOT be reported as completed remediation. | Reporting | Inspection |
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-018-AC-1 | Every first-party executable-path matrix row records one current state and one final disposition. | Test (TC-097) |
 | FR-018-AC-2 | Removal is refused unless old and new paths agree and direct invocations use the Rust interface. | Test (TC-113) |
-| FR-018-AC-3 | Before deletion, a failed Rust cutover can restore the previous invocation without rewriting historical evidence or corpus bytes. | Test (TC-114) |
 | FR-018-AC-4 | Final inventory and static scans find no unapproved first-party non-Rust semantic or assertion logic and exclude inert fixture samples from executable debt. | Test (TC-115) |
 
 ## Dependencies

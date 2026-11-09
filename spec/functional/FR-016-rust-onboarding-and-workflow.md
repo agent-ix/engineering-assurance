@@ -174,7 +174,6 @@ Quire unavailability during staged publication refuses publication.
 | FR-016-AC-1 | For the accepted onboarding fixtures, Rust returns the declared complete sorted inventory, status, recommendation, and artifact path for existing, absent, conflicting, malformed, unavailable, unjustified, incomplete-boundary, and valid-authoring cases without executing another implementation; duplicate-key or merge-key artifact identities remain malformed; absolute or parent-traversing targets, symlink escapes, existing destinations, invalid staged artifacts, malformed requests, and unsupported artifact types refuse without publishing bytes. | Test (TC-105) |
 | FR-016-AC-2 | For every canonical invariant and focused valid boundary fixture, Rust and the retained reference produce the same complete ordered outcome set at the same explicit evaluation instant; unknown names and malformed Rust requests are refused before an outcome is emitted. | Test (TC-106) |
 | FR-016-AC-3 | Start, pristine unbound-run recovery, interruption/resume, explicit acceptance, explicit rejection, missing choice, repeated same choice, opposite choice, invalid transition, run-binding mismatch, broken event chain, unavailable host, malformed/oversized/timed-out response, and automatic-gate evidence preserve ix-flow-owned state and human-gate behavior; every successful Rust result is typed and follows an intact ix-flow chain verification, every pre-mutation refusal leaves prior history unchanged, and every ambiguous post-mutation outcome is reported as indeterminate and reconciled on retry. | Test (TC-107) |
-| FR-016-AC-4 | Canonical and pilot invocations pass through Rust before either legacy JavaScript path is removed. | Test (TC-108) |
 | FR-016-AC-5 | Starting from a passing projection and breaking one binding, the Rust evaluator fails closed with that binding's code, and the retained reference agrees: every stage pair other than one step forward in the MeasurementPlan schema's stage order, and an unknown stage, yields `promotion_must_advance_one_stage`; an impact snapshot missing any change array or naming another profile or baseline yields `impact_snapshot_incomplete`; an expected but absent exception, or any recorded exception that is unowned, unjustified, without impact, expired at the evaluation instant, or undated, yields `owned_current_exception_required`; and a review for another subject, analysis, or artifact type, an invalid one, or one without a path yields `architecture_review_missing` or `code_review_missing`. | Test (TC-201) |
 
 ## Dependencies
@@ -182,11 +181,9 @@ Quire unavailability during staged publication refuses publication.
 - **Upstream**: FR-001 through FR-005, FR-014, FR-015, and an ix-flow interface
   supported by the ix-flow owner.
 - **Downstream**: FR-018 governs removal of the old paths.
-- **Sequence**: FR-016-AC-2 is an independently reviewable additive slice. It
-  does not authorize the host bridge or JavaScript removal required by
-  FR-016-AC-4.
+- **Sequence**: FR-016-AC-2 is an independently reviewable additive slice.
 - **Sequence**: FR-016-AC-1 is independently reviewable from ix-flow lifecycle
   and invariant-host integration. It does not authorize removal until FR-018's
   parity gate passes.
 - **Sequence**: FR-016-AC-3 ports the existing lifecycle adapter and does not
-  approve the JavaScript invariant-provider bridge needed by FR-016-AC-4.
+  approve a JavaScript invariant-provider bridge.

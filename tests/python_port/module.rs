@@ -278,6 +278,90 @@ fn only_the_configuration_package_entry_point_remains_python() {
     assert!(!source.contains("class "));
 }
 
+/// Every first-party file in a foreign executable language, relative to the repository root.
+fn foreign_executable_paths(dir: &std::path::Path, root: &std::path::Path, out: &mut Vec<String>) {
+    const SKIPPED: [&str; 6] = [
+        ".git",
+        "target",
+        "node_modules",
+        ".worktrees",
+        "spec",
+        "reviews",
+    ];
+    const FOREIGN: [&str; 8] = ["py", "js", "mjs", "cjs", "ts", "tsx", "sh", "bash"];
+    for entry in
+        std::fs::read_dir(dir).unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()))
+    {
+        let path = entry.expect("dir entry").path();
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        if path.is_dir() {
+            if !SKIPPED.contains(&name.as_str()) && !name.ends_with("-target") {
+                foreign_executable_paths(&path, root, out);
+            }
+        } else if path
+            .extension()
+            .is_some_and(|ext| FOREIGN.contains(&ext.to_string_lossy().as_ref()))
+        {
+            out.push(
+                path.strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/"),
+            );
+        }
+    }
+}
+
+#[test]
+#[trace(
+    "TC-115",
+    "FR-018-AC-4",
+    "NFR-005-AC-4",
+    "FR-016-CON-2",
+    "StR-003-VC-2",
+    "StR-003-VC-4"
+)]
+fn only_approved_foreign_language_paths_remain() {
+    let repository = root();
+    let mut found = Vec::new();
+    foreign_executable_paths(&repository, &repository, &mut found);
+    found.sort();
+    // The approved set: the configuration-only package entry point, the inert
+    // generated cross-language fixtures, the two JavaScript invariant providers
+    // ix-flow loads (an external-host dependency), and the cli-agent-evals host
+    // configuration. Any other foreign-language path fails here until it is
+    // given an owner disposition by being added to this list.
+    let generated = "engineering_assurance/fixtures/verification-semantics/generated/";
+    let approved = [
+        "engineering_assurance/__init__.py",
+        "engineering_assurance/skills/assurance-onboarding/scripts/invariants.js",
+        "evals/cli-agent-evals.config.mjs",
+        "pilots/assurance-workflows/scripts/invariants.js",
+    ];
+    let unapproved: Vec<&String> = found
+        .iter()
+        .filter(|path| !path.starts_with(generated) && !approved.contains(&path.as_str()))
+        .collect();
+    assert!(
+        unapproved.is_empty(),
+        "unapproved foreign-language paths: {unapproved:?}"
+    );
+    for path in approved {
+        assert!(
+            found.iter().any(|f| f == path),
+            "{path} is approved but absent"
+        );
+    }
+
+    // The host configuration only dispatches to the native provider, and the
+    // pilot provider only re-exports the canonical one.
+    let config = read(&repository.join("evals/cli-agent-evals.config.mjs"));
+    assert!(config.contains("agent-evals-provider"));
+    let pilot = read(&repository.join("pilots/assurance-workflows/scripts/invariants.js"));
+    assert_eq!(pilot.lines().count(), 1);
+    assert!(pilot.starts_with("export { invariants } from "));
+}
+
 #[test]
 #[trace("TC-195", "FR-003-AC-8")]
 fn every_schema_and_skeleton_is_valid() {
