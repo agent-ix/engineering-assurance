@@ -115,24 +115,35 @@ history; they cannot govern new measurement collections.
   (total best-constant agreements over total items). The families SHALL be
   the plan's `statistical_design.answer_families`, never inferred from the
   population prose or from whatever grouping a producer wrote.
-- `statistical_design.answer_families` SHALL be required exactly when
-  `decision_rule.baseline` is `constant-predictor`; the schema SHALL refuse a
-  plan that declares that baseline without it, and SHALL refuse the field on
-  a plan whose rule has any other baseline or a threshold, because a family
-  list that no baseline reads is a claim nothing checks. Each entry SHALL be
-  a non-empty string, entries SHALL be unique, and the list SHALL be
-  non-empty.
-- Because merging two answer spaces into one family understates the baseline
-  and lets a tool clear a bar it never beat, a checker SHALL require the set
-  of distinct `family` dimension values on the producer's item rows to equal
-  `answer_families` exactly, and SHALL return a typed inconclusive reason
-  naming the missing and the undeclared families when it does not. That
-  comparison lives in Quoin's measurement checker (`quoin-measurement`), not
-  in this repository, which owns only the declared list. Forward note: the
-  Quoin follow-up for the comparison and its inconclusive reason is tracked
-  by Linear PLAT-1020 against the Quoin repository.
-- Changing `answer_families` changes the baseline, so it is part of the
-  measurement definition and needs a new `definition_version`.
+- The schema SHALL require `statistical_design.answer_families` when
+  `decision_rule.baseline` is `constant-predictor`.
+- The schema SHALL refuse `statistical_design.answer_families` when the
+  decision rule has any other baseline or a threshold, because a family list
+  that no baseline reads is a claim nothing checks.
+- The schema SHALL refuse an `answer_families` list that is empty, repeats an
+  entry, or holds an empty or non-string entry.
+- The plan author SHALL name each answer-space family of the population once
+  in `answer_families`, and SHALL NOT infer the list from the Population
+  prose.
+- The Rust `AnswerFamilies` type SHALL be a non-empty set of distinct,
+  non-empty `AnswerFamily` strings, built through construction and
+  deserialization, which SHALL refuse an empty list with
+  `AnswerFamiliesError::Empty`, a repeated entry with
+  `AnswerFamiliesError::Duplicate` naming it, and an empty-string entry with
+  `AnswerFamiliesError::EmptyFamily`. It SHALL compare and serialize as a
+  set: reordering the list is not a change, and entries serialize sorted.
+- Forward note (not a requirement on this repository): Quoin's measurement
+  checker (`quoin-measurement`) is to require the set of distinct `family`
+  dimension values on the producer's item rows to equal `answer_families`
+  exactly, and to return a typed inconclusive reason naming the missing and
+  the undeclared families when it does not, so a producer that merges two
+  declared families is caught. That comparison and its reason are specified
+  and tracked in the Quoin follow-up to Linear PLAT-1020; this repository
+  owns only the declared list.
+- Changing `answer_families` changes the baseline, so the definition-change
+  check SHALL treat it as a member of the measurement definition (the Rust
+  `DefinitionMember::AnswerFamilies`, path
+  `statistical_design.answer_families`) and compare it as a set.
 - `baseline: prior-collection` SHALL mean the plan's metric in the collection
   this result is compared against under the same `definition_version`.
 - An accepted collection SHALL mean one the measurement intake admitted rather
@@ -211,9 +222,9 @@ history; they cannot govern new measurement collections.
   dependency on `baseline`, the direction and estimator consistency rules,
   the refused `eq` combinations, and that `answer_families` is required with
   `baseline: constant-predictor` and refused otherwise.
-- `Estimator`, `Comparator`, `Baseline`, `DecisionRule`, and the
-  definition-change check SHALL be reachable through the `measurement` Cargo
-  feature.
+- `Estimator`, `Comparator`, `Baseline`, `DecisionRule`, `AnswerFamily`,
+  `AnswerFamilies`, `AnswerFamiliesError`, and the definition-change check
+  SHALL be reachable through the `measurement` Cargo feature.
 
 ## Error Conditions
 
@@ -250,8 +261,9 @@ change produces a finding rather than being accepted silently.
 | FR-021-AC-14 | `holds_on_interval` judges a rule at the interval's lower bound for `gt` and `ge` and its upper bound for `lt` and `le`, for higher- and lower-is-better rules and for threshold and baseline (including relative-margin) references, so a point estimate that passes but whose unfavourable bound fails is refused; an interval at a level at or above the rule's is accepted; a missing interval, a lower level, an estimate outside the interval, a rule without `interval_level`, and non-finite inputs are typed refusals; and the point-form `holds` returns a typed `IntervalRequired` error for a rule with `interval_level`. | Test (TC-193) |
 | FR-021-AC-15 | `holds_on_interval_reporting` returns, with the verdict of `holds_on_interval`, the bound it judged at and that bound's value: the lower bound for `gt` and `ge`, the upper bound for `lt` and `le`, for threshold and baseline (including relative-margin) references, whether the rule holds or not; it refuses with the same typed errors as `holds_on_interval`, and `holds_on_interval` returns exactly its verdict. | Test (TC-239) |
 | FR-021-AC-16 | The MeasurementPlan frontmatter schema requires `statistical_design.answer_families` when `decision_rule.baseline` is `constant-predictor` and refuses a plan without it; it accepts a non-empty list of unique non-empty strings and refuses an empty list, a duplicate entry, an empty-string entry, and a non-string entry; it refuses `answer_families` with any other baseline and with a threshold rule. | Test (TC-240) |
-| FR-021-AC-17 | Editing `statistical_design.answer_families` (adding, removing, or changing a family) while `definition_version` stays the same yields one definition-change finding naming `statistical_design.answer_families`; the same edit with a changed `definition_version` yields none. | Test (TC-241) |
+| FR-021-AC-17 | Adding, removing, or changing a family in `statistical_design.answer_families`, or adding or removing the list, while `definition_version` stays the same yields one definition-change finding naming `statistical_design.answer_families`; reordering the same families yields no finding (the list is compared as a set); the same edit with a changed `definition_version` yields none. | Test (TC-241) |
 | FR-021-AC-18 | The MeasurementPlan skeleton's constant-predictor guidance and worked example show the `answer_families` declaration and say the families come from it rather than from the Population prose, and the onboarding checklist states the required-with-constant-predictor, refused-otherwise rule and that a producer's item-row families must equal the list. | Test (TC-242) |
+| FR-021-AC-19 | The Rust `AnswerFamilies` accepts a non-empty set of distinct non-empty `AnswerFamily` strings and refuses an empty list, a repeated entry, and an empty-string entry with distinct typed `AnswerFamiliesError`s, through construction and deserialization; two lists of the same families in a different order are equal and serialize identically in sorted order; `DefinitionMember::AnswerFamilies` has path `statistical_design.answer_families`; and a minimal consumer with only the `measurement` feature reaches these types. | Test (TC-243) |
 
 ## Dependencies
 

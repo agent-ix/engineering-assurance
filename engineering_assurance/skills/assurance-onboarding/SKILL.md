@@ -162,7 +162,8 @@ how. `kind` is one of `suppressed-observation`, `gain-within-noise`,
 is checked for shape only; Quoin's checker exercises the kinds it can detect.
 Declare only controls the owner has stated.
 
-The objective's `direction` and `bound`, `estimator`, `decision_rule`, and
+The objective's `direction` and `bound`, `estimator`, `decision_rule`,
+`answer_families` (compared as a set, so reordering is not a change), and
 `protected_apparatus` list are all part of the measurement definition (the
 objective's steering fields are not; retuning them needs no new version): when you add, remove, or change
 any of them on an existing plan, also change `definition_version`, so results
