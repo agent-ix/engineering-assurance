@@ -29,3 +29,9 @@ Tagged is not the same as backed, though. FR-009-AC-4 ("Projection values retain
 ## Verdict
 
 No criterion was left untagged and no live code lost a test. One medium gap: FR-009-AC-4's ✅ row is now backed only by a positive schema check, so a regression in native source-path validation would ship green. Not mergeable until FND-001 has an adverse test.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fix commit d2836165 adds `tc_063_a_reference_must_cite_an_absolute_field_path_and_a_non_empty_record` (tagged TC-063 / FR-009-AC-4): empty, relative and bare field paths refuse with `InvalidSourcePath`, an empty record id refuses with `InvalidIdentity`. Reviewer re-ran the mutation probe: with the `validate_source` field-path check replaced by `if false`, the new test fails; reverted afterwards. The TC-063 row now describes what the test asserts. |

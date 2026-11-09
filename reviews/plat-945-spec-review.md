@@ -32,3 +32,12 @@ Examined and clean: FR-013 statement edit, FR-015 title/inputs/behaviour/AC-1/AC
 ## Verdict
 
 The withdrawal is structurally sound: quire validate is green, no live relationship points at FR-010, historical reviews are preserved, and no replacement ledger or compatibility layer is introduced. Two medium findings block: FR-015-AC-2 still mandates a `lossy` state that no longer exists, and the Coverage Gaps / PLAN-002 range claims and withdrawn-id record are inconsistent with the removed TCs and ACs. Not mergeable until FND-001 and FND-002 are fixed; the lows are one-line edits in the same files.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fix commit d2836165 removes `lossy` from FR-015-AC-2 and from the TC-100/TC-102/TC-103 variation row; no `lossy` state reference remains in spec/. |
+| FND-002 | fixed | Fix commit d2836165 lists the surviving ids (TC-052, TC-053, TC-056..TC-063, TC-068) consistently in the spec/tests.md Coverage Gaps paragraph, the INT-005 row, the PLAN-002 TASK-011 row and TASK-011 acceptance; the PLAN-002 completion gate says "every surviving" row; the not-reused sentence now records TC-054, TC-055, TC-064..TC-067 with FR-010, US-005-AC-2, US-005-AC-3 and FR-015-CON-1. |
+| FND-003 | fixed | Fix commit d2836165 adds the US-005-AC-2/AC-3 withdrawn, not-reused note. |
+| FND-004 | fixed | Fix commit d2836165 drops "and report reference" from TC-100, renames PLAN-002 to "Verification semantics implementation", and restores the conjunction in FR-018. |
