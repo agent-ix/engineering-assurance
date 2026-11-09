@@ -28,3 +28,10 @@ Evidence: the focused `measurement` and `python_port` test binaries pass (37 and
 ## Verdict
 
 The schema rule and the Rust types meet FR-021-AC-16, AC-17 and AC-19. The set-newtype shape matches `ProtectedApparatus`: a BTreeSet newtype with sorted serialization, refusals on both construction and deserialization, and a round trip. The PR deserializes through `Vec<String>` so that an empty entry maps to the distinct `EmptyFamily` error, which is a deliberate and correct deviation from the sibling. Only two low documentation and typing nits.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | still-open: member lists fixed, reflow not done | Fix commit 5be346c adds answer families to both member lists. The reflow only moved the long text down: the module doc's `evaluated; an objective's bound is informational. The objective's weight, value_half_life, and` line is now 104 columns (the only doc line over 100 in the file), and the rustdoc line `or protected apparatus list between two versions of one plan that did not come with a` is 89 columns. Rewrap both paragraphs to the ~80-column width of their neighbours. |
+| FND-002 | fixed | Fix commits 5be346c and c65c784: `Duplicate { family: AnswerFamily }`, constructed as `Duplicate { family }`; `AnswerFamily` gains `Display` writing the inner string, so the `answer_families names {family} more than once` message is unchanged; tc_243 builds the expected error with `AnswerFamily::new("a")`; FR-021 already says "`AnswerFamiliesError::Duplicate` naming it". |

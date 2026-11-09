@@ -32,3 +32,9 @@ Mutation checks were run in a scratch worktree and each was reverted:
 ## Verdict
 
 FR-021-AC-16, AC-17 and AC-19 are backed by tests that fail under mutation. FR-021-AC-18 is backed only partly: the skeleton and onboarding-skill text are asserted, but the generated checklist's required and refused rule is not, although the checklist does state it today (verified from `onboard-report --json` output).
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fix commit 5be346c removes the `\|\| text.contains("answer_families")` fallback, asserts the `conditionalRequired` entry `{when: statistical_design.decision_rule.baseline = constant-predictor, required: [statistical_design.answer_families]}` on its own, and asserts a `conditionalConstraints` entry containing `statistical_design.answer_families must be absent`. Re-run mutation at c65c784: with the schema `else` removed the test fails; restored, it passes. |

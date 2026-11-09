@@ -11,10 +11,10 @@
 //! path list and the closed `negative_controls` vocabulary, and the check that
 //! an edit to the objective, estimator, rule, answer families, or protected
 //! list came with a new `definition_version`. Only the decision rule is
-//! evaluated; an objective's `bound` is informational. The objective's `weight`, `value_half_life`, and
-//! `budget` steering fields (FR-026) are advisory only: they are excluded
-//! from the definition-change check, and no decision rule evaluation ever
-//! reads them.
+//! evaluated; an objective's `bound` is informational. The objective's
+//! `weight`, `value_half_life`, and `budget` steering fields (FR-026) are
+//! advisory only: they are excluded from the definition-change check, and no
+//! decision rule evaluation ever reads them.
 //! A rule may state an `interval_level` (FR-021-AC-13); it is then evaluated at
 //! the unfavourable end of an observation's [`Interval`], a serde-only value
 //! type the observation's owner reuses for validation. The observation itself
@@ -2028,8 +2028,8 @@ pub struct DefinitionChangedWithoutVersionBump {
 }
 
 /// Report an edit to the objective, estimator, decision rule, answer families,
-/// or protected apparatus list between two versions of one plan that did not come with a
-/// genuine `definition_version` bump.
+/// or protected apparatus list between two versions of one plan that did not
+/// come with a genuine `definition_version` bump.
 ///
 /// Returns `None` when no member changed, or when `after`'s
 /// `definition_version` is present and differs from `before`'s (a genuine
