@@ -416,7 +416,8 @@ fn tc_141_definition_edit_without_a_version_bump_is_a_typed_finding_naming_the_m
             "objective",
             "statistical_design.estimator",
             "statistical_design.decision_rule",
-            "protected_apparatus"
+            "protected_apparatus",
+            "statistical_design.answer_families"
         ]
     );
 }
