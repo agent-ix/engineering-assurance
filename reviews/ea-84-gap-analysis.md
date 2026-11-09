@@ -41,3 +41,16 @@ Two flipped rows claim more than their tests show.
 Traceability is complete and the gate passes. FND-001 and FND-002 are status
 prose that overstates coverage. Back them with the tests named above, or keep an
 honest caveat in the row.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs | Escape Cause |
+| --- | --- | --- | --- | --- |
+| FND-003 | low | The FR-014-AC-2 and TC-098 status cells still name only `tests/manifest_host_cli.rs`, although the new table-driven test in `tests/package_boundary.rs` is now the main backing. That table also omits the `agent-evals` capability, which emits the same machine error envelope, and gives no reason for the omission (`onboard-report` is human-facing and is rightly excluded). | spec/tests.md:111; spec/tests.md:325; tests/package_boundary.rs:58-130 | correct-requirement-no-evidence |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | `tc_098_every_machine_facing_command_emits_one_versioned_json_result_on_stdout` drives twelve commands through a refusal and asserts a non-zero exit, non-empty stderr, exactly one newline-terminated JSON line, the error protocol and the capability. Making `scope-footprint` emit a second stdout line turns it red. |
+| FND-002 | fixed | The FR-017-AC-4, FR-017-CON-2, TC-112 and NFR-005 rows now name what is audited and state that GitHub workflow YAML is not. |

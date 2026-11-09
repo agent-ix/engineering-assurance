@@ -57,3 +57,13 @@ Not mergeable yet. FND-001 makes a tagged gate test depend on the checkout's
 ignored files and blind to two directories. FND-002 overstates what the audit
 proves. Both are small fixes inside this PR. All re-tags are sound and the
 NFR-002 tests can fail.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The audit lists `git ls-files -z` and no longer skips any directory. Checked: a gitignored `.venv/lib/site.py` stays green, a tracked `spec/tools/hidden.py` goes red. |
+| FND-002 | fixed | New `host_configuration_is_declarative_or_dispatches_to_the_native_cli` audits seven plugin and host manifests for program-launching keys, every `package.json` script for native dispatch, and the cli-agent-evals config's imports and process APIs. Adding an `mcpServers` command to `opencode.json` turns it red. Workflow YAML is stated as excluded in the matrix rows. |
+| FND-003 | fixed | The reverse "approved but absent" loop and the pilot re-export check were removed. |
+| FND-004 | fixed | Paths are kept only when `symlink_metadata` reports a regular file. |
+| FND-005 | fixed | The duplicate NFR-002-AC-1 test was removed. NFR-002-AC-1 is now tagged on `every_incomplete_semantic_class_withholds_aggregation`. The AC-2 and AC-3 tests are kept. |

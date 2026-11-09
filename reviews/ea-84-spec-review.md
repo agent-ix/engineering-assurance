@@ -54,3 +54,12 @@ The withdrawals are justified and the edited documents are structurally valid.
 FND-001 should be fixed before merge, because it records a false reason for
 dropping a guard that a previous review kept on purpose. FND-002 to FND-004 are
 small wording and convention fixes.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The FR-016 withdrawal paragraph names the real guards: TC-106 parity, TC-036, the package-audit member list and TC-115. |
+| FND-002 | fixed | The FR-018 paragraph now says rollback, a per-path ledger and a coexistence-reporting rule are not required before release, and that FR-018-AC-2 and AC-4 still gate removal. |
+| FND-003 | fixed | "Withdrawn, not reused" paragraphs are in FR-016 and FR-018. The spec.md notes and the empty Outputs line are removed. |
+| FND-004 | fixed | INT-006 is withdrawn with a not-reused line, the lifecycle row is INT-008, and TC-107's detail row points at INT-008. No live INT-006 reference remains. |
