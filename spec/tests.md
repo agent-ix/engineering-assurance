@@ -127,7 +127,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-017 | FR-017-AC-1 | TC-109 | ✅ Backed by the tagged tests |
 | FR-017 | FR-017-AC-2 | TC-110 | ✅ Backed by the tagged tests |
 | FR-017 | FR-017-AC-3 | TC-111 | ✅ Bounded Rust package/archive/install candidate and preceding qualification slices backed |
-| FR-017 | FR-017-AC-4 | TC-112 | ✅ npm lifecycle, content-rights, and package-audit gates are declarative Rust dispatch |
+| FR-017 | FR-017-AC-4 | TC-112 | ✅ npm lifecycle, content-rights, and package-audit gates are declarative Rust dispatch; plugin manifests, `opencode.json`, `package.json` scripts and the cli-agent-evals config are audited, GitHub workflow YAML is not |
 | FR-017 | FR-017-AC-9 | TC-136 | ✅ Provider responses omit absent optional scenario metadata from the emitted bytes |
 | FR-017 | FR-017-AC-10 | TC-137 | ✅ Coverage refusals carry condition-specific codes and authored locations |
 | FR-017 | FR-017-AC-6 | TC-120 | ✅ Typed Rust policy, retained-Python differential, adverse boundaries, ordering, resource ceilings, and mutation probes passing |
@@ -227,7 +227,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | NFR-001 | Install, discovery, byte comparison, and static scan | TC-038 | ✅ Passing |
 | NFR-002 | Agent evaluation against fixture-authorized outcomes | TC-039 | ✅ `tests/evaluation_parity.rs`: the aggregate gate withholds on any unsupported addition, any inferred terminal decision, and any incomplete or failing cell of the declared qualification population, and ignores an unqualified host |
 | NFR-003 | Wheel/npm member audit plus compatibility invocation | TC-040 | ✅ Passing |
-| NFR-005 | Exact toolchain build, unsafe audit, executable-path audit, Quire reconciliation, matrix row integrity | TC-115..TC-118, TC-205 | ✅ Executable-language audit, trace-marker and reconciliation checks passing |
+| NFR-005 | Exact toolchain build, unsafe audit, executable-path audit, Quire reconciliation, matrix row integrity | TC-115..TC-118, TC-205 | ✅ Executable-language and host-configuration audit (workflow YAML excluded), trace-marker and reconciliation checks passing |
 
 ### Constraint Coverage
 
@@ -249,7 +249,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-016-CON-6 | TC-107 | ✅ State-file isolation and delegated chain verification passing |
 | FR-016-CON-7 | TC-107 | ✅ Direct argv and display-only next-action guards passing |
 | FR-017-CON-1 | TC-109 | ✅ Backed by the tagged tests |
-| FR-017-CON-2 | TC-112 | ✅ npm lifecycle hooks backed |
+| FR-017-CON-2 | TC-112 | ✅ npm lifecycle hooks backed; GitHub workflow YAML is not audited |
 | FR-018-CON-1 | TC-113 | ✅ Backed by the tagged tests |
 | FR-022-CON-1 | TC-153 | ✅ Claim-strength-only consumer resolves no `serde_json` |
 
@@ -341,7 +341,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-137 | Each coverage refusal condition — incomplete totals, unbacked rows, status lies, first-party untracked symbols, a fatal local diagnostic, a skipped status classification, and an unparseable document — yields its own code, every offending row is named with its authored document and line, all failing conditions are reported together, and no repository gap is reported as a coverage-tool failure | Integration | P0 | FR-017-AC-10 | ✅ condition-specific located refusals backed |
 | TC-110 | The pure typed Rust evaluator preserves the exact declared-population contract and deterministically withholds aggregation for missing, duplicate, malformed, unsupported, unavailable, failed, changed-governing-identity, changed-workflow, unsupported-addition, invalid-transcript-reference, invalid-count, outcome-mismatch, and terminal-pair cases; input permutation cannot change the result, oversized input refuses before decoding, and the reusable boundary performs no I/O | Property | P0 | FR-017-AC-2, FR-017-CON-1, FR-017-CON-3 | ✅ typed Rust aggregation, retained-Python differential cases, adverse cases, portable path/refusal rules, resource ceiling, and mutation probes passing |
 | TC-111 | Each package, rights, manifest, integration, and publication-refusal capability has independent positive and negative subcases matching the retained gate; npm stage/cleanup covers missing, linked, special, non-portable, oversized, excessive, pre-existing, changed, exact-copy, rollback, idempotent-absence, direct-JSON, and hook-empty-stdout states; the content-rights tree adapter covers exact Git selection, tracked/untracked/ignored entries, gitlinks, links, special files, protected tokens, repository-root identity, deterministic findings, and every exact/over resource boundary; the package-audit adapter covers pre-build linked/special/unsafe/over-limit source refusal including wheel build configuration, direct bounded builder/installer processes and descendant groups, fail-closed hosts without process-group containment, invocation-owned package-manager cache/temporary paths, bounded top-level output correspondence, preflight-absent and exact post-process npm staging cleanup on success and failure, exact archive selection, validated regular/zero-payload-directory kinds, raw tar extension-header refusal before preprocessing, safe unique member names, exact/over archive bytes, total entries, member bytes, and aggregate expanded bytes, traceability coverage that counts an untracked trace tag as a gap only when it lies outside every declared submodule, independent report/archive allowlist agreement, every content-rights category without disclosure, exact license/private metadata, offline installs, thin host discovery, canonical/pilot YAML equivalence, installed links/special files/escapes, and cross-format canonical byte identity | Property | P0 | FR-017-AC-3 | ✅ bounded Rust package, rights, manifest, integration, publication-refusal, archive, install, correspondence, and adverse-case slices reviewed and passing |
-| TC-112 | Package-manager and host files contain declarative dispatch only; npm lifecycle hooks invoke the local Rust CLI in explicit hook mode without embedded staging/refusal semantics or contamination of npm output; `make test` invokes the Rust content-rights tree adapter and `make package-audit` invokes the Rust package-audit adapter after their respective correspondence; local qualification, real-agent evaluation, publication, and release operations remain explicit manual actions | Static | P0 | FR-017-AC-4, FR-017-CON-2 | ✅ npm lifecycle, content-rights, and package-audit Rust dispatch backed |
+| TC-112 | Package-manager and host files contain declarative dispatch only; npm lifecycle hooks invoke the local Rust CLI in explicit hook mode without embedded staging/refusal semantics or contamination of npm output; `make test` invokes the Rust content-rights tree adapter and `make package-audit` invokes the Rust package-audit adapter after their respective correspondence; local qualification, real-agent evaluation, publication, and release operations remain explicit manual actions | Static | P0 | FR-017-AC-4, FR-017-CON-2 | ✅ npm lifecycle, content-rights, and package-audit Rust dispatch backed; GitHub workflow YAML is not audited |
 | TC-113 | Removal refuses incomplete parity, and direct invocations that still use the old path; content-rights removal additionally requires exact full-tree status/finding correspondence and an independently passing Rust tree and package-audit dispatch, followed by removal of every executable import or subprocess reference to the deleted Python paths | Property | P0 | FR-018-AC-2, FR-018-CON-1 | ✅ content-rights and package-audit cutovers plus final four-file deletion candidate backed |
 | TC-115 | Final audit finds no unapproved non-Rust semantic or assertion logic | Static | P0 | StR-003-VC-2, StR-003-VC-4, FR-016-CON-2, FR-018-AC-4, NFR-005-AC-4 | ✅ `tests/python_port/module.rs` executable-language audit passing |
 | TC-117 | Parsed first-party Rust tests under `src/` and `tests/` use an exact unaliased `ix_trace_rs::trace` import and bare trace attributes carrying both TC and AC literals; absent, aliased, path-qualified, malformed, invalid-source, and over-limit cases fail closed | Static | P0 | NFR-005-AC-2 | ✅ Parsed repository census, canonical-form adverse cases, and mutation evidence passing |
@@ -572,8 +572,10 @@ become reachable again the moment a second host is declared.
 | INT-003 | Load workflows, persist runs, resume, and gate decisions | ix-flow | service | TC-026, TC-028, TC-029, TC-030, TC-035, TC-047, TC-048 | ✅ |
 | INT-004 | Discover canonical onboarding through supported hosts | agent discovery adapters | service | TC-010, TC-011, TC-038 | ✅ |
 | INT-005 | Validate shared semantic references | Quire, Quoin, ix-flow, native producer fixtures | library | TC-052, TC-053, TC-056..TC-063, TC-068 | ✅ |
-| INT-006 | Drive the ix-flow run lifecycle through the Rust workflow host | ix-flow | service | TC-107 | ✅ |
+| INT-008 | Drive the ix-flow run lifecycle through the Rust workflow host | ix-flow | service | TC-107 | ✅ |
 | INT-007 | Load Rust-owned scenarios and assertions through a structured host interface | cli-agent-evals | service | TC-109, TC-110 | ✅ |
+
+INT-006 is withdrawn with FR-016-AC-4. Its row is removed and the identifier is not reused.
 
 ### Integration Test Details
 
@@ -593,7 +595,7 @@ become reachable again the moment a second host is declared.
 | TC-048 | INT-003 | Run identity mismatch | Existing id with changed binding | Refused with both runs unchanged | P0 |
 | TC-010 | INT-004 | Host discovery permutations | Two sources by four hosts | Same canonical skill | P0 |
 | TC-011 | INT-004 | Workflow discovery | Canonical skill | Exactly four workflow definitions | P0 |
-| TC-107 | INT-006 | Run lifecycle and human gates | Versioned Rust provider and fictional runs | Existing ix-flow state behavior is preserved | P0 |
+| TC-107 | INT-008 | Run lifecycle and human gates | Versioned Rust provider and fictional runs | Existing ix-flow state behavior is preserved | P0 |
 | TC-109 | INT-007 | Complete declared-host evaluation | Seven scenarios on every declared host | One valid result cell per declared cell, with explicit decisions | P0 |
 | TC-110 | INT-007 | Invalid or incomplete evaluation | Missing and malformed host results | Aggregate gate remains withheld | P0 |
 

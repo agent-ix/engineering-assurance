@@ -176,6 +176,14 @@ Quire unavailability during staged publication refuses publication.
 | FR-016-AC-3 | Start, pristine unbound-run recovery, interruption/resume, explicit acceptance, explicit rejection, missing choice, repeated same choice, opposite choice, invalid transition, run-binding mismatch, broken event chain, unavailable host, malformed/oversized/timed-out response, and automatic-gate evidence preserve ix-flow-owned state and human-gate behavior; every successful Rust result is typed and follows an intact ix-flow chain verification, every pre-mutation refusal leaves prior history unchanged, and every ambiguous post-mutation outcome is reported as indeterminate and reconciled on retry. | Test (TC-107) |
 | FR-016-AC-5 | Starting from a passing projection and breaking one binding, the Rust evaluator fails closed with that binding's code, and the retained reference agrees: every stage pair other than one step forward in the MeasurementPlan schema's stage order, and an unknown stage, yields `promotion_must_advance_one_stage`; an impact snapshot missing any change array or naming another profile or baseline yields `impact_snapshot_incomplete`; an expected but absent exception, or any recorded exception that is unowned, unjustified, without impact, expired at the evaluation instant, or undated, yields `owned_current_exception_required`; and a review for another subject, analysis, or artifact type, an invalid one, or one without a path yields `architecture_review_missing` or `code_review_missing`. | Test (TC-201) |
 
+FR-016-AC-4 is withdrawn. Its row is removed and the identifier is not reused. It
+required the invocations to pass through a Rust invariant provider loaded by
+ix-flow before the JavaScript providers are removed, and it depended on an
+ix-flow interface owned elsewhere. Removal of the providers is still guarded:
+TC-106 parity runs the canonical `invariants.js`, TC-036 resolves the pilot
+re-export, the package audit lists the pilot provider as a required member, and
+TC-115 requires both files to be present until a Rust provider replaces them.
+
 ## Dependencies
 
 - **Upstream**: FR-001 through FR-005, FR-014, FR-015, and an ix-flow interface

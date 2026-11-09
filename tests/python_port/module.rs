@@ -278,37 +278,46 @@ fn only_the_configuration_package_entry_point_remains_python() {
     assert!(!source.contains("class "));
 }
 
-/// Every first-party file in a foreign executable language, relative to the repository root.
-fn foreign_executable_paths(dir: &std::path::Path, root: &std::path::Path, out: &mut Vec<String>) {
-    const SKIPPED: [&str; 6] = [
-        ".git",
-        "target",
-        "node_modules",
-        ".worktrees",
-        "spec",
-        "reviews",
-    ];
+/// Every tracked, non-symlink file in a foreign executable language, relative to the
+/// repository root. The Git-selected population keeps ignored build and virtualenv
+/// content out and leaves no tracked directory unscanned.
+fn foreign_executable_paths() -> Vec<String> {
     const FOREIGN: [&str; 8] = ["py", "js", "mjs", "cjs", "ts", "tsx", "sh", "bash"];
-    for entry in
-        std::fs::read_dir(dir).unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()))
-    {
-        let path = entry.expect("dir entry").path();
-        let name = path.file_name().unwrap().to_string_lossy().into_owned();
-        if path.is_dir() {
-            if !SKIPPED.contains(&name.as_str()) && !name.ends_with("-target") {
-                foreign_executable_paths(&path, root, out);
-            }
-        } else if path
-            .extension()
-            .is_some_and(|ext| FOREIGN.contains(&ext.to_string_lossy().as_ref()))
-        {
-            out.push(
-                path.strip_prefix(root)
-                    .unwrap()
-                    .to_string_lossy()
-                    .replace('\\', "/"),
-            );
-        }
+    let repository = root();
+    let listing = Command::new("git")
+        .args(["ls-files", "-z"])
+        .current_dir(&repository)
+        .output()
+        .expect("git must be runnable");
+    assert!(listing.status.success(), "git ls-files failed");
+    let mut found: Vec<String> = String::from_utf8(listing.stdout)
+        .expect("tracked paths must be UTF-8")
+        .split('\0')
+        .filter(|path| !path.is_empty())
+        .filter(|path| {
+            std::path::Path::new(path)
+                .extension()
+                .is_some_and(|ext| FOREIGN.contains(&ext.to_string_lossy().as_ref()))
+        })
+        .filter(|path| {
+            std::fs::symlink_metadata(repository.join(path))
+                .is_ok_and(|metadata| metadata.file_type().is_file())
+        })
+        .map(str::to_owned)
+        .collect();
+    found.sort();
+    found
+}
+
+/// True when any JSON object under `value` has a key that launches a program.
+fn launches_program(value: &Value) -> bool {
+    match value {
+        Value::Object(members) => members.iter().any(|(key, member)| {
+            ["command", "hooks", "scripts", "mcpServers"].contains(&key.as_str())
+                || launches_program(member)
+        }),
+        Value::Array(items) => items.iter().any(launches_program),
+        _ => false,
     }
 }
 
@@ -322,15 +331,11 @@ fn foreign_executable_paths(dir: &std::path::Path, root: &std::path::Path, out: 
     "StR-003-VC-4"
 )]
 fn only_approved_foreign_language_paths_remain() {
-    let repository = root();
-    let mut found = Vec::new();
-    foreign_executable_paths(&repository, &repository, &mut found);
-    found.sort();
     // The approved set: the configuration-only package entry point, the inert
     // generated cross-language fixtures, the two JavaScript invariant providers
     // ix-flow loads (an external-host dependency), and the cli-agent-evals host
-    // configuration. Any other foreign-language path fails here until it is
-    // given an owner disposition by being added to this list.
+    // configuration. Any other tracked foreign-language path fails here until it
+    // is given an owner disposition by being added to this list.
     let generated = "engineering_assurance/fixtures/verification-semantics/generated/";
     let approved = [
         "engineering_assurance/__init__.py",
@@ -338,28 +343,68 @@ fn only_approved_foreign_language_paths_remain() {
         "evals/cli-agent-evals.config.mjs",
         "pilots/assurance-workflows/scripts/invariants.js",
     ];
-    let unapproved: Vec<&String> = found
-        .iter()
+    let unapproved: Vec<String> = foreign_executable_paths()
+        .into_iter()
         .filter(|path| !path.starts_with(generated) && !approved.contains(&path.as_str()))
         .collect();
     assert!(
         unapproved.is_empty(),
         "unapproved foreign-language paths: {unapproved:?}"
     );
-    for path in approved {
+}
+
+#[test]
+#[trace(
+    "TC-115",
+    "NFR-005-AC-4",
+    "StR-003-VC-4",
+    "FR-017-AC-4",
+    "FR-017-CON-2"
+)]
+fn host_configuration_is_declarative_or_dispatches_to_the_native_cli() {
+    let repository = root();
+
+    // Plugin manifests, marketplace files and opencode.json declare content only.
+    let manifests = [
+        ".agents/plugins/marketplace.json",
+        ".claude-plugin/marketplace.json",
+        ".claude-plugin/plugin.json",
+        ".codex-plugin/plugin.json",
+        ".github/plugin/marketplace.json",
+        ".github/plugin/plugin.json",
+        "opencode.json",
+    ];
+    for path in manifests {
+        let document: Value = serde_json::from_str(&read(&repository.join(path)))
+            .unwrap_or_else(|e| panic!("{path} is not JSON: {e}"));
+        assert!(!launches_program(&document), "{path} launches a program");
+    }
+
+    // Every package script dispatches to the native CLI.
+    let package: Value = serde_json::from_str(&read(&repository.join("package.json"))).unwrap();
+    let scripts = package["scripts"].as_object().expect("package scripts");
+    assert!(!scripts.is_empty());
+    for (name, script) in scripts {
+        let script = script.as_str().expect("script is a string");
         assert!(
-            found.iter().any(|f| f == path),
-            "{path} is approved but absent"
+            script.starts_with("cargo run --locked --quiet --features full -- ")
+                && !script.contains("&&")
+                && !script.contains(';'),
+            "package script {name} is not native dispatch: {script}"
         );
     }
 
-    // The host configuration only dispatches to the native provider, and the
-    // pilot provider only re-exports the canonical one.
+    // The cli-agent-evals configuration only names the native provider.
     let config = read(&repository.join("evals/cli-agent-evals.config.mjs"));
     assert!(config.contains("agent-evals-provider"));
-    let pilot = read(&repository.join("pilots/assurance-workflows/scripts/invariants.js"));
-    assert_eq!(pilot.lines().count(), 1);
-    assert!(pilot.starts_with("export { invariants } from "));
+    let imports: Vec<&str> = config
+        .lines()
+        .filter(|line| line.starts_with("import "))
+        .collect();
+    assert_eq!(imports, ["import { dirname } from \"node:path\";"]);
+    for forbidden in ["child_process", "spawn", "exec", "eval(", "fetch("] {
+        assert!(!config.contains(forbidden), "config uses {forbidden}");
+    }
 }
 
 #[test]

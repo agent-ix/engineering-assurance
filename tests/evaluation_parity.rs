@@ -164,6 +164,7 @@ fn complete_matrix_preserves_declared_aggregation_outcomes() {
 
 #[test]
 #[trace("TC-110", "FR-017-AC-2", "FR-017-CON-1", "FR-017-CON-3")]
+#[trace("TC-039", "NFR-002-AC-1")]
 fn every_incomplete_semantic_class_withholds_aggregation() {
     let complete = complete_matrix();
     assert!(aggregate_evaluations(&complete).ok);
@@ -498,24 +499,6 @@ fn failure_codes(matrix: &[EvaluationEnvelope]) -> Vec<String> {
     let result = aggregate_evaluations(matrix);
     assert!(!result.ok, "the matrix must be withheld");
     result.failures.iter().map(ToString::to_string).collect()
-}
-
-#[test]
-#[trace("TC-039", "NFR-002-AC-1")]
-fn tc_039_an_unsupported_addition_in_any_required_cell_withholds_aggregation() {
-    let complete = complete_matrix();
-    assert!(aggregate_evaluations(&complete).ok);
-    for index in 0..complete.len() {
-        let matrix = changed(&complete, index, |item| {
-            item.unsupported_additions.push("invented-claim".to_owned());
-        });
-        assert!(
-            failure_codes(&matrix)
-                .iter()
-                .any(|failure| failure.contains("unsupported-assurance-addition")),
-            "cell {index} must report the unsupported addition"
-        );
-    }
 }
 
 #[test]
