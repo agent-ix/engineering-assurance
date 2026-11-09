@@ -1668,9 +1668,8 @@ impl AnswerFamilies {
     ) -> Result<Self, AnswerFamiliesError> {
         let mut set = BTreeSet::new();
         for family in families {
-            let family = AnswerFamily::new(family).map_err(|AnswerFamilyError::Empty| {
-                AnswerFamiliesError::EmptyFamily
-            })?;
+            let family = AnswerFamily::new(family)
+                .map_err(|AnswerFamilyError::Empty| AnswerFamiliesError::EmptyFamily)?;
             if set.contains(&family) {
                 return Err(AnswerFamiliesError::Duplicate {
                     family: family.into(),

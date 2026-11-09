@@ -68,7 +68,10 @@ fn answer_families_are_refused_with_any_other_baseline_or_a_threshold_rule() {
     for baseline in ["prior-collection", "best-seen", "external-reference"] {
         let rule = json!({"comparator": "ge", "baseline": baseline});
         assert!(errors(rule.clone(), None).is_empty(), "{baseline} without");
-        assert!(!errors(rule, families.clone()).is_empty(), "{baseline} with");
+        assert!(
+            !errors(rule, families.clone()).is_empty(),
+            "{baseline} with"
+        );
     }
     let threshold = json!({"comparator": "ge", "threshold": 0.9});
     assert!(errors(threshold.clone(), None).is_empty());
@@ -81,7 +84,10 @@ fn skeleton_and_onboarding_state_the_answer_families_rule() {
     let skeleton = read(&package_root().join("skeletons/MeasurementPlan.md"));
     assert!(skeleton.contains("answer_families: [weakness_kind, coverage]"));
     assert!(skeleton.contains("do not take it from the Population prose"));
-    assert!(skeleton.contains("must not"), "refused with another reference");
+    assert!(
+        skeleton.contains("must not"),
+        "refused with another reference"
+    );
 
     let output = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
         .arg("onboard-report")

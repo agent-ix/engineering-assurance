@@ -13,13 +13,13 @@
 use std::{collections::BTreeSet, fs, path::Path, process::Command};
 
 use engineering_assurance::measurement::{
-    AnswerFamilies, AnswerFamiliesError, AnswerFamily, AnswerFamilyError, ApparatusPath, ApparatusPathError, Baseline, Comparator, ConfidenceLevel, ConfidenceLevelError,
-    DecisionRule, DecisionRuleError, DefinitionChangedWithoutVersionBump, DefinitionMember,
-    Direction, Estimator, Interval, IntervalBound, IntervalError, MarginMode,
-    MeasurementDefinition, NegativeControl, NegativeControlError, NegativeControlKind,
-    NegativeControls, Objective, ObjectiveError, PlanDefinition, ProtectedApparatus,
-    ProtectedApparatusError, RuleEvaluationError, RuleReference,
-    definition_change_without_version_bump,
+    AnswerFamilies, AnswerFamiliesError, AnswerFamily, AnswerFamilyError, ApparatusPath,
+    ApparatusPathError, Baseline, Comparator, ConfidenceLevel, ConfidenceLevelError, DecisionRule,
+    DecisionRuleError, DefinitionChangedWithoutVersionBump, DefinitionMember, Direction, Estimator,
+    Interval, IntervalBound, IntervalError, MarginMode, MeasurementDefinition, NegativeControl,
+    NegativeControlError, NegativeControlKind, NegativeControls, Objective, ObjectiveError,
+    PlanDefinition, ProtectedApparatus, ProtectedApparatusError, RuleEvaluationError,
+    RuleReference, definition_change_without_version_bump,
 };
 use ix_trace_rs::trace;
 
@@ -780,7 +780,15 @@ fn tc_169_steering_fields_never_change_a_decision_rules_verdict() {
 /// proves that consumer never resolves `serde_json`, so it cannot inherit the
 /// `arbitrary_precision` flip `full` carries.
 #[test]
-#[trace("TC-142", "TC-243", "FR-020-AC-4", "FR-021-AC-7", "FR-021-AC-19", "FR-024-AC-7", "FR-026-AC-6")]
+#[trace(
+    "TC-142",
+    "TC-243",
+    "FR-020-AC-4",
+    "FR-021-AC-7",
+    "FR-021-AC-19",
+    "FR-024-AC-7",
+    "FR-026-AC-6"
+)]
 fn tc_142_a_minimal_downstream_compiles_only_the_measurement_feature() {
     let consumer = tempfile::tempdir().expect("consumer root");
     fs::create_dir(consumer.path().join("src")).expect("consumer source directory");
@@ -2295,13 +2303,21 @@ fn tc_243_answer_families_is_a_non_empty_set_of_distinct_non_empty_families() {
     // Deserialization refuses with the same typed errors.
     for (refused, error) in [
         ("[]\n", AnswerFamiliesError::Empty),
-        ("- a\n- a\n", AnswerFamiliesError::Duplicate { family: "a".to_owned() }),
+        (
+            "- a\n- a\n",
+            AnswerFamiliesError::Duplicate {
+                family: "a".to_owned(),
+            },
+        ),
         ("- a\n- ''\n", AnswerFamiliesError::EmptyFamily),
     ] {
         let message = yaml_serde::from_str::<AnswerFamilies>(refused)
             .expect_err("must refuse")
             .to_string();
-        assert!(message.contains(&error.to_string()), "{refused:?}: {message}");
+        assert!(
+            message.contains(&error.to_string()),
+            "{refused:?}: {message}"
+        );
     }
     assert!(serde_json::from_value::<AnswerFamilies>(serde_json::json!([7])).is_err());
     assert!(serde_json::from_value::<AnswerFamily>(serde_json::json!("")).is_err());
