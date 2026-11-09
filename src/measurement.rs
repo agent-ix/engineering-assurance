@@ -1126,21 +1126,13 @@ impl DecisionRule {
     }
 
     /// Whether the rule holds for `estimate` at the unfavourable end of its
-    /// `interval`: the lower bound for `gt`/`ge`, the upper bound for
-    /// `lt`/`le`. The reference is resolved exactly as in [`Self::holds`].
-    ///
-    /// An interval computed at a level at or above the rule's `interval_level`
-    /// is accepted; a wider (higher-level) interval is only more conservative.
+    /// `interval`. This is the verdict of
+    /// [`Self::holds_on_interval_reporting`], which also reports the bound
+    /// judged; see it for the semantics.
     ///
     /// # Errors
     ///
-    /// The input refusals of [`Self::holds`], plus
-    /// [`RuleEvaluationError::IntervalNotRequested`] when the rule states no
-    /// `interval_level`, [`RuleEvaluationError::MissingInterval`] when
-    /// `interval` is `None`, [`RuleEvaluationError::IntervalLevelTooLow`] when
-    /// the interval's level is below the rule's, and
-    /// [`RuleEvaluationError::EstimateOutsideInterval`] when `estimate` is not
-    /// within `[lower, upper]`.
+    /// The refusals of [`Self::holds_on_interval_reporting`].
     pub fn holds_on_interval(
         &self,
         estimate: f64,

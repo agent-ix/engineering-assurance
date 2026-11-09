@@ -48,6 +48,9 @@ history; they cannot govern new measurement collections.
   disagreeing direction and comparator, or the disallowed estimator.
 - For rule evaluation: whether the rule holds, or a typed refusal naming the
   missing, unexpected, or non-finite input or reference.
+- For interval evaluation: whether the rule holds at the unfavourable bound,
+  together with which bound (lower or upper) was judged and its value, or the
+  same typed refusals.
 - For the definition-change check: either no finding, or one typed finding
   naming which of `objective`, `statistical_design.estimator`, and
   `statistical_design.decision_rule` changed.
@@ -92,6 +95,8 @@ history; they cannot govern new measurement collections.
   definition (a reader that does not know it refuses the plan rather than
   judging the point estimate). An absent `interval_level` means the point
   estimate is used. `statistical_design.uncertainty` stays prose.
+- Evaluating a rule with `interval_level` SHALL report, with the verdict, which
+  bound (lower or upper) it was judged at and that bound's value.
 - An interval (`lower`, `upper`, `level`, `method`) SHALL have finite bounds
   with `lower <= upper`, a `level` strictly between 0 and 1, and a non-empty
   `method` that no checker reads. A rule with `interval_level` SHALL refuse an

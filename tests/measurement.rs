@@ -2139,6 +2139,22 @@ fn tc_239_the_judgement_reports_the_bound_it_was_judged_at() {
         report(&ratchet, 0.8, &interval(0.73, 0.85, 0.9), Some(0.7)),
         (true, IntervalBound::Lower, 0.73)
     );
+    assert_eq!(
+        report(&ratchet, 0.8, &interval(0.71, 0.85, 0.9), Some(0.7)),
+        (false, IntervalBound::Lower, 0.71)
+    );
+    let tolerance = interval_rule(
+        rule_baseline(Comparator::Le, Baseline::PriorCollection, Some(-5.0)),
+        0.9,
+    );
+    assert_eq!(
+        report(&tolerance, 100.0, &interval(98.0, 104.0, 0.9), Some(100.0)),
+        (true, IntervalBound::Upper, 104.0)
+    );
+    assert_eq!(
+        report(&tolerance, 100.0, &interval(98.0, 106.0, 0.9), Some(100.0)),
+        (false, IntervalBound::Upper, 106.0)
+    );
     let relative = interval_rule(
         DecisionRule::against_baseline_with_mode(
             Comparator::Le,

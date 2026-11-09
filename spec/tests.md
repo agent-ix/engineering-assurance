@@ -464,7 +464,7 @@ implemented and reviewed.
 | TC-236 | Unused scope entries are listed sorted and leave the status unchanged | Unit | P0 | FR-032-AC-5 | ✅ `tests/scope_footprint.rs` passing |
 | TC-237 | The real binary on a temporary git repository reports complete, false_scope with both rename paths, and incomplete for an unknown revision and a non-repository, each at exit 0 | Integration | P0 | FR-032-AC-6 | ✅ `tests/scope_footprint.rs` passing |
 | TC-238 | Unreadable and non-conforming requests, an invalid scope entry and a revision beginning with `-` yield machine errors at exit 2 | Integration | P0 | FR-032-AC-7 | ✅ `tests/scope_footprint.rs` passing |
-| TC-239 | `holds_on_interval_reporting` reports the lower bound and its value for gt/ge and the upper bound and its value for lt/le, for threshold, absolute-margin baseline and relative-margin baseline references, when the rule holds and when it does not; it refuses a missing interval, a rule without interval_level and a missing baseline value as `holds_on_interval` does; and `holds_on_interval` returns the same verdict | Unit | P1 | FR-021-AC-15 | ✅ reported bound cases and shared refusals passing |
+| TC-239 | `holds_on_interval_reporting` reports the lower bound and its value for gt/ge and the upper bound and its value for lt/le, for threshold, absolute-margin baseline (higher and lower is better) and relative-margin baseline references, when the rule holds and when it does not; it refuses a missing interval, a rule without interval_level and a missing baseline value as `holds_on_interval` does; and `holds_on_interval` returns the same verdict | Unit | P1 | FR-021-AC-15 | ✅ reported bound cases and shared refusals passing |
 
 ## Option Permutation Matrix
 
