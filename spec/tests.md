@@ -157,6 +157,7 @@ implemented and reviewed.
 | FR-021 | FR-021-AC-12 | TC-188 | ✅ Relative and absolute margin evaluation, mode validation, default and round trip, and schema/Rust wire parity passing |
 | FR-021 | FR-021-AC-13 | TC-192 | ✅ Schema and Rust `interval_level`, `Interval` and `ConfidenceLevel` validation, canonical round trip, wire parity and definition-change cases passing |
 | FR-021 | FR-021-AC-14 | TC-193 | ✅ Unfavourable-bound evaluation, level and interval refusals, and point-form refusal passing |
+| FR-021 | FR-021-AC-15 | TC-239 | ✅ Reported bound kind and value for gt/ge/lt/le, threshold, baseline and relative-margin references, and shared refusals passing |
 | FR-022 | FR-022-AC-1 | TC-150 | ✅ Wire spelling, rendering, parsing, and serde round trip backed |
 | FR-022 | FR-022-AC-2 | TC-151 | ✅ Exact-match typed refusal backed |
 | FR-022 | FR-022-AC-3 | TC-152 | ✅ Exhaustive listing, compile-time trait-absence probe, and downstream ordering refusals backed |
@@ -463,6 +464,7 @@ implemented and reviewed.
 | TC-236 | Unused scope entries are listed sorted and leave the status unchanged | Unit | P0 | FR-032-AC-5 | ✅ `tests/scope_footprint.rs` passing |
 | TC-237 | The real binary on a temporary git repository reports complete, false_scope with both rename paths, and incomplete for an unknown revision and a non-repository, each at exit 0 | Integration | P0 | FR-032-AC-6 | ✅ `tests/scope_footprint.rs` passing |
 | TC-238 | Unreadable and non-conforming requests, an invalid scope entry and a revision beginning with `-` yield machine errors at exit 2 | Integration | P0 | FR-032-AC-7 | ✅ `tests/scope_footprint.rs` passing |
+| TC-239 | `holds_on_interval_reporting` reports the lower bound and its value for gt/ge and the upper bound and its value for lt/le, for threshold, absolute-margin baseline and relative-margin baseline references, when the rule holds and when it does not; it refuses a missing interval, a rule without interval_level and a missing baseline value as `holds_on_interval` does; and `holds_on_interval` returns the same verdict | Unit | P1 | FR-021-AC-15 | ✅ reported bound cases and shared refusals passing |
 
 ## Option Permutation Matrix
 

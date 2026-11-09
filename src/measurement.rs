@@ -687,6 +687,27 @@ impl Interval {
     }
 }
 
+/// Which end of an [`Interval`] a rule is judged at.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IntervalBound {
+    /// The lower bound, unfavourable for `gt` and `ge`.
+    Lower,
+    /// The upper bound, unfavourable for `lt` and `le`.
+    Upper,
+}
+
+/// The verdict of [`DecisionRule::holds_on_interval_reporting`] with the bound
+/// it was judged at.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct IntervalJudgement {
+    /// Whether the rule holds at the judged bound.
+    pub holds: bool,
+    /// Which end of the interval was judged.
+    pub bound: IntervalBound,
+    /// The value of that bound.
+    pub value: f64,
+}
+
 /// The closed wire shape of an observation `interval`, before validation.
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -1126,6 +1147,33 @@ impl DecisionRule {
         interval: Option<&Interval>,
         baseline_value: Option<f64>,
     ) -> Result<bool, RuleEvaluationError> {
+        self.holds_on_interval_reporting(estimate, interval, baseline_value)
+            .map(|judgement| judgement.holds)
+    }
+
+    /// Judge the rule for `estimate` at the unfavourable end of its
+    /// `interval`: the lower bound for `gt`/`ge`, the upper bound for
+    /// `lt`/`le`, and report which bound was used and its value alongside the
+    /// verdict. The reference is resolved exactly as in [`Self::holds`].
+    ///
+    /// An interval computed at a level at or above the rule's `interval_level`
+    /// is accepted; a wider (higher-level) interval is only more conservative.
+    ///
+    /// # Errors
+    ///
+    /// The input refusals of [`Self::holds`], plus
+    /// [`RuleEvaluationError::IntervalNotRequested`] when the rule states no
+    /// `interval_level`, [`RuleEvaluationError::MissingInterval`] when
+    /// `interval` is `None`, [`RuleEvaluationError::IntervalLevelTooLow`] when
+    /// the interval's level is below the rule's, and
+    /// [`RuleEvaluationError::EstimateOutsideInterval`] when `estimate` is not
+    /// within `[lower, upper]`.
+    pub fn holds_on_interval_reporting(
+        &self,
+        estimate: f64,
+        interval: Option<&Interval>,
+        baseline_value: Option<f64>,
+    ) -> Result<IntervalJudgement, RuleEvaluationError> {
         if !estimate.is_finite() {
             return Err(RuleEvaluationError::NonFiniteEstimate { estimate });
         }
@@ -1146,15 +1194,19 @@ impl DecisionRule {
                 upper: interval.upper(),
             });
         }
-        let unfavourable = match self.comparator {
-            Comparator::Gt | Comparator::Ge => interval.lower(),
-            Comparator::Lt | Comparator::Le => interval.upper(),
+        let (bound, unfavourable) = match self.comparator {
+            Comparator::Gt | Comparator::Ge => (IntervalBound::Lower, interval.lower()),
+            Comparator::Lt | Comparator::Le => (IntervalBound::Upper, interval.upper()),
             // `with_interval_level` refuses `eq`, so a level-bearing rule never
             // reaches this arm; keep a distinct error rather than a misleading one.
             Comparator::Eq => return Err(RuleEvaluationError::EqHasNoUnfavourableBound),
         };
         let reference = self.resolve_reference(baseline_value)?;
-        Ok(self.comparator.holds(unfavourable, reference))
+        Ok(IntervalJudgement {
+            holds: self.comparator.holds(unfavourable, reference),
+            bound,
+            value: unfavourable,
+        })
     }
 
     /// The value the estimate is compared with: the threshold, or the baseline

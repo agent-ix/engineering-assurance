@@ -15,10 +15,11 @@ use std::{collections::BTreeSet, fs, path::Path, process::Command};
 use engineering_assurance::measurement::{
     ApparatusPath, ApparatusPathError, Baseline, Comparator, ConfidenceLevel, ConfidenceLevelError,
     DecisionRule, DecisionRuleError, DefinitionChangedWithoutVersionBump, DefinitionMember,
-    Direction, Estimator, Interval, IntervalError, MarginMode, MeasurementDefinition,
-    NegativeControl, NegativeControlError, NegativeControlKind, NegativeControls, Objective,
-    ObjectiveError, PlanDefinition, ProtectedApparatus, ProtectedApparatusError,
-    RuleEvaluationError, RuleReference, definition_change_without_version_bump,
+    Direction, Estimator, Interval, IntervalBound, IntervalError, MarginMode,
+    MeasurementDefinition, NegativeControl, NegativeControlError, NegativeControlKind,
+    NegativeControls, Objective, ObjectiveError, PlanDefinition, ProtectedApparatus,
+    ProtectedApparatusError, RuleEvaluationError, RuleReference,
+    definition_change_without_version_bump,
 };
 use ix_trace_rs::trace;
 
@@ -2093,6 +2094,90 @@ fn tc_193_interval_evaluation_refuses_what_it_cannot_judge() {
         Err(RuleEvaluationError::IntervalNotRequested)
     );
     assert_eq!(point.holds(0.95, None), Ok(true));
+}
+
+#[trace("TC-239", "FR-021-AC-15")]
+#[test]
+fn tc_239_the_judgement_reports_the_bound_it_was_judged_at() {
+    let report = |rule: &DecisionRule, estimate, interval: &Interval, baseline| {
+        let judgement = rule
+            .holds_on_interval_reporting(estimate, Some(interval), baseline)
+            .expect("judgeable");
+        assert_eq!(
+            rule.holds_on_interval(estimate, Some(interval), baseline),
+            Ok(judgement.holds)
+        );
+        (judgement.holds, judgement.bound, judgement.value)
+    };
+    for comparator in [Comparator::Ge, Comparator::Gt] {
+        let rule = interval_rule(rule_threshold(comparator, 0.9), 0.95);
+        assert_eq!(
+            report(&rule, 0.95, &interval(0.91, 0.97, 0.95), None),
+            (true, IntervalBound::Lower, 0.91)
+        );
+        assert_eq!(
+            report(&rule, 0.95, &interval(0.85, 0.99, 0.95), None),
+            (false, IntervalBound::Lower, 0.85)
+        );
+    }
+    for comparator in [Comparator::Le, Comparator::Lt] {
+        let rule = interval_rule(rule_threshold(comparator, 100.0), 0.9);
+        assert_eq!(
+            report(&rule, 90.0, &interval(85.0, 99.0, 0.9), None),
+            (true, IntervalBound::Upper, 99.0)
+        );
+        assert_eq!(
+            report(&rule, 90.0, &interval(85.0, 105.0, 0.9), None),
+            (false, IntervalBound::Upper, 105.0)
+        );
+    }
+    let ratchet = interval_rule(
+        rule_baseline(Comparator::Ge, Baseline::PriorCollection, Some(0.02)),
+        0.9,
+    );
+    assert_eq!(
+        report(&ratchet, 0.8, &interval(0.73, 0.85, 0.9), Some(0.7)),
+        (true, IntervalBound::Lower, 0.73)
+    );
+    let relative = interval_rule(
+        DecisionRule::against_baseline_with_mode(
+            Comparator::Le,
+            Baseline::PriorCollection,
+            Some(-0.05),
+            MarginMode::Relative,
+        )
+        .expect("valid rule"),
+        0.9,
+    );
+    assert_eq!(
+        report(&relative, 100.0, &interval(98.0, 104.0, 0.9), Some(100.0)),
+        (true, IntervalBound::Upper, 104.0)
+    );
+    assert_eq!(
+        report(&relative, 100.0, &interval(98.0, 106.0, 0.9), Some(100.0)),
+        (false, IntervalBound::Upper, 106.0)
+    );
+
+    assert_eq!(
+        ratchet.holds_on_interval_reporting(0.8, None, Some(0.7)),
+        Err(RuleEvaluationError::MissingInterval {
+            required: level(0.9)
+        })
+    );
+    assert_eq!(
+        rule_threshold(Comparator::Ge, 0.9).holds_on_interval_reporting(
+            0.95,
+            Some(&interval(0.91, 0.97, 0.95)),
+            None
+        ),
+        Err(RuleEvaluationError::IntervalNotRequested)
+    );
+    assert_eq!(
+        ratchet.holds_on_interval_reporting(0.8, Some(&interval(0.7, 0.9, 0.9)), None),
+        Err(RuleEvaluationError::MissingBaselineValue {
+            baseline: Baseline::PriorCollection
+        })
+    );
 }
 
 #[trace("TC-192", "FR-021-AC-13")]
