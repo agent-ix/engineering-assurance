@@ -22,8 +22,6 @@ evidence, measurements, diagnostics, reports, and an attributed human decision
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | US-005-AC-1 | A reviewer can identify the authoritative owner, schema/version premise, and link for every semantic concept without consulting a parallel generic envelope. | Inspection (TC-053) |
-| US-005-AC-2 | A report exposes claims, evidence, counterevidence, gaps, owner, and action, and contains no overall trust score or inferred human decision. | Test (TC-054) |
-| US-005-AC-3 | Legacy PGM-01 records are read through an explicit mapping that preserves ambiguity and never mutates the source. | Test (TC-055) |
 
 ## Dependencies (Contextual)
 
@@ -34,11 +32,10 @@ Quire, Quoin, native producer, and ix-flow contracts remain authoritative.
 - Unknown schema versions are incompatible, not empty.
 - Missing, unavailable, not-computed, malformed, stale, suspect, vacuous,
   failed, and tampered states remain distinguishable.
-- An ambiguous legacy field is reported as unmapped or lossy, not guessed.
 
 ## Assurance Risk
 
-The primary risk is a compatibility or presentation layer silently turning an
+The primary risk is a presentation layer silently turning an
 absent execution, failed result, or unauthorised inference into successful
 evidence.
 

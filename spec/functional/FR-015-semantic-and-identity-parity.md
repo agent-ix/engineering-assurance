@@ -1,19 +1,17 @@
 ---
 id: FR-015
-title: "Preserve semantic, identity, and compatibility behavior in Rust"
+title: "Preserve semantic and identity behavior in Rust"
 type: FR
 relationships:
   - target: "ix://agent-ix/engineering-assurance/StR-003"
     type: "implements"
   - target: "ix://agent-ix/engineering-assurance/FR-009"
     type: "requires"
-  - target: "ix://agent-ix/engineering-assurance/FR-010"
-    type: "requires"
   - target: "ix://agent-ix/engineering-assurance/FR-014"
     type: "requires"
 ---
 
-# FR-015: Preserve semantic, identity, and compatibility behavior in Rust
+# FR-015: Preserve semantic and identity behavior in Rust
 
 ## Description
 
@@ -23,10 +21,9 @@ fixture generation to Rust without changing observable identities or ownership.
 
 ## Inputs
 
-- Canonical semantic-reference and report fixtures.
+- Canonical semantic-reference fixtures.
 - Finite RFC 8259 JSON producer outputs, including exact integers outside the
   `i64` and `u64` ranges.
-- Historical PGM-01 v1/v2 records.
 - Accepted portable verification-contract versions when available.
 
 ## Outputs
@@ -38,16 +35,12 @@ fixture generation to Rust without changing observable identities or ownership.
 
 - Preserve every declared availability and non-success state without collapsing
   it to success.
-- Preserve source-field references and declared lossy or unmapped limitations
-  in historical views.
 - Exact integer values SHALL NOT pass through binary floating-point
   conversion.
 - Reject non-finite or overflowing numeric identity inputs.
 - Expose stable typed availability spellings, exact-one validation for untyped
   labels, result validity, one stable top-level semantic-error category, and an
   exhaustive typed refusal reason without formatted-output parsing.
-- When a historical PGM-01 identity is a JSON array or object, the Rust mapper SHALL return a schema-valid explicit classification or refusal rather than reproduce a language-specific object representation or interpreter exception.
-- Historical structured-identity inputs SHALL produce the declared Rust classification or refusal without depending on another implementation at qualification time.
 - Reject empty, whitespace-bearing, and non-printable governing versions and
   accept any other version token.
 - Assign a new explicit version to a different canonicalization algorithm.
@@ -68,7 +61,6 @@ diagnostic prose is not the discriminator.
 
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
-| FR-015-CON-1 | Compatibility access SHALL be read-only. | Data Integrity | Test |
 | FR-015-CON-2 | Generated foreign-language fixtures SHALL NOT be executed by qualification. | Security | Test (TC-104) |
 | FR-015-CON-3 | The implementation SHALL NOT define a second persisted verification or evidence record family. | Responsibility | Test (TC-104) |
 
@@ -76,15 +68,15 @@ diagnostic prose is not the discriminator.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-015-AC-1 | Over focused fictional cases, Rust produces the declared canonical fixtures and bounded reports, including exact integers beyond `i64` and `u64`; structured-identity inputs produce their declared classification or refusal. | Test (TC-100) |
+| FR-015-AC-1 | Over focused fictional cases, Rust produces the declared canonical fixtures, including exact integers beyond `i64` and `u64`. | Test (TC-100) |
 | FR-015-AC-2 | Success, unavailable, not-computed, not-applicable, failed, inconclusive, malformed, stale, tampered, lossy, and unreadable remain distinguishable; typed state labels retain stable wire spellings and untyped labels require exactly one known state. | Test (TC-102) |
-| FR-015-AC-3 | Invalid versions, provenance, mappings, fixtures, and numeric identity inputs fail without a source-byte change; every exercised semantic and PGM-01 refusal exposes its expected typed reason without inspecting diagnostic prose. | Test (TC-103) |
+| FR-015-AC-3 | Invalid versions, provenance, mappings, fixtures, and numeric identity inputs fail without a source-byte change; every exercised semantic refusal exposes its expected typed reason without inspecting diagnostic prose. | Test (TC-103) |
 | FR-015-AC-4 | Static ownership and execution audits find no copied portable contract family, persisted evidence family, or executable foreign-language fixture. | Test (TC-104) |
 
-FR-015-AC-5 and FR-015-CON-4 are withdrawn. Their rows are removed and the identifiers are not reused.
+FR-015-AC-5, FR-015-CON-1, and FR-015-CON-4 are withdrawn. Their rows are removed and the identifiers are not reused.
 
 ## Dependencies
 
-- **Upstream**: FR-008 through FR-010, FR-014, and any accepted portable
+- **Upstream**: FR-008, FR-009, FR-014, and any accepted portable
   verification-contract release consumed by the implementation.
 - **Downstream**: FR-016 and FR-017 reuse these types and classifiers.

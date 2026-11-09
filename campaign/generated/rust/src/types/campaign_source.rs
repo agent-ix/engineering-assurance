@@ -5,38 +5,36 @@
 use serde::{Deserialize, Serialize};
 
 /// The fields of `CampaignSource`, in the order the contract declares them.
-pub const FIELDS: &[crate::identity::FieldMeta] = &[
-    crate::identity::FieldMeta {
-        identity: "ix://agent-ix/engineering-assurance-campaign/VO-005/repository",
-        name: "repository",
-        rust_name: "repository",
-        type_ref: "ix://quire/native/String",
-        rust_type: "String",
-        row: "field:single/non-null/required",
-        presence: "required",
-        nullable: false,
-        multiplicity: crate::identity::MultiplicityMeta {
-            lower: 1,
-            upper: Some(1),
-            ordered: Some(false),
-            unique: Some(false),
-        },
-        unit: None,
-        default_kind: "none",
-        default_value: None,
-        origin: crate::identity::OriginMeta {
-            source: Some(crate::identity::SourceLocusMeta {
-                source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
-                path: "spec/functional/VO-005-campaign-source.md",
-                start_line: 21,
-                start_column: 3,
-                end_line: None,
-                end_column: None,
-            }),
-            generated: None,
-        },
+pub const FIELDS: &[crate::identity::FieldMeta] = &[crate::identity::FieldMeta {
+    identity: "ix://agent-ix/engineering-assurance-campaign/VO-005/repository",
+    name: "repository",
+    rust_name: "repository",
+    type_ref: "ix://quire/native/String",
+    rust_type: "String",
+    row: "field:single/non-null/required",
+    presence: "required",
+    nullable: false,
+    multiplicity: crate::identity::MultiplicityMeta {
+        lower: 1,
+        upper: Some(1),
+        ordered: Some(false),
+        unique: Some(false),
     },
-];
+    unit: None,
+    default_kind: "none",
+    default_value: None,
+    origin: crate::identity::OriginMeta {
+        source: Some(crate::identity::SourceLocusMeta {
+            source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
+            path: "spec/functional/VO-005-campaign-source.md",
+            start_line: 21,
+            start_column: 3,
+            end_line: None,
+            end_column: None,
+        }),
+        generated: None,
+    },
+}];
 
 /// CampaignSource
 ///

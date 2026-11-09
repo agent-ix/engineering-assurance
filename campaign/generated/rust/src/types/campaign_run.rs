@@ -201,12 +201,7 @@ impl<'de> Deserialize<'de> for CampaignRun {
         D: serde::Deserializer<'de>,
     {
         let wire = CampaignRunWire::deserialize(deserializer)?;
-        Self::try_new(
-            wire.attempts,
-            wire.id,
-            wire.schema_version,
-            wire.verdict,
-        )
-        .map_err(serde::de::Error::custom)
+        Self::try_new(wire.attempts, wire.id, wire.schema_version, wire.verdict)
+            .map_err(serde::de::Error::custom)
     }
 }

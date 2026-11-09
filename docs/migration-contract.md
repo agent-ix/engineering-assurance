@@ -35,7 +35,7 @@ read at `origin/main`.
 | `test_evidence_tool.py` | tl-mltl | **DELETE** | Tests of the deleted machinery. They go with it, not before it. |
 | `validate_json_schema.py` | runtime, tl-mltl | **REPLACE** | Generic schema validation. Spec artifacts are validated by `quire validate`; retained records by Quoin's packaged schemas. |
 | `validate_governance.py`, `validate_matrix_status.py` | contract-ir | **KEEP** | Governance-specific to that repository's own PGM-01 obligations, not a generic evidence family. |
-| `schemas/*-evidence-*.schema.json`, `schemas/pgm01-*` | runtime, tl-mltl, contract-ir | **DELETE, read-only-preserved** | Repository-local generic evidence schemas. Historical records stay readable through the FR-010 compatibility view; the schemas stop being written against. |
+| `schemas/*-evidence-*.schema.json`, `schemas/pgm01-*` | runtime, tl-mltl, contract-ir | **DELETE** | Repository-local generic evidence schemas. Historical records are left untouched; the schemas stop being written against. |
 | `assurance_chain.py` | all eight | **REPLACE** | Duplicated Python orchestration around Quoin's native retention, receipt, and audit operations. Consumer migration under `agent-ix/quire-research#59` and `#60` replaces executable logic with the shared Rust CLI and declarative local inputs; Quoin remains the evidence-schema and store owner. |
 | `check_shared_pins.py` | all eight | **DELETE** | Duplicated local observation of an up-front tool-version list. Engineering Assurance keeps no such list; tool identity is recorded at run time. |
 | `rust_test_census.py` | tl-parse, tl-mltl | **REPLACE** | Generic qualification that compares requirement-tagged Rust tests with Cargo's compiled census. Replace with one Engineering Assurance Rust qualification command; Quire remains authoritative for static trace relationships. |
@@ -103,10 +103,8 @@ other way.
    retention, audit, history, traceability, and anchor implementations are
    deleted and their jobs handed to the shared components. A "thin wrapper"
    around a deleted family is the family.
-6. **Preserve legacy history read-only.** Existing evidence directories are
-   never rewritten. They stay readable through the FR-010 compatibility view,
-   which reports `lossy`, `unreadable`, or `incompatible` rather than
-   synthesizing a field the legacy record never had.
+6. **Preserve legacy history.** Existing evidence directories are never
+   rewritten, and no field the legacy record never had is synthesized for them.
 7. **Simplify the Makefile to native orchestration.** A Makefile calls the
    native toolchain. It is not a trust root, not a self-attesting qualification
    boundary, and not the place a verdict is computed.
@@ -125,7 +123,7 @@ Per step, and none of it is irreversible:
 | If | Then |
 | --- | --- |
 | the shared path fails | stop at step 9; the old machinery is still there and still runs |
-| legacy history reads as `unreadable` | that is the compatibility view working; do not edit the legacy record to make it read |
+| legacy history is not readable by the shared path | do not edit the legacy record to make it read |
 | a domain result has no adapter | file it against `agent-ix/quoin` with a real producer and a real sample; do not scrape stdout as a stopgap |
 
 Legacy history is never rewritten in any of these paths.
@@ -144,8 +142,6 @@ body, not in a reviewer's head.
       the change is justified as a domain change and not a migration one.
 - [ ] Every existing evidence directory is byte-identical to its pre-migration
       state.
-- [ ] The compatibility view is exercised over that repository's real legacy
-      records, and its `lossy` and `unreadable` outcomes are shown.
 - [ ] Pass, fail, unavailable, not-computed, malformed, stale, and tampered are
       each demonstrated.
 - [ ] The shared path and the old path both pass, and the deletion commit is separate and last.

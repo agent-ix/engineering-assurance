@@ -20,7 +20,6 @@ pull request is judged against.
 
 - The `scripts/` and `schemas/` trees of the eight campaign repositories, read
   at `origin/main`.
-- The read-only compatibility view (FR-010) for legacy history.
 - Quoin's adapter inventory for the formats those repositories emit.
 
 ## Outputs
@@ -40,7 +39,7 @@ pull request is judged against.
 - The contract SHALL separate domain output validation from evidence intake,
   audit, and human decision, naming the owner of each.
 - The contract SHALL preserve legacy evidence directories byte for byte and
-  read them only through the compatibility view.
+  not synthesize fields they never had.
 - The contract SHALL delete old generic machinery only after the shared path
   passes.
 - The contract SHALL require every non-success state to be demonstrated.
@@ -77,6 +76,6 @@ fail its gate.
 
 ## Dependencies
 
-- **Upstream**: [FR-010](./FR-010-read-only-compatibility-and-reporting.md).
+- **Upstream**: none.
 - **Downstream**: the eight repository migrations, each of which is reviewed
   against this contract's checklist.

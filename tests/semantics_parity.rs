@@ -2,22 +2,15 @@
 // Copyright (C) 2026 Agent-IX
 
 //! Requirement and reference-parity tests for the Rust semantic/projection slice.
-//!
-//! The report rendering reference is a committed file captured from the retired
-//! Python implementation.
 
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use engineering_assurance::semantics::{
-    Pgm01Outcome, ReportProjection, SemanticErrorKind, SemanticFixture, map_pgm01_bytes,
-    render_generated_fixtures, validate_embedded_ownership_registry,
-    validate_ownership_registry_bytes, validate_semantic_fixture_bytes,
+    SemanticErrorKind, SemanticFixture, render_generated_fixtures,
+    validate_embedded_ownership_registry, validate_ownership_registry_bytes,
+    validate_semantic_fixture_bytes,
 };
 use ix_trace_rs::trace;
-
-/// The rendered bounded report the retired Python lane produced for the
-/// governed projection fixture, as its JSON and Markdown strings.
-const REFERENCE_REPORT_RENDER: &[u8] = include_bytes!("fixtures/semantics-report-render.json");
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -167,117 +160,6 @@ fn tc_103_semantic_reference_failures_do_not_collapse() {
     assert_eq!(
         unknown_version.validate().unwrap_err().kind(),
         SemanticErrorKind::SourcePremiseMismatch
-    );
-}
-
-#[trace("TC-066", "FR-010-AC-3")]
-#[trace("TC-102", "FR-015-AC-2")]
-#[trace("TC-103", "FR-015-AC-3")]
-#[test]
-fn tc_103_pgm01_adverse_outcomes_preserve_source_identity() {
-    let unreadable = map_pgm01_bytes(b"not-json").expect("unreadable is a result");
-    assert_eq!(unreadable.outcome, Pgm01Outcome::Unreadable);
-    assert!(unreadable.mappings.is_empty());
-
-    let unsupported =
-        map_pgm01_bytes(br#"{"schemaVersion":"quire.pgm01-evidence/v99","recordId":"legacy-1"}"#)
-            .expect("unsupported is a result");
-    assert_eq!(unsupported.outcome, Pgm01Outcome::Incompatible);
-
-    let original = fixture("pgm01-v2.json");
-
-    let mut unbounded_integer: serde_json::Value =
-        serde_json::from_slice(&original).expect("fixture must parse");
-    unbounded_integer["commands"][0]["stdout"]["bytes"] =
-        serde_json::from_str("184467440737095516160").expect("large integer must remain exact");
-    let view =
-        map_pgm01_bytes(&serde_json::to_vec(&unbounded_integer).expect("mutant must serialize"))
-            .expect("arbitrary-precision non-negative integer must map");
-    let mapped = view
-        .mappings
-        .iter()
-        .find(|item| item.source_path == "/commands/0/stdout/bytes")
-        .expect("stdout byte count must remain mapped");
-    assert_eq!(mapped.value.to_string(), "184467440737095516160");
-
-    unbounded_integer["commands"][0]["stdout"]["bytes"] =
-        serde_json::from_str("-0").expect("negative-zero integer token must parse");
-    let view =
-        map_pgm01_bytes(&serde_json::to_vec(&unbounded_integer).expect("mutant must serialize"))
-            .expect("Python-compatible negative-zero integer must map");
-    let mapped = view
-        .mappings
-        .iter()
-        .find(|item| item.source_path == "/commands/0/stdout/bytes")
-        .expect("stdout byte count must remain mapped");
-    assert_eq!(mapped.value, serde_json::json!(0));
-
-    let mut malformed = unbounded_integer.clone();
-    malformed
-        .as_object_mut()
-        .expect("fixture must remain an object")
-        .remove("limitations");
-    assert_eq!(
-        map_pgm01_bytes(&serde_json::to_vec(&malformed).expect("mutant must serialize"))
-            .expect("malformed source is a classified result")
-            .outcome,
-        Pgm01Outcome::Unreadable
-    );
-
-    let mut stale: serde_json::Value =
-        serde_json::from_slice(&original).expect("fixture must parse");
-    stale["historicalDisposition"] = serde_json::json!("retracted");
-    let stale = map_pgm01_bytes(&serde_json::to_vec(&stale).expect("mutant must serialize"))
-        .expect("retracted source must map as stale");
-    assert!(stale.mappings.iter().any(|mapping| {
-        mapping.source_path == "/historicalDisposition" && mapping.value == "stale"
-    }));
-}
-
-#[trace("TC-100", "FR-015-AC-1")]
-#[trace("TC-103", "FR-015-AC-3")]
-#[test]
-fn tc_103_pgm01_structured_identity_divergences_are_explicit() {
-    let object_id = br#"{"schemaVersion":"quire.pgm01-evidence/v99","recordId":{"a":1}}"#;
-    let rust_object = map_pgm01_bytes(object_id).expect("Rust must classify object identity");
-    assert_eq!(rust_object.outcome, Pgm01Outcome::Incompatible);
-    assert_eq!(rust_object.source_record_id, "incompatible-source");
-
-    let list_schema = br#"{"schemaVersion":[1,2],"recordId":"legacy-1"}"#;
-    let rust_list = map_pgm01_bytes(list_schema).expect("Rust must classify list identity");
-    assert_eq!(rust_list.outcome, Pgm01Outcome::Incompatible);
-    assert_eq!(rust_list.source_schema_version, "unknown");
-}
-
-#[trace("TC-067", "FR-010-AC-4")]
-#[trace("TC-100", "FR-015-AC-1")]
-#[test]
-fn tc_100_report_rendering_matches_the_captured_reference() {
-    let raw = fixture("report-projection.json");
-    let report: ReportProjection = serde_json::from_slice(&raw).expect("report must parse");
-    let rust_json = report.render_json().expect("report JSON must render");
-    let rust_markdown = report
-        .render_markdown()
-        .expect("report Markdown must render");
-    let expected: serde_json::Value =
-        serde_json::from_slice(REFERENCE_REPORT_RENDER).expect("reference must be JSON");
-    assert_eq!(
-        serde_json::Value::String(rust_json),
-        expected["json"],
-        "the rendered report JSON drifted from the captured reference"
-    );
-    assert_eq!(
-        serde_json::Value::String(rust_markdown),
-        expected["markdown"],
-        "the rendered report Markdown drifted from the captured reference"
-    );
-
-    let mut extended: serde_json::Value =
-        serde_json::from_slice(&raw).expect("report must parse as generic JSON");
-    extended["overall_verdict"] = serde_json::json!("passed");
-    assert!(
-        serde_json::from_value::<ReportProjection>(extended).is_err(),
-        "an aggregate verdict must not enter the bounded report type"
     );
 }
 
