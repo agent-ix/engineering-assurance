@@ -5,7 +5,7 @@ use ix_trace_rs::trace;
 use serde_json::{Value, json};
 use std::process::Command;
 
-fn plan(rule: Value, answer_families: Option<Value>) -> Value {
+fn plan(rule: &Value, answer_families: Option<Value>) -> Value {
     let mut design = json!({
         "population": "p",
         "sampling": "s",
@@ -31,7 +31,7 @@ fn plan(rule: Value, answer_families: Option<Value>) -> Value {
     })
 }
 
-fn errors(rule: Value, answer_families: Option<Value>) -> Vec<String> {
+fn errors(rule: &Value, answer_families: Option<Value>) -> Vec<String> {
     let validator = jsonschema::draft202012::new(&schema("measurement-plan-frontmatter.schema"))
         .expect("schema compiles");
     schema_errors(&validator, &plan(rule, answer_families))
@@ -44,9 +44,9 @@ fn constant() -> Value {
 #[test]
 #[trace("TC-240", "FR-021-AC-16")]
 fn answer_families_are_required_with_a_constant_predictor_and_a_valid_list() {
-    assert!(errors(constant(), Some(json!(["weakness_kind", "coverage"]))).is_empty());
-    assert!(errors(constant(), Some(json!(["only"]))).is_empty());
-    assert!(!errors(constant(), None).is_empty(), "absent list");
+    assert!(errors(&constant(), Some(json!(["weakness_kind", "coverage"]))).is_empty());
+    assert!(errors(&constant(), Some(json!(["only"]))).is_empty());
+    assert!(!errors(&constant(), None).is_empty(), "absent list");
     for refused in [
         json!([]),
         json!(["a", "a"]),
@@ -55,7 +55,7 @@ fn answer_families_are_required_with_a_constant_predictor_and_a_valid_list() {
         json!("a"),
     ] {
         assert!(
-            !errors(constant(), Some(refused.clone())).is_empty(),
+            !errors(&constant(), Some(refused.clone())).is_empty(),
             "{refused}"
         );
     }
@@ -67,15 +67,15 @@ fn answer_families_are_refused_with_any_other_baseline_or_a_threshold_rule() {
     let families = Some(json!(["a", "b"]));
     for baseline in ["prior-collection", "best-seen", "external-reference"] {
         let rule = json!({"comparator": "ge", "baseline": baseline});
-        assert!(errors(rule.clone(), None).is_empty(), "{baseline} without");
+        assert!(errors(&rule, None).is_empty(), "{baseline} without");
         assert!(
-            !errors(rule, families.clone()).is_empty(),
+            !errors(&rule, families.clone()).is_empty(),
             "{baseline} with"
         );
     }
     let threshold = json!({"comparator": "ge", "threshold": 0.9});
-    assert!(errors(threshold.clone(), None).is_empty());
-    assert!(!errors(threshold, families).is_empty());
+    assert!(errors(&threshold, None).is_empty());
+    assert!(!errors(&threshold, families).is_empty());
 }
 
 #[test]
