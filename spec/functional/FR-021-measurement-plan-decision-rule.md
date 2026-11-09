@@ -48,6 +48,9 @@ history; they cannot govern new measurement collections.
   disagreeing direction and comparator, or the disallowed estimator.
 - For rule evaluation: whether the rule holds, or a typed refusal naming the
   missing, unexpected, or non-finite input or reference.
+- For interval evaluation: whether the rule holds at the unfavourable bound,
+  together with which bound (lower or upper) was judged and its value, or the
+  same typed refusals.
 - For the definition-change check: either no finding, or one typed finding
   naming which of `objective`, `statistical_design.estimator`, and
   `statistical_design.decision_rule` changed.
@@ -92,6 +95,8 @@ history; they cannot govern new measurement collections.
   definition (a reader that does not know it refuses the plan rather than
   judging the point estimate). An absent `interval_level` means the point
   estimate is used. `statistical_design.uncertainty` stays prose.
+- Evaluating a rule with `interval_level` SHALL report, with the verdict, which
+  bound (lower or upper) it was judged at and that bound's value.
 - An interval (`lower`, `upper`, `level`, `method`) SHALL have finite bounds
   with `lower <= upper`, a `level` strictly between 0 and 1, and a non-empty
   `method` that no checker reads. A rule with `interval_level` SHALL refuse an
@@ -215,6 +220,7 @@ change produces a finding rather than being accepted silently.
 | FR-021-AC-12 | The schema and the Rust `DecisionRule` accept `margin_mode` of `absolute` or `relative` only with a `margin`, and refuse it with a threshold, without a margin, with `eq`, or with any other value; an absent mode is absolute and an absolute rule does not serialize the key; a relative margin moves the baseline value by the margin times its absolute value in the direction of improvement, so one rule tolerates the same fraction of baselines that differ in scale, including negative baselines; the schema's `margin_mode` enum equals the Rust `MarginMode` wire names. | Test (TC-188) |
 | FR-021-AC-13 | The schema and the Rust `DecisionRule` accept an `interval_level` strictly between 0 and 1 with a threshold or baseline rule and every comparator but `eq`, and refuse it with `eq`, at 0 or 1, outside that range, non-numeric, or (Rust) non-finite, with distinct typed errors, through construction and deserialization; an absent level is not serialized and a stated level round-trips; the Rust `Interval` and `ConfidenceLevel` types accept a finite ordered interval at a level strictly between 0 and 1 with a non-empty method and refuse each violation with a typed `IntervalError`, and round-trip; the `interval_level` key is inside `decision_rule`, so an unknown-key reader refuses it and editing it without a `definition_version` bump yields a finding. | Test (TC-192) |
 | FR-021-AC-14 | `holds_on_interval` judges a rule at the interval's lower bound for `gt` and `ge` and its upper bound for `lt` and `le`, for higher- and lower-is-better rules and for threshold and baseline (including relative-margin) references, so a point estimate that passes but whose unfavourable bound fails is refused; an interval at a level at or above the rule's is accepted; a missing interval, a lower level, an estimate outside the interval, a rule without `interval_level`, and non-finite inputs are typed refusals; and the point-form `holds` returns a typed `IntervalRequired` error for a rule with `interval_level`. | Test (TC-193) |
+| FR-021-AC-15 | `holds_on_interval_reporting` returns, with the verdict of `holds_on_interval`, the bound it judged at and that bound's value: the lower bound for `gt` and `ge`, the upper bound for `lt` and `le`, for threshold and baseline (including relative-margin) references, whether the rule holds or not; it refuses with the same typed errors as `holds_on_interval`, and `holds_on_interval` returns exactly its verdict. | Test (TC-239) |
 
 ## Dependencies
 
