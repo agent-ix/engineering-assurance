@@ -7,6 +7,7 @@
     reason = "test-only binary; its tests are not public API"
 )]
 
+mod answer_families;
 mod campaign_measurement_plan;
 mod common;
 mod migration_contract;
