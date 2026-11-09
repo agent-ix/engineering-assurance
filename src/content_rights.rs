@@ -294,18 +294,9 @@ impl Patterns {
     }
 }
 
-/// URL prefix of the semantic-core bundle this package extends, derived from
-/// the `semantic.semantic_core` declaration in the module manifest.
-static SEMANTIC_CORE_PREFIX: LazyLock<String> = LazyLock::new(|| {
-    let version = include_str!("../engineering_assurance/manifest.yaml")
-        .lines()
-        .find_map(|line| line.trim().strip_prefix("semantic_core:"))
-        .map_or("", str::trim);
-    format!(
-        "{}{version}/",
-        concat!("https:", "//schemas.agent-ix.org/semantic-core/")
-    )
-});
+/// URL prefix of the semantic-core bundle this package extends. The manifest
+/// no longer declares a semantic-core version, so any version is accepted.
+const SEMANTIC_CORE_PREFIX: &str = concat!("https:", "//schemas.agent-ix.org/semantic-core/");
 
 static PATTERNS: LazyLock<Result<Patterns, regex::Error>> = LazyLock::new(Patterns::compile);
 
@@ -647,7 +638,7 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
     );
     let campaign_schema_url = url.starts_with(generated_schema_prefix)
         || url.starts_with(authored_schema_prefix)
-        || url.starts_with(SEMANTIC_CORE_PREFIX.as_str())
+        || url.starts_with(SEMANTIC_CORE_PREFIX)
         || url == concat!("https:", "//json-schema.org/draft/2020-12/schema");
     let campaign_license_url = [
         concat!("https:", "//fsf.org/"),
