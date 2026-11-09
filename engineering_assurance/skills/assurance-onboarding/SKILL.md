@@ -130,6 +130,10 @@ against threshold 0. The rule applies to the plan's own `metric`, which is
 then required; do not restate `metric`, `repetitions`, or
 `minimum_population` inside the rule. Gate on the constant-predictor margin as
 `{ comparator: gt, baseline: constant-predictor, margin: <owner's bar> }`, and
+declare the answer-space families the owner's population has in
+`statistical_design.answer_families` (required with `constant-predictor`,
+refused with any other reference; a non-empty list of unique non-empty
+strings; the producer's item-row families must equal it exactly), and
 do not invent a threshold or margin the owner has not stated. `population`,
 `sampling`, `error_model`, and `uncertainty` remain prose.
 
@@ -158,7 +162,8 @@ how. `kind` is one of `suppressed-observation`, `gain-within-noise`,
 is checked for shape only; Quoin's checker exercises the kinds it can detect.
 Declare only controls the owner has stated.
 
-The objective's `direction` and `bound`, `estimator`, `decision_rule`, and
+The objective's `direction` and `bound`, `estimator`, `decision_rule`,
+`answer_families` (compared as a set, so reordering is not a change), and
 `protected_apparatus` list are all part of the measurement definition (the
 objective's steering fields are not; retuning them needs no new version): when you add, remove, or change
 any of them on an existing plan, also change `definition_version`, so results

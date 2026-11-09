@@ -169,7 +169,7 @@ The rule does not restate `metric`, `repetitions`, or `minimum_population`: it
 applies to the plan's own `metric`, and a result over fewer than
 `minimum_population` items is refused before the rule is read. `population`,
 `sampling`, `error_model`, and `uncertainty` remain prose. The estimator and
-rule are part of the measurement definition: changing either needs a new
+rule, and a constant-predictor plan's `answer_families`, are part of the measurement definition: changing any needs a new
 `definition_version`, so a rule edited after results were seen starts a new
 series rather than re-judging the old one.
 
@@ -297,8 +297,16 @@ raw rate alone. A skewed population lets a tool that reads nothing score high
 purely because one label dominates; the number that says whether the tool did
 anything is the margin over this baseline, not the raw rate by itself.
 
-**Formula.** Group the population into the answer-space families the plan's
-own Population section already states — do not invent a new grouping here.
+**Formula.** Group the population into the answer-space families the plan declares in
+`statistical_design.answer_families` — do not invent a new grouping here, and
+do not take it from the Population prose. A plan with
+`baseline: constant-predictor` must declare that list (non-empty, unique,
+non-empty strings, e.g. `answer_families: [weakness_kind, coverage]`); a plan
+with any other reference must not. Quoin's checker is to require the producer's
+item rows to carry exactly those `family` values and to return a typed
+inconclusive reason when they differ, so two declared families merged into one
+are caught rather than silently lowering the baseline (the comparison follows
+in the Quoin follow-up to PLAT-1020).
 For family `f` with `n_f` items, and for each label `i` in that family's
 answer space, let `n_{f,i}` count every item where label `i` is the primary
 recorded reading *or* one of its recorded contested alternates (an item with
@@ -323,14 +331,14 @@ definition would.
 
 **A single constant answer across every family, instead of one per family,
 understates the baseline and lets a tool clear a bar it never actually beat.**
-Worked example, from a real 15-item corpus split into two families with
+Worked example (declared as `answer_families: [weakness_kind, coverage]`), from a real 15-item corpus split into two families with
 different answer spaces (quoin's `criterion-strength-fixtures.json`, 11
-`weakness_kind` items and 4 `adverse_case_coverage` items):
+`weakness_kind` items and 4 `coverage` items):
 
 | family | items | best single global label (`sound`) | agrees | best per-family label |
 | --- | --- | --- | --- | --- |
 | `weakness_kind` | 11 | `sound` | 9 | `sound` (9/11) |
-| `adverse_case_coverage` | 4 | `sound` (not in this label space) | 0 | coverage level `2` (3/4) |
+| `coverage` | 4 | `sound` (not in this label space) | 0 | coverage level `2` (3/4) |
 
 A grader that answers `sound` to all 15 items scores 9/15 = **60.0%** — the
 family whose answer space does not even contain `sound` contributes nothing,

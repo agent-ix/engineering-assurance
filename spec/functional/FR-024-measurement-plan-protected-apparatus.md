@@ -99,8 +99,8 @@ admitted collections; missing or inconclusive evidence does not become a pass.
   an entry or found under a directory entry.
 - Quoin's resolution SHALL refuse a directory entry that contains no file.
 - The plan's measurement definition SHALL include `protected_apparatus`
-  alongside `objective`, `statistical_design.estimator`, and
-  `statistical_design.decision_rule`.
+  alongside `objective`, `statistical_design.estimator`,
+  `statistical_design.decision_rule`, and `statistical_design.answer_families`.
 - When an entry is added or removed, an entry is changed, or the list is added
   or removed while `definition_version` stays the same, the definition-change
   check SHALL return one typed finding naming `protected_apparatus`. The same
