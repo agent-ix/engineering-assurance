@@ -164,6 +164,7 @@ fn complete_matrix_preserves_declared_aggregation_outcomes() {
 
 #[test]
 #[trace("TC-110", "FR-017-AC-2", "FR-017-CON-1", "FR-017-CON-3")]
+#[trace("TC-039", "NFR-002-AC-1")]
 fn every_incomplete_semantic_class_withholds_aggregation() {
     let complete = complete_matrix();
     assert!(aggregate_evaluations(&complete).ok);
@@ -492,4 +493,80 @@ fn tc_049_every_host_retains_one_distinct_explicit_acceptance_and_rejection() {
             result.failures
         );
     }
+}
+
+fn failure_codes(matrix: &[EvaluationEnvelope]) -> Vec<String> {
+    let result = aggregate_evaluations(matrix);
+    assert!(!result.ok, "the matrix must be withheld");
+    result.failures.iter().map(ToString::to_string).collect()
+}
+
+#[test]
+#[trace("TC-039", "NFR-002-AC-2")]
+fn tc_039_an_automated_terminal_decision_withholds_aggregation() {
+    let complete = complete_matrix();
+    let decision = terminal(EvaluationHost::Claude, EvaluationScenario::HumanAcceptance)
+        .expect("acceptance scenario carries a terminal event");
+    let mut checked = 0;
+    for (index, cell) in complete.iter().enumerate() {
+        if cell.terminal_event.is_none() {
+            // A scenario with no human decision may not carry a terminal event.
+            let matrix = changed(&complete, index, |item| {
+                item.terminal_event = Some(decision.clone());
+            });
+            assert!(
+                failure_codes(&matrix)
+                    .iter()
+                    .any(|failure| failure.contains("unexpected-terminal-event"))
+            );
+            checked += 1;
+        } else {
+            // A human-decision scenario with no recorded owner is not a human decision.
+            let matrix = changed(&complete, index, |item| {
+                item.terminal_event
+                    .as_mut()
+                    .expect("decision fixture")
+                    .owner = " ".to_owned();
+            });
+            assert!(
+                failure_codes(&matrix)
+                    .iter()
+                    .any(|failure| failure.contains("terminal-event-invalid"))
+            );
+            checked += 1;
+        }
+    }
+    assert_eq!(checked, complete.len());
+}
+
+#[test]
+#[trace("TC-039", "NFR-002-AC-3")]
+fn tc_039_only_the_declared_qualification_population_must_retain_passing_evidence() {
+    let complete = complete_matrix();
+    assert_eq!(complete.len(), REQUIRED_CELLS);
+    assert!(
+        complete
+            .iter()
+            .all(|cell| EvaluationHost::QUALIFIED.contains(&cell.host))
+    );
+
+    // A qualified host's missing cell and failing cell each withhold aggregation.
+    let mut missing = complete.clone();
+    missing.pop();
+    assert!(!aggregate_evaluations(&missing).ok);
+    assert!(!aggregate_evaluations(&changed(&complete, 0, |item| item.passed = false)).ok);
+
+    // A supported host outside the population is unqualified: its evidence,
+    // even failing evidence, is neither required nor counted as a qualified cell.
+    let unqualified = EvaluationHost::ALL
+        .into_iter()
+        .find(|host| !EvaluationHost::QUALIFIED.contains(host))
+        .expect("a supported but unqualified host exists");
+    let mut extended = complete;
+    let mut outsider = envelope(unqualified, EvaluationScenario::ExistingProfile);
+    outsider.passed = false;
+    extended.push(outsider);
+    let result = aggregate_evaluations(&extended);
+    assert!(result.ok, "{:?}", result.failures);
+    assert_eq!(result.complete_cells, REQUIRED_CELLS);
 }

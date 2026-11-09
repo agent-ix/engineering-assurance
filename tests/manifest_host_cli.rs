@@ -47,7 +47,7 @@ fn fixture() -> (TempDir, TempDir, TempDir) {
 }
 
 #[test]
-#[trace("TC-131", "FR-017-AC-8", "FR-014-AC-2")]
+#[trace("TC-131", "FR-017-AC-8", "FR-014-AC-2", "TC-098")]
 fn tc_131_cli_emits_one_versioned_machine_result_for_explicit_roots() {
     let (repository, schema_root, registry_root) = fixture();
     let output = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))

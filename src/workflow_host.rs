@@ -1212,7 +1212,7 @@ mod tests {
 
     use super::*;
 
-    #[trace("TC-107", "FR-016-AC-3", "FR-016-CON-5")]
+    #[trace("TC-107", "FR-016-AC-3", "FR-016-CON-5", "TC-099", "FR-014-AC-3")]
     #[test]
     fn tc_107_process_adapter_bounds_time_and_output() {
         let timeout = run_process(

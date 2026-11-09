@@ -194,7 +194,7 @@ fn parity_cases() -> Vec<ProducerAttempt> {
     ]
 }
 
-#[trace("TC-100", "FR-015-AC-1")]
+#[trace("TC-100", "FR-015-AC-1", "StR-003-VC-3")]
 #[test]
 fn tc_100_evidence_classification_preserves_accepted_state_fixtures() {
     let results = parity_cases()[..4]
@@ -275,7 +275,7 @@ fn tc_103_evidence_malformed_and_missing_provenance_fail_explicitly() {
     );
 }
 
-#[trace("TC-100", "FR-015-AC-1")]
+#[trace("TC-100", "FR-015-AC-1", "StR-003-VC-3")]
 #[test]
 fn tc_100_accepted_and_generated_json_values_are_classified_valid() {
     let raw_values = generated_identity_corpus();
