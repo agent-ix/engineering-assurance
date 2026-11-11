@@ -192,6 +192,8 @@ same canonical bundle and do not redefine these responsibilities.
   change scope against the candidate change footprint: complete, false scope or incomplete.
 - [FR-033](./functional/FR-033-measurement-plan-cross-profile-comparison.md) — let a
   MeasurementPlan opt in to comparing collections built under different build profiles.
+- [FR-034](./functional/FR-034-measurement-plan-paired-run.md) — let a MeasurementPlan state how
+  two runs of the same measurement relate.
 
 ### Non-Functional Requirements
 

@@ -157,6 +157,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-021 | FR-021-AC-18 | TC-242 | ✅ Passing |
 | FR-021 | FR-021-AC-19 | TC-243 | ✅ Passing |
 | FR-021 | FR-021-AC-20 | TC-245 | ✅ Skeleton Interpretation and onboarding skill warning passing |
+| TC-246 | The MeasurementPlan schema accepts an absent `paired_run`, each relation, and `minimum_pairs` 1 and 5, and refuses an unknown relation, `minimum_pairs` 0, -1 and "2", `within_delta` without `delta`, `delta` with `equal`, extra members and a non-object value | Unit | P0 | FR-034-AC-1 | ✅ `tests/python_port/module.rs` passing |
 | FR-022 | FR-022-AC-1 | TC-150 | ✅ Wire spelling, rendering, parsing, and serde round trip backed |
 | FR-022 | FR-022-AC-2 | TC-151 | ✅ Exact-match typed refusal backed |
 | FR-022 | FR-022-AC-3 | TC-152 | ✅ Exhaustive listing, compile-time trait-absence probe, and downstream ordering refusals backed |
@@ -221,6 +222,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-032 | FR-032-AC-7 | TC-238 | ✅ `tests/scope_footprint.rs` passing |
 | FR-032 | FR-032-CON-1 | TC-234 | ✅ Truncated and unavailable footprints never complete |
 | FR-033 | FR-033-AC-1 | TC-244 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
+| FR-034 | FR-034-AC-1 | TC-246 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
 
 ### Non-Functional Requirement Coverage
 
