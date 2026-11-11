@@ -598,6 +598,39 @@ fn cross_profile_comparison_is_an_optional_boolean() {
 }
 
 #[test]
+#[trace("TC-246", "FR-034-AC-1")]
+fn paired_run_is_an_optional_closed_relation_object() {
+    let errors = |value: Value| plan_errors(json!({ "paired_run": value }));
+    assert!(plan_errors(json!({})).is_empty());
+    for ok in [
+        json!({ "relation": "equal" }),
+        json!({ "relation": "not_worse" }),
+        json!({ "relation": "within_delta", "delta": 0.5 }),
+        json!({ "relation": "equal", "minimum_pairs": 1 }),
+        json!({ "relation": "equal", "minimum_pairs": 5 }),
+    ] {
+        assert!(errors(ok.clone()).is_empty(), "{ok}");
+    }
+    for bad in [
+        json!({ "relation": "better" }),
+        json!({}),
+        json!({ "relation": "equal", "minimum_pairs": 0 }),
+        json!({ "relation": "equal", "minimum_pairs": -1 }),
+        json!({ "relation": "equal", "minimum_pairs": "2" }),
+        json!({ "relation": "within_delta" }),
+        json!({ "relation": "within_delta", "delta": 0 }),
+        json!({ "relation": "within_delta", "delta": "1" }),
+        json!({ "relation": "equal", "delta": 1 }),
+        json!({ "relation": "equal", "extra": true }),
+        json!("equal"),
+        json!([]),
+        Value::Null,
+    ] {
+        assert!(!errors(bad.clone()).is_empty(), "{bad}");
+    }
+}
+
+#[test]
 #[trace("TC-170", "FR-026-AC-5")]
 fn measurement_plan_skeleton_shows_the_steering_fields() {
     let skeleton = frontmatter(&skeleton_path("MeasurementPlan.md"));
