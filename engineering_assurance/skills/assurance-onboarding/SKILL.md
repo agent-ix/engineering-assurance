@@ -137,6 +137,12 @@ strings; the producer's item-row families must equal it exactly), and
 do not invent a threshold or margin the owner has not stated. `population`,
 `sampling`, `error_model`, and `uncertainty` remain prose.
 
+When converting an older plan's prose `estimator` or `decision_rule` into these
+typed fields, the typed fields keep only the comparator, threshold or baseline,
+and margin. Carry the explanatory detail the prose held (what a count counts,
+which conditions fail the gate beyond the comparator) into the body
+Interpretation section; do not drop it with the prose.
+
 Declaring `execution_procedure` elects to govern a producer; repository layout
 does not imply ownership. When declaring `protected_apparatus`, list the files
 that produce its number

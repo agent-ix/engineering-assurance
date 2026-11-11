@@ -245,6 +245,12 @@ repository-relative `.json` procedure file and include that file in
 Report uncertainty, invalid runs, environmental differences, and plausible
 alternative explanations.
 
+When converting an older plan whose `estimator` or `decision_rule` was free
+prose into the typed frontmatter fields, the typed fields keep only the
+comparator, threshold or baseline, and margin. Carry the explanatory detail the
+old prose held (what a count counts, which conditions fail the gate beyond the
+comparator) into this section instead of dropping it with the prose.
+
 ## Example: tracking two related quantities on one plan
 
 A single MeasurementPlan can track more than one related quantity through its

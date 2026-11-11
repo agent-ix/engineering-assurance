@@ -156,6 +156,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-021 | FR-021-AC-17 | TC-241 | ✅ Passing |
 | FR-021 | FR-021-AC-18 | TC-242 | ✅ Passing |
 | FR-021 | FR-021-AC-19 | TC-243 | ✅ Passing |
+| FR-021 | FR-021-AC-20 | TC-245 | ✅ Skeleton Interpretation and onboarding skill warning passing |
 | FR-022 | FR-022-AC-1 | TC-150 | ✅ Wire spelling, rendering, parsing, and serde round trip backed |
 | FR-022 | FR-022-AC-2 | TC-151 | ✅ Exact-match typed refusal backed |
 | FR-022 | FR-022-AC-3 | TC-152 | ✅ Exhaustive listing, compile-time trait-absence probe, and downstream ordering refusals backed |
@@ -456,6 +457,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-241 | Adding, removing or changing an answer family, or adding or removing the list, with an unchanged definition_version yields one finding naming statistical_design.answer_families; reordering the same families yields none; with a changed definition_version it yields none | Unit | P1 | FR-021-AC-17 | ✅ Passing |
 | TC-242 | The skeleton's constant-predictor guidance shows answer_families and states that families come from it, not the Population prose; the onboarding checklist states the required/refused rule and the producer-families-equal-list requirement | Unit | P1 | FR-021-AC-18 | ✅ Passing |
 | TC-243 | AnswerFamilies accepts a non-empty set of distinct non-empty AnswerFamily strings and refuses empty, repeated and empty-string entries with distinct typed errors through construction and deserialization; order does not affect equality and entries serialize sorted; DefinitionMember::AnswerFamilies has the expected path; a measurement-only consumer reaches the types | Unit | P0 | FR-021-AC-19 | ✅ Passing |
+| TC-245 | The skeleton's Interpretation section and the onboarding skill state that detail from prose estimator or decision_rule moved into typed fields must be carried into the body Interpretation section | Unit | P2 | FR-021-AC-20 | ✅ Passing |
 | TC-244 | The MeasurementPlan schema accepts `cross_profile_comparison` true and false and its absence, and refuses a string, number, null, array or object value | Unit | P0 | FR-033-AC-1 | ✅ `tests/python_port/module.rs` passing |
 
 ## Option Permutation Matrix
