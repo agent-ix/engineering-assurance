@@ -234,12 +234,16 @@
       },
       "required": ["relation"],
       "additionalProperties": false,
-      "if": {
-        "properties": { "relation": { "const": "within_delta" } },
-        "required": ["relation"]
-      },
-      "then": { "required": ["delta"] },
-      "else": { "not": { "required": ["delta"] } }
+      "allOf": [
+        {
+          "if": {
+            "properties": { "relation": { "const": "within_delta" } },
+            "required": ["relation"]
+          },
+          "then": { "required": ["delta"] },
+          "else": { "not": { "required": ["delta"] } }
+        }
+      ]
     },
     "negative_control": {
       "type": "object",
