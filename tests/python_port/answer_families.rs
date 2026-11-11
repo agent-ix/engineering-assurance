@@ -135,3 +135,18 @@ fn skeleton_and_onboarding_state_the_answer_families_rule() {
     assert!(skill.contains("refused with any other reference"));
     assert!(skill.contains("must equal it exactly"));
 }
+
+#[test]
+#[trace("TC-245", "FR-021-AC-20")]
+fn skeleton_and_onboarding_warn_to_preserve_prose_in_interpretation() {
+    let skeleton = read(&package_root().join("skeletons/MeasurementPlan.md"));
+    let (_, interpretation) = skeleton
+        .split_once("## Interpretation")
+        .expect("skeleton has an Interpretation section");
+    let interpretation = interpretation.split("\n## ").next().unwrap();
+    assert!(interpretation.contains("Carry the explanatory detail"));
+
+    let skill = read(&package_root().join("skills/assurance-onboarding/SKILL.md"));
+    assert!(skill.contains("Carry the explanatory detail"));
+    assert!(skill.contains("Interpretation section"));
+}
