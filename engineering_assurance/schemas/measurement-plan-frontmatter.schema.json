@@ -63,6 +63,10 @@
       "items": { "$ref": "#/$defs/negative_control" }
     },
     "statistical_design": { "type": "object" },
+    "cross_profile_comparison": {
+      "type": "boolean",
+      "description": "Opt-in (FR-033): when `true`, the plan's checker may compare measurement collections built under different build profiles. Absent means the same-profile comparison rule applies. Optional."
+    },
     "relationships": {
       "type": "array",
       "description": "Structural links to other spec artifacts. When a pass/fail decision genuinely depends on more than one metric succeeding together (a composite/AND gate), that composition MUST be expressed here as one `references` entry per constituent metric's MeasurementPlan -- never as a fabricated single `metric` id, and never only as prose. Do not add a separate constituent-metrics field for this; `references` is the one spelling of the edge.",

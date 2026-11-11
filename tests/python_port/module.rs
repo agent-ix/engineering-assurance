@@ -586,6 +586,18 @@ fn objective_steering_fields_are_optional_advisory_and_range_checked() {
 }
 
 #[test]
+#[trace("TC-244", "FR-033-AC-1")]
+fn cross_profile_comparison_is_an_optional_boolean() {
+    let errors = |value: Value| plan_errors(json!({ "cross_profile_comparison": value }));
+    assert!(plan_errors(json!({})).is_empty());
+    assert!(errors(json!(true)).is_empty());
+    assert!(errors(json!(false)).is_empty());
+    for bad in [json!("true"), json!(1), Value::Null, json!([true]), json!({})] {
+        assert!(!errors(bad.clone()).is_empty(), "{bad}");
+    }
+}
+
+#[test]
 #[trace("TC-170", "FR-026-AC-5")]
 fn measurement_plan_skeleton_shows_the_steering_fields() {
     let skeleton = frontmatter(&skeleton_path("MeasurementPlan.md"));

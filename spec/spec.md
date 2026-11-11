@@ -190,6 +190,8 @@ same canonical bundle and do not redefine these responsibilities.
   conflicts instead of winners.
 - [FR-032](./functional/FR-032-declared-scope-footprint-verification.md) — verify a declared
   change scope against the candidate change footprint: complete, false scope or incomplete.
+- [FR-033](./functional/FR-033-measurement-plan-cross-profile-comparison.md) — let a
+  MeasurementPlan opt in to comparing collections built under different build profiles.
 
 ### Non-Functional Requirements
 
