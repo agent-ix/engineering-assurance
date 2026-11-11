@@ -631,6 +631,38 @@ fn paired_run_is_an_optional_closed_relation_object() {
 }
 
 #[test]
+#[trace("TC-247", "FR-035-AC-1")]
+fn population_set_and_exemption_are_optional_closed_declarations() {
+    let errors = |over: Value| statistical_design_errors(None, over);
+    assert!(errors(json!({})).is_empty());
+    for ok in [
+        json!({ "population_set": { "ids": ["a"] } }),
+        json!({ "population_set": { "ids": ["a", "b"] } }),
+        json!({ "population_exempt": "no enumerable population" }),
+        json!({ "population_set": { "ids": ["a"] }, "population_exempt": "why" }),
+    ] {
+        assert!(errors(ok.clone()).is_empty(), "{ok}");
+    }
+    for bad in [
+        json!({ "population_set": { "ids": [] } }),
+        json!({ "population_set": { "ids": ["a", "a"] } }),
+        json!({ "population_set": { "ids": [""] } }),
+        json!({ "population_set": { "ids": [1] } }),
+        json!({ "population_set": { "ids": ["a"], "extra": true } }),
+        json!({ "population_set": {} }),
+        json!({ "population_set": { "ids": "a" } }),
+        json!({ "population_set": ["a"] }),
+        json!({ "population_set": "a" }),
+        json!({ "population_exempt": "" }),
+        json!({ "population_exempt": "  " }),
+        json!({ "population_exempt": 1 }),
+        json!({ "population_exempt": true }),
+    ] {
+        assert!(!errors(bad.clone()).is_empty(), "{bad}");
+    }
+}
+
+#[test]
 #[trace("TC-170", "FR-026-AC-5")]
 fn measurement_plan_skeleton_shows_the_steering_fields() {
     let skeleton = frontmatter(&skeleton_path("MeasurementPlan.md"));

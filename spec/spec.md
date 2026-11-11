@@ -194,6 +194,8 @@ same canonical bundle and do not redefine these responsibilities.
   MeasurementPlan opt in to comparing collections built under different build profiles.
 - [FR-034](./functional/FR-034-measurement-plan-paired-run.md) — let a MeasurementPlan state how
   two runs of the same measurement relate.
+- [FR-035](./functional/FR-035-measurement-plan-population-set.md) — let a
+  MeasurementPlan declare an enumerated population set or an exemption reason.
 
 ### Non-Functional Requirements
 

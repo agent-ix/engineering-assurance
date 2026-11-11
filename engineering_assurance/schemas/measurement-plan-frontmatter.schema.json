@@ -372,6 +372,25 @@
           "description": "Prose: how uncertain the estimate is and how the plan accounts for it. It is never read by a checker. To have the decision rule judge each observation's stated interval instead of its point estimate, state `decision_rule.interval_level`."
         },
         "decision_rule": { "$ref": "#/$defs/decision_rule" },
+        "population_set": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ids"],
+          "properties": {
+            "ids": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          },
+          "description": "The enumerated population a percentage metric is taken over (FR-035): `{ ids: [...] }`, a non-empty list of distinct, non-empty strings. A declaration only: the consuming checker holds an observation's examined ids to this set. Optional."
+        },
+        "population_exempt": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The reason a percentage metric is not taken over an enumerated population (FR-035): a non-blank string. A declaration only. Optional."
+        },
         "answer_families": {
           "type": "array",
           "minItems": 1,
