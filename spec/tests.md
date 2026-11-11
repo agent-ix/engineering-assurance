@@ -222,6 +222,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-032 | FR-032-CON-1 | TC-234 | ✅ Truncated and unavailable footprints never complete |
 | FR-033 | FR-033-AC-1 | TC-244 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
 | FR-034 | FR-034-AC-1 | TC-246 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
+| FR-035 | FR-035-AC-1 | TC-247 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
 
 ### Non-Functional Requirement Coverage
 
@@ -461,6 +462,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-245 | The skeleton's Interpretation section and the onboarding skill state that detail from prose estimator or decision_rule moved into typed fields must be carried into the body Interpretation section | Unit | P2 | FR-021-AC-20 | ✅ Passing |
 | TC-246 | The MeasurementPlan schema accepts an absent `paired_run`, each relation, and `minimum_pairs` 1 and 5, and refuses an unknown relation, `minimum_pairs` 0, -1 and "2", `within_delta` without `delta`, `delta` with `equal`, extra members and a non-object value | Unit | P0 | FR-034-AC-1 | ✅ `tests/python_port/module.rs` passing |
 | TC-244 | The MeasurementPlan schema accepts `cross_profile_comparison` true and false and its absence, and refuses a string, number, null, array or object value | Unit | P0 | FR-033-AC-1 | ✅ `tests/python_port/module.rs` passing |
+| TC-247 | The MeasurementPlan schema accepts `statistical_design` with neither, either or both of `population_set` and `population_exempt`, and refuses empty, repeated, empty-string and non-string ids, an extra or missing member, a non-object set, and an empty, blank or non-string exemption | Unit | P0 | FR-035-AC-1 | ✅ `tests/python_port/module.rs` passing |
 
 ## Option Permutation Matrix
 
