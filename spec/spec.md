@@ -196,6 +196,10 @@ same canonical bundle and do not redefine these responsibilities.
   two runs of the same measurement relate.
 - [FR-035](./functional/FR-035-measurement-plan-population-set.md) — let a
   MeasurementPlan declare an enumerated population set or an exemption reason.
+- [FR-036](./functional/FR-036-ssh-signed-commit-and-tag-verification.md) — verify SSH
+  signatures on commits and annotated tags by delegating to git.
+- [FR-037](./functional/FR-037-signer-mapping-and-signed-off-meaning.md) — map verified
+  signers to named people and expose the signed-off meaning.
 
 ### Non-Functional Requirements
 
