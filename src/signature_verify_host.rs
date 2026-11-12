@@ -3,22 +3,26 @@
 
 //! Git and `ssh-keygen` adapter for the `signature-verify` command (FR-036).
 //!
-//! The adapter runs `git verify-commit`, `git log --format=%G?%x00%GF`,
-//! `git verify-tag` and, for a tag git rejected, `ssh-keygen -Y
-//! check-novalidate`, through the shared process host. It reads exit statuses
+//! The adapter reads the allowed-signers file, then runs `git verify-commit`,
+//! `git log --format=%G?%x00%GF%x00%GS`, `git verify-tag`, `git
+//! interpret-trailers --parse` and, for a tag, `ssh-keygen -Y find-principals`
+//! (git accepted it) or `ssh-keygen -Y check-novalidate` (git rejected it),
+//! through the shared process host. It reads exit statuses
 //! and fixed signals only, hands them to the pure classifier, and never writes
 //! to the repository.
 
 use std::{
     ffi::{OsStr, OsString},
     fs::File,
+    io::Read,
     path::{Path, PathBuf},
     time::Duration,
 };
 
 use engineering_assurance::signature_verify::{
-    CommitObservation, GitGrade, Reason, SignatureFormat, SshCheck, TagObservation, TargetKind,
-    Verdict, classify_commit, classify_tag, commit_signature_format, is_plain_revision,
+    CommitObservation, GitGrade, PrincipalLookup, Reason, SignatureFormat, SignedOffMeaning,
+    SplitTag, SshCheck, TagObservation, TargetKind, Verdict, classify_commit, classify_tag,
+    commit_signature_format, is_plain_revision, object_message, signed_off_meaning,
     split_tag_object,
 };
 use serde::{Deserialize, Serialize};
@@ -29,6 +33,8 @@ use crate::process_host::{self, CompletedProcess, ProcessError, ProcessLimits};
 const REQUEST_PROTOCOL: &str = "engineering-assurance.signature-verify-request/v1";
 const RESULT_PROTOCOL: &str = "engineering-assurance.signature-verify-result/v1";
 const MAX_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
+/// Largest accepted allowed-signers file in bytes.
+const MAX_ALLOWED_SIGNERS_BYTES: u64 = 1024 * 1024;
 const PROCESS_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Repository-selecting and configuration variables git must not inherit.
@@ -76,6 +82,11 @@ pub(crate) enum SignatureVerifyError {
     /// The revision is empty, too long, option-like or contains whitespace or controls.
     #[error("signature-verify revision is not a plain revision name")]
     Revision,
+    /// The allowed-signers file is not a readable regular UTF-8 file of at most 1 MiB.
+    #[error(
+        "signature-verify allowed-signers file is not a readable UTF-8 regular file of at most 1 MiB"
+    )]
+    AllowedSigners,
     /// The verdict cannot be encoded.
     #[error("signature-verify result cannot be encoded")]
     ResultEncoding,
@@ -88,6 +99,7 @@ impl SignatureVerifyError {
             Self::Unreadable => "signature_verify_request_unreadable",
             Self::Invalid => "signature_verify_request_invalid",
             Self::Revision => "signature_verify_revision_invalid",
+            Self::AllowedSigners => "signature_verify_allowed_signers_invalid",
             Self::ResultEncoding => "signature_verify_result_encoding_failed",
         }
     }
@@ -108,15 +120,15 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, SignatureVerifyError> {
     if !is_plain_revision(&request.revision) {
         return Err(SignatureVerifyError::Revision);
     }
+    check_allowed_signers(&request.allowed_signers)?;
     let git = Git {
         repository: &request.repository,
         allowed_signers: &request.allowed_signers,
     };
-    let observed = match request.kind {
+    let verdict = match request.kind {
         TargetKind::Commit => git.commit(&request.revision),
         TargetKind::Tag => git.tag(&request.revision),
     };
-    let verdict = observed.unwrap_or_else(|reason| Verdict::unverifiable(request.kind, reason));
     let mut line = serde_json::to_vec(&ResultLine {
         protocol: RESULT_PROTOCOL,
         verdict: &verdict,
@@ -124,6 +136,28 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, SignatureVerifyError> {
     .map_err(|_| SignatureVerifyError::ResultEncoding)?;
     line.push(b'\n');
     Ok(line)
+}
+
+/// Refuses an allowed-signers file git should not be given: one that is not a
+/// regular file, is over 1 MiB, cannot be read, or is not UTF-8. The grammar of
+/// the file is git's and `ssh-keygen`'s to read.
+fn check_allowed_signers(path: &Path) -> Result<(), SignatureVerifyError> {
+    let invalid = |_| SignatureVerifyError::AllowedSigners;
+    let file = File::open(path).map_err(invalid)?;
+    let metadata = file.metadata().map_err(invalid)?;
+    if !metadata.is_file() || metadata.len() > MAX_ALLOWED_SIGNERS_BYTES {
+        return Err(SignatureVerifyError::AllowedSigners);
+    }
+    let mut bytes = Vec::new();
+    file.take(MAX_ALLOWED_SIGNERS_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(invalid)?;
+    if u64::try_from(bytes.len()).map_or(true, |len| len > MAX_ALLOWED_SIGNERS_BYTES)
+        || std::str::from_utf8(&bytes).is_err()
+    {
+        return Err(SignatureVerifyError::AllowedSigners);
+    }
+    Ok(())
 }
 
 /// Maps a process-mechanics failure to the reason it makes the object
@@ -145,15 +179,31 @@ struct Git<'a> {
 }
 
 impl Git<'_> {
-    fn commit(&self, revision: &str) -> Result<Verdict, Reason> {
+    fn commit(&self, revision: &str) -> Verdict {
+        let kind = TargetKind::Commit;
+        let (id, object) = match self.load_commit(revision) {
+            Ok(loaded) => loaded,
+            Err(reason) => return Verdict::unverifiable(kind, reason),
+        };
+        let meaning = self.meaning(object_message(&object));
+        self.commit_verdict(&id, &object)
+            .unwrap_or_else(|reason| Verdict::unverifiable(kind, reason))
+            .with_meaning(meaning)
+    }
+
+    fn load_commit(&self, revision: &str) -> Result<(String, Vec<u8>), Reason> {
         self.require_repository()?;
         let id = self.resolve(&format!("{revision}^{{commit}}"))?;
         let object = self.successful(&["cat-file", "commit", &id])?;
-        let format = commit_signature_format(&object);
+        Ok((id, object))
+    }
+
+    fn commit_verdict(&self, id: &str, object: &[u8]) -> Result<Verdict, Reason> {
+        let format = commit_signature_format(object);
         let git = if format == Some(SignatureFormat::Other) {
             None
         } else {
-            Some(self.grade(&id)?)
+            Some(self.grade(id)?)
         };
         Ok(classify_commit(&CommitObservation { format, git }))
     }
@@ -164,14 +214,16 @@ impl Git<'_> {
             "log",
             "-1",
             "--no-show-signature",
-            "--format=%G?%x00%GF",
+            "--format=%G?%x00%GF%x00%GS",
             id,
         ])?;
         let text = String::from_utf8(log).map_err(|_| Reason::UnrecognizedOutput)?;
-        let (grade, fingerprint) = text
-            .trim_end_matches('\n')
-            .split_once('\0')
-            .ok_or(Reason::UnrecognizedOutput)?;
+        let mut fields = text.trim_end_matches('\n').split('\0');
+        let (Some(grade), Some(fingerprint), Some(principal), None) =
+            (fields.next(), fields.next(), fields.next(), fields.next())
+        else {
+            return Err(Reason::UnrecognizedOutput);
+        };
         let mut codes = grade.chars();
         let (Some(grade), None) = (codes.next(), codes.next()) else {
             return Err(Reason::UnrecognizedOutput);
@@ -180,17 +232,45 @@ impl Git<'_> {
             verify_accepted,
             grade,
             fingerprint: (!fingerprint.is_empty()).then(|| fingerprint.to_owned()),
+            principal: (!principal.is_empty()).then(|| principal.to_owned()),
         })
     }
 
-    fn tag(&self, revision: &str) -> Result<Verdict, Reason> {
+    fn tag(&self, revision: &str) -> Verdict {
+        let kind = TargetKind::Tag;
+        let loaded = self.load_tag(revision);
+        let (id, object) = match loaded {
+            Ok(Some(loaded)) => loaded,
+            Ok(None) => return classify_tag(&TagObservation::Lightweight),
+            Err(reason) => return Verdict::unverifiable(kind, reason),
+        };
+        let split = split_tag_object(&object);
+        let payload = split.as_ref().map_or(object.as_slice(), |s| s.payload);
+        let meaning = self.meaning(object_message(payload));
+        self.tag_verdict(&id, split.as_ref())
+            .unwrap_or_else(|reason| Verdict::unverifiable(kind, reason))
+            .with_meaning(meaning)
+    }
+
+    /// The id and object of an annotated tag; `None` for a lightweight tag.
+    fn load_tag(&self, revision: &str) -> Result<Option<(String, Vec<u8>)>, Reason> {
         self.require_repository()?;
         let id = self.resolve(revision)?;
         let kind = self.successful(&["cat-file", "-t", &id])?;
-        let observation = match kind.as_slice() {
-            b"commit\n" if self.names_tag_ref(revision)? => TagObservation::Lightweight,
-            b"tag\n" => self.annotated_tag(&id)?,
-            _ => return Err(Reason::RevisionUnresolved),
+        match kind.as_slice() {
+            b"commit\n" if self.names_tag_ref(revision)? => Ok(None),
+            b"tag\n" => {
+                let object = self.successful(&["cat-file", "tag", &id])?;
+                Ok(Some((id, object)))
+            }
+            _ => Err(Reason::RevisionUnresolved),
+        }
+    }
+
+    fn tag_verdict(&self, id: &str, split: Option<&SplitTag<'_>>) -> Result<Verdict, Reason> {
+        let observation = match split {
+            Some(split) => self.annotated_tag(id, split)?,
+            None => TagObservation::NoSignature,
         };
         Ok(classify_tag(&observation))
     }
@@ -203,29 +283,86 @@ impl Git<'_> {
         Ok(output.starts_with(b"refs/tags/"))
     }
 
-    fn annotated_tag(&self, id: &str) -> Result<TagObservation, Reason> {
-        let object = self.successful(&["cat-file", "tag", id])?;
-        let Some(split) = split_tag_object(&object) else {
-            return Ok(TagObservation::NoSignature);
-        };
+    fn annotated_tag(&self, id: &str, split: &SplitTag<'_>) -> Result<TagObservation, Reason> {
         if split.format == SignatureFormat::Other {
             return Ok(TagObservation::Signature {
                 format: SignatureFormat::Other,
                 verify_accepted: false,
                 check: None,
+                principal: PrincipalLookup::NotRun,
             });
         }
         let verify_accepted = self.run(&["verify-tag", id])?.status.success();
-        let check = if verify_accepted {
-            None
+        let (check, principal) = if verify_accepted {
+            (None, self.find_principal(split.signature)?)
         } else {
-            Some(ssh_check(split.signature, split.payload)?)
+            (
+                Some(ssh_check(split.signature, split.payload)?),
+                PrincipalLookup::NotRun,
+            )
         };
         Ok(TagObservation::Signature {
             format: SignatureFormat::Ssh,
             verify_accepted,
             check,
+            principal,
         })
+    }
+
+    /// The first principal `ssh-keygen -Y find-principals` prints for `signature`.
+    fn find_principal(&self, signature: &[u8]) -> Result<PrincipalLookup, Reason> {
+        let directory = tempfile::tempdir().map_err(|_| Reason::UnrecognizedOutput)?;
+        let signature_path = directory.path().join("signature");
+        std::fs::write(&signature_path, signature).map_err(|_| Reason::UnrecognizedOutput)?;
+        let arguments = [
+            OsStr::new("-Y"),
+            OsStr::new("find-principals"),
+            OsStr::new("-s"),
+            signature_path.as_os_str(),
+            OsStr::new("-f"),
+            self.allowed_signers.as_os_str(),
+        ];
+        let result = process_host::run_configured(
+            OsStr::new("ssh-keygen"),
+            &arguments,
+            Some(directory.path()),
+            &[],
+            &[],
+            limits(),
+        );
+        match result {
+            Ok(output) if output.status.success() => {
+                let first = std::str::from_utf8(&output.stdout)
+                    .ok()
+                    .and_then(|text| text.lines().next())
+                    .filter(|line| !line.is_empty());
+                Ok(first.map_or(PrincipalLookup::Rejected, |line| {
+                    PrincipalLookup::Found(line.to_owned())
+                }))
+            }
+            Ok(_) => Ok(PrincipalLookup::Rejected),
+            Err(ProcessError::Unavailable { .. }) => Ok(PrincipalLookup::NotStarted),
+            Err(error) => Err(mechanics_reason(&error, Reason::UnrecognizedOutput)),
+        }
+    }
+
+    /// The `Signed-off-meaning:` trailers of `message`, read by
+    /// `git interpret-trailers --parse`; `None` when git could not read them.
+    fn meaning(&self, message: &[u8]) -> Option<SignedOffMeaning> {
+        let directory = tempfile::tempdir().ok()?;
+        let path = directory.path().join("message");
+        std::fs::write(&path, message).ok()?;
+        let output = self
+            .run_with_stdin(
+                &["interpret-trailers", "--parse"],
+                Some(File::open(&path).ok()?),
+            )
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let text = String::from_utf8_lossy(&output.stdout);
+        Some(signed_off_meaning(&text))
     }
 
     fn require_repository(&self) -> Result<(), Reason> {
@@ -270,6 +407,15 @@ impl Git<'_> {
 
     /// Runs git with only the allowed-signers setting from the request.
     fn run(&self, arguments: &[&str]) -> Result<CompletedProcess, Reason> {
+        self.run_with_stdin(arguments, None)
+    }
+
+    /// Runs git with `stdin` as standard input when given.
+    fn run_with_stdin(
+        &self,
+        arguments: &[&str],
+        stdin: Option<File>,
+    ) -> Result<CompletedProcess, Reason> {
         let mut setting = OsString::from("gpg.ssh.allowedSignersFile=");
         setting.push(self.allowed_signers);
         let mut all: Vec<&OsStr> = vec![
@@ -283,6 +429,8 @@ impl Git<'_> {
             OsStr::new("gpg.openpgp.program=false"),
             OsStr::new("-c"),
             OsStr::new("gpg.x509.program=false"),
+            OsStr::new("-c"),
+            OsStr::new("trailer.separators=:"),
         ];
         all.extend(arguments.iter().map(OsStr::new));
         let removed: Vec<&OsStr> = REMOVED_ENVIRONMENT.iter().map(OsStr::new).collect();
@@ -291,14 +439,25 @@ impl Git<'_> {
             (OsStr::new("GIT_CONFIG_GLOBAL"), OsStr::new("/dev/null")),
             (OsStr::new("GIT_OPTIONAL_LOCKS"), OsStr::new("0")),
         ];
-        process_host::run_configured(
-            OsStr::new("git"),
-            &all,
-            Some(self.repository),
-            &environment,
-            &removed,
-            limits(),
-        )
+        match stdin {
+            Some(stdin) => process_host::run_configured_stdin(
+                OsStr::new("git"),
+                &all,
+                Some(self.repository),
+                &environment,
+                &removed,
+                stdin,
+                limits(),
+            ),
+            None => process_host::run_configured(
+                OsStr::new("git"),
+                &all,
+                Some(self.repository),
+                &environment,
+                &removed,
+                limits(),
+            ),
+        }
         .map_err(|error| mechanics_reason(&error, Reason::GitNotStarted))
     }
 }

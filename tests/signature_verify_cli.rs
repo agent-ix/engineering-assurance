@@ -571,3 +571,290 @@ fn tc_263_only_a_tag_ref_to_a_commit_is_a_lightweight_tag() {
         assert_eq!(verdict["reason"], "revision_unresolved", "{revision}");
     }
 }
+
+const PRINCIPAL: &str = "signer@example.invalid";
+
+fn public_line(fixture: &Fixture, key: &str) -> String {
+    fs::read_to_string(fixture.public(key)).expect("public key")
+}
+
+fn set_allowed(fixture: &Fixture, contents: &str) {
+    fs::write(fixture.allowed(), contents).expect("allowed signers");
+}
+
+fn signed_commit_with(fixture: &Fixture, key: &str, messages: &[&str]) -> String {
+    let public = fixture.public(key);
+    let repo = fixture.repo();
+    let mut arguments = vec!["commit", "-q", "-S", "--allow-empty"];
+    for message in messages {
+        arguments.extend(["-m", message]);
+    }
+    git(&repo, Some(public.to_str().expect("utf-8")), &arguments);
+    git(&repo, None, &["rev-parse", "HEAD"]).trim().to_owned()
+}
+
+fn signed_tag_with(fixture: &Fixture, key: &str, name: &str, message: &str) {
+    let public = fixture.public(key);
+    git(
+        &fixture.repo(),
+        Some(public.to_str().expect("utf-8")),
+        &["tag", "-s", "-m", message, name],
+    );
+}
+
+fn meaning(verdict: &Value) -> (&str, Vec<&str>) {
+    let meaning = &verdict["signed_off_meaning"];
+    let values = meaning
+        .get("values")
+        .and_then(Value::as_array)
+        .map(|values| values.iter().map(|v| v.as_str().expect("string")).collect())
+        .unwrap_or_default();
+    (meaning["presence"].as_str().expect("presence"), values)
+}
+
+#[test]
+#[trace("TC-264", "FR-037-AC-1", "FR-037-CON-1")]
+fn tc_264_valid_commit_and_tag_are_mapped_to_the_principal_in_the_file() {
+    let fixture = fixture();
+    let id = signed_commit(&fixture, "a", "signed by a");
+    signed_tag(&fixture, "a", "v-valid");
+    let commit = status(&fixture, &id, "commit");
+    assert_eq!(commit["status"], "signed_valid");
+    assert_eq!(commit["signer"]["mapping"], "mapped");
+    assert_eq!(commit["signer"]["principal"], PRINCIPAL);
+    assert_eq!(commit["key_fingerprint"], fixture.fingerprint("a"));
+    let tag = status(&fixture, "v-valid", "tag");
+    assert_eq!(tag["status"], "signed_valid");
+    assert_eq!(tag["signer"]["mapping"], "mapped");
+    assert_eq!(tag["signer"]["principal"], PRINCIPAL);
+    assert!(tag.get("key_fingerprint").is_none());
+}
+
+#[test]
+#[trace("TC-265", "FR-037-AC-2", "FR-037-CON-1")]
+fn tc_265_a_key_the_file_does_not_name_is_unmapped_without_a_principal() {
+    let fixture = fixture();
+    // The committer identity matches the principal; it must not be used.
+    let repo = fixture.repo();
+    let public = fixture.public("b");
+    git(
+        &repo,
+        Some(public.to_str().expect("utf-8")),
+        &[
+            "-c",
+            &format!("user.email={PRINCIPAL}"),
+            "commit",
+            "-q",
+            "-S",
+            "--allow-empty",
+            "-m",
+            "signed by b",
+        ],
+    );
+    let id = git(&repo, None, &["rev-parse", "HEAD"]).trim().to_owned();
+    let commit = status(&fixture, &id, "commit");
+    assert_eq!(commit["status"], "signed_untrusted");
+    assert_eq!(commit["signer"]["mapping"], "unmapped");
+    assert!(commit["signer"].get("principal").is_none());
+    signed_tag(&fixture, "b", "v-untrusted");
+    let tag = status(&fixture, "v-untrusted", "tag");
+    assert_eq!(tag["status"], "signed_untrusted");
+    assert_eq!(tag["signer"]["mapping"], "unmapped");
+    assert!(tag["signer"].get("principal").is_none());
+    let bad_or_unsigned = plain_commit(&fixture, "plain");
+    assert!(
+        status(&fixture, &bad_or_unsigned, "commit")
+            .get("signer")
+            .is_none()
+    );
+}
+
+#[test]
+#[trace("TC-266", "FR-037-AC-3")]
+fn tc_266_an_invalid_allowed_signers_file_is_refused_before_git_starts() {
+    let fixture = fixture();
+    signed_commit(&fixture, "a", "signed by a");
+    let marker = fixture.root().join("git-was-started");
+    let shim = fixture.root().join("shim-bin");
+    fs::create_dir(&shim).expect("shim dir");
+    let script = shim.join("git");
+    fs::write(
+        &script,
+        format!("#!/bin/sh\ntouch '{}'\nexit 1\n", marker.display()),
+    )
+    .expect("shim");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("mode");
+    let oversized = fixture.root().join("oversized");
+    fs::write(&oversized, vec![b'#'; 1024 * 1024 + 1]).expect("oversized");
+    let not_utf8 = fixture.root().join("not-utf8");
+    fs::write(&not_utf8, [0xff, 0xfe, b'\n']).expect("not utf-8");
+    let directory = fixture.root().join("a-directory");
+    fs::create_dir(&directory).expect("directory");
+    let missing = fixture.root().join("missing");
+    for path in [&missing, &directory, &oversized, &not_utf8] {
+        let mut body = request(&fixture, "HEAD", "commit");
+        body["allowed_signers"] = json!(path.display().to_string());
+        let output = run_with(body.to_string().as_bytes(), Some(&shim));
+        assert_eq!(output.status.code(), Some(2), "{path:?}: {output:?}");
+        let error: Value = serde_json::from_slice(&output.stdout).expect("error json");
+        assert_eq!(error["protocol"], "engineering-assurance.error/v1");
+        assert_eq!(error["capability"], "signature-verify");
+        assert_eq!(error["code"], "signature_verify_allowed_signers_invalid");
+        assert!(!output.stderr.is_empty());
+    }
+    assert!(!marker.exists(), "an invalid file must not start git");
+    // A file of exactly 1 MiB is accepted.
+    let limit = fixture.root().join("limit");
+    let mut contents = format!("{PRINCIPAL} {}", public_line(&fixture, "a")).into_bytes();
+    contents.resize(1024 * 1024, b'\n');
+    fs::write(&limit, contents).expect("limit file");
+    let mut body = request(&fixture, "HEAD", "commit");
+    body["allowed_signers"] = json!(limit.display().to_string());
+    assert_eq!(verdict(&body)["status"], "signed_valid");
+}
+
+#[test]
+#[trace("TC-267", "FR-037-AC-4")]
+fn tc_267_unparsable_lines_authorize_nothing_and_the_rest_still_grades() {
+    let fixture = fixture();
+    let id = signed_commit(&fixture, "a", "signed by a");
+    set_allowed(&fixture, "this is not an allowed signers line\n");
+    let only = status(&fixture, &id, "commit");
+    assert_eq!(only["status"], "signed_untrusted");
+    assert_eq!(only["signer"]["mapping"], "unmapped");
+    set_allowed(
+        &fixture,
+        &format!(
+            "this is not an allowed signers line\n{PRINCIPAL} {}",
+            public_line(&fixture, "a")
+        ),
+    );
+    let mixed = status(&fixture, &id, "commit");
+    assert_eq!(mixed["status"], "signed_valid");
+    assert_eq!(mixed["signer"]["principal"], PRINCIPAL);
+}
+
+#[test]
+#[trace("TC-268", "FR-037-AC-9")]
+fn tc_268_an_expired_entry_is_untrusted_and_unmapped() {
+    let fixture = fixture();
+    let id = signed_commit(&fixture, "a", "signed by a");
+    signed_tag(&fixture, "a", "v-expired");
+    set_allowed(
+        &fixture,
+        &format!(
+            "{PRINCIPAL} valid-before=\"20200101\" {}",
+            public_line(&fixture, "a")
+        ),
+    );
+    for (revision, kind) in [(id.as_str(), "commit"), ("v-expired", "tag")] {
+        let verdict = status(&fixture, revision, kind);
+        assert_eq!(verdict["status"], "signed_untrusted", "{kind}");
+        assert_eq!(verdict["signer"]["mapping"], "unmapped", "{kind}");
+        assert!(verdict["signer"].get("principal").is_none(), "{kind}");
+    }
+}
+
+#[test]
+#[trace("TC-269", "FR-037-AC-5")]
+fn tc_269_trailers_are_read_in_order_from_the_trailer_block_only() {
+    let fixture = fixture();
+    let one = signed_commit_with(&fixture, "a", &["subject", "Signed-off-meaning: reviewed"]);
+    assert_eq!(
+        meaning(&status(&fixture, &one, "commit")),
+        ("present", vec!["reviewed"])
+    );
+    let two = signed_commit_with(
+        &fixture,
+        "a",
+        &[
+            "subject",
+            "Signed-off-meaning: reviewed\nSigned-off-meaning: approved for release",
+        ],
+    );
+    assert_eq!(
+        meaning(&status(&fixture, &two, "commit")),
+        ("present", vec!["reviewed", "approved for release"])
+    );
+    let outside = signed_commit_with(
+        &fixture,
+        "a",
+        &[
+            "subject",
+            "Signed-off-meaning: not a trailer",
+            "closing text",
+        ],
+    );
+    assert_eq!(
+        meaning(&status(&fixture, &outside, "commit")),
+        ("missing", vec![])
+    );
+}
+
+#[test]
+#[trace("TC-270", "FR-037-AC-6", "FR-037-CON-2")]
+fn tc_270_a_missing_trailer_is_missing_and_an_empty_one_is_present() {
+    let fixture = fixture();
+    let none = signed_commit(&fixture, "a", "no trailer here");
+    let verdict = status(&fixture, &none, "commit");
+    assert_eq!(meaning(&verdict), ("missing", vec![]));
+    assert!(verdict["signed_off_meaning"].get("values").is_none());
+    let empty = signed_commit_with(&fixture, "a", &["subject", "Signed-off-meaning:"]);
+    assert_eq!(
+        meaning(&status(&fixture, &empty, "commit")),
+        ("present", vec![""])
+    );
+}
+
+#[test]
+#[trace("TC-271", "FR-037-AC-7")]
+fn tc_271_a_bad_and_an_unsigned_commit_report_the_trailer_and_keep_their_status() {
+    let fixture = fixture();
+    let good = signed_commit_with(&fixture, "a", &["subject", "Signed-off-meaning: reviewed"]);
+    let altered = rewrite(&fixture, "commit", &good, |o| {
+        o.replace("subject", "subjecu")
+    });
+    let bad = status(&fixture, &altered, "commit");
+    assert_eq!(bad["status"], "signed_bad");
+    assert_eq!(meaning(&bad), ("present", vec!["reviewed"]));
+    assert!(bad.get("signer").is_none());
+    let unsigned = plain_commit_with(&fixture, &["subject", "Signed-off-meaning: authored"]);
+    let verdict = status(&fixture, &unsigned, "commit");
+    assert_eq!(verdict["status"], "unsigned");
+    assert_eq!(meaning(&verdict), ("present", vec!["authored"]));
+}
+
+fn plain_commit_with(fixture: &Fixture, messages: &[&str]) -> String {
+    let repo = fixture.repo();
+    let mut arguments = vec!["commit", "-q", "--allow-empty"];
+    for message in messages {
+        arguments.extend(["-m", message]);
+    }
+    git(&repo, None, &arguments);
+    git(&repo, None, &["rev-parse", "HEAD"]).trim().to_owned()
+}
+
+#[test]
+#[trace("TC-272", "FR-037-AC-8")]
+fn tc_272_a_signed_tags_trailer_comes_from_the_tag_message() {
+    let fixture = fixture();
+    signed_commit_with(
+        &fixture,
+        "a",
+        &["subject", "Signed-off-meaning: from commit"],
+    );
+    signed_tag_with(
+        &fixture,
+        "a",
+        "v-meaning",
+        "release\n\nSigned-off-meaning: from tag",
+    );
+    let tag = status(&fixture, "v-meaning", "tag");
+    assert_eq!(tag["status"], "signed_valid");
+    assert_eq!(meaning(&tag), ("present", vec!["from tag"]));
+    signed_tag_with(&fixture, "a", "v-no-meaning", "release");
+    assert_eq!(
+        meaning(&status(&fixture, "v-no-meaning", "tag")),
+        ("missing", vec![])
+    );
+}
