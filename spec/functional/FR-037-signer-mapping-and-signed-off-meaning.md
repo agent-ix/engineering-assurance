@@ -81,7 +81,7 @@ signature, is a claim that needs its own evidence.
 | FR-037-AC-2 | A commit with a good signature by a key the file does not name yields `signed_untrusted` with `mapping` `unmapped` and no principal, none derived from author or email. | Test |
 | FR-037-AC-3 | An allowed-signers file that is missing, a directory, over 1 MiB or not UTF-8 yields `signature_verify_allowed_signers_invalid` and exit status 2, and does not start git. | Test |
 | FR-037-AC-4 | A file whose only line is unparsable yields `signed_untrusted` for a validly signed commit, and a file with an unparsable line plus a valid line for the signer yields `signed_valid` with that principal. | Test |
-| FR-037-AC-9 | A commit and an annotated tag signed by a key whose allowed-signers entry has expired (`valid-before` in the past) each yield `signed_untrusted` with mapping `unmapped`, and not `signed_valid`. | Test |
+| FR-037-AC-9 | A commit and an annotated tag signed by a key whose allowed-signers entry has expired (`valid-before` in the past) each yield `signed_untrusted` with mapping `unmapped`, and not `signed_valid`, on git 2.34.1 with `ssh-keygen` installed. | Test |
 | FR-037-AC-5 | A message with one `Signed-off-meaning:` trailer yields `present` with that value; a message with two yields both in order; a trailer in the body but not in the trailer block is not read. | Test |
 | FR-037-AC-6 | A message with no such trailer yields `missing` with no values, and a trailer with an empty value yields `present` with an empty value. | Test |
 | FR-037-AC-7 | A `signed_bad` and an `unsigned` commit that carry the trailer report its values and keep their status. | Test |
