@@ -70,3 +70,19 @@ It is not mergeable:
 - FND-002 is a reproduced wrong `missing` on an ordinary message.
 
 FND-004 and FND-005 are one-line spec clarifications of the coder's correct choices.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | medium | The FND-003 fix sets `GIT_CEILING_DIRECTORIES` to the temp dir itself. Git ignores a ceiling that equals the working directory: only proper ancestors count. So git still walks up from the temp dir and loads the config of any repository that encloses `TMPDIR`. Reproduced on git 2.34.1 against the rebuilt binary: with `TMPDIR` inside a repository whose config has `trailer.fake.key Signed-off-meaning`, a commit whose only trailer is `fake: injected` returns `presence: present, values: [injected]`, an FR-037-CON-2 violation. Running git directly confirms it: ceiling = cwd gives `Signed-off-meaning: injected`, ceiling = parent gives `fake: injected`. The code comment's claim that git "cannot discover a repository above it" is false. Fix: set the ceiling to the temp dir's parent (`directory.parent()`), and add a TC-276 case that runs the CLI with `TMPDIR` inside a repository carrying the alias. | src/signature_verify_host.rs:451-455 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fix commit e86cc95 checks `std::fs::metadata(path)` (type and size) before `File::open`. Re-run against the rebuilt binary, a FIFO returns `signature_verify_allowed_signers_invalid` at exit 2 immediately, and so does `/dev/null`. A symlink to a regular file is still accepted. TC-266 now has a FIFO case behind a 30 s hang guard. Using stat before open instead of a validated temp copy is acceptable: swapping the path between stat and open needs write access to the file's directory, and that actor can already rewrite the allowed-signers file. |
+| FND-002 | fixed | `interpret-trailers` now runs with `--parse --no-divider`. Re-run: a commit message with `---` before the trailer returns `present` / `approved`, and a tag message with `---` returns `present` / `tagmeaning`. FR-037 Behavior states the no-divider rule, and TC-269 has a `---` case. |
+| FND-003 | fixed | `interpret-trailers` now runs with cwd set to the message temp dir, not the verified repository. Re-run: with repository-local `trailer.fake.key Signed-off-meaning`, `core.commentChar S` and `trailer.separators =`, the `fake: injected` commit returns `missing`, and the real `Signed-off-meaning: approved` commit still returns `present`. TC-276 covers the alias and the commentChar case. The remaining case, a repository enclosing `TMPDIR`, is FND-006. |
+| FND-004 | fixed | FR-037 Outputs now states that an accepted signature without a principal is `unverifiable` with `unrecognized_output`, for commit `G` with an empty `%GS` and for a tag whose `find-principals` fails or prints nothing. This matches `classify_commit` and `classify_tag`. |
+| FND-005 | fixed | FR-037 Outputs now states that `signed_off_meaning` is omitted when no message was read (a lightweight tag, an unresolved revision, or a failed trailer read), and that non-UTF-8 bytes are replaced lossily. This matches `Git::meaning`. |

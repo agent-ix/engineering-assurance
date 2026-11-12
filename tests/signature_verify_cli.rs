@@ -192,6 +192,10 @@ fn request(fixture: &Fixture, revision: &str, kind: &str) -> Value {
 }
 
 fn run_with(body: &[u8], path: Option<&Path>) -> Output {
+    run_with_temp(body, path, None)
+}
+
+fn run_with_temp(body: &[u8], path: Option<&Path>, temp: Option<&Path>) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"));
     command
         .args(["signature-verify", "--request", "-"])
@@ -200,6 +204,9 @@ fn run_with(body: &[u8], path: Option<&Path>) -> Output {
         .stderr(Stdio::piped());
     if let Some(path) = path {
         command.env("PATH", path);
+    }
+    if let Some(temp) = temp {
+        command.env("TMPDIR", temp);
     }
     let mut child = command.spawn().expect("the Cargo-built CLI must start");
     child
@@ -907,4 +914,25 @@ fn tc_276_repository_trailer_config_cannot_inject_or_hide_the_trailer() {
         meaning(&status(&fixture, &real, "commit")),
         ("present", vec!["real"])
     );
+}
+
+#[test]
+#[trace("TC-277", "FR-037-CON-2")]
+fn tc_277_a_temp_dir_inside_the_verified_repository_cannot_inject_the_trailer() {
+    let fixture = fixture();
+    let repo = fixture.repo();
+    let injected = signed_commit_with(&fixture, "a", &["subject", "fake: injected"]);
+    git(
+        &repo,
+        None,
+        &["config", "trailer.fake.key", "Signed-off-meaning"],
+    );
+    let inside = repo.join("scratch");
+    fs::create_dir(&inside).expect("scratch dir");
+    let body = request(&fixture, &injected, "commit");
+    let output = run_with_temp(body.to_string().as_bytes(), None, Some(&inside));
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    let verdict: Value = serde_json::from_slice(&output.stdout).expect("json");
+    assert_eq!(verdict["status"], "signed_valid");
+    assert_eq!(meaning(&verdict), ("missing", vec![]));
 }

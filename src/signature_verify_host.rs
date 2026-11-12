@@ -419,7 +419,9 @@ impl Git<'_> {
     }
 
     /// Runs git with `stdin` as standard input when given. With `isolated`, git
-    /// runs in that directory and cannot discover a repository above it.
+    /// runs in that directory and, with the ceiling on its parent, cannot
+    /// discover a repository there or above it (git ignores a ceiling equal to
+    /// the working directory itself).
     fn run_with_stdin(
         &self,
         arguments: &[&str],
@@ -449,8 +451,8 @@ impl Git<'_> {
             (OsStr::new("GIT_CONFIG_GLOBAL"), OsStr::new("/dev/null")),
             (OsStr::new("GIT_OPTIONAL_LOCKS"), OsStr::new("0")),
         ];
-        if let Some(directory) = isolated {
-            environment.push((OsStr::new("GIT_CEILING_DIRECTORIES"), directory.as_os_str()));
+        if let Some(parent) = isolated.and_then(Path::parent) {
+            environment.push((OsStr::new("GIT_CEILING_DIRECTORIES"), parent.as_os_str()));
         }
         let directory = isolated.unwrap_or(self.repository);
         match stdin {

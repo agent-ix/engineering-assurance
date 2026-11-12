@@ -505,6 +505,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-274 | Parsed trailer output yields `present` values in order (case-insensitive token, trimmed) or `missing`, with an empty value kept | Unit | P0 | FR-037-AC-5, FR-037-AC-6, FR-037-CON-2 | ✅ `tests/signature_verify.rs` passing |
 | TC-275 | An object's message is everything after its header block, including after a multi-line signature header | Unit | P0 | FR-037-AC-8 | ✅ `tests/signature_verify.rs` passing |
 | TC-276 | Trailer config in the verified repository (`trailer.<token>.key`, `core.commentChar`) neither injects a `Signed-off-meaning` value nor hides a real one | Integration | P0 | FR-037-CON-2 | ✅ `tests/signature_verify_cli.rs` passing |
+| TC-277 | With the temporary directory inside the verified repository, whose config maps `fake` to `Signed-off-meaning`, a commit whose only trailer is `fake: injected` reports `missing` | Integration | P0 | FR-037-CON-2 | ✅ `tests/signature_verify_cli.rs` passing |
 
 ## Option Permutation Matrix
 
