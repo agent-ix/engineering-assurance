@@ -200,6 +200,10 @@ same canonical bundle and do not redefine these responsibilities.
   signatures on commits and annotated tags by delegating to git.
 - [FR-037](./functional/FR-037-signer-mapping-and-signed-off-meaning.md) — map verified
   signers to named people and expose the signed-off meaning.
+- [FR-038](./functional/FR-038-syft-sbom-producer-request.md) — define the Syft producer as one
+  `producer-execute` request shape emitting CycloneDX JSON, with existing result states for failure.
+- [FR-039](./functional/FR-039-syft-sbom-evidence-ingestion.md) — end Engineering Assurance's SBOM work at the retained
+  CycloneDX artifact the Quoin SBOM adapter accepts, with no parser or quoin launch here.
 
 ### Non-Functional Requirements
 
@@ -214,6 +218,8 @@ same canonical bundle and do not redefine these responsibilities.
 - [NFR-005](./non-functional/NFR-005-rust-containment-and-traceability.md) — enforce
   Rust containment, current-stable qualification, unsafe-code, and canonical
   ix-trace-rs test tracing.
+- [NFR-006](./non-functional/NFR-006-single-sbom-tool-single-execution-path.md) — Syft is the only
+  SBOM generator, run only through the FR-019 executor, read only through the Quoin adapter.
 
 ### Integration Tests
 
