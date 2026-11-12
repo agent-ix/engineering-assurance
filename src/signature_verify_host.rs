@@ -143,6 +143,11 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, SignatureVerifyError> {
 /// the file is git's and `ssh-keygen`'s to read.
 fn check_allowed_signers(path: &Path) -> Result<(), SignatureVerifyError> {
     let invalid = |_| SignatureVerifyError::AllowedSigners;
+    // The type is checked before the open: opening a FIFO would block.
+    let before = std::fs::metadata(path).map_err(invalid)?;
+    if !before.is_file() || before.len() > MAX_ALLOWED_SIGNERS_BYTES {
+        return Err(SignatureVerifyError::AllowedSigners);
+    }
     let file = File::open(path).map_err(invalid)?;
     let metadata = file.metadata().map_err(invalid)?;
     if !metadata.is_file() || metadata.len() > MAX_ALLOWED_SIGNERS_BYTES {
@@ -347,15 +352,18 @@ impl Git<'_> {
     }
 
     /// The `Signed-off-meaning:` trailers of `message`, read by
-    /// `git interpret-trailers --parse`; `None` when git could not read them.
+    /// `git interpret-trailers --parse --no-divider`; `None` when git could not
+    /// read them. Git runs in an empty directory it may not leave, so the
+    /// verified repository's configuration cannot change what is read.
     fn meaning(&self, message: &[u8]) -> Option<SignedOffMeaning> {
         let directory = tempfile::tempdir().ok()?;
         let path = directory.path().join("message");
         std::fs::write(&path, message).ok()?;
         let output = self
             .run_with_stdin(
-                &["interpret-trailers", "--parse"],
+                &["interpret-trailers", "--parse", "--no-divider"],
                 Some(File::open(&path).ok()?),
+                Some(directory.path()),
             )
             .ok()?;
         if !output.status.success() {
@@ -407,14 +415,16 @@ impl Git<'_> {
 
     /// Runs git with only the allowed-signers setting from the request.
     fn run(&self, arguments: &[&str]) -> Result<CompletedProcess, Reason> {
-        self.run_with_stdin(arguments, None)
+        self.run_with_stdin(arguments, None, None)
     }
 
-    /// Runs git with `stdin` as standard input when given.
+    /// Runs git with `stdin` as standard input when given. With `isolated`, git
+    /// runs in that directory and cannot discover a repository above it.
     fn run_with_stdin(
         &self,
         arguments: &[&str],
         stdin: Option<File>,
+        isolated: Option<&Path>,
     ) -> Result<CompletedProcess, Reason> {
         let mut setting = OsString::from("gpg.ssh.allowedSignersFile=");
         setting.push(self.allowed_signers);
@@ -434,16 +444,20 @@ impl Git<'_> {
         ];
         all.extend(arguments.iter().map(OsStr::new));
         let removed: Vec<&OsStr> = REMOVED_ENVIRONMENT.iter().map(OsStr::new).collect();
-        let environment: [(&OsStr, &OsStr); 3] = [
+        let mut environment: Vec<(&OsStr, &OsStr)> = vec![
             (OsStr::new("GIT_CONFIG_NOSYSTEM"), OsStr::new("1")),
             (OsStr::new("GIT_CONFIG_GLOBAL"), OsStr::new("/dev/null")),
             (OsStr::new("GIT_OPTIONAL_LOCKS"), OsStr::new("0")),
         ];
+        if let Some(directory) = isolated {
+            environment.push((OsStr::new("GIT_CEILING_DIRECTORIES"), directory.as_os_str()));
+        }
+        let directory = isolated.unwrap_or(self.repository);
         match stdin {
             Some(stdin) => process_host::run_configured_stdin(
                 OsStr::new("git"),
                 &all,
-                Some(self.repository),
+                Some(directory),
                 &environment,
                 &removed,
                 stdin,
@@ -452,7 +466,7 @@ impl Git<'_> {
             None => process_host::run_configured(
                 OsStr::new("git"),
                 &all,
-                Some(self.repository),
+                Some(directory),
                 &environment,
                 &removed,
                 limits(),

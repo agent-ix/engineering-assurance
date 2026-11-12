@@ -494,16 +494,17 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-263 | Kind `tag` reports `lightweight_tag` only for a `refs/tags/` ref to a commit; a commit id, branch or `HEAD` is `revision_unresolved` | Integration | P0 | FR-036-AC-4 | ✅ `tests/signature_verify_cli.rs` passing |
 | TC-264 | A commit and an annotated tag validly signed by a key the file names are `signed_valid` with mapping `mapped` and the file's principal | Integration | P0 | FR-037-AC-1, FR-037-CON-1 | ✅ `tests/signature_verify_cli.rs` passing |
 | TC-265 | A good signature by an unnamed key on a commit and a tag is `signed_untrusted`, mapping `unmapped`, no principal, even when the committer email equals a principal | Integration | P0 | FR-037-AC-2, FR-037-CON-1 | ✅ `tests/signature_verify_cli.rs` passing |
-| TC-266 | A missing, directory, over-1-MiB or non-UTF-8 allowed-signers file yields `signature_verify_allowed_signers_invalid` at exit 2 without starting git; a file of exactly 1 MiB is accepted | Integration | P0 | FR-037-AC-3 | ✅ `tests/signature_verify_cli.rs` passing |
+| TC-266 | A missing, directory, FIFO, over-1-MiB or non-UTF-8 allowed-signers file yields `signature_verify_allowed_signers_invalid` at exit 2 without starting git; a file of exactly 1 MiB is accepted | Integration | P0 | FR-037-AC-3 | ✅ `tests/signature_verify_cli.rs` passing |
 | TC-267 | A file whose only line is unparsable is `signed_untrusted`; with a valid line for the signer added it is `signed_valid` with that principal | Integration | P0 | FR-037-AC-4 | ✅ `tests/signature_verify_cli.rs` passing |
 | TC-268 | A commit and a tag signed by a key whose entry has an expired `valid-before` are `signed_untrusted`, mapping `unmapped` | Integration | P0 | FR-037-AC-9 | ✅ `tests/signature_verify_cli.rs` passing |
-| TC-269 | One trailer yields `present` with its value, two yield both in order, and a trailer outside the trailer block is not read | Integration | P0 | FR-037-AC-5 | ✅ `tests/signature_verify_cli.rs` passing |
+| TC-269 | One trailer yields `present` with its value, two yield both in order, a trailer after a `---` line is read, and a trailer outside the trailer block is not read | Integration | P0 | FR-037-AC-5 | ✅ `tests/signature_verify_cli.rs` passing |
 | TC-270 | A message without the trailer is `missing` with no values; an empty trailer is `present` with an empty value | Integration | P0 | FR-037-AC-6, FR-037-CON-2 | ✅ `tests/signature_verify_cli.rs` passing |
 | TC-271 | A `signed_bad` and an `unsigned` commit carrying the trailer report its values and keep their status | Integration | P0 | FR-037-AC-7 | ✅ `tests/signature_verify_cli.rs` passing |
 | TC-272 | A signed tag's trailer is read from the tag message, not the tagged commit's, despite the signature block | Integration | P0 | FR-037-AC-8 | ✅ `tests/signature_verify_cli.rs` passing |
 | TC-273 | Only grade `G` accepted by git with a principal, or an accepted tag with a found principal, is `mapped`; `U` and a rejected-check tag are `unmapped`; others carry no signer | Unit | P0 | FR-037-AC-1, FR-037-AC-2, FR-037-CON-1 | ✅ `tests/signature_verify.rs` passing |
 | TC-274 | Parsed trailer output yields `present` values in order (case-insensitive token, trimmed) or `missing`, with an empty value kept | Unit | P0 | FR-037-AC-5, FR-037-AC-6, FR-037-CON-2 | ✅ `tests/signature_verify.rs` passing |
 | TC-275 | An object's message is everything after its header block, including after a multi-line signature header | Unit | P0 | FR-037-AC-8 | ✅ `tests/signature_verify.rs` passing |
+| TC-276 | Trailer config in the verified repository (`trailer.<token>.key`, `core.commentChar`) neither injects a `Signed-off-meaning` value nor hides a real one | Integration | P0 | FR-037-CON-2 | ✅ `tests/signature_verify_cli.rs` passing |
 
 ## Option Permutation Matrix
 

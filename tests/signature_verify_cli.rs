@@ -669,6 +669,17 @@ fn tc_265_a_key_the_file_does_not_name_is_unmapped_without_a_principal() {
     );
 }
 
+/// Runs the command on another thread and fails the test if it hangs.
+fn run_guarded(body: Vec<u8>, path: Option<PathBuf>) -> Output {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = sender.send(run_with(&body, path.as_deref()));
+    });
+    receiver
+        .recv_timeout(std::time::Duration::from_secs(30))
+        .expect("the command must not hang")
+}
+
 #[test]
 #[trace("TC-266", "FR-037-AC-3")]
 fn tc_266_an_invalid_allowed_signers_file_is_refused_before_git_starts() {
@@ -691,10 +702,17 @@ fn tc_266_an_invalid_allowed_signers_file_is_refused_before_git_starts() {
     let directory = fixture.root().join("a-directory");
     fs::create_dir(&directory).expect("directory");
     let missing = fixture.root().join("missing");
-    for path in [&missing, &directory, &oversized, &not_utf8] {
+    let fifo = fixture.root().join("a-fifo");
+    run_program(
+        "mkfifo",
+        fixture.root(),
+        &[fifo.to_str().expect("utf-8")],
+        None,
+    );
+    for path in [&missing, &directory, &oversized, &not_utf8, &fifo] {
         let mut body = request(&fixture, "HEAD", "commit");
         body["allowed_signers"] = json!(path.display().to_string());
-        let output = run_with(body.to_string().as_bytes(), Some(&shim));
+        let output = run_guarded(body.to_string().into_bytes(), Some(shim.clone()));
         assert_eq!(output.status.code(), Some(2), "{path:?}: {output:?}");
         let error: Value = serde_json::from_slice(&output.stdout).expect("error json");
         assert_eq!(error["protocol"], "engineering-assurance.error/v1");
@@ -776,6 +794,15 @@ fn tc_269_trailers_are_read_in_order_from_the_trailer_block_only() {
         meaning(&status(&fixture, &two, "commit")),
         ("present", vec!["reviewed", "approved for release"])
     );
+    let divided = signed_commit_with(
+        &fixture,
+        "a",
+        &["subject", "---", "Signed-off-meaning: after a divider line"],
+    );
+    assert_eq!(
+        meaning(&status(&fixture, &divided, "commit")),
+        ("present", vec!["after a divider line"])
+    );
     let outside = signed_commit_with(
         &fixture,
         "a",
@@ -856,5 +883,28 @@ fn tc_272_a_signed_tags_trailer_comes_from_the_tag_message() {
     assert_eq!(
         meaning(&status(&fixture, "v-no-meaning", "tag")),
         ("missing", vec![])
+    );
+}
+
+#[test]
+#[trace("TC-276", "FR-037-CON-2")]
+fn tc_276_repository_trailer_config_cannot_inject_or_hide_the_trailer() {
+    let fixture = fixture();
+    let repo = fixture.repo();
+    let injected = signed_commit_with(&fixture, "a", &["subject", "Fake: injected"]);
+    let real = signed_commit_with(&fixture, "a", &["subject", "Signed-off-meaning: real"]);
+    git(
+        &repo,
+        None,
+        &["config", "trailer.fake.key", "Signed-off-meaning"],
+    );
+    git(&repo, None, &["config", "core.commentChar", "S"]);
+    assert_eq!(
+        meaning(&status(&fixture, &injected, "commit")),
+        ("missing", vec![])
+    );
+    assert_eq!(
+        meaning(&status(&fixture, &real, "commit")),
+        ("present", vec!["real"])
     );
 }
