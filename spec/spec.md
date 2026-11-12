@@ -202,8 +202,8 @@ same canonical bundle and do not redefine these responsibilities.
   signers to named people and expose the signed-off meaning.
 - [FR-038](./functional/FR-038-syft-sbom-producer-request.md) — define the Syft producer as one
   `producer-execute` request shape emitting CycloneDX JSON, with existing result states for failure.
-- [FR-039](./functional/FR-039-syft-sbom-evidence-ingestion.md) — ingest Syft output through the
-  Quoin SBOM adapter with no duplicated parser.
+- [FR-039](./functional/FR-039-syft-sbom-evidence-ingestion.md) — end Engineering Assurance's SBOM work at the retained
+  CycloneDX artifact the Quoin SBOM adapter accepts, with no parser or quoin launch here.
 
 ### Non-Functional Requirements
 
