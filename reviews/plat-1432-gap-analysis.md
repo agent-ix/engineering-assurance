@@ -30,3 +30,10 @@ The CON-1 tests cover only the case where the classifier and git agree on the si
 ## Verdict
 
 AC coverage is real and every bound test can fail, but the traceability as committed is broken (FND-001) and CON-1 lacks its adverse case (FND-002). Not mergeable until both are fixed together with code-review SR-16405.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fix commit 98e28a1 moves TC-248..TC-259 (plus the new TC-260..TC-263) into the Test Case Summary. `quoin matrix --json` at 98e28a1 reports FR-036-AC-1..AC-11 and CON-1 as `tagged`, with CON-1 at 7 binders. |
+| FND-002 | fixed | TC-260 and TC-261 add the format-divergence adverse cases, with a lying repo-local `gpg.program`, asserting `unverifiable`/`unsupported_signature_format`. Both are tagged FR-036-CON-1 and pass. |

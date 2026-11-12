@@ -49,3 +49,13 @@ Defects: the classifier detects the signature format with stricter rules than gi
 ## Verdict
 
 The design is sound: git and ssh-keygen are delegated to, classification uses fixed signals, the stdin edit is safe and the feature boundary is clean. It is not mergeable. FND-001 and FND-002 are reproduced FR-036-CON-1 violations, where `signed_valid` is reported without the allowed-signers file accepting an SSH key. FND-003 is a reproduced wrong result on a real configuration. FND-004 and FND-005 are low.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Fix commit 98e28a1 makes `header_format` match headers by prefix (`line.starts_with(header)`), as git does. It also pins `gpg.program`, `gpg.openpgp.program` and `gpg.x509.program` to `false`. Re-run against the rebuilt binary, the crafted tag (SSH block plus a trailing-space PGP header) with a lying repo-local `gpg.program` now returns `unverifiable`/`unsupported_signature_format`. TC-260 covers it. |
+| FND-002 | fixed | `commit_signature_format` now returns `Other` if any `gpgsig`/`gpgsig-sha256` header is non-SSH. Re-run, the `gpgsig-sha256` SSH plus `gpgsig` PGP commit with a lying `gpg.program` returns `unverifiable`/`unsupported_signature_format`. TC-261 and the mixed/reversed unit cases in TC-248 cover it. |
+| FND-003 | fixed | `git log` now passes `--no-show-signature`. TC-262 asserts `signed_valid` plus fingerprint with repo-local `log.showSignature=true`. |
+| FND-004 | fixed | `names_tag_ref` gates `Lightweight` on `rev-parse --symbolic-full-name` starting with `refs/tags/`, and anything else is `revision_unresolved`. TC-263 covers a commit id, `main` and `HEAD`. |
+| FND-005 | fixed | The tautological `assert_ne!` was removed from the TC-255 unit test. |
