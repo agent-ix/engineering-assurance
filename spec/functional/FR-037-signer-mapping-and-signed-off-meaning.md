@@ -29,8 +29,10 @@ signature, is a claim that needs its own evidence.
 ## Outputs
 
 - On the FR-036 verdict: `signer` with `mapping` (`mapped` or `unmapped`) and,
-  when mapped, `principal`, the name git reports from the allowed-signers
-  file; and `signed_off_meaning` with `presence` (`present` or `missing`) and,
+  when mapped, `principal`, the name from the allowed-signers file: for a
+  commit git's `%GS` code, and for a tag the first line printed by
+  `ssh-keygen -Y find-principals -s <extracted signature> -f <allowed_signers>`
+  when it exits 0; and `signed_off_meaning` with `presence` (`present` or `missing`) and,
   when present, the trailer `values` in order.
 - `signer` is present only for `signed_valid` (`mapped`) and `signed_untrusted`
   (`unmapped`). There is no other `principal` member.
@@ -77,7 +79,7 @@ signature, is a claim that needs its own evidence.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-037-AC-1 | A commit validly signed by a key the allowed-signers file names yields `signed_valid` with `mapping` `mapped` and the principal name from that file. | Test |
+| FR-037-AC-1 | A commit and an annotated tag validly signed by a key the allowed-signers file names each yield `signed_valid` with `mapping` `mapped` and the principal name from that file, the tag principal coming from `ssh-keygen -Y find-principals` on the tag's signature, on git 2.34.1 with `ssh-keygen` installed. | Test |
 | FR-037-AC-2 | A commit with a good signature by a key the file does not name yields `signed_untrusted` with `mapping` `unmapped` and no principal, none derived from author or email. | Test |
 | FR-037-AC-3 | An allowed-signers file that is missing, a directory, over 1 MiB or not UTF-8 yields `signature_verify_allowed_signers_invalid` and exit status 2, and does not start git. | Test |
 | FR-037-AC-4 | A file whose only line is unparsable yields `signed_untrusted` for a validly signed commit, and a file with an unparsable line plus a valid line for the signer yields `signed_valid` with that principal. | Test |

@@ -51,9 +51,10 @@ which signed commits count as an approval. Signatures in other formats
 
 ## Outputs
 
-- A verdict with `status`, `kind`, `key_fingerprint` (as git reports it; present
-  for `signed_valid`, `signed_untrusted` and `signed_bad` when git reports one)
-  and `reason`. The `signer` member (principal and mapping) is defined by FR-037.
+- A verdict with `status`, `kind`, `key_fingerprint` (for a commit only, read
+  from git's `%GF` code when git reports one; a tag result carries none, because
+  no delegated machine-readable fingerprint source exists for a tag) and
+  `reason`. The `signer` member (principal and mapping) is defined by FR-037.
 - `status` is one of:
   - `signed_valid`: git reports a good signature by a key the allowed-signers
     file names (commit: grade `G`; tag: `git verify-tag` exit 0).
@@ -91,7 +92,10 @@ which signed commits count as an approval. Signatures in other formats
   it grades commits and not tag objects.
 - The command SHALL grade an annotated tag object itself, never the commit it
   points to, in this order:
-  - a tag object with no `-----BEGIN SSH SIGNATURE-----` block is `unsigned`;
+  - a tag object with no signature block of any format is `unsigned`;
+  - otherwise a tag object whose signature block is not an SSH signature
+    block (it begins a PGP or X.509 signature block) is `unverifiable` with
+    reason `unsupported_signature_format`, and git is not asked to verify it;
   - otherwise `git verify-tag` exit 0 is `signed_valid`;
   - otherwise the command runs `ssh-keygen -Y check-novalidate -n git` with the
     extracted signature over the tag payload, being the tag object with the
@@ -99,9 +103,12 @@ which signed commits count as an approval. Signatures in other formats
     `signed_bad`.
 - The command SHALL split the tag object at the signature block header line.
 - The command SHALL pass the two parts to `ssh-keygen` unchanged.
-- The command SHALL require `ssh-keygen` only for the third step, run it under
-  the same process limits, and report `unverifiable` with reason
-  `ssh_keygen_not_started` when it cannot start.
+- The command SHALL require `ssh-keygen` for the signature check of a tag whose
+  `git verify-tag` exits nonzero and for the principal lookup of FR-037 on a
+  tag that `git verify-tag` accepts, and SHALL run it under the same process
+  limits.
+- The command SHALL report `unverifiable` with reason `ssh_keygen_not_started`
+  when a required `ssh-keygen` cannot start.
 - The command SHALL run git without the user's or the system's git
   configuration other than that setting, and without repository-selecting
   environment variables.
@@ -127,7 +134,7 @@ which signed commits count as an approval. Signatures in other formats
 - Kind `tag` SHALL require an annotated tag. A lightweight tag (a ref directly
   to a commit) carries no signature of its own and SHALL yield `unsigned` with
   reason `lightweight_tag`, never a verification of the commit it points to.
-- The command SHALL copy `key_fingerprint` as git reports it.
+- The command SHALL copy a commit's `key_fingerprint` from git's `%GF` code.
 - The command SHALL NOT derive, normalize or invent a `key_fingerprint`.
 - The command SHALL refuse a revision that is empty, longer than 256 bytes,
   begins with `-`, or contains a control character or whitespace, before it
@@ -148,7 +155,7 @@ which signed commits count as an approval. Signatures in other formats
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-036-AC-1 | On a real repository with fictional test keys, a commit and an annotated tag signed by a key the allowed-signers file names each yield `signed_valid`, and the commit result carries the `key_fingerprint` git reports. | Test |
+| FR-036-AC-1 | On a real repository with fictional test keys, a commit and an annotated tag signed by a key the allowed-signers file names each yield `signed_valid`, and the commit result carries the `key_fingerprint` from `%GF`; a tag result carries no `key_fingerprint`. | Test |
 | FR-036-AC-2 | An unsigned commit and an unsigned annotated tag each yield `unsigned`, distinct from every other status. | Test |
 | FR-036-AC-3 | A commit and an annotated tag signed by a key absent from the allowed-signers file each yield `signed_untrusted`, and a commit and a tag altered after signing each yield `signed_bad`, on git 2.34.1 with `ssh-keygen` installed. | Test |
 | FR-036-AC-4 | A lightweight tag yields `unsigned` with reason `lightweight_tag`. | Test |
@@ -157,8 +164,8 @@ which signed commits count as an approval. Signatures in other formats
 | FR-036-AC-7 | A revision that is empty, 257 bytes long, begins with `-`, or contains whitespace or a control character yields `signature_verify_revision_invalid` and exit status 2, and does not start git. | Test |
 | FR-036-AC-8 | An unreadable or non-conforming request, including one without `allowed_signers`, yields the matching machine error and exit status 2. | Test |
 | FR-036-AC-9 | The classifier maps the commit grade codes `G`, `U`, `B`, `N` and `E`, the codes `X`, `Y` and `R`, an unrecognized code, and a non-SSH signature header to the statuses and reasons above, and maps each tag outcome (no signature block, `git verify-tag` exit 0, delegated check success, delegated check failure) to its status, all from captured outcomes without running git or `ssh-keygen`. | Test |
-| FR-036-AC-10 | An OpenPGP-signed commit yields `unverifiable` with reason `unsupported_signature_format`. | Test |
-| FR-036-AC-11 | When `git verify-tag` exits nonzero on a signed tag and `ssh-keygen` cannot start, the verdict is `unverifiable` with reason `ssh_keygen_not_started`; a tag that `git verify-tag` accepts or that has no signature block does not need `ssh-keygen`. | Test |
+| FR-036-AC-10 | An OpenPGP-signed commit and an OpenPGP-signed annotated tag each yield `unverifiable` with reason `unsupported_signature_format`. | Test |
+| FR-036-AC-11 | When `git verify-tag` exits nonzero on a signed tag and `ssh-keygen` cannot start, the verdict is `unverifiable` with reason `ssh_keygen_not_started`; a tag with no signature block or with a non-SSH signature block does not need `ssh-keygen`. | Test |
 | FR-036-AC-12 | The `signature-verify` feature and the binary add no crate dependency that performs signature verification or cryptography; the only verifying programs invoked are git and `ssh-keygen`. | Inspection |
 
 ## Dependencies
