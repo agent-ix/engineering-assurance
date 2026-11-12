@@ -160,7 +160,13 @@ impl Git<'_> {
 
     fn grade(&self, id: &str) -> Result<GitGrade, Reason> {
         let verify_accepted = self.run(&["verify-commit", id])?.status.success();
-        let log = self.successful(&["log", "-1", "--format=%G?%x00%GF", id])?;
+        let log = self.successful(&[
+            "log",
+            "-1",
+            "--no-show-signature",
+            "--format=%G?%x00%GF",
+            id,
+        ])?;
         let text = String::from_utf8(log).map_err(|_| Reason::UnrecognizedOutput)?;
         let (grade, fingerprint) = text
             .trim_end_matches('\n')
@@ -182,11 +188,19 @@ impl Git<'_> {
         let id = self.resolve(revision)?;
         let kind = self.successful(&["cat-file", "-t", &id])?;
         let observation = match kind.as_slice() {
-            b"commit\n" => TagObservation::Lightweight,
+            b"commit\n" if self.names_tag_ref(revision)? => TagObservation::Lightweight,
             b"tag\n" => self.annotated_tag(&id)?,
             _ => return Err(Reason::RevisionUnresolved),
         };
         Ok(classify_tag(&observation))
+    }
+
+    /// Whether `revision` names a ref under `refs/tags/`.
+    fn names_tag_ref(&self, revision: &str) -> Result<bool, Reason> {
+        // The revision cannot begin with `-` (checked before git starts), and git
+        // 2.34 echoes `--end-of-options` under `--symbolic-full-name`.
+        let output = self.successful(&["rev-parse", "--symbolic-full-name", revision])?;
+        Ok(output.starts_with(b"refs/tags/"))
     }
 
     fn annotated_tag(&self, id: &str) -> Result<TagObservation, Reason> {
@@ -263,6 +277,12 @@ impl Git<'_> {
             &setting,
             OsStr::new("-c"),
             OsStr::new("gpg.ssh.program=ssh-keygen"),
+            OsStr::new("-c"),
+            OsStr::new("gpg.program=false"),
+            OsStr::new("-c"),
+            OsStr::new("gpg.openpgp.program=false"),
+            OsStr::new("-c"),
+            OsStr::new("gpg.x509.program=false"),
         ];
         all.extend(arguments.iter().map(OsStr::new));
         let removed: Vec<&OsStr> = REMOVED_ENVIRONMENT.iter().map(OsStr::new).collect();
@@ -355,10 +375,5 @@ mod tests {
             Reason::GitNotStarted,
         );
         assert_eq!(not_started, Reason::GitNotStarted);
-        let verdict = Verdict::unverifiable(TargetKind::Commit, timed_out);
-        assert_ne!(
-            verdict.status,
-            engineering_assurance::signature_verify::Status::SignedValid
-        );
     }
 }

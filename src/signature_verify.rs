@@ -239,8 +239,9 @@ pub struct SplitTag<'a> {
 
 /// Splits a tag object at its signature block header line.
 ///
-/// Git reads the last header line of any format as the start of the signature,
-/// so message text that merely looks like a header stays in the payload.
+/// Git reads the last line that starts with a header of any format as the start
+/// of the signature, so earlier message text that looks like a header stays in
+/// the payload.
 /// Returns `None` for an object with no signature block of any format.
 #[must_use]
 pub fn split_tag_object(object: &[u8]) -> Option<SplitTag<'_>> {
@@ -263,28 +264,35 @@ pub fn split_tag_object(object: &[u8]) -> Option<SplitTag<'_>> {
     })
 }
 
-/// Format of the signature in a commit object's `gpgsig` header, if it has one.
+/// Format of the signature headers of a commit object.
+///
+/// Git verifies one of the `gpgsig` headers depending on the repository's hash
+/// algorithm, so the commit counts as SSH-signed only when every signature
+/// header is an SSH signature.
 #[must_use]
 pub fn commit_signature_format(object: &[u8]) -> Option<SignatureFormat> {
+    let mut found = None;
     for line in object.split(|b| *b == b'\n') {
         if line.is_empty() {
-            return None;
+            break;
         }
         let value = line
             .strip_prefix(b"gpgsig ")
             .or_else(|| line.strip_prefix(b"gpgsig-sha256 "));
         if let Some(value) = value {
-            return Some(header_format(value).unwrap_or(SignatureFormat::Other));
+            match header_format(value).unwrap_or(SignatureFormat::Other) {
+                SignatureFormat::Other => return Some(SignatureFormat::Other),
+                SignatureFormat::Ssh => found = Some(SignatureFormat::Ssh),
+            }
         }
     }
-    None
+    found
 }
 
+/// Format named by a line that starts with a signature header, as git's own
+/// signature split reads it: the header is a prefix, not the whole line.
 fn header_format(line: &[u8]) -> Option<SignatureFormat> {
-    let is_header = |header: &[u8]| {
-        line.strip_prefix(header)
-            .is_some_and(|rest| matches!(rest.first(), None | Some(b'\n')))
-    };
+    let is_header = |header: &[u8]| line.starts_with(header);
     if is_header(SSH_BEGIN) {
         Some(SignatureFormat::Ssh)
     } else if OTHER_BEGIN.iter().any(|header| is_header(header)) {

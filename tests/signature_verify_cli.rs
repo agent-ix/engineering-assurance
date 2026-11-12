@@ -484,3 +484,90 @@ fn tc_259_missing_ssh_keygen_makes_a_rejected_tag_unverifiable_only() {
     let unsupported = verdict_with(&request(&fixture, &pgp, "tag"), Some(&git_only));
     assert_eq!(unsupported["reason"], "unsupported_signature_format");
 }
+
+/// Makes the repository's own config name a `gpg` that reports a trusted good
+/// signature for anything.
+fn install_lying_gpg(fixture: &Fixture) {
+    let script = fixture.root().join("lying-gpg");
+    fs::write(
+        &script,
+        "#!/bin/sh\necho '[GNUPG:] NEWSIG'\necho '[GNUPG:] GOODSIG ABCDEF0123456789 signer'\necho '[GNUPG:] VALIDSIG ABCDEF0123456789 2026-01-01 1 0 4 0 1 10 00 ABCDEF0123456789'\necho '[GNUPG:] TRUST_ULTIMATE 0 pgp'\nexit 0\n",
+    )
+    .expect("script");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("mode");
+    let path = script.to_str().expect("utf-8").to_owned();
+    for key in ["gpg.program", "gpg.openpgp.program", "gpg.x509.program"] {
+        git(&fixture.repo(), None, &["config", key, &path]);
+    }
+}
+
+#[test]
+#[trace("TC-260", "FR-036-AC-10", "FR-036-CON-1")]
+fn tc_260_a_tag_whose_last_header_line_is_not_ssh_never_verifies_as_valid() {
+    let fixture = fixture();
+    signed_commit(&fixture, "b", "signed by b");
+    signed_tag(&fixture, "b", "v-crafted");
+    install_lying_gpg(&fixture);
+    // A prefix-only PGP header after the SSH block is the signature to git.
+    let crafted = rewrite(&fixture, "tag", "v-crafted", |o| {
+        format!("{o}-----BEGIN PGP SIGNATURE----- \nAAAA\n-----END PGP SIGNATURE-----\n")
+    });
+    let tag = status(&fixture, &crafted, "tag");
+    assert_eq!(tag["status"], "unverifiable");
+    assert_eq!(tag["reason"], "unsupported_signature_format");
+}
+
+#[test]
+#[trace("TC-261", "FR-036-AC-10", "FR-036-CON-1")]
+fn tc_261_a_commit_with_any_non_ssh_signature_header_never_verifies_as_valid() {
+    let fixture = fixture();
+    let base = plain_commit(&fixture, "plain");
+    install_lying_gpg(&fixture);
+    let crafted = rewrite(&fixture, "commit", &base, |o| {
+        o.replacen(
+            "\n\n",
+            "\ngpgsig-sha256 -----BEGIN SSH SIGNATURE-----\n AAAA\n -----END SSH SIGNATURE-----\ngpgsig -----BEGIN PGP SIGNATURE-----\n AAAA\n -----END PGP SIGNATURE-----\n\n",
+            1,
+        )
+    });
+    let commit = status(&fixture, &crafted, "commit");
+    assert_eq!(commit["status"], "unverifiable");
+    assert_eq!(commit["reason"], "unsupported_signature_format");
+    assert!(commit.get("key_fingerprint").is_none());
+}
+
+#[test]
+#[trace("TC-262", "FR-036-AC-1")]
+fn tc_262_repository_signature_display_config_does_not_change_the_grade() {
+    let fixture = fixture();
+    let id = signed_commit(&fixture, "a", "signed by a");
+    git(
+        &fixture.repo(),
+        None,
+        &["config", "log.showSignature", "true"],
+    );
+    let commit = status(&fixture, &id, "commit");
+    assert_eq!(commit["status"], "signed_valid");
+    assert_eq!(commit["key_fingerprint"], fixture.fingerprint("a"));
+}
+
+#[test]
+#[trace("TC-263", "FR-036-AC-4")]
+fn tc_263_only_a_tag_ref_to_a_commit_is_a_lightweight_tag() {
+    let fixture = fixture();
+    let id = signed_commit(&fixture, "a", "signed by a");
+    git(&fixture.repo(), None, &["tag", "v-light"]);
+    assert_eq!(
+        status(&fixture, "v-light", "tag")["reason"],
+        "lightweight_tag"
+    );
+    assert_eq!(
+        status(&fixture, "refs/tags/v-light", "tag")["reason"],
+        "lightweight_tag"
+    );
+    for revision in [id.as_str(), "main", "HEAD"] {
+        let verdict = status(&fixture, revision, "tag");
+        assert_eq!(verdict["status"], "unverifiable", "{revision}");
+        assert_eq!(verdict["reason"], "revision_unresolved", "{revision}");
+    }
+}

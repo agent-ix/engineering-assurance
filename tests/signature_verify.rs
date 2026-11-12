@@ -123,7 +123,7 @@ fn tc_249_tag_outcomes_map_in_grading_order() {
 }
 
 #[test]
-#[trace("TC-249", "FR-036-AC-9")]
+#[trace("TC-249", "FR-036-AC-9", "FR-036-CON-1")]
 fn tc_249_a_tag_object_splits_at_the_signature_header_line() {
     let object = b"object 1\ntype commit\ntag t\n\nmessage\n-----BEGIN SSH SIGNATURE-----\nAAAA\n-----END SSH SIGNATURE-----\n";
     let split = split_tag_object(object).expect("a signature block");
@@ -146,11 +146,11 @@ fn tc_249_a_tag_object_splits_at_the_signature_header_line() {
         SignatureFormat::Other
     );
     assert_eq!(split_tag_object(b"tag t\n\nplain message\n"), None);
-    // A header that is only the prefix of a longer line is message text.
-    assert_eq!(
-        split_tag_object(b"tag t\n\n-----BEGIN SSH SIGNATURE----- not a header\n"),
-        None
-    );
+    // Git matches a header by prefix, so a longer line still starts the block.
+    let prefixed =
+        split_tag_object(b"tag t\n\nm\n-----BEGIN PGP SIGNATURE----- \nAA\n").expect("block");
+    assert_eq!(prefixed.format, SignatureFormat::Other);
+    assert_eq!(prefixed.payload, b"tag t\n\nm\n");
     // Message text that looks like a header does not start the signature.
     let quoted = b"tag t\n\n-----BEGIN PGP SIGNATURE-----\nq\n-----BEGIN SSH SIGNATURE-----\nAA\n";
     let split = split_tag_object(quoted).expect("block");
@@ -159,7 +159,7 @@ fn tc_249_a_tag_object_splits_at_the_signature_header_line() {
 }
 
 #[test]
-#[trace("TC-248", "FR-036-AC-9")]
+#[trace("TC-248", "FR-036-AC-9", "FR-036-CON-1")]
 fn tc_248_commit_signature_header_names_its_format() {
     let ssh = b"tree 1\nauthor a\ngpgsig -----BEGIN SSH SIGNATURE-----\n AAAA\n -----END SSH SIGNATURE-----\n\nbody\n";
     assert_eq!(commit_signature_format(ssh), Some(SignatureFormat::Ssh));
@@ -170,6 +170,14 @@ fn tc_248_commit_signature_header_names_its_format() {
     let sha256 = b"tree 1\ngpgsig-sha256 -----BEGIN SSH SIGNATURE-----\n AA\n\nbody\n";
     assert_eq!(commit_signature_format(sha256), Some(SignatureFormat::Ssh));
     assert_eq!(commit_signature_format(b"tree 1\nauthor a\n\nbody\n"), None);
+    // Any non-SSH signature header makes the commit unsupported, in either order.
+    let mixed = b"tree 1\ngpgsig-sha256 -----BEGIN SSH SIGNATURE-----\n AA\ngpgsig -----BEGIN PGP SIGNATURE-----\n AA\n\nbody\n";
+    assert_eq!(commit_signature_format(mixed), Some(SignatureFormat::Other));
+    let reversed = b"tree 1\ngpgsig -----BEGIN PGP SIGNATURE-----\n AA\ngpgsig-sha256 -----BEGIN SSH SIGNATURE-----\n AA\n\nbody\n";
+    assert_eq!(
+        commit_signature_format(reversed),
+        Some(SignatureFormat::Other)
+    );
     // A header-looking line in the message is not a header.
     let message = b"tree 1\n\ngpgsig -----BEGIN SSH SIGNATURE-----\n";
     assert_eq!(commit_signature_format(message), None);

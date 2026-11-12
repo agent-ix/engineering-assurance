@@ -220,34 +220,22 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-032 | FR-032-AC-6 | TC-237 | ✅ `tests/scope_footprint.rs` passing |
 | FR-032 | FR-032-AC-7 | TC-238 | ✅ `tests/scope_footprint.rs` passing |
 | FR-032 | FR-032-CON-1 | TC-234 | ✅ Truncated and unavailable footprints never complete |
-| FR-036 | FR-036-AC-1 | TC-250 | ✅ `tests/signature_verify_cli.rs` passing |
+| FR-036 | FR-036-AC-1 | TC-250, TC-262 | ✅ `tests/signature_verify_cli.rs` passing |
 | FR-036 | FR-036-AC-2 | TC-251 | ✅ `tests/signature_verify_cli.rs` passing |
 | FR-036 | FR-036-AC-3 | TC-252 | ✅ `tests/signature_verify_cli.rs` passing |
-| FR-036 | FR-036-AC-4 | TC-253 | ✅ `tests/signature_verify_cli.rs` passing |
+| FR-036 | FR-036-AC-4 | TC-253, TC-263 | ✅ `tests/signature_verify_cli.rs` passing |
 | FR-036 | FR-036-AC-5 | TC-254 | ✅ `tests/signature_verify_cli.rs` passing |
 | FR-036 | FR-036-AC-6 | TC-255 | ✅ `src/signature_verify_host.rs` unit test passing |
 | FR-036 | FR-036-AC-7 | TC-256 | ✅ `tests/signature_verify.rs` and `tests/signature_verify_cli.rs` passing |
 | FR-036 | FR-036-AC-8 | TC-257 | ✅ `tests/signature_verify_cli.rs` passing |
 | FR-036 | FR-036-AC-9 | TC-248, TC-249 | ✅ `tests/signature_verify.rs` passing |
-| FR-036 | FR-036-AC-10 | TC-258 | ✅ `tests/signature_verify_cli.rs` passing |
+| FR-036 | FR-036-AC-10 | TC-258, TC-260, TC-261 | ✅ `tests/signature_verify_cli.rs` passing |
 | FR-036 | FR-036-AC-11 | TC-259 | ✅ `tests/signature_verify_cli.rs` passing |
-| FR-036 | FR-036-CON-1 | TC-248, TC-249, TC-250 | ✅ A valid status needs grade `G` with `git verify-commit` accepting, or `git verify-tag` exit 0 |
+| FR-036 | FR-036-CON-1 | TC-248, TC-249, TC-250, TC-260, TC-261 | ✅ A valid status needs grade `G` with `git verify-commit` accepting, or `git verify-tag` exit 0 |
 | FR-036 | FR-036-AC-12, FR-036-CON-2 | Inspection | ✅ No crate dependency added; only git and `ssh-keygen` are invoked |
 | FR-033 | FR-033-AC-1 | TC-244 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
 | FR-034 | FR-034-AC-1 | TC-246 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
 | FR-035 | FR-035-AC-1 | TC-247 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
-| TC-248 | Commit grades G, U, B, N, E, the codes X, Y, R and an unrecognized code, a G grade git did not accept, and a non-SSH signature header map to their statuses and reasons; the commit signature header names its format | Unit | P0 | FR-036-AC-9, FR-036-CON-1 | ✅ `tests/signature_verify.rs` passing |
-| TC-249 | Each tag outcome (no signature block, non-SSH block, `git verify-tag` exit 0, delegated check success, failure, not started) maps to its status in grading order; a tag object splits at its signature header line | Unit | P0 | FR-036-AC-9, FR-036-CON-1 | ✅ `tests/signature_verify.rs` passing |
-| TC-250 | A commit and an annotated tag signed by an allowed key are `signed_valid`; the commit carries the `%GF` fingerprint and the tag none | Integration | P0 | FR-036-AC-1, FR-036-CON-1 | ✅ `tests/signature_verify_cli.rs` passing |
-| TC-251 | An unsigned commit and an unsigned annotated tag are `unsigned` with no reason | Integration | P0 | FR-036-AC-2 | ✅ `tests/signature_verify_cli.rs` passing |
-| TC-252 | A commit and a tag signed by an unlisted key are `signed_untrusted`; a commit and a tag altered after signing are `signed_bad` | Integration | P0 | FR-036-AC-3 | ✅ `tests/signature_verify_cli.rs` passing |
-| TC-253 | A lightweight tag is `unsigned` with reason `lightweight_tag` | Integration | P0 | FR-036-AC-4 | ✅ `tests/signature_verify_cli.rs` passing |
-| TC-254 | An unknown revision, a directory that is not a repository and a missing git executable are `unverifiable` with reasons `revision_unresolved`, `repository_unavailable` and `git_not_started` at exit 0 | Integration | P0 | FR-036-AC-5 | ✅ `tests/signature_verify_cli.rs` passing |
-| TC-255 | A simulated timeout and an output over the capture bound map to reasons `timeout` and `output_exceeded` | Unit | P0 | FR-036-AC-6 | ✅ `src/signature_verify_host.rs` passing |
-| TC-256 | An empty, 257-byte, option-like, whitespace or control-character revision yields `signature_verify_revision_invalid` at exit 2 and does not start git | Integration | P0 | FR-036-AC-7 | ✅ `tests/signature_verify.rs` and `tests/signature_verify_cli.rs` passing |
-| TC-257 | An unreadable or non-conforming request, including one without `allowed_signers`, yields the matching machine error at exit 2 | Integration | P0 | FR-036-AC-8 | ✅ `tests/signature_verify_cli.rs` passing |
-| TC-258 | An OpenPGP-signed commit and an OpenPGP-signed annotated tag are `unverifiable` with reason `unsupported_signature_format` | Integration | P0 | FR-036-AC-10 | ✅ `tests/signature_verify_cli.rs` passing |
-| TC-259 | With `ssh-keygen` absent, a tag git rejected is `unverifiable` with reason `ssh_keygen_not_started`, while unsigned and non-SSH tags need no `ssh-keygen` | Integration | P0 | FR-036-AC-11 | ✅ `tests/signature_verify_cli.rs` passing |
 
 ### Non-Functional Requirement Coverage
 
@@ -488,6 +476,22 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-246 | The MeasurementPlan schema accepts an absent `paired_run`, each relation, and `minimum_pairs` 1 and 5, and refuses an unknown relation, `minimum_pairs` 0, -1 and "2", `within_delta` without `delta`, `delta` with `equal`, extra members and a non-object value | Unit | P0 | FR-034-AC-1 | ✅ `tests/python_port/module.rs` passing |
 | TC-244 | The MeasurementPlan schema accepts `cross_profile_comparison` true and false and its absence, and refuses a string, number, null, array or object value | Unit | P0 | FR-033-AC-1 | ✅ `tests/python_port/module.rs` passing |
 | TC-247 | The MeasurementPlan schema accepts `statistical_design` with neither, either or both of `population_set` and `population_exempt`, and refuses empty, repeated, empty-string and non-string ids, an extra or missing member, a non-object set, and an empty, blank or non-string exemption | Unit | P0 | FR-035-AC-1 | ✅ `tests/python_port/module.rs` passing |
+| TC-248 | Commit grades G, U, B, N, E, the codes X, Y, R and an unrecognized code, a G grade git did not accept, and a non-SSH signature header map to their statuses and reasons; the commit signature header names its format | Unit | P0 | FR-036-AC-9, FR-036-CON-1 | ✅ `tests/signature_verify.rs` passing |
+| TC-249 | Each tag outcome (no signature block, non-SSH block, `git verify-tag` exit 0, delegated check success, failure, not started) maps to its status in grading order; a tag object splits at its signature header line | Unit | P0 | FR-036-AC-9, FR-036-CON-1 | ✅ `tests/signature_verify.rs` passing |
+| TC-250 | A commit and an annotated tag signed by an allowed key are `signed_valid`; the commit carries the `%GF` fingerprint and the tag none | Integration | P0 | FR-036-AC-1, FR-036-CON-1 | ✅ `tests/signature_verify_cli.rs` passing |
+| TC-251 | An unsigned commit and an unsigned annotated tag are `unsigned` with no reason | Integration | P0 | FR-036-AC-2 | ✅ `tests/signature_verify_cli.rs` passing |
+| TC-252 | A commit and a tag signed by an unlisted key are `signed_untrusted`; a commit and a tag altered after signing are `signed_bad` | Integration | P0 | FR-036-AC-3 | ✅ `tests/signature_verify_cli.rs` passing |
+| TC-253 | A lightweight tag is `unsigned` with reason `lightweight_tag` | Integration | P0 | FR-036-AC-4 | ✅ `tests/signature_verify_cli.rs` passing |
+| TC-254 | An unknown revision, a directory that is not a repository and a missing git executable are `unverifiable` with reasons `revision_unresolved`, `repository_unavailable` and `git_not_started` at exit 0 | Integration | P0 | FR-036-AC-5 | ✅ `tests/signature_verify_cli.rs` passing |
+| TC-255 | A simulated timeout and an output over the capture bound map to reasons `timeout` and `output_exceeded` | Unit | P0 | FR-036-AC-6 | ✅ `src/signature_verify_host.rs` passing |
+| TC-256 | An empty, 257-byte, option-like, whitespace or control-character revision yields `signature_verify_revision_invalid` at exit 2 and does not start git | Integration | P0 | FR-036-AC-7 | ✅ `tests/signature_verify.rs` and `tests/signature_verify_cli.rs` passing |
+| TC-257 | An unreadable or non-conforming request, including one without `allowed_signers`, yields the matching machine error at exit 2 | Integration | P0 | FR-036-AC-8 | ✅ `tests/signature_verify_cli.rs` passing |
+| TC-258 | An OpenPGP-signed commit and an OpenPGP-signed annotated tag are `unverifiable` with reason `unsupported_signature_format` | Integration | P0 | FR-036-AC-10 | ✅ `tests/signature_verify_cli.rs` passing |
+| TC-259 | With `ssh-keygen` absent, a tag git rejected is `unverifiable` with reason `ssh_keygen_not_started`, while unsigned and non-SSH tags need no `ssh-keygen` | Integration | P0 | FR-036-AC-11 | ✅ `tests/signature_verify_cli.rs` passing |
+| TC-260 | A tag whose last signature header line is a prefix-only non-SSH header is `unverifiable` with `unsupported_signature_format`, even when the repository config names a `gpg` that reports a trusted good signature | Integration | P0 | FR-036-AC-10, FR-036-CON-1 | ✅ `tests/signature_verify_cli.rs` passing |
+| TC-261 | A commit with an SSH `gpgsig-sha256` header and a PGP `gpgsig` header is `unverifiable` with `unsupported_signature_format` and no fingerprint, under the same lying `gpg` | Integration | P0 | FR-036-AC-10, FR-036-CON-1 | ✅ `tests/signature_verify_cli.rs` passing |
+| TC-262 | A repository with `log.showSignature=true` still grades a valid commit `signed_valid` with its fingerprint | Integration | P0 | FR-036-AC-1 | ✅ `tests/signature_verify_cli.rs` passing |
+| TC-263 | Kind `tag` reports `lightweight_tag` only for a `refs/tags/` ref to a commit; a commit id, branch or `HEAD` is `revision_unresolved` | Integration | P0 | FR-036-AC-4 | ✅ `tests/signature_verify_cli.rs` passing |
 
 ## Option Permutation Matrix
 
