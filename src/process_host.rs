@@ -38,6 +38,26 @@ pub(crate) fn run_configured(
     )
 }
 
+pub(crate) fn run_configured_stdin(
+    executable: &OsStr,
+    arguments: &[&OsStr],
+    current_directory: Option<&Path>,
+    environment: &[(&OsStr, &OsStr)],
+    removed_environment: &[&OsStr],
+    stdin: std::fs::File,
+    limits: ProcessLimits,
+) -> Result<CompletedProcess, ProcessError> {
+    engineering_assurance::producer_execution::__private::run_configured_stdin(
+        executable,
+        arguments,
+        current_directory,
+        environment,
+        removed_environment,
+        stdin,
+        limits,
+    )
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use std::{

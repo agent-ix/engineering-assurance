@@ -2124,6 +2124,52 @@ pub mod __private {
         removed_environment: &[&OsStr],
         limits: ProcessLimits,
     ) -> Result<CompletedProcess, ProcessError> {
+        run_with_stdin(
+            executable,
+            arguments,
+            current_directory,
+            environment,
+            removed_environment,
+            None,
+            limits,
+        )
+    }
+
+    /// Like [`run_configured`], with the child's standard input bound to an
+    /// already opened file instead of the null device.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed process-mechanics failure, as [`run_configured`] does.
+    pub fn run_configured_stdin(
+        executable: &OsStr,
+        arguments: &[&OsStr],
+        current_directory: Option<&Path>,
+        environment: &[(&OsStr, &OsStr)],
+        removed_environment: &[&OsStr],
+        stdin: std::fs::File,
+        limits: ProcessLimits,
+    ) -> Result<CompletedProcess, ProcessError> {
+        run_with_stdin(
+            executable,
+            arguments,
+            current_directory,
+            environment,
+            removed_environment,
+            Some(stdin),
+            limits,
+        )
+    }
+
+    fn run_with_stdin(
+        executable: &OsStr,
+        arguments: &[&OsStr],
+        current_directory: Option<&Path>,
+        environment: &[(&OsStr, &OsStr)],
+        removed_environment: &[&OsStr],
+        stdin: Option<std::fs::File>,
+        limits: ProcessLimits,
+    ) -> Result<CompletedProcess, ProcessError> {
         #[cfg(unix)]
         {
             run_unix(
@@ -2132,6 +2178,7 @@ pub mod __private {
                 current_directory,
                 environment,
                 removed_environment,
+                stdin,
                 limits,
             )
         }
@@ -2143,6 +2190,7 @@ pub mod __private {
                 current_directory,
                 environment,
                 removed_environment,
+                stdin,
                 limits,
             );
             Err(ProcessError::Unavailable {
@@ -2159,6 +2207,7 @@ pub mod __private {
         current_directory: Option<&Path>,
         environment: &[(&OsStr, &OsStr)],
         removed_environment: &[&OsStr],
+        stdin: Option<std::fs::File>,
         limits: ProcessLimits,
     ) -> Result<CompletedProcess, ProcessError> {
         use std::os::unix::process::CommandExt;
@@ -2178,7 +2227,7 @@ pub mod __private {
             command.env_remove(name);
         }
         command
-            .stdin(Stdio::null())
+            .stdin(stdin.map_or_else(Stdio::null, Stdio::from))
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .process_group(0);
