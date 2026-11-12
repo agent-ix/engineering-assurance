@@ -36,6 +36,13 @@ signature, is a claim that needs its own evidence.
   when present, the trailer `values` in order.
 - `signer` is present only for `signed_valid` (`mapped`) and `signed_untrusted`
   (`unmapped`). There is no other `principal` member.
+- An accepted signature without a principal is `unverifiable` with reason
+  `unrecognized_output`: a commit graded `G` whose `%GS` is empty, and a tag
+  git accepted for which `ssh-keygen -Y find-principals` fails or prints
+  nothing.
+- `signed_off_meaning` is omitted when no message was read (a lightweight tag,
+  an unresolved revision, or a trailer read that failed); non-UTF-8 bytes in a
+  value are replaced lossily.
 - A missing, unreadable or invalid allowed-signers file writes the machine
   error `signature_verify_allowed_signers_invalid` and exits with status 2.
 
@@ -52,7 +59,9 @@ signature, is a claim that needs its own evidence.
 - A line of the file that git cannot parse authorizes no key; git skips it and
   grades from the remaining lines, and the command SHALL report that grade.
 - The command SHALL read the `Signed-off-meaning:` trailer with the semantics
-  of `git interpret-trailers --parse` over the object's subject and body. For a
+  of `git interpret-trailers --parse` over the object's subject and body,
+  parsed with no patch divider (`--no-divider`), so a `---` line does not end
+  the message. For a
   tag it SHALL first remove the trailing signature block from the tag message,
   because git appends that block after the trailer.
 - The command SHALL yield every value of a repeated trailer in order.

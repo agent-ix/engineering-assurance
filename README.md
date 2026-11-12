@@ -290,7 +290,7 @@ protocol is versioned and documented by the schemas under
 | `workflow-invariants` | Evaluate a closed workflow projection against named invariants. |
 | `producer-execute` | Run one bounded producer-execution request (`--request <json>` or `-`) and print the canonical result line; `--schema request\|result` prints the published schemas. |
 | `scope-footprint` | Compare a declared change scope with the changed paths between two git revisions (`--request <json>` or `-`) and print a `complete`, `false_scope` or `incomplete` verdict. |
-| `signature-verify` | Report whether a commit or annotated tag carries a valid SSH signature, by delegating to `git verify-commit`, `git verify-tag` and `ssh-keygen` against an allowed-signers file (`--request <json>` or `-`), and print a `signed_valid`, `signed_untrusted`, `signed_bad`, `unsigned` or `unverifiable` verdict. |
+| `signature-verify` | Report whether a commit or annotated tag carries a valid SSH signature, by delegating to `git verify-commit`, `git verify-tag` and `ssh-keygen` against an allowed-signers file (`--request <json>` or `-`), and print a `signed_valid`, `signed_untrusted`, `signed_bad`, `unsigned` or `unverifiable` verdict with the `signer` principal the file maps the key to and the `Signed-off-meaning:` trailer values. |
 
 Run `engineering-assurance --help` or
 `engineering-assurance <command> --help` for argument details. Maintainer-only

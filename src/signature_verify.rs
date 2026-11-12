@@ -6,14 +6,17 @@
 //! The module is pure and performs no cryptography: git decides whether a
 //! signature is valid, and `ssh-keygen` decides, for a tag git rejected, whether
 //! the signature is intact. The classifier maps their exit statuses and fixed
-//! signals to a [`Verdict`] and never reads message text. The binary's git
-//! adapter runs the programs and builds the observation.
+//! signals to a [`Verdict`]. The `Signed-off-meaning:` trailer (FR-037) is read
+//! from the output of `git interpret-trailers --parse`, never from raw message
+//! text. The binary's git adapter runs the programs and builds the
+//! observation.
 
 use serde::{Deserialize, Serialize};
 
 /// Longest accepted revision in bytes.
 pub const MAX_REVISION_BYTES: usize = 256;
 
+const MEANING_TOKEN: &str = "Signed-off-meaning";
 const SSH_BEGIN: &[u8] = b"-----BEGIN SSH SIGNATURE-----";
 const OTHER_BEGIN: [&[u8]; 3] = [
     b"-----BEGIN PGP SIGNATURE-----",
@@ -73,6 +76,63 @@ pub enum Reason {
     UnrecognizedOutput,
 }
 
+/// Whether the allowed-signers file maps the signing key to a person.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Mapping {
+    /// Git accepted the key for a principal named in the file.
+    Mapped,
+    /// Git did not accept the key for any principal in the file.
+    Unmapped,
+}
+
+/// The person a signature is attributed to (FR-037).
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct Signer {
+    /// Whether the key is mapped.
+    pub mapping: Mapping,
+    /// The principal named in the allowed-signers file; only when mapped.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub principal: Option<String>,
+}
+
+impl Signer {
+    const fn unmapped() -> Self {
+        Self {
+            mapping: Mapping::Unmapped,
+            principal: None,
+        }
+    }
+
+    const fn mapped(principal: String) -> Self {
+        Self {
+            mapping: Mapping::Mapped,
+            principal: Some(principal),
+        }
+    }
+}
+
+/// Whether a message carries a `Signed-off-meaning:` trailer.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Presence {
+    /// At least one trailer is in the message's trailer block.
+    Present,
+    /// No such trailer is in the message's trailer block.
+    Missing,
+}
+
+/// The meaning a signer recorded in `Signed-off-meaning:` trailers (FR-037),
+/// as recorded text.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct SignedOffMeaning {
+    /// Whether the trailer is present.
+    pub presence: Presence,
+    /// Every trailer value in order; empty when the trailer is missing.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<String>,
+}
+
 /// The result of verifying one object.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Verdict {
@@ -86,6 +146,12 @@ pub struct Verdict {
     /// Present only for a lightweight tag and for `unverifiable`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<Reason>,
+    /// The mapped person; present only for `signed_valid` and `signed_untrusted`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signer: Option<Signer>,
+    /// The recorded meaning, when the object's message was readable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signed_off_meaning: Option<SignedOffMeaning>,
 }
 
 impl Verdict {
@@ -97,7 +163,16 @@ impl Verdict {
             kind,
             key_fingerprint: None,
             reason: Some(reason),
+            signer: None,
+            signed_off_meaning: None,
         }
+    }
+
+    /// The verdict with the meaning read from the object's message.
+    #[must_use]
+    pub fn with_meaning(mut self, meaning: Option<SignedOffMeaning>) -> Self {
+        self.signed_off_meaning = meaning;
+        self
     }
 
     const fn plain(kind: TargetKind, status: Status) -> Self {
@@ -106,6 +181,15 @@ impl Verdict {
             kind,
             key_fingerprint: None,
             reason: None,
+            signer: None,
+            signed_off_meaning: None,
+        }
+    }
+
+    fn signed(kind: TargetKind, status: Status, signer: Signer) -> Self {
+        Self {
+            signer: Some(signer),
+            ..Self::plain(kind, status)
         }
     }
 }
@@ -128,6 +212,8 @@ pub struct GitGrade {
     pub grade: char,
     /// The `%GF` code git printed, when it printed one.
     pub fingerprint: Option<String>,
+    /// The `%GS` code git printed, the principal it matched, when it printed one.
+    pub principal: Option<String>,
 }
 
 /// What was observed for a commit.
@@ -150,6 +236,19 @@ pub enum SshCheck {
     NotStarted,
 }
 
+/// Outcome of the delegated `ssh-keygen -Y find-principals` run.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PrincipalLookup {
+    /// The lookup was not run.
+    NotRun,
+    /// Exit status 0: the first line printed.
+    Found(String),
+    /// Nonzero exit status, or no usable line.
+    Rejected,
+    /// `ssh-keygen` could not be started.
+    NotStarted,
+}
+
 /// What was observed for an annotated tag, or the lack of one.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TagObservation {
@@ -165,6 +264,8 @@ pub enum TagObservation {
         verify_accepted: bool,
         /// The delegated check, which only a tag git rejected is given.
         check: Option<SshCheck>,
+        /// The principal lookup, which only a tag git accepted is given.
+        principal: PrincipalLookup,
     },
 }
 
@@ -181,16 +282,18 @@ pub fn classify_commit(observation: &CommitObservation) -> Verdict {
     let Some(git) = &observation.git else {
         return Verdict::unverifiable(kind, Reason::UnrecognizedOutput);
     };
-    let signed = |status| Verdict {
-        status,
-        kind,
+    let signed = |status, signer| Verdict {
         key_fingerprint: git.fingerprint.clone(),
-        reason: None,
+        signer,
+        ..Verdict::plain(kind, status)
     };
     match git.grade {
-        'G' if git.verify_accepted => signed(Status::SignedValid),
-        'U' => signed(Status::SignedUntrusted),
-        'B' => signed(Status::SignedBad),
+        'G' if git.verify_accepted => match git.principal.clone() {
+            Some(principal) => signed(Status::SignedValid, Some(Signer::mapped(principal))),
+            None => Verdict::unverifiable(kind, Reason::UnrecognizedOutput),
+        },
+        'U' => signed(Status::SignedUntrusted, Some(Signer::unmapped())),
+        'B' => signed(Status::SignedBad, None),
         'N' => Verdict::plain(kind, Status::Unsigned),
         'E' => Verdict::unverifiable(kind, Reason::SignatureUnchecked),
         _ => Verdict::unverifiable(kind, Reason::UnrecognizedOutput),
@@ -215,10 +318,21 @@ pub fn classify_tag(observation: &TagObservation) -> Verdict {
         } => Verdict::unverifiable(kind, Reason::UnsupportedSignatureFormat),
         TagObservation::Signature {
             verify_accepted: true,
+            principal,
             ..
-        } => Verdict::plain(kind, Status::SignedValid),
+        } => match principal {
+            PrincipalLookup::Found(name) => {
+                Verdict::signed(kind, Status::SignedValid, Signer::mapped(name.clone()))
+            }
+            PrincipalLookup::NotStarted => Verdict::unverifiable(kind, Reason::SshKeygenNotStarted),
+            PrincipalLookup::NotRun | PrincipalLookup::Rejected => {
+                Verdict::unverifiable(kind, Reason::UnrecognizedOutput)
+            }
+        },
         TagObservation::Signature { check, .. } => match check {
-            Some(SshCheck::Accepted) => Verdict::plain(kind, Status::SignedUntrusted),
+            Some(SshCheck::Accepted) => {
+                Verdict::signed(kind, Status::SignedUntrusted, Signer::unmapped())
+            }
             Some(SshCheck::Rejected) => Verdict::plain(kind, Status::SignedBad),
             Some(SshCheck::NotStarted) => Verdict::unverifiable(kind, Reason::SshKeygenNotStarted),
             None => Verdict::unverifiable(kind, Reason::UnrecognizedOutput),
@@ -299,6 +413,39 @@ fn header_format(line: &[u8]) -> Option<SignatureFormat> {
         Some(SignatureFormat::Other)
     } else {
         None
+    }
+}
+
+/// The message of a commit or tag object: everything after its header block.
+///
+/// Git ends the headers at the first blank line, and a signature header
+/// continues on lines that start with a space, so the first `\n\n` is the end.
+#[must_use]
+pub fn object_message(object: &[u8]) -> &[u8] {
+    object
+        .windows(2)
+        .position(|pair| pair == b"\n\n")
+        .map_or(&[], |at| &object[at + 2..])
+}
+
+/// Reads the `Signed-off-meaning:` trailers from the output of
+/// `git interpret-trailers --parse`, which prints one `token: value` line per
+/// trailer of the message's trailer block.
+#[must_use]
+pub fn signed_off_meaning(parsed_trailers: &str) -> SignedOffMeaning {
+    let values: Vec<String> = parsed_trailers
+        .lines()
+        .filter_map(|line| line.split_once(':'))
+        .filter(|(token, _)| token.trim().eq_ignore_ascii_case(MEANING_TOKEN))
+        .map(|(_, value)| value.trim().to_owned())
+        .collect();
+    SignedOffMeaning {
+        presence: if values.is_empty() {
+            Presence::Missing
+        } else {
+            Presence::Present
+        },
+        values,
     }
 }
 

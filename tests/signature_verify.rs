@@ -4,9 +4,10 @@
 //! Contract tests for the pure signature-verification classifier (FR-036).
 
 use engineering_assurance::signature_verify::{
-    CommitObservation, GitGrade, MAX_REVISION_BYTES, Reason, SignatureFormat, SshCheck, Status,
-    TagObservation, TargetKind, classify_commit, classify_tag, commit_signature_format,
-    is_plain_revision, split_tag_object,
+    CommitObservation, GitGrade, MAX_REVISION_BYTES, Mapping, Presence, PrincipalLookup, Reason,
+    SignatureFormat, SshCheck, Status, TagObservation, TargetKind, classify_commit, classify_tag,
+    commit_signature_format, is_plain_revision, object_message, signed_off_meaning,
+    split_tag_object,
 };
 use ix_trace_rs::trace;
 
@@ -17,6 +18,7 @@ fn commit(grade: char, verify_accepted: bool, fingerprint: Option<&str>) -> Comm
             verify_accepted,
             grade,
             fingerprint: fingerprint.map(str::to_owned),
+            principal: Some("p".to_owned()),
         }),
     }
 }
@@ -69,6 +71,7 @@ fn tc_248_commit_grades_map_to_statuses_and_reasons() {
                 verify_accepted: true,
                 grade,
                 fingerprint: None,
+                principal: None,
             }),
         });
         assert_eq!(other.status, Status::Unverifiable);
@@ -85,6 +88,11 @@ fn signed(
         format,
         verify_accepted,
         check,
+        principal: if verify_accepted {
+            PrincipalLookup::Found("p".to_owned())
+        } else {
+            PrincipalLookup::NotRun
+        },
     }
 }
 
@@ -201,4 +209,82 @@ fn tc_256_plain_revisions_are_the_only_accepted_ones() {
     ] {
         assert!(!is_plain_revision(bad), "{bad:?}");
     }
+}
+
+#[test]
+#[trace("TC-273", "FR-037-AC-1", "FR-037-AC-2", "FR-037-CON-1")]
+fn tc_273_only_an_accepted_key_with_a_principal_is_mapped() {
+    let mapped = classify_commit(&commit('G', true, Some("SHA256:key")));
+    let signer = mapped.signer.expect("signer");
+    assert_eq!(signer.mapping, Mapping::Mapped);
+    assert_eq!(signer.principal.as_deref(), Some("p"));
+
+    let untrusted = classify_commit(&commit('U', false, Some("SHA256:key")));
+    assert_eq!(untrusted.signer.expect("signer").mapping, Mapping::Unmapped);
+    // A good grade without a principal is not mapped as anything.
+    let nameless = classify_commit(&CommitObservation {
+        format: Some(SignatureFormat::Ssh),
+        git: Some(GitGrade {
+            verify_accepted: true,
+            grade: 'G',
+            fingerprint: None,
+            principal: None,
+        }),
+    });
+    assert_eq!(nameless.status, Status::Unverifiable);
+    assert_eq!(nameless.signer, None);
+    for (grade, accepted) in [('B', false), ('N', false), ('E', false)] {
+        assert_eq!(classify_commit(&commit(grade, accepted, None)).signer, None);
+    }
+
+    let ssh = SignatureFormat::Ssh;
+    let tag = classify_tag(&signed(true, None, ssh));
+    assert_eq!(tag.signer.expect("signer").mapping, Mapping::Mapped);
+    let untrusted_tag = classify_tag(&signed(false, Some(SshCheck::Accepted), ssh));
+    assert_eq!(
+        untrusted_tag.signer.expect("signer").mapping,
+        Mapping::Unmapped
+    );
+    let no_lookup = classify_tag(&TagObservation::Signature {
+        format: ssh,
+        verify_accepted: true,
+        check: None,
+        principal: PrincipalLookup::Rejected,
+    });
+    assert_eq!(no_lookup.status, Status::Unverifiable);
+    assert_eq!(no_lookup.signer, None);
+}
+
+#[test]
+#[trace("TC-274", "FR-037-AC-5", "FR-037-AC-6", "FR-037-CON-2")]
+fn tc_274_trailer_output_yields_present_values_in_order_or_missing() {
+    let one = signed_off_meaning("Signed-off-meaning: reviewed\n");
+    assert_eq!(one.presence, Presence::Present);
+    assert_eq!(one.values, ["reviewed"]);
+    let two = signed_off_meaning(
+        "Signed-off-by: A\nsigned-off-meaning: first\nSigned-off-meaning:   second  \n",
+    );
+    assert_eq!(two.values, ["first", "second"]);
+    let empty = signed_off_meaning("Signed-off-meaning:\n");
+    assert_eq!(empty.presence, Presence::Present);
+    assert_eq!(empty.values, [""]);
+    for text in ["", "Signed-off-by: A\n", "Signed-off-meaning-x: v\n"] {
+        let missing = signed_off_meaning(text);
+        assert_eq!(missing.presence, Presence::Missing, "{text:?}");
+        assert!(missing.values.is_empty());
+    }
+}
+
+#[test]
+#[trace("TC-275", "FR-037-AC-8")]
+fn tc_275_a_message_is_everything_after_the_header_block() {
+    assert_eq!(
+        object_message(b"tree x\nauthor a\n\nsubject\n\nbody\n"),
+        b"subject\n\nbody\n"
+    );
+    assert_eq!(
+        object_message(b"tree x\ngpgsig -----BEGIN\n  sig\n \n -----END\n\nmsg\n"),
+        b"msg\n"
+    );
+    assert_eq!(object_message(b"tree x\n"), b"");
 }
