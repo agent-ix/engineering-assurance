@@ -592,7 +592,13 @@ fn cross_profile_comparison_is_an_optional_boolean() {
     assert!(plan_errors(json!({})).is_empty());
     assert!(errors(json!(true)).is_empty());
     assert!(errors(json!(false)).is_empty());
-    for bad in [json!("true"), json!(1), Value::Null, json!([true]), json!({})] {
+    for bad in [
+        json!("true"),
+        json!(1),
+        Value::Null,
+        json!([true]),
+        json!({}),
+    ] {
         assert!(!errors(bad.clone()).is_empty(), "{bad}");
     }
 }
