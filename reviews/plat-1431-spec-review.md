@@ -54,3 +54,29 @@ Checked and found consistent:
 ## Verdict
 
 The design is right: git does the cryptography, the result is a closed classification, and attribution and meaning are reported, never inferred. The FR-032 command pattern is followed faithfully, nothing contradicts quoin FR-063/FR-065, and the public-repo hygiene is clean. Two high findings come from git's measured behaviour: the optional allowed-signers file and the "valid but unmapped" outcome cannot both exist under `git verify-commit` (FND-001, FND-002). Not mergeable until FND-001 through FND-007 are fixed; the lows are small edits in the same files.
+
+## New findings (disposition pass 1)
+
+Measured again in a throwaway repository with fresh fictional ed25519 keys, git 2.34.1, system and global config disabled, against fix commit 82c8e9f.
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-012 | high | Kind `tag` has no `%G?` source on the installed git. `%G?` is a `git log` placeholder for commits only; the ref-filter atom `%(signature:grade)` is refused by both `git for-each-ref` and `git verify-tag --format` (`fatal: unknown field name: signature:grade`), and FR-036 forbids classifying from git's message text. So FR-036-AC-1 and AC-2 cannot pass for tags on git 2.34.1. State how the adapter obtains a tag's grade and the minimum git release that provides it, and what an older git yields (for example `unverifiable` with a named reason), with an AC. | spec/functional/FR-036-ssh-signed-commit-and-tag-verification.md:38-41,80-83,127-128 |
+| FND-013 | high | FR-037-AC-4 contradicts measured git and FR-036's no-message-text rule. git skips an allowed-signers line it cannot parse, prints `<file>:1: invalid key`, and grades from the rest: a file whose only line is bad yields `%G?` `U` (`signed_untrusted`), and a bad line plus the signer's valid line yields `G`, exit 0 (`signed_valid`). AC-4 allows only `signature_verify_allowed_signers_invalid` or `unrecognized_output` and never `signed_valid`, and "git names the file as the cause" can only be detected from message text. Drop the two "git rejects a line" bullets, state that a line git cannot parse authorizes no key, and rewrite AC-4 to those two measured outcomes. | spec/functional/FR-037-signer-mapping-and-signed-off-meaning.md:50-53,85 |
+| FND-014 | medium | An allowed-signers entry whose `valid-before` has passed yields `%G?` `U` (`key has expired`, `No principal matched.`, exit 1), so an expired but named key is reported `signed_untrusted` and `unmapped`, while FR-036 defines `signed_untrusted` as a key "the file does not name" and puts "expired or revoked" under `signed_bad` via `X`/`Y`/`R`. Revocation needs `gpg.ssh.revocationFile` (then `B`), which the request cannot set. Define `signed_untrusted` as a good signature by a key the file does not accept at signing time (not named, or outside its validity window), drop the SSH expiry/revocation claim from `signed_bad` or add a revocation input, and add an expired-entry AC. | spec/functional/FR-036-ssh-signed-commit-and-tag-verification.md:57-60; spec/functional/FR-037-signer-mapping-and-signed-off-meaning.md:15-18,40-43 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | 82c8e9f: `allowed_signers` is required in the FR-036 request; a request without it is a machine error (FR-036-AC-8); the unmapped-without-file AC and bullet are gone. |
+| FND-002 | fixed | 82c8e9f adds `signed_untrusted` (`%G?` `U`) with `mapping` `unmapped`; CON-1 requires exit 0, `G` and a named key; FR-036-AC-3 and FR-037-AC-2 agree. |
+| FND-003 | fixed | 82c8e9f: the trailer is read over subject and body with the tag's trailing signature block removed first; FR-037-AC-8 asserts presence on a signed tag. |
+| FND-004 | fixed | 82c8e9f: a non-SSH signature header yields `unverifiable` with `unsupported_signature_format`, never `signed_bad` or `unsigned`; FR-036-AC-9 and AC-10 cover it. |
+| FND-005 | fixed | 82c8e9f states the 60 s timeout and 8 MiB capture bound; FR-036-AC-6 drives timeout and overflow through a simulated process outcome at the adapter boundary. |
+| FND-006 | fixed | 82c8e9f declares `reason` for `unsigned`/`lightweight_tag` and `unverifiable` with a closed list of eight codes; FR-036-AC-5 names the exact reasons. |
+| FND-007 | fixed | 82c8e9f classifies on `%G?` codes and exit status and forbids message-text classification. For commits this matches measured git; the tag path is FND-012. |
+| FND-008 | fixed | 82c8e9f removes FR-036's `principal`; FR-037's `signer` is the only principal member. |
+| FND-009 | fixed | 82c8e9f keeps only the regular-file, 1 MiB and UTF-8 checks and forbids re-implementing the grammar. The replacement rule for rejected lines is FND-013. |
+| FND-010 | fixed | 82c8e9f adds FR-014 and FR-029 to FR-036 relationships and FR-014 to Dependencies. |
+| FND-011 | fixed | `quire validate` over FR-036 and FR-037 at 82c8e9f exits 0 with no grammar warnings. |

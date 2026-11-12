@@ -14,7 +14,7 @@ relationships:
 Engineering Assurance SHALL attach to a signature result (FR-036) the named
 person an allowed-signers file maps the signing key to, and the meaning a
 signer declared in a `Signed-off-meaning:` trailer. A good signature by a key
-the file does not name is reported `signed_untrusted` with mapping `unmapped`,
+the file does not accept at signing time is reported `signed_untrusted` with mapping `unmapped`,
 and a message without the trailer is reported as lacking it. Neither is
 defaulted or guessed: attributing a signature to a person, or a meaning to a
 signature, is a claim that needs its own evidence.
@@ -47,10 +47,8 @@ signature, is a claim that needs its own evidence.
 - The command SHALL refuse the allowed-signers file, before git is started,
   when it is not a readable regular file, exceeds 1 MiB, or is not valid UTF-8.
 - The command SHALL NOT re-implement the allowed-signers grammar.
-- When git rejects a line of the file and names the file as the cause, the
-  command SHALL report `signature_verify_allowed_signers_invalid`.
-- When git rejects a line of the file without naming the file, the command SHALL
-  report `unverifiable` with reason `unrecognized_output`.
+- A line of the file that git cannot parse authorizes no key; git skips it and
+  grades from the remaining lines, and the command SHALL report that grade.
 - The command SHALL read the `Signed-off-meaning:` trailer with the semantics
   of `git interpret-trailers --parse` over the object's subject and body. For a
   tag it SHALL first remove the trailing signature block from the tag message,
@@ -82,7 +80,8 @@ signature, is a claim that needs its own evidence.
 | FR-037-AC-1 | A commit validly signed by a key the allowed-signers file names yields `signed_valid` with `mapping` `mapped` and the principal name from that file. | Test |
 | FR-037-AC-2 | A commit with a good signature by a key the file does not name yields `signed_untrusted` with `mapping` `unmapped` and no principal, none derived from author or email. | Test |
 | FR-037-AC-3 | An allowed-signers file that is missing, a directory, over 1 MiB or not UTF-8 yields `signature_verify_allowed_signers_invalid` and exit status 2, and does not start git. | Test |
-| FR-037-AC-4 | A file with a line git rejects yields `signature_verify_allowed_signers_invalid` or `unverifiable` with reason `unrecognized_output`, and never `signed_valid`. | Test |
+| FR-037-AC-4 | A file whose only line is unparsable yields `signed_untrusted` for a validly signed commit, and a file with an unparsable line plus a valid line for the signer yields `signed_valid` with that principal. | Test |
+| FR-037-AC-9 | A commit and an annotated tag signed by a key whose allowed-signers entry has expired (`valid-before` in the past) each yield `signed_untrusted` with mapping `unmapped`, and not `signed_valid`. | Test |
 | FR-037-AC-5 | A message with one `Signed-off-meaning:` trailer yields `present` with that value; a message with two yields both in order; a trailer in the body but not in the trailer block is not read. | Test |
 | FR-037-AC-6 | A message with no such trailer yields `missing` with no values, and a trailer with an empty value yields `present` with an empty value. | Test |
 | FR-037-AC-7 | A `signed_bad` and an `unsigned` commit that carry the trailer report its values and keep their status. | Test |
