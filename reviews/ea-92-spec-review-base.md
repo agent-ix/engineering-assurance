@@ -70,3 +70,33 @@ The following hold and are recorded as clean:
 - Quoin runs no git and consumes the result as data, and Engineering Assurance embeds no Quoin
   schema copy.
 - No standard text is quoted and no roadmap content is present.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-017 | low | NFR-007 Verification still says the source inspection "checks the three counts", but the fix removed metric 3 and two metrics remain. | spec/non-functional/NFR-007-no-release-without-a-person.md:46 |
+| FND-018 | low | FR-048 and FR-049 name the Quoin inputs only as "the format Quoin publishes" and leave the protocol ids to Quoin. Quoin already specifies these outputs (quoin FR-144 SOUP report, FR-162 anomaly report). Fix: reference those requirements, so the EA-94 implementer binds to the right contract without copying any schema. | spec/functional/FR-049-release-ownership-split-and-data-contract.md:39; spec/functional/FR-048-human-release-decision-workflow.md:39 |
+| FND-019 | low | FR-047 reason `release_commit_changes_other_paths` also covers a release commit that "does not add" `record_path`, for example one that modifies an existing record path. That case changes no other path, so the reason name misleads. Fix: split it into its own reason, or rename it (for example `release_commit_not_record_only`). | spec/functional/FR-047-release-record-and-signed-release-tag.md:110 |
+| FND-020 | low | FR-050-AC-3 says "the README and this requirement change in the same pull request as the `release-verify` implementation". That reads as if FR-050 itself must be edited again. Fix: say the README change lands in the implementation pull request. | spec/functional/FR-050-record-named-persons-release-decision-stance.md:43 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | 748434d: the person writes the release tag with `git tag -s` from the message FR-048 supplies, and FR-042 is unchanged; `release-verify` catches unsigned and wrong-record tags, so no new writer is needed. |
+| FND-002 | fixed | 748434d: the record digest is `git-blob:` plus the object id git reports for `<release commit>:<record_path>`; it is passed opaquely to FR-041 within its bounds, and FR-047-CON-3/AC-11 forbid hashing code. |
+| FND-003 | fixed | 748434d: AC-2 now tests a new tag carrying a stale `git-blob:` id, a case that can occur and fails as `wrong_record`. |
+| FND-004 | fixed | 748434d: the release commit's single parent must be the baseline commit and its only change the record; FR-047-AC-6 tests it. |
+| FND-005 | fixed | 748434d: the Baseline is resolved at `baseline.commit`/`baseline.path`, `name` comes from the Baseline file, and `baseline_file_absent`/`baseline_file_invalid` are added (FR-046-AC-6, FR-047-AC-5). |
+| FND-006 | fixed | 748434d: `approval` is absent, and FR-041 is not run, for `record_unreadable`/`record_invalid` (FR-047-AC-7). |
+| FND-007 | fixed | 748434d: FR-048 emits `record_path` and the tag message; the owner makes the release commit and signs the tag; the workflow creates no commit (FR-048-AC-6, AC-10). |
+| FND-008 | fixed | 748434d: the members read are named and an unreadable file is refused with `release_input_unreadable` (FR-048-AC-9). This is acceptable as a data contract; the remaining citation of Quoin's requirements is new finding FND-018. |
+| FND-009 | fixed | 748434d: closed schemas for Baseline and Release; the denylist, its AC, the FR-047-AC-6 digest clause and NFR-007 metric 3 are removed. |
+| FND-010 | fixed | 748434d: README reverted; FR-050 now requires the README change to land with the implementation. |
+| FND-011 | fixed | 748434d: `resolve_baseline(repository, commit, path)` is named as the library entry point. |
+| FND-012 | fixed | 748434d: FR-046 states that the archetype is unrelated to the MeasurementPlan `baseline`. |
+| FND-013 | fixed | 748434d: the reasons list is explicit, exit-2 error codes are named, and the unreachable "that commit or" branch is gone. |
+| FND-014 | fixed | 748434d: restated as `release-verify` being the only release interface Engineering Assurance offers. |
+| FND-015 | fixed | 748434d: an unlisted accepted anomaly id is refused (FR-048-AC-9). |
+| FND-016 | fixed | 748434d: FR-050-AC-1 is now a positive inspection. |

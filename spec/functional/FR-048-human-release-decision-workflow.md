@@ -34,9 +34,11 @@ provided" when the source was not supplied, never as "none" or "clean":
 - the unresolved anomalies: the list the caller supplies, each with its id and
   status.
 
-The evidence status, SOUP report and anomaly list are the output of Quoin's
-evidence, SOUP and anomaly reporting, supplied to the workflow as files in the
-format Quoin publishes; Engineering Assurance reads only the members it
+The evidence status, SOUP report and anomaly list are Quoin outputs, supplied
+to the workflow as files in the formats that Quoin requirements define: the
+evidence status of `ix://agent-ix/quoin/FR-115` (the Evidence Status of
+`quoin matrix`), the SOUP report of `ix://agent-ix/quoin/FR-144` and the anomaly
+report of `ix://agent-ix/quoin/FR-162`. Engineering Assurance reads only the members it
 presents (per evidence item the id and state, the SOUP records and their report
 entries, per anomaly the id and status) and computes none of them
 ([FR-049](./FR-049-release-ownership-split-and-data-contract.md)). A supplied

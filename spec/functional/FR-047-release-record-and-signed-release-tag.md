@@ -76,7 +76,7 @@ signature.
   For `not_released`, `reasons` lists each failed check, every one of: an
   FR-041 status other than `approved`, `record_unreadable`, `record_invalid`,
   `baseline_commit_unknown`, `baseline_file_absent`, `baseline_file_invalid`,
-  `release_commit_not_child_of_baseline`, `release_commit_changes_other_paths`,
+  `release_commit_not_child_of_baseline`, `release_commit_changes_other_paths`, `release_commit_record_not_added`,
   `baseline_item_absent`, `decision_owner_mismatch`.
 - The `approval` member, the unchanged FR-041 result for the tag, whenever the
   record was readable and valid; it is absent, and FR-041 is not run, when the
@@ -106,8 +106,10 @@ signature.
   report `baseline_commit_unknown`.
 - If the release commit does not have exactly one parent equal to the baseline
   commit, then the command SHALL report `release_commit_not_child_of_baseline`.
-- If the release commit changes any path other than `record_path`, or does not
-  add it, then the command SHALL report `release_commit_changes_other_paths`.
+- If the release commit changes any path other than `record_path`, then the
+  command SHALL report `release_commit_changes_other_paths`.
+- If the release commit does not add `record_path`, then the command SHALL
+  report `release_commit_record_not_added`.
 - The command SHALL report `released` only when the FR-041 status is
   `approved` and every other check passes.
 - The command SHALL report every failing check it can evaluate.
@@ -141,7 +143,7 @@ signature.
 | FR-047-AC-3 | A tag signed by a mapped principal that differs from `decision_owner` yields `not_released` with reason `decision_owner_mismatch` and no `release` member. | Test |
 | FR-047-AC-4 | An unsigned annotated tag, a lightweight tag, a bad signature, an unmapped key and a tag with no `Signed-off-meaning` each yield `not_released` carrying the corresponding FR-041 status. | Test |
 | FR-047-AC-5 | A baseline commit not in the repository yields `baseline_commit_unknown`; a baseline item path absent at the baseline commit yields `baseline_item_absent` naming the path; a Baseline file absent or invalid at the baseline commit yields `baseline_file_absent` or `baseline_file_invalid`. | Test |
-| FR-047-AC-6 | A release commit with two parents, a different parent, or a parent that is a descendant of the baseline commit yields `release_commit_not_child_of_baseline`; a release commit that also changes another path, or does not add `record_path`, yields `release_commit_changes_other_paths`. | Test |
+| FR-047-AC-6 | A release commit with two parents, a different parent, or a parent that is a descendant of the baseline commit yields `release_commit_not_child_of_baseline`; a release commit that also changes another path yields `release_commit_changes_other_paths`; a release commit that does not add `record_path` yields `release_commit_record_not_added`. | Test |
 | FR-047-AC-7 | A record whose frontmatter is invalid, or that carries any member outside the closed schema, yields `record_invalid` with no `approval` member; a missing record path at the release commit yields `record_unreadable` with no `approval` member. | Test |
 | FR-047-AC-8 | A record edited only in the working tree after tagging does not change the verdict, which is read from the release commit. | Test |
 | FR-047-AC-9 | A signed commit, a merge commit or a note carrying the record trailers yields `not_released` and never `released`. | Test |

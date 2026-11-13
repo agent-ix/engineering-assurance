@@ -43,7 +43,7 @@ nothing and the workflow chooses nothing.
 
 The pure decision of FR-047-AC-12 is exercised over every combination, the
 workflow tests of FR-048 run with no owner choice and with evidence that
-is all `observed`, and a source inspection checks the three counts.
+is all `observed`, and a source inspection checks the second count.
 
 ## Dependencies
 

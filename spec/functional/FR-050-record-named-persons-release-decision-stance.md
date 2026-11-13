@@ -40,7 +40,7 @@ automating terminal human decisions stays: only the person decides.
 | --- | --- | --- |
 | FR-050-AC-1 | The README states that Engineering Assurance records and verifies a named person's signed release decision. | Inspection |
 | FR-050-AC-2 | The README says Engineering Assurance never decides a release and names the person as the decision maker. | Inspection |
-| FR-050-AC-3 | The README command table has a `release-verify` row consistent with FR-047, and the README and this requirement change in the same pull request as the `release-verify` implementation. | Inspection |
+| FR-050-AC-3 | The README command table has a `release-verify` row consistent with FR-047, and that row and the stance sentence of this requirement are added to the README in the pull request that implements `release-verify`. | Inspection |
 | FR-050-AC-4 | `spec/spec.md` lists FR-046 to FR-050 and NFR-007 and keeps the Out of Scope bullet that automated terminal decisions are excluded. | Inspection |
 
 ## Dependencies

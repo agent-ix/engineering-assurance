@@ -37,3 +37,14 @@ though quire does not flag it.
 Six low grammar findings, all fixable by splitting compound bullets and naming the agent. Fix
 them in the same round as the base-review findings, so that `quire validate` reports no warnings
 for FR-046 to FR-050 or NFR-007.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | 748434d: FR-046 Behavior is split to one SHALL per bullet; quire reports no warning. |
+| FND-002 | fixed | 748434d: FR-047 Behavior is split; quire reports no warning. |
+| FND-003 | fixed | 748434d: "If a run id is reused ..., then the workflow SHALL refuse ...". |
+| FND-004 | fixed | 748434d: FR-049 Behavior is split; quire reports no warning. |
+| FND-005 | fixed | 748434d: the FR-050 Description has one SHALL; the table and the note obligations moved to Behavior bullets. |
+| FND-006 | fixed | 748434d: the NFR-007 statement keeps only the `released` obligation. |

@@ -35,10 +35,11 @@ The data contract Quoin consumes is the `release-verify` result of FR-047: the
 `approver`, `meaning`, `signed_at` and `accepted_anomalies` members. The files
 Engineering Assurance reads from Quoin are the evidence-status, SOUP-report and
 anomaly-list files named in
-[FR-048](./FR-048-human-release-decision-workflow.md): the output of Quoin's
-evidence, SOUP and anomaly reporting, in the format Quoin publishes. The
-protocol identifiers of those outputs are Quoin's to name in its own
-requirement; Engineering Assurance copies no schema, reads only the members
+[FR-048](./FR-048-human-release-decision-workflow.md): the evidence
+status of `ix://agent-ix/quoin/FR-115`, the SOUP report of
+`ix://agent-ix/quoin/FR-144` and the anomaly report of
+`ix://agent-ix/quoin/FR-162`, in the formats those requirements define.
+Engineering Assurance copies no schema, reads only the members
 FR-048 lists, and refuses an unreadable file with `release_input_unreadable`.
 
 Out of scope: how Quoin presents, stores or reports the result, and any change
