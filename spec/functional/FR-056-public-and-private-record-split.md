@@ -46,8 +46,10 @@ construction. The public form, `engineering-assurance.record-public/v1`, has the
   payload.
 
 The private form, `engineering-assurance.record-private/v1`, has the members `protocol`, `record_id`, and optionally
-`ticket_text`, `criteria_text`, `model_names` and `statement` (the full approval statement of
-[FR-058](./FR-058-approval-statement-and-predicate.md)). The two forms are linked only by equal `record_id`.
+`ticket_text`, `criteria_text`, `model_names`, `statement` (the full approval statement of
+[FR-058](./FR-058-approval-statement-and-predicate.md)), `change_record` (the full change record, with the ticket and
+criteria text and the review results, of [FR-072](./FR-072-change-record-predicate.md)) and `agent_bom` (the agent bill
+of materials of [FR-073](./FR-073-agent-bom-in-cyclonedx-1-7.md)). The two forms are linked only by equal `record_id`.
 
 A value is accepted into the public form only if it matches the grammar of its member. A model name, a ticket text, a
 criteria text or a private identifier is therefore refused by grammar membership, not by searching for words: no

@@ -246,6 +246,20 @@ same canonical bundle and do not redefine these responsibilities.
 - [FR-063](./functional/FR-063-unstaffed-required-role-fails-visibly.md) — fail with a named error when a required role has no staffed approver.
 - [FR-064](./functional/FR-064-verify-approval-statement-with-workflow-identity-policy.md) — verify approval statements against the trusted CI workflow identity and the role policy.
 - [FR-065](./functional/FR-065-workflow-roles-and-relation-to-signed-release-tags.md) — name the CI workflow roles, gate on reviews before merge; release decisions stay person-signed tags.
+- [FR-066](./functional/FR-066-release-attestation-set-and-subjects.md) — emit a release as a fixed set of standard attestations over the release artifacts.
+- [FR-067](./functional/FR-067-release-attestations-bind-to-the-signed-release-tag.md) — attest a release only after the signed tag and the role policy verify.
+- [FR-068](./functional/FR-068-verification-summary-signed-by-the-pinned-workflow.md) — sign one verification summary with a pinned reusable workflow.
+- [FR-069](./functional/FR-069-test-result-export-is-consumed-as-data.md) — consume the Quoin test-result export as data.
+- [FR-070](./functional/FR-070-release-and-receipt-workflow-files.md) — name the workflow files the attestation and receipt features add.
+- [FR-071](./functional/FR-071-release-attestations-publish-through-the-sinks.md) — publish release attestations through the sinks; never write a private repository to a public log.
+- [FR-072](./functional/FR-072-change-record-predicate.md) — the change-record/v1 predicate: identifiers, hashes, verdicts, per-role approval references.
+- [FR-073](./functional/FR-073-agent-bom-in-cyclonedx-1-7.md) — the agent bill of materials as a producer-reported CycloneDX 1.7 document.
+- [FR-074](./functional/FR-074-per-change-receipt-bundle-records-failures-too.md) — one CI-signed receipt per merged commit, failures recorded too.
+- [FR-075](./functional/FR-075-push-to-main-receipt-workflow.md) — write the receipt in a push-to-main workflow that runs no agent.
+- [FR-076](./functional/FR-076-receipt-storage-in-git-notes.md) — store the receipt in git notes; publish only the trimmed record.
+- [FR-077](./functional/FR-077-missing-receipt-check.md) — list commits with no valid receipt; unknown status counts as missing.
+- [FR-078](./functional/FR-078-receipt-verify.md) — verify a receipt against the pinned workflow identity, the commit and the role policy.
+- [FR-079](./functional/FR-079-content-rights-admits-the-attestation-schema-prefix.md) — admit the attestation schema prefix in the content-rights URL check.
 
 ### Non-Functional Requirements
 
@@ -267,6 +281,7 @@ same canonical bundle and do not redefine these responsibilities.
 - [NFR-008](./non-functional/NFR-008-closed-schemas.md) — records, configuration, statements and policies use closed schemas.
 - [NFR-009](./non-functional/NFR-009-no-private-reference-reaches-a-public-log.md) — no private reference reaches a public log.
 - [NFR-010](./non-functional/NFR-010-no-cryptography-of-our-own.md) — no cryptography of our own.
+- [NFR-011](./non-functional/NFR-011-signing-jobs-run-no-agent.md) — signing jobs run no agent and hold no agent-reachable credential.
 
 ### Integration Tests
 
