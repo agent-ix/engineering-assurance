@@ -835,6 +835,7 @@ fn tc_463_the_generic_workflow_host_cannot_reach_released_without_a_presentation
 
     let (output, value) = host("decide", Some("release"));
     assert_eq!(output.status.code(), Some(2), "{value}");
+    assert_eq!(value["code"], "workflow_transition_invalid", "{value}");
     assert_eq!(phase(&fixture, "run-generic"), "evidence_ready");
     assert_eq!(acknowledgements(&fixture, "run-generic"), 0);
 }
@@ -1065,11 +1066,10 @@ fn tc_471_the_generic_host_cannot_release_a_presented_run_without_a_stored_outco
         "repository_id": fixture.repo(),
         "workflow": "release-decision",
         "workflow_version": "0.1.0",
-        "decision_boundary": serde_json::to_string(&json!({
-            "baseline_path": BASELINE_PATH,
-            "baseline_commit": fixture.baseline,
-            "snapshot_path": SNAPSHOT_PATH,
-        })).expect("boundary"),
+        "decision_boundary": format!(
+            r#"{{"baseline_path":"{BASELINE_PATH}","baseline_commit":"{}","snapshot_path":"{SNAPSHOT_PATH}"}}"#,
+            fixture.baseline
+        ),
         "decision_owner": OWNER,
     });
     let before = tree_snapshot(&fixture.state());
@@ -1086,6 +1086,15 @@ fn tc_471_the_generic_host_cannot_release_a_presented_run_without_a_stored_outco
         }),
     );
     assert_eq!(output.status.code(), Some(2), "{value}");
+    // A deterministic refusal names the invariant; it is not an unknown outcome.
+    assert_eq!(value["code"], "workflow_invariant_refused", "{value}");
+    assert!(
+        value["message"]
+            .as_str()
+            .expect("message")
+            .contains("release_outcome_missing"),
+        "{value}"
+    );
     assert_eq!(tree_snapshot(&fixture.state()), before);
     assert_eq!(phase(&fixture, "run-generic-presented"), "decision_ready");
     assert_eq!(acknowledgements(&fixture, "run-generic-presented"), 0);

@@ -45,6 +45,12 @@ Not mergeable. The core gate is correct: no automatic decision path in the comma
 | FND-010 | medium | A refused `release` on a rejected run changes the run: release_outcome stores the meaning and the Release document in the rejected run before run.decide refuses with workflow_decision_conflict (reproduced, run j1: phase rejected, items now include release_outcome). FR-048 says a reject writes no Release document and a refusal changes no state. Store the outcome only when the phase is decision_ready. | src/release_decision_host.rs:587-634 |
 | FND-011 | low | The post-gate guard is `phase == released`. If the gate was acknowledged but the terminal advance did not complete (interrupted), a repeat with a different meaning overwrites release_outcome after the acknowledgement, and the next decide advances with it. Guard on the acknowledgement event, not the phase. | src/release_decision_host.rs:600-619 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-012 | low | Now that release.outcome_ready guards a terminal transition, the generic workflow-host reports its deterministic refusal (ix-flow transition_invariant_failed, release_outcome_missing) as ix_flow_outcome_indeterminate with 'retry status to reconcile'. invoke_gate_deferred maps every non-gate_deferred answer to OutcomeIndeterminate. It fails closed and changes no state, but the code and message misdirect the caller. tc_471 checks only exit 2. Map transition_invariant_failed to a typed refusal and assert the code. | src/workflow_host.rs:539-556 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -58,3 +64,7 @@ Not mergeable. The core gate is correct: no automatic decision path in the comma
 | FND-007 | fixed | Verified on head 46b9e93:     /// Return the terminal phase selected by `choice`, or `None` when this     /// workflow does not take `choice`.     #[must_use]     pub const fn terminal_phase(self, choice: DecisionChoice) -> Option<&'static str> {         if !self.takes(choice) {             return None;         }         let [positive, negative] = self.terminal_phases();         Some(match choice {             DecisionChoice::Reject => negative,             DecisionChoice::Accept \| DecisionChoice::Release => positive,         })     } |
 | FND-008 | fixed | Verified on head 46b9e93:         RunStatus::Missing if !create => Err(WorkflowHostError::RunNotFound {             run_id: binding.run_id.clone(),         }), |
 | FND-009 | fixed | Verified on head 46b9e93: tc_455 now asserts HEAD, refs, tags and status unchanged; the forbidden-string source scan was removed. |
+| FND-004 | fixed | Reproduced on 52ad81e (run g1): after a normal present, generic workflow-host decide release is refused because release.outcome_ready fails; the run stays at decision_ready with no gate event and no item. Rust and JS evaluators both carry the invariant. |
+| FND-005 | fixed | Probed 1 MiB inputs of 9 shapes (zeros nested 1/20/60/120 deep, wide {} arrays, 69,599 small keys, \u0001 strings nested 20/100 deep, objects nested 60 deep), each sized to the largest presentation accepted. Every one gives a status of at most 2,039,857 bytes and stays rejectable. The round-1 1 MiB depth-20 file is refused with release_presentation_too_large (29,881,444 printed bytes). |
+| FND-010 | fixed | Reproduced on 52ad81e (run j1): a release on a rejected run is refused with workflow_decision_conflict, and the items stay run_binding, release_request and release_presentation, with no release_outcome. |
+| FND-011 | fixed | Reproduced on 52ad81e (run k1): with the gate acknowledged through raw ix-flow and no terminal advance yet, a different meaning or order is refused with release_decision_changed, and the stored outcome is unchanged. |

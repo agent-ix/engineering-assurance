@@ -47,6 +47,8 @@ pub(crate) enum WorkflowHostError {
     Binding { detail: String },
     #[error("no ix-flow run has the id {run_id:?}")]
     RunNotFound { run_id: String },
+    #[error("a workflow invariant refused the transition: {invariant}: {message}")]
+    InvariantRefused { invariant: String, message: String },
     #[error("workflow transition is invalid: {detail}")]
     Transition { detail: String },
     #[error("workflow decision conflicts with ix-flow state: {detail}")]
@@ -71,6 +73,7 @@ impl WorkflowHostError {
             Self::Request { .. } => "workflow_host_request_invalid",
             Self::Binding { .. } => "workflow_binding_invalid",
             Self::RunNotFound { .. } => "workflow_run_not_found",
+            Self::InvariantRefused { .. } => "workflow_invariant_refused",
             Self::Transition { .. } => "workflow_transition_invalid",
             Self::DecisionConflict { .. } => "workflow_decision_conflict",
             Self::Unavailable { .. } => "ix_flow_unavailable",
@@ -544,6 +547,23 @@ fn invoke_gate_deferred(
 ) -> Result<IxEnvelope, WorkflowHostError> {
     let envelope = invoke(executable, arguments, state_dir, true, "advance", limits)?;
     validate_command(&envelope, "advance", true)?;
+    // An invariant that does not hold refuses the transition before anything
+    // is written, so it is a known refusal and not an unknown outcome.
+    if !envelope.ok
+        && envelope.state.as_deref() == Some("invariant_failed")
+        && let Some(error) = &envelope.error
+    {
+        let invariant = error
+            .details
+            .as_ref()
+            .and_then(|details| details.get("invariantCode"))
+            .and_then(Value::as_str)
+            .unwrap_or(&error.code);
+        return Err(WorkflowHostError::InvariantRefused {
+            invariant: invariant.to_owned(),
+            message: error.message.clone(),
+        });
+    }
     if envelope.ok || envelope.state.as_deref() != Some("gate_deferred") {
         return Err(WorkflowHostError::OutcomeIndeterminate {
             operation: "advance".to_owned(),
@@ -1259,8 +1279,7 @@ struct IxError {
     code: String,
     message: String,
     #[serde(default)]
-    #[serde(rename = "details")]
-    _details: Option<Map<String, Value>>,
+    details: Option<Map<String, Value>>,
 }
 
 #[derive(Debug, Deserialize)]
