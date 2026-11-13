@@ -53,11 +53,12 @@ pub struct Offending {
 }
 
 /// Proof that the leak check passed for one public form. Only [`leak_check`]
-/// makes one, so the public signing path and the public-log send cannot be
-/// reached without a passing check for the record at hand.
+/// makes one, and it carries the RFC 8785 bytes of the checked form, so the
+/// public signing path can receive nothing but the bytes that were checked.
 #[derive(Debug)]
 pub struct PublicPathProof<'a> {
     record: &'a PublicRecord,
+    signed_bytes: Vec<u8>,
 }
 
 impl<'a> PublicPathProof<'a> {
@@ -66,20 +67,36 @@ impl<'a> PublicPathProof<'a> {
     pub const fn record(&self) -> &'a PublicRecord {
         self.record
     }
+
+    /// The canonical bytes of the checked public form: the only payload the
+    /// public signing path may sign.
+    #[must_use]
+    pub fn signed_bytes(&self) -> &[u8] {
+        &self.signed_bytes
+    }
+}
+
+/// Why the check did not pass.
+#[derive(Debug, Eq, PartialEq)]
+pub enum CheckRefusal {
+    /// At least one item is private or of unknown visibility.
+    Offending(Vec<Offending>),
+    /// The public form could not be encoded, so nothing can be signed.
+    Unencodable,
 }
 
 /// Checks the publishing repository, the subject and every reference.
 ///
 /// # Errors
 ///
-/// Every offending item, each once, in the order publishing repository,
-/// subject, references.
+/// [`CheckRefusal::Offending`] lists every offending item, each once, in the
+/// order publishing repository, subject, references.
 pub fn leak_check<'a>(
     publishing_repo: &str,
     record: &'a PublicRecord,
     public_linear_teams: &[String],
     lookup: &dyn VisibilityLookup,
-) -> Result<PublicPathProof<'a>, Vec<Offending>> {
+) -> Result<PublicPathProof<'a>, CheckRefusal> {
     let mut items: Vec<(RefKind, &str)> = vec![
         (RefKind::Repo, publishing_repo),
         (RefKind::Repo, record.subject.reference().id()),
@@ -115,11 +132,16 @@ pub fn leak_check<'a>(
             reason,
         });
     }
-    if offending.is_empty() {
-        Ok(PublicPathProof { record })
-    } else {
-        Err(offending)
+    if !offending.is_empty() {
+        return Err(CheckRefusal::Offending(offending));
     }
+    let signed_bytes = record
+        .signed_bytes()
+        .map_err(|_| CheckRefusal::Unencodable)?;
+    Ok(PublicPathProof {
+        record,
+        signed_bytes,
+    })
 }
 
 fn linear_visibility(issue: &str, public_teams: &[String]) -> Visibility {

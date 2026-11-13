@@ -112,8 +112,11 @@ pub enum SelectionSource {
 #[serde(deny_unknown_fields)]
 struct RawConfig {
     protocol: String,
+    #[serde(default, deserialize_with = "super::form::no_null")]
     sink: Option<SinkKind>,
+    #[serde(default, deserialize_with = "super::form::no_null")]
     public_log: Option<RawPublicLog>,
+    #[serde(default, deserialize_with = "super::form::no_null")]
     private_store: Option<RawPrivateStore>,
     #[serde(default)]
     public_linear_teams: Vec<String>,
@@ -122,12 +125,14 @@ struct RawConfig {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawPublicLog {
+    #[serde(default, deserialize_with = "super::form::no_null")]
     endpoint: Option<String>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawPrivateStore {
+    #[serde(default, deserialize_with = "super::form::no_null")]
     destination: Option<String>,
 }
 

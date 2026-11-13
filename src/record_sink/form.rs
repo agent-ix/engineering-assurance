@@ -43,6 +43,29 @@ pub enum FormError {
     Schema,
 }
 
+/// Deserializes a present optional member, rejecting JSON `null`: `null` is in
+/// no member's grammar.
+pub(crate) fn no_null<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
+}
+
+/// As [`no_null`] for free-form JSON members, where `null` is a valid value.
+fn no_null_value<'de, D>(deserializer: D) -> Result<Option<serde_json::Value>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    if value.is_null() {
+        Err(serde::de::Error::custom("null is not a valid member value"))
+    } else {
+        Ok(Some(value))
+    }
+}
+
 const fn grammar(member: &'static str) -> FormError {
     FormError::Grammar { member }
 }
@@ -399,13 +422,25 @@ pub enum Verdict {
 #[serde(deny_unknown_fields)]
 pub struct Hashes {
     /// The digest of the private form.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "no_null"
+    )]
     pub private_form: Option<Sha256Digest>,
     /// The digest of the statement.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "no_null"
+    )]
     pub statement: Option<Sha256Digest>,
     /// The subject commit.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "no_null"
+    )]
     pub subject_commit: Option<GitObjectId>,
 }
 
@@ -414,13 +449,25 @@ pub struct Hashes {
 #[serde(deny_unknown_fields)]
 pub struct Verdicts {
     /// The approval verdict.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "no_null"
+    )]
     pub approval: Option<Verdict>,
     /// The change-record verdict.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "no_null"
+    )]
     pub change_record: Option<Verdict>,
     /// The release verdict.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "no_null"
+    )]
     pub release: Option<Verdict>,
 }
 
@@ -429,13 +476,25 @@ pub struct Verdicts {
 #[serde(deny_unknown_fields)]
 pub struct Timestamps {
     /// When the record was created.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "no_null"
+    )]
     pub created: Option<Timestamp>,
     /// When it was signed.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "no_null"
+    )]
     pub signed: Option<Timestamp>,
     /// When it was published.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "no_null"
+    )]
     pub published: Option<Timestamp>,
 }
 
@@ -479,7 +538,11 @@ pub struct PublicRecord {
     #[serde(default)]
     pub timestamps: Timestamps,
     /// The signature bundle; set only by the signing step.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "no_null"
+    )]
     pub signature: Option<Signature>,
 }
 
@@ -526,22 +589,46 @@ pub struct PrivateRecord {
     /// The record id shared with the public form.
     pub record_id: RecordId,
     /// The ticket text.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "no_null"
+    )]
     pub ticket_text: Option<String>,
     /// The criteria text.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "no_null"
+    )]
     pub criteria_text: Option<String>,
     /// The model names.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "no_null"
+    )]
     pub model_names: Option<Vec<String>>,
     /// The full approval statement.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "no_null_value"
+    )]
     pub statement: Option<serde_json::Value>,
     /// The full change record.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "no_null_value"
+    )]
     pub change_record: Option<serde_json::Value>,
     /// The agent bill of materials.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "no_null_value"
+    )]
     pub agent_bom: Option<serde_json::Value>,
 }
 

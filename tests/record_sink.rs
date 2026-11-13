@@ -12,21 +12,22 @@
     clippy::type_complexity
 )]
 
-use std::{cell::RefCell, collections::HashMap};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+
+type Events = Rc<RefCell<Vec<&'static str>>>;
 
 use engineering_assurance::record_sink::{
     config::{
         ErrorCode, PolicySource, SINK_CONFIG_PATH, SelectionSource, SinkConfig, SinkKind,
         SinkSelection, Visibility, read_policy_document, resolve_from_source, resolve_sink,
     },
-    form::{
-        FormError, PrivateRecord, PublicRecord, Record, RecordId, Reference, References, Signature,
-        Subject,
+    form::{FormError, PrivateRecord, PublicRecord, Record, RecordId, Reference, Signature},
+    leak::{
+        CheckRefusal, LookupFailed, OffenseReason, PublicPathProof, VisibilityLookup, leak_check,
     },
-    leak::{LookupFailed, OffenseReason, PublicPathProof, VisibilityLookup, leak_check},
     sink::{
-        LogRejected, NoneSink, PrivateStore, PrivateStoreSink, PublicLogClient, PublicLogSink,
-        RecordSink, Signer, SigningFailed, SinkLayer, SinkResult, Sinks, Status, StoreError,
+        CheckedEntry, LogRejected, Ports, PrivateStore, PublicLogClient, RecordSink, Signer,
+        SigningFailed, SinkLayer, SinkResult, Status, StoreError,
     },
 };
 use ix_trace_rs::trace;
@@ -46,7 +47,7 @@ struct Store {
     private: RefCell<Vec<(String, PrivateRecord)>>,
     public: RefCell<Vec<(String, PublicRecord)>>,
     fail_private: bool,
-    events: RefCell<Vec<&'static str>>,
+    events: Events,
 }
 
 impl PrivateStore for Store {
@@ -73,16 +74,18 @@ impl PrivateStore for Store {
 struct Log {
     entries: RefCell<Vec<(String, PublicRecord)>>,
     reject: bool,
+    events: Events,
 }
 
 impl PublicLogClient for Log {
-    fn send(&self, endpoint: &str, entry: &PublicRecord) -> Result<(), LogRejected> {
+    fn send(&self, endpoint: &str, entry: &CheckedEntry) -> Result<(), LogRejected> {
+        self.events.borrow_mut().push("send");
         if self.reject {
             return Err(LogRejected);
         }
         self.entries
             .borrow_mut()
-            .push((endpoint.to_owned(), entry.clone()));
+            .push((endpoint.to_owned(), entry.record().clone()));
         Ok(())
     }
 }
@@ -91,6 +94,7 @@ impl PublicLogClient for Log {
 struct Visibilities {
     map: RefCell<HashMap<String, Result<Visibility, ()>>>,
     calls: RefCell<Vec<String>>,
+    events: Events,
 }
 
 impl Visibilities {
@@ -110,6 +114,7 @@ impl Visibilities {
 impl VisibilityLookup for Visibilities {
     fn repo_visibility(&self, repo: &str) -> Result<Visibility, LookupFailed> {
         self.calls.borrow_mut().push(repo.to_owned());
+        self.events.borrow_mut().push("lookup");
         self.map
             .borrow()
             .get(repo)
@@ -123,6 +128,7 @@ impl VisibilityLookup for Visibilities {
 enum SignMode {
     Honest,
     SignsOther,
+    NonCanonical,
     Fails,
 }
 
@@ -133,6 +139,7 @@ struct StandInSigner {
     mode: SignMode,
     public_calls: RefCell<u32>,
     non_public_calls: RefCell<u32>,
+    events: Events,
 }
 
 impl StandInSigner {
@@ -141,13 +148,23 @@ impl StandInSigner {
             mode,
             public_calls: RefCell::new(0),
             non_public_calls: RefCell::new(0),
+            events: Events::default(),
         }
     }
 
     fn bundle(&self, canonical: &[u8]) -> Result<String, SigningFailed> {
+        self.events.borrow_mut().push("sign");
+        let reordered;
         let payload: &[u8] = match self.mode {
             SignMode::Honest => canonical,
             SignMode::SignsOther => b"{\"full\":\"statement\"}",
+            SignMode::NonCanonical => {
+                // The same members in non-canonical form (insertion order, with
+                // whitespace): a broken canonicaliser would produce this.
+                let value: Value = serde_json::from_slice(canonical).unwrap();
+                reordered = serde_json::to_string_pretty(&value).unwrap().into_bytes();
+                &reordered
+            }
             SignMode::Fails => return Err(SigningFailed),
         };
         let mut hex: String = payload.iter().map(|b| format!("{b:02x}")).collect();
@@ -159,13 +176,9 @@ impl StandInSigner {
 }
 
 impl Signer for StandInSigner {
-    fn sign_for_public_log(
-        &self,
-        _proof: &PublicPathProof<'_>,
-        canonical: &[u8],
-    ) -> Result<String, SigningFailed> {
+    fn sign_for_public_log(&self, proof: &PublicPathProof<'_>) -> Result<String, SigningFailed> {
         *self.public_calls.borrow_mut() += 1;
-        self.bundle(canonical)
+        self.bundle(proof.signed_bytes())
     }
 
     fn sign_without_public_log(&self, canonical: &[u8]) -> Result<String, SigningFailed> {
@@ -210,13 +223,13 @@ fn record() -> Record {
     record_with(PUBLISHER, &[])
 }
 
-fn selection(sink: SinkKind) -> SinkSelection {
+fn selection(sink: SinkKind, teams: &[String]) -> SinkSelection {
     SinkSelection {
         sink,
         source: SelectionSource::Configured,
         public_log_endpoint: Some(ENDPOINT.to_owned()),
         private_store_destination: (sink != SinkKind::None).then(|| DESTINATION.to_owned()),
-        public_linear_teams: vec!["PUB".to_owned()],
+        public_linear_teams: teams.to_vec(),
     }
 }
 
@@ -226,11 +239,13 @@ struct World {
     lookup: Visibilities,
     signer: StandInSigner,
     teams: Vec<String>,
+    events: Events,
 }
 
 impl World {
     fn new() -> Self {
-        Self {
+        let events = Events::default();
+        let mut this = Self {
             store: Store::default(),
             log: Log::default(),
             lookup: Visibilities::with(&[
@@ -242,34 +257,41 @@ impl World {
             ]),
             signer: StandInSigner::new(SignMode::Honest),
             teams: vec!["PUB".to_owned()],
-        }
+            events: Rc::clone(&events),
+        };
+        this.wire();
+        this
+    }
+
+    /// Points every stand-in at the world's shared event log.
+    fn wire(&mut self) {
+        self.store.events = Rc::clone(&self.events);
+        self.log.events = Rc::clone(&self.events);
+        self.lookup.events = Rc::clone(&self.events);
+        self.signer.events = Rc::clone(&self.events);
+    }
+
+    fn with_signer(mut self, mode: SignMode) -> Self {
+        self.signer = StandInSigner::new(mode);
+        self.wire();
+        self
     }
 
     fn publish(&self, sink: SinkKind, record: &Record) -> SinkResult {
-        let selection = selection(sink);
-        let public_log = PublicLogSink {
-            endpoint: ENDPOINT,
-            publishing_repo: PUBLISHER,
-            public_linear_teams: &self.teams,
+        self.publish_with(&selection(sink, &self.teams), record)
+    }
+
+    fn publish_with(&self, selection: &SinkSelection, record: &Record) -> SinkResult {
+        SinkLayer::new(selection, PUBLISHER, self.ports()).publish(record)
+    }
+
+    fn ports(&self) -> Ports<'_> {
+        Ports {
+            store: &self.store,
             lookup: &self.lookup,
             signer: &self.signer,
             client: &self.log,
-        };
-        let private_store = PrivateStoreSink {
-            destination: DESTINATION,
-            store: &self.store,
-            signer: &self.signer,
-        };
-        let layer = SinkLayer {
-            selection: &selection,
-            store: &self.store,
-            sinks: Sinks {
-                public_log: &public_log,
-                private_store: &private_store,
-                none: &NoneSink,
-            },
-        };
-        layer.publish(record)
+        }
     }
 
     fn nothing_sent_or_stored(&self) -> bool {
@@ -361,25 +383,19 @@ impl RecordSink for RegisteredSink {
 #[trace("TC-627", "FR-054-AC-4")]
 #[test]
 fn tc_627_a_registered_implementation_publishes_the_unchanged_forms() {
-    let store = Store::default();
-    let selection = selection(SinkKind::PrivateStore);
-    let layer = SinkLayer {
-        selection: &selection,
-        store: &store,
-        sinks: Sinks {
-            public_log: &NoneSink,
-            private_store: &RegisteredSink,
-            none: &NoneSink,
-        },
-    };
+    let world = World::new();
+    let selection = selection(SinkKind::PrivateStore, &world.teams);
+    let mut layer = SinkLayer::new(&selection, PUBLISHER, world.ports());
+    layer.register_private_store(&RegisteredSink);
     let rec = record();
     let before = rec.clone();
     let result = layer.publish(&rec);
     assert_eq!(result.status, Status::Published);
     assert_eq!(rec, before);
+    assert!(world.store.public.borrow().is_empty());
 }
 
-#[trace("TC-628", "FR-054-AC-5", "NFR-008")]
+#[trace("TC-628", "FR-054-AC-5", "NFR-008-M-1")]
 #[test]
 fn tc_628_the_result_schema_is_closed() {
     let base = json!({
@@ -397,6 +413,30 @@ fn tc_628_the_result_schema_is_closed() {
             serde_json::from_value::<SinkResult>(bad).is_err(),
             "{status}"
         );
+    }
+    // Members must fit the status: `error` only with `refused`, `offending` only
+    // with the leak-check code, and `null` is not a member value.
+    let refused = |extra: Value| {
+        let mut doc = base.clone();
+        doc["status"] = json!("refused");
+        for (key, value) in extra.as_object().unwrap() {
+            doc[key] = value.clone();
+        }
+        serde_json::from_value::<SinkResult>(doc)
+    };
+    assert!(refused(json!({})).is_err(), "refused without error");
+    assert!(refused(json!({"error": "public_log_rejected"})).is_ok());
+    assert!(refused(json!({"error": "public_log_rejected", "offending": []})).is_err());
+    assert!(refused(json!({"error": "public_sink_private_reference", "offending": []})).is_ok());
+    assert!(refused(json!({"error": null})).is_err());
+    for status in ["published", "discarded"] {
+        let mut doc = base.clone();
+        doc["status"] = json!(status);
+        doc["error"] = json!("public_log_rejected");
+        assert!(serde_json::from_value::<SinkResult>(doc.clone()).is_err());
+        doc.as_object_mut().unwrap().remove("error");
+        doc["offending"] = json!([]);
+        assert!(serde_json::from_value::<SinkResult>(doc).is_err());
     }
 }
 
@@ -422,6 +462,14 @@ fn tc_629_the_private_form_is_written_first_and_survives_a_refusal() {
     );
     assert!(failing.log.entries.borrow().is_empty());
     assert_eq!(*failing.signer.public_calls.borrow(), 0);
+
+    // The private write precedes every lookup, sign and send.
+    let ordered = World::new();
+    ordered.publish(SinkKind::PublicLog, &record());
+    let events = ordered.events.borrow();
+    assert_eq!(events.first(), Some(&"private_write"));
+    assert_eq!(events.iter().filter(|e| **e == "private_write").count(), 1);
+    assert!(events.contains(&"lookup") && events.contains(&"sign") && events.contains(&"send"));
 }
 
 // ---- FR-055 ------------------------------------------------------------------
@@ -448,16 +496,7 @@ fn tc_630_visibility_chooses_the_default_and_an_override_wins() {
     );
     // The default public log has no endpoint to send to: the publish is refused.
     let world = World::new();
-    let layer = SinkLayer {
-        selection: &public,
-        store: &world.store,
-        sinks: Sinks {
-            public_log: &NoneSink,
-            private_store: &NoneSink,
-            none: &NoneSink,
-        },
-    };
-    let refused = layer.publish(&record());
+    let refused = world.publish_with(&public, &record());
     assert_eq!(refused.error, Some(ErrorCode::SinkConfigIncomplete));
     assert!(world.nothing_sent_or_stored());
     let private = resolve_sink(Some(&only_store), Visibility::Private).unwrap();
@@ -494,7 +533,7 @@ fn tc_631_undeterminable_visibility_counts_as_private() {
     );
 }
 
-#[trace("TC-632", "FR-055-AC-4", "NFR-008")]
+#[trace("TC-632", "FR-055-AC-4", "NFR-008-M-1")]
 #[test]
 fn tc_632_invalid_and_incomplete_configurations_are_refused() {
     let base = |extra: Value| {
@@ -545,7 +584,6 @@ fn tc_632_invalid_and_incomplete_configurations_are_refused() {
 struct Branches {
     protected: Option<bool>,
     base: HashMap<String, Vec<u8>>,
-    pull_request: HashMap<String, Vec<u8>>,
 }
 
 impl PolicySource for Branches {
@@ -574,9 +612,7 @@ fn tc_633_the_protected_base_branch_document_is_the_one_used() {
     let source = Branches {
         protected: Some(true),
         base: HashMap::from([(SINK_CONFIG_PATH.to_owned(), config_doc("none"))]),
-        pull_request: HashMap::from([(SINK_CONFIG_PATH.to_owned(), config_doc("private_store"))]),
     };
-    assert!(!source.pull_request.is_empty());
     let got = resolve_from_source(&source, Visibility::Public).unwrap();
     assert_eq!(got.sink, SinkKind::None);
 }
@@ -588,7 +624,6 @@ fn tc_634_an_unprotected_or_unreported_base_branch_refuses_each_policy_document(
         let source = Branches {
             protected,
             base: HashMap::new(),
-            pull_request: HashMap::new(),
         };
         for path in [
             SINK_CONFIG_PATH,
@@ -613,7 +648,6 @@ fn tc_635_a_missing_destination_is_incomplete_and_the_first_publish_sends_nothin
     let absent = Branches {
         protected: Some(true),
         base: HashMap::new(),
-        pull_request: HashMap::new(),
     };
     assert_eq!(
         resolve_from_source(&absent, Visibility::Public),
@@ -627,7 +661,6 @@ fn tc_635_a_missing_destination_is_incomplete_and_the_first_publish_sends_nothin
                 .to_string()
                 .into_bytes(),
         )]),
-        pull_request: HashMap::new(),
     };
     for visibility in [Visibility::Public, Visibility::Private] {
         assert_eq!(
@@ -635,8 +668,19 @@ fn tc_635_a_missing_destination_is_incomplete_and_the_first_publish_sends_nothin
             Err(ErrorCode::SinkConfigIncomplete)
         );
     }
-    // A refused selection yields no SinkLayer, so no publish can be made.
-    assert!(World::new().nothing_sent_or_stored());
+    // A selection that reaches the layer without a destination is refused with
+    // nothing sent, signed or stored.
+    for sink in [SinkKind::PublicLog, SinkKind::PrivateStore] {
+        let world = World::new();
+        let mut selection = selection(sink, &world.teams);
+        selection.private_store_destination = None;
+        let result = world.publish_with(&selection, &record());
+        assert_eq!(result.status, Status::Refused, "{sink:?}");
+        assert_eq!(result.error, Some(ErrorCode::SinkConfigIncomplete));
+        assert!(world.nothing_sent_or_stored());
+        assert_eq!(*world.signer.non_public_calls.borrow(), 0);
+        assert!(world.events.borrow().is_empty());
+    }
 }
 
 // ---- FR-056 ------------------------------------------------------------------
@@ -678,7 +722,7 @@ fn tc_636_the_forms_split_private_text_from_public_members() {
     );
 }
 
-#[trace("TC-637", "FR-056-AC-3", "NFR-008")]
+#[trace("TC-637", "FR-056-AC-3", "NFR-008-M-1")]
 #[test]
 fn tc_637_both_forms_reject_an_extra_member() {
     let mut public = public_json(PUBLISHER, &[]);
@@ -839,7 +883,70 @@ fn tc_640_a_member_accepts_a_string_only_when_it_matches_its_grammar() {
             part(o) && part(n)
         });
         assert_eq!(repo, repo_expected, "{text}");
+
+        // Pure noise almost never matches the structured grammars, so each is also
+        // fed mutations of a valid sample.
+        check_structured(&text);
+        for valid in [ID, COMMIT, "2026-11-13T10:00:00Z", "ENG-77"] {
+            let mut chars: Vec<char> = valid.chars().collect();
+            for _ in 0..(rng.next() % 3) {
+                let at = (rng.next() % chars.len() as u64) as usize;
+                chars[at] = noisy[(rng.next() % noisy.len() as u64) as usize] as char;
+            }
+            check_structured(&chars.into_iter().collect::<String>());
+        }
     }
+}
+
+/// Checks `text` against the grammars of `record_id`, `subject_commit`, the
+/// timestamps and Linear issue ids, each by an independent oracle.
+fn check_structured(text: &str) {
+    let uuid = text.len() == 36
+        && text.bytes().enumerate().all(|(i, c)| match i {
+            8 | 13 | 18 | 23 => c == b'-',
+            _ => matches!(c, b'0'..=b'9' | b'a'..=b'f'),
+        });
+    let commit = matches!(text.len(), 40 | 64)
+        && text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
+    let instant = text.len() == 20
+        && text.bytes().enumerate().all(|(i, c)| match i {
+            4 | 7 => c == b'-',
+            10 => c == b'T',
+            13 | 16 => c == b':',
+            19 => c == b'Z',
+            _ => c.is_ascii_digit(),
+        })
+        && (1..=12).contains(&text[5..7].parse::<u32>().unwrap())
+        && (1..=31).contains(&text[8..10].parse::<u32>().unwrap())
+        && text[11..13].parse::<u32>().unwrap() < 24
+        && text[14..16].parse::<u32>().unwrap() < 60
+        && text[17..19].parse::<u32>().unwrap() < 60;
+    let issue = text.split_once('-').is_some_and(|(team, n)| {
+        (1..=10).contains(&team.len())
+            && team.as_bytes()[0].is_ascii_uppercase()
+            && team
+                .bytes()
+                .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+            && (1..=9).contains(&n.len())
+            && n.bytes().all(|b| b.is_ascii_digit())
+    });
+    let accepted = |member: &dyn Fn(&mut Value)| {
+        let mut v = public_json(PUBLISHER, &[]);
+        member(&mut v);
+        PublicRecord::from_json(v.to_string().as_bytes()).is_ok()
+    };
+    assert_eq!(accepted(&|v| v["record_id"] = json!(text)), uuid, "{text}");
+    assert_eq!(
+        accepted(&|v| v["hashes"]["subject_commit"] = json!(text)),
+        commit,
+        "{text}"
+    );
+    assert_eq!(
+        accepted(&|v| v["timestamps"]["signed"] = json!(text)),
+        instant,
+        "{text}"
+    );
+    assert_eq!(Reference::linear_issue(text).is_ok(), issue, "{text}");
 }
 
 #[trace("TC-641", "FR-056-AC-7")]
@@ -889,9 +996,13 @@ fn tc_642_the_bundle_signs_exactly_the_canonical_public_bytes() {
     let text = String::from_utf8(payload).unwrap();
     assert!(text.starts_with("{\"hashes\":{") && !text.contains("signature"));
 
-    for sink in [SinkKind::PublicLog, SinkKind::PrivateStore] {
-        let mut other = World::new();
-        other.signer = StandInSigner::new(SignMode::SignsOther);
+    for (mode, sink) in [
+        (SignMode::SignsOther, SinkKind::PublicLog),
+        (SignMode::SignsOther, SinkKind::PrivateStore),
+        (SignMode::NonCanonical, SinkKind::PublicLog),
+        (SignMode::NonCanonical, SinkKind::PrivateStore),
+    ] {
+        let other = World::new().with_signer(mode);
         let result = other.publish(sink, &rec);
         assert_eq!(
             result.error,
@@ -901,8 +1012,7 @@ fn tc_642_the_bundle_signs_exactly_the_canonical_public_bytes() {
         assert!(other.log.entries.borrow().is_empty());
         assert!(other.store.public.borrow().is_empty());
     }
-    let mut failing = World::new();
-    failing.signer = StandInSigner::new(SignMode::Fails);
+    let failing = World::new().with_signer(SignMode::Fails);
     assert_eq!(
         failing.publish(SinkKind::PublicLog, &rec).error,
         Some(ErrorCode::SigningFailed)
@@ -922,7 +1032,6 @@ fn a_record_offered_with_a_signature_is_not_accepted() {
     );
     let id = RecordId::from_random_bytes([0xff; 16]);
     assert_eq!(id.as_str(), "ffffffff-ffff-4fff-bfff-ffffffffffff");
-    let _ = (References::default(), Subject::repo(PUBLISHER).unwrap());
 }
 
 // ---- FR-057 ------------------------------------------------------------------
@@ -1006,10 +1115,9 @@ fn tc_645_an_unknown_visibility_is_refused_under_the_one_code() {
         OffenseReason::VisibilityUnknown
     );
 
-    let dark = World {
-        lookup: Visibilities::default(),
-        ..World::new()
-    };
+    let mut dark = World::new();
+    dark.lookup = Visibilities::default();
+    dark.wire();
     let result = dark.publish(SinkKind::PublicLog, &rec);
     let offending = result.offending.unwrap();
     assert_eq!(offending.len(), 2);
@@ -1082,7 +1190,7 @@ fn tc_648_private_store_and_none_publish_what_the_public_sink_refused() {
     assert!(none.lookup.calls.borrow().is_empty());
 }
 
-#[trace("TC-649", "FR-057-AC-8", "NFR-009")]
+#[trace("TC-649", "FR-057-AC-8", "NFR-009-M-1")]
 #[test]
 fn tc_649_only_all_public_records_reach_or_sign_for_the_public_log() {
     let mut rng = Rng(0x2545_f491_4f6c_dd1d);
@@ -1129,7 +1237,7 @@ fn tc_649_only_all_public_records_reach_or_sign_for_the_public_log() {
     }
 }
 
-#[trace("TC-650", "FR-057-AC-10", "FR-057-AC-11", "NFR-010")]
+#[trace("TC-650", "FR-057-AC-10", "FR-057-AC-11", "NFR-010-M-2")]
 #[test]
 fn tc_650_signing_uses_the_public_path_only_after_the_check_passed() {
     let rec = record();
@@ -1157,7 +1265,7 @@ fn tc_650_signing_uses_the_public_path_only_after_the_check_passed() {
     assert_eq!(*refused.signer.public_calls.borrow(), 0);
 }
 
-#[trace("TC-651", "NFR-010", "NFR-009")]
+#[trace("TC-651", "NFR-010-M-1")]
 #[test]
 fn tc_651_the_sink_module_implements_no_signature_primitive() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/record_sink");
@@ -1173,15 +1281,87 @@ fn tc_651_the_sink_module_implements_no_signature_primitive() {
                 path.display()
             );
         }
-        // The public log client is reached from one place, behind the leak check.
-        if path.file_name().unwrap() != "sink.rs" {
-            assert!(!source.contains(".send("), "{}", path.display());
-        }
     }
-    let sink = std::fs::read_to_string(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/record_sink/sink.rs"),
-    )
-    .unwrap();
-    assert_eq!(sink.matches("self.client.send(").count(), 1);
-    assert!(sink.find("leak_check(").unwrap() < sink.find("self.client.send(").unwrap());
+}
+
+/// A sink that would reach any log if it could. It stands in for a pluggable
+/// implementation: it has no way to build the entry type the log client takes.
+struct Rogue(RefCell<u32>);
+
+impl RecordSink for Rogue {
+    fn publish(&self, record: &Record) -> SinkResult {
+        *self.0.borrow_mut() += 1;
+        SinkResult::published(SinkKind::PublicLog, record.id())
+    }
+}
+
+#[trace("TC-652", "FR-057-AC-8", "NFR-009-M-2")]
+#[test]
+fn tc_652_the_public_log_is_reachable_only_through_the_checked_sink() {
+    // A registered implementation takes the private-store slot only; a public-log
+    // selection still goes through the leak check, and a leaking record sends nothing.
+    let world = World::new();
+    let rogue = Rogue(RefCell::new(0));
+    let selection = selection(SinkKind::PublicLog, &world.teams);
+    let mut layer = SinkLayer::new(&selection, PUBLISHER, world.ports());
+    layer.register_private_store(&rogue);
+    let leaking = record_with(PUBLISHER, &[("repo", "acme/secret")]);
+    let result = layer.publish(&leaking);
+    assert_eq!(result.error, Some(ErrorCode::PublicSinkPrivateReference));
+    assert_eq!(*rogue.0.borrow(), 0);
+    assert!(world.log.entries.borrow().is_empty());
+    assert_eq!(*world.signer.public_calls.borrow(), 0);
+
+    // A check that failed to encode, or refused, yields no proof to sign with.
+    world.lookup.set(PUBLISHER, Ok(Visibility::Private));
+    let public = record();
+    assert!(matches!(
+        leak_check(PUBLISHER, public.public(), &[], &world.lookup),
+        Err(CheckRefusal::Offending(_))
+    ));
+    world.lookup.set(PUBLISHER, Ok(Visibility::Public));
+    let proof = leak_check(PUBLISHER, public.public(), &[], &world.lookup).unwrap();
+    assert_eq!(
+        proof.signed_bytes(),
+        public.public().signed_bytes().unwrap()
+    );
+}
+
+#[test]
+fn null_is_not_a_member_value_in_any_closed_document() {
+    let mut public = public_json(PUBLISHER, &[]);
+    public["hashes"]["statement"] = Value::Null;
+    assert!(PublicRecord::from_json(public.to_string().as_bytes()).is_err());
+    let mut public = public_json(PUBLISHER, &[]);
+    public["signature"] = Value::Null;
+    assert!(PublicRecord::from_json(public.to_string().as_bytes()).is_err());
+    for member in ["ticket_text", "statement", "model_names"] {
+        let private = json!({
+            "protocol": "engineering-assurance.record-private/v1",
+            "record_id": ID, member: null
+        });
+        assert!(
+            PrivateRecord::from_json(private.to_string().as_bytes()).is_err(),
+            "{member}"
+        );
+    }
+    for patch in [
+        json!({"sink": null}),
+        json!({"public_log": null}),
+        json!({"public_log": {"endpoint": null}}),
+        json!({"private_store": {"destination": null}}),
+    ] {
+        let mut doc = json!({
+            "protocol": "engineering-assurance.sink-config/v1",
+            "private_store": {"destination": DESTINATION}
+        });
+        for (key, value) in patch.as_object().unwrap() {
+            doc[key] = value.clone();
+        }
+        assert_eq!(
+            SinkConfig::parse(doc.to_string().as_bytes()),
+            Err(ErrorCode::SinkConfigInvalid),
+            "{patch}"
+        );
+    }
 }
