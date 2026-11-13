@@ -26,3 +26,9 @@ The code-review method ran as a document-only review. No Rust, Python, or React 
 ## Verdict
 
 **CONDITIONAL** — fix FND-001 in this draft. The proposed five-working-day deadline and four higher-risk triggers are clearly marked as pending Peter's confirmation; that owner decision remains a separate merge gate.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified commit ccf16a85cbec911b08e727b201a9de110ab28eca adds the missing ban on agent-reachable signing credentials to both the opening policy and the human-only signing control. |
