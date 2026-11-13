@@ -8,10 +8,11 @@ use engineering_assurance::approval_verify::{
     UnverifiableReason, bind, decide, is_record_value,
 };
 use engineering_assurance::signature_verify::{
-    Mapping, Presence, Reason, SignatureKind, SignedOffMeaning, Signer, SignerSource, Status,
-    TargetKind, Verdict, trailer_values,
+    Mapping, Presence, Reason, SignatureKind, SignedAt, SignedOffMeaning, Signer, SignerSource,
+    Status, TargetKind, Verdict, tagger_signed_at, trailer_values,
 };
 use ix_trace_rs::trace;
+use serde_json::json;
 
 const STATUSES: [Status; 5] = [
     Status::SignedValid,
@@ -73,7 +74,7 @@ fn is_approval(status: Status, bindings: Option<Bindings>, meaning: Option<Prese
 }
 
 #[test]
-#[trace("TC-310", "FR-041-AC-9", "FR-041-CON-1")]
+#[trace("TC-310", "FR-041-AC-9", "FR-041-AC-19", "FR-041-CON-1")]
 fn tc_310_every_combination_decides_and_only_one_is_approved() {
     let mut combinations = Vec::new();
     for id in BINDINGS {
@@ -91,7 +92,7 @@ fn tc_310_every_combination_decides_and_only_one_is_approved() {
         for bindings in &combinations {
             for meaning in [None, Some(Presence::Missing), Some(Presence::Present)] {
                 total += 1;
-                let decision = decide(&verdict(status, meaning), *bindings);
+                let decision = decide(&verdict(status, meaning), *bindings, None);
                 let expected = is_approval(status, *bindings, meaning);
                 assert_eq!(
                     decision.status == ApprovalStatus::Approved,
@@ -99,6 +100,10 @@ fn tc_310_every_combination_decides_and_only_one_is_approved() {
                     "{status:?} {bindings:?} {meaning:?}"
                 );
                 assert_eq!(decision.approval.is_some(), expected);
+                // The signing time fills an approval and changes no status.
+                let timed = decide(&verdict(status, meaning), *bindings, time_at(1_772_598_600));
+                assert_eq!(timed.status, decision.status);
+                assert_eq!(timed.reason, decision.reason);
                 assert_eq!(
                     decision.reason.is_some(),
                     decision.status == ApprovalStatus::Unverifiable
@@ -118,7 +123,8 @@ fn tc_311_signature_status_decides_before_the_binding_and_the_binding_before_the
         record_id: Binding::Mismatch,
         record_digest: Binding::Repeated,
     });
-    let status = |status, bindings, meaning| decide(&verdict(status, meaning), bindings).status;
+    let status =
+        |status, bindings, meaning| decide(&verdict(status, meaning), bindings, None).status;
     // Rule 1 wins over any binding.
     assert_eq!(
         status(Status::Unsigned, wrong, None),
@@ -152,6 +158,7 @@ fn tc_311_signature_status_decides_before_the_binding_and_the_binding_before_the
     let approved = decide(
         &verdict(Status::SignedValid, Some(Presence::Present)),
         right,
+        None,
     );
     let approval = approved.approval.expect("approval members");
     assert_eq!(approval.approver, "alice");
@@ -163,7 +170,7 @@ fn tc_311_signature_status_decides_before_the_binding_and_the_binding_before_the
 #[test]
 #[trace("TC-312", "FR-041-AC-15", "FR-041-AC-6")]
 fn tc_312_an_unreadable_message_is_unverifiable_and_a_verdict_reason_is_carried() {
-    let decision = decide(&verdict(Status::SignedValid, None), None);
+    let decision = decide(&verdict(Status::SignedValid, None), None, None);
     assert_eq!(decision.status, ApprovalStatus::Unverifiable);
     assert_eq!(
         decision.reason,
@@ -171,7 +178,7 @@ fn tc_312_an_unreadable_message_is_unverifiable_and_a_verdict_reason_is_carried(
             TrailerUnreadable::TrailerUnreadable
         ))
     );
-    let carried = decide(&verdict(Status::Unverifiable, None), None);
+    let carried = decide(&verdict(Status::Unverifiable, None), None, None);
     assert_eq!(
         carried.reason,
         Some(UnverifiableReason::Signature(Reason::Timeout))
@@ -223,4 +230,144 @@ fn tc_315_a_record_value_is_bounded_plain_and_not_option_like() {
     assert!(!is_record_value("-digest"));
     assert!(!is_record_value("a\nb"));
     assert!(!is_record_value("a\u{7}b"));
+}
+
+/// The signing time a tagger line with this epoch yields.
+fn time_at(epoch: u64) -> Option<SignedAt> {
+    tagger_signed_at(&tag_with_tagger(&format!("A <a@x.test> {epoch} +0000")))
+}
+
+const COMMIT: &str = "object 0123456789012345678901234567890123456789\ntype commit\ntag v1\n";
+
+fn tag_with_tagger(tagger: &str) -> Vec<u8> {
+    format!("{COMMIT}tagger {tagger}\n\nsubject\n").into_bytes()
+}
+
+#[test]
+#[trace("TC-331", "FR-041-AC-16", "FR-041-AC-17")]
+fn tc_331_the_tagger_line_gives_a_utc_instant_and_anything_else_gives_none() {
+    let at = |tagger: &str| {
+        tagger_signed_at(&tag_with_tagger(tagger)).map(|time| time.as_str().to_owned())
+    };
+    // The epoch is the instant; the zone does not move it.
+    assert_eq!(
+        at("A B <a@x.test> 1772598600 +0530").as_deref(),
+        Some("2026-03-04T04:30:00Z")
+    );
+    assert_eq!(
+        at("A B <a@x.test> 1772598600 -0800").as_deref(),
+        Some("2026-03-04T04:30:00Z")
+    );
+    assert_eq!(
+        at("A <a@x.test> 0 +0000").as_deref(),
+        Some("1970-01-01T00:00:00Z")
+    );
+    assert_eq!(
+        at("A <a@x.test> 951782400 +0000").as_deref(),
+        Some("2000-02-29T00:00:00Z")
+    );
+    assert_eq!(
+        at("A <a@x.test> 253402300799 +0000").as_deref(),
+        Some("9999-12-31T23:59:59Z")
+    );
+    // A name holding `>` is read from the last `>`.
+    assert_eq!(
+        at("A > B <a@x.test> 1700000000 +0000").as_deref(),
+        Some("2023-11-14T22:13:20Z")
+    );
+    for bad in [
+        "A <a@x.test> 253402300800 +0000",
+        "A <a@x.test> 1700000000",
+        "A <a@x.test> 1700000000 +0000 extra",
+        "A <a@x.test> 17e8 +0000",
+        "A <a@x.test> -1 +0000",
+        "A <a@x.test> 1700000000 0000",
+        "A <a@x.test> 1700000000 +0060",
+        "A <a@x.test> 1700000000 +00",
+        "A <a@x.test> 1234567890123 +0000",
+        "A <a@x.test> 999999999999 +0000",
+        "A <a@x.test>  1700000000 +0000",
+        "A <a@x.test>",
+        "no email 1700000000 +0000",
+    ] {
+        assert_eq!(at(bad), None, "{bad}");
+    }
+}
+
+#[test]
+#[trace("TC-332", "FR-041-AC-17", "FR-041-CON-3")]
+fn tc_332_only_the_one_header_tagger_line_counts_never_message_text() {
+    let none =
+        |object: &str| tagger_signed_at(object.as_bytes()).map(|time| time.as_str().to_owned());
+    // No tagger header, though the message holds a tagger-shaped line.
+    assert_eq!(
+        none(&format!(
+            "{COMMIT}\nsubject\n\ntagger A <a@x.test> 1700000000 +0000\n"
+        )),
+        None
+    );
+    // Two tagger headers are ambiguous.
+    assert_eq!(
+        none(&format!(
+            "{COMMIT}tagger A <a@x.test> 1700000000 +0000\ntagger B <b@x.test> 1700000001 +0000\n\nm\n"
+        )),
+        None
+    );
+    // A header-only object still reads its tagger.
+    assert_eq!(
+        none(&format!("{COMMIT}tagger A <a@x.test> 1700000000 +0000\n")).as_deref(),
+        Some("2023-11-14T22:13:20Z")
+    );
+    // A tagger header whose text after `>` is not UTF-8 gives none.
+    let mut raw = COMMIT.as_bytes().to_vec();
+    raw.extend_from_slice(b"tagger A <a@x.test> 17\xff0000000 +0000\n\nm\n");
+    assert_eq!(tagger_signed_at(&raw), None);
+    assert_eq!(tagger_signed_at(b"\xff\xfe"), None);
+    assert_eq!(tagger_signed_at(b""), None);
+}
+
+#[test]
+#[trace("TC-333", "FR-041-AC-16", "FR-041-AC-18", "FR-041-AC-19")]
+fn tc_333_a_time_is_reported_only_on_approved_and_a_missing_one_is_explicit() {
+    let right = Some(Bindings {
+        record_id: Binding::Match,
+        record_digest: Binding::Match,
+    });
+    let approved = |time: Option<SignedAt>| {
+        let decision = decide(
+            &verdict(Status::SignedValid, Some(Presence::Present)),
+            right,
+            time,
+        );
+        serde_json::to_value(decision.approval.expect("approval")).expect("json")
+    };
+    assert_eq!(
+        approved(time_at(1_772_598_600)),
+        json!({
+            "approver": "alice",
+            "meaning": ["reviewed", "released"],
+            "signature_kind": "ssh",
+            "signed_at": "2026-03-04T04:30:00Z",
+            "signed_at_source": "tagger_date",
+        })
+    );
+    assert_eq!(
+        approved(None),
+        json!({
+            "approver": "alice",
+            "meaning": ["reviewed", "released"],
+            "signature_kind": "ssh",
+            "signed_at_missing": "tagger_date_unreadable",
+        })
+    );
+    // Every other status carries no approval members, so no time.
+    let wrong = decide(
+        &verdict(Status::SignedValid, Some(Presence::Present)),
+        Some(Bindings {
+            record_id: Binding::Match,
+            record_digest: Binding::Mismatch,
+        }),
+        time_at(1_772_598_600),
+    );
+    assert_eq!(wrong.approval, None);
 }

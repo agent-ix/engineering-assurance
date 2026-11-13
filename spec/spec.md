@@ -208,7 +208,8 @@ same canonical bundle and do not redefine these responsibilities.
   gitsign (Sigstore keyless) signatures on commits and annotated tags by
   delegating to gitsign.
 - [FR-041](./functional/FR-041-signed-tag-approval-of-a-change-assurance-record.md) — verify a
-  signed annotated tag as a named person's approval of an exact change-assurance record.
+  signed annotated tag as a named person's approval of an exact change-assurance record, reporting the
+  signer, signing time and meaning together.
 
 ### Non-Functional Requirements
 

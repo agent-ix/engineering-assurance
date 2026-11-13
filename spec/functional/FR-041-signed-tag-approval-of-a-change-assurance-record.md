@@ -30,6 +30,22 @@ runs the signature verification of FR-036, FR-037 and FR-040 on the tag and
 adds only the record binding and the approval meaning. A consumer such as Quoin
 retains the result as data and never re-verifies it.
 
+An `approved` result also reports when the approval was signed, so that the
+person, the time and the meaning appear together, as an electronic record needs.
+The time is the tag's tagger date, which sits inside the signed payload, so the
+signature covers it and a validly signed tag cannot have it altered; it is still
+the signer's own claim, not an independent attestation, and the result names
+that source. A gitsign signature is also made over the tag payload that holds the
+tagger line, so the same source applies to it. No release of `gitsign` (checked
+through v0.18.0) prints the Rekor integrated time from `gitsign verify` or
+`gitsign verify-tag`: they print the log index, the certificate identifier, the
+signer line and claim lines only, and `gitsign show` prints an in-toto statement
+without it. The command therefore reads no transparency-log time and invents no
+output format for one. The source value `transparency_log` is reserved: it is
+reported only after a gitsign release documents how it exposes the integrated
+time and this requirement is amended to parse it. Until then every `signed_at`
+has the source `tagger_date`.
+
 An annotated tag is the approval object because a squash merge replaces a
 commit a person signed with a commit the hosting service signed, so a commit
 signature cannot carry an approval through a squash. A tag keeps pointing at the
@@ -77,8 +93,16 @@ carried by commits, merge commits or notes.
   - `signature`, the FR-036 verdict for the tag exactly as FR-036, FR-037 and
     FR-040 define it, without a second `protocol` member;
   - on `approved` only: `approver`, the `principal` of the FR-037 signer;
-    `meaning`, the array of `Signed-off-meaning` values in order; and
-    `signature_kind`, `ssh` or `gitsign` as FR-040 defines it;
+    `meaning`, the array of `Signed-off-meaning` values in order;
+    `signature_kind`, `ssh` or `gitsign` as FR-040 defines it; and the signing
+    time, which is exactly one of `signed_at` with `signed_at_source`, or
+    `signed_at_missing`. `signed_at` is a UTC instant of the form
+    `YYYY-MM-DDTHH:MM:SSZ`, and `signed_at_source` is `tagger_date`.
+    `signed_at_missing` is `tagger_date_unreadable`, and appears, with neither
+    other member, when the tag has no readable tagger date (rule below). A
+    status other than `approved` carries none of the three members, because the
+    signer of such a tag is not an accepted approver and a time beside an
+    unaccepted signature would read as an attested one;
   - `binding`, when the tag message was readable: `record_id` and
     `record_digest`, each one of `match`, `mismatch`, `missing`, `repeated`.
 - `status` is decided in this order, the first rule that applies winning:
@@ -132,6 +156,35 @@ carried by commits, merge commits or notes.
   an email or a key comment.
 - The command SHALL report the binding for every status with a readable tag
   message, and the binding SHALL NOT change a status decided by rule 1.
+- The command SHALL read the signing time from the tagger line in the header
+  block of the tag object it already read with `git cat-file tag`, never from
+  the tag message. The tagger line is `tagger <name> <email> <epoch> <zone>`;
+  the epoch counts seconds since 1970-01-01T00:00:00Z whatever the zone, so
+  `signed_at` is the epoch formatted in UTC and the zone, which records only
+  the signer's local offset, never moves the instant. The time is readable only
+  when the header block holds exactly one `tagger` line, the text after the last
+  `>` is exactly one space, an epoch of one to twelve ASCII digits no later than
+  9999-12-31T23:59:59Z, one space and a zone of a sign and four digits with
+  minutes below 60. Anything else is unreadable and no time is guessed.
+- The command SHALL NOT default the signing time. It SHALL NOT use the
+  verification time, the current time, the commit date or the author date for
+  `signed_at`, and an `approved` result whose tagger date is unreadable stays
+  `approved` and reports `signed_at_missing`.
+- The command SHALL report the claimed time exactly as claimed, with no
+  plausibility check: a date in the future, epoch 0, or a date before the
+  signing key existed is reported verbatim. The time is the signer's claim in
+  every rendering. For gitsign the tagger date is not checked against the
+  short-lived certificate's validity window. For SSH, git 2.35 and later passes
+  the claimed tagger date to `ssh-keygen` as `-Overify-time`, so key validity
+  windows in the allowed-signers file are judged at the claimed time and not at
+  the verification time (earlier git versions judge them at the verification
+  time); in neither case does the verification attest the time.
+- The command SHALL NOT run `gitsign`, or change any invocation, status, probe
+  or classification of FR-040, to obtain the signing time, and SHALL NOT parse
+  `gitsign` output text for it.
+- The command SHALL leave the `signature-verify` output of FR-036, FR-037 and
+  FR-040 unchanged: it gains no signing-time member, and the `signature` member
+  of an approval result stays exactly that output.
 - The command SHALL NOT default a missing trailer.
 - The command SHALL NOT report `approved` for a tag whose message lacks
   `Signed-off-meaning`.
@@ -147,6 +200,7 @@ carried by commits, merge commits or notes.
 | --- | --- | --- | --- |
 | FR-041-CON-1 | A result SHALL NOT be `approved` unless the FR-036 verdict for the tag is `signed_valid` with a mapped signer, the tag message carries exactly one `Approved-Record-Id` equal to the request's `record_id`, exactly one `Approved-Record-Digest` equal to the request's `record_digest`, and a `Signed-off-meaning` trailer. | Safety | Test |
 | FR-041-CON-2 | The command SHALL contain no signature, certificate or trailer-parsing code of its own, and no rule of FR-036, FR-037 or FR-040 restated. | Architecture | Inspection |
+| FR-041-CON-3 | A result SHALL NOT report a `signed_at` that was not read from a well-formed tagger line of the tag object that was verified. | Safety | Test |
 
 ## Acceptance Criteria
 
@@ -171,6 +225,12 @@ criteria use real signatures from throwaway keys generated in the test.
 | FR-041-AC-15 | A validly signed tag whose message cannot be read yields `unverifiable` with reason `trailer_unreadable` and not `wrong_record`; a message cannot be read when git cannot parse it, when it holds a NUL byte, or when the parsed trailer output is not valid UTF-8, and no byte is replaced or truncated to make a trailer match. | Test |
 | FR-041-AC-11 | Every status other than a request error exits 0 and writes one JSON line carrying the result protocol, and a validly signed tag whose trailers are unrelated to the request still carries the unchanged `signature` verdict that `signature-verify` yields for the same tag. | Test |
 | FR-041-AC-12 | Static inspection shows no signature, certificate or trailer-parsing code in the approval module and no restated FR-036, FR-037 or FR-040 rule (CON-2). | Inspection |
+| FR-041-AC-16 | A mapped, validly signed SSH tag with matching trailers and a `Signed-off-meaning` trailer, created with a known tagger date in a non-UTC zone (`+0530`, and `-0800` across a UTC day boundary), yields `approved` carrying `approver`, `meaning`, `signed_at` equal to the UTC instant of that date and `signed_at_source` `tagger_date`, for a bare and a `refs/tags/` name. | Test |
+| FR-041-AC-17 | The tagger time is read from the tag header block only: a tagger-shaped line in the message, two tagger headers, a missing or non-digit epoch, an epoch past 9999-12-31T23:59:59Z, a malformed zone, extra fields or non-UTF-8 text yield no time, and epochs `0`, a leap day and the last accepted instant format correctly. | Test (captured) |
+| FR-041-AC-18 | An `approved` result for a tag whose tagger date is missing or malformed carries `signed_at_missing` `tagger_date_unreadable` and neither `signed_at` nor `signed_at_source`, together with `approver` and `meaning`, and the result carries no time member other than `signed_at_missing`. | Test (stand-in) |
+| FR-041-AC-19 | `wrong_record`, `untrusted_signer` and `meaning_missing` results for tags with a readable tagger date carry none of `signed_at`, `signed_at_source` and `signed_at_missing`, and supplying a time to the pure decision changes no status or reason for any combination. | Test |
+| FR-041-AC-20 | A gitsign-signed tag approved through the stand-in reports `signed_at` from its tagger date (normalized from a non-UTC zone) with `signed_at_source` `tagger_date`; a stand-in rejecting the identity still yields `untrusted_signer` with no time; the time read starts no `gitsign` run. | Test (stand-in) |
+| FR-041-AC-21 | The `signature-verify` output for the same tag has no signing-time member and equals the `signature` member of the approval result. | Test |
 
 ## Dependencies
 
