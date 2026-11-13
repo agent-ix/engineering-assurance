@@ -77,7 +77,7 @@ fn all_facts() -> Vec<Facts> {
 }
 
 #[test]
-#[trace("TC-415", "FR-047-AC-12", "FR-047-CON-1")]
+#[trace("TC-415", "FR-047-AC-12", "FR-047-CON-1", "NFR-007-M-1")]
 fn tc_415_released_is_returned_for_exactly_one_combination_of_the_facts() {
     let released: Vec<Facts> = all_facts()
         .into_iter()
@@ -118,7 +118,7 @@ fn tc_419_a_status_other_than_approved_is_always_listed_and_never_released() {
 }
 
 #[test]
-#[trace("TC-416", "FR-047-AC-6", "FR-051-AC-4")]
+#[trace("TC-416", "FR-047-AC-10")]
 fn tc_416_path_rules_refuse_every_unsafe_spelling() {
     for good in [
         "a",

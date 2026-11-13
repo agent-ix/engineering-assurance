@@ -72,7 +72,7 @@ to a Quoin repository from this requirement.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-049-AC-1 | Every member a consumer needs to retain a release (status, approver, meaning, signed time, baseline commit and items, accepted anomalies, the FR-041 approval) is present in one `released` result without a second command. | Test |
+| FR-049-AC-1 | Every member a consumer needs to retain a release (status, approver, meaning, signed time, baseline commit and items, accepted anomalies, the FR-041 approval, and on `not_released` the `reasons` and the `absent_items` paths) is present in one `released` result without a second command. | Test |
 | FR-049-AC-2 | The release module starts git itself and Quoin is not invoked by it; the result is the same when the Quoin executables are absent. | Test |
 | FR-049-AC-3 | The evidence-status, SOUP-report and anomaly-list inputs are read from files and no code of the release module derives any of them from the repository. | Inspection |
 | FR-049-AC-4 | The repository holds no copy of a Quoin schema or record for these inputs. | Inspection |

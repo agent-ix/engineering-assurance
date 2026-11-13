@@ -635,17 +635,25 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-404 | A record with an extra member, no frontmatter, another type, a bad id, an empty owner, a short commit or no `snapshot_path` is `not_released` with exactly `record_invalid` and no `approval` member | Integration | P0 | FR-047-AC-7 | ✅ `tests/release_verify_cli.rs` passing |
 | TC-405 | A `snapshot_path` equal to the record path, absolute, with `..`, a glob, a control character or a leading-space segment is `record_invalid` with no `approval` member | Integration | P0 | FR-051-AC-4 | ✅ `tests/release_verify_cli.rs` passing |
 | TC-406 | A record edited or removed in the working tree after tagging does not change the verdict | Integration | P0 | FR-047-AC-8 | ✅ `tests/release_verify_cli.rs` passing |
-| TC-407 | A signed commit, a note or a commit id carrying the record trailers is never `released` | Integration | P0 | FR-047-AC-9 | ✅ `tests/release_verify_cli.rs` passing |
+| TC-407 | A signed commit, a note, a merge commit or a commit id carrying the record trailers is never `released` | Integration | P0 | FR-047-AC-9 | ✅ `tests/release_verify_cli.rs` passing |
 | TC-408 | The `approval` member equals the `approval-verify` output for the same tag, record id and digest | Integration | P0 | FR-047-AC-10 | ✅ `tests/release_verify_cli.rs` passing |
 | TC-409 | Unknown or attestation members, a wrong protocol, relative paths, an option-like or spaced tag, an unsafe record path and an invalid `gitsign` member yield `release_verify_request_invalid`; unreadable JSON and an invalid allowed-signers file yield their codes, all at exit 2 without starting git | Integration | P0 | FR-047-AC-10, FR-053-AC-2 | ✅ `tests/release_verify_cli.rs` passing |
 | TC-410 | Attestation files in the working tree or a later commit leave a released result unchanged, and the same release commit under an unsigned tag is never released | Integration | P0 | FR-053-AC-1 | ✅ `tests/release_verify_cli.rs` passing |
 | TC-411 | A snapshot whose bytes are not JSON leaves the verdict `released` and the result members unchanged, and the only snapshot member is the recorded path | Integration | P0 | FR-051-AC-5, FR-051-AC-6 | ✅ `tests/release_verify_cli.rs` passing |
 | TC-412 | The released result carries every member a consumer retains in one result, and is identical with only git and ssh-keygen on the path | Integration | P0 | FR-049-AC-1, FR-049-AC-2 | ✅ `tests/release_verify_cli.rs` passing |
-| TC-415 | The decision is exercised over every combination of the FR-041 status, the owner match, the Baseline state and the release commit facts without any process, and `released` is returned for exactly one | Property | P0 | FR-047-AC-12, FR-047-CON-1 | ✅ `tests/release.rs` passing |
-| TC-416 | The path rules refuse an empty, absolute, trailing-slash, empty-segment, `.`, `..`, glob, backslash, control-character and leading-space-segment path | Unit | P0 | FR-047-AC-6, FR-051-AC-4 | ✅ `tests/release.rs` passing |
+| TC-415 | The decision is exercised over every combination of the FR-041 status, the owner match, the Baseline state and the release commit facts without any process, and `released` is returned for exactly one | Property | P0 | FR-047-AC-12, FR-047-CON-1, NFR-007-M-1 | ✅ `tests/release.rs` passing |
+| TC-416 | The path rules refuse an empty, absolute, trailing-slash, empty-segment, `.`, `..`, glob, backslash, control-character and leading-space-segment path | Unit | P0 | FR-047-AC-10 | ✅ `tests/release.rs` passing |
 | TC-417 | The frontmatter is the block between the first two fences and nothing else | Unit | P0 | FR-047-AC-7 | ✅ `tests/release.rs` passing |
 | TC-418 | Each failed fact gives its own reason and no other | Unit | P0 | FR-047-AC-5, FR-047-AC-6 | ✅ `tests/release.rs` passing |
 | TC-419 | A status other than `approved` is always the first reason and `approved` is never listed | Property | P0 | FR-047-AC-12, FR-047-CON-1 | ✅ `tests/release.rs` passing |
+| TC-420 | The Release skeleton validates, `accepted_anomalies` may be absent, and a missing `snapshot_path` is refused | Unit | P0 | FR-047-AC-7, FR-051-AC-4 | ✅ `tests/semantic_exports.rs` passing |
+| TC-421 | The Release schema refuses an unknown member, a malformed `baseline`, and an empty, absolute, `..` or glob `snapshot_path` | Unit | P0 | FR-047-AC-7, FR-051-AC-4 | ✅ `tests/semantic_exports.rs` passing |
+| TC-422 | The Release schema is closed and has no score, decision or approval member | Unit | P0 | FR-047-AC-7 | ✅ `tests/semantic_exports.rs` passing |
+| TC-423 | A replace ref forging the record blob does not change the record read under a valid signature | Integration | P0 | FR-047-AC-13 | ✅ `tests/release_verify_cli.rs` passing |
+| TC-424 | A replace-graft or a grafts file cannot turn a merge release commit into a child of the baseline | Integration | P0 | FR-047-AC-13 | ✅ `tests/release_verify_cli.rs` passing |
+| TC-425 | A git that exits 3 on every call, and a directory that is not a repository, yield `release_verify_git_failed` at exit 2 and no reason; a tag naming nothing is `record_unreadable` | Integration | P0 | FR-047-AC-13 | ✅ `tests/release_verify_cli.rs` passing |
+| TC-426 | A non-UTF-8 path in the release commit is not mistaken for a snapshot path containing U+FFFD | Integration | P0 | FR-047-AC-6 | ✅ `tests/release_verify_cli.rs` passing |
+| TC-427 | A Baseline with 1025 items is `baseline_file_invalid` | Integration | P0 | FR-046-AC-6 | ✅ `tests/release_verify_cli.rs` passing |
 
 ## Option Permutation Matrix
 

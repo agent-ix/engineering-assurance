@@ -345,7 +345,7 @@ fn rewrite_tag(fixture: &Fixture, name: &str, edit: impl Fn(&str) -> String) {
 #[trace("TC-380", "FR-047-AC-1", "FR-051-AC-1")]
 fn tc_380_a_signed_release_of_a_present_baseline_is_released() {
     let fixture = fixture();
-    let (baseline, release) = standard(&fixture);
+    let (baseline, _) = standard(&fixture);
     let result = verdict(&fixture, "v1");
     assert_eq!(result["status"], "released", "{result}");
     assert_eq!(result["reasons"], json!([]));
@@ -375,7 +375,6 @@ fn tc_380_a_signed_release_of_a_present_baseline_is_released() {
         result["accepted_anomalies"],
         json!(["minor cosmetic defect"])
     );
-    assert_eq!(result["release_commit"], release);
     assert_eq!(result["approval"]["status"], "approved");
     // The tag's tree is the baseline plus the record and the snapshot only.
     let changed = git(
@@ -547,7 +546,7 @@ fn tc_389_an_item_absent_at_the_baseline_commit_is_named_even_when_in_the_workin
 }
 
 #[test]
-#[trace("TC-390", "FR-046-AC-4")]
+#[trace("TC-390", "FR-046-AC-4", "FR-046-AC-5")]
 fn tc_390_an_item_modified_in_the_working_tree_is_still_present_and_the_tree_is_untouched() {
     let fixture = fixture();
     let repo = fixture.repo();
@@ -661,19 +660,27 @@ fn tc_394_two_baselines_report_the_two_commit_hashes_git_gives() {
     }
 }
 
-#[test]
-#[trace("TC-395", "FR-047-AC-6")]
-fn tc_395_a_release_commit_with_two_parents_is_not_a_child_of_the_baseline() {
-    let fixture = fixture();
+/// A release commit with two parents (the baseline and a side commit) whose
+/// tree equals the baseline plus the record and the snapshot. Returns the
+/// baseline commit and the release commit.
+fn merge_release(fixture: &Fixture) -> (String, String) {
     let repo = fixture.repo();
-    let baseline = commit_baseline(&fixture, &[]);
+    let baseline = commit_baseline(fixture, &[]);
     git(&repo, None, &["checkout", "-q", "-b", "side"]);
-    commit_files(&fixture, &[("side.txt", "side\n")], "side");
+    commit_files(fixture, &[("side.txt", "side\n")], "side");
     git(&repo, None, &["checkout", "-q", "main"]);
     git(
         &repo,
         None,
-        &["merge", "-q", "--no-ff", "--no-commit", "side"],
+        &[
+            "merge",
+            "-q",
+            "-s",
+            "ours",
+            "--no-ff",
+            "--no-commit",
+            "side",
+        ],
     );
     let release = Release::standard(&baseline);
     fs::create_dir_all(repo.join("release")).expect("directory");
@@ -681,12 +688,18 @@ fn tc_395_a_release_commit_with_two_parents_is_not_a_child_of_the_baseline() {
     fs::write(repo.join(SNAPSHOT_PATH), "{}\n").expect("snapshot");
     git(&repo, None, &["add", RECORD_PATH, SNAPSHOT_PATH]);
     git(&repo, None, &["commit", "-q", "-m", "merge release"]);
-    let commit = head(&fixture);
+    (baseline, head(fixture))
+}
+
+#[test]
+#[trace("TC-395", "FR-047-AC-6")]
+fn tc_395_a_release_commit_with_two_parents_is_not_a_child_of_the_baseline() {
+    let fixture = fixture();
+    let (_, commit) = merge_release(&fixture);
     let digest = digest_at(&fixture, &commit);
     sign(&fixture, "a", "v1", &commit, &message(&digest));
     let result = verdict(&fixture, "v1");
-    assert_eq!(result["status"], "not_released", "{result}");
-    assert!(reasons(&result).contains(&"release_commit_not_child_of_baseline".to_owned()));
+    assert_not_released(&result, &["release_commit_not_child_of_baseline"]);
 }
 
 #[test]
@@ -960,6 +973,146 @@ fn tc_407_a_signed_commit_or_a_note_carrying_the_trailers_is_never_released() {
     }
     let note_ref = verdict(&fixture, "refs/notes/commits");
     assert_eq!(note_ref["status"], "not_released", "{note_ref}");
+    // A merge commit whose message carries the trailers, named as the tag.
+    let merged = self::fixture();
+    let (_, merge) = merge_release(&merged);
+    let merge_digest = digest_at(&merged, &merge);
+    git(
+        &merged.repo(),
+        None,
+        &["commit", "-q", "--amend", "-m", &message(&merge_digest)],
+    );
+    let result = verdict(&merged, "main");
+    assert_eq!(result["status"], "not_released", "{result}");
+    assert_ne!(result["approval"]["status"], "approved", "{result}");
+    assert!(
+        reasons(&result).contains(&"release_commit_not_child_of_baseline".to_owned()),
+        "{result}"
+    );
+}
+
+#[test]
+#[trace("TC-423", "FR-047-AC-13")]
+fn tc_423_a_replace_ref_cannot_change_the_record_read_under_a_valid_signature() {
+    let fixture = fixture();
+    let (baseline, release) = standard(&fixture);
+    let repo = fixture.repo();
+    let record_id = git(
+        &repo,
+        None,
+        &["rev-parse", &format!("{release}:{RECORD_PATH}")],
+    );
+    let mut forged = Release::standard(&baseline).record;
+    forged = forged.replace("minor cosmetic defect", "FORGED critical defect waived");
+    let forged_id = String::from_utf8(run_program(
+        "git",
+        &repo,
+        &["hash-object", "-w", "--stdin"],
+        Some(forged.as_bytes()),
+    ))
+    .expect("utf-8");
+    git(&repo, None, &["replace", &record_id, forged_id.trim()]);
+    assert!(!git(&repo, None, &["for-each-ref", "refs/replace"]).is_empty());
+    let result = verdict(&fixture, "v1");
+    assert_eq!(result["status"], "released", "{result}");
+    assert_eq!(
+        result["accepted_anomalies"],
+        json!(["minor cosmetic defect"])
+    );
+}
+
+#[test]
+#[trace("TC-424", "FR-047-AC-13")]
+fn tc_424_a_graft_or_replace_graft_cannot_turn_a_merge_release_into_a_child() {
+    let fixture = fixture();
+    let (baseline, commit) = merge_release(&fixture);
+    let digest = digest_at(&fixture, &commit);
+    sign(&fixture, "a", "v1", &commit, &message(&digest));
+    let repo = fixture.repo();
+    git(&repo, None, &["replace", "--graft", &commit, &baseline]);
+    let replaced = verdict(&fixture, "v1");
+    assert_not_released(&replaced, &["release_commit_not_child_of_baseline"]);
+    git(&repo, None, &["replace", "-d", &commit]);
+    fs::write(
+        repo.join(".git/info/grafts"),
+        format!("{commit} {baseline}\n"),
+    )
+    .expect("grafts");
+    let grafted = verdict(&fixture, "v1");
+    assert_not_released(&grafted, &["release_commit_not_child_of_baseline"]);
+}
+
+#[test]
+#[trace("TC-425", "FR-047-AC-13")]
+fn tc_425_a_git_that_fails_is_a_machine_error_and_never_a_reason() {
+    let fixture = fixture();
+    standard(&fixture);
+    let shim = fixture.root().join("shim-bin");
+    fs::create_dir(&shim).expect("shim dir");
+    fs::write(shim.join("git"), "#!/bin/sh\nexit 3\n").expect("shim");
+    fs::set_permissions(shim.join("git"), fs::Permissions::from_mode(0o755)).expect("mode");
+    let body = request(&fixture, "v1");
+    for path in [Some(shim.as_path()), None] {
+        let mut body = body.clone();
+        if path.is_none() {
+            // A directory that is not a repository: git exits 128.
+            body["repository"] = json!(fixture.root().display().to_string());
+        }
+        let output = run_command("release-verify", body.to_string().as_bytes(), path);
+        assert_eq!(output.status.code(), Some(2), "{output:?}");
+        let error: Value = serde_json::from_slice(&output.stdout).expect("error json");
+        assert_eq!(error["code"], "release_verify_git_failed", "{error}");
+    }
+    // A tag that names nothing is not a git failure: the record cannot be read.
+    let missing = verdict(&fixture, "no-such-tag");
+    assert_eq!(reasons(&missing), ["record_unreadable"], "{missing}");
+    assert!(missing.get("approval").is_none());
+}
+
+#[test]
+#[trace("TC-426", "FR-047-AC-6")]
+fn tc_426_a_non_utf8_path_is_not_mistaken_for_the_snapshot_path() {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+    let fixture = fixture();
+    let baseline = commit_baseline(&fixture, &[]);
+    // The snapshot path holds U+FFFD, which is what a lossy decode of 0xFF gives.
+    let snapshot_path = "release/\u{fffd}.json";
+    let mut release = Release::standard(&baseline);
+    release.record = record_text(&baseline, snapshot_path, ALICE);
+    let repo = fixture.repo();
+    fs::create_dir_all(repo.join("release")).expect("directory");
+    fs::write(repo.join(RECORD_PATH), &release.record).expect("record");
+    fs::write(repo.join(OsStr::from_bytes(b"release/\xff.json")), "{}\n").expect("odd path");
+    git(&repo, None, &["add", "release"]);
+    git(&repo, None, &["commit", "-q", "-m", "release"]);
+    let commit = head(&fixture);
+    let digest = digest_at(&fixture, &commit);
+    sign(&fixture, "a", "v1", &commit, &message(&digest));
+    let result = verdict(&fixture, "v1");
+    assert_not_released(
+        &result,
+        &[
+            "release_commit_changes_other_paths",
+            "release_commit_snapshot_not_added",
+        ],
+    );
+}
+
+#[test]
+#[trace("TC-427", "FR-046-AC-6")]
+fn tc_427_a_baseline_with_more_than_1024_items_is_invalid() {
+    let fixture = fixture();
+    let items: Vec<(String, &str)> = (0..1025)
+        .map(|n| (format!("f{n}.txt"), "evidence"))
+        .collect();
+    let refs: Vec<(&str, &str)> = items.iter().map(|(p, k)| (p.as_str(), *k)).collect();
+    let document = baseline_document(&refs);
+    let baseline = commit_files(&fixture, &[(BASELINE_PATH, &document)], "large baseline");
+    let release = Release::standard(&baseline).commit(&fixture);
+    let digest = digest_at(&fixture, &release);
+    sign(&fixture, "a", "v1", &release, &message(&digest));
+    let result = verdict(&fixture, "v1");
+    assert_not_released(&result, &["baseline_file_invalid"]);
 }
 
 #[test]

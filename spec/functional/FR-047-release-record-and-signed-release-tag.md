@@ -90,10 +90,12 @@ signature.
 - On `released` only: `release` (record `id`, `name`, `snapshot_path`), `baseline` (`name`,
   `commit`, and each item `path`, `kind`), `approver`, `meaning`, `signed_at`
   with its source, and `accepted_anomalies`.
+- On `not_released` with a resolved Baseline, `absent_items` lists the path of
+  each Baseline item absent at the baseline commit; it is absent otherwise.
 - A request that yields no verdict writes the `engineering-assurance.error/v1`
   machine error and exits 2, with the codes
   `release_verify_request_unreadable`, `release_verify_request_invalid`,
-  `release_verify_allowed_signers_invalid` and
+  `release_verify_allowed_signers_invalid`, `release_verify_git_failed` and
   `release_verify_result_encoding_failed`.
 
 ## Behavior
@@ -101,6 +103,13 @@ signature.
 - The command SHALL read the release record from the commit the tag peels to,
   with git object access.
 - The command SHALL NOT read the working tree.
+- If git cannot answer a read the verdict needs (it cannot start, times out,
+  exceeds its output bound, or exits with a status other than the one that
+  means the object does not exist), then the command SHALL write the machine
+  error `release_verify_git_failed` and exit 2, and SHALL NOT report a reason
+  for the failure.
+- The command SHALL read objects without replace refs and without a graft
+  file.
 - The command SHALL obtain `record_digest` from git as `git-blob:` followed by
   the object id of `<release commit>:<record_path>`.
 - The command SHALL pass the record `id` and that digest as `record_id` and
@@ -160,6 +169,7 @@ signature.
 | FR-047-AC-10 | The `approval` member equals the output of `approval-verify` for the same tag, record id and digest, and the command refuses a request with an unknown member, a relative path or a `-`-leading value with `release_verify_request_invalid` and exit 2 before starting git. | Test |
 | FR-047-AC-11 | Static inspection shows no signature, certificate, trailer-parsing or hashing code in the release module (CON-2, CON-3). | Inspection |
 | FR-047-AC-12 | The decision from the FR-041 status and the record checks is exercised without any process, over every combination, and `released` is returned for exactly one. | Property |
+| FR-047-AC-13 | A git that fails every call yields `release_verify_git_failed` at exit 2 and no verdict, and a replace ref or a graft in the repository changes neither the record read nor the parent compared. | Test |
 
 ## Dependencies
 

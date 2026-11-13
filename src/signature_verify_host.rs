@@ -880,6 +880,12 @@ impl Git<'_> {
             (OsStr::new("GIT_CONFIG_NOSYSTEM"), OsStr::new("1")),
             (OsStr::new("GIT_CONFIG_GLOBAL"), OsStr::new("/dev/null")),
             (OsStr::new("GIT_OPTIONAL_LOCKS"), OsStr::new("0")),
+            // Neither a replace ref nor a graft may change what an object id names.
+            (OsStr::new("GIT_NO_REPLACE_OBJECTS"), OsStr::new("1")),
+            (
+                OsStr::new("GIT_GRAFT_FILE"),
+                OsStr::new("/nonexistent/grafts"),
+            ),
         ];
         if let Some(parent) = isolated.and_then(Path::parent) {
             environment.push((OsStr::new("GIT_CEILING_DIRECTORIES"), parent.as_os_str()));

@@ -15,7 +15,7 @@
 
 use std::path::{Path, PathBuf};
 
-use engineering_assurance::approval_verify::ApprovalStatus;
+use engineering_assurance::approval_verify::{ApprovalStatus, SigningTime};
 use engineering_assurance::release::{
     BaselineState, Changes, Check, Facts, Reason, frontmatter, is_repository_path, reasons,
 };
@@ -25,6 +25,7 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::approval_verify_host::{ResultLine as ApprovalLine, gitsign_identity};
+use crate::process_host::CompletedProcess;
 use crate::signature_verify_host::{GitsignRequest, check_allowed_signers, run_git};
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.release-verify-request/v1";
@@ -107,13 +108,8 @@ pub(crate) enum BaselineError {
 #[derive(Clone, Copy, Debug)]
 struct GitFailure;
 
-fn git(repository: &Path, arguments: &[&str]) -> Result<std::process::Output, GitFailure> {
-    let done = run_git(repository, arguments).map_err(|_| GitFailure)?;
-    Ok(std::process::Output {
-        status: done.status,
-        stdout: done.stdout,
-        stderr: Vec::new(),
-    })
+fn git(repository: &Path, arguments: &[&str]) -> Result<CompletedProcess, GitFailure> {
+    run_git(repository, arguments).map_err(|_| GitFailure)
 }
 
 /// The object id git resolves `expression` to, or `None` when it names nothing.
@@ -128,8 +124,11 @@ fn object_id(repository: &Path, expression: &str) -> Result<Option<String>, GitF
             expression,
         ],
     )?;
-    if !output.status.success() {
-        return Ok(None);
+    match output.status.code() {
+        Some(0) => {}
+        // `--verify --quiet` exits 1 when the expression names nothing.
+        Some(1) => return Ok(None),
+        _ => return Err(GitFailure),
     }
     let text = String::from_utf8(output.stdout).map_err(|_| GitFailure)?;
     let id = text.trim_end_matches('\n');
@@ -146,10 +145,47 @@ fn object_at(repository: &Path, commit: &str, path: &str) -> Result<Option<Strin
     object_id(repository, &format!("{commit}:{path}"))
 }
 
-/// The bytes of the blob `id`, or `None` when it is not a blob.
+/// The bytes of the blob `id`, or `None` when the object is not a blob.
 fn blob(repository: &Path, id: &str) -> Result<Option<Vec<u8>>, GitFailure> {
-    let output = git(repository, &["cat-file", "blob", id])?;
-    Ok(output.status.success().then_some(output.stdout))
+    let kind = git(repository, &["cat-file", "-t", id])?;
+    if !kind.status.success() {
+        return Err(GitFailure);
+    }
+    if kind.stdout != b"blob\n" {
+        return Ok(None);
+    }
+    let content = git(repository, &["cat-file", "blob", id])?;
+    if content.status.success() {
+        Ok(Some(content.stdout))
+    } else {
+        Err(GitFailure)
+    }
+}
+
+/// The paths among `paths` that exist at `commit`, from one `ls-tree` call.
+fn paths_present(
+    repository: &Path,
+    commit: &str,
+    paths: &[&str],
+) -> Result<std::collections::BTreeSet<Vec<u8>>, GitFailure> {
+    let mut arguments = vec!["ls-tree", "-z", "--full-tree", commit, "--"];
+    arguments.extend(paths);
+    let output = git(repository, &arguments)?;
+    if !output.status.success() {
+        return Err(GitFailure);
+    }
+    output
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty())
+        .map(|entry| {
+            let tab = entry
+                .iter()
+                .position(|byte| *byte == b'\t')
+                .ok_or(GitFailure)?;
+            Ok(entry[tab + 1..].to_vec())
+        })
+        .collect()
 }
 
 fn is_valid(schema: &str, instance: &Value) -> bool {
@@ -202,17 +238,21 @@ pub(crate) fn resolve_baseline(
     {
         return Err(BaselineError::FileInvalid);
     }
-    let mut items = Vec::with_capacity(baseline.items.len());
-    for item in baseline.items {
-        let present = object_at(repository, &commit, &item.path)
-            .map_err(git_error)?
-            .is_some();
-        items.push(ResolvedItem {
+    let paths: Vec<&str> = baseline
+        .items
+        .iter()
+        .map(|item| item.path.as_str())
+        .collect();
+    let present = paths_present(repository, &commit, &paths).map_err(git_error)?;
+    let items = baseline
+        .items
+        .into_iter()
+        .map(|item| ResolvedItem {
+            present: present.contains(item.path.as_bytes()),
             path: item.path,
             kind: item.kind,
-            present,
-        });
-    }
+        })
+        .collect();
     Ok(Resolution {
         name: baseline.name,
         commit,
@@ -245,6 +285,9 @@ pub(crate) enum ReleaseVerifyError {
         "release-verify allowed-signers file is not a readable UTF-8 regular file of at most 1 MiB"
     )]
     AllowedSigners,
+    /// Git could not answer a read the verdict needs.
+    #[error("release-verify could not read the repository with git")]
+    GitFailed,
     /// The result cannot be encoded.
     #[error("release-verify result cannot be encoded")]
     ResultEncoding,
@@ -257,6 +300,7 @@ impl ReleaseVerifyError {
             Self::Unreadable => "release_verify_request_unreadable",
             Self::Invalid => "release_verify_request_invalid",
             Self::AllowedSigners => "release_verify_allowed_signers_invalid",
+            Self::GitFailed => "release_verify_git_failed",
             Self::ResultEncoding => "release_verify_result_encoding_failed",
         }
     }
@@ -289,13 +333,20 @@ struct ItemInfo<'a> {
     kind: ItemKind,
 }
 
+/// The person, meaning and signing time of a released decision.
+#[derive(Serialize)]
+struct DecisionInfo<'a> {
+    approver: &'a str,
+    meaning: &'a [String],
+    #[serde(flatten)]
+    signing_time: &'a SigningTime,
+}
+
 #[derive(Serialize)]
 struct ResultLine<'a> {
     protocol: &'static str,
     status: Status,
     tag: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    release_commit: Option<&'a str>,
     reasons: Vec<Reason>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     absent_items: Vec<String>,
@@ -306,24 +357,23 @@ struct ResultLine<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     baseline: Option<BaselineInfo<'a>>,
     #[serde(flatten)]
-    approved: Option<engineering_assurance::approval_verify::Approval>,
+    decision: Option<DecisionInfo<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     accepted_anomalies: Option<&'a [String]>,
 }
 
 impl<'a> ResultLine<'a> {
-    fn not_released(tag: &'a str, release_commit: Option<&'a str>, reasons: Vec<Reason>) -> Self {
+    fn not_released(tag: &'a str, reasons: Vec<Reason>) -> Self {
         Self {
             protocol: RESULT_PROTOCOL,
             status: Status::NotReleased,
             tag,
-            release_commit,
             reasons,
             absent_items: Vec::new(),
             approval: None,
             release: None,
             baseline: None,
-            approved: None,
+            decision: None,
             accepted_anomalies: None,
         }
     }
@@ -347,19 +397,9 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ReleaseVerifyError> {
         gitsign_identity(request.gitsign.as_ref()).map_err(|()| ReleaseVerifyError::Invalid)?;
     check_allowed_signers(&request.allowed_signers)
         .map_err(|_| ReleaseVerifyError::AllowedSigners)?;
-    let tag = request
-        .tag
-        .strip_prefix("refs/tags/")
-        .unwrap_or(&request.tag);
     let mut line = match verify(&request, identity.as_ref()) {
         Ok(line) => line,
-        // A probe git cannot answer is never read as a pass: the record is then
-        // reported unreadable, so nothing is released.
-        Err(VerifyError::Git) => {
-            let result =
-                ResultLine::not_released(tag, None, vec![Reason::Check(Check::RecordUnreadable)]);
-            serde_json::to_vec(&result).map_err(|_| ReleaseVerifyError::ResultEncoding)?
-        }
+        Err(VerifyError::Git) => return Err(ReleaseVerifyError::GitFailed),
         Err(VerifyError::Encoding) => return Err(ReleaseVerifyError::ResultEncoding),
     };
     line.push(b'\n');
@@ -381,12 +421,12 @@ fn encode(result: &ResultLine<'_>) -> Result<Vec<u8>, VerifyError> {
     serde_json::to_vec(result).map_err(|_| VerifyError::Encoding)
 }
 
-/// The changes a commit makes against its first parent, as `(status, path)`.
+/// The changes a commit makes against its first parent, as `(status, path bytes)`.
 fn changes(
     repository: &Path,
     commit: &str,
     first_parent: Option<&str>,
-) -> Result<Vec<(u8, String)>, GitFailure> {
+) -> Result<Vec<(u8, Vec<u8>)>, GitFailure> {
     let mut arguments = vec![
         "diff-tree",
         "-r",
@@ -411,7 +451,7 @@ fn changes(
     while let Some(meta) = parts.next() {
         let status = *meta.last().ok_or(GitFailure)?;
         let path = parts.next().ok_or(GitFailure)?;
-        found.push((status, String::from_utf8_lossy(path).into_owned()));
+        found.push((status, path.to_vec()));
     }
     Ok(found)
 }
@@ -463,13 +503,16 @@ fn commit_shape(
             release_commit,
         ],
     )?;
+    if !parents.status.success() {
+        return Err(VerifyError::Git);
+    }
     let parents = String::from_utf8(parents.stdout).map_err(|_| GitFailure)?;
     let parents: Vec<&str> = parents.split_whitespace().skip(1).collect();
     let changed = changes(repository, release_commit, parents.first().copied())?;
     let added = |path: &str| {
         changed
             .iter()
-            .any(|(status, name)| *status == b'A' && name == path)
+            .any(|(status, name)| *status == b'A' && name == path.as_bytes())
     };
     let snapshot_present_at_baseline = baseline_commit
         .map(|commit| object_at(repository, commit, snapshot_path).map(|id| id.is_some()))
@@ -477,9 +520,9 @@ fn commit_shape(
     Ok(Shape {
         child_of_baseline: baseline_commit.map(|commit| parents == [commit]),
         changes: Changes {
-            only_record_and_snapshot: changed
-                .iter()
-                .all(|(_, name)| name == record_path || name == snapshot_path),
+            only_record_and_snapshot: changed.iter().all(|(_, name)| {
+                name == record_path.as_bytes() || name == snapshot_path.as_bytes()
+            }),
             record_added: added(record_path),
             snapshot_added: added(snapshot_path),
         },
@@ -498,15 +541,11 @@ fn verify(
         .unwrap_or(&request.tag);
     let Some(release_commit) = commit_of(repository, &request.tag)? else {
         let reasons = vec![Reason::Check(Check::RecordUnreadable)];
-        return encode(&ResultLine::not_released(tag, None, reasons));
+        return encode(&ResultLine::not_released(tag, reasons));
     };
     let early = |check| {
         let reasons = vec![Reason::Check(check)];
-        encode(&ResultLine::not_released(
-            tag,
-            Some(&release_commit),
-            reasons,
-        ))
+        encode(&ResultLine::not_released(tag, reasons))
     };
     let Some(record_object) = object_at(repository, &release_commit, &request.record_path)? else {
         return early(Check::RecordUnreadable);
@@ -563,9 +602,10 @@ fn verify(
         })
         .unwrap_or_default();
     let released = failed.is_empty() && status == ApprovalStatus::Approved;
-    let mut result = ResultLine::not_released(tag, Some(&release_commit), failed);
+    let mut result = ResultLine::not_released(tag, failed);
     result.absent_items = absent_items;
-    if released && let (Some(approved), Some(resolution)) = (approved, resolution.as_ref()) {
+    if released && let (Some(approved), Some(resolution)) = (approved.as_ref(), resolution.as_ref())
+    {
         result.status = Status::Released;
         result.release = Some(ReleaseInfo {
             id: &record.id,
@@ -584,7 +624,11 @@ fn verify(
                 })
                 .collect(),
         });
-        result.approved = Some(approved);
+        result.decision = Some(DecisionInfo {
+            approver: &approved.approver,
+            meaning: &approved.meaning,
+            signing_time: &approved.signing_time,
+        });
         result.accepted_anomalies = Some(&record.accepted_anomalies);
     }
     result.approval = Some(approval);

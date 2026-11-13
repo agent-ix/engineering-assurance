@@ -605,6 +605,7 @@ fn baseline_schema_has_no_member_for_a_commit_hash_or_computed_content() {
 }
 
 #[test]
+#[trace("TC-420", "FR-047-AC-7", "FR-051-AC-4")]
 fn release_skeleton_validates_and_optional_anomalies_may_be_absent() {
     let v = archetype_validator("release");
     assert!(v.is_valid(&frontmatter("Release")));
@@ -626,6 +627,7 @@ fn release_skeleton_validates_and_optional_anomalies_may_be_absent() {
 }
 
 #[test]
+#[trace("TC-421", "FR-047-AC-7", "FR-051-AC-4")]
 fn release_refuses_unknown_members_and_malformed_members() {
     let v = archetype_validator("release");
     let commit = "0123456789abcdef0123456789abcdef01234567";
@@ -665,6 +667,7 @@ fn release_refuses_unknown_members_and_malformed_members() {
 }
 
 #[test]
+#[trace("TC-422", "FR-047-AC-7")]
 fn release_schema_has_no_score_decision_or_approval_member() {
     let schema = read_json(&module_root().join("schemas/release-frontmatter.schema.json"));
     let members: BTreeSet<&str> = schema["properties"]
