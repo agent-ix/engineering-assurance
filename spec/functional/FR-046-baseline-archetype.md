@@ -62,7 +62,6 @@ git write, and any digest or manifest of the items.
 
 - The archetype SHALL refuse a member other than those named under
   Inputs.
-- The archetype SHALL refuse a duplicate `path`.
 - The archetype SHALL refuse a `kind` outside the three named.
 - When a Baseline is resolved, the resolution SHALL read the Baseline file
   from the supplied commit with git object access.
@@ -70,6 +69,10 @@ git write, and any digest or manifest of the items.
   git at the supplied commit.
 - The resolution SHALL report the commit hash that git resolves.
 - The resolution SHALL NOT report a hash it computed.
+- If a Baseline lists the same `path` more than once, then the resolution SHALL
+  report `baseline_file_invalid`. Frontmatter schemas and the module's lint rules
+  cannot compare two list items by a member, so the archetype refuses an identical
+  repeated item and the resolution refuses a repeated `path`.
 - If an item path is absent at the commit, then the resolution SHALL report
   that path `absent`.
 - If an item path is absent at the commit, then the resolution SHALL NOT
@@ -82,11 +85,11 @@ git write, and any digest or manifest of the items.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-046-AC-1 | A Baseline with a name and items of each of the three kinds validates, and the skeleton validates as authored. | Test |
-| FR-046-AC-2 | A Baseline with an unknown member, an empty `items`, a duplicate `path`, an absolute path, a path with `..`, a glob, or an unknown `kind` is refused with the member named. | Test |
+| FR-046-AC-2 | A Baseline with an unknown member, an empty `items`, an absolute path, a path with `..`, a glob, or an unknown `kind` is refused with the member named. | Test |
 | FR-046-AC-3 | Resolving one Baseline at two commits whose item contents differ reports the two commit hashes git gives, and the result has no member that Engineering Assurance computed from file content. | Test |
 | FR-046-AC-4 | An item path deleted at the resolved commit but present in the working tree is reported `absent`; an item present at the commit but modified in the working tree is reported `present`. | Test |
 | FR-046-AC-5 | Resolution leaves the repository's refs, index and working tree unchanged. | Test |
-| FR-046-AC-6 | A Baseline file absent at the commit yields `baseline_file_absent`, and one whose frontmatter is invalid yields `baseline_file_invalid`; neither yields an item list. | Test |
+| FR-046-AC-6 | A Baseline file absent at the commit yields `baseline_file_absent`, and one whose frontmatter is invalid or that lists a `path` twice yields `baseline_file_invalid`; neither yields an item list. | Test |
 
 ## Dependencies
 

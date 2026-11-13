@@ -8,10 +8,9 @@ one canonical onboarding skill and four resumable workflows for deciding what
 assurance work a repository actually needs.
 
 It is deliberately not a compliance oracle. Engineering Assurance does not
-calculate a trust score or import external rules, and it never decides a release. It
-records a named person's signed release decision and verifies it. The decision
-owner remains responsible for the boundary, claims, exceptions, evidence
-sufficiency, and terminal decision.
+calculate a trust score, import external rules, or approve a release. The
+decision owner remains responsible for the boundary, claims, exceptions,
+evidence sufficiency, and terminal decision.
 
 ## Setup
 

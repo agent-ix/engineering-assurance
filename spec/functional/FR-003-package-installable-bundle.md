@@ -40,7 +40,7 @@ existing engineering-assurance module root.
   procedures for each applicable surface.
 - The installed module root SHALL continue to expose `manifest.yaml`, `schemas/`,
   and `skeletons/` at the paths consumed by Quire.
-- The module manifest SHALL export each of its five artifact types
+- The module manifest SHALL export each of its artifact types
   (`AssuranceProfile`, `MeasurementPlan`, `ArchitectureDescription`,
   `ComponentAssuranceContract`, `AssuranceArgument`) through its semantic
   contract. Each artifact type SHALL have exactly one schema file, a JSON

@@ -39,8 +39,8 @@
       "properties": {
         "path": {
           "type": "string",
-          "pattern": "^(?:[^/.*?\\[\\]{}\\\\][^/*?\\[\\]{}\\\\]*|\\.[^/.*?\\[\\]{}\\\\][^/*?\\[\\]{}\\\\]*|\\.\\.[^/*?\\[\\]{}\\\\]+)(?:/(?:[^/.*?\\[\\]{}\\\\][^/*?\\[\\]{}\\\\]*|\\.[^/.*?\\[\\]{}\\\\][^/*?\\[\\]{}\\\\]*|\\.\\.[^/*?\\[\\]{}\\\\]+))*$",
-          "description": "Repository-relative file path: no leading slash, no `..` or `.` segment, no empty segment and no glob character."
+          "pattern": "^(?:[^/.*?\\[\\]{}\\\\ \\u0000-\\u001f\\u007f][^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]*|\\.[^/.*?\\[\\]{}\\\\ \\u0000-\\u001f\\u007f][^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]*|\\.\\.[^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]+)(?:/(?:[^/.*?\\[\\]{}\\\\ \\u0000-\\u001f\\u007f][^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]*|\\.[^/.*?\\[\\]{}\\\\ \\u0000-\\u001f\\u007f][^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]*|\\.\\.[^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]+))*$",
+          "description": "Repository-relative file path: no leading slash, no `..` or `.` segment, no empty segment and no glob character, no control character and no segment starting with a space."
         },
         "commit": {
           "type": "string",
@@ -51,7 +51,7 @@
     },
     "snapshot_path": {
       "type": "string",
-      "pattern": "^(?:[^/.*?\\[\\]{}\\\\][^/*?\\[\\]{}\\\\]*|\\.[^/.*?\\[\\]{}\\\\][^/*?\\[\\]{}\\\\]*|\\.\\.[^/*?\\[\\]{}\\\\]+)(?:/(?:[^/.*?\\[\\]{}\\\\][^/*?\\[\\]{}\\\\]*|\\.[^/.*?\\[\\]{}\\\\][^/*?\\[\\]{}\\\\]*|\\.\\.[^/*?\\[\\]{}\\\\]+))*$",
+      "pattern": "^(?:[^/.*?\\[\\]{}\\\\ \\u0000-\\u001f\\u007f][^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]*|\\.[^/.*?\\[\\]{}\\\\ \\u0000-\\u001f\\u007f][^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]*|\\.\\.[^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]+)(?:/(?:[^/.*?\\[\\]{}\\\\ \\u0000-\\u001f\\u007f][^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]*|\\.[^/.*?\\[\\]{}\\\\ \\u0000-\\u001f\\u007f][^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]*|\\.\\.[^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]+))*$",
       "description": "Repository-relative path of the release evidence snapshot, with the same path rules as a Baseline item. It must differ from the release record's own path; that comparison is made at verification, which knows the record path."
     },
     "decision_owner": {

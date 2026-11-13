@@ -480,17 +480,8 @@ fn archetype_validator(name: &str) -> jsonschema::Validator {
     ))
 }
 
-fn baseline_with(over: &Value) -> Value {
-    let mut document = frontmatter("Baseline");
-    document
-        .as_object_mut()
-        .expect("object")
-        .extend(over.as_object().expect("object").clone());
-    document
-}
-
-fn release_with(over: &Value) -> Value {
-    let mut document = frontmatter("Release");
+fn skeleton_with(name: &str, over: &Value) -> Value {
+    let mut document = frontmatter(name);
     document
         .as_object_mut()
         .expect("object")
@@ -502,7 +493,7 @@ fn refused(v: &jsonschema::Validator, document: &Value) -> bool {
     !v.is_valid(document)
 }
 
-#[trace("FR-046-AC-1")]
+#[trace("TC-378", "FR-046-AC-1")]
 #[test]
 fn baseline_skeleton_and_every_item_kind_validate() {
     let v = archetype_validator("baseline");
@@ -517,7 +508,7 @@ fn baseline_skeleton_and_every_item_kind_validate() {
     assert_eq!(kinds, ["spec_artifact", "soup_record", "evidence"]);
 }
 
-#[trace("FR-046-AC-2")]
+#[trace("TC-379", "FR-046-AC-2")]
 #[test]
 fn baseline_refuses_unknown_members_empty_items_bad_paths_and_kinds() {
     let v = archetype_validator("baseline");
@@ -525,13 +516,22 @@ fn baseline_refuses_unknown_members_empty_items_bad_paths_and_kinds() {
 
     assert!(refused(
         &v,
-        &baseline_with(&json!({"commit": "0".repeat(40)}))
+        &skeleton_with("Baseline", &json!({"commit": "0".repeat(40)}))
     ));
-    assert!(refused(&v, &baseline_with(&json!({"digest": "sha256:00"}))));
-    assert!(refused(&v, &baseline_with(&json!({"items": []}))));
     assert!(refused(
         &v,
-        &baseline_with(&json!({"items": [item("a.md", "evidence"), item("a.md", "evidence")]}))
+        &skeleton_with("Baseline", &json!({"digest": "sha256:00"}))
+    ));
+    assert!(refused(
+        &v,
+        &skeleton_with("Baseline", &json!({"items": []}))
+    ));
+    assert!(refused(
+        &v,
+        &skeleton_with(
+            "Baseline",
+            &json!({"items": [item("a.md", "evidence"), item("a.md", "evidence")]})
+        )
     ));
     for bad in [
         "/etc/a.md",
@@ -545,30 +545,43 @@ fn baseline_refuses_unknown_members_empty_items_bad_paths_and_kinds() {
         "a/",
         "",
         ".",
+        "a\nb.md",
+        "a\rb.md",
+        "a\tb.md",
+        "a\u{0}b.md",
+        " a.md",
+        "a/ /b.md",
     ] {
         assert!(
             refused(
                 &v,
-                &baseline_with(&json!({"items": [item(bad, "evidence")]}))
+                &skeleton_with("Baseline", &json!({"items": [item(bad, "evidence")]}))
             ),
             "path {bad:?} must be refused"
         );
     }
     assert!(refused(
         &v,
-        &baseline_with(&json!({"items": [item("a.md", "source")]}))
+        &skeleton_with("Baseline", &json!({"items": [item("a.md", "source")]}))
     ));
     assert!(refused(
         &v,
-        &baseline_with(&json!({"items": [{"path": "a.md", "kind": "evidence", "sha": "x"}]}))
+        &skeleton_with(
+            "Baseline",
+            &json!({"items": [{"path": "a.md", "kind": "evidence", "sha": "x"}]})
+        )
     ));
-    assert!(refused(&v, &baseline_with(&json!({"name": ""}))));
-    assert!(v.is_valid(&baseline_with(
+    assert!(refused(
+        &v,
+        &skeleton_with("Baseline", &json!({"name": ""}))
+    ));
+    assert!(v.is_valid(&skeleton_with(
+        "Baseline",
         &json!({"items": [item(".github/a..b.md", "evidence")]})
     )));
 }
 
-#[trace("FR-046-AC-3", "FR-046-CON-1")]
+#[trace("TC-379", "FR-046-AC-2")]
 #[test]
 fn baseline_schema_has_no_member_for_a_commit_hash_or_computed_content() {
     let schema = read_json(&module_root().join("schemas/baseline-frontmatter.schema.json"));
@@ -591,7 +604,6 @@ fn baseline_schema_has_no_member_for_a_commit_hash_or_computed_content() {
     assert_eq!(item_members, BTreeSet::from(["path", "kind"]));
 }
 
-#[trace("FR-047-AC-7", "FR-051-AC-4")]
 #[test]
 fn release_skeleton_validates_and_optional_anomalies_may_be_absent() {
     let v = archetype_validator("release");
@@ -607,10 +619,12 @@ fn release_skeleton_validates_and_optional_anomalies_may_be_absent() {
         .expect("object")
         .remove("snapshot_path");
     assert!(refused(&v, &document), "snapshot_path is required");
-    assert!(v.is_valid(&release_with(&json!({"accepted_anomalies": []}))));
+    assert!(v.is_valid(&skeleton_with(
+        "Release",
+        &json!({"accepted_anomalies": []})
+    )));
 }
 
-#[trace("FR-047-AC-7", "FR-051-AC-4")]
 #[test]
 fn release_refuses_unknown_members_and_malformed_members() {
     let v = archetype_validator("release");
@@ -639,14 +653,17 @@ fn release_refuses_unknown_members_and_malformed_members() {
         json!({"baseline": {"path": "../b.md", "commit": commit}}),
         json!({"baseline": {"path": "b.md", "commit": commit, "digest": "x"}}),
     ] {
-        assert!(refused(&v, &release_with(&over)), "{over} must be refused");
+        assert!(
+            refused(&v, &skeleton_with("Release", &over)),
+            "{over} must be refused"
+        );
     }
-    assert!(v.is_valid(&release_with(
+    assert!(v.is_valid(&skeleton_with(
+        "Release",
         &json!({"baseline": {"path": "b.md", "commit": "a".repeat(64)}})
     )));
 }
 
-#[trace("FR-047-AC-7", "NFR-007")]
 #[test]
 fn release_schema_has_no_score_decision_or_approval_member() {
     let schema = read_json(&module_root().join("schemas/release-frontmatter.schema.json"));
