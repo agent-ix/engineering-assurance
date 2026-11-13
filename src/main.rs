@@ -23,6 +23,7 @@ mod package_install;
 mod process_host;
 mod producer_execute_host;
 mod release_history_host;
+mod release_decision_host;
 mod release_host;
 mod scope_footprint_host;
 mod signature_verify_host;
@@ -60,6 +61,7 @@ const PACKAGE_AUDIT_CAPABILITY: &str = "package-audit";
 const PACKAGE_LIFECYCLE_CAPABILITY: &str = "package-lifecycle";
 const PRODUCER_EXECUTE_CAPABILITY: &str = "producer-execute";
 const RELEASE_HISTORY_CAPABILITY: &str = "release-history";
+const RELEASE_DECISION_CAPABILITY: &str = "release-decision";
 const RELEASE_VERIFY_CAPABILITY: &str = "release-verify";
 const SCOPE_FOOTPRINT_CAPABILITY: &str = "scope-footprint";
 const SIGNATURE_VERIFY_CAPABILITY: &str = "signature-verify";
@@ -138,6 +140,7 @@ fn command() -> Command {
         .subcommand(approval_trail_command())
         .subcommand(release_verify_command())
         .subcommand(release_history_command())
+        .subcommand(release_decision_command())
         .subcommand(
             Command::new(WORKFLOW_INVARIANTS_CAPABILITY)
                 .about("Evaluate a closed workflow projection against named invariants"),
@@ -230,6 +233,20 @@ fn approval_tag_command() -> Command {
                 .long("request")
                 .value_name("JSON")
                 .help("Approval-tag request document, or - to read it from stdin")
+                .required(true),
+        )
+}
+
+fn release_decision_command() -> Command {
+    Command::new(RELEASE_DECISION_CAPABILITY)
+        .about(
+            "Present a release candidate to its decision owner and record their release or reject",
+        )
+        .arg(
+            Arg::new("request")
+                .long("request")
+                .value_name("JSON")
+                .help("Release-decision request document, or - to read it from stdin")
                 .required(true),
         )
 }
@@ -372,6 +389,7 @@ fn main() -> ExitCode {
         Some((APPROVAL_TRAIL_CAPABILITY, arguments)) => run_approval_trail(arguments),
         Some((RELEASE_VERIFY_CAPABILITY, arguments)) => run_release_verify(arguments),
         Some((RELEASE_HISTORY_CAPABILITY, arguments)) => run_release_history(arguments),
+        Some((RELEASE_DECISION_CAPABILITY, arguments)) => run_release_decision(arguments),
         Some((WORKFLOW_INVARIANTS_CAPABILITY, _)) => run_workflow_invariants(),
         Some((WORKFLOW_HOST_CAPABILITY, _)) => run_workflow_host(),
         Some((PACKAGE_LIFECYCLE_CAPABILITY, arguments)) => run_package_lifecycle(arguments),
@@ -902,6 +920,13 @@ fn run_release_history(arguments: &ArgMatches) -> ExitCode {
         "release_history_request_unreadable",
         |bytes| {
             release_history_host::execute(bytes).map_err(|error| (error.code(), error.to_string()))
+fn run_release_decision(arguments: &ArgMatches) -> ExitCode {
+    run_request_line(
+        arguments,
+        RELEASE_DECISION_CAPABILITY,
+        "release_decision_request_invalid",
+        |bytes| {
+            release_decision_host::execute(bytes).map_err(|error| (error.code(), error.to_string()))
         },
     )
 }

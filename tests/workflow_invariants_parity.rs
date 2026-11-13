@@ -220,6 +220,14 @@ fn passing_workflow_cases() -> Vec<(Value, Vec<&'static str>)> {
                 "change.review_ready",
             ],
         ),
+        (
+            workflow_projection(
+                "release-decision",
+                &["decision_ready->released", "decision_ready->rejected"],
+                &["release_request", "release_presentation"],
+            ),
+            vec!["shared.terminal_gates", "release.presentation_ready"],
+        ),
     ]
 }
 
@@ -258,6 +266,23 @@ fn tc_106_all_canonical_invariants_match_the_reference_in_request_order() {
 fn tc_106_failure_codes_and_time_boundaries_match_the_reference() {
     let empty = json!({"defName": "change-assurance", "items": {}});
     assert_parity(&request(&empty, &canonical_names()));
+
+    for kinds in [
+        &["release_request"][..],
+        &["release_presentation"][..],
+        &[][..],
+    ] {
+        let partial = workflow_projection(
+            "release-decision",
+            &["decision_ready->released", "decision_ready->rejected"],
+            kinds,
+        );
+        assert_failed(
+            &request(&partial, &["release.presentation_ready"]),
+            &["release_presentation_missing"],
+        );
+        assert_parity(&request(&partial, &["release.presentation_ready"]));
+    }
 
     let mut expired = workflow_projection(
         "assurance-intake",

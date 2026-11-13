@@ -220,6 +220,17 @@ fn document<T: for<'de> Deserialize<'de>>(bytes: &[u8], schema: &str) -> Option<
     serde_json::from_value(value).ok()
 }
 
+/// Whether `path` exists at `commit`, with git object access (FR-051).
+pub(crate) fn path_exists_at(
+    repository: &Path,
+    commit: &str,
+    path: &str,
+) -> Result<bool, BaselineError> {
+    object_at(repository, commit, path)
+        .map(|id| id.is_some())
+        .map_err(|_| BaselineError::Git)
+}
+
 /// Reads the Baseline file `path` at `commit` and tests each item path there,
 /// with git object access only (FR-046).
 pub(crate) fn resolve_baseline(

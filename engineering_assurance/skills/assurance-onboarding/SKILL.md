@@ -187,8 +187,11 @@ Use the definitions under `workflows/`:
 
 - `assurance-intake` for a bounded profile decision;
 - `architecture-evaluation` for a scenario-based architecture decision;
-- `measurement-promotion` for a one-stage measurement decision; and
-- `change-assurance` for a bounded change decision.
+- `measurement-promotion` for a one-stage measurement decision;
+- `change-assurance` for a bounded change decision; and
+- `release-decision` for a named person's release or reject decision, driven
+  through `engineering-assurance release-decision` (the person's signed tag, not
+  the workflow, is the release).
 
 Run them through ix-flow and preserve its state for resume. Terminal transitions
 remain named human decisions; never acknowledge or override those gates.

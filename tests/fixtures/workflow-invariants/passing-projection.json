@@ -130,6 +130,15 @@
     "operator_observation": [{
       "elapsed_minutes": 0,
       "command_count": 1
+    }],
+    "release_request": [{
+      "id": "release-request-1",
+      "interviewId": "release",
+      "release_id": "REL-1"
+    }],
+    "release_presentation": [{
+      "id": "presentation",
+      "baseline": {"path": "baseline.md", "name": "Fictional baseline", "commit": "0123456789abcdef0123456789abcdef01234567", "items": []}
     }]
   }
 }

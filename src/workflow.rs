@@ -35,6 +35,9 @@ pub enum DecisionChoice {
     Accept,
     /// Select the workflow's negative terminal phase.
     Reject,
+    /// Select the positive terminal phase of `release-decision`, the only
+    /// workflow that takes this choice in place of [`Self::Accept`].
+    Release,
 }
 
 impl DecisionChoice {
@@ -44,6 +47,7 @@ impl DecisionChoice {
         match self {
             Self::Accept => "accept",
             Self::Reject => "reject",
+            Self::Release => "release",
         }
     }
 }
@@ -54,7 +58,7 @@ impl fmt::Display for DecisionChoice {
     }
 }
 
-/// One of the four canonical Engineering Assurance workflows.
+/// One of the five canonical Engineering Assurance workflows.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WorkflowKind {
     /// Bounded assurance-profile intake.
@@ -65,6 +69,8 @@ pub enum WorkflowKind {
     MeasurementPromotion,
     /// Bounded change assurance.
     ChangeAssurance,
+    /// A named person's decision to release one Baseline.
+    ReleaseDecision,
 }
 
 impl WorkflowKind {
@@ -74,11 +80,12 @@ impl WorkflowKind {
     /// workflows exist, and they used to agree by each carrying its own list.
     /// One list means a workflow cannot be promoted into the bundle without
     /// also becoming bindable, or bound without also being discoverable.
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 5] = [
         Self::ArchitectureEvaluation,
         Self::AssuranceIntake,
         Self::ChangeAssurance,
         Self::MeasurementPromotion,
+        Self::ReleaseDecision,
     ];
 
     /// Return the canonical ix-flow definition name.
@@ -89,33 +96,59 @@ impl WorkflowKind {
             Self::ArchitectureEvaluation => "architecture-evaluation",
             Self::MeasurementPromotion => "measurement-promotion",
             Self::ChangeAssurance => "change-assurance",
+            Self::ReleaseDecision => "release-decision",
         }
     }
 
-    /// Return the terminal phase selected by `choice`.
+    /// Whether `choice` is one this workflow takes: `release-decision` takes
+    /// `release` and `reject`, every other workflow `accept` and `reject`.
     #[must_use]
-    pub const fn terminal_phase(self, choice: DecisionChoice) -> &'static str {
-        match (self, choice) {
-            (Self::AssuranceIntake | Self::ArchitectureEvaluation, DecisionChoice::Accept) => {
-                "accepted"
-            }
-            (
-                Self::AssuranceIntake | Self::ArchitectureEvaluation | Self::ChangeAssurance,
-                DecisionChoice::Reject,
-            ) => "rejected",
-            (Self::MeasurementPromotion, DecisionChoice::Accept) => "promoted",
-            (Self::MeasurementPromotion, DecisionChoice::Reject) => "not_promoted",
-            (Self::ChangeAssurance, DecisionChoice::Accept) => "approved",
-        }
-    }
-
-    /// Return the terminal phase opposite `choice`.
-    #[must_use]
-    pub const fn opposite_terminal_phase(self, choice: DecisionChoice) -> &'static str {
+    pub const fn takes(self, choice: DecisionChoice) -> bool {
         match choice {
-            DecisionChoice::Accept => self.terminal_phase(DecisionChoice::Reject),
-            DecisionChoice::Reject => self.terminal_phase(DecisionChoice::Accept),
+            DecisionChoice::Reject => true,
+            DecisionChoice::Accept => !matches!(self, Self::ReleaseDecision),
+            DecisionChoice::Release => matches!(self, Self::ReleaseDecision),
         }
+    }
+
+    /// The terminal phases of the workflow: the one its positive choice selects
+    /// (`accept`, or `release` for `release-decision`), then the rejecting one.
+    #[must_use]
+    pub const fn terminal_phases(self) -> [&'static str; 2] {
+        match self {
+            Self::AssuranceIntake | Self::ArchitectureEvaluation => ["accepted", "rejected"],
+            Self::MeasurementPromotion => ["promoted", "not_promoted"],
+            Self::ChangeAssurance => ["approved", "rejected"],
+            Self::ReleaseDecision => ["released", "rejected"],
+        }
+    }
+
+    /// Return the terminal phase selected by `choice`, or `None` when this
+    /// workflow does not take `choice`.
+    #[must_use]
+    pub const fn terminal_phase(self, choice: DecisionChoice) -> Option<&'static str> {
+        if !self.takes(choice) {
+            return None;
+        }
+        let [positive, negative] = self.terminal_phases();
+        Some(match choice {
+            DecisionChoice::Reject => negative,
+            DecisionChoice::Accept | DecisionChoice::Release => positive,
+        })
+    }
+
+    /// Return the terminal phase opposite `choice`, or `None` when this
+    /// workflow does not take `choice`.
+    #[must_use]
+    pub const fn opposite_terminal_phase(self, choice: DecisionChoice) -> Option<&'static str> {
+        if !self.takes(choice) {
+            return None;
+        }
+        let [positive, negative] = self.terminal_phases();
+        Some(match choice {
+            DecisionChoice::Reject => positive,
+            DecisionChoice::Accept | DecisionChoice::Release => negative,
+        })
     }
 
     /// Return the definition's initial phase.
@@ -450,7 +483,14 @@ pub fn parse_request_bytes(input: &[u8]) -> Result<WorkflowHostRequest, Workflow
             observed: request.protocol,
         });
     }
-    request.binding.validate()?;
+    let workflow = request.binding.validate()?;
+    if let Some(choice) = request.choice
+        && !workflow.takes(choice)
+    {
+        return Err(WorkflowRequestError::InvalidOperation {
+            detail: "choice is not one this workflow takes",
+        });
+    }
     if request.operation == WorkflowOperation::StartOrResume && request.choice.is_some() {
         return Err(WorkflowRequestError::InvalidOperation {
             detail: "start_or_resume does not accept a terminal choice",

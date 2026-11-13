@@ -22,7 +22,16 @@ use crate::package_archive::{
 
 const CANONICAL_SKILL: &str = "engineering_assurance/skills/assurance-onboarding";
 const CANONICAL_SKILLS: &str = "engineering_assurance/skills";
-const WORKFLOWS: [&str; 4] = [
+const WORKFLOWS: [&str; 5] = [
+    "architecture-evaluation",
+    "assurance-intake",
+    "change-assurance",
+    "measurement-promotion",
+    "release-decision",
+];
+/// The workflows the pilot path kept when it was frozen; `release-decision` was
+/// promoted after and has no pilot copy.
+const PILOT_WORKFLOWS: [&str; 4] = [
     "architecture-evaluation",
     "assurance-intake",
     "change-assurance",
@@ -188,7 +197,7 @@ fn validate_workflows(tree: &TreeSnapshot) -> Result<(), InstalledError> {
     if canonical != BTreeSet::from(WORKFLOWS) {
         return Err(InstalledError::WorkflowPopulationInvalid);
     }
-    for workflow in WORKFLOWS {
+    for workflow in PILOT_WORKFLOWS {
         let canonical_path = format!("{CANONICAL_SKILL}/workflows/{workflow}/def.yaml");
         let pilot_path = format!("pilots/assurance-workflows/workflows/{workflow}/def.yaml");
         let canonical_bytes = tree
@@ -422,12 +431,14 @@ mod tests {
                 &root.join(format!("{CANONICAL_SKILL}/workflows/{workflow}/def.yaml")),
                 definition.as_bytes(),
             );
-            write(
-                &root.join(format!(
-                    "pilots/assurance-workflows/workflows/{workflow}/def.yaml"
-                )),
-                definition.as_bytes(),
-            );
+            if PILOT_WORKFLOWS.contains(&workflow) {
+                write(
+                    &root.join(format!(
+                        "pilots/assurance-workflows/workflows/{workflow}/def.yaml"
+                    )),
+                    definition.as_bytes(),
+                );
+            }
         }
         let plugin = br#"{"name":"engineering-assurance","version":"0.2.0","description":"fixture","skills":"./engineering_assurance/skills/"}"#;
         for manifest in [
