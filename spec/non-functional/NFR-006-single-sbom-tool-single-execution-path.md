@@ -9,6 +9,8 @@ relationships:
     type: "constrains"
   - target: "ix://agent-ix/engineering-assurance/FR-039"
     type: "constrains"
+  - target: "ix://agent-ix/engineering-assurance/FR-044"
+    type: "constrains"
 ---
 
 # NFR-006: One SBOM tool and one execution path
@@ -20,6 +22,9 @@ Engineering Assurance SHALL use Syft as its only SBOM generator.
 Syft SHALL run only through the [FR-019](../functional/FR-019-bounded-producer-execution.md) executor.
 
 Engineering Assurance SHALL NOT parse SBOM components in production code.
+
+The advisory scanner of [FR-044](../functional/FR-044-grype-advisory-scan-producer-request.md) SHALL read the Syft
+SBOM and SHALL NOT generate an SBOM.
 
 ## Scope
 
