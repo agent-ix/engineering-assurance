@@ -236,6 +236,38 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-033 | FR-033-AC-1 | TC-244 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
 | FR-034 | FR-034-AC-1 | TC-246 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
 | FR-035 | FR-035-AC-1 | TC-247 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
+| FR-054 | FR-054-AC-1 | TC-624 | ✅ `tests/record_sink.rs` passing |
+| FR-054 | FR-054-AC-2 | TC-625 | ✅ `tests/record_sink.rs` passing |
+| FR-054 | FR-054-AC-3 | TC-626 | ✅ `tests/record_sink.rs` passing |
+| FR-054 | FR-054-AC-4 | TC-627 | ✅ `tests/record_sink.rs` passing |
+| FR-054 | FR-054-AC-5 | TC-628 | ✅ `tests/record_sink.rs` passing |
+| FR-054 | FR-054-AC-6 | TC-629 | ✅ `tests/record_sink.rs` passing |
+| FR-055 | FR-055-AC-1 | TC-630 | ✅ `tests/record_sink.rs` passing |
+| FR-055 | FR-055-AC-2 | TC-630 | ✅ `tests/record_sink.rs` passing |
+| FR-055 | FR-055-AC-3 | TC-631 | ✅ `tests/record_sink.rs` passing |
+| FR-055 | FR-055-AC-4 | TC-632 | ✅ `tests/record_sink.rs` passing |
+| FR-055 | FR-055-AC-5 | TC-633 | 🚧 Not closed here: the repository `PolicySource` adapter is not implemented in this change and the case where a pull request branch edits `sinks.json` is untested. `tests/record_sink.rs` tests only the `PolicySource` contract with a stand-in. PLAT-1685 builds the adapter and closes FR-055-AC-5 |
+| FR-055 | FR-055-AC-6 | TC-634 | ✅ `tests/record_sink.rs` passing |
+| FR-055 | FR-055-AC-7 | TC-635 | ✅ `tests/record_sink.rs` passing |
+| FR-056 | FR-056-AC-1 | TC-636 | ✅ `tests/record_sink.rs` passing |
+| FR-056 | FR-056-AC-2 | TC-636 | ✅ `tests/record_sink.rs` passing |
+| FR-056 | FR-056-AC-3 | TC-637 | ✅ `tests/record_sink.rs` passing |
+| FR-056 | FR-056-AC-4 | TC-638 | ✅ `tests/record_sink.rs` passing |
+| FR-056 | FR-056-AC-5 | TC-639 | ✅ `tests/record_sink.rs` passing |
+| FR-056 | FR-056-AC-6 | TC-640 | ✅ `tests/record_sink.rs` passing |
+| FR-056 | FR-056-AC-7 | TC-641 | ✅ `tests/record_sink.rs` passing |
+| FR-056 | FR-056-AC-8 | TC-642 | ✅ `tests/record_sink.rs` passing |
+| FR-057 | FR-057-AC-1 | TC-643 | ✅ `tests/record_sink.rs` passing |
+| FR-057 | FR-057-AC-2 | TC-644 | ✅ `tests/record_sink.rs` passing |
+| FR-057 | FR-057-AC-3 | TC-645 | ✅ `tests/record_sink.rs` passing |
+| FR-057 | FR-057-AC-4 | TC-646 | ✅ `tests/record_sink.rs` passing |
+| FR-057 | FR-057-AC-5 | TC-643 | ✅ `tests/record_sink.rs` passing |
+| FR-057 | FR-057-AC-6 | TC-647 | ✅ `tests/record_sink.rs` passing |
+| FR-057 | FR-057-AC-7 | TC-648 | ✅ `tests/record_sink.rs` passing |
+| FR-057 | FR-057-AC-8 | TC-649 | ✅ `tests/record_sink.rs` passing |
+| FR-057 | FR-057-AC-9 | TC-648 | ✅ `tests/record_sink.rs` passing |
+| FR-057 | FR-057-AC-10 | TC-650 | ✅ `tests/record_sink.rs` passing |
+| FR-057 | FR-057-AC-11 | TC-650 | ✅ `tests/record_sink.rs` passing |
 | FR-064 | FR-064-AC-13 | TC-518 | 🚧 Specified |
 | FR-064 | FR-064-AC-14 | TC-519 | 🚧 Specified |
 | FR-064 | FR-064-AC-15 | TC-520 | 🚧 Specified |
@@ -349,6 +381,9 @@ and verification-semantics baseline and the verification of the Rust port.
 | NFR-002 | Agent evaluation against fixture-authorized outcomes | TC-039 | ✅ `tests/evaluation_parity.rs`: the aggregate gate withholds on any unsupported addition, any inferred terminal decision, and any incomplete or failing cell of the declared qualification population, and ignores an unqualified host |
 | NFR-003 | Wheel/npm member audit plus compatibility invocation | TC-040 | ✅ Passing |
 | NFR-005 | Exact toolchain build, unsafe audit, executable-path audit, Quire reconciliation, matrix row integrity | TC-115..TC-118, TC-205 | ✅ Executable-language and host-configuration audit (workflow YAML excluded), trace-marker and reconciliation checks passing |
+| NFR-008 | Schema test per document kind (sink config, public and private forms, publish result) | TC-628, TC-632, TC-637 (NFR-008-M-1) | ✅ `tests/record_sink.rs` passing |
+| NFR-009 | Property test over the sink layer; behavioural test that the public log is reachable only through the checked sink | TC-649 (NFR-009-M-1), TC-652 (NFR-009-M-2) | ✅ `tests/record_sink.rs` passing |
+| NFR-010 | Source inspection (NFR-010-M-1); stand-in public log signer (NFR-010-M-2); stand-in library that rejects every signature (NFR-010-M-3) | TC-651 (M-1), TC-650 (M-2) | ✅ M-1 and M-2 in `tests/record_sink.rs`; 🚧 M-3, which needs the verifier of FR-064 |
 | NFR-011 | Source inspection of the workflow files; YAML-parsing test; stand-in signer test | TC-622, TC-623 | 🚧 Specified |
 
 ### Constraint Coverage
@@ -908,6 +943,35 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-621 | The full tree check passes on a tree that contains the literal URIs | Integration | P0 | FR-079-AC-4 | 🚧 |
 | TC-622 | No step of a signing job in the workflow files invokes an agent harness or model client, and no signing job executes repository code | Static | P0 | NFR-011 | 🚧 |
 | TC-623 | Every signing job's identity in the fixture is the workflow identity, checked with a stand-in signer | Integration | P0 | NFR-011 | 🚧 |
+| TC-624 | Publishing with each implementation returns `published`, `published` and `discarded` with the record's id and the closed result members; the public-log publish leaves the full private form in the private store and sends only the trimmed public form | Unit | P0 | FR-054-AC-1 | ✅ `tests/record_sink.rs` passing |
+| TC-625 | A publish to `none` sends nothing, stores nothing and signs nothing | Unit | P0 | FR-054-AC-2 | ✅ `tests/record_sink.rs` passing |
+| TC-626 | A public log that rejects the record yields `refused` with `public_log_rejected`, keeps the private form and publishes nothing through another sink | Unit | P0 | FR-054-AC-3 | ✅ `tests/record_sink.rs` passing |
+| TC-627 | A test implementation registered through the sink interface publishes the record with the forms unchanged | Unit | P0 | FR-054-AC-4 | ✅ `tests/record_sink.rs` passing |
+| TC-628 | The publish result schema rejects an unknown member and a status outside the three values | Unit | P0 | FR-054-AC-5, NFR-008-M-1 | ✅ `tests/record_sink.rs` passing |
+| TC-629 | A record the leak check refuses still has its private form stored and sends nothing; a failing private store write fails the publish before the check runs | Unit | P0 | FR-054-AC-6 | ✅ `tests/record_sink.rs` passing |
+| TC-630 | The visibility default and the configured override resolve the sink, and a private repository configured `public_log` is refused | Unit | P0 | FR-055-AC-1, FR-055-AC-2 | ✅ `tests/record_sink.rs` passing |
+| TC-631 | An undeterminable visibility resolves `private_store` and refuses a configured `public_log` | Unit | P0 | FR-055-AC-3 | ✅ `tests/record_sink.rs` passing |
+| TC-632 | An unknown member, unknown sink value, non-https endpoint, missing endpoint or missing destination is refused with `sink_config_invalid` or `sink_config_incomplete` | Unit | P0 | FR-055-AC-4, NFR-008-M-1 | ✅ `tests/record_sink.rs` passing |
+| TC-633 | The policy document is read from the protected base branch and not from the pull request branch | Unit | P0 | FR-055-AC-5 | 🚧 only the contract is tested, with a stand-in source in `tests/record_sink.rs`; the repository adapter and the pull-request-branch case are not implemented or tested here, and PLAT-1685 builds the adapter and closes FR-055-AC-5 |
+| TC-634 | An unprotected or unreported base branch refuses each policy document with `policy_branch_unprotected` | Unit | P0 | FR-055-AC-6 | ✅ `tests/record_sink.rs` passing |
+| TC-635 | An absent document or one without a private store destination is `sink_config_incomplete` and nothing is sent or stored | Unit | P0 | FR-055-AC-7 | ✅ `tests/record_sink.rs` passing |
+| TC-636 | The public form holds none of the ticket text, criteria text or model names, the private form holds them, and both carry one record id and no other shared member | Unit | P0 | FR-056-AC-1, FR-056-AC-2 | ✅ `tests/record_sink.rs` passing |
+| TC-637 | A public or private form with an extra member fails schema validation | Unit | P0 | FR-056-AC-3, NFR-008-M-1 | ✅ `tests/record_sink.rs` passing |
+| TC-638 | A public form value outside its member's grammar is rejected before any sink is called | Unit | P0 | FR-056-AC-4 | ✅ `tests/record_sink.rs` passing |
+| TC-639 | Changing only the private form leaves the public form's signed bytes and signature unchanged | Unit | P0 | FR-056-AC-5 | ✅ `tests/record_sink.rs` passing |
+| TC-640 | Over generated strings a public member accepts a string only when it matches its grammar | Property | P0 | FR-056-AC-6 | ✅ `tests/record_sink.rs` passing |
+| TC-641 | An approval statement published as a record has the statement digest in the public form and its meaning, approver and pull request only in the private form | Unit | P0 | FR-056-AC-7 | ✅ `tests/record_sink.rs` passing |
+| TC-642 | The bundle's signed payload equals the RFC 8785 canonical bytes of the public form without its signature; a bundle over other bytes is rejected before any sink call | Unit | P0 | FR-056-AC-8 | ✅ `tests/record_sink.rs` passing |
+| TC-643 | A record with one private repository among public ones is refused naming exactly that repository with reason `private` and sends nothing; two offending items yield both | Unit | P0 | FR-057-AC-1, FR-057-AC-5 | ✅ `tests/record_sink.rs` passing |
+| TC-644 | A Linear issue of an unlisted team is private and the same record with the team listed is published | Unit | P0 | FR-057-AC-2 | ✅ `tests/record_sink.rs` passing |
+| TC-645 | A failing, unanswered or unrecognized visibility lookup is refused as `visibility_unknown` under the one code and sends nothing | Unit | P0 | FR-057-AC-3 | ✅ `tests/record_sink.rs` passing |
+| TC-646 | The publishing repository and the subject are checked even when `references` is empty or omits them | Unit | P0 | FR-057-AC-4 | ✅ `tests/record_sink.rs` passing |
+| TC-647 | The check runs on each publish: a repository made private between two publishes refuses the second | Unit | P0 | FR-057-AC-6 | ✅ `tests/record_sink.rs` passing |
+| TC-648 | The private-store and `none` sinks publish the record the public sink refused and run no check; a refusal reaches no other sink | Unit | P0 | FR-057-AC-7, FR-057-AC-9 | ✅ `tests/record_sink.rs` passing |
+| TC-649 | Over generated records and visibility maps the public sink sends, and the signing step uses the public path, only when the publisher, subject and every reference are public | Property | P0 | FR-057-AC-8, NFR-009-M-1 | ✅ `tests/record_sink.rs` passing |
+| TC-650 | Signing for the private store or `none` makes no public-log call; the public path signs only after the check passed and never for a refused record | Unit | P0 | FR-057-AC-10, FR-057-AC-11, NFR-010-M-2 | ✅ `tests/record_sink.rs` passing |
+| TC-651 | The sink module source implements no signature primitive | Static | P0 | NFR-010-M-1 | ✅ `tests/record_sink.rs` passing |
+| TC-652 | A registered implementation cannot reach the public log: a public-log selection still runs the leak check, a leaking record sends and public-signs nothing, and the proof carries the checked bytes | Unit | P0 | FR-057-AC-8, NFR-009-M-2 | ✅ `tests/record_sink.rs` passing |
 
 ## Option Permutation Matrix
 

@@ -227,6 +227,11 @@ path = "tests/approval_trail_gitsign.rs"
 required-features = ["full"]
 
 [[test]]
+name = "record_sink"
+path = "tests/record_sink.rs"
+required-features = ["record-sink"]
+
+[[test]]
 name = "release"
 path = "tests/release.rs"
 required-features = ["release"]
@@ -442,6 +447,15 @@ approval-trail = ["approval-verify", "dep:serde"]
 # Baseline and the path and frontmatter rules it reads; the git adapter lives
 # in the binary.
 release = ["approval-verify", "dep:serde"]
+# FR-054 to FR-057: record forms, sink selection, the fail-closed leak check and
+# the sink layer. Pure: the log, the store, the visibility source and the
+# delegated signing stack are traits the caller supplies.
+record-sink = [
+  "dep:serde",
+  "dep:serde_json",
+  "dep:serde_json_canonicalizer",
+  "dep:thiserror",
+]
 # FR-052: pure request rules and record path grammar of the release history; the
 # git adapter lives in the binary.
 release-history = []
@@ -490,6 +504,7 @@ full = [
   "package-lifecycle",
   "package-membership",
   "producer-execution",
+  "record-sink",
   "release",
   "release-history",
   "scope-footprint",
