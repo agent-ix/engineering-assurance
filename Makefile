@@ -1,4 +1,4 @@
-.PHONY: rust-features rust-feature-list lint content-rights-tree test manifest-validate package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-gate release-gate
+.PHONY: syft-integration rust-features rust-feature-list lint content-rights-tree test manifest-validate package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-gate release-gate
 
 EVAL_AGENT ?= codex
 EVAL_RUN ?= canary
@@ -23,6 +23,13 @@ content-rights-tree:
 
 test: content-rights-tree
 	CARGO_BUILD_JOBS=2 cargo test --locked --features full --test python_port -- --nocapture
+
+syft-integration:
+	@case "$$EA_TEST_SYFT" in /*) test -x "$$EA_TEST_SYFT" ;; *) false ;; esac || { \
+		echo "EA_TEST_SYFT must name the absolute path of an executable Syft binary" >&2; \
+		exit 2; \
+	}
+	CARGO_BUILD_JOBS=2 cargo test --locked --features full --test syft_producer_cli -- --ignored
 
 manifest-validate:
 	@test -n "$(strip $(MANIFEST_SCHEMA_ROOT))" || { \

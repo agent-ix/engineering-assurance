@@ -20,9 +20,6 @@ use serde_json::{Value, json};
 
 const REQUEST_SCHEMA: &str =
     include_str!("../src/producer_execute_schemas/producer-execution-request-v1.schema.json");
-/// Stands for the URL scheme prefix in lock-file fixtures, which the content-rights
-/// tree check refuses to see spelled out.
-const URL_PREFIX: &str = concat!("https:", "//");
 const SBOM_PATH: &str = "out/sbom.cdx.json";
 
 struct Syft {
@@ -70,11 +67,14 @@ fn syft() -> Syft {
 /// A capability root holding `scan/` with the given files and an empty `out/`.
 fn workspace(files: &[(&str, &str)]) -> tempfile::TempDir {
     let root = tempfile::tempdir().expect("temporary root");
-    fs::create_dir_all(root.path().join("out")).expect("out/");
+    for directory in ["out/home", "out/xdg", "out/tmp"] {
+        fs::create_dir_all(root.path().join(directory)).expect("out/ subdirectory");
+    }
+    fs::write(root.path().join("out/empty-config.yaml"), "").expect("empty config");
     for (path, body) in files {
         let target = root.path().join("scan").join(path);
         fs::create_dir_all(target.parent().expect("parent")).expect("scan subdirectory");
-        fs::write(target, body.replace("@@", URL_PREFIX)).expect("fixture file");
+        fs::write(target, body).expect("fixture file");
     }
     fs::create_dir_all(root.path().join("scan")).expect("scan/");
     root
@@ -89,6 +89,8 @@ fn syft_request(root: &Path, executable: &Path, version: &str, selector: &str) -
         "-o",
         "cyclonedx-json=out/sbom.cdx.json",
         "-q",
+        "--config",
+        "out/empty-config.yaml",
     ];
     json!({
         "protocol": "engineering-assurance.producer-execution-request/v1",
@@ -109,7 +111,9 @@ fn syft_request(root: &Path, executable: &Path, version: &str, selector: &str) -
             "SYFT_CACHE_DIR": format!("{root}/out/cache"),
             "SYFT_FILE_METADATA_SELECTION": "none",
             "HOME": format!("{root}/out/home"),
-            "XDG_CONFIG_HOME": format!("{root}/out/home")
+            "XDG_CONFIG_HOME": format!("{root}/out/home"),
+            "XDG_CONFIG_DIRS": format!("{root}/out/xdg"),
+            "TMPDIR": format!("{root}/out/tmp")
         },
         "inputs": [],
         "stdin": {"kind": "null"},
@@ -208,19 +212,19 @@ const CARGO_LOCK: &str = r#"version = 3
 [[package]]
 name = "fx-lumen"
 version = "1.2.0"
-source = "registry+@@github.com/rust-lang/crates.io-index"
+source = "registry+fictional"
 checksum = "1111111111111111111111111111111111111111111111111111111111111111"
 
 [[package]]
 name = "fx-ember"
 version = "0.4.1"
-source = "registry+@@github.com/rust-lang/crates.io-index"
+source = "registry+fictional"
 checksum = "2222222222222222222222222222222222222222222222222222222222222222"
 
 [[package]]
 name = "fx-quill"
 version = "2.0.0"
-source = "registry+@@github.com/rust-lang/crates.io-index"
+source = "registry+fictional"
 checksum = "3333333333333333333333333333333333333333333333333333333333333333"
 "#;
 
@@ -232,10 +236,10 @@ const NPM_LOCK: &str = r#"{
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
-    "": {"name": "fx-root", "version": "1.0.0", "dependencies": {"fx-lumen": "1.2.0", "fx-ember": "0.4.1", "fx-quill": "2.0.0"}},
-    "node_modules/fx-lumen": {"version": "1.2.0", "resolved": "@@registry.example.invalid/fx-lumen/-/fx-lumen-1.2.0.tgz", "integrity": "sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="},
-    "node_modules/fx-ember": {"version": "0.4.1", "resolved": "@@registry.example.invalid/fx-ember/-/fx-ember-0.4.1.tgz", "integrity": "sha512-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=="},
-    "node_modules/fx-quill": {"version": "2.0.0", "resolved": "@@registry.example.invalid/fx-quill/-/fx-quill-2.0.0.tgz", "integrity": "sha512-CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC=="}
+    "": {"dependencies": {"fx-lumen": "1.2.0", "fx-ember": "0.4.1", "fx-quill": "2.0.0"}},
+    "node_modules/fx-lumen": {"version": "1.2.0"},
+    "node_modules/fx-ember": {"version": "0.4.1"},
+    "node_modules/fx-quill": {"version": "2.0.0"}
   }
 }
 "#;
@@ -352,6 +356,7 @@ fn fixture_request(root: &Path, arguments: &[&str]) -> Value {
 
 #[trace("TC-278", "FR-038-AC-1", "FR-039-AC-1")]
 #[test]
+#[ignore = "needs EA_TEST_SYFT"]
 fn tc_278_rust_fixture_yields_declared_component_count() {
     let sbom = sbom_for_source(&[("Cargo.toml", CARGO_TOML), ("Cargo.lock", CARGO_LOCK)]);
     assert_fixture(&sbom, 3, "pkg:cargo/");
@@ -359,6 +364,7 @@ fn tc_278_rust_fixture_yields_declared_component_count() {
 
 #[trace("TC-279", "FR-039-AC-2")]
 #[test]
+#[ignore = "needs EA_TEST_SYFT"]
 fn tc_279_npm_fixture_yields_declared_component_count() {
     let sbom = sbom_for_source(&[
         ("package.json", NPM_PACKAGE),
@@ -369,6 +375,7 @@ fn tc_279_npm_fixture_yields_declared_component_count() {
 
 #[trace("TC-280", "FR-039-AC-3")]
 #[test]
+#[ignore = "needs EA_TEST_SYFT"]
 fn tc_280_python_fixture_yields_declared_component_count() {
     let sbom = sbom_for_source(&[("requirements.txt", REQUIREMENTS)]);
     assert_fixture(&sbom, 3, "pkg:pypi/");
@@ -376,6 +383,7 @@ fn tc_280_python_fixture_yields_declared_component_count() {
 
 #[trace("TC-281", "FR-038-AC-2", "FR-039-AC-4")]
 #[test]
+#[ignore = "needs EA_TEST_SYFT"]
 fn tc_281_container_archive_yields_declared_component_count() {
     let syft = syft();
     let root = workspace(&[]);
@@ -387,25 +395,31 @@ fn tc_281_container_archive_yields_declared_component_count() {
         "oci-archive:scan/image.tar",
     );
     let sbom = completed_sbom(root.path(), &request);
-    assert_fixture(&sbom, 3, "pkg:deb/");
+    let mut names: Vec<&str> = components(&sbom)
+        .iter()
+        .map(|component| component["name"].as_str().unwrap_or_default())
+        .collect();
+    names.sort_unstable();
+    assert_eq!(names, ["fx-ember", "fx-lumen", "fx-quill"], "{sbom}");
     for component in components(&sbom) {
-        assert_ne!(component["type"], "operating-system");
-        assert_ne!(component["type"], "file");
+        assert_eq!(component["type"], "library");
     }
 }
 
 #[trace("TC-282", "FR-038-AC-7")]
 #[test]
-fn tc_282_scan_ignores_configuration_and_earlier_output_outside_scan() {
+#[ignore = "needs EA_TEST_SYFT"]
+fn tc_282_scan_ignores_planted_configuration_and_earlier_output() {
     let syft = syft();
-    let root = workspace(&[("Cargo.toml", CARGO_TOML), ("Cargo.lock", CARGO_LOCK)]);
-    fs::write(root.path().join(".syft.yaml"), "exclude:\n  - \"**\"\n").expect("planted config");
+    let planted = "exclude:\n  - \"**\"\n";
+    let root = workspace(&[
+        ("Cargo.toml", CARGO_TOML),
+        ("Cargo.lock", CARGO_LOCK),
+        (".syft.yaml", planted),
+        (".syft/config.yaml", planted),
+    ]);
     fs::create_dir_all(root.path().join("out/cache")).expect("cache");
-    fs::write(
-        root.path().join("out/cache/package-lock.json"),
-        NPM_LOCK.replace("@@", URL_PREFIX),
-    )
-    .expect("earlier cache");
+    fs::write(root.path().join("out/cache/package-lock.json"), NPM_LOCK).expect("earlier cache");
     fs::write(
         root.path().join(SBOM_PATH),
         r#"{"bomFormat":"CycloneDX","components":[{"type":"library","name":"fx-ghost"}]}"#,
@@ -420,12 +434,10 @@ fn tc_282_scan_ignores_configuration_and_earlier_output_outside_scan() {
     );
 }
 
+#[cfg(target_os = "linux")]
 #[trace("TC-283", "FR-038-AC-3", "FR-039-AC-6")]
 #[test]
 fn tc_283_missing_executable_is_unavailable_without_an_sbom() {
-    if !cfg!(target_os = "linux") {
-        return;
-    }
     let root = workspace(&[]);
     let absent = root.path().join("absent-syft");
     let request = syft_request(root.path(), &absent, "1.0.0", "dir:scan");
@@ -435,12 +447,10 @@ fn tc_283_missing_executable_is_unavailable_without_an_sbom() {
     assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
 }
 
+#[cfg(target_os = "linux")]
 #[trace("TC-284", "FR-038-AC-4", "FR-039-AC-6")]
 #[test]
 fn tc_284_failed_and_timed_out_runs_carry_no_sbom() {
-    if !cfg!(target_os = "linux") {
-        return;
-    }
     let root = workspace(&[]);
     let failing = fixture_request(root.path(), &["exit", "3", "nope"]);
     assert_valid_request(&failing);
@@ -455,12 +465,10 @@ fn tc_284_failed_and_timed_out_runs_carry_no_sbom() {
     assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
 }
 
+#[cfg(target_os = "linux")]
 #[trace("TC-285", "FR-038-AC-6")]
 #[test]
 fn tc_285_stale_sbom_is_absent_from_a_failed_result() {
-    if !cfg!(target_os = "linux") {
-        return;
-    }
     let root = workspace(&[]);
     fs::write(root.path().join(SBOM_PATH), b"stale").expect("stale SBOM");
     let value = result(&fixture_request(root.path(), &["exit", "3", "nope"]));
@@ -484,35 +492,66 @@ fn tc_286_request_matches_the_definition_and_the_published_schema() {
     );
     assert_valid_request(&request);
 
-    let arguments: Vec<&str> = request["arguments"]
-        .as_array()
-        .expect("arguments")
-        .iter()
-        .map(|argument| argument["value"].as_str().expect("literal"))
-        .collect();
-    assert_eq!(arguments.iter().filter(|value| **value == "-o").count(), 1);
-    assert!(arguments.contains(&"cyclonedx-json=out/sbom.cdx.json"));
-    assert!(!arguments.iter().any(|value| value.contains("spdx")));
+    let base = fs::canonicalize(root.path())
+        .expect("root")
+        .display()
+        .to_string();
+    let literals: Vec<Value> = [
+        "scan",
+        "dir:scan",
+        "-o",
+        "cyclonedx-json=out/sbom.cdx.json",
+        "-q",
+        "--config",
+        "out/empty-config.yaml",
+    ]
+    .iter()
+    .map(|value| json!({"kind": "literal", "value": value}))
+    .collect();
+    assert_eq!(request["arguments"], json!(literals));
+    assert_eq!(
+        request["environment"],
+        json!({
+            "SYFT_CHECK_FOR_APP_UPDATE": "false",
+            "SYFT_CACHE_DIR": format!("{base}/out/cache"),
+            "SYFT_FILE_METADATA_SELECTION": "none",
+            "HOME": format!("{base}/out/home"),
+            "XDG_CONFIG_HOME": format!("{base}/out/home"),
+            "XDG_CONFIG_DIRS": format!("{base}/out/xdg"),
+            "TMPDIR": format!("{base}/out/tmp")
+        })
+    );
     assert_eq!(request["inputs"], json!([]));
     assert_eq!(request["stdin"], json!({"kind": "null"}));
     assert_eq!(
-        request["containment"]["contract"],
-        json!({"kind": "engineering-assurance.syft-containment", "version": "1"})
+        request["containment"],
+        json!({
+            "profile": "process-group-v1",
+            "contract": {"kind": "engineering-assurance.syft-containment", "version": "1"}
+        })
     );
     assert_eq!(
-        request["environment"]["SYFT_FILE_METADATA_SELECTION"],
-        "none"
+        request["outputs"],
+        json!([{"role": "sbom", "path": "out/sbom.cdx.json", "required": true}])
     );
-    assert_eq!(request["environment"].as_object().expect("env").len(), 5);
 }
 
 #[trace("TC-287", "FR-038-AC-8", "FR-038-CON-1", "FR-039-AC-5")]
 #[test]
-fn tc_287_missing_syft_fails_with_a_message_naming_the_variable() {
-    let unset = resolve_syft(None).err().expect("unset must fail");
-    assert!(unset.contains("EA_TEST_SYFT"), "{unset}");
-    let absent = resolve_syft(Some("/nonexistent/syft".into()))
-        .err()
-        .expect("unrunnable must fail");
-    assert!(absent.contains("EA_TEST_SYFT"), "{absent}");
+fn tc_287_missing_syft_fails_the_integration_target_naming_the_variable() {
+    let not_executable = tempfile::NamedTempFile::new().expect("plain file");
+    for syft in [None, Some("relative/syft"), not_executable.path().to_str()] {
+        let mut make = Command::new("make");
+        make.args(["-C", env!("CARGO_MANIFEST_DIR"), "syft-integration"])
+            .env_remove("EA_TEST_SYFT");
+        if let Some(path) = syft {
+            make.env("EA_TEST_SYFT", path);
+        }
+        let output = make.output().expect("make must start");
+        assert_eq!(output.status.code(), Some(2), "{syft:?}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("EA_TEST_SYFT"), "{stderr}");
+    }
+    let message = resolve_syft(None).err().expect("unset must fail");
+    assert!(message.contains("EA_TEST_SYFT"), "{message}");
 }

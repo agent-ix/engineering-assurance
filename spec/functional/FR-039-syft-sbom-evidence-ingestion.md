@@ -58,7 +58,7 @@ The retained `sbom` artifact of the FR-038 result, unchanged.
 | FR-039-AC-1 | The Rust fixture's retained artifact has a top-level `components` array of the declared package count, each with a `pkg:cargo/` purl. | Test |
 | FR-039-AC-2 | The npm fixture's artifact has the declared package count with `pkg:npm/` purls. | Test |
 | FR-039-AC-3 | The Python fixture's artifact has the declared package count with `pkg:pypi/` purls. | Test |
-| FR-039-AC-4 | The container fixture's artifact has the declared package count, no `operating-system` component and no `file` component. | Test |
+| FR-039-AC-4 | The container fixture's artifact has the declared package count, each component of type `library` and named for a declared package, no `operating-system` component and no `file` component. | Test |
 | FR-039-AC-5 | The Syft-dependent tests obtain Syft as FR-038-CON-1 states; a missing Syft fails them. | Test |
 | FR-039-AC-6 | A non-`completed` FR-038 result (`unavailable`, `failed`, `timed_out`) is reported as that state with no artifact presented. | Test |
 | FR-039-AC-7 | Design review confirms Engineering Assurance contains no CycloneDX component reader, no quoin dependency and no quoin launch path in production code. Test code that counts the array in AC-1 to AC-4 is the only reader. | Inspection |
