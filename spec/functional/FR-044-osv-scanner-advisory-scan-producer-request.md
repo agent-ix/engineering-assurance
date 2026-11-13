@@ -47,7 +47,7 @@ decide each UNVERIFIED row.
 | --- | --- | --- | --- |
 | 1 | CLI to scan a CycloneDX SBOM, JSON output | VERIFIED | `docs/scan-source.md`: `osv-scanner scan source -L <sbom>`; an SBOM is recognised by file name (`*.cdx.json`, `bom.json`). `--sbom` is deprecated in favour of `-L` (`cmd/osv-scanner/scan/source/command.go`). `docs/output.md`: `--format json`; `--output-file <path>` writes the result to a file (`internal/helper/flags.go`). |
 | 2 | SBOM from stdin | UNVERIFIED | Neither `docs/scan-source.md` nor the `scan source` command source documents stdin for a scan; the scan target is a path. This definition therefore passes the retained snapshot as an FR-019 `input_artifact` argument (a descriptor path). Whether a descriptor path with no `.cdx.json` name is accepted as a CycloneDX SBOM is UNVERIFIED (see Inputs). |
-| 3 | Offline mode | VERIFIED | `docs/offline-mode.md`: `--offline` scans against a previously downloaded local database, downloads nothing and fails with an error when no database is present. The directory is `OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY`, laid out `{dir}/osv-scalibr/<ecosystem>/all.zip`. Mirrors of `all.zip` come from `https://osv-vulnerabilities.storage.googleapis.com/<ECOSYSTEM>/all.zip`; the ecosystem list is `ecosystems.txt` in that bucket. `--download-offline-databases` downloads and is barred here. |
+| 3 | Offline mode | VERIFIED | `docs/offline-mode.md`: `--offline` scans against a previously downloaded local database, downloads nothing and fails with an error when no database is present. The directory is `OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY`, laid out `{dir}/osv-scalibr/<ecosystem>/all.zip`. Mirrors of `all.zip` come from the OSV bucket path `<ECOSYSTEM>/all.zip` named in `docs/offline-mode.md`; the ecosystem list is `ecosystems.txt` in that bucket. `--download-offline-databases` downloads and is barred here. |
 | 4 | JSON envelope and database identity | VERIFIED absent | `pkg/models/results.go`: the top-level object holds `results` (each `source` and `packages`), `experimental_config`, optional `image_metadata` and `license_summary`. No field names the database, the zip, or a database version or build time. Each package carries `package.name`, `version`, `ecosystem`, optional `purl`, and `vulnerabilities` (full OSV records) with `groups` of aliased ids. |
 | 5 | Exit codes | VERIFIED | `docs/output.md` Return Codes: `0` packages found and no vulnerabilities; `1` packages found and vulnerabilities found; `127` general error; `128` no packages found; `129-255` reserved for non-result errors. A partial scan (some lookup failed but the run continued) is not distinguished from a complete one by any documented code or field: UNVERIFIED. |
 | 5a | `--all-packages` lists clean packages in the JSON | UNVERIFIED | `docs/usage.md` states the flag outputs all packages in JSON, so a clean scan names the packages it read; the quoin adapter FR-149 refuses a report with no packages. Not run. |
@@ -57,7 +57,7 @@ decide each UNVERIFIED row.
 ### Data terms
 
 The advisory data OSV-Scanner reads is third-party data with its own terms. These are recorded as the data
-terms this definition works to; they are not legal advice.
+terms this definition works to.
 
 | Source | Term | Consequence here |
 | --- | --- | --- |
