@@ -10,7 +10,7 @@
 //! It signs nothing and starts nothing.
 
 use crate::approval_verify::{RECORD_DIGEST_TRAILER, RECORD_ID_TRAILER, is_record_value};
-use crate::signature_verify::MEANING_TOKEN;
+use crate::signature_verify::{MEANING_TOKEN, SignatureFormat, split_tag_object};
 
 /// Longest accepted `Signed-off-meaning` value in bytes.
 pub const MAX_MEANING_BYTES: usize = 256;
@@ -70,6 +70,9 @@ pub fn compose_message(record_id: &str, record_digest: &str, meaning: &str) -> S
 pub enum SigningSetting {
     /// `gpg.format`: unset, or neither `ssh` nor `x509`.
     GpgFormat,
+    /// `gpg.x509.program`: unset under `gpg.format=x509`, where git would sign
+    /// with `gpgsm`, a signature FR-040 does not verify.
+    X509Program,
     /// `user.signingkey`: unset under `gpg.format=ssh`, with no default key
     /// command either.
     UserSigningKey,
@@ -81,6 +84,7 @@ impl SigningSetting {
     pub const fn key(self) -> &'static str {
         match self {
             Self::GpgFormat => "gpg.format",
+            Self::X509Program => "gpg.x509.program",
             Self::UserSigningKey => "user.signingkey",
         }
     }
@@ -97,17 +101,28 @@ fn set(value: Option<&str>) -> bool {
 /// is how `gitsign` signs (FR-040); an unset format means `OpenPGP` to git, which
 /// FR-036 does not verify. Under `ssh` git needs a key: `signing_key` is
 /// `user.signingkey` and `default_key_command` is `gpg.ssh.defaultKeyCommand`.
-/// Under `x509` the configured program chooses the key, so none is required.
+/// Under `x509` the program must be set (`gpg.x509.program`, `gitsign` being the
+/// one FR-040 verifies) and chooses the key, so none is required.
 #[must_use]
 pub fn signing_refusal(
     format: Option<&str>,
     signing_key: Option<&str>,
     default_key_command: Option<&str>,
+    x509_program: Option<&str>,
 ) -> Option<SigningSetting> {
     match format {
         Some("ssh") => (!set(signing_key) && !set(default_key_command))
             .then_some(SigningSetting::UserSigningKey),
-        Some("x509") => None,
+        Some("x509") => (!set(x509_program)).then_some(SigningSetting::X509Program),
         _ => Some(SigningSetting::GpgFormat),
     }
+}
+
+/// Whether the tag object `object` carries a signature block of a kind
+/// `approval-verify` can check (SSH, or X.509 CMS for `gitsign`). Git 2.34 can
+/// exit 0 from `git tag -s` and write an unsigned tag when an SSH signature fails.
+#[must_use]
+pub fn tag_is_signed(object: &[u8]) -> bool {
+    split_tag_object(object)
+        .is_some_and(|split| matches!(split.format, SignatureFormat::Ssh | SignatureFormat::Cms))
 }

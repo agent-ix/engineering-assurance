@@ -423,16 +423,26 @@ fn tc_344_the_configured_key_signs_and_nothing_else_changes() {
     let fixture = fixture();
     let before = snapshot(&fixture);
     fixture.ssh_config("a");
+    let global_a = fs::read(fixture.global()).expect("global config");
     created(&fixture, &tag_request(&fixture, "by-alice", "reviewed"));
+    assert_eq!(fs::read(fixture.global()).expect("global"), global_a);
     fixture.ssh_config("b");
+    let global_b = fs::read(fixture.global()).expect("global config");
     created(&fixture, &tag_request(&fixture, "by-bob", "reviewed"));
+    assert_eq!(fs::read(fixture.global()).expect("global"), global_b);
     assert_eq!(verified(&fixture, "by-alice", false)["approver"], ALICE);
     assert_eq!(verified(&fixture, "by-bob", false)["approver"], BOB);
 
     let after = snapshot(&fixture);
-    // Only the two new tag refs differ; the configuration files are as written.
     assert_eq!(after.2, before.2, "repository configuration is unchanged");
     assert_eq!(after.3, before.3, "no commit is made");
+    // Every earlier ref is unchanged; exactly the two new tag refs are added.
+    for old in before.0.lines() {
+        assert!(
+            after.0.lines().any(|line| line == old),
+            "ref changed: {old}"
+        );
+    }
     let new_refs: Vec<&str> = after
         .0
         .lines()
@@ -446,10 +456,6 @@ fn tc_344_the_configured_key_signs_and_nothing_else_changes() {
     );
     let remote = fixture.root().join("remote.git");
     assert_eq!(git(&remote, &["for-each-ref"]), "", "nothing is pushed");
-    assert_eq!(
-        fs::read_to_string(fixture.global()).expect("global config"),
-        String::from_utf8(after.1).expect("utf-8")
-    );
 }
 
 #[test]
@@ -466,6 +472,7 @@ fn tc_345_missing_signing_configuration_is_refused_naming_the_setting() {
             "[gpg]\n\tformat = ssh\n[user]\n\tsigningkey = \n",
             "user.signingkey",
         ),
+        ("[gpg]\n\tformat = x509\n", "gpg.x509.program"),
     ];
     for (body, setting) in cases {
         fixture.config(body);
@@ -554,6 +561,17 @@ fn tc_346_a_record_that_does_not_resolve_is_refused() {
         &tag_request(&fixture, "approve-17", "reviewed"),
         "approval_tag_record_unresolved",
     );
+    run_program(
+        "mkfifo",
+        fixture.root(),
+        &[fixture.record().to_str().expect("utf-8")],
+    );
+    refused(
+        &fixture,
+        &tag_request(&fixture, "approve-17", "reviewed"),
+        "approval_tag_record_unresolved",
+    );
+    fs::remove_file(fixture.record()).expect("remove fifo");
     fs::create_dir(fixture.record()).expect("directory");
     refused(
         &fixture,
@@ -572,6 +590,10 @@ fn tc_347_bad_and_existing_tag_names_and_bad_revisions_are_refused() {
     fixture.ssh_config("a");
     for name in [
         "a..b",
+        "HEAD",
+        "@",
+        "heads/main",
+        "main",
         "a~b",
         "a^b",
         "a:b",
@@ -717,7 +739,7 @@ fn tc_349_a_relative_path_entry_in_the_repository_is_never_run() {
 
 #[test]
 #[trace("TC-350", "FR-042-AC-11")]
-fn tc_350_a_failing_signing_program_writes_no_tag() {
+fn tc_350_a_failing_signer_leaves_no_tag_for_x509_and_for_ssh() {
     let fixture = fixture();
     fixture.x509_config();
     fs::write(fixture.bin().join("fail"), "").expect("fail flag");
@@ -727,5 +749,39 @@ fn tc_350_a_failing_signing_program_writes_no_tag() {
         "approval_tag_create_failed",
     );
     fs::remove_file(fixture.bin().join("fail")).expect("remove flag");
+    created(&fixture, &tag_request(&fixture, "approve-17", "reviewed"));
+
+    // Git 2.34 exits 0 and writes an unsigned tag when an SSH signature fails:
+    // a missing key file, and a passphrase-protected key with no agent.
+    let fixture = self::fixture();
+    let locked = fixture.root().join("locked");
+    run_program(
+        "ssh-keygen",
+        fixture.root(),
+        &[
+            "-q",
+            "-t",
+            "ed25519",
+            "-N",
+            "secret",
+            "-f",
+            locked.to_str().expect("utf-8"),
+        ],
+    );
+    for key in [
+        fixture.root().join("missing.pub"),
+        fixture.root().join("locked.pub"),
+    ] {
+        fixture.config(&format!(
+            "[gpg]\n\tformat = ssh\n[user]\n\tsigningkey = {}\n",
+            key.display()
+        ));
+        refused(
+            &fixture,
+            &tag_request(&fixture, "approve-17", "reviewed"),
+            "approval_tag_create_failed",
+        );
+    }
+    fixture.ssh_config("a");
     created(&fixture, &tag_request(&fixture, "approve-17", "reviewed"));
 }

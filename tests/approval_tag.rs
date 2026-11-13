@@ -5,7 +5,7 @@
 
 use engineering_assurance::approval_tag::{
     MAX_MEANING_BYTES, SigningSetting, compose_message, is_meaning, is_record_digest,
-    is_trailer_record_value, signing_refusal,
+    is_trailer_record_value, signing_refusal, tag_is_signed,
 };
 use engineering_assurance::approval_verify::{RECORD_DIGEST_TRAILER, RECORD_ID_TRAILER};
 use engineering_assurance::signature_verify::{MEANING_TOKEN, trailer_values};
@@ -101,21 +101,40 @@ fn tc_340_only_ssh_with_a_key_and_x509_can_sign_a_verifiable_tag() {
     for format in formats {
         for key in values {
             for command in values {
-                let refusal = signing_refusal(format, key, command);
-                match format {
-                    Some("x509") => assert_eq!(refusal, None),
-                    Some("ssh") if key == Some("key") || command == Some("key") => {
-                        assert_eq!(refusal, None);
+                for program in values {
+                    let refusal = signing_refusal(format, key, command, program);
+                    match format {
+                        Some("x509") if program == Some("key") => assert_eq!(refusal, None),
+                        Some("x509") => assert_eq!(refusal, Some(SigningSetting::X509Program)),
+                        Some("ssh") if key == Some("key") || command == Some("key") => {
+                            assert_eq!(refusal, None);
+                        }
+                        Some("ssh") => assert_eq!(refusal, Some(SigningSetting::UserSigningKey)),
+                        _ => assert_eq!(refusal, Some(SigningSetting::GpgFormat)),
                     }
-                    Some("ssh") => assert_eq!(refusal, Some(SigningSetting::UserSigningKey)),
-                    _ => assert_eq!(refusal, Some(SigningSetting::GpgFormat)),
+                    accepted += usize::from(refusal.is_none());
                 }
-                accepted += usize::from(refusal.is_none());
             }
         }
     }
-    // x509 with any of 9 key combinations, ssh with the 5 that carry a key.
-    assert_eq!(accepted, 9 + 5);
+    // x509 with a program (9 key combinations), ssh with a key (5, times 3 programs).
+    assert_eq!(accepted, 9 + 5 * 3);
+    assert_eq!(SigningSetting::X509Program.key(), "gpg.x509.program");
     assert_eq!(SigningSetting::GpgFormat.key(), "gpg.format");
     assert_eq!(SigningSetting::UserSigningKey.key(), "user.signingkey");
+}
+
+#[test]
+#[trace("TC-340", "FR-042-AC-11")]
+fn tc_340_only_a_tag_with_a_supported_signature_block_counts_as_signed() {
+    let head = "object 0123456789abcdef0123456789abcdef01234567\ntype commit\ntag t\ntagger a <a@example.test> 1 +0000\n\nmsg\n";
+    assert!(!tag_is_signed(head.as_bytes()));
+    for block in [
+        "-----BEGIN SSH SIGNATURE-----\nAAAA\n-----END SSH SIGNATURE-----\n",
+        "-----BEGIN SIGNED MESSAGE-----\nAAAA\n-----END SIGNED MESSAGE-----\n",
+    ] {
+        assert!(tag_is_signed(format!("{head}{block}").as_bytes()));
+    }
+    let pgp = "-----BEGIN PGP SIGNATURE-----\nAAAA\n-----END PGP SIGNATURE-----\n";
+    assert!(!tag_is_signed(format!("{head}{pgp}").as_bytes()));
 }

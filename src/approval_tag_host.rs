@@ -12,15 +12,15 @@
 
 use std::{
     ffi::OsStr,
-    fs::File,
     io::Read,
+    os::unix::fs::OpenOptionsExt,
     path::{Path, PathBuf},
     time::Duration,
 };
 
 use engineering_assurance::approval_tag::{
     SigningSetting, compose_message, is_meaning, is_record_digest, is_trailer_record_value,
-    signing_refusal,
+    signing_refusal, tag_is_signed,
 };
 use engineering_assurance::signature_verify::is_plain_revision;
 use serde::{Deserialize, Serialize};
@@ -38,9 +38,8 @@ const RECORD_SCHEMA_VERSION: u64 = 2;
 /// Largest accepted record file in bytes.
 const MAX_RECORD_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
-/// Signing may wait on a passphrase prompt, so the bound is longer than the
-/// 60 seconds of the verification adapters.
-const PROCESS_TIMEOUT: Duration = Duration::from_secs(120);
+/// The signer must be non-interactive: the process host gives git no terminal.
+const PROCESS_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -104,11 +103,14 @@ pub(crate) enum ApprovalTagError {
         .0.key()
     )]
     SigningUnconfigured(SigningSetting),
-    /// `git tag -s` did not create the tag.
+    /// `git tag -s` did not create a signed tag.
     #[error(
-        "approval-tag: git tag -s did not create the tag (signing program, key or ref update failed)"
+        "approval-tag: git tag -s did not create a signed tag (signing key, program or ref update failed, or it timed out; the signer must be non-interactive); no tag was left"
     )]
     CreateFailed,
+    /// The message file could not be prepared locally.
+    #[error("approval-tag could not prepare its message file")]
+    LocalIo,
     /// Git could not be started, timed out or produced too much output.
     #[error("approval-tag could not run git from an absolute PATH entry")]
     GitUnavailable,
@@ -133,6 +135,7 @@ impl ApprovalTagError {
             Self::RevisionUnresolved => "approval_tag_revision_unresolved",
             Self::SigningUnconfigured(_) => "approval_tag_signing_unconfigured",
             Self::CreateFailed => "approval_tag_create_failed",
+            Self::LocalIo => "approval_tag_local_io_failed",
             Self::GitUnavailable => "approval_tag_git_unavailable",
             Self::GitFailed => "approval_tag_git_failed",
             Self::ResultEncoding => "approval_tag_result_encoding_failed",
@@ -173,6 +176,11 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalTagError> {
     if git.resolve(&full_name)?.is_some() {
         return Err(ApprovalTagError::TagExists);
     }
+    // A name that already resolves as a revision (`HEAD`, `@`, `heads/x`) would
+    // not resolve to the new tag for `approval-verify`.
+    if git.resolve(&request.tag)?.is_some() {
+        return Err(ApprovalTagError::TagInvalid);
+    }
     let target = git
         .resolve(&format!("{}^{{commit}}", request.revision))?
         .ok_or(ApprovalTagError::RevisionUnresolved)?;
@@ -182,9 +190,7 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalTagError> {
         &target,
         &compose_message(&request.record_id, digest, &request.meaning),
     )?;
-    let tag_object = git
-        .resolve(&full_name)?
-        .ok_or(ApprovalTagError::CreateFailed)?;
+    let tag_object = git.created_signed(&request.tag)?;
     let mut line = serde_json::to_vec(&ResultLine {
         protocol: RESULT_PROTOCOL,
         status: "created",
@@ -210,12 +216,17 @@ fn resolve_record(path: &Path, record_id: &str) -> Result<(), ApprovalTagError> 
     fn unresolved<E>(_: E) -> ApprovalTagError {
         ApprovalTagError::RecordUnresolved
     }
-    // The type is checked before the open: opening a FIFO would block.
-    let before = std::fs::metadata(path).map_err(unresolved)?;
-    if !before.is_file() || before.len() > MAX_RECORD_BYTES {
+    // Opened without blocking, then checked on the handle: a FIFO swapped in
+    // for the file cannot hang the read.
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(rustix::fs::OFlags::NONBLOCK.bits().cast_signed())
+        .open(path)
+        .map_err(unresolved)?;
+    let metadata = file.metadata().map_err(unresolved)?;
+    if !metadata.is_file() || metadata.len() > MAX_RECORD_BYTES {
         return Err(ApprovalTagError::RecordUnresolved);
     }
-    let file = File::open(path).map_err(unresolved)?;
     let mut bytes = Vec::new();
     file.take(MAX_RECORD_BYTES + 1)
         .read_to_end(&mut bytes)
@@ -254,7 +265,18 @@ impl Git<'_> {
     /// `PATH` is cut to its absolute entries so that neither git nor the signing
     /// program it starts is found inside the repository.
     fn run(&self, arguments: &[&OsStr]) -> Result<CompletedProcess, ApprovalTagError> {
-        let (git, path) = resolve_program("git").map_err(|_| ApprovalTagError::GitUnavailable)?;
+        self.run_raw(arguments).map_err(|error| match error {
+            ProcessError::Unavailable { .. }
+            | ProcessError::TimedOut { .. }
+            | ProcessError::OutputTooLarge { .. } => ApprovalTagError::GitUnavailable,
+            ProcessError::PipeUnavailable { .. }
+            | ProcessError::Observation { .. }
+            | ProcessError::OutputUnreadable { .. } => ApprovalTagError::GitFailed,
+        })
+    }
+
+    fn run_raw(&self, arguments: &[&OsStr]) -> Result<CompletedProcess, ProcessError> {
+        let (git, path) = resolve_program("git")?;
         let removed: Vec<&OsStr> = REMOVED_ENVIRONMENT.iter().map(OsStr::new).collect();
         process_host::run_configured(
             git.as_os_str(),
@@ -270,14 +292,6 @@ impl Git<'_> {
                 max_output_bytes: MAX_OUTPUT_BYTES,
             },
         )
-        .map_err(|error| match error {
-            ProcessError::Unavailable { .. }
-            | ProcessError::TimedOut { .. }
-            | ProcessError::OutputTooLarge { .. } => ApprovalTagError::GitUnavailable,
-            ProcessError::PipeUnavailable { .. }
-            | ProcessError::Observation { .. }
-            | ProcessError::OutputUnreadable { .. } => ApprovalTagError::GitFailed,
-        })
     }
 
     /// Whether `git <arguments>` exits 0; exit 1 is "no", anything else is
@@ -351,19 +365,29 @@ impl Git<'_> {
         } else {
             (None, None)
         };
-        signing_refusal(format.as_deref(), key.as_deref(), command.as_deref())
-            .map_or(Ok(()), |setting| {
-                Err(ApprovalTagError::SigningUnconfigured(setting))
-            })
+        let program = if format.as_deref() == Some("x509") {
+            self.config("gpg.x509.program")?
+        } else {
+            None
+        };
+        signing_refusal(
+            format.as_deref(),
+            key.as_deref(),
+            command.as_deref(),
+            program.as_deref(),
+        )
+        .map_or(Ok(()), |setting| {
+            Err(ApprovalTagError::SigningUnconfigured(setting))
+        })
     }
 
     /// `git tag -s` of `target` as `name` with `message`. Signing goes through
     /// the caller's configuration alone: no key, program or format is passed,
     /// and `-f` is never passed, so an existing tag is never replaced.
     fn create(&self, name: &str, target: &str, message: &str) -> Result<(), ApprovalTagError> {
-        let directory = tempfile::tempdir().map_err(|_| ApprovalTagError::GitFailed)?;
+        let directory = tempfile::tempdir().map_err(|_| ApprovalTagError::LocalIo)?;
         let path = directory.path().join("message");
-        std::fs::write(&path, message).map_err(|_| ApprovalTagError::GitFailed)?;
+        std::fs::write(&path, message).map_err(|_| ApprovalTagError::LocalIo)?;
         let arguments: [&OsStr; 8] = [
             OsStr::new("tag"),
             OsStr::new("-s"),
@@ -374,10 +398,46 @@ impl Git<'_> {
             OsStr::new(name),
             OsStr::new(target),
         ];
-        if self.run(&arguments)?.status.success() {
+        // A timeout or kill can come after the ref update; the check below
+        // removes whatever this run wrote.
+        let created = self
+            .run_raw(&arguments)
+            .is_ok_and(|output| output.status.success());
+        if created {
             Ok(())
         } else {
+            self.remove_written(name);
             Err(ApprovalTagError::CreateFailed)
+        }
+    }
+
+    /// The id of the tag object `name` now names, once it is read to carry a
+    /// signature. Git 2.34 exits 0 from `git tag -s` after a failed SSH
+    /// signature and leaves an unsigned tag, so the object is read back; an
+    /// unsigned one is removed and refused.
+    fn created_signed(&self, name: &str) -> Result<String, ApprovalTagError> {
+        let full = format!("refs/tags/{name}");
+        let id = self.resolve(&full)?.ok_or(ApprovalTagError::CreateFailed)?;
+        let signed = self
+            .run(&["cat-file", "tag", &id].map(OsStr::new))
+            .ok()
+            .filter(|output| output.status.success())
+            .is_some_and(|output| tag_is_signed(&output.stdout));
+        if signed {
+            Ok(id)
+        } else {
+            self.remove_written(name);
+            Err(ApprovalTagError::CreateFailed)
+        }
+    }
+
+    /// Deletes the ref `refs/tags/<name>` this run wrote, only if it still names
+    /// the object it names now (compare-and-delete). Nothing else is deleted.
+    fn remove_written(&self, name: &str) {
+        let full = format!("refs/tags/{name}");
+        if let Ok(Some(id)) = self.resolve(&full) {
+            let arguments = ["update-ref", "-d", &full, &id].map(OsStr::new);
+            let _ = self.run_raw(&arguments);
         }
     }
 }
