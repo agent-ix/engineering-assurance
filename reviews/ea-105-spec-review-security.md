@@ -50,6 +50,12 @@ Not mergeable: FND-001 to FND-003 are paths by which private content reaches a p
 | --- | --- | --- | --- |
 | FND-008 | high | `signature` is up to 64 KiB of base64, which encodes any bytes, so "no member's grammar admits free text" is not true of it. The spec does not say what the bundle signs. If it is the approval statement's DSSE bundle, the bundle carries the statement payload (meaning, approver, pull request) inside the public form, and FR-058-AC-8's byte search passes vacuously because the payload is base64. Fix: state that the public `signature` is a bundle over the public form's own canonical bytes, that a bundle whose signed payload is not exactly the public form is rejected, and that a public-log entry for a statement signature carries hashes only, never the statement payload. | spec/functional/FR-056-public-and-private-record-split.md:40-41 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-009 | low | The canonical bytes leave open whether member names are sorted in nested objects (`references`, `subject`, the maps), by which ordering, and how strings are escaped, so two implementations can produce different signed payloads and reject each other's bundles. FR-056-AC-8 is otherwise non-vacuous: it decodes the bundle and compares the payload. Fix: name RFC 8785 (JSON Canonicalization Scheme). | spec/functional/FR-056-public-and-private-record-split.md:44-45 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -61,3 +67,4 @@ Not mergeable: FND-001 to FND-003 are paths by which private content reaches a p
 | FND-005 | fixed | - |
 | FND-006 | fixed | - |
 | FND-007 | fixed | - |
+| FND-008 | fixed | - |

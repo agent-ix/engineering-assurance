@@ -42,6 +42,14 @@ Not mergeable: FND-001 (the pre-merge gate cannot see statements that are only w
 | FND-007 | high | Statements now go through the sinks, but FR-054 selects exactly one implementation per publish with no fallback and the public-log sink sends only the trimmed form. For a repository whose sink is `public_log`, nothing stores the full statement, yet FR-058-AC-8 expects "the private store holds them", and the FR-064 verifier needs the full statement to verify a signature over it and run the role evaluation. With `none`, no statement is kept at all, so post-merge verification is always `unverifiable`. Fix: state that the private form (with the statement) always goes to a private store, alongside the public log when that is selected (the ticket: ticket text, criteria text and model names go to a separate private store), or say where a public repository's statements are kept for the verifier, and state the result for `none`. | spec/functional/FR-058-approval-statement-and-predicate.md:AC-8 |
 | FND-008 | medium | `hashes.subject_commit` must be `sha256:` plus 64 hex characters, but the subject commit is a git commit id, which is SHA-1 (40 hex) in ordinary repositories and is what the in-toto subject carries as its git commit digest. The grammar cannot hold the commit id, and a SHA-256 of something else is undefined. Fix: give `subject_commit` the git object id grammar (40 or 64 lowercase hex, `gitCommit`), or say what is hashed. | spec/functional/FR-056-public-and-private-record-split.md:34-35 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-009 | medium | The satisfied/unsatisfied verdict is now exact and order-independent, but "lexicographically smallest" maximum matching has two readings that give different `missing` sets. Roles A, B, C; X approves A and B; Y approves A and C. The maximum matchings are {A-Y, B-X}, {A-X, C-Y} and {B-X, C-Y}. Compared as sorted (role, individual) pair lists, {A-X, C-Y} is smallest (A-X < A-Y), so `missing` is [B]; compared by covered role set first (cover A, then B if still possible), {A-Y, B-X} wins and `missing` is [C]. The AC-10 and AC-11 cases do not tell the two apart. Only the reported assignment and `missing` differ, never the status. Fix: define the order in one sentence (for example "matchings are compared as their (role, individual) pairs sorted by role name, element by element, by byte order of the names") and add this case as an AC. | spec/functional/FR-061-role-policy-and-distinct-individuals.md:57-59, 78-79 |
+| FND-010 | medium | Requiring a private store for every `public_log` publish is coherent with the ticket (ticket text, criteria text and model names go to a separate private store, and the public repository still defaults to the public sink), and it fails closed rather than making the system unusable. But FR-055 no longer says what an absent `sinks.json` yields. The Description still promises a default with no explicit choice, the old "no configuration" AC was replaced by one that needs a destination, and no error is named for a private repository whose default `private_store` has no destination (`sink_config_incomplete` speaks of a configuration that "selects" the sink). Fix: state that a private store destination is required configuration for every repository, that a missing document or missing destination is refused with one named code, and add that case to an AC. | spec/functional/FR-055-per-repo-sink-configuration-and-visibility-default.md:18-19, 51-52, 75 |
+| FND-011 | low | Because the private form is written only after the leak check passes, a `public_log` publish that the leak check refuses keeps the full private form nowhere, so an approval statement refused this way is lost and FR-064 has no stated result for it. Writing to the private store discloses nothing publicly. Fix: write the private form whatever the leak check decides, or state the verifier's result for a refused statement. | spec/functional/FR-054-record-sink-interface-and-implementations.md:50 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -51,3 +59,6 @@ Not mergeable: FND-001 (the pre-merge gate cannot see statements that are only w
 | FND-003 | fixed | - |
 | FND-004 | fixed | - |
 | FND-005 | fixed | - |
+| FND-006 | fixed | - |
+| FND-007 | fixed | - |
+| FND-008 | fixed | - |

@@ -47,7 +47,8 @@ publishing role of [FR-065](./FR-065-workflow-roles-and-relation-to-signed-relea
 - The sink interface SHALL expose one operation, publish, that takes a record and returns one publish result.
 - The public-log sink SHALL send the trimmed public form of FR-056 and nothing else.
 - The sink layer SHALL write the full private form of FR-056 to the configured private store for every publish whose resolved sink is `public_log` or `private_store`.
-- The sink layer SHALL write the private form before the public-log sink sends, and only after the leak check passed.
+- The sink layer SHALL write the private form first, before the leak check and before any send.
+- The sink layer SHALL fail the publish when the private store write fails.
 - The private-store sink SHALL store the full private form of FR-056 and the trimmed public form it is linked to.
 - The none sink SHALL send and store nothing.
 - The none sink SHALL return `discarded`.
@@ -66,6 +67,7 @@ publishing role of [FR-065](./FR-065-workflow-roles-and-relation-to-signed-relea
 | FR-054-AC-3 | A public-log endpoint that rejects the record yields `refused` with a named error, the full private form stays in the private store, and no record is published through the private store or `none` as a fallback. | Test |
 | FR-054-AC-4 | A test implementation added in the test crate and registered through the interface publishes a record with the record forms of FR-056 unchanged. | Test |
 | FR-054-AC-5 | A publish result with an unknown member, or a `status` outside the three values, is rejected by the result schema. | Test |
+| FR-054-AC-6 | A record that the leak check refuses still has its full private form in the test private store, and nothing is sent to the test public log; a failing private store write fails the publish with a named error before the leak check runs and nothing is sent. | Test |
 
 ## Dependencies
 

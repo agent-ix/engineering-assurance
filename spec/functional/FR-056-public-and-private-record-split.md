@@ -41,8 +41,7 @@ construction. The public form, `engineering-assurance.record-public/v1`, has the
 - `signature`: a signature bundle in standard padded base64 (alphabet `A-Z a-z 0-9 + /`, length a multiple of 4, at
   most 16384 characters), produced by the signing step ([NFR-010](../non-functional/NFR-010-no-cryptography-of-our-own.md))
   and never accepted from the input. The bundle signs only the canonical bytes of the public form itself, that is the
-  public form without its `signature` member, as JSON with sorted member names, no insignificant whitespace and UTF-8
-  encoding. A bundle whose signed payload is anything else, for example a full approval statement, is rejected before
+  public form without its `signature` member, in the JSON Canonicalization Scheme of RFC 8785. A bundle whose signed payload is anything else, for example a full approval statement, is rejected before
   publishing, and a public-log entry for an approval carries the hashes of the public form only, never the statement
   payload.
 
@@ -80,7 +79,7 @@ Out of scope: the record kinds that fill these members (EA-97, EA-98).
 | FR-056-AC-5 | Changing only the private form's contents leaves the public form's signed bytes and signature unchanged. | Test |
 | FR-056-AC-6 | Over generated strings, the public form accepts a string in a member only when it matches that member's grammar, and no accepted string contains a character outside the grammar's alphabet. | Property |
 | FR-056-AC-7 | An approval statement published as a record has a public form of kind `approval` with the statement's digest in `hashes.statement`, and its meaning, pull request reference and approver appear only in the private form's `statement`. | Test |
-| FR-056-AC-8 | The decoded `signature` bundle's signed payload equals the canonical bytes of the public form (sorted members, no whitespace, no `signature` member); a bundle over a full statement, or over any other bytes, is rejected before any sink call, and the test public log receives no entry carrying statement payload bytes. | Test |
+| FR-056-AC-8 | The decoded `signature` bundle's signed payload equals the canonical bytes of the public form (RFC 8785 canonical form, no `signature` member); a bundle over a full statement, or over any other bytes, is rejected before any sink call, and the test public log receives no entry carrying statement payload bytes. | Test |
 
 ## Dependencies
 

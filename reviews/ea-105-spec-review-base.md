@@ -41,6 +41,12 @@ Base checklist passes on structure. FND-001 makes one AC non-deterministic and F
 | --- | --- | --- | --- |
 | FND-005 | low | NFR-010's Verification now names "the second" count twice: the stand-in public log client checks the second metric and the library stand-in test checks the third. Fix: "... checks the third". | spec/non-functional/NFR-010-no-cryptography-of-our-own.md:45-46 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | low | FR-064 returns a `reason` (`statements_not_retained`), but the result `engineering-assurance.approval-verify-statement-result/v1` defines no `reason` member, and it is a closed schema under NFR-008. Separately, the AC tables list FR-061-AC-10 and AC-11 before AC-9, and FR-064-AC-11 before AC-10. Fix: list the result members including `reason`, and put the AC rows in order. | spec/functional/FR-064-verify-approval-statement-with-workflow-identity-policy.md:46-47, 63 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -49,3 +55,4 @@ Base checklist passes on structure. FND-001 makes one AC non-deterministic and F
 | FND-002 | fixed | - |
 | FND-003 | fixed | - |
 | FND-004 | fixed | - |
+| FND-005 | fixed | - |

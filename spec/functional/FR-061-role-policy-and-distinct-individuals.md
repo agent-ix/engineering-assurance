@@ -54,9 +54,9 @@ by the verifier ([FR-065](./FR-065-workflow-roles-and-relation-to-signed-release
 Role coverage is exact. The role set is satisfied if and only if a maximum bipartite matching between the required
 roles and distinct individuals, where an individual is connected to a role when a counting approval of that
 individual names the role, covers every required role. No greedy or order-dependent choice decides the verdict: an
-assignment may be re-arranged freely. The verdict reports one deterministic assignment, the lexicographically smallest
-by role name and then individual name, and when unsatisfied it names the required roles that lie outside a maximum
-matching, as the roles that are not in the lexicographically smallest maximum matching, in ascending order of role name.
+assignment may be re-arranged freely. Maximum matchings are compared as ascending-sorted lists of (role name, individual name) pairs in byte order, and the
+smallest list wins; the verdict reports that assignment, and `missing` is the required roles outside it in ascending
+byte order.
 
 ## Outputs
 
@@ -75,7 +75,7 @@ matching, as the roles that are not in the lexicographically smallest maximum ma
   role.
 - The role evaluation SHALL assign each covered role a different individual.
 - The role evaluation SHALL return `satisfied` if and only if a matching of distinct individuals to roles covers every required role.
-- The role evaluation SHALL report the lexicographically smallest assignment by role name and then individual name.
+- The role evaluation SHALL report the assignment whose ascending-sorted list of (role name, individual name) pairs is smallest in byte order.
 - The role evaluation SHALL name the roles outside a maximum matching in ascending order of role name.
 - The role evaluation SHALL give the same verdict for the same policy and approvals whatever their order.
 - The role evaluation SHALL NOT count an account that no individual lists.
@@ -95,9 +95,10 @@ matching, as the roles that are not in the lexicographically smallest maximum ma
 | FR-061-AC-6 | Over generated policies and generated approval sets, `satisfied` is returned if and only if an assignment of distinct individuals to all required roles exists (checked against an exhaustive search), and the verdict and the reported assignment do not change when the approvals are reordered. | Property |
 | FR-061-AC-7 | An individual listed for `developer` and `engineer` who approves as `developer`, and a second individual listed for `engineer` who approves as `engineer`, yield `satisfied`; an approval naming a role the individual is not listed for is not counted. | Test |
 | FR-061-AC-8 | Two accounts listed under one individual that approve for two roles count as one individual, and an account that no individual lists approving for a role counts for nothing. | Test |
+| FR-061-AC-9 | The review gate and the statement verifier return the same verdict for the same policy when given the same approvals as reviews and as verified statements. | Test |
 | FR-061-AC-10 | Roles `A` and `B`, individual X approving `A` and `B` through two accounts and individual Y approving `A`, yield `satisfied` with the assignment `A` to Y and `B` to X, whatever the order of the approvals. | Test |
 | FR-061-AC-11 | Roles `A` and `B` with individual X alone approving both yield `unsatisfied` with `missing` equal to `[B]`; roles `A`, `B` and `C` with X approving `A`, `B` and `C` and Y approving only `A` yield `unsatisfied` with `missing` equal to `[C]`. | Test |
-| FR-061-AC-9 | The review gate and the statement verifier return the same verdict for the same policy when given the same approvals as reviews and as verified statements. | Test |
+| FR-061-AC-12 | Roles `A`, `B` and `C` with individual X approving `A` and `B` and individual Y approving `A` and `C` yield `unsatisfied` with `missing` equal to `[B]`, because the smallest maximum matching as a sorted list of pairs is `(A, X), (C, Y)`. | Test |
 
 ## Dependencies
 

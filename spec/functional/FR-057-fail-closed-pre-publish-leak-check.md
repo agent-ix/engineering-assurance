@@ -36,7 +36,8 @@ private store and `none`, uses a signing configuration that writes to no public 
 signature Engineering Assurance makes, including approval statements ([FR-058](./FR-058-approval-statement-and-predicate.md)).
 
 The check applies to the public path only. It runs on every publish and every signing, decides from the record being
-published, and does not reroute a refused record. The private store and `none` do not run it.
+published, and does not reroute a refused record. The private store and `none` do not run it. The full private form is written to the private store before the check
+([FR-054](./FR-054-record-sink-interface-and-implementations.md)), so a refused record is still retained there.
 
 ## Outputs
 
