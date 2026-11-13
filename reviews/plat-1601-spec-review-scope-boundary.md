@@ -25,3 +25,4 @@ Reviewed the producer boundary, its caller-owned offline database, supported fix
 | FND | outcome | reason / after_excerpt |
 | --- | --- | --- |
 | FND-001 | still-open | The updated fixture list now requires container OS-package coverage, but it still does not decide whether Lean manifest components are scanned or require an explicit unsupported outcome that cannot be read as clean. |
+| FND-001 | fixed | `Lean lake manifest components are outside the supported advisory coverage of this producer. When a Lean component is present in a SOUP record, the quoin consumer SHALL surface it as unsupported. The quoin consumer SHALL NOT report a Lean component free of advisories.` |

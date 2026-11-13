@@ -27,3 +27,4 @@ Reviewed requirement linkage, consistency, atomicity, and criterion testability.
 | --- | --- | --- |
 | FND-001 | still-open | Row 5 now explicitly classifies partial lookup signaling as UNVERIFIED, but row 4 still says `VERIFIED absent`, which is outside AC-13's required VERIFIED/UNVERIFIED values. |
 | FND-002 | fixed | `- target: "ix://agent-ix/engineering-assurance/StR-002"` / `type: "traces_to"` |
+| FND-001 | fixed | `| 4 | JSON envelope and database identity | VERIFIED | ...` and row 5 separately records `Partial lookup failure signal | UNVERIFIED`. |
