@@ -631,17 +631,24 @@ fn header_format(line: &[u8]) -> Option<SignatureFormat> {
     }
 }
 
-/// Whether the output of `git config --get-regexp .*` holds a `gitsign.` key.
+/// Whether the output of `git config --get-regexp .*` holds a `gitsign.` key,
+/// or a key that `gitsign` might read as one.
 ///
 /// `gitsign` reads that output line by line and takes the text before the first
 /// space of each line as a key, so a value that holds a newline can inject a
-/// key. This reads it the same way, ASCII case-insensitively.
+/// key. It compares the `gitsign.` prefix with Unicode simple case folding, so
+/// `gitſign.` (long s) and a Kelvin sign fold to ASCII letters. This does not
+/// implement that folding: it fails closed and counts a line whose key, up to
+/// its first `.`, holds a non-ASCII byte, besides the ASCII case-insensitive
+/// `gitsign.` prefix.
 #[must_use]
 pub fn config_sets_gitsign_key(output: &[u8]) -> bool {
     const PREFIX: &[u8] = b"gitsign.";
     output.split(|b| *b == b'\n').any(|line| {
         let key = line.split(|b| *b == b' ').next().unwrap_or_default();
-        key.len() >= PREFIX.len() && key[..PREFIX.len()].eq_ignore_ascii_case(PREFIX)
+        let section = key.split(|b| *b == b'.').next().unwrap_or_default();
+        !section.is_ascii()
+            || (key.len() >= PREFIX.len() && key[..PREFIX.len()].eq_ignore_ascii_case(PREFIX))
     })
 }
 

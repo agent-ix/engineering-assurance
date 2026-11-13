@@ -134,9 +134,13 @@ remain `unverifiable`, FR-036).
   into lines and reads the first space-separated token of each line as a key,
   so a value holding a newline can inject a key. The command SHALL therefore
   read the output the same way and, when any line's first token begins with
-  `gitsign.` (ASCII case-insensitive), report `unverifiable` with reason
+  `gitsign.` (ASCII case-insensitive), or contains a non-ASCII byte before its
+  first `.`, report `unverifiable` with reason
   `gitsign_repository_config` without starting `gitsign`. Exit 0 with no such
-  line, or exit 1 (no key at all), means no key is set; any other outcome is
+  line, or exit 1 (no key at all), means no key is set. The non-ASCII rule fails
+  closed: gitsign compares the prefix with Unicode simple case folding, under
+  which `gitſign.` (long s) and a Kelvin sign read as `gitsign.`, and the command
+  does not implement that folding; any other outcome is
   `unverifiable` with the matching FR-036 reason. gitsign reads trust settings
   such as `gitsign.fulcioRoot` from that configuration, and a repository under
   verification must not choose the roots that verify it.
@@ -238,7 +242,7 @@ distinct from `unverifiable`, and a bad signature is `unverifiable`.
 | FR-040-AC-14 | The `signature-verify` feature and the binary add no crate dependency that performs signature verification, cryptography or Sigstore access; the only verifying programs invoked are git, `ssh-keygen` and `gitsign`. | Inspection |
 | FR-040-AC-15 | Against real `gitsign` and the network, a public gitsign-signed commit and tag yield `signed_valid` for their true identity and issuer, `signed_untrusted` with `mismatch` `issuer` for a wrong issuer. An unreachable network is covered by the stand-in tests of FR-040-AC-4, because gitsign reports it as an exit status 1 with every matcher. | Test (live, ignored by default) |
 | FR-040-AC-16 | The gitsign argument vectors, including `verify`, `verify-tag`, the four certificate flags and the wildcard values, match the command line documented for the gitsign release the adapter targets. | Inspection |
-| FR-040-AC-17 | A CMS-signed commit in a repository that sets `gitsign.fulcioRoot` (or any other `gitsign.*` key) in its local configuration, in a file named by `include.path`, or in `config.worktree` with `extensions.worktreeConfig` enabled, or injected by a newline inside another key's value, yields `unverifiable` with reason `gitsign_repository_config`, and the stand-in is never started; a repository with no such key proceeds. | Test (stand-in) |
+| FR-040-AC-17 | A CMS-signed commit in a repository that sets `gitsign.fulcioRoot` (or any other `gitsign.*` key) in its local configuration, in a file named by `include.path`, or in `config.worktree` with `extensions.worktreeConfig` enabled, or injected by a newline inside another key's value (including one whose first token holds a non-ASCII character, such as `gitſign.`), yields `unverifiable` with reason `gitsign_repository_config`, and the stand-in is never started; a repository with no such key proceeds. | Test (stand-in) |
 | FR-040-AC-18 | The stand-in's recorded environment holds exactly `PATH`, `HOME`, `GIT_CONFIG_NOSYSTEM` and `GIT_CONFIG_GLOBAL`, even when the parent environment sets `SIGSTORE_ROOT_FILE`, `GITSIGN_FULCIO_ROOT`, `TUF_ROOT` and `GIT_DIR`. | Test (stand-in) |
 | FR-040-AC-19 | A lightweight tag yields `unsigned` with reason `lightweight_tag`, and a tag revision that resolves to no annotated tag under `refs/tags/`, or whose name begins with `-` (`refs/tags/--help`), yields `unverifiable` with reason `revision_unresolved`, without starting `gitsign`. | Test (stand-in) |
 

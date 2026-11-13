@@ -489,4 +489,19 @@ fn tc_298_config_output_is_read_line_by_line_for_a_gitsign_key() {
         b"core.bare false\nfoo.bar gitsign.x\n"
     ));
     assert!(!config_sets_gitsign_key(b"gitsignfoo.x 1\n gitsign.y\n"));
+    // Unicode folds that gitsign's comparison would accept: long s, Kelvin sign.
+    assert!(config_sets_gitsign_key(
+        "git\u{17f}ign.fulcioRoot x".as_bytes()
+    ));
+    assert!(config_sets_gitsign_key(
+        "foo.bar x\n\u{212a}.x y\n".as_bytes()
+    ));
+    assert!(config_sets_gitsign_key("gitsign\u{212a}.x y".as_bytes()));
+    // A non-ASCII subsection or value is not a key section.
+    assert!(!config_sets_gitsign_key(
+        "branch.\u{e9}.remote origin\n".as_bytes()
+    ));
+    assert!(!config_sets_gitsign_key(
+        "core.editor caf\u{e9}\n".as_bytes()
+    ));
 }

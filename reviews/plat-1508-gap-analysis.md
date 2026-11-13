@@ -59,3 +59,17 @@ Inspection criteria:
 The tag binding is complete and honest. Every Test criterion has a real test that can fail. The stand-in limits are declared in the spec, and the one live test is opt-in and fails loudly without its variables.
 
 The gaps are one untested AC-15 clause and two spec holes that SR-16413 reproduced as exploitable. The spec and its tests should be fixed in the same round as the code.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | high | The amended FR-040 Behavior bullet says a line's first token is matched against `gitsign.` "ASCII case-insensitive". gitsign uses Go `strings.EqualFold`, which also folds U+017F to `s`, so the spec rule still lets a repository inject a key gitsign applies (reproduced, SR-16413 FND-007). Fix: state the match as Go EqualFold, that is Unicode simple case folding, which for `gitsign.` means ASCII case-insensitive with U+017F counted as `s`. Extend AC-17 with that case. | spec/functional/FR-040-gitsign-sigstore-keyless-commit-and-tag-verification.md |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-040-AC-15 now states that an unreachable network is covered by the AC-4 stand-in tests, because gitsign reports it as exit 1 with every matcher. That matches the gitsign v0.18.0 source (every `Execute` error exits 1). The live TC-292 asserts the two remaining clauses. |
+| FND-002 | fixed | The Behavior bullet now prescribes gitsign's own `git config --get-regexp .*` query, read line by line for a first token beginning `gitsign.`. AC-17 adds the newline-injection case and TC-289 tests it. The case-folding gap left in the new wording is FND-004. |
+| FND-003 | fixed | FR-040 Inputs now makes a tag name beginning with `-` `revision_unresolved`, Behavior passes the target after `--`, and AC-19 and AC-2 name both. TC-291 (`refs/tags/--help`) and TC-279 (`--` in argv) test them. |

@@ -628,7 +628,22 @@ fn tc_289_a_gitsign_key_in_any_repository_configuration_stops_the_run() {
             "a scoped query misses the injection"
         );
     };
-    let setters: [&dyn Fn(&Fixture); 4] = [&local, &included, &worktree, &injected];
+    // gitsign folds case with Unicode simple folding, so a long s or a Kelvin
+    // sign in an injected key is read as `gitsign.`; the check fails closed.
+    let folded = |name: &'static str| {
+        move |f: &Fixture| {
+            let config = f.repo().join(".git").join("config");
+            let mut text = fs::read_to_string(&config).expect("config");
+            text.push_str(&format!("[foo]\n\tbar = \"x\\n{name}.fulcioRoot evil\"\n"));
+            fs::write(&config, text).expect("config");
+            let listed = git(&f.repo(), &["config", "--get-regexp", ".*"]);
+            assert!(listed.contains(name), "{listed}");
+        }
+    };
+    let long_s = folded("git\u{17f}ign");
+    let kelvin = folded("gitsign\u{212a}");
+    let setters: [&dyn Fn(&Fixture); 6] =
+        [&local, &included, &worktree, &injected, &long_s, &kelvin];
     for set in setters {
         let fixture = fixture_with_commit();
         forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);

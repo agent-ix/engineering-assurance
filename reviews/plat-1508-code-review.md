@@ -76,3 +76,20 @@ It is not mergeable:
 - FND-003 is a reproduced program hijack, but only when the caller's PATH has a relative entry.
 
 FND-004 to FND-006 are small cleanups.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | high | The FND-002 fix compares the first token with ASCII case-insensitivity (`eq_ignore_ascii_case`), but gitsign matches keys with Go `strings.EqualFold`, which uses Unicode simple folding and maps U+017F (long s) to `s`. A value `[foo] bar = "x\ngitſign.fulcioRoot /tmp/evil"` makes git print a line `gitſign.fulcioRoot /tmp/evil`. `config_sets_gitsign_key` returns false and the stand-in runs, so the verdict is `signed_valid`, yet gitsign applies that line as its Fulcio root (Go 1.x confirms `EqualFold("gitſign.fulcioRoot", "gitsign.fulcioRoot") == true`). Reproduced on git 2.34.1 against the clean-rebuilt head 4da9f97. Fix: before the ASCII prefix check, map U+017F to `s` and U+212A (Kelvin sign) to `k`, the only non-ASCII members of any ASCII letter's simple-fold orbit. Alternatively, refuse any line whose first token has a non-ASCII byte before its first `.`. Change FR-040's "ASCII case-insensitive" to Go EqualFold semantics, and add a `gitſign.` case to TC-298 and TC-289. | src/signature_verify.rs:634-646 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | `tag_name` now returns `revision_unresolved` for a name beginning with `-`, and `gitsign_run` puts `--` before the target. Re-tested against the rebuilt binary: a CMS tag at `refs/tags/--help` gives `unverifiable`/`revision_unresolved` and the stand-in is never started, and a commit run records argv `verify --certificate-identity … --certificate-oidc-issuer … -- <id>`. TC-291 and TC-279 now assert both. |
+| FND-002 | fixed | The check now runs gitsign's own `git config --get-regexp .*` through `run_tool` (same environment and cwd) and reads the output line by line for a first token starting `gitsign.`. Re-tested: the `\ngitsign.fulcioRoot` injection gives `gitsign_repository_config` without starting the stand-in. TC-289 has the injected case and TC-298 the reader. FR-040 Behavior and AC-17 are amended. The remaining Unicode-fold bypass is FND-007. |
+| FND-003 | fixed | `resolve_program` finds `git`, `ssh-keygen` and `gitsign` only in absolute PATH entries, runs each by absolute path, and passes on a PATH with relative entries dropped. That covers every spawn site (`run`, `run_tool`, both `ssh-keygen` calls), and git's own `ssh-keygen` lookup through the passed PATH. Re-tested with hook `git`/`gitsign`/`ssh-keygen` reachable only through a relative entry: SSH commit and tag and a gitsign commit all used the absolute programs, no hook ran, only-relative and unset PATH give `git_not_started`, and a missing absolute `ssh-keygen` gives `ssh_keygen_not_started`. With resolution reverted in a scratch copy, TC-297 and TC-299 both FAIL, so they can fail. The PATH-unset/only-relative behaviour change is stated in FR-036 and FR-040 and TC-299 covers it. The legitimate SSH path still verifies. |
+| FND-004 | fixed | `observed` now maps a missing exit code to `Run::Signaled`, which `probe_gitsign` maps to `gitsign_verification_failed`. TC-295 builds a signal-9 `ExitStatus` and TC-293 uses `Run::Signaled`. |
+| FND-005 | fixed | `run_tool` replaces the duplicated environment boilerplate. `gitsign_verdict` returns early without an identity and passes it into the closure, so `gitsign_run` takes `&GitsignIdentity` and no impossible `NotStarted` remains. The kept set is `PATH` and `HOME`, and the set names are excluded from removal, so TC-290 still records exactly four variables. |
+| FND-006 | fixed | The new TC-278..TC-299 rows no longer claim "✅ passing" or "⏸ ignored". They carry the template's `🚧` placeholder in the schema-required Status column. Removing the column repo-wide is a separate change for the lead. |
