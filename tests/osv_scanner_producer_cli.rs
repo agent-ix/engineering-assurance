@@ -114,9 +114,10 @@ fn copy_database(source: &Path, destination: &Path) {
     for ecosystem in ecosystems {
         let ecosystem = ecosystem.expect("database ecosystem entry");
         let name = ecosystem.file_name();
-        if name == "wolfi" {
-            panic!("EA_TEST_OSV_DB must not include the Wolfi ecosystem");
-        }
+        assert!(
+            name != "wolfi",
+            "EA_TEST_OSV_DB must not include the Wolfi ecosystem"
+        );
         let archive = ecosystem.path().join("all.zip");
         if archive.is_file() {
             let target = destination.join("osv-scalibr").join(name).join("all.zip");
@@ -186,12 +187,12 @@ fn osv_request(root: &Path, executable: &Path, version: &str, db: &Path) -> Valu
         },
         "cancellation": {"kind": "disabled"},
         "budget": {
-            "timeoutMillis": 120000,
+            "timeoutMillis": 120_000,
             "maxStdoutBytes": 65536,
             "maxStderrBytes": 65536,
-            "maxInputBytes": 67108864,
+            "maxInputBytes": 67_108_864,
             "maxOutputArtifacts": 1,
-            "maxOutputBytes": 67108864,
+            "maxOutputBytes": 67_108_864,
             "maxDescendants": 64,
             "maxConcurrency": 1
         },
@@ -424,17 +425,10 @@ fn tc_380_integration_lane_refuses_missing_scanner_or_database() {
     }
 }
 
-#[trace(
-    "TC-381",
-    "FR-044-AC-1",
-    "FR-044-AC-2",
-    "FR-044-AC-8",
-    "FR-044-AC-13",
-    "FR-044-AC-14"
-)]
+#[trace("TC-381", "FR-044-AC-13")]
 #[test]
 #[ignore = "needs EA_TEST_OSV_SCANNER and EA_TEST_OSV_DB; fixture outcomes are not compliance evidence"]
-fn tc_381_scans_retained_npm_python_go_and_debian_sboms_offline() {
+fn tc_381_scans_the_debian_sbom_fixture_offline_and_captures_its_package() {
     let scanner = scanner();
     let supplied_database = database();
     let sbom = json!({
@@ -476,6 +470,19 @@ fn tc_381_scans_retained_npm_python_go_and_debian_sboms_offline() {
     assert_eq!(artifacts[0]["byteLength"], report_bytes.len());
     let report: Value = serde_json::from_slice(&report_bytes).expect("scanner report JSON");
     assert!(report.is_object(), "{report}");
+    let results = report["results"].as_array().expect("OSV report results");
+    let captured = results
+        .iter()
+        .flat_map(|result| result["packages"].as_array().into_iter().flatten())
+        .any(|package| {
+            package["package"]["name"] == "libc6"
+                && package["package"]["version"] == "2.36-9+deb12u4"
+                && package["package"]["purl"] == OS_PURL
+        });
+    assert!(
+        captured,
+        "OSV report did not capture the declared Debian fixture package: {report}"
+    );
     // Runtime fixture behavior is not a compliance claim. In particular this
     // test does not interpret an empty vulnerability list as clean evidence.
 }
