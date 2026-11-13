@@ -27,8 +27,9 @@ provided" when the source was not supplied, never as "none" or "clean":
 
 - the Baseline: its name, the commit hash, and every item path and kind with
   `present` or `absent` at that commit ([FR-046](./FR-046-baseline-archetype.md));
-- the evidence status of every evidence item: the FR-004 states
-  (`observed`, `unavailable`, `not_computed`, `not_applicable`) as retained;
+- the evidence status of every acceptance criterion, in the Evidence Status
+  vocabulary of `ix://agent-ix/quoin/FR-115` (the closed set `bound`, `stale`,
+  `suspect`, `undischarged`, `no run evidence`), as Quoin reports it;
 - the SOUP report: the SOUP records of the Baseline and the report the caller
   supplies for them;
 - the unresolved anomalies: the list the caller supplies, each with its id and
@@ -39,7 +40,7 @@ to the workflow as files in the formats that Quoin requirements define: the
 evidence status of `ix://agent-ix/quoin/FR-115` (the Evidence Status of
 `quoin matrix`), the SOUP report of `ix://agent-ix/quoin/FR-144` and the anomaly
 report of `ix://agent-ix/quoin/FR-162`. Engineering Assurance reads only the members it
-presents (per evidence item the id and state, the SOUP records and their report
+presents (per acceptance criterion the id and evidence status, the SOUP records and their report
 entries, per anomaly the id and status) and computes none of them
 ([FR-049](./FR-049-release-ownership-split-and-data-contract.md)). A supplied
 file that cannot be read, or lacks a member the presentation needs, is refused
@@ -110,11 +111,11 @@ scheduled, or agent-made release choice; signing; pushing the tag.
 | --- | --- | --- |
 | FR-048-AC-1 | The workflow's transitions into terminal phases are all `hitl`, and a requested automatic terminal-gate override fails closed. | Test |
 | FR-048-AC-2 | With no owner choice the run stays non-terminal at the gate, no Release document exists and no tag exists. | Test |
-| FR-048-AC-3 | The review presentation lists the baseline commit and items, each evidence state, the SOUP report and the anomalies; an input file not supplied is shown "not provided", and an empty supplied anomaly list is shown as supplied and empty. | Test |
+| FR-048-AC-3 | The review presentation lists the baseline commit and items, each criterion's evidence status, the SOUP report and the anomalies; an input file not supplied is shown "not provided", and an empty supplied anomaly list is shown as supplied and empty. | Test |
 | FR-048-AC-4 | A `release` choice with an unresolved anomaly not named as accepted writes no Release document; naming its id writes `accepted_anomalies` with exactly the named ids. | Test |
 | FR-048-AC-5 | A `reject` choice retains the rejection outcome and writes no Release document and no tag. | Test |
 | FR-048-AC-6 | A `release` choice emits one terminal event with run id, workflow version, owner, choice and timestamp, and the workflow runs no `git tag`, no `git commit`, no signer and no push. | Test |
-| FR-048-AC-7 | Evidence that is all `observed`, an empty anomaly list or a failed input read never produces a `release` choice. | Test |
+| FR-048-AC-7 | Evidence in which every criterion is `bound`, an empty anomaly list or a failed input read never produces a `release` choice. | Test |
 | FR-048-AC-9 | An owner-named accepted anomaly id absent from the supplied anomaly list is refused and no Release document is written; an unreadable input file, or one lacking a presented member, yields `release_input_unreadable` naming the file and leaves the run before the gate. | Test |
 | FR-048-AC-10 | The `release` outcome carries the Release document, `record_path` and the tag message text with the digest line to complete; committing the record as a single child of the baseline commit and signing a tag with that message by `git tag -s` yields `released` from `release-verify`, with no workflow-run git write. | Test |
 | FR-048-AC-8 | A run id reused with a different Baseline, baseline commit, repository or owner is refused without changing either run; an interrupted run resumes at its last completed phase. | Test |
@@ -122,7 +123,6 @@ scheduled, or agent-made release choice; signing; pushing the tag.
 ## Dependencies
 
 - **Upstream**: [FR-005](./FR-005-resumable-human-decisions.md),
-  [FR-004](./FR-004-evidence-state-and-provenance.md),
   [FR-046](./FR-046-baseline-archetype.md),
   [FR-047](./FR-047-release-record-and-signed-release-tag.md).
 - **Downstream**: the owner's release commit and `git tag -s` signing, and `release-verify`.

@@ -80,6 +80,12 @@ The following hold and are recorded as clean:
 | FND-019 | low | FR-047 reason `release_commit_changes_other_paths` also covers a release commit that "does not add" `record_path`, for example one that modifies an existing record path. That case changes no other path, so the reason name misleads. Fix: split it into its own reason, or rename it (for example `release_commit_not_record_only`). | spec/functional/FR-047-release-record-and-signed-release-tag.md:110 |
 | FND-020 | low | FR-050-AC-3 says "the README and this requirement change in the same pull request as the `release-verify` implementation". That reads as if FR-050 itself must be edited again. Fix: say the README change lands in the implementation pull request. | spec/functional/FR-050-record-named-persons-release-decision-stance.md:43 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-021 | medium | Regression from the FND-018 fix. FR-048 now names the evidence-status file as the Evidence Status of quoin FR-115 (`quoin matrix`). FR-115 gives one status per acceptance criterion, from the closed vocabulary `bound`, `stale`, `suspect`, `undischarged`, `no run evidence`. FR-048 still says it presents "the FR-004 states (`observed`, `unavailable`, `not_computed`, `not_applicable`)" per evidence item, and FR-048-AC-7 and NFR-007 Verification test evidence that is "all `observed`". No file from the cited source can carry those states, so an implementer cannot satisfy both. Fix: present the FR-115 status per criterion and restate AC-7 and NFR-007 in that vocabulary (for example "all `bound`"), or cite a source that does carry the FR-004 states. | spec/functional/FR-048-human-release-decision-workflow.md:30-31; spec/functional/FR-048-human-release-decision-workflow.md:37-42; spec/functional/FR-048-human-release-decision-workflow.md:117; spec/non-functional/NFR-007-no-release-without-a-person.md:44-46 |
+
 ## Dispositions
 
 | FND | outcome | reason |
@@ -100,3 +106,7 @@ The following hold and are recorded as clean:
 | FND-014 | fixed | 748434d: restated as `release-verify` being the only release interface Engineering Assurance offers. |
 | FND-015 | fixed | 748434d: an unlisted accepted anomaly id is refused (FR-048-AC-9). |
 | FND-016 | fixed | 748434d: FR-050-AC-1 is now a positive inspection. |
+| FND-017 | fixed | 4b3675b: NFR-007 Verification now says "a source inspection checks the second count", which matches the two remaining metrics. |
+| FND-018 | fixed | 4b3675b: FR-048 and FR-049 cite `ix://agent-ix/quoin/FR-115`, `FR-144` and `FR-162`; all three exist on quoin origin/main. The FR-115 citation causes a vocabulary mismatch, recorded as new finding FND-021. |
+| FND-019 | fixed | 4b3675b: a separate reason, `release_commit_record_not_added`, has its own Behavior bullet and its own clause in FR-047-AC-6. |
+| FND-020 | fixed | 4b3675b: FR-050-AC-3 now says the row and the stance sentence are added to the README in the pull request that implements `release-verify`. |
