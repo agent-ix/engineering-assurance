@@ -19,7 +19,11 @@ relationships:
 
 Engineering Assurance SHALL provide an `approval-verify` command that reports
 whether a signed annotated git tag is a named person's approval of one exact
-change-assurance record. The tag message carries the record id and the record
+change-assurance record. The named person is the principal that the supplied trust
+input (the allowed-signers file, or the `gitsign` identity and principal) names for
+the signing key; the result is not an established identity, and it echoes that
+trust input so a consumer can tell which trust root named the approver and can
+re-run the command. The tag message carries the record id and the record
 digest as trailers, so the signature binds the signer to the record content
 the digest names. The command adds no cryptography and no signature rules: it
 runs the signature verification of FR-036, FR-037 and FR-040 on the tag and
@@ -64,6 +68,12 @@ carried by commits, merge commits or notes.
     `meaning_missing`, `signed_bad`, `unsigned`, `unverifiable`;
   - `tag`, the tag name the command resolved, and `record_id` and
     `record_digest` as requested;
+  - `trust`, the trust input the verdict was made against, copied from the
+    request: `allowed_signers` (the path) and, when the request had one, `gitsign`
+    (`certificate_identity`, `certificate_oidc_issuer` and `principal`);
+  - `reason`, present only when `status` is `unverifiable`: the FR-036 or FR-040
+    reason, or `trailer_unreadable` when a validly signed tag's message could not
+    be read;
   - `signature`, the FR-036 verdict for the tag exactly as FR-036, FR-037 and
     FR-040 define it, without a second `protocol` member;
   - on `approved` only: `approver`, the `principal` of the FR-037 signer;
@@ -76,7 +86,8 @@ carried by commits, merge commits or notes.
      `lightweight_tag`) is `unsigned`; `signed_bad` is `signed_bad`;
      `unverifiable` is `unverifiable`; `signed_untrusted` (a good signature by a
      key or identity the supplied trust inputs do not accept, so the signer is
-     `unmapped`) is `untrusted_signer`;
+     `unmapped`) is `untrusted_signer`; `signed_valid` with no readable tag
+     message is `unverifiable` with reason `trailer_unreadable`;
   2. `signed_valid` with `binding` other than `match` for either member is
      `wrong_record`;
   3. `signed_valid`, both bindings `match`, and `signed_off_meaning` `missing`
@@ -100,20 +111,29 @@ carried by commits, merge commits or notes.
 - The command SHALL read the two record trailers from the tag message with the
   semantics of `git interpret-trailers --parse` and the same preparation
   FR-037 states for the tag message (signature block removed, no patch
-  divider), and SHALL compare each value to the request by exact byte
+  divider).
+- The command SHALL match trailer keys ASCII case-insensitively, as FR-037 does,
+  so that every case variant of a key counts as an occurrence of that key.
+- The command SHALL compare each trailer value to the request by exact byte
   equality, with no case folding, trimming beyond trailer parsing, or
   normalization.
+- The command SHALL require the trailers to follow a subject paragraph, because
+  git takes a message's only paragraph as its subject and reads no trailers from
+  it; a tag message made only of trailer lines therefore yields binding `missing`
+  for both members and status `wrong_record`.
 - The command SHALL report a binding `missing` when its trailer is absent,
-  `repeated` when it occurs more than once (no occurrence is then preferred),
+  `repeated` when it occurs more than once in any mix of key case (no occurrence
+  is then preferred),
   `mismatch` when its single value differs from the request, and `match`
   otherwise.
-- The command SHALL derive `approver` only from the FR-037 `principal`, and
-  SHALL NOT derive a person from the tag's tagger, the commit author, an email
-  or a key comment.
+- The command SHALL derive `approver` only from the FR-037 `principal`.
+- The command SHALL NOT derive a person from the tag's tagger, the commit author,
+  an email or a key comment.
 - The command SHALL report the binding for every status with a readable tag
   message, and the binding SHALL NOT change a status decided by rule 1.
-- The command SHALL NOT default a missing trailer, and SHALL NOT report
-  `approved` for a tag whose message lacks `Signed-off-meaning`.
+- The command SHALL NOT default a missing trailer.
+- The command SHALL NOT report `approved` for a tag whose message lacks
+  `Signed-off-meaning`.
 - The command SHALL NOT interpret the digest, read the record, or decide what
   a meaning permits.
 - The decision of `status` from the verdict and the binding SHALL be a pure
@@ -125,7 +145,7 @@ carried by commits, merge commits or notes.
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
 | FR-041-CON-1 | A result SHALL NOT be `approved` unless the FR-036 verdict for the tag is `signed_valid` with a mapped signer, the tag message carries exactly one `Approved-Record-Id` equal to the request's `record_id`, exactly one `Approved-Record-Digest` equal to the request's `record_digest`, and a `Signed-off-meaning` trailer. | Safety | Test |
-| FR-041-CON-2 | The command SHALL contain no signature, certificate or trailer-parsing code of its own and SHALL NOT duplicate a rule of FR-036, FR-037 or FR-040. | Architecture | Inspection |
+| FR-041-CON-2 | The command SHALL contain no signature, certificate or trailer-parsing code of its own, and no rule of FR-036, FR-037 or FR-040 restated. | Architecture | Inspection |
 
 ## Acceptance Criteria
 
@@ -137,14 +157,17 @@ criteria use real signatures from throwaway keys generated in the test.
 | --- | --- | --- |
 | FR-041-AC-1 | An annotated tag validly signed by a key the allowed-signers file maps to a principal, whose message carries one `Approved-Record-Id` and one `Approved-Record-Digest` equal to the request and a `Signed-off-meaning` trailer, yields `approved` with `approver` equal to that principal, `meaning` equal to the trailer values in order, `signature_kind` `ssh` and `tag` equal to the tag name. | Test |
 | FR-041-AC-2 | A valid, mapped tag whose `Approved-Record-Digest` differs from the request by one character yields `wrong_record` with `binding.record_digest` `mismatch`, and no `approver`. | Test |
-| FR-041-AC-3 | A valid, mapped tag whose `Approved-Record-Id` differs from the request yields `wrong_record` with `binding.record_id` `mismatch`; a tag lacking either trailer yields `wrong_record` with that binding `missing`; a tag repeating either trailer yields `wrong_record` with that binding `repeated`, even when one of the repeated values equals the request. | Test |
+| FR-041-AC-3 | A valid, mapped tag whose `Approved-Record-Id` differs from the request yields `wrong_record` with `binding.record_id` `mismatch`; a tag lacking either trailer yields `wrong_record` with that binding `missing`; a tag repeating either trailer yields `wrong_record` with that binding `repeated`, even when one of the repeated values equals the request or the repeats differ only in the case of the key. | Test |
 | FR-041-AC-4 | A tag with a good signature by a key the allowed-signers file does not name, whose message carries matching trailers, yields `untrusted_signer`, no `approver`, and a `signature` verdict of `signed_untrusted` with mapping `unmapped`. | Test |
 | FR-041-AC-5 | A valid, mapped tag with matching record trailers and no `Signed-off-meaning` trailer yields `meaning_missing` and no `meaning` default; the same tag with an empty-valued trailer yields `approved` with the empty value. | Test |
 | FR-041-AC-6 | A tag whose signature does not verify yields `signed_bad`; an unsigned annotated tag yields `unsigned`; a lightweight tag yields `unsigned` with `signature` reason `lightweight_tag`; a name resolving to no tag, or to a branch or commit, yields `unverifiable`; none of them yields `approved` even when the message carries matching trailers. | Test |
-| FR-041-AC-7 | Record trailers placed in the tagged commit's message but not in the tag message do not bind the record, and a signed commit, a merge commit and a git note naming the record are each refused as an approval (they are not tags). | Test |
+| FR-041-AC-7 | Record trailers placed in the tagged commit's message but not in the tag message do not bind the record (binding `missing`, status `wrong_record`), and a name that resolves to a signed commit or a merge commit rather than an annotated tag yields `unverifiable` with `signature` reason `revision_unresolved`, not `approved`. | Test |
 | FR-041-AC-8 | A gitsign-signed tag with a `gitsign` member whose identity and issuer gitsign accepts, and matching trailers, yields `approved` with `signature_kind` `gitsign` and `approver` equal to the request's `gitsign.principal`; a tag whose identity gitsign does not accept yields `untrusted_signer`; a CMS-signed tag with no `gitsign` member yields `unverifiable`. | Test |
 | FR-041-AC-9 | The decision from the FR-036 verdict and the binding is exercised without starting any process, covering every combination of verdict status, binding member and meaning presence, and `approved` is returned for exactly one combination (CON-1). | Property |
 | FR-041-AC-10 | A request with an unknown member, an empty or over-long `record_id` or `record_digest`, a leading `-`, a control character, a relative `repository` or `allowed_signers` path, or an invalid `gitsign` member writes `approval_verify_request_invalid` and exits 2; an invalid allowed-signers file writes `approval_verify_allowed_signers_invalid` and exits 2; neither starts git. | Test |
+| FR-041-AC-13 | A tag message made only of the trailer lines, with no subject paragraph, yields binding `missing` for both members and status `wrong_record`; the same trailers after a subject paragraph yield `match`. | Test |
+| FR-041-AC-14 | The result of an `approved` or any other status carries `trust` equal to the request's `allowed_signers` and `gitsign` members; a tag allowed-signers file naming a different principal for the same key yields a different `approver` under the different `trust`. | Test |
+| FR-041-AC-15 | A validly signed tag whose message cannot be read yields `unverifiable` with reason `trailer_unreadable` and not `wrong_record`. | Test |
 | FR-041-AC-11 | Every status other than a request error exits 0 and writes one JSON line carrying the result protocol, and a validly signed tag whose trailers are unrelated to the request still carries the unchanged `signature` verdict that `signature-verify` yields for the same tag. | Test |
 | FR-041-AC-12 | Static inspection shows no signature, certificate or trailer-parsing code in the approval module and no restated FR-036, FR-037 or FR-040 rule (CON-2). | Inspection |
 
