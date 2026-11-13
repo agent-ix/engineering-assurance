@@ -216,6 +216,8 @@ same canonical bundle and do not redefine these responsibilities.
   signed annotated tag that approves a change-assurance record, signed through the caller's git configuration.
 - [FR-043](./functional/FR-043-approval-trail-of-a-change-assurance-record.md) — list the audit trail of signed
   approval tags that name a change-assurance record, oldest first by claimed signing time, with every verdict shown.
+- [FR-044](./functional/FR-044-document-converter-producer-requests.md) — run the document converters pandoc and
+  typst as `producer-execute` requests, with existing result states for failure.
 
 ### Non-Functional Requirements
 
