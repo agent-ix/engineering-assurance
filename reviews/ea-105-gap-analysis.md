@@ -55,3 +55,9 @@ Round 1, fix commit 6c195a4 (rebased onto main eae09ed).
 | FND-004 | fixed | Trace tags are `NFR-008-M-1` (TC-628/632/637), `NFR-009-M-1` (TC-649), `NFR-009-M-2` (new TC-652), `NFR-010-M-1` (TC-651), `NFR-010-M-2` (TC-650); spec/tests.md rows match. |
 | FND-005 | fixed | `SignMode::NonCanonical` signs `to_string_pretty` of the same members; tc_642 asserts `signature_payload_mismatch` with nothing sent or stored for both `public_log` and `private_store`. |
 | FND-006 | fixed | `check_structured` checks `record_id`, `subject_commit`, timestamps and Linear issue ids against independent oracles over the generated noise and over mutations of valid samples. |
+
+Round 2, fix commit a5a08d5.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The FR-055-AC-5 and TC-633 rows now explicitly state that the repository adapter and pull-request-branch case are not implemented or tested in this change, explain that the test covers only the contract with a stand-in, and name PLAT-1685 as the ticket that builds the adapter and closes FR-055-AC-5. |
