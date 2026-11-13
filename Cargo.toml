@@ -192,6 +192,16 @@ path = "tests/semantics_parity.rs"
 required-features = ["semantics"]
 
 [[test]]
+name = "approval_tag"
+path = "tests/approval_tag.rs"
+required-features = ["approval-tag"]
+
+[[test]]
+name = "approval_tag_cli"
+path = "tests/approval_tag_cli.rs"
+required-features = ["full"]
+
+[[test]]
 name = "approval_verify"
 path = "tests/approval_verify.rs"
 required-features = ["approval-verify"]
@@ -377,6 +387,9 @@ signature-verify = ["dep:serde"]
 # FR-041: pure decision of whether a signed tag approves a record; the trailer
 # reading and every signature rule stay in `signature-verify`.
 approval-verify = ["signature-verify", "dep:serde"]
+# FR-042: pure composition and preconditions of a signed approval tag; the git
+# adapter lives in the binary.
+approval-tag = ["approval-verify"]
 semantics = [
   "claim-strength",
   "exact-numbers",
@@ -403,6 +416,7 @@ exact-numbers = ["serde_json/arbitrary_precision"]
 # and its `*_host` modules use (clap, cap-std, tar, zip, flate2, tempfile),
 # plus `exact-numbers`.
 full = [
+  "approval-tag",
   "approval-verify",
   "atomic-publish",
   "campaign",

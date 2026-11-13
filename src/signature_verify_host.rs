@@ -44,7 +44,7 @@ const MAX_ALLOWED_SIGNERS_BYTES: u64 = 1024 * 1024;
 const PROCESS_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Repository-selecting and configuration variables git must not inherit.
-const REMOVED_ENVIRONMENT: [&str; 12] = [
+pub(crate) const REMOVED_ENVIRONMENT: [&str; 12] = [
     "GIT_DIR",
     "GIT_WORK_TREE",
     "GIT_INDEX_FILE",
@@ -272,7 +272,7 @@ fn find_executable(name: &str, search: &OsStr) -> Option<PathBuf> {
 /// come from the absolute entries of the inherited `PATH` alone, so a program
 /// in the verified repository (the working directory) is never found, whether
 /// we start it or a program we start does.
-fn resolve_program(program: &str) -> Result<(PathBuf, OsString), ProcessError> {
+pub(crate) fn resolve_program(program: &str) -> Result<(PathBuf, OsString), ProcessError> {
     let unavailable = || ProcessError::Unavailable {
         detail: format!("{program} is not in an absolute PATH entry"),
     };
