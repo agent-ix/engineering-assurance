@@ -894,7 +894,7 @@ fn tc_272_a_signed_tags_trailer_comes_from_the_tag_message() {
 }
 
 #[test]
-#[trace("TC-276", "FR-037-CON-2")]
+#[trace("TC-276", "FR-037-AC-6", "FR-037-CON-2")]
 fn tc_276_repository_trailer_config_cannot_inject_or_hide_the_trailer() {
     let fixture = fixture();
     let repo = fixture.repo();
@@ -917,7 +917,7 @@ fn tc_276_repository_trailer_config_cannot_inject_or_hide_the_trailer() {
 }
 
 #[test]
-#[trace("TC-277", "FR-037-CON-2")]
+#[trace("TC-277", "FR-037-AC-6", "FR-037-CON-2")]
 fn tc_277_a_temp_dir_inside_the_verified_repository_cannot_inject_the_trailer() {
     let fixture = fixture();
     let repo = fixture.repo();
