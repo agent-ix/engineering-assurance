@@ -305,6 +305,7 @@ fn tc_279_gitsign_gets_the_resolved_commit_id_or_bare_tag_name_and_runs_in_the_r
             IDENTITY.to_owned(),
             "--certificate-oidc-issuer".to_owned(),
             ISSUER.to_owned(),
+            "--".to_owned(),
             target.to_owned(),
         ]
     };
@@ -592,7 +593,32 @@ fn tc_289_a_gitsign_key_in_any_repository_configuration_stops_the_run() {
             &["config", "--worktree", "gitsign.connectorID", "x"],
         );
     };
-    let setters: [&dyn Fn(&Fixture); 3] = [&local, &included, &worktree];
+    // A newline inside another key's value puts a `gitsign.` line in the output
+    // of `git config --get-regexp .*`, which is how gitsign reads its settings.
+    let injected = |f: &Fixture| {
+        let config = f.repo().join(".git").join("config");
+        let mut text = fs::read_to_string(&config).expect("config");
+        text.push_str("[foo]\n\tbar = \"x\\ngitsign.fulcioRoot evil\"\n");
+        fs::write(&config, text).expect("config");
+        let listed = git(&f.repo(), &["config", "--get-regexp", ".*"]);
+        assert!(
+            listed
+                .lines()
+                .any(|l| l.to_ascii_lowercase().starts_with("gitsign.fulcioroot ")),
+            "{listed}"
+        );
+        let scoped = Command::new("git")
+            .current_dir(f.repo())
+            .args(["config", "--get-regexp", "^gitsign\\."])
+            .output()
+            .expect("git");
+        assert_eq!(
+            scoped.status.code(),
+            Some(1),
+            "a scoped query misses the injection"
+        );
+    };
+    let setters: [&dyn Fn(&Fixture); 4] = [&local, &included, &worktree, &injected];
     for set in setters {
         let fixture = fixture_with_commit();
         forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
@@ -638,16 +664,50 @@ fn tc_291_a_tag_that_is_not_an_annotated_tag_ref_never_starts_gitsign() {
     let fixture = fixture_with_commit();
     git(&fixture.repo(), &["tag", "light"]);
     let id = forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
+    forged_tag(&fixture, "--help", "tag message", CMS_BLOCK);
     let light = verdict(&fixture, &request(&fixture, "light", "tag", true));
     assert_eq!(light["status"], "unsigned", "{light}");
     assert_eq!(light["reason"], "lightweight_tag");
     // The tag object's own id, a branch and an unknown name are not tag refs.
-    for revision in [id.as_str(), "main", "refs/tags/nope", "v-cms^{tag}"] {
+    for revision in [
+        id.as_str(),
+        "main",
+        "refs/tags/nope",
+        "v-cms^{tag}",
+        "refs/tags/--help",
+    ] {
         let result = verdict(&fixture, &request(&fixture, revision, "tag", true));
         assert_eq!(result["status"], "unverifiable", "{revision}: {result}");
         assert_eq!(result["reason"], "revision_unresolved", "{revision}");
     }
     assert_eq!(fixture.calls(), 0);
+}
+
+#[test]
+#[trace("TC-297", "FR-040-CON-1")]
+fn tc_297_a_relative_path_entry_never_supplies_gitsign() {
+    let fixture = fixture_with_commit();
+    // A `gitsign` inside the repository that would report a valid signature.
+    let hook = fixture.repo().join("hook");
+    fs::create_dir(&hook).expect("hook dir");
+    let marker = fixture.root().join("hook-ran");
+    let script = format!("#!/bin/sh\n: > {}\nexit 0\n", marker.display());
+    fs::write(hook.join("gitsign"), script).expect("hook");
+    fs::set_permissions(hook.join("gitsign"), fs::Permissions::from_mode(0o755)).expect("mode");
+    let request = request(&fixture, "signed", "commit", true);
+    // The absolute `gitsign` is used, never the one in the relative entry.
+    let path = std::env::join_paths([Path::new("hook"), fixture.bin().as_path()]).expect("path");
+    let result = verdict_on(&fixture, &request, Path::new(&path));
+    assert_eq!(result["status"], "signed_valid", "{result}");
+    assert_eq!(fixture.calls(), 1);
+    // With no absolute `gitsign` the relative one is not found either.
+    let bare = fixture.root().join("bare");
+    fs::create_dir(&bare).expect("bare");
+    symlink(which("git"), bare.join("git")).expect("git link");
+    let path = std::env::join_paths([Path::new("hook"), bare.as_path()]).expect("path");
+    let result = verdict_on(&fixture, &request, Path::new(&path));
+    assert_eq!(result["reason"], "gitsign_not_started", "{result}");
+    assert!(!marker.exists(), "a program from the repository ran");
 }
 
 #[test]

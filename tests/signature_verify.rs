@@ -7,8 +7,8 @@ use engineering_assurance::signature_verify::{
     CommitObservation, GitGrade, GitsignIdentity, MAX_REVISION_BYTES, Mapping, Mismatch, Presence,
     PrincipalLookup, Probe, Reason, Run, SignatureFormat, SignatureKind, SignerSource, SshCheck,
     Status, TagObservation, TargetKind, classify_commit, classify_gitsign, classify_tag,
-    commit_signature_format, is_plain_revision, object_message, signed_off_meaning,
-    split_tag_object,
+    commit_signature_format, config_sets_gitsign_key, is_plain_revision, object_message,
+    signed_off_meaning, split_tag_object,
 };
 use ix_trace_rs::trace;
 
@@ -374,7 +374,7 @@ fn tc_293_gitsign_outcomes_map_to_statuses_mismatches_and_reasons() {
         failed,
     );
     unverifiable(&[(Probe::Exact, Run::Exit(2))], failed);
-    unverifiable(&[(Probe::Exact, Run::Exit(-1))], failed);
+    unverifiable(&[(Probe::Exact, Run::Signaled)], failed);
     unverifiable(
         &[
             (Probe::Exact, Run::Exit(1)),
@@ -474,4 +474,19 @@ fn tc_296_gitsign_identity_values_are_bounded() {
     assert!(make("a", "i", &"x".repeat(257)).is_none());
     // A principal may begin with `-`: it is never an argument.
     assert!(make("a", "i", "-p").is_some());
+}
+
+#[test]
+#[trace("TC-298", "FR-040-AC-17")]
+fn tc_298_config_output_is_read_line_by_line_for_a_gitsign_key() {
+    assert!(config_sets_gitsign_key(
+        b"core.bare false\ngitsign.fulcioroot /x\n"
+    ));
+    assert!(config_sets_gitsign_key(b"GitSign.Rekor y\n"));
+    assert!(config_sets_gitsign_key(b"gitsign.connectorid"));
+    assert!(!config_sets_gitsign_key(b""));
+    assert!(!config_sets_gitsign_key(
+        b"core.bare false\nfoo.bar gitsign.x\n"
+    ));
+    assert!(!config_sets_gitsign_key(b"gitsignfoo.x 1\n gitsign.y\n"));
 }

@@ -72,7 +72,8 @@ remain `unverifiable`, FR-036).
   short, or exit status.
 - For kind `tag`, the request `revision` names the tag: it is either a bare
   tag name or `refs/tags/<name>`, and the name is the part after
-  `refs/tags/`. For kind `commit` it is any revision FR-036 accepts.
+  `refs/tags/`. A name that begins with `-` is `revision_unresolved`, because
+  `gitsign` would read it as an option. For kind `commit` it is any revision FR-036 accepts.
 
 ## Outputs
 
@@ -123,25 +124,30 @@ remain `unverifiable`, FR-036).
 - The command SHALL NOT report `signed_valid` for a CMS-signed object without
   a `gitsign` member.
 - When a CMS-signed object has a supplied identity, the command SHALL ask git
-  whether the configuration gitsign will see has any key matching
-  `^gitsign\.` before it runs `gitsign`, by running the unscoped
-  `git config --get-regexp '^gitsign\.'` in the repository, so that includes
-  (`include.path`, `includeIf`) and `config.worktree` are read as gitsign reads
-  them. The check SHALL run in exactly the environment gitsign gets (`PATH`,
-  `HOME`, `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null`, and no
-  `GIT_CONFIG_COUNT` or `GIT_CONFIG_PARAMETERS`). Exit 0 means a key is set and
-  the command SHALL report `unverifiable` with reason `gitsign_repository_config`
-  without starting `gitsign`; exit 1 means none is set; any other outcome is
+  for the configuration gitsign will see before it runs `gitsign`, by running
+  exactly the query gitsign runs, `git config --get-regexp .*`, in the
+  repository, so that includes (`include.path`, `includeIf`) and
+  `config.worktree` are read as gitsign reads them. The check SHALL run in
+  exactly the environment gitsign gets (`PATH`, `HOME`,
+  `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null`, and no
+  `GIT_CONFIG_COUNT` or `GIT_CONFIG_PARAMETERS`). gitsign splits that output
+  into lines and reads the first space-separated token of each line as a key,
+  so a value holding a newline can inject a key. The command SHALL therefore
+  read the output the same way and, when any line's first token begins with
+  `gitsign.` (ASCII case-insensitive), report `unverifiable` with reason
+  `gitsign_repository_config` without starting `gitsign`. Exit 0 with no such
+  line, or exit 1 (no key at all), means no key is set; any other outcome is
   `unverifiable` with the matching FR-036 reason. gitsign reads trust settings
   such as `gitsign.fulcioRoot` from that configuration, and a repository under
   verification must not choose the roots that verify it.
 - The command SHALL delegate verification to `gitsign` as the only verifier,
   passing `--certificate-identity` and `--certificate-oidc-issuer` from the
-  request as separate arguments, never through a shell:
-  - for kind `commit`, `gitsign verify <commit-id>`, where `<commit-id>` is the
+  request as separate arguments, never through a shell, and the target after a
+  `--` argument:
+  - for kind `commit`, `gitsign verify -- <commit-id>`, where `<commit-id>` is the
     commit id git resolved from the request revision, never the request
     revision text;
-  - for kind `tag`, `gitsign verify-tag <name>`, where `<name>` is the tag name
+  - for kind `tag`, `gitsign verify-tag -- <name>`, where `<name>` is the tag name
     defined in Inputs; a revision that does not resolve to an annotated tag
     under `refs/tags/<name>` is `unverifiable` with reason
     `revision_unresolved`, and a lightweight tag is `unsigned` with reason
@@ -164,7 +170,10 @@ remain `unverifiable`, FR-036).
   `unverifiable` with the matching FR-036 reason.
 - The command SHALL pin the program: it runs the executable named `gitsign`,
   and SHALL NOT take a name or path from the request, the repository or git
-  configuration. It SHALL report `unverifiable` with reason `gitsign_not_started`
+  configuration. It SHALL find `gitsign`, and the `git` of the configuration
+  check, only in the absolute entries of `PATH`, run them by that absolute path,
+  and pass on a `PATH` without its relative entries, so the repository under
+  verification (the working directory) can never supply either program. It SHALL report `unverifiable` with reason `gitsign_not_started`
   when `gitsign` cannot start.
 - The command SHALL run `gitsign` with the repository as its working directory,
   through the process host of FR-019 with the same 60 second wall-clock timeout
@@ -212,7 +221,7 @@ distinct from `unverifiable`, and a bad signature is `unverifiable`.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-040-AC-1 | With a stand-in `gitsign` exiting 0 for the exact identity and issuer, a CMS-signed commit and a CMS-signed annotated tag each yield `signed_valid` with `signature_kind` `gitsign`, `certificate` carrying that identity and issuer, and `signer` with `source` `request`, `mapping` `mapped` and the request's `principal`. | Test (stand-in) |
-| FR-040-AC-2 | The stand-in receives, for a commit, `verify <commit-id>` with the resolved commit id and not the request revision text, and for a tag, `verify-tag <name>` with the bare tag name for both a bare-name and a `refs/tags/<name>` revision; both carry `--certificate-identity` and `--certificate-oidc-issuer` with the request values as separate arguments, run with the repository as the working directory, and git is not asked to verify the object. | Test (stand-in) |
+| FR-040-AC-2 | The stand-in receives, for a commit, `verify` and the resolved commit id and not the request revision text, and for a tag, `verify-tag` and the bare tag name for both a bare-name and a `refs/tags/<name>` revision; both carry `--certificate-identity` and `--certificate-oidc-issuer` with the request values as separate arguments, with the target after a `--` argument, run with the repository as the working directory, and git is not asked to verify the object. | Test (stand-in) |
 | FR-040-AC-3 | With a stand-in that exits 1 for the exact flags and 0 for the wildcard flags, the verdict is `signed_untrusted` with `signer` `unmapped`, no `certificate`, and `mismatch` `issuer` when only the issuer differs, `identity` when only the identity differs, and `identity_and_issuer` when both differ, using no more than four invocations. | Test (stand-in) |
 | FR-040-AC-4 | With a stand-in that exits 1 for every invocation, the verdict is `unverifiable` with reason `gitsign_verification_failed`, never `signed_bad` and never `signed_untrusted`; a stand-in that exits 2, or any status other than 0 or 1, at any step gives the same result. | Test (stand-in) |
 | FR-040-AC-5 | A CMS-signed commit and tag in a request without `gitsign` yield `unverifiable` with reason `gitsign_identity_missing`, the stand-in is never started, and the status is never `signed_valid`. | Test (stand-in) |
@@ -225,11 +234,11 @@ distinct from `unverifiable`, and a bad signature is `unverifiable`.
 | FR-040-AC-12 | An SSH-signed commit and tag in a request that also carries `gitsign` yield the FR-036 and FR-037 statuses, signer principal and mapping unchanged, with `signature_kind` `ssh` and `signer.source` `allowed_signers`, and `gitsign` is never started. | Test (stand-in) |
 | FR-040-AC-13 | A gitsign-signed commit and tag whose message carries a `Signed-off-meaning:` trailer report it as FR-037 does, and an `unverifiable` gitsign commit still reports it. | Test (stand-in) |
 | FR-040-AC-14 | The `signature-verify` feature and the binary add no crate dependency that performs signature verification, cryptography or Sigstore access; the only verifying programs invoked are git, `ssh-keygen` and `gitsign`. | Inspection |
-| FR-040-AC-15 | Against real `gitsign` and the network, a public gitsign-signed commit and tag yield `signed_valid` for their true identity and issuer, `signed_untrusted` with `mismatch` `issuer` for a wrong issuer, and `unverifiable` with reason `gitsign_verification_failed` when the network is unavailable. | Test (live, ignored by default) |
+| FR-040-AC-15 | Against real `gitsign` and the network, a public gitsign-signed commit and tag yield `signed_valid` for their true identity and issuer, `signed_untrusted` with `mismatch` `issuer` for a wrong issuer. An unreachable network is covered by the stand-in tests of FR-040-AC-4, because gitsign reports it as an exit status 1 with every matcher. | Test (live, ignored by default) |
 | FR-040-AC-16 | The gitsign argument vectors, including `verify`, `verify-tag`, the four certificate flags and the wildcard values, match the command line documented for the gitsign release the adapter targets. | Inspection |
-| FR-040-AC-17 | A CMS-signed commit in a repository that sets `gitsign.fulcioRoot` (or any other `gitsign.*` key) in its local configuration, in a file named by `include.path`, or in `config.worktree` with `extensions.worktreeConfig` enabled, yields `unverifiable` with reason `gitsign_repository_config`, and the stand-in is never started; a repository with no such key proceeds. | Test (stand-in) |
+| FR-040-AC-17 | A CMS-signed commit in a repository that sets `gitsign.fulcioRoot` (or any other `gitsign.*` key) in its local configuration, in a file named by `include.path`, or in `config.worktree` with `extensions.worktreeConfig` enabled, or injected by a newline inside another key's value, yields `unverifiable` with reason `gitsign_repository_config`, and the stand-in is never started; a repository with no such key proceeds. | Test (stand-in) |
 | FR-040-AC-18 | The stand-in's recorded environment holds exactly `PATH`, `HOME`, `GIT_CONFIG_NOSYSTEM` and `GIT_CONFIG_GLOBAL`, even when the parent environment sets `SIGSTORE_ROOT_FILE`, `GITSIGN_FULCIO_ROOT`, `TUF_ROOT` and `GIT_DIR`. | Test (stand-in) |
-| FR-040-AC-19 | A lightweight tag yields `unsigned` with reason `lightweight_tag`, and a tag revision that resolves to no annotated tag under `refs/tags/` yields `unverifiable` with reason `revision_unresolved`, without starting `gitsign`. | Test (stand-in) |
+| FR-040-AC-19 | A lightweight tag yields `unsigned` with reason `lightweight_tag`, and a tag revision that resolves to no annotated tag under `refs/tags/`, or whose name begins with `-` (`refs/tags/--help`), yields `unverifiable` with reason `revision_unresolved`, without starting `gitsign`. | Test (stand-in) |
 
 ## Dependencies
 

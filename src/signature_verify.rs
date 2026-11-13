@@ -201,6 +201,8 @@ pub enum Run {
     TimedOut,
     /// The program wrote more than the capture bound.
     CutShort,
+    /// The program was ended by a signal and has no exit status.
+    Signaled,
     /// The run could not be observed for another reason.
     Unobserved,
 }
@@ -629,6 +631,20 @@ fn header_format(line: &[u8]) -> Option<SignatureFormat> {
     }
 }
 
+/// Whether the output of `git config --get-regexp .*` holds a `gitsign.` key.
+///
+/// `gitsign` reads that output line by line and takes the text before the first
+/// space of each line as a key, so a value that holds a newline can inject a
+/// key. This reads it the same way, ASCII case-insensitively.
+#[must_use]
+pub fn config_sets_gitsign_key(output: &[u8]) -> bool {
+    const PREFIX: &[u8] = b"gitsign.";
+    output.split(|b| *b == b'\n').any(|line| {
+        let key = line.split(|b| *b == b' ').next().unwrap_or_default();
+        key.len() >= PREFIX.len() && key[..PREFIX.len()].eq_ignore_ascii_case(PREFIX)
+    })
+}
+
 /// Classifies a CMS-signed object by delegating to `gitsign` through `run`.
 ///
 /// `run` performs one [`Probe`] and reports only what was observed; the
@@ -666,7 +682,7 @@ fn probe_gitsign(
     let mut accepted = |probe| match run(probe) {
         Run::Exit(0) => Ok(true),
         Run::Exit(1) => Ok(false),
-        Run::Exit(_) => Err(Reason::GitsignVerificationFailed),
+        Run::Exit(_) | Run::Signaled => Err(Reason::GitsignVerificationFailed),
         Run::NotStarted => Err(Reason::GitsignNotStarted),
         Run::TimedOut => Err(Reason::Timeout),
         Run::CutShort => Err(Reason::OutputExceeded),

@@ -27,8 +27,9 @@ use std::{
 use engineering_assurance::signature_verify::{
     CommitObservation, GitGrade, GitsignIdentity, PrincipalLookup, Probe, Reason, Run,
     SignatureFormat, SignedOffMeaning, SplitTag, SshCheck, TagObservation, TargetKind, Verdict,
-    classify_commit, classify_gitsign, classify_tag, commit_signature_format, is_plain_revision,
-    object_message, signed_off_meaning, split_tag_object,
+    classify_commit, classify_gitsign, classify_tag, commit_signature_format,
+    config_sets_gitsign_key, is_plain_revision, object_message, signed_off_meaning,
+    split_tag_object,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -213,32 +214,78 @@ struct Git<'a> {
 /// Name of the verifier program for CMS signatures; never taken from input.
 const GITSIGN_PROGRAM: &str = "gitsign";
 
-/// Environment variables the tools that read the repository's trust settings
-/// are given.
-const TOOL_ENVIRONMENT: [&str; 4] = ["PATH", "HOME", "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_GLOBAL"];
+/// Environment variables `gitsign` and the configuration check keep from the
+/// parent; `GIT_CONFIG_NOSYSTEM` and `GIT_CONFIG_GLOBAL` are set, not kept.
+const KEPT_ENVIRONMENT: [&str; 2] = ["PATH", "HOME"];
 
-/// The exact environment of `gitsign` and of the configuration check: the
-/// inherited `PATH` and `HOME`, no system or global git configuration, and
-/// nothing else, so the returned removal list holds every other inherited name.
-fn tool_environment() -> (Vec<(OsString, OsString)>, Vec<OsString>) {
-    let set = vec![
-        (OsString::from("GIT_CONFIG_NOSYSTEM"), OsString::from("1")),
-        (
-            OsString::from("GIT_CONFIG_GLOBAL"),
-            OsString::from("/dev/null"),
-        ),
-    ];
-    let removed = std::env::vars_os()
-        .map(|(name, _)| name)
-        .filter(|name| !TOOL_ENVIRONMENT.iter().any(|kept| OsStr::new(kept) == name))
+/// The absolute entries of `path`, which are the only directories a verifier
+/// program is looked up in: a relative entry would resolve inside the
+/// repository under verification, the working directory of the run.
+fn absolute_search_path(path: &OsStr) -> OsString {
+    let kept: Vec<PathBuf> = std::env::split_paths(path)
+        .filter(|entry| entry.is_absolute())
         .collect();
-    (set, removed)
+    std::env::join_paths(kept).unwrap_or_default()
+}
+
+/// The executable `name` in the first directory of `search` that holds one.
+fn find_executable(name: &str, search: &OsStr) -> Option<PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+    std::env::split_paths(search)
+        .map(|directory| directory.join(name))
+        .find(|candidate| {
+            std::fs::metadata(candidate)
+                .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
+        })
+}
+
+/// Runs `program` as `gitsign` and the configuration check need it run: found
+/// by absolute path in the absolute entries of the inherited `PATH`, in the
+/// repository, with exactly `PATH` (those entries), `HOME`,
+/// `GIT_CONFIG_NOSYSTEM=1` and `GIT_CONFIG_GLOBAL=/dev/null`.
+fn run_tool(
+    program: &str,
+    arguments: &[&OsStr],
+    repository: &Path,
+) -> Result<CompletedProcess, ProcessError> {
+    let search = std::env::var_os("PATH").map(|path| absolute_search_path(&path));
+    let executable = search
+        .as_deref()
+        .and_then(|search| find_executable(program, search))
+        .ok_or_else(|| ProcessError::Unavailable {
+            detail: format!("{program} is not in an absolute PATH entry"),
+        })?;
+    let mut set: Vec<(OsString, OsString)> = vec![
+        ("GIT_CONFIG_NOSYSTEM".into(), "1".into()),
+        ("GIT_CONFIG_GLOBAL".into(), "/dev/null".into()),
+    ];
+    if let Some(search) = search {
+        set.push(("PATH".into(), search));
+    }
+    let removed: Vec<OsString> = std::env::vars_os()
+        .map(|(name, _)| name)
+        .filter(|name| !KEPT_ENVIRONMENT.iter().any(|kept| OsStr::new(kept) == name))
+        .filter(|name| !set.iter().any(|(set_name, _)| set_name == name))
+        .collect();
+    let set: Vec<(&OsStr, &OsStr)> = set
+        .iter()
+        .map(|(name, value)| (name.as_os_str(), value.as_os_str()))
+        .collect();
+    let removed: Vec<&OsStr> = removed.iter().map(OsString::as_os_str).collect();
+    process_host::run_configured(
+        executable.as_os_str(),
+        arguments,
+        Some(repository),
+        &set,
+        &removed,
+        limits(),
+    )
 }
 
 /// What the process host observed of a delegated run, as the classifier reads it.
 fn observed(result: &Result<CompletedProcess, ProcessError>) -> Run {
     match result {
-        Ok(output) => Run::Exit(output.status.code().unwrap_or(-1)),
+        Ok(output) => output.status.code().map_or(Run::Signaled, Run::Exit),
         Err(ProcessError::Unavailable { .. }) => Run::NotStarted,
         Err(ProcessError::TimedOut { .. }) => Run::TimedOut,
         Err(ProcessError::OutputTooLarge { .. }) => Run::CutShort,
@@ -288,40 +335,25 @@ impl Git<'_> {
     /// Delegates a CMS-signed object to `gitsign`; `target` is the commit id or
     /// the bare tag name. Without a supplied identity nothing is started.
     fn gitsign_verdict(&self, kind: TargetKind, target: &str) -> Result<Verdict, Reason> {
-        let sets_key = match self.gitsign {
-            Some(_) => self.repository_sets_gitsign_key()?,
-            None => false,
+        let Some(identity) = self.gitsign else {
+            // The classifier asks for no probe without an identity.
+            return Ok(classify_gitsign(kind, None, false, |_| Run::Unobserved));
         };
-        Ok(classify_gitsign(kind, self.gitsign, sets_key, |probe| {
-            self.gitsign_run(kind, target, probe)
+        let sets_key = self.repository_sets_gitsign_key()?;
+        Ok(classify_gitsign(kind, Some(identity), sets_key, |probe| {
+            self.gitsign_run(identity, kind, target, probe)
         }))
     }
 
     /// Whether the configuration `gitsign` will see sets any `gitsign.*` key,
-    /// asked of git with no setting added, in `gitsign`'s own environment.
+    /// asked as gitsign asks it, `git config --get-regexp .*` with no setting
+    /// added, in `gitsign`'s own environment, and read as gitsign reads it.
     fn repository_sets_gitsign_key(&self) -> Result<bool, Reason> {
-        let (set, removed) = tool_environment();
-        let set: Vec<(&OsStr, &OsStr)> = set
-            .iter()
-            .map(|(k, v)| (k.as_os_str(), v.as_os_str()))
-            .collect();
-        let removed: Vec<&OsStr> = removed.iter().map(OsString::as_os_str).collect();
-        let arguments = [
-            OsStr::new("config"),
-            OsStr::new("--get-regexp"),
-            OsStr::new("^gitsign\\."),
-        ];
-        let output = process_host::run_configured(
-            OsStr::new("git"),
-            &arguments,
-            Some(self.repository),
-            &set,
-            &removed,
-            limits(),
-        )
-        .map_err(|error| mechanics_reason(&error, Reason::GitNotStarted))?;
+        let arguments = ["config", "--get-regexp", ".*"].map(OsStr::new);
+        let output = run_tool("git", &arguments, self.repository)
+            .map_err(|error| mechanics_reason(&error, Reason::GitNotStarted))?;
         match output.status.code() {
-            Some(0) => Ok(true),
+            Some(0) => Ok(config_sets_gitsign_key(&output.stdout)),
             Some(1) => Ok(false),
             _ => Err(Reason::UnrecognizedOutput),
         }
@@ -329,10 +361,13 @@ impl Git<'_> {
 
     /// One `gitsign` invocation of the procedure, as separate arguments and
     /// never through a shell.
-    fn gitsign_run(&self, kind: TargetKind, target: &str, probe: Probe) -> Run {
-        let Some(identity) = self.gitsign else {
-            return Run::NotStarted;
-        };
+    fn gitsign_run(
+        &self,
+        identity: &GitsignIdentity,
+        kind: TargetKind,
+        target: &str,
+        probe: Probe,
+    ) -> Run {
         let (identity_flag, identity_value) = match probe {
             Probe::Exact | Probe::ExactIdentityAnyIssuer => {
                 ("--certificate-identity", identity.certificate_identity())
@@ -360,23 +395,11 @@ impl Git<'_> {
             identity_value,
             issuer_flag,
             issuer_value,
+            "--",
             target,
         ]
         .map(OsStr::new);
-        let (set, removed) = tool_environment();
-        let set: Vec<(&OsStr, &OsStr)> = set
-            .iter()
-            .map(|(k, v)| (k.as_os_str(), v.as_os_str()))
-            .collect();
-        let removed: Vec<&OsStr> = removed.iter().map(OsString::as_os_str).collect();
-        observed(&process_host::run_configured(
-            OsStr::new(GITSIGN_PROGRAM),
-            &arguments,
-            Some(self.repository),
-            &set,
-            &removed,
-            limits(),
-        ))
+        observed(&run_tool(GITSIGN_PROGRAM, &arguments, self.repository))
     }
 
     fn grade(&self, id: &str) -> Result<GitGrade, Reason> {
@@ -463,6 +486,10 @@ impl Git<'_> {
     /// valid ref that resolves to the tag object `id`.
     fn tag_name<'r>(&self, revision: &'r str, id: &str) -> Result<&'r str, Reason> {
         let name = revision.strip_prefix("refs/tags/").unwrap_or(revision);
+        // `gitsign` would read such a name as an option.
+        if name.starts_with('-') {
+            return Err(Reason::RevisionUnresolved);
+        }
         let full = format!("refs/tags/{name}");
         let valid = self.run(&["check-ref-format", &full])?.status.success();
         if valid && self.resolve(&full).is_ok_and(|resolved| resolved == id) {
@@ -741,6 +768,15 @@ mod tests {
             }),
             Run::NotStarted
         );
+        {
+            use std::os::unix::process::ExitStatusExt;
+            let killed = CompletedProcess {
+                status: std::process::ExitStatus::from_raw(9),
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+            };
+            assert_eq!(observed(&Ok(killed)), Run::Signaled);
+        }
         assert_eq!(
             failure(ProcessError::PipeUnavailable { stream: "stdout" }),
             Run::Unobserved
