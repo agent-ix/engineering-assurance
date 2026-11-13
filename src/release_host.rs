@@ -30,6 +30,8 @@ use crate::signature_verify_host::{GitsignRequest, check_allowed_signers, run_gi
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.release-verify-request/v1";
 const RESULT_PROTOCOL: &str = "engineering-assurance.release-verify-result/v1";
+/// The most items a Baseline may list, so that one git call tests every path.
+const MAX_BASELINE_ITEMS: usize = 1024;
 const RELEASE_SCHEMA: &str =
     include_str!("../engineering_assurance/schemas/release-frontmatter.schema.json");
 const BASELINE_SCHEMA: &str =
@@ -230,6 +232,9 @@ pub(crate) fn resolve_baseline(
         .ok_or(BaselineError::FileAbsent)?;
     let baseline: BaselineDocument =
         document(&file, BASELINE_SCHEMA).ok_or(BaselineError::FileInvalid)?;
+    if baseline.items.len() > MAX_BASELINE_ITEMS {
+        return Err(BaselineError::FileInvalid);
+    }
     let mut seen = std::collections::BTreeSet::new();
     if !baseline
         .items

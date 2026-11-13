@@ -45,7 +45,7 @@ git write, and any digest or manifest of the items.
 ## Inputs
 
 - One Baseline document with frontmatter `id`, `title`, `type: Baseline`,
-  `name` (a non-empty human name) and `items`, a list of one to 1024 objects with
+  `name` (a non-empty human name) and `items`, a non-empty list of objects with
   `path` (a repository-relative path: no `..` or `.` segment, no leading `/`,
   no empty segment, no glob character, no control character, and no segment
   starting with a space) and
@@ -66,8 +66,10 @@ git write, and any digest or manifest of the items.
 - The archetype SHALL refuse a member other than those named under
   Inputs.
 - The archetype SHALL refuse a `kind` outside the three named.
-- The archetype SHALL refuse more than 1024 items, so that one git call tests
-  every item path.
+- If a Baseline lists more than 1024 items, then the resolution SHALL report
+  `baseline_file_invalid`, so that one git call tests every item path. The
+  archetype's schema does not state this bound, because the onboarding
+  checklist reads no `maxItems`.
 - When a Baseline is resolved, the resolution SHALL read the Baseline file
   from the supplied commit with git object access.
 - When a Baseline is resolved, the resolution SHALL test each item path with
@@ -90,7 +92,7 @@ git write, and any digest or manifest of the items.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-046-AC-1 | A Baseline with a name and items of each of the three kinds validates, and the skeleton validates as authored. | Test |
-| FR-046-AC-2 | A Baseline with an unknown member, an empty `items`, more than 1024 items, an absolute path, a path with `..`, a glob, or an unknown `kind` is refused with the member named. | Test |
+| FR-046-AC-2 | A Baseline with an unknown member, an empty `items`, an absolute path, a path with `..`, a glob, or an unknown `kind` is refused with the member named. | Test |
 | FR-046-AC-3 | Resolving one Baseline at two commits whose item contents differ reports the two commit hashes git gives, and the result has no member that Engineering Assurance computed from file content. | Test |
 | FR-046-AC-4 | An item path deleted at the resolved commit but present in the working tree is reported `absent`; an item present at the commit but modified in the working tree is reported `present`. | Test |
 | FR-046-AC-5 | Resolution leaves the repository's refs, index and working tree unchanged. | Test |

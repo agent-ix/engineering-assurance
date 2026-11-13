@@ -30,7 +30,6 @@
     "items": {
       "type": "array",
       "minItems": 1,
-      "maxItems": 1024,
       "uniqueItems": true,
       "description": "Configuration items, each identified by its repository path. No digest or listing of content is recorded: the commit fixes every byte.",
       "items": {
