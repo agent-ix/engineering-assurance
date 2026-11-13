@@ -258,6 +258,8 @@ fn module_inventory_is_exact() {
             "ArchitectureDescription",
             "ComponentAssuranceContract",
             "AssuranceArgument",
+            "Baseline",
+            "Release",
         ]
     );
     assert_eq!(data["lint_rules"], json!([]));

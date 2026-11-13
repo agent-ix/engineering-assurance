@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-//! The module exports its five artifact types through the semantic contract.
+//! The module exports its seven artifact types through the semantic contract.
 //!
 //! Each artifact type has ONE JSON Schema 2020-12 file, which is both its
 //! manifest `frontmatter_schema_ref` and its exported `data_schema`; there is no
@@ -45,7 +45,7 @@ const ID_BASE: &str = concat!(
 const RFC_3339_DATE_TIME: &str = r"^(?:[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-8]))|(?:(?:0[048]|[2468][048]|[13579][26])00|[0-9]{2}(?:0[48]|[2468][048]|[13579][26]))-02-29)[Tt ](?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\.[0-9]+)?(?:[Zz]|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$";
 
 /// Artifact types; each one's schema is `schemas/<kebab-name>-frontmatter.schema.json`.
-const ARTIFACTS: [(&str, &str); 5] = [
+const ARTIFACTS: [(&str, &str); 7] = [
     (
         "AssuranceProfile",
         "assurance-profile-frontmatter.schema.json",
@@ -66,6 +66,8 @@ const ARTIFACTS: [(&str, &str); 5] = [
         "AssuranceArgument",
         "assurance-argument-frontmatter.schema.json",
     ),
+    ("Baseline", "baseline-frontmatter.schema.json"),
+    ("Release", "release-frontmatter.schema.json"),
 ];
 
 fn module_root() -> PathBuf {
@@ -133,8 +135,8 @@ fn every_export_is_a_declared_type_with_a_2020_12_schema() {
     }
     assert_eq!(
         checked.len(),
-        7,
-        "five artifact and two campaign exports are all checked"
+        9,
+        "seven artifact and two campaign exports are all checked"
     );
 
     // One file per artifact type: its export IS its frontmatter schema.
@@ -468,4 +470,204 @@ fn content_rights_admits_exactly_the_manifest_data_schema_files() {
         unlisted > 0,
         "the schemas directory holds non-exported files"
     );
+}
+
+// --- Baseline and Release archetypes -------------------------------------------
+
+fn archetype_validator(name: &str) -> jsonschema::Validator {
+    validator(&read_json(
+        &module_root().join(format!("schemas/{name}-frontmatter.schema.json")),
+    ))
+}
+
+fn baseline_with(over: &Value) -> Value {
+    let mut document = frontmatter("Baseline");
+    document
+        .as_object_mut()
+        .expect("object")
+        .extend(over.as_object().expect("object").clone());
+    document
+}
+
+fn release_with(over: &Value) -> Value {
+    let mut document = frontmatter("Release");
+    document
+        .as_object_mut()
+        .expect("object")
+        .extend(over.as_object().expect("object").clone());
+    document
+}
+
+fn refused(v: &jsonschema::Validator, document: &Value) -> bool {
+    !v.is_valid(document)
+}
+
+#[trace("FR-046-AC-1")]
+#[test]
+fn baseline_skeleton_and_every_item_kind_validate() {
+    let v = archetype_validator("baseline");
+    assert!(v.is_valid(&frontmatter("Baseline")));
+    let skeleton = frontmatter("Baseline");
+    let kinds: Vec<&str> = skeleton["items"]
+        .as_array()
+        .expect("items")
+        .iter()
+        .map(|item| item["kind"].as_str().expect("kind"))
+        .collect();
+    assert_eq!(kinds, ["spec_artifact", "soup_record", "evidence"]);
+}
+
+#[trace("FR-046-AC-2")]
+#[test]
+fn baseline_refuses_unknown_members_empty_items_bad_paths_and_kinds() {
+    let v = archetype_validator("baseline");
+    let item = |path: &str, kind: &str| json!({"path": path, "kind": kind});
+
+    assert!(refused(
+        &v,
+        &baseline_with(&json!({"commit": "0".repeat(40)}))
+    ));
+    assert!(refused(&v, &baseline_with(&json!({"digest": "sha256:00"}))));
+    assert!(refused(&v, &baseline_with(&json!({"items": []}))));
+    assert!(refused(
+        &v,
+        &baseline_with(&json!({"items": [item("a.md", "evidence"), item("a.md", "evidence")]}))
+    ));
+    for bad in [
+        "/etc/a.md",
+        "../a.md",
+        "a/../b.md",
+        "a/..",
+        "specs/*.md",
+        "a/?.md",
+        "a/[b].md",
+        "a//b.md",
+        "a/",
+        "",
+        ".",
+    ] {
+        assert!(
+            refused(
+                &v,
+                &baseline_with(&json!({"items": [item(bad, "evidence")]}))
+            ),
+            "path {bad:?} must be refused"
+        );
+    }
+    assert!(refused(
+        &v,
+        &baseline_with(&json!({"items": [item("a.md", "source")]}))
+    ));
+    assert!(refused(
+        &v,
+        &baseline_with(&json!({"items": [{"path": "a.md", "kind": "evidence", "sha": "x"}]}))
+    ));
+    assert!(refused(&v, &baseline_with(&json!({"name": ""}))));
+    assert!(v.is_valid(&baseline_with(
+        &json!({"items": [item(".github/a..b.md", "evidence")]})
+    )));
+}
+
+#[trace("FR-046-AC-3", "FR-046-CON-1")]
+#[test]
+fn baseline_schema_has_no_member_for_a_commit_hash_or_computed_content() {
+    let schema = read_json(&module_root().join("schemas/baseline-frontmatter.schema.json"));
+    let members: BTreeSet<&str> = schema["properties"]
+        .as_object()
+        .expect("properties")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        members,
+        BTreeSet::from(["id", "title", "type", "name", "items"])
+    );
+    let item_members: BTreeSet<&str> = schema["properties"]["items"]["items"]["properties"]
+        .as_object()
+        .expect("item properties")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(item_members, BTreeSet::from(["path", "kind"]));
+}
+
+#[trace("FR-047-AC-7", "FR-051-AC-4")]
+#[test]
+fn release_skeleton_validates_and_optional_anomalies_may_be_absent() {
+    let v = archetype_validator("release");
+    assert!(v.is_valid(&frontmatter("Release")));
+    let mut document = frontmatter("Release");
+    document
+        .as_object_mut()
+        .expect("object")
+        .remove("accepted_anomalies");
+    assert!(v.is_valid(&document));
+    document
+        .as_object_mut()
+        .expect("object")
+        .remove("snapshot_path");
+    assert!(refused(&v, &document), "snapshot_path is required");
+    assert!(v.is_valid(&release_with(&json!({"accepted_anomalies": []}))));
+}
+
+#[trace("FR-047-AC-7", "FR-051-AC-4")]
+#[test]
+fn release_refuses_unknown_members_and_malformed_members() {
+    let v = archetype_validator("release");
+    let commit = "0123456789abcdef0123456789abcdef01234567";
+    for over in [
+        json!({"status": "released"}),
+        json!({"approved": true}),
+        json!({"score": 0.9}),
+        json!({"decision": "release"}),
+        json!({"previous_release": "REL-000"}),
+        json!({"decision_owner": ""}),
+        json!({"snapshot_path": ""}),
+        json!({"snapshot_path": "/abs/snapshot.json"}),
+        json!({"snapshot_path": "../snapshot.json"}),
+        json!({"snapshot_path": "snapshots/*.json"}),
+        json!({"name": ""}),
+        json!({"type": "Baseline"}),
+        json!({"id": "R-1"}),
+        json!({"accepted_anomalies": [""]}),
+        json!({"accepted_anomalies": "none"}),
+        json!({"baseline": {"path": "b.md"}}),
+        json!({"baseline": {"commit": commit}}),
+        json!({"baseline": {"path": "b.md", "commit": "main"}}),
+        json!({"baseline": {"path": "b.md", "commit": "0123456"}}),
+        json!({"baseline": {"path": "b.md", "commit": commit.to_uppercase()}}),
+        json!({"baseline": {"path": "../b.md", "commit": commit}}),
+        json!({"baseline": {"path": "b.md", "commit": commit, "digest": "x"}}),
+    ] {
+        assert!(refused(&v, &release_with(&over)), "{over} must be refused");
+    }
+    assert!(v.is_valid(&release_with(
+        &json!({"baseline": {"path": "b.md", "commit": "a".repeat(64)}})
+    )));
+}
+
+#[trace("FR-047-AC-7", "NFR-007")]
+#[test]
+fn release_schema_has_no_score_decision_or_approval_member() {
+    let schema = read_json(&module_root().join("schemas/release-frontmatter.schema.json"));
+    let members: BTreeSet<&str> = schema["properties"]
+        .as_object()
+        .expect("properties")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        members,
+        BTreeSet::from([
+            "id",
+            "title",
+            "type",
+            "name",
+            "baseline",
+            "snapshot_path",
+            "decision_owner",
+            "accepted_anomalies"
+        ])
+    );
+    assert_eq!(schema["additionalProperties"], json!(false));
 }

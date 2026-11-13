@@ -127,6 +127,8 @@ fn retained_bundle() -> OwnedBundle {
             "AssuranceArgument",
             "schemas/assurance-argument-frontmatter.schema.json",
         ),
+        ("Baseline", "schemas/baseline-frontmatter.schema.json"),
+        ("Release", "schemas/release-frontmatter.schema.json"),
     ];
     OwnedBundle {
         manifest_yaml: std::fs::read(package.join("manifest.yaml"))

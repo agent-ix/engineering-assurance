@@ -8,9 +8,10 @@ one canonical onboarding skill and four resumable workflows for deciding what
 assurance work a repository actually needs.
 
 It is deliberately not a compliance oracle. Engineering Assurance does not
-calculate a trust score, import external rules, or approve a release. The
-decision owner remains responsible for the boundary, claims, exceptions,
-evidence sufficiency, and terminal decision.
+calculate a trust score or import external rules, and it never decides a release. It
+records a named person's signed release decision and verifies it. The decision
+owner remains responsible for the boundary, claims, exceptions, evidence
+sufficiency, and terminal decision.
 
 ## Setup
 
@@ -211,7 +212,7 @@ after installing.
 
 ### Artifact types
 
-The module supplies Quire schemas and Markdown skeletons for five artifact
+The module supplies Quire schemas and Markdown skeletons for seven artifact
 types:
 
 | Type | Purpose |
@@ -221,6 +222,8 @@ types:
 | `ArchitectureDescription` | Record system boundaries, views, architecture decisions, and risks. |
 | `ComponentAssuranceContract` | State required component behavior, failure handling, controls, and replacement. |
 | `AssuranceArgument` | Record a claim, reasoning, sufficiency decision, and challenges. |
+| `Baseline` | Name a set of configuration items by repository path, read at one git commit. |
+| `Release` | Record a release: its Baseline and commit, the named decision owner, and the anomalies that person accepted. |
 
 ### Agent skill and workflows
 
