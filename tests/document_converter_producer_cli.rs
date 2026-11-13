@@ -428,7 +428,7 @@ fn tc_375_real_pandoc_and_typst_convert_the_fixture_to_pdf() {
     assert!(pdf.starts_with(b"%PDF"), "the output must be a PDF");
 }
 
-#[trace("TC-376", "FR-045-CON-1")]
+#[trace("TC-376", "FR-045-AC-6", "FR-045-CON-1")]
 #[test]
 fn tc_376_missing_converter_fails_the_integration_target_naming_the_variable() {
     let not_executable = tempfile::NamedTempFile::new().expect("plain file");

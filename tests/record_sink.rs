@@ -549,6 +549,10 @@ fn tc_632_invalid_and_incomplete_configurations_are_refused() {
     for bad in [
         json!({"surprise": 1}),
         json!({"sink": "elsewhere"}),
+        json!({"sink": null}),
+        json!({"public_log": null}),
+        json!({"public_log": {"endpoint": null}}),
+        json!({"private_store": {"destination": null}}),
         json!({"public_log": {"endpoint": concat!("http", "://log.example.test")}}),
         json!({"public_log": {"endpoint": "https://"}}),
         json!({"public_log": {"endpoint": ENDPOINT, "extra": true}}),
@@ -685,7 +689,7 @@ fn tc_635_a_missing_destination_is_incomplete_and_the_first_publish_sends_nothin
 
 // ---- FR-056 ------------------------------------------------------------------
 
-#[trace("TC-636", "FR-056-AC-1", "FR-056-AC-2")]
+#[trace("TC-636", "FR-056-AC-1", "FR-056-AC-2", "FR-056-AC-10")]
 #[test]
 fn tc_636_the_forms_split_private_text_from_public_members() {
     let rec = record();
@@ -720,6 +724,19 @@ fn tc_636_the_forms_split_private_text_from_public_members() {
         Record::new(rec.public().clone(), other),
         Err(FormError::RecordIdMismatch)
     );
+    for member in ["ticket_text", "statement", "model_names"] {
+        let private = json!({
+            "protocol": "engineering-assurance.record-private/v1",
+            "record_id": ID,
+            member: null
+        });
+        assert!(
+            PrivateRecord::from_json(private.to_string().as_bytes()).is_err(),
+            "{member}"
+        );
+    }
+    let id = RecordId::from_random_bytes([0xff; 16]);
+    assert_eq!(id.as_str(), "ffffffff-ffff-4fff-bfff-ffffffffffff");
 }
 
 #[trace("TC-637", "FR-056-AC-3", "NFR-008-M-1")]
@@ -757,6 +774,8 @@ fn tc_638_a_value_outside_its_grammar_is_rejected_before_any_sink() {
         Box::new(|v| v["hashes"]["subject_commit"] = json!(format!("sha256:{COMMIT}"))),
         Box::new(|v| v["hashes"]["subject_commit"] = json!("abc123")),
         Box::new(|v| v["signature"] = json!("not base64!")),
+        Box::new(|v| v["hashes"]["statement"] = Value::Null),
+        Box::new(|v| v["signature"] = Value::Null),
         Box::new(|v| v["signature"] = json!("abc")),
         Box::new(|v| v["signature"] = json!("A".repeat(16_388))),
         Box::new(|v| v["timestamps"]["created"] = json!("2026-11-13 10:00:00")),
@@ -979,7 +998,7 @@ fn tc_641_an_approval_statement_is_only_in_the_private_form() {
     );
 }
 
-#[trace("TC-642", "FR-056-AC-8")]
+#[trace("TC-642", "FR-056-AC-8", "FR-056-AC-9")]
 #[test]
 fn tc_642_the_bundle_signs_exactly_the_canonical_public_bytes() {
     let world = World::new();
@@ -1018,10 +1037,6 @@ fn tc_642_the_bundle_signs_exactly_the_canonical_public_bytes() {
         Some(ErrorCode::SigningFailed)
     );
     assert!(failing.log.entries.borrow().is_empty());
-}
-
-#[test]
-fn a_record_offered_with_a_signature_is_not_accepted() {
     let mut doc = public_json(PUBLISHER, &[]);
     doc["signature"] = json!("AAAA");
     let public = PublicRecord::from_json(doc.to_string().as_bytes()).unwrap();
@@ -1030,8 +1045,6 @@ fn a_record_offered_with_a_signature_is_not_accepted() {
         Record::new(public, private),
         Err(FormError::SignatureNotAccepted)
     );
-    let id = RecordId::from_random_bytes([0xff; 16]);
-    assert_eq!(id.as_str(), "ffffffff-ffff-4fff-bfff-ffffffffffff");
 }
 
 // ---- FR-057 ------------------------------------------------------------------
@@ -1237,7 +1250,13 @@ fn tc_649_only_all_public_records_reach_or_sign_for_the_public_log() {
     }
 }
 
-#[trace("TC-650", "FR-057-AC-10", "FR-057-AC-11", "NFR-010-M-2")]
+#[trace(
+    "TC-650",
+    "FR-057-AC-10",
+    "FR-057-AC-11",
+    "NFR-010-AC-1",
+    "NFR-010-M-2"
+)]
 #[test]
 fn tc_650_signing_uses_the_public_path_only_after_the_check_passed() {
     let rec = record();
@@ -1265,7 +1284,7 @@ fn tc_650_signing_uses_the_public_path_only_after_the_check_passed() {
     assert_eq!(*refused.signer.public_calls.borrow(), 0);
 }
 
-#[trace("TC-651", "NFR-010-M-1")]
+#[trace("TC-651", "NFR-010-AC-2", "NFR-010-M-1")]
 #[test]
 fn tc_651_the_sink_module_implements_no_signature_primitive() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/record_sink");
@@ -1325,43 +1344,4 @@ fn tc_652_the_public_log_is_reachable_only_through_the_checked_sink() {
         proof.signed_bytes(),
         public.public().signed_bytes().unwrap()
     );
-}
-
-#[test]
-fn null_is_not_a_member_value_in_any_closed_document() {
-    let mut public = public_json(PUBLISHER, &[]);
-    public["hashes"]["statement"] = Value::Null;
-    assert!(PublicRecord::from_json(public.to_string().as_bytes()).is_err());
-    let mut public = public_json(PUBLISHER, &[]);
-    public["signature"] = Value::Null;
-    assert!(PublicRecord::from_json(public.to_string().as_bytes()).is_err());
-    for member in ["ticket_text", "statement", "model_names"] {
-        let private = json!({
-            "protocol": "engineering-assurance.record-private/v1",
-            "record_id": ID, member: null
-        });
-        assert!(
-            PrivateRecord::from_json(private.to_string().as_bytes()).is_err(),
-            "{member}"
-        );
-    }
-    for patch in [
-        json!({"sink": null}),
-        json!({"public_log": null}),
-        json!({"public_log": {"endpoint": null}}),
-        json!({"private_store": {"destination": null}}),
-    ] {
-        let mut doc = json!({
-            "protocol": "engineering-assurance.sink-config/v1",
-            "private_store": {"destination": DESTINATION}
-        });
-        for (key, value) in patch.as_object().unwrap() {
-            doc[key] = value.clone();
-        }
-        assert_eq!(
-            SinkConfig::parse(doc.to_string().as_bytes()),
-            Err(ErrorCode::SinkConfigInvalid),
-            "{patch}"
-        );
-    }
 }

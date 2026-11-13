@@ -709,7 +709,7 @@ fn tc_291_a_tag_that_is_not_an_annotated_tag_ref_never_starts_gitsign() {
 }
 
 #[test]
-#[trace("TC-297", "FR-040-CON-1")]
+#[trace("TC-297", "FR-040-AC-6", "FR-040-CON-1")]
 fn tc_297_a_relative_path_entry_never_supplies_gitsign_or_git() {
     let fixture = fixture_with_commit();
     // Programs inside the repository that would report a valid signature.
