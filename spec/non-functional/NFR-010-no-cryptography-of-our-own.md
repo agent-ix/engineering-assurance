@@ -45,6 +45,13 @@ workflow, so the upload is part of publishing and is gated like it. The git-sign
 A source inspection checks the first count; a stand-in public log client checks the second (FR-057-AC-10); a test that substitutes the delegated library with a stand-in that rejects
 every signature checks the third.
 
+## Acceptance Criteria
+
+| ID | Criteria | Verification |
+| --- | --- | --- |
+| NFR-010-AC-1 | On a public-log publish, the sink obtains the public-form signature through its injected `Signer` only after the [FR-057](../functional/FR-057-fail-closed-pre-publish-leak-check.md) check passes; a refused record does not invoke the public signing method. | Test |
+| NFR-010-AC-2 | Source inspection finds no signature, certificate or hash-based signing primitive in the sink modules. | Test |
+
 ## Dependencies
 
 - **Upstream**: none.
