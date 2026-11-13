@@ -18,8 +18,7 @@ relationships:
 
 Engineering Assurance shall report a release as `released` only for a signed
 annotated tag whose signer a supplied trust input maps to the release record's
-named decision owner, and shall make no release decision, sign nothing and keep
-no baseline digest or manifest.
+named decision owner.
 
 ## Scope
 
@@ -30,8 +29,8 @@ no baseline digest or manifest.
 
 A release is a person's accountable act. A tool that could produce or default
 that decision would turn evidence into approval, which this repository exists
-to avoid. Git already fixes baseline content by commit hash, so a second
-identity would only drift.
+to avoid. FR-047 and FR-048 carry the obligations that the release module signs
+nothing and the workflow chooses nothing.
 
 ## Measurement and Evaluation
 
@@ -39,11 +38,10 @@ identity would only drift.
 | --- | --- | --- | --- |
 | Count of `released` results over generated inputs where the FR-041 status is not `approved` or the approver is not the decision owner | 0 | 0 | Property test over the pure decision |
 | Count of code paths in the release module and workflow that create, sign or push a tag or choose `release` | 0 | 0 | Source inspection |
-| Count of baseline digest, hash or manifest members in the archetypes and results | 0 | 0 | Schema and result inspection |
 
 ## Verification
 
-The pure decision of FR-047-AC-11 is exercised over every combination, the
+The pure decision of FR-047-AC-12 is exercised over every combination, the
 workflow tests of FR-048 run with no owner choice and with evidence that
 is all `observed`, and a source inspection checks the three counts.
 

@@ -245,7 +245,7 @@ same canonical bundle and do not redefine these responsibilities.
 - [NFR-006](./non-functional/NFR-006-single-sbom-tool-single-execution-path.md) — Syft is the only
   SBOM generator, run only through the FR-019 executor, read only through the Quoin adapter.
 - [NFR-007](./non-functional/NFR-007-no-release-without-a-person.md) — a release is reported only for a verified
-  person's signed decision; no automatic decision, no baseline digest.
+  person's signed decision.
 
 ### Integration Tests
 

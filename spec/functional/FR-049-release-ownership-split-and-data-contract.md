@@ -35,8 +35,11 @@ The data contract Quoin consumes is the `release-verify` result of FR-047: the
 `approver`, `meaning`, `signed_at` and `accepted_anomalies` members. The files
 Engineering Assurance reads from Quoin are the evidence-status, SOUP-report and
 anomaly-list files named in
-[FR-048](./FR-048-human-release-decision-workflow.md); their formats are Quoin's
-and are read as given.
+[FR-048](./FR-048-human-release-decision-workflow.md): the output of Quoin's
+evidence, SOUP and anomaly reporting, in the format Quoin publishes. The
+protocol identifiers of those outputs are Quoin's to name in its own
+requirement; Engineering Assurance copies no schema, reads only the members
+FR-048 lists, and refuses an unreadable file with `release_input_unreadable`.
 
 Out of scope: how Quoin presents, stores or reports the result, and any change
 to a Quoin repository from this requirement.
@@ -48,14 +51,15 @@ to a Quoin repository from this requirement.
 
 ## Behavior
 
-- Engineering Assurance SHALL be the only component that reads git objects to
-  verify a release.
-- Engineering Assurance SHALL NOT compute SOUP, evidence or anomaly status and
-  SHALL read them from supplied files only.
+- Engineering Assurance SHALL offer the `release-verify` result as its only
+  release interface to a consumer.
+- Engineering Assurance SHALL NOT compute SOUP, evidence or anomaly status.
+- The release-decision workflow SHALL read SOUP, evidence and anomaly status
+  from supplied files only.
 - The `release-verify` result SHALL NOT require its consumer to run git, read
   the repository or re-verify a signature to use it.
-- Engineering Assurance SHALL NOT mutate a Quoin record, and SHALL NOT embed a
-  Quoin schema copy; it reads Quoin's files as given.
+- Engineering Assurance SHALL NOT mutate a Quoin record.
+- Engineering Assurance SHALL NOT embed a Quoin schema copy.
 
 ## Acceptance Criteria
 
