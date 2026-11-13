@@ -37,8 +37,8 @@ The Syft producer definition fixes these fields of the request schema
 | `caller` | `{"kind": "engineering-assurance.sbom-generation", "version": "1"}`. |
 | `procedure` | `direct`. |
 | `capabilityRoot` | An absolute directory holding exactly two subtrees: `scan/`, the only scanned content, and `out/`, the SBOM and every Syft cache and home directory. |
-| `arguments` | `{"kind":"literal","value":...}` entries, in order: `scan`, the source selector, `-o`, `cyclonedx-json=out/sbom.cdx.json`, `-q`. The selector is `dir:scan` for a source tree, or `oci-archive:scan/<file>` or `docker-archive:scan/<file>` for a container image archive. |
-| `environment` | `SYFT_CHECK_FOR_APP_UPDATE=false`, `SYFT_CACHE_DIR=<capabilityRoot>/out/cache`, `SYFT_FILE_METADATA_SELECTION=none`, `HOME=<capabilityRoot>/out/home` and `XDG_CONFIG_HOME=<capabilityRoot>/out/home`. No other variable is inherited (FR-019-CON-1). |
+| `arguments` | `{"kind":"literal","value":...}` entries, in order: `scan`, the source selector, `-o`, `cyclonedx-json=out/sbom.cdx.json`, `-q`, `--config`, `out/empty-config.yaml`. The file `out/empty-config.yaml` is an empty file the caller writes before the run, so Syft reads no other configuration. The selector is `dir:scan` for a source tree, or `oci-archive:scan/<file>` or `docker-archive:scan/<file>` for a container image archive. |
+| `environment` | `SYFT_CHECK_FOR_APP_UPDATE=false`, `SYFT_CACHE_DIR=<capabilityRoot>/out/cache`, `SYFT_FILE_METADATA_SELECTION=none`, `HOME=<capabilityRoot>/out/home`, `XDG_CONFIG_HOME=<capabilityRoot>/out/home`, `XDG_CONFIG_DIRS=<capabilityRoot>/out/xdg` and `TMPDIR=<capabilityRoot>/out/tmp`. The caller creates `out/home`, `out/xdg` and `out/tmp` empty before the run. No other variable is inherited (FR-019-CON-1). |
 | `inputs` | Empty. Syft reads the scan target from the capability root; an image archive is read there too and is not declared as an input, because a retained input snapshot cannot carry a source-scheme prefix. |
 | `stdin` | `{"kind": "null"}`. |
 | `outputs` | One entry: role `sbom`, path `out/sbom.cdx.json`, `required` true. |
@@ -61,10 +61,11 @@ The Syft producer definition fixes these fields of the request schema
   boundary and through no other launch path.
 - The Syft producer request SHALL carry exactly one `-o` pair, of the form
   `cyclonedx-json=out/sbom.cdx.json`, and no other output selector.
-- The capability root SHALL contain no Syft configuration file (`.syft.yaml`,
-  `.syft.yml` or `.syft/`) at its top level, and the scan SHALL cover only
-  `scan/`, so the scan neither catalogues its own SBOM or cache nor reads
-  repository-supplied configuration.
+- The caller SHALL NOT place a Syft configuration file (`.syft.yaml`,
+  `.syft.yml` or `.syft/`) at the top level of the capability root, because
+  Syft reads its working directory for configuration. The scan SHALL cover only
+  `scan/`, so the scan neither catalogues its own SBOM or cache nor treats a
+  configuration file inside `scan/` as anything but scanned content.
 - If the Syft executable named in `producer.executable` cannot be opened or
   launched, then the result state SHALL be `unavailable`.
 - If Syft exits with a non-zero code, is killed by a signal, or exceeds a stream
@@ -82,7 +83,7 @@ The Syft producer definition fixes these fields of the request schema
 
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
-| FR-038-CON-1 | If `EA_TEST_SYFT`, the absolute path of the Syft binary a test runs, is unset or names a file that cannot be run, then the test SHALL fail rather than skip. The repository holds no Syft binary. | Test integrity | Test |
+| FR-038-CON-1 | If `EA_TEST_SYFT`, the absolute path of the Syft binary a test runs, is unset or does not name an executable file, then `make syft-integration` SHALL exit non-zero with a message naming `EA_TEST_SYFT`. A default `cargo test` does not run the Syft-dependent tests, and the repository holds no Syft binary. | Test integrity | Test |
 
 ## Acceptance Criteria
 
@@ -94,8 +95,8 @@ The Syft producer definition fixes these fields of the request schema
 | FR-038-AC-4 | A Syft fixture executable that exits non-zero yields state `failed`, and one that outlives a one-second timeout yields `timed_out`; neither result carries an SBOM artifact for ingestion. | Test |
 | FR-038-AC-5 | The request used by the tests carries exactly one `-o cyclonedx-json=` pair and no `spdx-json` selector, and its `environment`, `inputs`, `stdin` and `containment` equal the definition. | Inspection |
 | FR-038-AC-6 | A stale file left at the SBOM output path before a run that fails is absent from the failed result. | Test |
-| FR-038-AC-7 | With a `.syft.yaml` planted outside `scan/` in the fixture workspace and an earlier SBOM and cache under `out/`, the produced SBOM lists no component originating from `out/` and none configured by the planted file. | Test |
-| FR-038-AC-8 | With `EA_TEST_SYFT` unset, the Syft-dependent tests fail with a message naming the variable. | Test |
+| FR-038-AC-7 | With a `.syft.yaml` and a `.syft/config.yaml` planted inside `scan/`, and an earlier SBOM and cache under `out/`, the produced SBOM still holds exactly the declared components, lists none originating from `out/`, and none configured by the planted files. | Test |
+| FR-038-AC-8 | `make syft-integration` with `EA_TEST_SYFT` unset, or naming a file that is not executable, exits non-zero with a message naming the variable and runs no test. | Test |
 
 ## Dependencies
 

@@ -152,6 +152,11 @@ path = "tests/package_membership_parity.rs"
 required-features = ["full"]
 
 [[test]]
+name = "syft_producer_cli"
+path = "tests/syft_producer_cli.rs"
+required-features = ["full"]
+
+[[test]]
 name = "producer_execute_cli"
 path = "tests/producer_execute_cli.rs"
 required-features = ["full"]
