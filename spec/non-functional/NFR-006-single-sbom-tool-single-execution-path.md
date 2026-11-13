@@ -9,6 +9,8 @@ relationships:
     type: "constrains"
   - target: "ix://agent-ix/engineering-assurance/FR-039"
     type: "constrains"
+  - target: "ix://agent-ix/engineering-assurance/FR-044"
+    type: "constrains"
 ---
 
 # NFR-006: One SBOM tool and one execution path
@@ -21,10 +23,18 @@ Syft SHALL run only through the [FR-019](../functional/FR-019-bounded-producer-e
 
 Engineering Assurance SHALL NOT parse SBOM components in production code.
 
+The advisory scanner of [FR-044](../functional/FR-044-grype-advisory-scan-producer-request.md) SHALL read the Syft
+SBOM on stdin.
+
+The advisory scanner SHALL NOT generate an SBOM.
+
+The advisory scanner SHALL run only through the [FR-019](../functional/FR-019-bounded-producer-execution.md) executor.
+
 ## Scope
 
-Applies to the [FR-038](../functional/FR-038-syft-sbom-producer-request.md) and
-[FR-039](../functional/FR-039-syft-sbom-evidence-ingestion.md) code, tests and
+Applies to the [FR-038](../functional/FR-038-syft-sbom-producer-request.md),
+[FR-039](../functional/FR-039-syft-sbom-evidence-ingestion.md) and
+[FR-044](../functional/FR-044-grype-advisory-scan-producer-request.md) code, tests and
 fixtures. It extends [NFR-004](./NFR-004-no-parallel-assurance-framework.md).
 
 ## Measurement and Evaluation
@@ -33,6 +43,8 @@ fixtures. It extends [NFR-004](./NFR-004-no-parallel-assurance-framework.md).
 | --- | --- | --- | --- |
 | SBOM generators other than Syft | 0 | 0 | architecture-conformance |
 | Syft launch sites outside the FR-019 executor | 0 | 0 | architecture-conformance |
+| Grype launch sites outside the FR-019 executor | 0 | 0 | architecture-conformance |
+| Grype requests carrying a source selector or an SBOM output format | 0 | 0 | architecture-conformance |
 | Production CycloneDX component readers | 0 | 0 | architecture-conformance |
 
 ## Acceptance Criteria
@@ -41,6 +53,8 @@ fixtures. It extends [NFR-004](./NFR-004-no-parallel-assurance-framework.md).
 | --- | --- | --- |
 | NFR-006-AC-1 | Design review confirms Syft is the only SBOM generator and that it is launched only by the FR-019 executor. | Inspection |
 | NFR-006-AC-2 | The Syft request used by the tests passes the published request schema of `producer-execute --schema request`. | Test |
+| NFR-006-AC-3 | Design review confirms Grype is launched only by the FR-019 executor and that its request carries no source selector and no SBOM output format. | Inspection |
+| NFR-006-AC-4 | The Grype request used by the tests passes the published request schema of `producer-execute --schema request`. | Test |
 
 ## Verification
 
