@@ -34,3 +34,13 @@ Checked and clean: first-parent semantics on the main path (`log --first-parent 
 | FND-007 | low | Grammar-valid record paths are silently dropped: a revision above u64::MAX (FR-052 and quoin FR-063 set no upper bound) and a record_id that is not UTF-8. Both are vanishingly rare; either state the bound in FR-052 or refuse with an error rather than omitting a record from the version history without a trace. | src/release_history.rs:62-74 |
 
 ## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | round 1 (c51b922): AC-15 added; range_is_empty refuses with release_history_previous_not_on_first_parent (TC-515; merge-back fixture re-run: refused, exit 2; mutation Ok(false) fails TC-515). |
+| FND-002 | fixed | round 1 (c51b922): show-ref --verify is exact; refs/heads/refs/tags/v2 and refs/tags/refs/tags/v3 now give previous_tag_unknown (TC-512, re-run by hand); annotated and nested tags still peel via ^{commit}. |
+| FND-003 | fixed | round 1 (c51b922): Missing member refused as request_invalid (TC-506; fixture 8 re-run). |
+| FND-004 | fixed | round 1 (c51b922): Extra refusals now stated in FR-052 Inputs; tag v{1} accepted end to end; tag still reaches git only after show-ref --verify --, so no option or revision syntax is interpreted. |
+| FND-005 | fixed | round 1 (c51b922): Codes listed in FR-052 Outputs; AC-16 added with TC-516 (git failure, replace ref, graft). |
+| FND-006 | fixed | round 1 (c51b922): Whole-chain rev-list removed; only the range is listed (rev-list --first-parent --parents baseline ^previous), and the oldest commit's first parent must be previous. Ordering unchanged (BTreeMap + sort). |
+| FND-007 | fixed | round 1 (c51b922): RecordPath::Unrepresentable refused only after the present-at-baseline filter (AC-17, TC-517, TC-513). |

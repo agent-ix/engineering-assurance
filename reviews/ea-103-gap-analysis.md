@@ -31,3 +31,8 @@ Ticket: EA-103. Planless gap analysis over the PR diff at 199828e. Read `quoin m
 - Plan completion: not assessed
 
 ## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | round 1 (c51b922): AC-15 and TC-515 added; test kills the Ok(false) mutation. |
+| FND-002 | fixed | round 1 (c51b922): TC-516 covers git failure, a replace ref and a graft; TC-512 covers refs/tags/ guessing. |
