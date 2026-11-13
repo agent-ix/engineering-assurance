@@ -406,7 +406,8 @@ fn tc_377_licence_fixture_components_carry_the_expected_licences() {
                 assert_eq!(entries.len(), 1, "{purl}: {entries:?}");
                 let got = match field {
                     "id" => &entries[0]["license"]["id"],
-                    _ => &entries[0]["expression"],
+                    "expression" => &entries[0]["expression"],
+                    other => panic!("{purl}: unknown expected field {other:?}"),
                 };
                 assert_eq!(got, &want["text"], "{purl}: {entries:?}");
             }
