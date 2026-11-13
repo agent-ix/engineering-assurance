@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-//! Classification of git's verdict on a signed commit or tag (FR-036).
+//! Classification of git's verdict on a signed commit or tag (FR-036) and of
+//! `gitsign`'s verdict on a CMS-signed one (FR-040).
 //!
-//! The module is pure and performs no cryptography: git decides whether a
-//! signature is valid, and `ssh-keygen` decides, for a tag git rejected, whether
-//! the signature is intact. The classifier maps their exit statuses and fixed
-//! signals to a [`Verdict`]. The `Signed-off-meaning:` trailer (FR-037) is read
+//! The module is pure and performs no cryptography: git decides whether an SSH
+//! signature is valid, `ssh-keygen` decides, for a tag git rejected, whether
+//! the signature is intact, and `gitsign` decides for a CMS signature. The
+//! classifier maps their exit statuses and fixed signals to a [`Verdict`]. The `Signed-off-meaning:` trailer (FR-037) is read
 //! from the output of `git interpret-trailers --parse`, never from raw message
 //! text. The binary's git adapter runs the programs and builds the
 //! observation.
@@ -18,11 +19,14 @@ pub const MAX_REVISION_BYTES: usize = 256;
 
 const MEANING_TOKEN: &str = "Signed-off-meaning";
 const SSH_BEGIN: &[u8] = b"-----BEGIN SSH SIGNATURE-----";
-const OTHER_BEGIN: [&[u8]; 3] = [
+const CMS_BEGIN: &[u8] = b"-----BEGIN SIGNED MESSAGE-----";
+const OTHER_BEGIN: [&[u8]; 2] = [
     b"-----BEGIN PGP SIGNATURE-----",
     b"-----BEGIN PGP MESSAGE-----",
-    b"-----BEGIN SIGNED MESSAGE-----",
 ];
+
+/// Longest accepted `gitsign` request value in bytes.
+pub const MAX_GITSIGN_VALUE_BYTES: usize = 256;
 
 /// What the request asks to verify.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -74,6 +78,133 @@ pub enum Reason {
     UnsupportedSignatureFormat,
     /// The output matches no known outcome.
     UnrecognizedOutput,
+    /// A CMS-signed object was given no `gitsign` identity to verify against.
+    GitsignIdentityMissing,
+    /// `gitsign` could not be started.
+    GitsignNotStarted,
+    /// `gitsign` did not accept the signature, even with wildcard matchers, or
+    /// exited with a status other than 0 or 1.
+    GitsignVerificationFailed,
+    /// The repository sets a `gitsign.*` configuration key.
+    GitsignRepositoryConfig,
+}
+
+/// Which verifier a signature belongs to.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SignatureKind {
+    /// An SSH signature, verified by git and `ssh-keygen`.
+    Ssh,
+    /// A CMS (X.509) signature, verified by `gitsign`.
+    Gitsign,
+}
+
+/// Where a signer's person comes from.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SignerSource {
+    /// The allowed-signers file (SSH).
+    AllowedSigners,
+    /// The request's `gitsign.principal`.
+    Request,
+}
+
+/// How a `gitsign` identity or issuer differs from the request's.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Mismatch {
+    /// Only the certificate identity differs.
+    Identity,
+    /// Only the OIDC issuer differs.
+    Issuer,
+    /// Both differ.
+    IdentityAndIssuer,
+}
+
+/// The certificate identity and issuer `gitsign` accepted.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct Certificate {
+    /// The certificate identity, copied from the request.
+    pub identity: String,
+    /// The OIDC issuer, copied from the request.
+    pub oidc_issuer: String,
+}
+
+/// The `gitsign` member of a request: who the signature must come from.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GitsignIdentity {
+    certificate_identity: String,
+    certificate_oidc_issuer: String,
+    principal: String,
+}
+
+impl GitsignIdentity {
+    /// Builds an identity, or `None` when a value is empty, longer than
+    /// [`MAX_GITSIGN_VALUE_BYTES`], holds a control character, or (identity and
+    /// issuer only) begins with `-`.
+    #[must_use]
+    pub fn new(
+        certificate_identity: String,
+        certificate_oidc_issuer: String,
+        principal: String,
+    ) -> Option<Self> {
+        let plain = |value: &str| {
+            !value.is_empty()
+                && value.len() <= MAX_GITSIGN_VALUE_BYTES
+                && !value.chars().any(char::is_control)
+        };
+        let option_safe = |value: &str| plain(value) && !value.starts_with('-');
+        (option_safe(&certificate_identity)
+            && option_safe(&certificate_oidc_issuer)
+            && plain(&principal))
+        .then_some(Self {
+            certificate_identity,
+            certificate_oidc_issuer,
+            principal,
+        })
+    }
+
+    /// The certificate identity the signature must carry.
+    #[must_use]
+    pub fn certificate_identity(&self) -> &str {
+        &self.certificate_identity
+    }
+
+    /// The OIDC issuer the certificate must name.
+    #[must_use]
+    pub fn certificate_oidc_issuer(&self) -> &str {
+        &self.certificate_oidc_issuer
+    }
+}
+
+/// One `gitsign` invocation of the exit-status procedure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Probe {
+    /// The request's identity and issuer.
+    Exact,
+    /// Wildcard identity and wildcard issuer.
+    AnyIdentityAnyIssuer,
+    /// The request's identity and a wildcard issuer.
+    ExactIdentityAnyIssuer,
+    /// A wildcard identity and the request's issuer.
+    AnyIdentityExactIssuer,
+}
+
+/// What was observed of one delegated run.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Run {
+    /// The program ran to an exit status.
+    Exit(i32),
+    /// The program could not be started.
+    NotStarted,
+    /// The program exceeded its wall-clock limit.
+    TimedOut,
+    /// The program wrote more than the capture bound.
+    CutShort,
+    /// The program was ended by a signal and has no exit status.
+    Signaled,
+    /// The run could not be observed for another reason.
+    Unobserved,
 }
 
 /// Whether the allowed-signers file maps the signing key to a person.
@@ -89,6 +220,8 @@ pub enum Mapping {
 /// The person a signature is attributed to (FR-037).
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Signer {
+    /// Where the person comes from.
+    pub source: SignerSource,
     /// Whether the key is mapped.
     pub mapping: Mapping,
     /// The principal named in the allowed-signers file; only when mapped.
@@ -97,15 +230,17 @@ pub struct Signer {
 }
 
 impl Signer {
-    const fn unmapped() -> Self {
+    const fn unmapped(source: SignerSource) -> Self {
         Self {
+            source,
             mapping: Mapping::Unmapped,
             principal: None,
         }
     }
 
-    const fn mapped(principal: String) -> Self {
+    const fn mapped(source: SignerSource, principal: String) -> Self {
         Self {
+            source,
             mapping: Mapping::Mapped,
             principal: Some(principal),
         }
@@ -140,6 +275,9 @@ pub struct Verdict {
     pub status: Status,
     /// What was verified.
     pub kind: TargetKind,
+    /// Which verifier the identified signature block belongs to.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature_kind: Option<SignatureKind>,
     /// Signing key fingerprint exactly as git reports it; a commit only.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key_fingerprint: Option<String>,
@@ -149,6 +287,12 @@ pub struct Verdict {
     /// The mapped person; present only for `signed_valid` and `signed_untrusted`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signer: Option<Signer>,
+    /// The identity and issuer `gitsign` accepted; `signed_valid` gitsign only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub certificate: Option<Certificate>,
+    /// How a gitsign signature differs; `signed_untrusted` gitsign only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mismatch: Option<Mismatch>,
     /// The recorded meaning, when the object's message was readable.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signed_off_meaning: Option<SignedOffMeaning>,
@@ -161,9 +305,12 @@ impl Verdict {
         Self {
             status: Status::Unverifiable,
             kind,
+            signature_kind: None,
             key_fingerprint: None,
             reason: Some(reason),
             signer: None,
+            certificate: None,
+            mismatch: None,
             signed_off_meaning: None,
         }
     }
@@ -175,13 +322,23 @@ impl Verdict {
         self
     }
 
+    /// The verdict with the verifier of the identified signature block.
+    #[must_use]
+    pub const fn with_signature_kind(mut self, kind: Option<SignatureKind>) -> Self {
+        self.signature_kind = kind;
+        self
+    }
+
     const fn plain(kind: TargetKind, status: Status) -> Self {
         Self {
             status,
             kind,
+            signature_kind: None,
             key_fingerprint: None,
             reason: None,
             signer: None,
+            certificate: None,
+            mismatch: None,
             signed_off_meaning: None,
         }
     }
@@ -199,8 +356,22 @@ impl Verdict {
 pub enum SignatureFormat {
     /// An SSH signature.
     Ssh,
-    /// Any other format (`OpenPGP`, X.509, gitsign).
+    /// A CMS (X.509) signature, which is what gitsign produces.
+    Cms,
+    /// Any other format (`OpenPGP`).
     Other,
+}
+
+impl SignatureFormat {
+    /// The verifier of an identified SSH or CMS block.
+    #[must_use]
+    pub const fn signature_kind(self) -> Option<SignatureKind> {
+        match self {
+            Self::Ssh => Some(SignatureKind::Ssh),
+            Self::Cms => Some(SignatureKind::Gitsign),
+            Self::Other => None,
+        }
+    }
 }
 
 /// What git printed for a commit it was asked to grade.
@@ -275,9 +446,25 @@ pub enum TagObservation {
 /// `git verify-commit` agreed.
 #[must_use]
 pub fn classify_commit(observation: &CommitObservation) -> Verdict {
+    let verdict = classify_ssh_commit(observation);
+    if verdict.status == Status::Unsigned {
+        return verdict;
+    }
+    let signature_kind = observation.format.and_then(SignatureFormat::signature_kind);
+    verdict.with_signature_kind(signature_kind)
+}
+
+fn classify_ssh_commit(observation: &CommitObservation) -> Verdict {
     let kind = TargetKind::Commit;
-    if observation.format == Some(SignatureFormat::Other) {
-        return Verdict::unverifiable(kind, Reason::UnsupportedSignatureFormat);
+    match observation.format {
+        Some(SignatureFormat::Other) => {
+            return Verdict::unverifiable(kind, Reason::UnsupportedSignatureFormat);
+        }
+        // A CMS object is classified by `classify_gitsign`, never by git's grade.
+        Some(SignatureFormat::Cms) => {
+            return Verdict::unverifiable(kind, Reason::UnrecognizedOutput);
+        }
+        Some(SignatureFormat::Ssh) | None => {}
     }
     let Some(git) = &observation.git else {
         return Verdict::unverifiable(kind, Reason::UnrecognizedOutput);
@@ -289,10 +476,16 @@ pub fn classify_commit(observation: &CommitObservation) -> Verdict {
     };
     match git.grade {
         'G' if git.verify_accepted => match git.principal.clone() {
-            Some(principal) => signed(Status::SignedValid, Some(Signer::mapped(principal))),
+            Some(principal) => signed(
+                Status::SignedValid,
+                Some(Signer::mapped(SignerSource::AllowedSigners, principal)),
+            ),
             None => Verdict::unverifiable(kind, Reason::UnrecognizedOutput),
         },
-        'U' => signed(Status::SignedUntrusted, Some(Signer::unmapped())),
+        'U' => signed(
+            Status::SignedUntrusted,
+            Some(Signer::unmapped(SignerSource::AllowedSigners)),
+        ),
         'B' => signed(Status::SignedBad, None),
         'N' => Verdict::plain(kind, Status::Unsigned),
         'E' => Verdict::unverifiable(kind, Reason::SignatureUnchecked),
@@ -305,6 +498,16 @@ pub fn classify_commit(observation: &CommitObservation) -> Verdict {
 /// signature check.
 #[must_use]
 pub fn classify_tag(observation: &TagObservation) -> Verdict {
+    let verdict = classify_ssh_tag(observation);
+    match observation {
+        TagObservation::Signature { format, .. } => {
+            verdict.with_signature_kind(format.signature_kind())
+        }
+        TagObservation::Lightweight | TagObservation::NoSignature => verdict,
+    }
+}
+
+fn classify_ssh_tag(observation: &TagObservation) -> Verdict {
     let kind = TargetKind::Tag;
     match observation {
         TagObservation::Lightweight => Verdict {
@@ -316,23 +519,32 @@ pub fn classify_tag(observation: &TagObservation) -> Verdict {
             format: SignatureFormat::Other,
             ..
         } => Verdict::unverifiable(kind, Reason::UnsupportedSignatureFormat),
+        // A CMS object is classified by `classify_gitsign`, never by git.
+        TagObservation::Signature {
+            format: SignatureFormat::Cms,
+            ..
+        } => Verdict::unverifiable(kind, Reason::UnrecognizedOutput),
         TagObservation::Signature {
             verify_accepted: true,
             principal,
             ..
         } => match principal {
-            PrincipalLookup::Found(name) => {
-                Verdict::signed(kind, Status::SignedValid, Signer::mapped(name.clone()))
-            }
+            PrincipalLookup::Found(name) => Verdict::signed(
+                kind,
+                Status::SignedValid,
+                Signer::mapped(SignerSource::AllowedSigners, name.clone()),
+            ),
             PrincipalLookup::NotStarted => Verdict::unverifiable(kind, Reason::SshKeygenNotStarted),
             PrincipalLookup::NotRun | PrincipalLookup::Rejected => {
                 Verdict::unverifiable(kind, Reason::UnrecognizedOutput)
             }
         },
         TagObservation::Signature { check, .. } => match check {
-            Some(SshCheck::Accepted) => {
-                Verdict::signed(kind, Status::SignedUntrusted, Signer::unmapped())
-            }
+            Some(SshCheck::Accepted) => Verdict::signed(
+                kind,
+                Status::SignedUntrusted,
+                Signer::unmapped(SignerSource::AllowedSigners),
+            ),
             Some(SshCheck::Rejected) => Verdict::plain(kind, Status::SignedBad),
             Some(SshCheck::NotStarted) => Verdict::unverifiable(kind, Reason::SshKeygenNotStarted),
             None => Verdict::unverifiable(kind, Reason::UnrecognizedOutput),
@@ -381,11 +593,11 @@ pub fn split_tag_object(object: &[u8]) -> Option<SplitTag<'_>> {
 /// Format of the signature headers of a commit object.
 ///
 /// Git verifies one of the `gpgsig` headers depending on the repository's hash
-/// algorithm, so the commit counts as SSH-signed only when every signature
-/// header is an SSH signature.
+/// algorithm, so the commit counts as SSH-signed (or CMS-signed) only when every
+/// signature header is of that one format; a mix is [`SignatureFormat::Other`].
 #[must_use]
 pub fn commit_signature_format(object: &[u8]) -> Option<SignatureFormat> {
-    let mut found = None;
+    let mut found: Option<SignatureFormat> = None;
     for line in object.split(|b| *b == b'\n') {
         if line.is_empty() {
             break;
@@ -394,10 +606,11 @@ pub fn commit_signature_format(object: &[u8]) -> Option<SignatureFormat> {
             .strip_prefix(b"gpgsig ")
             .or_else(|| line.strip_prefix(b"gpgsig-sha256 "));
         if let Some(value) = value {
-            match header_format(value).unwrap_or(SignatureFormat::Other) {
-                SignatureFormat::Other => return Some(SignatureFormat::Other),
-                SignatureFormat::Ssh => found = Some(SignatureFormat::Ssh),
+            let format = header_format(value).unwrap_or(SignatureFormat::Other);
+            if format == SignatureFormat::Other || found.is_some_and(|seen| seen != format) {
+                return Some(SignatureFormat::Other);
             }
+            found = Some(format);
         }
     }
     found
@@ -409,11 +622,107 @@ fn header_format(line: &[u8]) -> Option<SignatureFormat> {
     let is_header = |header: &[u8]| line.starts_with(header);
     if is_header(SSH_BEGIN) {
         Some(SignatureFormat::Ssh)
+    } else if is_header(CMS_BEGIN) {
+        Some(SignatureFormat::Cms)
     } else if OTHER_BEGIN.iter().any(|header| is_header(header)) {
         Some(SignatureFormat::Other)
     } else {
         None
     }
+}
+
+/// Whether the output of `git config --get-regexp .*` holds a `gitsign.` key,
+/// or a key that `gitsign` might read as one.
+///
+/// `gitsign` reads that output line by line and takes the text before the first
+/// space of each line as a key, so a value that holds a newline can inject a
+/// key. It compares the `gitsign.` prefix with Unicode simple case folding, so
+/// `gitſign.` (long s) and a Kelvin sign fold to ASCII letters. This does not
+/// implement that folding: it fails closed and counts a line whose key, up to
+/// its first `.`, holds a non-ASCII byte, besides the ASCII case-insensitive
+/// `gitsign.` prefix.
+#[must_use]
+pub fn config_sets_gitsign_key(output: &[u8]) -> bool {
+    const PREFIX: &[u8] = b"gitsign.";
+    output.split(|b| *b == b'\n').any(|line| {
+        let key = line.split(|b| *b == b' ').next().unwrap_or_default();
+        let section = key.split(|b| *b == b'.').next().unwrap_or_default();
+        !section.is_ascii()
+            || (key.len() >= PREFIX.len() && key[..PREFIX.len()].eq_ignore_ascii_case(PREFIX))
+    })
+}
+
+/// Classifies a CMS-signed object by delegating to `gitsign` through `run`.
+///
+/// `run` performs one [`Probe`] and reports only what was observed; the
+/// classifier asks for at most four, each only when the earlier exit statuses
+/// require it, and reads nothing but exit statuses. Without an `identity` no
+/// probe runs and the object is never valid. With `repository_sets_key`, the
+/// repository could choose the roots that verify it, so no probe runs.
+#[must_use]
+pub fn classify_gitsign(
+    kind: TargetKind,
+    identity: Option<&GitsignIdentity>,
+    repository_sets_key: bool,
+    mut run: impl FnMut(Probe) -> Run,
+) -> Verdict {
+    let verdict = |reason| Verdict::unverifiable(kind, reason);
+    let Some(identity) = identity else {
+        return verdict(Reason::GitsignIdentityMissing)
+            .with_signature_kind(Some(SignatureKind::Gitsign));
+    };
+    let outcome = if repository_sets_key {
+        Err(Reason::GitsignRepositoryConfig)
+    } else {
+        probe_gitsign(kind, identity, &mut run)
+    };
+    outcome
+        .unwrap_or_else(verdict)
+        .with_signature_kind(Some(SignatureKind::Gitsign))
+}
+
+fn probe_gitsign(
+    kind: TargetKind,
+    identity: &GitsignIdentity,
+    run: &mut impl FnMut(Probe) -> Run,
+) -> Result<Verdict, Reason> {
+    let mut accepted = |probe| match run(probe) {
+        Run::Exit(0) => Ok(true),
+        Run::Exit(1) => Ok(false),
+        Run::Exit(_) | Run::Signaled => Err(Reason::GitsignVerificationFailed),
+        Run::NotStarted => Err(Reason::GitsignNotStarted),
+        Run::TimedOut => Err(Reason::Timeout),
+        Run::CutShort => Err(Reason::OutputExceeded),
+        Run::Unobserved => Err(Reason::UnrecognizedOutput),
+    };
+    if accepted(Probe::Exact)? {
+        let signer = Signer::mapped(SignerSource::Request, identity.principal.clone());
+        return Ok(Verdict {
+            certificate: Some(Certificate {
+                identity: identity.certificate_identity.clone(),
+                oidc_issuer: identity.certificate_oidc_issuer.clone(),
+            }),
+            ..Verdict::signed(kind, Status::SignedValid, signer)
+        });
+    }
+    if !accepted(Probe::AnyIdentityAnyIssuer)? {
+        return Err(Reason::GitsignVerificationFailed);
+    }
+    let mismatch = if accepted(Probe::ExactIdentityAnyIssuer)? {
+        Mismatch::Issuer
+    } else if accepted(Probe::AnyIdentityExactIssuer)? {
+        Mismatch::Identity
+    } else {
+        Mismatch::IdentityAndIssuer
+    };
+    Ok(Verdict {
+        mismatch: Some(mismatch),
+        ..Verdict::signed(
+            kind,
+            Status::SignedUntrusted,
+            Signer::unmapped(SignerSource::Request),
+        )
+    })
 }
 
 /// The message of a commit or tag object: everything after its header block.

@@ -354,7 +354,7 @@ fn fixture_request(root: &Path, arguments: &[&str]) -> Value {
     request
 }
 
-#[trace("TC-278", "FR-038-AC-1", "FR-039-AC-1")]
+#[trace("TC-300", "FR-038-AC-1", "FR-039-AC-1")]
 #[test]
 #[ignore = "needs EA_TEST_SYFT"]
 fn tc_278_rust_fixture_yields_declared_component_count() {
@@ -362,7 +362,7 @@ fn tc_278_rust_fixture_yields_declared_component_count() {
     assert_fixture(&sbom, 3, "pkg:cargo/");
 }
 
-#[trace("TC-279", "FR-039-AC-2")]
+#[trace("TC-301", "FR-039-AC-2")]
 #[test]
 #[ignore = "needs EA_TEST_SYFT"]
 fn tc_279_npm_fixture_yields_declared_component_count() {
@@ -373,7 +373,7 @@ fn tc_279_npm_fixture_yields_declared_component_count() {
     assert_fixture(&sbom, 3, "pkg:npm/");
 }
 
-#[trace("TC-280", "FR-039-AC-3")]
+#[trace("TC-302", "FR-039-AC-3")]
 #[test]
 #[ignore = "needs EA_TEST_SYFT"]
 fn tc_280_python_fixture_yields_declared_component_count() {
@@ -381,7 +381,7 @@ fn tc_280_python_fixture_yields_declared_component_count() {
     assert_fixture(&sbom, 3, "pkg:pypi/");
 }
 
-#[trace("TC-281", "FR-038-AC-2", "FR-039-AC-4")]
+#[trace("TC-303", "FR-038-AC-2", "FR-039-AC-4")]
 #[test]
 #[ignore = "needs EA_TEST_SYFT"]
 fn tc_281_container_archive_yields_declared_component_count() {
@@ -406,7 +406,7 @@ fn tc_281_container_archive_yields_declared_component_count() {
     }
 }
 
-#[trace("TC-282", "FR-038-AC-7")]
+#[trace("TC-304", "FR-038-AC-7")]
 #[test]
 #[ignore = "needs EA_TEST_SYFT"]
 fn tc_282_scan_ignores_planted_configuration_and_earlier_output() {
@@ -435,7 +435,7 @@ fn tc_282_scan_ignores_planted_configuration_and_earlier_output() {
 }
 
 #[cfg(target_os = "linux")]
-#[trace("TC-283", "FR-038-AC-3", "FR-039-AC-6")]
+#[trace("TC-305", "FR-038-AC-3", "FR-039-AC-6")]
 #[test]
 fn tc_283_missing_executable_is_unavailable_without_an_sbom() {
     let root = workspace(&[]);
@@ -448,7 +448,7 @@ fn tc_283_missing_executable_is_unavailable_without_an_sbom() {
 }
 
 #[cfg(target_os = "linux")]
-#[trace("TC-284", "FR-038-AC-4", "FR-039-AC-6")]
+#[trace("TC-306", "FR-038-AC-4", "FR-039-AC-6")]
 #[test]
 fn tc_284_failed_and_timed_out_runs_carry_no_sbom() {
     let root = workspace(&[]);
@@ -466,7 +466,7 @@ fn tc_284_failed_and_timed_out_runs_carry_no_sbom() {
 }
 
 #[cfg(target_os = "linux")]
-#[trace("TC-285", "FR-038-AC-6")]
+#[trace("TC-307", "FR-038-AC-6")]
 #[test]
 fn tc_285_stale_sbom_is_absent_from_a_failed_result() {
     let root = workspace(&[]);
@@ -480,7 +480,7 @@ fn tc_285_stale_sbom_is_absent_from_a_failed_result() {
     );
 }
 
-#[trace("TC-286", "FR-038-AC-5", "NFR-006-AC-2")]
+#[trace("TC-308", "FR-038-AC-5", "NFR-006-AC-2")]
 #[test]
 fn tc_286_request_matches_the_definition_and_the_published_schema() {
     let root = workspace(&[]);
@@ -536,7 +536,7 @@ fn tc_286_request_matches_the_definition_and_the_published_schema() {
     );
 }
 
-#[trace("TC-287", "FR-038-AC-8", "FR-038-CON-1", "FR-039-AC-5")]
+#[trace("TC-309", "FR-038-AC-8", "FR-038-CON-1", "FR-039-AC-5")]
 #[test]
 fn tc_287_missing_syft_fails_the_integration_target_naming_the_variable() {
     let not_executable = tempfile::NamedTempFile::new().expect("plain file");

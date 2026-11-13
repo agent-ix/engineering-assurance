@@ -27,11 +27,15 @@ Engineering Assurance only classifies the outcome, names the signing key as git
 reports it, and refuses to guess when git cannot answer. A consumer that records
 a signed approval or release reads the result as data and does not re-verify.
 
-Out of scope: gitsign and Sigstore keyless signing (`git verify-commit` does
-not check the signer identity for them, so a later requirement will define
-them), the production of signatures, and any policy about squash merges or
-which signed commits count as an approval. Signatures in other formats
-(OpenPGP, X.509, gitsign) are not verified; they yield `unverifiable`.
+Out of scope: the production of signatures, and any policy about squash merges
+or which signed commits count as an approval. gitsign (Sigstore keyless)
+signatures are verified by delegating to `gitsign`, as
+[FR-040](./FR-040-gitsign-sigstore-keyless-commit-and-tag-verification.md)
+defines, because `git verify-commit` does not check their signer identity.
+Every X.509 (CMS) signature is delegated to `gitsign` and never to git; one
+that `gitsign` does not accept is `unverifiable` (FR-040). OpenPGP signatures
+are not verified; they yield `unverifiable`. The requirements below that speak
+of "the signature" describe SSH signatures unless FR-040 is named.
 
 ## Inputs
 
@@ -68,7 +72,8 @@ which signed commits count as an approval. Signatures in other formats
     SSH signature block in the tag object).
   - `unverifiable`: no classification is possible.
 - `reason` is present only for `unsigned` with value `lightweight_tag` and for
-  `unverifiable`, where it is exactly one of `git_not_started`,
+  `unverifiable`, where it is exactly one of the nine codes below and, for
+  gitsign signatures, the four FR-040 adds: `git_not_started`,
   `repository_unavailable`, `revision_unresolved`, `timeout`,
   `output_exceeded`, `signature_unchecked` (grade `E`),
   `ssh_keygen_not_started`, `unsupported_signature_format`, `unrecognized_output`.
@@ -93,8 +98,10 @@ which signed commits count as an approval. Signatures in other formats
 - The command SHALL grade an annotated tag object itself, never the commit it
   points to, in this order:
   - a tag object with no signature block of any format is `unsigned`;
+  - otherwise a tag object whose signature block is an X.509 (CMS) block is
+    handled by FR-040, and git is not asked to verify it;
   - otherwise a tag object whose signature block is not an SSH signature
-    block (it begins a PGP or X.509 signature block) is `unverifiable` with
+    block (it begins a PGP signature block) is `unverifiable` with
     reason `unsupported_signature_format`, and git is not asked to verify it;
   - otherwise `git verify-tag` exit 0 is `signed_valid`;
   - otherwise the command runs `ssh-keygen -Y check-novalidate -n git` with the
@@ -109,6 +116,8 @@ which signed commits count as an approval. Signatures in other formats
   limits.
 - The command SHALL report `unverifiable` with reason `ssh_keygen_not_started`
   when a required `ssh-keygen` cannot start.
+- The command SHALL find `git` and `ssh-keygen` as FR-040 pins its programs:
+  only in the absolute entries of `PATH`, never in the repository.
 - The command SHALL run git without the user's or the system's git
   configuration other than that setting, and without repository-selecting
   environment variables.
@@ -124,8 +133,9 @@ which signed commits count as an approval. Signatures in other formats
 - The classifier SHALL treat `signed_untrusted`, `signed_bad` and `unverifiable`
   as distinct from `unsigned`.
 - The classifier SHALL report `unverifiable` with reason
-  `unsupported_signature_format` when the signature header is not an SSH
-  signature, and SHALL NOT report `signed_bad` or `unsigned` for it.
+  `unsupported_signature_format` when the signature header is neither an SSH
+  signature nor an X.509 (CMS) signature, and SHALL NOT report `signed_bad` or
+  `unsigned` for it.
 - The classifier SHALL report `unverifiable` when git cannot start, the
   repository or revision cannot be resolved, git exits nonzero with a status
   code that is not a signature outcome, git times out, its output exceeds the
@@ -139,8 +149,10 @@ which signed commits count as an approval. Signatures in other formats
 - The command SHALL refuse a revision that is empty, longer than 256 bytes,
   begins with `-`, or contains a control character or whitespace, before it
   starts git.
-- The command SHALL NOT modify the repository, fetch from a network, or decide
-  that a signed object is acceptable.
+- The command SHALL NOT modify the repository or decide that a signed object is
+  acceptable.
+- The SSH path SHALL NOT fetch from a network. Only the `gitsign` runs of
+  FR-040 may contact a network.
 - The pure classifier SHALL perform no I/O. It lives in the `signature-verify`
   Cargo feature; the git adapter lives in the binary, as for FR-032.
 
@@ -148,7 +160,7 @@ which signed commits count as an approval. Signatures in other formats
 
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
-| FR-036-CON-1 | A result SHALL NOT be `signed_valid` unless git itself reported the signature accepted for a key the allowed-signers file names, being grade `G` for a commit and `git verify-tag` exit 0 for a tag. | Safety | Test |
+| FR-036-CON-1 | An SSH-signature result SHALL NOT be `signed_valid` unless git itself reported the signature accepted for a key the allowed-signers file names, being grade `G` for a commit and `git verify-tag` exit 0 for a tag. | Safety | Test |
 | FR-036-CON-2 | The implementation SHALL contain no signature-parsing or cryptographic code. | Architecture | Inspection |
 
 ## Acceptance Criteria
@@ -163,10 +175,10 @@ which signed commits count as an approval. Signatures in other formats
 | FR-036-AC-6 | A simulated process outcome at the adapter boundary for a timeout and for output above the 8 MiB bound yields `unverifiable` with reason `timeout` and `output_exceeded` respectively. | Test |
 | FR-036-AC-7 | A revision that is empty, 257 bytes long, begins with `-`, or contains whitespace or a control character yields `signature_verify_revision_invalid` and exit status 2, and does not start git. | Test |
 | FR-036-AC-8 | An unreadable or non-conforming request, including one without `allowed_signers`, yields the matching machine error and exit status 2. | Test |
-| FR-036-AC-9 | The classifier maps the commit grade codes `G`, `U`, `B`, `N` and `E`, the codes `X`, `Y` and `R`, an unrecognized code, and a non-SSH signature header to the statuses and reasons above, and maps each tag outcome (no signature block, `git verify-tag` exit 0, delegated check success, delegated check failure) to its status, all from captured outcomes without running git or `ssh-keygen`. | Test |
-| FR-036-AC-10 | An OpenPGP-signed commit and an OpenPGP-signed annotated tag each yield `unverifiable` with reason `unsupported_signature_format`. | Test |
+| FR-036-AC-9 | The classifier maps the commit grade codes `G`, `U`, `B`, `N` and `E`, the codes `X`, `Y` and `R`, an unrecognized code, and a header that is neither SSH nor X.509 (CMS) to the statuses and reasons above, and maps each tag outcome (no signature block, `git verify-tag` exit 0, delegated check success, delegated check failure) to its status, all from captured outcomes without running git or `ssh-keygen`. | Test |
+| FR-036-AC-10 | An OpenPGP-signed commit and an OpenPGP-signed annotated tag each yield `unverifiable` with reason `unsupported_signature_format`. An X.509 (CMS) signature never yields that reason; FR-040 handles it. | Test |
 | FR-036-AC-11 | When `git verify-tag` exits nonzero on a signed tag and `ssh-keygen` cannot start, the verdict is `unverifiable` with reason `ssh_keygen_not_started`; a tag with no signature block or with a non-SSH signature block does not need `ssh-keygen`. | Test |
-| FR-036-AC-12 | The `signature-verify` feature and the binary add no crate dependency that performs signature verification or cryptography; the only verifying programs invoked are git and `ssh-keygen`. | Inspection |
+| FR-036-AC-12 | The `signature-verify` feature and the binary add no crate dependency that performs signature verification or cryptography; the only verifying programs invoked are git and `ssh-keygen`, plus `gitsign` for FR-040. | Inspection |
 
 ## Dependencies
 
@@ -177,4 +189,5 @@ which signed commits count as an approval. Signatures in other formats
   exit-code convention; [FR-032](./FR-032-declared-scope-footprint-verification.md)
   for the pure-core and git-adapter split.
 - **Downstream**: [FR-037](./FR-037-signer-mapping-and-signed-off-meaning.md),
+  [FR-040](./FR-040-gitsign-sigstore-keyless-commit-and-tag-verification.md),
   and consumers that record signed approvals and read this result as data.
