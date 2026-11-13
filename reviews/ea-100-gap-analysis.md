@@ -39,3 +39,18 @@ Reverse gap: none. Every new function has an owning statement in FR-046, FR-047 
 - Hostile-repository coverage is missing. No test uses replace refs or grafts. The defect is code-review SR-20261113124202 FND-001.
 - Semantic review: skipped (reviewer subagent, not opted in).
 - Plan completion: not assessed
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | The amended FR-049-AC-1 reads 'Every member a consumer needs ... and on not_released the reasons and the absent_items paths, is present in one released result', which is contradictory: not_released members cannot be present in a released result. The FR-049 Description data contract ('the status, the approval member, and on released ...') was not updated to name reasons and absent_items. Reword the AC to say 'one result', and add the two members to the contract sentence. | spec/functional/FR-049-release-ownership-split-and-data-contract.md:75 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1. The tc_390 trace now names FR-046-AC-5, and quoin matrix shows FR-046-AC-5 tagged by tc_390. |
+| FND-002 | fixed | Round 1. TC-407 adds a merge commit whose message carries the trailers, named through branch 'main'. It asserts not_released, a non-approved FR-041 status and release_commit_not_child_of_baseline. |
+| FND-003 | fixed | Round 1. The tc_415 trace adds NFR-007-M-1, and the matrix shows it tagged. |
+| FND-004 | fixed | Round 1. tc_416 is retagged to FR-047-AC-10 (TC-416 row updated). |

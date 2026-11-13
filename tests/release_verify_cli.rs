@@ -1286,3 +1286,26 @@ fn tc_412_the_result_is_complete_and_the_same_without_any_other_tool_on_the_path
         assert!(restricted.get(member).is_some(), "{member}: {restricted}");
     }
 }
+
+#[test]
+#[trace("TC-428", "FR-046-AC-4")]
+fn tc_428_a_baseline_item_spelled_as_pathspec_magic_is_a_literal_path() {
+    let fixture = fixture();
+    // `:(exclude)spec/a.md` is pathspec magic unless the path is taken literally.
+    let items = [
+        ("spec/a.md", "spec_artifact"),
+        (":(exclude)spec/a.md", "evidence"),
+    ];
+    let document = baseline_document(&items);
+    let baseline = commit_files(
+        &fixture,
+        &[("spec/a.md", "spec a\n"), (BASELINE_PATH, &document)],
+        "baseline",
+    );
+    let release = Release::standard(&baseline).commit(&fixture);
+    let digest = digest_at(&fixture, &release);
+    sign(&fixture, "a", "v1", &release, &message(&digest));
+    let result = verdict(&fixture, "v1");
+    assert_not_released(&result, &["baseline_item_absent"]);
+    assert_eq!(result["absent_items"], json!([":(exclude)spec/a.md"]));
+}

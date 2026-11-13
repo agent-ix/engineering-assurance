@@ -170,7 +170,14 @@ fn paths_present(
     commit: &str,
     paths: &[&str],
 ) -> Result<std::collections::BTreeSet<Vec<u8>>, GitFailure> {
-    let mut arguments = vec!["ls-tree", "-z", "--full-tree", commit, "--"];
+    let mut arguments = vec![
+        "--literal-pathspecs",
+        "ls-tree",
+        "-z",
+        "--full-tree",
+        commit,
+        "--",
+    ];
     arguments.extend(paths);
     let output = git(repository, &arguments)?;
     if !output.status.success() {

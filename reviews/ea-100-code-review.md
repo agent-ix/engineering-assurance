@@ -47,3 +47,22 @@ Checked and clean:
 | FND-006 | low | The git() wrapper rebuilds a std::process::Output from CompletedProcess only to drop stderr. Use CompletedProcess directly, which removes a conversion and a misleading type. | src/release_host.rs:110 |
 | FND-007 | low | FR-046 places resolve_baseline in 'the release module' as 'a library function'. The code places it in the binary adapter (release_host.rs, pub(crate)), because the library is process-free and git runs only in the binary. The choice is sound. Amend FR-046 to say 'the release adapter' so that FR-048 and readers find it where it is. | src/release_host.rs:180 |
 | FND-008 | low | The result carries members that FR-047 Outputs and the FR-049 data contract do not name: `absent_items`, which FR-047-AC-5 'naming the path' needs, `release_commit`, and a top-level `signature_kind` flattened from Approval. Each is harmless and additive, but the consumer contract is undocumented. List them in FR-047 Outputs, or drop `release_commit` and `signature_kind`. | src/release_host.rs:298 |
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-009 | low | The one-call ls-tree that replaced the per-item probes (FND-004 fix) passes Baseline item paths as pathspecs without --literal-pathspecs. The schema admits ':' and '(' in a path, so a Baseline item ':(exclude)spec/a.md' makes ls-tree exit 128. release-verify then writes release_verify_git_failed at exit 2 instead of a verdict (reproduced at b02b94c). An item ':(top)a' is magic-parsed but still reported absent, because presence is compared on bytes. This fails closed, but Baseline content rather than git produces the machine error. Fix: add `--literal-pathspecs` (or GIT_LITERAL_PATHSPECS=1) to the ls-tree call. | src/release_host.rs:173 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (bff73e2). Git::run now sets GIT_NO_REPLACE_OBJECTS=1 and GIT_GRAFT_FILE=/nonexistent/grafts. Every git call of signature-verify, approval-verify, approval-trail and release-verify goes through that runner, including run_with_stdin. The replace.sh and graft.sh reproductions now give the true record and release_commit_not_child_of_baseline. TC-423 and TC-424 both fail with the two settings removed (mutation run). FR-036 and FR-047 state the rule. |
+| FND-002 | fixed | Round 1. Git failure is the machine error release_verify_git_failed at exit 2 (FR-047 Outputs, Behavior and AC-13). Start, timeout and capture-bound failures map to it through run_git Err. rev-parse treats exit 1 as absent and any other status as a failure; rev-list, cat-file, ls-tree and diff-tree statuses are checked. A tag naming nothing or peeling to a tree still gives record_unreadable (rev-parse exit 1 measured). Approval presence is unchanged for every verdict. TC-425 covers it. |
+| FND-003 | fixed | Round 1. Paths are compared as raw bytes; TC-426 commits a 0xFF path beside a U+FFFD snapshot path. |
+| FND-004 | fixed | Round 1. A single ls-tree call tests every item, and resolve_baseline refuses more than 1024 items as baseline_file_invalid (FR-046 Behavior, AC-6, TC-427). Placing the bound in the resolution rather than the schema is acceptable, and the spec states it. The new call's pathspec handling is FND-009. |
+| FND-005 | accepted-no-change | The three splitters live in separate features (release, onboarding, manifest) and differ in fence semantics: CRLF fences, an empty block, and a trailing fence at end of file. Sharing one would change onboarding or manifest parsing or add a cross-feature dependency. Keeping them separate is acceptable for a low duplication finding. |
+| FND-006 | fixed | Round 1. git() returns CompletedProcess directly. |
+| FND-007 | fixed | Round 1. FR-046 now says 'a function in the release adapter' and gives the reason. |
+| FND-008 | fixed | Round 1. release_commit and the top-level signature_kind are gone. DecisionInfo carries only approver, meaning and the signing time. absent_items is in FR-047 Outputs and FR-049-AC-1. The FR-049 wording is gap-analysis SR-20261113124203 FND-005. |

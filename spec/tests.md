@@ -654,6 +654,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-425 | A git that exits 3 on every call, and a directory that is not a repository, yield `release_verify_git_failed` at exit 2 and no reason; a tag naming nothing is `record_unreadable` | Integration | P0 | FR-047-AC-13 | ✅ `tests/release_verify_cli.rs` passing |
 | TC-426 | A non-UTF-8 path in the release commit is not mistaken for a snapshot path containing U+FFFD | Integration | P0 | FR-047-AC-6 | ✅ `tests/release_verify_cli.rs` passing |
 | TC-427 | A Baseline with 1025 items is `baseline_file_invalid` | Integration | P0 | FR-046-AC-6 | ✅ `tests/release_verify_cli.rs` passing |
+| TC-428 | A Baseline item spelled as pathspec magic is tested as a literal path: present when it exists, otherwise `baseline_item_absent`, never a git failure | Integration | P0 | FR-046-AC-4 | ✅ `tests/release_verify_cli.rs` passing |
 
 ## Option Permutation Matrix
 
