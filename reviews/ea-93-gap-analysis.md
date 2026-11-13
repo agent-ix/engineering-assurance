@@ -32,3 +32,11 @@ Reverse gap: none. Every schema member and manifest entry has an owning statemen
 - Criteria examined: FR-046-AC-1 (untagged), FR-046-AC-2 (untagged). Context only: FR-046-AC-3..AC-6, FR-047-AC-1..AC-12, FR-051-AC-1..AC-9 (EA-100), FR-050-AC-1..AC-4 (README, see code-review FND-005).
 - Semantic review: skipped (reviewer subagent, not opted in).
 - Plan completion: not assessed
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1, fix commit 0c61df2: tests/semantic_exports.rs: #[trace("TC-378", "FR-046-AC-1")] fn baseline_skeleton_and_every_item_kind_validate; spec/tests.md TC-378 row; quoin matrix --json at 0c61df2: FR-046-AC-1 static_status tagged, binder baseline_skeleton_and_every_item_kind_validate. |
+| FND-002 | fixed | Round 1, fix commit 0c61df2: tests/semantic_exports.rs: #[trace("TC-379", "FR-046-AC-2")] on baseline_refuses_unknown_members_empty_items_bad_paths_and_kinds and baseline_schema_has_no_member_for_a_commit_hash_or_computed_content; spec/tests.md TC-379 row; quoin matrix: FR-046-AC-2 tagged with both binders. The duplicate-path clause moved to FR-046-AC-6 (resolution), so the test is no longer hollow against AC-2. |
+| FND-003 | still-open | The count is gone but the statement still enumerates the exported artifact types as exactly the old five: 'SHALL export each of its artifact types (`AssuranceProfile`, `MeasurementPlan`, `ArchitectureDescription`, `ComponentAssuranceContract`, `AssuranceArgument`)'. Baseline and Release are missing from the list; add them (spec/functional/FR-003-package-installable-bundle.md:43-45). |

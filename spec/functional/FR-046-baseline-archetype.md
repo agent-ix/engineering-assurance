@@ -45,7 +45,9 @@ git write, and any digest or manifest of the items.
 
 - One Baseline document with frontmatter `id`, `title`, `type: Baseline`,
   `name` (a non-empty human name) and `items`, a non-empty list of objects with
-  `path` (a repository-relative path, no `..`, no leading `/`, no glob) and
+  `path` (a repository-relative path: no `..` or `.` segment, no leading `/`,
+  no empty segment, no glob character, no control character, and no segment
+  starting with a space) and
   `kind`, one of `spec_artifact`, `soup_record`, `evidence`.
 - For resolution: a repository directory, a git commit hash and the
   repository-relative path of the Baseline file.

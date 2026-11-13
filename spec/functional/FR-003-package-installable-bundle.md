@@ -42,7 +42,7 @@ existing engineering-assurance module root.
   and `skeletons/` at the paths consumed by Quire.
 - The module manifest SHALL export each of its artifact types
   (`AssuranceProfile`, `MeasurementPlan`, `ArchitectureDescription`,
-  `ComponentAssuranceContract`, `AssuranceArgument`) through its semantic
+  `ComponentAssuranceContract`, `AssuranceArgument`, `Baseline`, `Release`) through its semantic
   contract. Each artifact type SHALL have exactly one schema file, a JSON
   Schema 2020-12 document, named by both its `frontmatter_schema_ref` and its
   `data_schema`. No second copy of a schema SHALL exist.
