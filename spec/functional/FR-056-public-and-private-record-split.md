@@ -31,14 +31,20 @@ construction. The public form, `engineering-assurance.record-public/v1`, has the
 - `references`: a list of at most 64 references `{kind, id}`. `kind` is `repo` or `linear_issue`. A `repo` id matches
   `owner/name` with owner and name of 1 to 100 characters from `A-Z a-z 0-9 . _ -`. A `linear_issue` id matches
   `TEAM-N` with `TEAM` of 1 to 10 characters from `A-Z 0-9` starting with a letter and `N` of 1 to 9 digits.
-- `hashes`: a map whose names are drawn from `private_form`, `statement` and `subject_commit`, and whose values are
-  `sha256:` followed by 64 lowercase hexadecimal characters.
+- `hashes`: a map whose names are drawn from `private_form`, `statement` and `subject_commit`. The values of
+  `private_form` and `statement` are `sha256:` followed by 64 lowercase hexadecimal characters. The value of
+  `subject_commit` is a git object id: 40 or 64 lowercase hexadecimal characters with no prefix.
 - `verdicts`: a map whose names are drawn from `approval`, `change_record` and `release`, and whose values are drawn
   from `satisfied`, `unsatisfied`, `released`, `not_released`, `recorded` and `failed`.
 - `timestamps`: a map whose names are drawn from `created`, `signed` and `published`, and whose values are UTC
   instants of the form `YYYY-MM-DDTHH:MM:SSZ`.
-- `signature`: a signature bundle encoded in standard base64, at most 65536 characters, produced by the signing step
-  ([NFR-010](../non-functional/NFR-010-no-cryptography-of-our-own.md)) and never accepted from the input.
+- `signature`: a signature bundle in standard padded base64 (alphabet `A-Z a-z 0-9 + /`, length a multiple of 4, at
+  most 16384 characters), produced by the signing step ([NFR-010](../non-functional/NFR-010-no-cryptography-of-our-own.md))
+  and never accepted from the input. The bundle signs only the canonical bytes of the public form itself, that is the
+  public form without its `signature` member, as JSON with sorted member names, no insignificant whitespace and UTF-8
+  encoding. A bundle whose signed payload is anything else, for example a full approval statement, is rejected before
+  publishing, and a public-log entry for an approval carries the hashes of the public form only, never the statement
+  payload.
 
 The private form, `engineering-assurance.record-private/v1`, has the members `protocol`, `record_id`, and optionally
 `ticket_text`, `criteria_text`, `model_names` and `statement` (the full approval statement of
@@ -58,6 +64,7 @@ Out of scope: the record kinds that fill these members (EA-97, EA-98).
 - Engineering Assurance SHALL give both forms the same `record_id`.
 - Engineering Assurance SHALL reject a public form that carries a member outside the closed set.
 - Engineering Assurance SHALL reject a public form that carries a value that does not match its member's grammar.
+- Engineering Assurance SHALL reject a signature bundle whose signed payload is not the canonical bytes of the public form.
 - Engineering Assurance SHALL generate each `record_id` independently of the record's content.
 - Engineering Assurance SHALL NOT embed a private-form member in the public form under another name.
 - Engineering Assurance SHALL NOT include any private-form member in the signed bytes of the public form.
@@ -69,10 +76,11 @@ Out of scope: the record kinds that fill these members (EA-97, EA-98).
 | FR-056-AC-1 | For a record with ticket text, criteria text and model names, the public form has none of them anywhere in its serialized bytes, and the private form holds all three. | Test |
 | FR-056-AC-2 | Both forms carry the same `record_id`, and the private form carries no member of the public form other than `protocol` and `record_id`. | Test |
 | FR-056-AC-3 | A public form with an extra member, or a private form with an extra member, fails schema validation. | Test |
-| FR-056-AC-4 | A public form whose `record_id` is not a lowercase UUID, whose hash name or verdict name is outside its enumeration (for example a model name used as a hash name), whose verdict value is a sentence, whose hash value is not `sha256:` plus 64 lowercase hex characters, or whose timestamp is not `YYYY-MM-DDTHH:MM:SSZ`, is rejected before any sink is called. | Test |
+| FR-056-AC-4 | A public form whose `record_id` is not a lowercase UUID, whose hash name or verdict name is outside its enumeration (for example a model name used as a hash name), whose verdict value is a sentence, whose `private_form` or `statement` hash value is not `sha256:` plus 64 lowercase hex characters, whose `subject_commit` is not 40 or 64 lowercase hex characters (a `sha256:` prefix is rejected), whose `signature` is not padded base64 or exceeds 16384 characters, or whose timestamp is not `YYYY-MM-DDTHH:MM:SSZ`, is rejected before any sink is called. | Test |
 | FR-056-AC-5 | Changing only the private form's contents leaves the public form's signed bytes and signature unchanged. | Test |
 | FR-056-AC-6 | Over generated strings, the public form accepts a string in a member only when it matches that member's grammar, and no accepted string contains a character outside the grammar's alphabet. | Property |
 | FR-056-AC-7 | An approval statement published as a record has a public form of kind `approval` with the statement's digest in `hashes.statement`, and its meaning, pull request reference and approver appear only in the private form's `statement`. | Test |
+| FR-056-AC-8 | The decoded `signature` bundle's signed payload equals the canonical bytes of the public form (sorted members, no whitespace, no `signature` member); a bundle over a full statement, or over any other bytes, is rejected before any sink call, and the test public log receives no entry carrying statement payload bytes. | Test |
 
 ## Dependencies
 

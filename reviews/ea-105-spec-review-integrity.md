@@ -33,3 +33,21 @@ Ticket: EA-105 and PLAT-1685. Checked internal consistency of FR-054 to FR-065 a
 ## Verdict
 
 Not mergeable: FND-001 (the pre-merge gate cannot see statements that are only written at merge) and FND-002 (the `individual` key is used but is not a member of the closed policy schema) are contradictions. FND-003 to FND-005 are for the same round.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | high | The greedy evaluation can report a role missing when a valid assignment exists. An individual can hold approvals for two roles (two accounts, FR-061-AC-8). Roles A, B; individual X approves A and B, Y approves A. Read as fixed assignment, A may take X (the text does not say which candidate), then B has nobody, although A->Y, B->X is valid; the choice of candidate is also unspecified, so the verdict is not order-independent as the Behavior requires. The second clause hints at re-assignment but does not say it, and FR-061-AC-6 checks only one direction (satisfied implies an assignment exists), so no AC catches the wrong `unsatisfied`. Fix: state that a role is covered if and only if the roles already covered plus this role have an assignment of distinct individuals, re-assigning freely (greedy over a maximum bipartite matching, which is exact); make AC-6 "if and only if"; add the X{A,B}, Y{A} case as an AC; and say which assignment the verdict reports (for example the lexicographically first). | spec/functional/FR-061-role-policy-and-distinct-individuals.md:54-58 |
+| FND-007 | high | Statements now go through the sinks, but FR-054 selects exactly one implementation per publish with no fallback and the public-log sink sends only the trimmed form. For a repository whose sink is `public_log`, nothing stores the full statement, yet FR-058-AC-8 expects "the private store holds them", and the FR-064 verifier needs the full statement to verify a signature over it and run the role evaluation. With `none`, no statement is kept at all, so post-merge verification is always `unverifiable`. Fix: state that the private form (with the statement) always goes to a private store, alongside the public log when that is selected (the ticket: ticket text, criteria text and model names go to a separate private store), or say where a public repository's statements are kept for the verifier, and state the result for `none`. | spec/functional/FR-058-approval-statement-and-predicate.md:AC-8 |
+| FND-008 | medium | `hashes.subject_commit` must be `sha256:` plus 64 hex characters, but the subject commit is a git commit id, which is SHA-1 (40 hex) in ordinary repositories and is what the in-toto subject carries as its git commit digest. The grammar cannot hold the commit id, and a SHA-256 of something else is undefined. Fix: give `subject_commit` the git object id grammar (40 or 64 lowercase hex, `gitCommit`), or say what is hashed. | spec/functional/FR-056-public-and-private-record-split.md:34-35 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |
+| FND-005 | fixed | - |

@@ -46,6 +46,8 @@ publishing role of [FR-065](./FR-065-workflow-roles-and-relation-to-signed-relea
 
 - The sink interface SHALL expose one operation, publish, that takes a record and returns one publish result.
 - The public-log sink SHALL send the trimmed public form of FR-056 and nothing else.
+- The sink layer SHALL write the full private form of FR-056 to the configured private store for every publish whose resolved sink is `public_log` or `private_store`.
+- The sink layer SHALL write the private form before the public-log sink sends, and only after the leak check passed.
 - The private-store sink SHALL store the full private form of FR-056 and the trimmed public form it is linked to.
 - The none sink SHALL send and store nothing.
 - The none sink SHALL return `discarded`.
@@ -59,9 +61,9 @@ publishing role of [FR-065](./FR-065-workflow-roles-and-relation-to-signed-relea
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-054-AC-1 | Publishing a valid record with each of the three implementations returns `published` for `public_log` and `private_store` and `discarded` for `none`, with `record_id` equal to the record's id and no member beyond the closed set. | Test |
+| FR-054-AC-1 | Publishing a valid record with each of the three implementations returns `published` for `public_log` and `private_store` and `discarded` for `none`, with `record_id` equal to the record's id and no member beyond the closed set; the `public_log` publish leaves the full private form in the test private store and sends only the trimmed public form to the test endpoint. | Test |
 | FR-054-AC-2 | After a publish to `none`, the test public-log endpoint and the test private store hold no request and no object. | Test |
-| FR-054-AC-3 | A public-log endpoint that rejects the record yields `refused` with a named error, and the private store and `none` receive no request as a fallback. | Test |
+| FR-054-AC-3 | A public-log endpoint that rejects the record yields `refused` with a named error, the full private form stays in the private store, and no record is published through the private store or `none` as a fallback. | Test |
 | FR-054-AC-4 | A test implementation added in the test crate and registered through the interface publishes a record with the record forms of FR-056 unchanged. | Test |
 | FR-054-AC-5 | A publish result with an unknown member, or a `status` outside the three values, is rejected by the result schema. | Test |
 

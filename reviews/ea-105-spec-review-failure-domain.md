@@ -32,3 +32,12 @@ Ticket: EA-105 and PLAT-1685. Examined review-state, identity, commit-binding an
 ## Verdict
 
 Four real edges are unspecified; FND-001 to FND-003 should be fixed in this PR, FND-004 may be.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |

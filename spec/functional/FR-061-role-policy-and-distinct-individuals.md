@@ -51,11 +51,12 @@ nowhere else: before the merge on the platform reviews, by the review gate, and 
 by the verifier ([FR-065](./FR-065-workflow-roles-and-relation-to-signed-release-tags.md),
 [FR-064](./FR-064-verify-approval-statement-with-workflow-identity-policy.md)).
 
-The evaluation is deterministic. The required roles are taken in ascending order of role name. A role is covered if
-some counting approval for it can be assigned to an individual different from the individuals assigned to the roles
-already covered; a role that would leave no valid assignment for the roles already covered stays uncovered. When one
-individual holds two required roles and no other individual covers either, the earlier role by name is covered and the
-later one is named as missing.
+Role coverage is exact. The role set is satisfied if and only if a maximum bipartite matching between the required
+roles and distinct individuals, where an individual is connected to a role when a counting approval of that
+individual names the role, covers every required role. No greedy or order-dependent choice decides the verdict: an
+assignment may be re-arranged freely. The verdict reports one deterministic assignment, the lexicographically smallest
+by role name and then individual name, and when unsatisfied it names the required roles that lie outside a maximum
+matching, as the roles that are not in the lexicographically smallest maximum matching, in ascending order of role name.
 
 ## Outputs
 
@@ -73,8 +74,9 @@ later one is named as missing.
 - The role evaluation SHALL count an approval only when its account belongs to an individual listed for the approval's
   role.
 - The role evaluation SHALL assign each covered role a different individual.
-- The role evaluation SHALL take the required roles in ascending order of role name.
-- The role evaluation SHALL name each uncovered role in ascending order.
+- The role evaluation SHALL return `satisfied` if and only if a matching of distinct individuals to roles covers every required role.
+- The role evaluation SHALL report the lexicographically smallest assignment by role name and then individual name.
+- The role evaluation SHALL name the roles outside a maximum matching in ascending order of role name.
 - The role evaluation SHALL give the same verdict for the same policy and approvals whatever their order.
 - The role evaluation SHALL NOT count an account that no individual lists.
 - The role evaluation SHALL NOT count one individual for two roles.
@@ -90,9 +92,11 @@ later one is named as missing.
 | FR-061-AC-3 | A one-role policy with one approval yields `satisfied`; a policy with role names other than the three above is evaluated the same way. | Test |
 | FR-061-AC-4 | A policy change on the pull request branch does not change the policy used; the base branch's document is used. | Test |
 | FR-061-AC-5 | A policy with an unknown member, an empty or duplicated `required_roles`, a required role absent from `roles`, an individual named in `roles` but not declared, an account under two individuals, or an account both in an individual and in `agents`, is refused with `approval_policy_invalid`, and the evaluation is `unsatisfied`. | Test |
-| FR-061-AC-6 | Over generated policies and generated approval sets, `satisfied` is returned only when an assignment of distinct individuals to all required roles exists, and the verdict does not change when the approvals are reordered. | Property |
+| FR-061-AC-6 | Over generated policies and generated approval sets, `satisfied` is returned if and only if an assignment of distinct individuals to all required roles exists (checked against an exhaustive search), and the verdict and the reported assignment do not change when the approvals are reordered. | Property |
 | FR-061-AC-7 | An individual listed for `developer` and `engineer` who approves as `developer`, and a second individual listed for `engineer` who approves as `engineer`, yield `satisfied`; an approval naming a role the individual is not listed for is not counted. | Test |
 | FR-061-AC-8 | Two accounts listed under one individual that approve for two roles count as one individual, and an account that no individual lists approving for a role counts for nothing. | Test |
+| FR-061-AC-10 | Roles `A` and `B`, individual X approving `A` and `B` through two accounts and individual Y approving `A`, yield `satisfied` with the assignment `A` to Y and `B` to X, whatever the order of the approvals. | Test |
+| FR-061-AC-11 | Roles `A` and `B` with individual X alone approving both yield `unsatisfied` with `missing` equal to `[B]`; roles `A`, `B` and `C` with X approving `A`, `B` and `C` and Y approving only `A` yield `unsatisfied` with `missing` equal to `[C]`. | Test |
 | FR-061-AC-9 | The review gate and the statement verifier return the same verdict for the same policy when given the same approvals as reviews and as verified statements. | Test |
 
 ## Dependencies

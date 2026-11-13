@@ -83,7 +83,7 @@ approval statements (EA-98).
 | FR-058-AC-5 | The statement for a squash-merged pull request names the squash commit as the subject and the reviewed head commit as `head_commit`, and the two differ. | Test |
 | FR-058-AC-6 | A review with no valid `Signed-off-meaning:` line or no valid `Role:` line yields no statement. | Test |
 | FR-058-AC-7 | The statement is signed with the CI workflow identity and verifies under FR-064; the same statement with one predicate byte changed does not verify. | Test |
-| FR-058-AC-8 | A statement published for a public repository's public sink yields a public record of kind `approval` with the statement digest and none of `meaning`, `approver`, `approver_name` or `pull_request` in its bytes; the private store holds them under the same `record_id`. | Test |
+| FR-058-AC-8 | A statement published for a public repository's public sink yields a public record of kind `approval` whose bundle payload equals the canonical public form and which holds the statement digest only (FR-056-AC-8); the configured private store holds the full private form with the statement, under the same `record_id`, and the meaning, approver, approver name and pull request reference appear only there. | Test |
 | FR-058-AC-9 | A statement for a private repository whose resolved sink is the private store makes no public transparency log call. | Test |
 
 ## Dependencies

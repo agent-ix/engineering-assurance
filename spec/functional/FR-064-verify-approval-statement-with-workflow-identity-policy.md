@@ -41,6 +41,11 @@ The verification command reports one line of JSON, `engineering-assurance.approv
 `unverifiable`; for a set of statements it also reports the role verdict of FR-061. It adds no cryptography
 ([NFR-010](../non-functional/NFR-010-no-cryptography-of-our-own.md)).
 
+The verifier reads the full statements from the private store ([FR-054](./FR-054-record-sink-interface-and-implementations.md)),
+where the full private form is always kept for the `public_log` and `private_store` sinks. For a repository whose sink is
+`none` nothing is retained, so post-merge verification returns `unverifiable` with the reason
+`statements_not_retained`; the pre-merge review gate is unaffected because it reads the platform reviews.
+
 Out of scope: the git-signature `approval-verify` command of
 [FR-041](./FR-041-signed-tag-approval-of-a-change-assurance-record.md), which this command does not replace.
 
@@ -54,6 +59,8 @@ Out of scope: the git-signature `approval-verify` command of
   differs from the caller's request.
 - The statement verifier SHALL return `predicate_invalid` for a predicate that breaks the closed schema.
 - The statement verifier SHALL return `unverifiable` when the verification inputs cannot be read.
+- The statement verifier SHALL read statements from the private store.
+- The statement verifier SHALL return `unverifiable` with the reason `statements_not_retained` for a repository whose sink is `none`.
 - The statement verifier SHALL evaluate the verified statements with the role evaluation function of FR-061.
 - The statement verifier SHALL read the workflow-identity policy and the role policy from the protected base branch.
 - The statement verifier SHALL NOT trust an identity named only inside the statement.
@@ -72,6 +79,7 @@ Out of scope: the git-signature `approval-verify` command of
 | FR-064-AC-7 | A missing statement file or unreadable trust root yields `unverifiable`. | Test |
 | FR-064-AC-8 | A workflow-identity policy or role policy changed on the pull request branch does not change the document used. | Test |
 | FR-064-AC-9 | The same workflow path signed at a pull request ref (`refs/pull/N/merge`) yields `untrusted_signer`, and a policy entry with a wildcard or unknown member is refused as invalid. | Test |
+| FR-064-AC-11 | Statements published for a repository on the public sink are read from the private store and verify; for a repository on `none`, verification returns `unverifiable` with `statements_not_retained` while the review gate still returns its verdict. | Test |
 | FR-064-AC-10 | Statements for three roles from three individuals, all `verified`, yield the role verdict `satisfied`; with one statement `untrusted_signer`, the verdict is `unsatisfied` naming that role. | Test |
 
 ## Dependencies

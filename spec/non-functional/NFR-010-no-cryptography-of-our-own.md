@@ -43,7 +43,7 @@ workflow, so the upload is part of publishing and is gated like it. The git-sign
 ## Verification
 
 A source inspection checks the first count; a stand-in public log client checks the second (FR-057-AC-10); a test that substitutes the delegated library with a stand-in that rejects
-every signature checks the second.
+every signature checks the third.
 
 ## Dependencies
 

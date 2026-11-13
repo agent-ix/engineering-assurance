@@ -25,3 +25,9 @@ Ticket: EA-105 and PLAT-1685. Examined every Behavior statement and NFR statemen
 ## Verdict
 
 EARS-conformant, zero tool warnings. FND-001 is a wording fix for the same round; not blocking on its own.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |

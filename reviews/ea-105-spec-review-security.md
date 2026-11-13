@@ -43,3 +43,21 @@ Ticket: EA-105 and PLAT-1685. Examined the trust and disclosure surface: the lea
 ## Verdict
 
 Not mergeable: FND-001 to FND-003 are paths by which private content reaches a public log despite the leak check, which is the ticket's central acceptance criterion. FND-004 to FND-007 are for the same round.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-008 | high | `signature` is up to 64 KiB of base64, which encodes any bytes, so "no member's grammar admits free text" is not true of it. The spec does not say what the bundle signs. If it is the approval statement's DSSE bundle, the bundle carries the statement payload (meaning, approver, pull request) inside the public form, and FR-058-AC-8's byte search passes vacuously because the payload is base64. Fix: state that the public `signature` is a bundle over the public form's own canonical bytes, that a bundle whose signed payload is not exactly the public form is rejected, and that a public-log entry for a statement signature carries hashes only, never the statement payload. | spec/functional/FR-056-public-and-private-record-split.md:40-41 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |
+| FND-005 | fixed | - |
+| FND-006 | fixed | - |
+| FND-007 | fixed | - |

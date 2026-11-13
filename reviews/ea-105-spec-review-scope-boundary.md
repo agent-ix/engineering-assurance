@@ -31,3 +31,11 @@ Ticket: EA-105 and PLAT-1685. Checked allocation between Engineering Assurance, 
 ## Verdict
 
 Mergeable on scope once FND-001 is fixed; FND-002 and FND-003 are for the same round.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |

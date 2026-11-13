@@ -34,3 +34,18 @@ Ticket: EA-105 and PLAT-1685. Base checklist over the PR diff (FR-054 to FR-065,
 ## Verdict
 
 Base checklist passes on structure. FND-001 makes one AC non-deterministic and FND-002 makes NFR-010 unverifiable from the public spec; both should be fixed in this PR. FND-003 records the recommendation on the predicate-type spelling (acceptable as written; implementable). See the integrity, failure-domain, security and scope-boundary reviews for the blocking findings.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | NFR-010's Verification now names "the second" count twice: the stand-in public log client checks the second metric and the library stand-in test checks the third. Fix: "... checks the third". | spec/non-functional/NFR-010-no-cryptography-of-our-own.md:45-46 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |

@@ -48,6 +48,8 @@ Out of scope: the sink behaviors ([FR-054](./FR-054-record-sink-interface-and-im
 - The resolved selection: the sink, and whether it came from the `configured` member or the `default`.
 - A configuration that selects `public_log` without a `public_log.endpoint`, or `private_store` without a
   `private_store.destination`, is refused with `sink_config_incomplete`.
+- A configuration that resolves to `public_log` without a `private_store.destination` is refused with
+  `sink_config_private_store_required`: the full private form always goes to a private store ([FR-054](./FR-054-record-sink-interface-and-implementations.md)).
 - A configuration that selects `public_log` for a repository that is private or of undeterminable visibility is
   refused with `sink_config_public_log_for_non_public_repo`.
 
@@ -59,6 +61,7 @@ Out of scope: the sink behaviors ([FR-054](./FR-054-record-sink-interface-and-im
 - Engineering Assurance SHALL resolve `private_store` when the `sink` member is absent and the visibility cannot be
   determined.
 - Engineering Assurance SHALL refuse a configuration that selects `public_log` for a repository that is not public.
+- Engineering Assurance SHALL refuse a configuration that resolves to `public_log` without a private store destination.
 - Engineering Assurance SHALL refuse a configuration document that has an unknown member with `sink_config_invalid`.
 - Engineering Assurance SHALL read each policy document from the protected base branch.
 - Engineering Assurance SHALL refuse a policy document with `policy_branch_unprotected` when the base branch is not
@@ -69,7 +72,7 @@ Out of scope: the sink behaviors ([FR-054](./FR-054-record-sink-interface-and-im
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-055-AC-1 | With no configuration, a public repository resolves `public_log` with source `default` and a private repository resolves `private_store` with source `default`. | Test |
+| FR-055-AC-1 | With a configuration that holds only a private store destination, a public repository resolves `public_log` with source `default` and a private repository resolves `private_store` with source `default`; a public repository with no private store destination is refused with `sink_config_private_store_required`. | Test |
 | FR-055-AC-2 | A public repository configured `private_store` or `none`, and a private repository configured `private_store` or `none`, resolve the configured sink with source `configured`; a private repository configured `public_log` is refused with `sink_config_public_log_for_non_public_repo` and nothing is published. | Test |
 | FR-055-AC-3 | A repository whose visibility lookup fails or is ambiguous and which has no `sink` member resolves `private_store`; the same repository configured `public_log` is refused with `sink_config_public_log_for_non_public_repo`. | Test |
 | FR-055-AC-4 | A configuration with an unknown member, an unknown `sink` value, a non-https `endpoint` or a missing endpoint or destination for the selected sink is refused with `sink_config_invalid` or `sink_config_incomplete`, and nothing is published. | Test |
