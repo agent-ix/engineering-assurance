@@ -329,6 +329,17 @@ pub(crate) fn load_tag(
     .load(revision)
 }
 
+/// Runs git in `repository` with the isolation the verification uses, for
+/// object reads that decide nothing about a signature.
+pub(crate) fn run_git(repository: &Path, arguments: &[&str]) -> Result<CompletedProcess, Reason> {
+    Git {
+        repository,
+        allowed_signers: Path::new("/dev/null"),
+        gitsign: None,
+    }
+    .run(arguments)
+}
+
 /// Verifies a tag read by [`load_tag`], exactly as [`check_tag`] verifies it.
 pub(crate) fn verify_loaded_tag(
     repository: &Path,
@@ -869,6 +880,12 @@ impl Git<'_> {
             (OsStr::new("GIT_CONFIG_NOSYSTEM"), OsStr::new("1")),
             (OsStr::new("GIT_CONFIG_GLOBAL"), OsStr::new("/dev/null")),
             (OsStr::new("GIT_OPTIONAL_LOCKS"), OsStr::new("0")),
+            // Neither a replace ref nor a graft may change what an object id names.
+            (OsStr::new("GIT_NO_REPLACE_OBJECTS"), OsStr::new("1")),
+            (
+                OsStr::new("GIT_GRAFT_FILE"),
+                OsStr::new("/nonexistent/grafts"),
+            ),
         ];
         if let Some(parent) = isolated.and_then(Path::parent) {
             environment.push((OsStr::new("GIT_CEILING_DIRECTORIES"), parent.as_os_str()));

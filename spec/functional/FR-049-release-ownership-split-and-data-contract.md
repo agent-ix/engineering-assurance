@@ -36,8 +36,9 @@ split is:
 There are two interfaces to a consumer. The first is the `release-verify` result of FR-047, which Quoin retains. The
 second is the `release-history` result of FR-052, a list of change-assurance records that Quoin copies into the
 release evidence snapshot (`ix://agent-ix/quoin/FR-168`). The data contract of the first is: the
-`status`, the `approval` member, and on `released` the `release`, `baseline`,
-`approver`, `meaning`, `signed_at` and `accepted_anomalies` members. The files
+`status`, the `reasons` list, the `approval` member, on `not_released` the
+`absent_items` paths, and on `released` the `release`, `baseline`, `approver`,
+`meaning`, `signed_at` and `accepted_anomalies` members. The files
 Engineering Assurance reads from Quoin are the evidence-status, SOUP-report and
 anomaly-list files named in
 [FR-048](./FR-048-human-release-decision-workflow.md): the evidence
@@ -72,7 +73,7 @@ to a Quoin repository from this requirement.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-049-AC-1 | Every member a consumer needs to retain a release (status, approver, meaning, signed time, baseline commit and items, accepted anomalies, the FR-041 approval) is present in one `released` result without a second command. | Test |
+| FR-049-AC-1 | Every member a consumer needs to retain a release (status, approver, meaning, signed time, baseline commit and items, accepted anomalies, the FR-041 approval) is present in one `released` result without a second command, and a `not_released` result carries its `reasons` and any `absent_items` paths. | Test |
 | FR-049-AC-2 | The release module starts git itself and Quoin is not invoked by it; the result is the same when the Quoin executables are absent. | Test |
 | FR-049-AC-3 | The evidence-status, SOUP-report and anomaly-list inputs are read from files and no code of the release module derives any of them from the repository. | Inspection |
 | FR-049-AC-4 | The repository holds no copy of a Quoin schema or record for these inputs. | Inspection |

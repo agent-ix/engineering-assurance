@@ -92,8 +92,9 @@ pub(crate) fn assess(checked: CheckedTag, record_id: &str, record_digest: &str) 
     }
 }
 
+/// The FR-041 result for one tag.
 #[derive(Serialize)]
-struct ResultLine<'a> {
+pub(crate) struct ResultLine<'a> {
     protocol: &'static str,
     tag: &'a str,
     record_id: &'a str,
@@ -101,6 +102,53 @@ struct ResultLine<'a> {
     trust: Trust<'a>,
     #[serde(flatten)]
     assessment: Assessment,
+}
+
+impl<'a> ResultLine<'a> {
+    /// Verifies `tag` of `repository` against the record and the trust input.
+    pub(crate) fn verify(
+        repository: &Path,
+        tag: &'a str,
+        record: (&'a str, &'a str),
+        allowed_signers: &'a Path,
+        gitsign: Option<&'a GitsignRequest>,
+        identity: Option<&GitsignIdentity>,
+    ) -> Self {
+        let (record_id, record_digest) = record;
+        let checked = check_tag(repository, tag, allowed_signers, identity);
+        Self {
+            protocol: RESULT_PROTOCOL,
+            tag: tag.strip_prefix("refs/tags/").unwrap_or(tag),
+            record_id,
+            record_digest,
+            trust: Trust {
+                allowed_signers,
+                gitsign,
+            },
+            assessment: assess(checked, record_id, record_digest),
+        }
+    }
+
+    /// The decision part of the result.
+    pub(crate) const fn assessment(&self) -> &Assessment {
+        &self.assessment
+    }
+}
+
+/// The `gitsign` identity of a request, or `Err` when it is not acceptable.
+pub(crate) fn gitsign_identity(
+    request: Option<&GitsignRequest>,
+) -> Result<Option<GitsignIdentity>, ()> {
+    request
+        .map(|g| {
+            GitsignIdentity::new(
+                g.certificate_identity.clone(),
+                g.certificate_oidc_issuer.clone(),
+                g.principal.clone(),
+            )
+            .ok_or(())
+        })
+        .transpose()
 }
 
 /// Typed refusal that produces no verdict.
@@ -149,43 +197,19 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalVerifyError> {
     {
         return Err(ApprovalVerifyError::Invalid);
     }
-    let identity = request
-        .gitsign
-        .clone()
-        .map(|g| {
-            GitsignIdentity::new(
-                g.certificate_identity,
-                g.certificate_oidc_issuer,
-                g.principal,
-            )
-            .ok_or(ApprovalVerifyError::Invalid)
-        })
-        .transpose()?;
+    let identity =
+        gitsign_identity(request.gitsign.as_ref()).map_err(|()| ApprovalVerifyError::Invalid)?;
     check_allowed_signers(&request.allowed_signers)
         .map_err(|_| ApprovalVerifyError::AllowedSigners)?;
-    let checked = check_tag(
+    let result = ResultLine::verify(
         &request.repository,
         &request.tag,
+        (&request.record_id, &request.record_digest),
         &request.allowed_signers,
+        request.gitsign.as_ref(),
         identity.as_ref(),
     );
-    let assessment = assess(checked, &request.record_id, &request.record_digest);
-    let tag = request
-        .tag
-        .strip_prefix("refs/tags/")
-        .unwrap_or(&request.tag);
-    let mut line = serde_json::to_vec(&ResultLine {
-        protocol: RESULT_PROTOCOL,
-        tag,
-        record_id: &request.record_id,
-        record_digest: &request.record_digest,
-        trust: Trust {
-            allowed_signers: &request.allowed_signers,
-            gitsign: request.gitsign.as_ref(),
-        },
-        assessment,
-    })
-    .map_err(|_| ApprovalVerifyError::ResultEncoding)?;
+    let mut line = serde_json::to_vec(&result).map_err(|_| ApprovalVerifyError::ResultEncoding)?;
     line.push(b'\n');
     Ok(line)
 }

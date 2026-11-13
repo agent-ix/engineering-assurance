@@ -121,6 +121,9 @@ of "the signature" describe SSH signatures unless FR-040 is named.
 - The command SHALL run git without the user's or the system's git
   configuration other than that setting, and without repository-selecting
   environment variables.
+- The command SHALL run git without replace refs and without a graft file,
+  because either changes the object an id names, so a repository could alter
+  the bytes a signature or a signed object id is read over.
 - The command SHALL run git through the process host of FR-019 with a 60 second
   wall-clock timeout and an 8 MiB capture bound, as the existing git adapters
   do.
