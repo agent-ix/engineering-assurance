@@ -31,7 +31,7 @@ The ownership split, which extends that of [FR-049](./FR-049-release-ownership-s
 | Writing the snapshot file | none | owns, runs no git |
 | Resolving the release tag to its commit | owns, runs git | none |
 | Checking the snapshot is present at that commit | owns | none |
-| Reading the snapshot's members | none | none (the dossier documents read them) |
+| Reading the snapshot's members | none | none; the consumers are the dossier export that reads Quoin's reports (`ix://agent-ix/quoin/FR-162`) and the people who review the release, outside this repository |
 | Committing the snapshot and signing the tag | the person, with their own git | none |
 
 ### Why the release commit carries the snapshot
@@ -44,6 +44,12 @@ placed in a second commit after the release commit would break the single-parent
 before it. A snapshot bound by a digest in the record would add the digest this repository refuses to keep. A single
 release commit that adds the record and the snapshot keeps one parent, leaves the baseline untouched, and lets the
 tag's tree equal the baseline plus those two files and nothing else.
+
+The snapshot path must not exist at the baseline commit, so that the release commit adds it and the snapshot is never
+a configuration item of the baseline it reports on. This excludes reusing a fixed path across releases when an
+earlier release commit was merged back, and a path that is a Baseline item or the Baseline file. The reasons
+`release_commit_snapshot_not_added` and `release_commit_changes_other_paths` are stated in
+[FR-047](./FR-047-release-record-and-signed-release-tag.md) Behavior and are not repeated here.
 
 The snapshot is written from the baseline state. Quoin needs the baseline commit hash, not the release commit
 hash, so no step needs a hash that does not yet exist. The order is: the snapshot is written, the person commits it
@@ -60,9 +66,8 @@ git write.
 - `release-verify` SHALL require `snapshot_path` in the Release document, as FR-047 defines it.
 - `release-verify` SHALL resolve the release tag to its commit with git.
 - `release-verify` SHALL test `snapshot_path` at that commit with git object access.
-- If the release commit does not add `snapshot_path`, then `release-verify` SHALL report `release_commit_snapshot_not_added`.
-- If the release commit changes a path other than `record_path` and `snapshot_path`, then `release-verify` SHALL
-  report `release_commit_changes_other_paths`.
+- `release-verify` SHALL test `snapshot_path` at the baseline commit with git object access.
+- If `snapshot_path` exists at the baseline commit, then `release-verify` SHALL report `snapshot_path_present_at_baseline`.
 - If `snapshot_path` equals `record_path`, then `release-verify` SHALL report `record_invalid`.
 - `release-verify` SHALL NOT parse the snapshot.
 - `release-verify` SHALL NOT read the snapshot from the working tree.
@@ -78,9 +83,11 @@ git write.
 | FR-051-AC-2 | A release commit that adds the record but not `snapshot_path` yields `release_commit_snapshot_not_added`, with the other checks still evaluated. | Test |
 | FR-051-AC-3 | A release commit that adds the record, the snapshot and one further path yields `release_commit_changes_other_paths`; a snapshot present only in the working tree, or added in a later commit, yields `release_commit_snapshot_not_added`. | Test |
 | FR-051-AC-4 | A Release document whose `snapshot_path` equals the request's `record_path`, is absolute, contains `..` or a glob, or is missing is refused as `record_invalid`. | Test |
-| FR-051-AC-5 | A snapshot whose bytes are not valid JSON, committed at `snapshot_path`, does not change the verdict, and the release module contains no code that opens the snapshot's members. | Test |
-| FR-051-AC-6 | Two release commits whose snapshots differ by one byte have different commit hashes, and the result carries no member that Engineering Assurance computed from the snapshot's content. | Test |
+| FR-051-AC-5 | A snapshot whose bytes are not valid JSON, committed at `snapshot_path`, does not change the verdict. | Test |
+| FR-051-AC-6 | The result carries no member that Engineering Assurance computed from the snapshot's content. | Test |
 | FR-051-AC-7 | The release-decision workflow run to a `release` choice leaves the repository unchanged and writes no snapshot. | Test |
+| FR-051-AC-8 | A `snapshot_path` that is a Baseline item, is the Baseline file, or holds an earlier release's snapshot at the baseline commit yields `snapshot_path_present_at_baseline` and not `released`, and a release commit that modifies such a file is not reported as having added it. | Test |
+| FR-051-AC-9 | Static inspection shows no code in the release module that opens or parses the snapshot's members. | Inspection |
 
 ## Dependencies
 

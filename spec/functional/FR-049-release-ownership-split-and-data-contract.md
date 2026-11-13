@@ -7,6 +7,8 @@ relationships:
     type: "requires"
   - target: "ix://agent-ix/engineering-assurance/FR-048"
     type: "requires"
+  - target: "ix://agent-ix/engineering-assurance/FR-052"
+    type: "requires"
 ---
 
 # FR-049: Own the release record and its verification; hand Quoin the result as data
@@ -27,10 +29,13 @@ split is:
 | Baseline and Release archetypes, schemas, skeletons | owns | none |
 | Reading a commit, signature and tag verification, `release-verify` | owns, runs git | runs no git |
 | The `release-verify` result | produces | retains it as data, never re-verifies |
+| The `release-history` result ([FR-052](./FR-052-release-history-since-the-previous-release.md)) | produces, runs git | takes it as data, runs no git |
 | SOUP report, evidence status, unresolved anomalies | reads as supplied files | produces them and supplies them as files |
 | The release decision | records the person's signed decision | none |
 
-The data contract Quoin consumes is the `release-verify` result of FR-047: the
+There are two interfaces to a consumer. The first is the `release-verify` result of FR-047, which Quoin retains. The
+second is the `release-history` result of FR-052, a list of change-assurance records that Quoin copies into the
+release evidence snapshot (`ix://agent-ix/quoin/FR-168`). The data contract of the first is: the
 `status`, the `approval` member, and on `released` the `release`, `baseline`,
 `approver`, `meaning`, `signed_at` and `accepted_anomalies` members. The files
 Engineering Assurance reads from Quoin are the evidence-status, SOUP-report and
@@ -48,12 +53,13 @@ to a Quoin repository from this requirement.
 ## Outputs
 
 - The `engineering-assurance.release-verify-result/v1` line, fixed by FR-047,
-  as the only interface Quoin reads from a release.
+  and the `engineering-assurance.release-history/v1` line, fixed by FR-052, as
+  the only interfaces Quoin reads from a release.
 
 ## Behavior
 
-- Engineering Assurance SHALL offer the `release-verify` result as its only
-  release interface to a consumer.
+- Engineering Assurance SHALL offer the `release-verify` result and the
+  `release-history` result as its only release interfaces to a consumer.
 - Engineering Assurance SHALL NOT compute SOUP, evidence or anomaly status.
 - The release-decision workflow SHALL read SOUP, evidence and anomaly status
   from supplied files only.
@@ -74,6 +80,7 @@ to a Quoin repository from this requirement.
 ## Dependencies
 
 - **Upstream**: [FR-047](./FR-047-release-record-and-signed-release-tag.md),
+  [FR-052](./FR-052-release-history-since-the-previous-release.md),
   [FR-048](./FR-048-human-release-decision-workflow.md).
 - **Downstream**: Quoin's release consumer, which is Quoin's own requirement
   and is tracked in the Quoin repository.
