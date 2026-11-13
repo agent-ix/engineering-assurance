@@ -60,8 +60,8 @@ Out of scope: the record kinds that fill these members (EA-97, EA-98).
 ## Behavior
 
 - Engineering Assurance SHALL build the public form by copying only the allowed public members from the record.
-- Engineering Assurance SHALL build the private form from the record's ticket text, criteria text, model names and
-  statement.
+- Engineering Assurance SHALL build the private form from the record's ticket text, criteria text, model names,
+  statement, change record and agent bill of materials.
 - Engineering Assurance SHALL give both forms the same `record_id`.
 - Engineering Assurance SHALL reject a public form that carries a member outside the closed set.
 - Engineering Assurance SHALL reject a public form that carries a value that does not match its member's grammar.

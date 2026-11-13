@@ -46,7 +46,10 @@ reviews; the statements record afterwards what the reviews were, and the verifie
 policy and the same function, so an incomplete role set that landed anyway is reported `unsatisfied`.
 
 Each role is a separate workflow identity that the workflow-identity policy lists independently, so trusting the
-statement writer does not trust the publisher.
+statement writer does not trust the publisher. The policy also lists the release attester and the receipt writer
+([FR-066](./FR-066-release-attestation-set-and-subjects.md), [FR-074](./FR-074-per-change-receipt-bundle-records-failures-too.md))
+as two further separate identities. The approval review gate workflow and the main-branch ruleset belong to this
+requirement and to the EA-109 work; the attestation and receipt specification does not define them.
 
 Two approval mechanisms coexist and do not mix. A change approval for the role gate is a platform-recorded review and
 its statement. A release decision stays a person-signed annotated tag, verified under

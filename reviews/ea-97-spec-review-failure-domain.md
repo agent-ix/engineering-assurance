@@ -1,0 +1,50 @@
+---
+id: SR-20261113170518
+title: "Failure-domain review of release attestations and per-change receipts (engineering-assurance PR 232)"
+type: SpecReview
+analysis: failure-domain
+review_set: subset
+scope: "agent-ix/engineering-assurance; spec/functional/FR-066..FR-078 (PR #232 diff, head 5bab3f1)"
+relationships:
+  - target: ix://agent-ix/engineering-assurance/FR-067
+    type: references
+  - target: ix://agent-ix/engineering-assurance/FR-069
+    type: references
+  - target: ix://agent-ix/engineering-assurance/FR-076
+    type: references
+  - target: ix://agent-ix/engineering-assurance/FR-077
+    type: references
+---
+
+# SR-20261113170518: Failure-domain review of release attestations and per-change receipts (engineering-assurance PR 232)
+
+## Summary
+
+Ticket: EA-97 (EA-98). Unstated failure modes, identity confusion and topological edges.
+
+Assessment of author decision 4 (release roles are evaluated over the PR that lands the release commit,
+and the person-signed tag stays the only release decision): it is sound as an additional precondition on
+attesting. It does not touch `release-verify`, so NFR-007 and FR-053 hold. It is not complete; see FND-001.
+
+Assessment of decision 5 (fail closed for a public repository on a non-public sink): it is sound and
+consistent with FR-057. It leaves the release `released` (FR-053), so failing the attestation workflow cannot
+be mistaken for failing the release, provided FR-071's `failed` verdict is resolved (integrity FND-003).
+
+Checked clean: failing changes still get receipts; unknown status counts as missing; a valid failed receipt is
+`failed_receipt`, not missing; tag tampering after attestation is caught through the summary's commit subject.
+
+## Findings
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-001 | medium | Decision 4 is incomplete. FR-067 assumes "the release commit lands through a pull request" but does not define (a) how the PR is found: the approval statements whose `merged_commit` equals the commit the tag peels to; (b) the case of no such PR: a direct push, or a rebase-merged PR where the release commit is not the tip and so has no statements (FR-060); (c) the race in which the tag is pushed before the statement writer has run; (d) a repository on sink `none`, where FR-064 returns `statements_not_retained`, so no release can ever be attested; (e) that FR-047 requires the release commit's single parent to be the baseline commit, so a squash merge must produce the tagged commit and the tag must point at the merged commit, not the PR head. FR-065-AC-5 also requires that no code in the release module reads an approval statement, so the role step must sit outside that module. Fix: specify (a) to (e) with named errors (for example `release_roles_no_pull_request`, and `release_roles_unverifiable` as retryable) and ACs, and state that the role step lives in the attestation workflow code, not the release module. | spec/functional/FR-067-release-attestations-bind-to-the-signed-release-tag.md:24, 33 |
+| FND-002 | medium | FR-069 carries "failed and stale results ... exactly as the export states them", but the in-toto Test Result v0.1 predicate has only `PASSED`/`WARNED`/`FAILED` and the `passedTests`/`warnedTests`/`failedTests` lists, and FR-066 forbids adding members. "Stale" has no representation, so FR-069-AC-1 cannot be built. Fix: define the mapping (a stale result is listed in `failedTests`, and the overall `result` is `FAILED` when any test failed or is stale) in the Quoin export requirement (scope-boundary FND-001), and cite it in FR-069. | spec/functional/FR-069-test-result-export-is-consumed-as-data.md:16, 22, 30 |
+| FND-003 | medium | Notes push race. Two pushes to `main` in quick succession run two receipt workflows that each add a note and push `refs/notes/assurance-receipts`, and the second push is rejected as non-fast-forward, so a receipt is lost. FR-076-AC-1 covers sequential pushes only. Fix: require fetch, `git notes merge` (or `cat_sort_uniq`) and a bounded retry, with a named error on exhaustion, and an AC with two concurrent writers. | spec/functional/FR-076-receipt-storage-in-git-notes.md:20, 36 |
+| FND-004 | medium | Sink `none` is not handled for receipts. FR-075 reads the receipt input and the approval statements from the private store, which does not exist for `none` (FR-055, FR-064), so every receipt silently becomes `contract_missing` or `approvals_incomplete` instead of naming the cause. Fix: state the outcome for `none` (refuse with a named code, for example `receipt_private_store_required`, or define what the receipt records) and add an AC. | spec/functional/FR-075-push-to-main-receipt-workflow.md:22; spec/functional/FR-074-per-change-receipt-bundle-records-failures-too.md:26 |
+| FND-005 | medium | FR-071-AC-4 assumes every private repository can attest through the platform's private signing instance. That depends on the hosting plan, and when it is unavailable the spec says nothing, which risks an implementer falling back to the public log. Fix: when the private path is unavailable, fail with a named code (for example `release_attestation_private_signing_unavailable`) and never fall back to the public path; add an AC. | spec/functional/FR-071-release-attestations-publish-through-the-sinks.md:24, 42 |
+| FND-006 | low | The scheduled missing-receipt check reports as `no_note` a commit whose receipt workflow is still running, and does not handle an `adopted_at` that is not on the first-parent history. Fix: exclude commits whose receipt run is still in progress (or newer than a stated window), and refuse an `adopted_at` that is not a first-parent ancestor with a named error. | spec/functional/FR-077-missing-receipt-check.md:20 |
+
+## Verdict
+
+Mergeable on failure-domain grounds once FND-001 to FND-005 are specified. None needs a redesign, but each is
+a branch the implementation would otherwise have to invent.

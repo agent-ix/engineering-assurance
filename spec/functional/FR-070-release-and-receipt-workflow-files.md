@@ -1,6 +1,6 @@
 ---
 id: FR-070
-title: "Name the workflow files that the attestation and receipt features add"
+title: "Constrain the attestation and receipt workflows: files, jobs, triggers, permissions and untrusted input"
 type: FR
 relationships:
   - target: "ix://agent-ix/engineering-assurance/FR-066"
@@ -15,37 +15,51 @@ relationships:
     type: "references"
 ---
 
-# FR-070: Name the workflow files that the attestation and receipt features add
+# FR-070: Constrain the attestation and receipt workflows: files, jobs, triggers, permissions and untrusted input
 
 ## Description
 
-Tracked by Linear EA-97. Peter cleared edits under `.github/workflows` for these features. This requirement names every workflow file the implementing change adds, so the review can check the diff against it. All files are in this repository.
+Tracked by Linear EA-97. This requirement describes the workflow files the features add, and the properties that make a signing job safe. All files are in this repository.
 
-- `.github/workflows/release-attestation.yml`: a reusable workflow (`workflow_call`). It verifies the signed tag and role policy ([FR-067](./FR-067-release-attestations-bind-to-the-signed-release-tag.md)), runs the attestation actions, and signs the verification summary ([FR-068](./FR-068-verification-summary-signed-by-the-pinned-workflow.md)). Its identity is the pinned signer.
-- `.github/workflows/change-receipt.yml`: a reusable workflow (`workflow_call`) that writes the per-change receipt ([FR-075](./FR-075-push-to-main-receipt-workflow.md)).
-- `.github/workflows/missing-receipt-check.yml`: a workflow on `schedule` and `workflow_dispatch` that lists commits with no receipt ([FR-077](./FR-077-missing-receipt-check.md)).
-- `.github/workflows/release.yml`: this repository's own caller, on push of a tag matching `v*`, calling `release-attestation.yml`.
-- `.github/workflows/receipt.yml`: this repository's own caller, on push to the default branch, calling `change-receipt.yml`.
+| File | Trigger | Job | Permissions | Runs |
+| --- | --- | --- | --- | --- |
+| `.github/workflows/release-attestation.yml` | `workflow_call`, inputs `tag`, `artifact_name`, `test_result_artifact` (strings) | `verify` | `contents: read` | Engineering Assurance tooling only: `release-verify`, role step ([FR-067](./FR-067-release-attestations-bind-to-the-signed-release-tag.md)) |
+| same | same | `attest` | `contents: read`, `id-token: write`, `attestations: write` | Engineering Assurance tooling and the attestation actions; no repository code |
+| `.github/workflows/change-receipt.yml` | `workflow_call`, input `commit` (string) | `gates` | `contents: read` | The repository's gates from the receipt policy ([FR-075](./FR-075-push-to-main-receipt-workflow.md)); nothing else |
+| same | same | `record` | `contents: read`, `id-token: write` | Engineering Assurance tooling only; no repository code |
+| same | same | `notes` | `contents: write` | Engineering Assurance tooling only: fetch, merge and push the notes ref ([FR-076](./FR-076-receipt-storage-in-git-notes.md)) |
+| `.github/workflows/missing-receipt-check.yml` | `schedule`, `workflow_dispatch` | `check` | `contents: read` | `receipt-missing` ([FR-077](./FR-077-missing-receipt-check.md)) |
+| `.github/workflows/release.yml` | `push` of tags matching `v*` | `build`, `attest` | `build`: `contents: read`; `attest` calls `release-attestation.yml` with `contents: read`, `id-token: write`, `attestations: write` | the caller's build, then the reusable workflow |
+| `.github/workflows/receipt.yml` | `push` to the default branch | `receipt` | calls `change-receipt.yml` with `contents: write`, `id-token: write` | the reusable workflow |
 
-A repository that adopts the features adds its own two callers. `ci.yml` is unchanged, and the approval review gate of [FR-065](./FR-065-workflow-roles-and-relation-to-signed-release-tags.md) is a separate workflow outside this requirement. Jobs that sign hold `id-token: write` and `attestations: write`, and the receipt job holds `contents: write` for the notes ref only; no job runs an agent ([NFR-011](../non-functional/NFR-011-signing-jobs-run-no-agent.md)).
+A repository that adopts the features adds its own two callers. `ci.yml` is unchanged. The approval review gate workflow and the main-branch ruleset belong to [FR-065](./FR-065-workflow-roles-and-relation-to-signed-release-tags.md) and the EA-109 work; this specification does not define them.
 
+The repository's gates, builds and any other code from the repository under change run only in jobs that hold `contents: read` and nothing else; they hand results to the signing jobs as workflow artifacts, and a signing job executes no code from the repository ([NFR-011](../non-functional/NFR-011-signing-jobs-run-no-agent.md)). `contents: write` is a repository-wide permission and cannot be limited to the notes ref; it is confined to the `notes` job, which runs only Engineering Assurance tooling that pushes `refs/notes/assurance-receipts`, and the default branch stays protected by its ruleset.
+
+Values that an outside party can influence (tag and branch names, commit messages, pull request titles, workflow inputs) reach scripts only through `env:` and never by interpolation into `run:`. Third-party actions in a job that holds `id-token: write` are pinned by full commit SHA: this pin is load-bearing, because a moved tag would run foreign code holding the signing identity. Checkout steps set `persist-credentials: false`.
 
 ## Behavior
 
-- The implementing change SHALL add the five workflow files this requirement names and no other workflow file.
-- The reusable workflows SHALL declare `workflow_call` as their trigger.
-- The missing-receipt workflow SHALL declare `schedule` and `workflow_dispatch` as its triggers.
-- The caller workflows SHALL trigger on tag push `v*` and on push to the default branch respectively.
-- Each signing job SHALL declare the least permissions it needs and no more.
+- Each workflow file SHALL declare the triggers of the table and no other.
+- Each job SHALL declare exactly the permissions of the table.
+- Each workflow file SHALL NOT declare the `pull_request_target` or `workflow_run` trigger.
+- Each job SHALL pass an untrusted context value to a script only through `env:`.
+- Each job SHALL NOT interpolate an untrusted context value into a `run:` script.
+- Each job that holds `id-token: write` SHALL reference every third-party action by a full 40-character commit SHA.
+- Each checkout step SHALL set `persist-credentials: false`.
+- The `gates` job SHALL NOT hold `id-token: write`, `attestations: write` or `contents: write`.
+- Each signing job SHALL NOT run code from the repository under change.
 - Each workflow file SHALL NOT run an agent step.
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-070-AC-1 | The set of files added under `.github/workflows` by the implementing change equals the five named files. | Inspection |
-| FR-070-AC-2 | The trigger and permission declarations of each file equal this requirement's list, checked by parsing the YAML. | Test |
-| FR-070-AC-3 | No step in any of the five files invokes an agent harness or model client. | Inspection |
+| FR-070-AC-1 | Parsing the five files yields exactly the triggers, jobs and per-job permissions of the table, and no file declares `pull_request_target` or `workflow_run`. | Test |
+| FR-070-AC-2 | No `run:` value in any file contains an expression over `github.ref_name`, `github.head_ref`, an event title or body, a commit message or `inputs.`; each such value appears only under `env:`. | Test |
+| FR-070-AC-3 | Every `uses:` in a job with `id-token: write` ends in a 40-hex SHA, and every checkout step has `persist-credentials: false`. | Test |
+| FR-070-AC-4 | The `gates` job holds only `contents: read`, the `record` job runs no step that executes a repository file or a command from the receipt policy, and the `notes` job holds no `id-token`. | Test |
+| FR-070-AC-5 | No step in any of the five files invokes an agent harness or model client. | Inspection |
 
 ## Dependencies
 
