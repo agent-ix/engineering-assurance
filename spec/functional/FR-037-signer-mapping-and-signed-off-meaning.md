@@ -28,14 +28,16 @@ signature, is a claim that needs its own evidence.
 
 ## Outputs
 
-- On the FR-036 verdict: `signer` with `mapping` (`mapped` or `unmapped`) and,
-  when mapped, `principal`, the name from the allowed-signers file: for a
+- On the FR-036 verdict: `signer` with `source` (`allowed_signers` for an SSH signature, `request` for a
+  gitsign signature, FR-040), `mapping` (`mapped` or `unmapped`) and,
+  when mapped, `principal`, the name from the allowed-signers file (for an SSH
+  signature; FR-040 defines the source for a gitsign signature): for a
   commit git's `%GS` code, and for a tag the first line printed by
   `ssh-keygen -Y find-principals -s <extracted signature> -f <allowed_signers>`
   when it exits 0; and `signed_off_meaning` with `presence` (`present` or `missing`) and,
   when present, the trailer `values` in order.
 - `signer` is present only for `signed_valid` (`mapped`) and `signed_untrusted`
-  (`unmapped`). There is no other `principal` member.
+  (`unmapped`). There is no other `principal` member; FR-040 sets it from the request for a gitsign signature.
 - An accepted signature without a principal is `unverifiable` with reason
   `unrecognized_output`: a commit graded `G` whose `%GS` is empty, and a tag
   git accepted for which `ssh-keygen -Y find-principals` fails or prints
@@ -48,9 +50,10 @@ signature, is a claim that needs its own evidence.
 
 ## Behavior
 
-- The command SHALL report `mapped` only when git's own verification, run
-  against the supplied file, accepts the signing key for a principal in that
-  file, and SHALL report the key `unmapped` otherwise.
+- For an SSH signature the command SHALL report `mapped` only when git's own
+  verification, run against the supplied file, accepts the signing key for a
+  principal in that file, and SHALL report the key `unmapped` otherwise. For a
+  gitsign signature FR-040 governs.
 - The command SHALL NOT infer a person from the commit author, committer,
   tagger, email, or key comment.
 - The command SHALL refuse the allowed-signers file, before git is started,
@@ -81,7 +84,7 @@ signature, is a claim that needs its own evidence.
 
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
-| FR-037-CON-1 | A signer SHALL NOT be reported `mapped` unless git accepted the key against the allowed-signers file. | Safety | Test |
+| FR-037-CON-1 | A signer SHALL NOT be reported `mapped` unless git accepted the key against the allowed-signers file (SSH) or FR-040-CON-1 holds (gitsign). | Safety | Test |
 | FR-037-CON-2 | A missing trailer SHALL NOT be reported as `present` or given a default value. | Safety | Test |
 
 ## Acceptance Criteria
