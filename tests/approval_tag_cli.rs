@@ -35,12 +35,20 @@ const GITSIGN: &str = "#!/bin/sh\nexit 0\n";
 
 /// A stand-in signing program for `gpg.x509.program`: records its arguments,
 /// exits 1 when a `fail` file sits beside it, and otherwise reports a created
-/// signature on the status descriptor and prints a CMS-shaped block.
+/// signature on the status descriptor and prints a CMS-shaped block. Git accepts
+/// a signature only when `SIG_CREATED` follows an earlier status line, as it does
+/// from gpg, so the stand-in states the key it considered first; without that
+/// line git accepted the signature only when its read of the status pipe
+/// happened to split the output, which made the tests fail under load. The
+/// signer runs with a `PATH` holding only the fixture's `bin`, so it drains its
+/// input with shell builtins: with no `cat` to run, it exited without reading,
+/// and git failed with a broken pipe whenever it wrote the message after that.
 const SIGNER: &str = r#"#!/bin/sh
 d=${0%/*}
 echo "$@" > "$d/sign_args"
-cat > /dev/null
+while read -r line || [ -n "$line" ]; do :; done
 if [ -e "$d/fail" ]; then exit 1; fi
+echo "[GNUPG:] KEY_CONSIDERED AAAA 0" >&2
 echo "[GNUPG:] SIG_CREATED D 1 8 00 1700000000 00 AAAA" >&2
 printf -- '-----BEGIN SIGNED MESSAGE-----\nAAAA\n-----END SIGNED MESSAGE-----\n'
 "#;

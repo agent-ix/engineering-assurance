@@ -419,8 +419,8 @@ checking, manifest validation, and qualification assertions to Rust.
 - A package-audit failure SHALL NOT disclose source bytes or a protected token.
 - Each offline installed bundle SHALL contain the retained module roots,
   exactly four supported thin host manifests resolving the one canonical
-  assurance-onboarding skill, and exactly the four declared canonical and pilot
-  workflows.
+  assurance-onboarding skill, and exactly the five declared canonical workflows and the four
+  declared pilot workflows.
 - Installed host-manifest validation SHALL reject unknown keys, missing or
   multiple skill sources, noncanonical targets, and escaping paths.
 - Installed canonical and pilot definitions for each workflow SHALL parse as

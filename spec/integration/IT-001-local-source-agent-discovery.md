@@ -35,7 +35,7 @@ adapters are available to the smoke-test harness.
 
 - The repository path as the local installation source.
 - The four supported host identifiers.
-- Expected canonical skill name and four workflow names.
+- Expected canonical skill name and five workflow names.
 
 ## Test Procedure
 
@@ -46,7 +46,7 @@ adapters are available to the smoke-test harness.
 2. Invoke each supported host discovery adapter against the installed root.
    - IT-001-SC-02: all four adapters resolve the canonical onboarding skill.
 3. Resolve workflow contributions from each discovered skill.
-   - IT-001-SC-03: every host returns the same four canonical workflow files.
+   - IT-001-SC-03: every host returns the same five canonical workflow files.
 4. Compare canonical paths, canonical file bytes, and host manifest bodies.
    - IT-001-SC-04: canonical file bytes match and host manifests contain no copied
      behavioral instructions.

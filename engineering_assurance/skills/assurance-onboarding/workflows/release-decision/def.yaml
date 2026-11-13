@@ -1,0 +1,41 @@
+name: release-decision
+version: 0.1.0
+description: Present a release candidate to its named decision owner, who alone chooses release or reject.
+initialPhase: capture
+phases:
+  - { name: capture }
+  - { name: evidence_ready }
+  - { name: decision_ready }
+  - { name: released, terminal: true }
+  - { name: rejected, terminal: true }
+transitions:
+  - from: capture
+    to: evidence_ready
+    invariants: ["interview.complete:release"]
+    defaultGate: auto
+  - from: evidence_ready
+    to: decision_ready
+    invariants: ["release.presentation_ready", "shared.terminal_gates"]
+    defaultGate: auto
+  - { from: decision_ready, to: released, invariants: ["release.presentation_ready", "release.outcome_ready"], defaultGate: hitl }
+  - { from: decision_ready, to: rejected, invariants: [], defaultGate: hitl }
+itemSchemas:
+  run_binding:
+    required: [id, repository_id, workflow, workflow_version, decision_boundary, decision_owner]
+  release_request: {}
+  release_presentation:
+    required: [id, baseline, evidence_status, soup, anomalies, snapshot]
+  release_outcome:
+    required: [id, meaning, accepted_anomalies, document, record_path, tag_message]
+linkSchemas: {}
+interviews:
+  release:
+    itemType: release_request
+    completenessRule: all_required
+    questions:
+      - { key: release_id, prompt: "Which Release document id (REL-n) does the record carry?", type: text, required: true }
+      - { key: baseline_path, prompt: "Where is the Baseline file?", type: text, required: true }
+      - { key: baseline_commit, prompt: "Which commit is the Baseline read at?", type: text, required: true }
+      - { key: snapshot_path, prompt: "Where is the release evidence snapshot to be committed?", type: text, required: true }
+      - { key: record_path, prompt: "Where is the release record to be committed?", type: text, required: true }
+      - { key: owner, prompt: "Who owns the release decision?", type: text, required: true }

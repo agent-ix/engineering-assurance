@@ -243,7 +243,7 @@ fn tc_011_the_canonical_skill_exposes_exactly_the_promoted_workflows() {
     // this criterion exists to catch.
     validate_workflow_set(&workflows).expect("the canonical workflow set must be exact");
     assert_eq!(workflows, expected_workflows());
-    assert_eq!(workflows.len(), 4);
+    assert_eq!(workflows.len(), 5);
 
     // Each promoted name must be backed by a definition with bytes in it. An
     // empty def.yaml satisfies the name set and starts no run.
@@ -281,7 +281,7 @@ fn tc_038_supported_hosts_install_the_same_canonical_bytes() {
     // NFR-001-AC-2 is about the promoted workflow definitions rather than the
     // skill file, and nothing was checking it. Every host installs one skill
     // tree, so the definitions are shared only if each promoted name resolves
-    // to bytes inside that tree; four distinct files prove four distinct
+    // to bytes inside that tree; five distinct files prove five distinct
     // definitions rather than one file found four times.
     let definitions = expected_workflows()
         .into_iter()
@@ -291,10 +291,10 @@ fn tc_038_supported_hosts_install_the_same_canonical_bytes() {
             (name, bundle.read(&relative))
         })
         .collect::<BTreeMap<_, _>>();
-    assert_eq!(definitions.len(), 4);
+    assert_eq!(definitions.len(), 5);
     assert_eq!(
         definitions.values().collect::<BTreeSet<_>>().len(),
-        4,
+        5,
         "two promoted workflows must not share one definition file"
     );
 

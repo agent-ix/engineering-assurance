@@ -242,6 +242,11 @@ path = "tests/release_history_cli.rs"
 required-features = ["full"]
 
 [[test]]
+name = "release_decision_cli"
+path = "tests/release_decision_cli.rs"
+required-features = ["full"]
+
+[[test]]
 name = "release_verify_cli"
 path = "tests/release_verify_cli.rs"
 required-features = ["full"]

@@ -45,6 +45,10 @@ pub(crate) enum WorkflowHostError {
     Request { detail: String },
     #[error("workflow binding does not match ix-flow state: {detail}")]
     Binding { detail: String },
+    #[error("no ix-flow run has the id {run_id:?}")]
+    RunNotFound { run_id: String },
+    #[error("a workflow invariant refused the transition: {invariant}: {message}")]
+    InvariantRefused { invariant: String, message: String },
     #[error("workflow transition is invalid: {detail}")]
     Transition { detail: String },
     #[error("workflow decision conflicts with ix-flow state: {detail}")]
@@ -68,6 +72,8 @@ impl WorkflowHostError {
         match self {
             Self::Request { .. } => "workflow_host_request_invalid",
             Self::Binding { .. } => "workflow_binding_invalid",
+            Self::RunNotFound { .. } => "workflow_run_not_found",
+            Self::InvariantRefused { .. } => "workflow_invariant_refused",
             Self::Transition { .. } => "workflow_transition_invalid",
             Self::DecisionConflict { .. } => "workflow_decision_conflict",
             Self::Unavailable { .. } => "ix_flow_unavailable",
@@ -104,6 +110,7 @@ fn execute_with_limits(
         &skill_root,
         &request.binding,
         workflow,
+        true,
         limits,
     )?;
     verify_chain(&executable, &state_dir, &request.binding.run_id, limits)?;
@@ -210,6 +217,7 @@ fn start_or_resume(
     skill_root: &Path,
     binding: &WorkflowBinding,
     workflow: WorkflowKind,
+    create: bool,
     limits: HostLimits,
 ) -> Result<IxEnvelope, WorkflowHostError> {
     match status(executable, state_dir, &binding.run_id, limits)? {
@@ -228,6 +236,9 @@ fn start_or_resume(
                 limits,
             )
         }
+        RunStatus::Missing if !create => Err(WorkflowHostError::RunNotFound {
+            run_id: binding.run_id.clone(),
+        }),
         RunStatus::Missing => {
             let created = invoke_success(
                 executable,
@@ -335,8 +346,14 @@ fn decide(
     assert_binding(data, binding)?;
     reject_automatic_terminal_events(data, workflow)?;
     require_human_terminal_gates(data, workflow)?;
-    let outcome = workflow.terminal_phase(choice);
-    let opposite = workflow.opposite_terminal_phase(choice);
+    let (Some(outcome), Some(opposite)) = (
+        workflow.terminal_phase(choice),
+        workflow.opposite_terminal_phase(choice),
+    ) else {
+        return Err(WorkflowHostError::Request {
+            detail: format!("workflow {workflow} does not take the choice {choice}"),
+        });
+    };
     if data.phase == opposite {
         return Err(WorkflowHostError::DecisionConflict {
             detail: format!("run already has opposite terminal outcome {opposite:?}"),
@@ -530,6 +547,23 @@ fn invoke_gate_deferred(
 ) -> Result<IxEnvelope, WorkflowHostError> {
     let envelope = invoke(executable, arguments, state_dir, true, "advance", limits)?;
     validate_command(&envelope, "advance", true)?;
+    // An invariant that does not hold refuses the transition before anything
+    // is written, so it is a known refusal and not an unknown outcome.
+    if !envelope.ok
+        && envelope.state.as_deref() == Some("invariant_failed")
+        && let Some(error) = &envelope.error
+    {
+        let invariant = error
+            .details
+            .as_ref()
+            .and_then(|details| details.get("invariantCode"))
+            .and_then(Value::as_str)
+            .unwrap_or(&error.code);
+        return Err(WorkflowHostError::InvariantRefused {
+            invariant: invariant.to_owned(),
+            message: error.message.clone(),
+        });
+    }
     if envelope.ok || envelope.state.as_deref() != Some("gate_deferred") {
         return Err(WorkflowHostError::OutcomeIndeterminate {
             operation: "advance".to_owned(),
@@ -818,16 +852,11 @@ fn pristine_unbound(data: &IxInstance, binding: &WorkflowBinding, workflow: Work
 }
 
 fn human_terminal_gates(data: &IxInstance, workflow: WorkflowKind) -> bool {
-    [DecisionChoice::Accept, DecisionChoice::Reject]
-        .into_iter()
-        .all(|choice| {
-            data.gate_config
-                .get(&format!(
-                    "decision_ready->{}",
-                    workflow.terminal_phase(choice)
-                ))
-                .is_some_and(|mode| *mode == GateMode::Hitl)
-        })
+    workflow.terminal_phases().into_iter().all(|phase| {
+        data.gate_config
+            .get(&format!("decision_ready->{phase}"))
+            .is_some_and(|mode| *mode == GateMode::Hitl)
+    })
 }
 
 fn require_human_terminal_gates(
@@ -847,8 +876,7 @@ fn reject_automatic_terminal_events(
     data: &IxInstance,
     workflow: WorkflowKind,
 ) -> Result<(), WorkflowHostError> {
-    let terminal = [DecisionChoice::Accept, DecisionChoice::Reject]
-        .map(|choice| workflow.terminal_phase(choice));
+    let terminal = workflow.terminal_phases();
     for event in data
         .events
         .iter()
@@ -921,7 +949,12 @@ fn decision_event(
     workflow: WorkflowKind,
     choice: DecisionChoice,
 ) -> Result<DecisionEvent, WorkflowHostError> {
-    let outcome = workflow.terminal_phase(choice);
+    let outcome =
+        workflow
+            .terminal_phase(choice)
+            .ok_or_else(|| WorkflowHostError::DecisionConflict {
+                detail: format!("workflow {workflow} does not take the choice {choice}"),
+            })?;
     let acknowledgements = data
         .events
         .iter()
@@ -971,6 +1004,210 @@ fn snapshot(envelope: &IxEnvelope) -> Result<WorkflowSnapshot, WorkflowHostError
         next_actions: envelope.next_actions.clone(),
         open_gates: data.open_gates.clone(),
     })
+}
+
+/// A run bound to its request, driven one ix-flow step at a time by a caller
+/// that owns the workflow's own inputs (the release-decision command). Every
+/// step is the ix-flow command the lifecycle adapter would run; the adapter
+/// keeps the binding check, the chain verification and the human gate.
+pub(crate) struct BoundRun {
+    executable: OsString,
+    state_dir: PathBuf,
+    binding: WorkflowBinding,
+    workflow: WorkflowKind,
+    envelope: IxEnvelope,
+    limits: HostLimits,
+}
+
+/// Start or resume the run `request` binds, refusing a run bound differently.
+///
+/// With `create` false a run that does not exist is refused and none is made.
+pub(crate) fn bind_run(
+    request: &WorkflowHostRequest,
+    create: bool,
+) -> Result<BoundRun, WorkflowHostError> {
+    let limits = HostLimits::default();
+    let workflow = request
+        .binding
+        .validate()
+        .map_err(|error| WorkflowHostError::Binding {
+            detail: error.to_string(),
+        })?;
+    let state_dir = absolute_state_directory(&request.state_dir)?;
+    let skill_root = canonical_skill_root(&request.skill_root, &request.binding, workflow)?;
+    let executable = executable(&request.ix_flow_executable)?;
+    let envelope = start_or_resume(
+        &executable,
+        &state_dir,
+        &skill_root,
+        &request.binding,
+        workflow,
+        create,
+        limits,
+    )?;
+    verify_chain(&executable, &state_dir, &request.binding.run_id, limits)?;
+    Ok(BoundRun {
+        executable,
+        state_dir,
+        binding: request.binding.clone(),
+        workflow,
+        envelope,
+        limits,
+    })
+}
+
+impl BoundRun {
+    fn data(&self) -> Result<&IxInstance, WorkflowHostError> {
+        require_data(&self.envelope, "resume")
+    }
+
+    pub(crate) fn phase(&self) -> Result<&str, WorkflowHostError> {
+        Ok(&self.data()?.phase)
+    }
+
+    /// The items of `kind` the run holds.
+    pub(crate) fn items(&self, kind: &str) -> Result<&[Value], WorkflowHostError> {
+        Ok(self
+            .data()?
+            .items
+            .get(kind)
+            .map(Vec::as_slice)
+            .unwrap_or_default())
+    }
+
+    pub(crate) fn snapshot(&self) -> Result<WorkflowSnapshot, WorkflowHostError> {
+        snapshot(&self.envelope)
+    }
+
+    /// Whether the gate into the terminal phase `outcome` has been
+    /// acknowledged, whether or not the run has advanced into it yet.
+    pub(crate) fn terminal_acknowledged(&self, outcome: &str) -> Result<bool, WorkflowHostError> {
+        let key = format!("decision_ready->{outcome}");
+        Ok(self
+            .data()?
+            .satisfied_gates
+            .iter()
+            .any(|gate| gate.transition_key == key))
+    }
+
+    fn mutate(&mut self, arguments: &[OsString], operation: &str) -> Result<(), WorkflowHostError> {
+        verify_chain(
+            &self.executable,
+            &self.state_dir,
+            &self.binding.run_id,
+            self.limits,
+        )?;
+        let envelope = invoke_success(
+            &self.executable,
+            arguments,
+            &self.state_dir,
+            true,
+            operation,
+            self.limits,
+        )?;
+        assert_binding(require_data(&envelope, operation)?, &self.binding)?;
+        self.envelope = envelope;
+        Ok(())
+    }
+
+    /// Record the answers of one interview.
+    pub(crate) fn record_answers(
+        &mut self,
+        interview: &str,
+        answers: &Value,
+    ) -> Result<(), WorkflowHostError> {
+        let encoded =
+            serde_json::to_string(answers).map_err(|source| WorkflowHostError::Request {
+                detail: source.to_string(),
+            })?;
+        self.mutate(
+            &[
+                OsString::from("record-answers"),
+                OsString::from(&self.binding.run_id),
+                OsString::from(interview),
+                OsString::from("--answers"),
+                OsString::from(encoded),
+            ],
+            "record-answers",
+        )
+    }
+
+    /// Add one item through a file, so that its size is not an argument limit.
+    pub(crate) fn add_item(&mut self, kind: &str, item: &Value) -> Result<(), WorkflowHostError> {
+        let file = Self::temporary_json(item)?;
+        self.mutate(
+            &[
+                OsString::from("add-item"),
+                OsString::from(&self.binding.run_id),
+                OsString::from(kind),
+                OsString::from("--item-file"),
+                file.path().as_os_str().to_owned(),
+            ],
+            "add-item",
+        )
+    }
+
+    /// Replace members of one item through a patch file.
+    pub(crate) fn update_item(
+        &mut self,
+        kind: &str,
+        item_id: &str,
+        patch: &Value,
+    ) -> Result<(), WorkflowHostError> {
+        let file = Self::temporary_json(patch)?;
+        self.mutate(
+            &[
+                OsString::from("update-item"),
+                OsString::from(&self.binding.run_id),
+                OsString::from(kind),
+                OsString::from(item_id),
+                OsString::from("--patch-file"),
+                file.path().as_os_str().to_owned(),
+            ],
+            "update-item",
+        )
+    }
+
+    fn temporary_json(value: &Value) -> Result<tempfile::NamedTempFile, WorkflowHostError> {
+        let request_error = |source: &dyn std::fmt::Display| WorkflowHostError::Request {
+            detail: source.to_string(),
+        };
+        let mut file = tempfile::NamedTempFile::new().map_err(|source| request_error(&source))?;
+        std::io::Write::write_all(
+            &mut file,
+            &serde_json::to_vec(value).map_err(|source| request_error(&source))?,
+        )
+        .map_err(|source| request_error(&source))?;
+        Ok(file)
+    }
+
+    /// Advance through a transition whose default gate is `auto`.
+    pub(crate) fn advance(&mut self, phase: &str) -> Result<(), WorkflowHostError> {
+        self.mutate(
+            &[
+                OsString::from("advance"),
+                OsString::from(&self.binding.run_id),
+                OsString::from(phase),
+            ],
+            "advance",
+        )
+    }
+
+    /// Record the owner's explicit terminal choice at the `hitl` gate.
+    pub(crate) fn decide(
+        self,
+        choice: DecisionChoice,
+    ) -> Result<WorkflowHostResult, WorkflowHostError> {
+        decide(
+            &self.executable,
+            &self.state_dir,
+            &self.binding,
+            self.workflow,
+            Some(choice),
+            self.envelope,
+            self.limits,
+        )
+    }
 }
 
 enum RunStatus {
@@ -1042,8 +1279,7 @@ struct IxError {
     code: String,
     message: String,
     #[serde(default)]
-    #[serde(rename = "details")]
-    _details: Option<Map<String, Value>>,
+    details: Option<Map<String, Value>>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -220,6 +220,18 @@ fn passing_workflow_cases() -> Vec<(Value, Vec<&'static str>)> {
                 "change.review_ready",
             ],
         ),
+        (
+            workflow_projection(
+                "release-decision",
+                &["decision_ready->released", "decision_ready->rejected"],
+                &["release_request", "release_presentation", "release_outcome"],
+            ),
+            vec![
+                "shared.terminal_gates",
+                "release.presentation_ready",
+                "release.outcome_ready",
+            ],
+        ),
     ]
 }
 
@@ -254,10 +266,43 @@ fn tc_106_all_canonical_invariants_match_the_reference_in_request_order() {
 }
 
 #[trace("TC-106", "FR-016-AC-2", "FR-016-CON-3")]
+#[trace("TC-470", "FR-048-AC-14")]
 #[test]
 fn tc_106_failure_codes_and_time_boundaries_match_the_reference() {
     let empty = json!({"defName": "change-assurance", "items": {}});
     assert_parity(&request(&empty, &canonical_names()));
+
+    for kinds in [
+        &["release_request"][..],
+        &["release_presentation"][..],
+        &[][..],
+    ] {
+        let partial = workflow_projection(
+            "release-decision",
+            &["decision_ready->released", "decision_ready->rejected"],
+            kinds,
+        );
+        assert_failed(
+            &request(&partial, &["release.presentation_ready"]),
+            &["release_presentation_missing"],
+        );
+        assert_parity(&request(&partial, &["release.presentation_ready"]));
+    }
+
+    let mut outcome = workflow_projection(
+        "release-decision",
+        &["decision_ready->released", "decision_ready->rejected"],
+        &["release_request", "release_presentation", "release_outcome"],
+    );
+    assert_parity(&request(&outcome, &["release.outcome_ready"]));
+    outcome["items"]["release_outcome"][0]["document"] = json!("");
+    assert_failed(
+        &request(&outcome, &["release.outcome_ready"]),
+        &["release_outcome_missing"],
+    );
+    assert_parity(&request(&outcome, &["release.outcome_ready"]));
+    outcome["items"]["release_outcome"] = json!([]);
+    assert_parity(&request(&outcome, &["release.outcome_ready"]));
 
     let mut expired = workflow_projection(
         "assurance-intake",

@@ -21,7 +21,7 @@ workflow content from every supported agent discovery surface.
 
 - Applies to Claude Code, Codex, opencode, and GitHub Copilot discovery.
 - Applies to local-source and repository-source installations.
-- Applies to the onboarding skill and all four promoted workflows.
+- Applies to the onboarding skill and all five promoted workflows.
 
 ## Rationale
 
@@ -34,7 +34,7 @@ maintenance in the owning module.
 | Metric | Target | Threshold | Method |
 |--------|--------|-----------|--------|
 | Supported discovery surfaces resolving the canonical skill | 4 of 4 | 4 of 4 | integration-testing |
-| Promoted workflows with identical canonical bytes across hosts | 4 of 4 | 4 of 4 | property-based-testing |
+| Promoted workflows with identical canonical bytes across hosts | 5 of 5 | 5 of 5 | property-based-testing |
 | Agent-specific behavioral copies | 0 | 0 | architecture-conformance |
 
 ## Acceptance Criteria
@@ -42,7 +42,7 @@ maintenance in the owning module.
 | ID | Criteria | Verification |
 |----|----------|--------------|
 | NFR-001-AC-1 | All four supported host surfaces resolve the canonical skill from both supported installation sources. | Test (TC-038) |
-| NFR-001-AC-2 | All four promoted workflows have identical canonical bytes across hosts and installation sources. | Test (TC-038) |
+| NFR-001-AC-2 | All five promoted workflows have identical canonical bytes across hosts and installation sources. | Test (TC-038) |
 | NFR-001-AC-3 | No host manifest contains an agent-specific copy of behavioral onboarding content. | Test (TC-038) |
 
 ## Verification
