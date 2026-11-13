@@ -103,6 +103,17 @@ pub enum BaselineState {
     },
 }
 
+/// What a release commit changes against its parent.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Changes {
+    /// Whether it changes only the record and the snapshot.
+    pub only_record_and_snapshot: bool,
+    /// Whether it adds the record.
+    pub record_added: bool,
+    /// Whether it adds the snapshot.
+    pub snapshot_added: bool,
+}
+
 /// The facts of a release whose record was readable and valid.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Facts {
@@ -116,12 +127,8 @@ pub struct Facts {
     /// Whether the release commit has exactly one parent, the baseline commit;
     /// `None` when the baseline commit is unknown.
     pub child_of_baseline: Option<bool>,
-    /// Whether the release commit changes only the record and the snapshot.
-    pub changes_only_record_and_snapshot: bool,
-    /// Whether the release commit adds the record.
-    pub record_added: bool,
-    /// Whether the release commit adds the snapshot.
-    pub snapshot_added: bool,
+    /// What the release commit changes.
+    pub changes: Changes,
     /// Whether the snapshot path exists at the baseline commit; `None` when the
     /// baseline commit is unknown.
     pub snapshot_present_at_baseline: Option<bool>,
@@ -154,11 +161,17 @@ pub fn reasons(facts: &Facts) -> Vec<Reason> {
         Check::ReleaseCommitNotChildOfBaseline,
     );
     check(
-        !facts.changes_only_record_and_snapshot,
+        !facts.changes.only_record_and_snapshot,
         Check::ReleaseCommitChangesOtherPaths,
     );
-    check(!facts.record_added, Check::ReleaseCommitRecordNotAdded);
-    check(!facts.snapshot_added, Check::ReleaseCommitSnapshotNotAdded);
+    check(
+        !facts.changes.record_added,
+        Check::ReleaseCommitRecordNotAdded,
+    );
+    check(
+        !facts.changes.snapshot_added,
+        Check::ReleaseCommitSnapshotNotAdded,
+    );
     check(
         facts.snapshot_present_at_baseline == Some(true),
         Check::SnapshotPathPresentAtBaseline,

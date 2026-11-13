@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 use engineering_assurance::approval_verify::ApprovalStatus;
 use engineering_assurance::release::{
-    BaselineState, Check, Facts, Reason, frontmatter, is_repository_path, reasons,
+    BaselineState, Changes, Check, Facts, Reason, frontmatter, is_repository_path, reasons,
 };
 use engineering_assurance::signature_verify::is_plain_revision;
 use serde::{Deserialize, Serialize};
@@ -43,14 +43,11 @@ pub(crate) enum ItemKind {
     Evidence,
 }
 
+// The schema has already closed the document; only the members read are typed.
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct BaselineDocument {
     name: String,
     items: Vec<ItemDocument>,
-    // The remaining members are checked by the schema.
-    #[serde(flatten)]
-    _rest: serde_json::Map<String, Value>,
 }
 
 #[derive(Deserialize)]
@@ -419,6 +416,77 @@ fn changes(
     Ok(found)
 }
 
+/// How the Baseline of the record resolves at the baseline commit.
+fn baseline_state(
+    repository: &Path,
+    baseline_commit: Option<&str>,
+    record: &ReleaseDocument,
+) -> Result<(BaselineState, Option<Resolution>), VerifyError> {
+    let Some(commit) = baseline_commit else {
+        return Ok((BaselineState::CommitUnknown, None));
+    };
+    match resolve_baseline(repository, commit, &record.baseline.path) {
+        Ok(resolution) => Ok((
+            BaselineState::Resolved {
+                all_items_present: resolution.items.iter().all(|item| item.present),
+            },
+            Some(resolution),
+        )),
+        Err(BaselineError::FileAbsent) => Ok((BaselineState::FileAbsent, None)),
+        Err(BaselineError::FileInvalid) => Ok((BaselineState::FileInvalid, None)),
+        Err(BaselineError::CommitUnknown) => Ok((BaselineState::CommitUnknown, None)),
+        Err(BaselineError::Git) => Err(VerifyError::Git),
+    }
+}
+
+/// What git says about the release commit against the baseline commit.
+struct Shape {
+    child_of_baseline: Option<bool>,
+    changes: Changes,
+    snapshot_present_at_baseline: Option<bool>,
+}
+
+fn commit_shape(
+    repository: &Path,
+    release_commit: &str,
+    baseline_commit: Option<&str>,
+    (record_path, snapshot_path): (&str, &str),
+) -> Result<Shape, VerifyError> {
+    let parents = git(
+        repository,
+        &[
+            "rev-list",
+            "--parents",
+            "-n",
+            "1",
+            "--end-of-options",
+            release_commit,
+        ],
+    )?;
+    let parents = String::from_utf8(parents.stdout).map_err(|_| GitFailure)?;
+    let parents: Vec<&str> = parents.split_whitespace().skip(1).collect();
+    let changed = changes(repository, release_commit, parents.first().copied())?;
+    let added = |path: &str| {
+        changed
+            .iter()
+            .any(|(status, name)| *status == b'A' && name == path)
+    };
+    let snapshot_present_at_baseline = baseline_commit
+        .map(|commit| object_at(repository, commit, snapshot_path).map(|id| id.is_some()))
+        .transpose()?;
+    Ok(Shape {
+        child_of_baseline: baseline_commit.map(|commit| parents == [commit]),
+        changes: Changes {
+            only_record_and_snapshot: changed
+                .iter()
+                .all(|(_, name)| name == record_path || name == snapshot_path),
+            record_added: added(record_path),
+            snapshot_added: added(snapshot_path),
+        },
+        snapshot_present_at_baseline,
+    })
+}
+
 fn verify(
     request: &Request,
     identity: Option<&engineering_assurance::signature_verify::GitsignIdentity>,
@@ -465,59 +533,22 @@ fn verify(
     let approved = approval.assessment().approval().cloned();
 
     let baseline_commit = commit_of(repository, &record.baseline.commit)?;
-    let (state, resolution) = match &baseline_commit {
-        None => (BaselineState::CommitUnknown, None),
-        Some(commit) => match resolve_baseline(repository, commit, &record.baseline.path) {
-            Ok(resolution) => (
-                BaselineState::Resolved {
-                    all_items_present: resolution.items.iter().all(|item| item.present),
-                },
-                Some(resolution),
-            ),
-            Err(BaselineError::FileAbsent) => (BaselineState::FileAbsent, None),
-            Err(BaselineError::FileInvalid) => (BaselineState::FileInvalid, None),
-            Err(BaselineError::CommitUnknown) => (BaselineState::CommitUnknown, None),
-            Err(BaselineError::Git) => return Err(VerifyError::Git),
-        },
-    };
-
-    let parents = git(
+    let (state, resolution) = baseline_state(repository, baseline_commit.as_deref(), &record)?;
+    let shape = commit_shape(
         repository,
-        &[
-            "rev-list",
-            "--parents",
-            "-n",
-            "1",
-            "--end-of-options",
-            &release_commit,
-        ],
+        &release_commit,
+        baseline_commit.as_deref(),
+        (&request.record_path, &record.snapshot_path),
     )?;
-    let parents = String::from_utf8(parents.stdout).map_err(|_| GitFailure)?;
-    let parents: Vec<&str> = parents.split_whitespace().skip(1).collect();
-    let changed = changes(repository, &release_commit, parents.first().copied())?;
-    let added = |path: &str| {
-        changed
-            .iter()
-            .any(|(status, name)| *status == b'A' && name == path)
-    };
-    let snapshot_present_at_baseline = baseline_commit
-        .as_deref()
-        .map(|commit| object_at(repository, commit, &record.snapshot_path).map(|id| id.is_some()))
-        .transpose()?;
-
     let facts = Facts {
         approval: status,
         approver_is_decision_owner: approved
             .as_ref()
             .is_some_and(|approval| approval.approver == record.decision_owner),
         baseline: state,
-        child_of_baseline: baseline_commit.as_deref().map(|commit| parents == [commit]),
-        changes_only_record_and_snapshot: changed
-            .iter()
-            .all(|(_, name)| *name == request.record_path || *name == record.snapshot_path),
-        record_added: added(&request.record_path),
-        snapshot_added: added(&record.snapshot_path),
-        snapshot_present_at_baseline,
+        child_of_baseline: shape.child_of_baseline,
+        changes: shape.changes,
+        snapshot_present_at_baseline: shape.snapshot_present_at_baseline,
     };
     let failed = reasons(&facts);
     let absent_items = resolution
