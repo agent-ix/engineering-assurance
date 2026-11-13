@@ -596,15 +596,15 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-365 | With the total time expired the trail has no entries, `truncated` true, `time_limit`, `considered` counting only the refs reached, and `complete` false | Unit | P0 | FR-043-AC-16 | 🚧 |
 | TC-366 | Every entry carries the verified tag object id, equal for two ref names of one object | Integration | P0 | FR-043-AC-17 | 🚧 |
 | TC-367 | The table replaces escape, C1, bidirectional and zero-width characters in a tag name or meaning | Integration | P0 | FR-043-AC-18 | 🚧 |
-| TC-368 | A pandoc stand-in request over the fixture Markdown completes with one `document` artifact | Integration | P0 | FR-045-AC-1 |  |
-| TC-369 | A pandoc request writing `typ/document.typ` then a typst request compiling it, over one capability root, each complete with one `document` artifact | Integration | P0 | FR-045-AC-2 |  |
-| TC-370 | A missing pandoc or typst executable yields `unavailable`, no artifact and the echoed producer name and executable; a directory yields `refused` | Integration | P0 | FR-045-AC-3 |  |
-| TC-371 | A converter exiting 7 with a stderr message yields `failed` with the exit code and the stderr bytes retained | Integration | P0 | FR-045-AC-4 |  |
-| TC-372 | A converter exiting 0 without writing the required output yields `failed` and no artifact | Integration | P0 | FR-045-AC-4 |  |
-| TC-373 | The converter requests pass the published request schema and carry the defined caller, environment, inputs, stdin, outputs, containment, cancellation and arguments | Unit | P0 | FR-045-AC-5 |  |
-| TC-374 | Real pandoc converts the fixture to a DOCX zip whose `word/document.xml` holds the fixture headings and code text | Integration | P0 | FR-045-AC-6 |  |
-| TC-375 | Real pandoc and typst convert the fixture to a PDF starting with `%PDF` | Integration | P0 | FR-045-AC-6 |  |
-| TC-376 | `make converter-integration` with `EA_TEST_PANDOC` or `EA_TEST_TYPST` unset, relative or not executable exits non-zero with a message naming the variable | Unit | P0 | FR-045-CON-1 |  |
+| TC-368 | A pandoc stand-in request over the fixture Markdown completes with one `document` artifact | Integration | P0 | FR-045-AC-1 | ✅ |
+| TC-369 | A pandoc request writing `typ/document.typ` then a typst request compiling it, over one capability root, each complete with one `document` artifact | Integration | P0 | FR-045-AC-2 | ✅ |
+| TC-370 | A missing pandoc or typst executable yields `unavailable`, no artifact and the echoed producer name and executable; a directory yields `refused` | Integration | P0 | FR-045-AC-3 | ✅ |
+| TC-371 | A converter exiting 7 with a stderr message yields `failed` with the exit code and the stderr bytes retained | Integration | P0 | FR-045-AC-4 | ✅ |
+| TC-372 | A converter exiting 0 without writing the required output yields `failed` and no artifact | Integration | P0 | FR-045-AC-4 | ✅ |
+| TC-373 | The converter requests pass the published request schema and carry the defined caller, environment, inputs, stdin, outputs, containment, cancellation and arguments | Unit | P0 | FR-045-AC-5 | ✅ |
+| TC-374 | Real pandoc converts the fixture to a DOCX zip whose `word/document.xml` holds the fixture headings and code text | Integration | P0 | FR-045-AC-6 | 🚧 |
+| TC-375 | Real pandoc and typst convert the fixture to a PDF starting with `%PDF` | Integration | P0 | FR-045-AC-6 | 🚧 |
+| TC-376 | `make converter-integration` with `EA_TEST_PANDOC` or `EA_TEST_TYPST` unset, relative or not executable exits non-zero with a message naming the variable | Unit | P0 | FR-045-CON-1 | ✅ |
 
 ## Option Permutation Matrix
 

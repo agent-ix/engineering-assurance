@@ -6,7 +6,7 @@ analysis: base
 scope: "agent-ix/engineering-assurance@406604ec; spec/functional/FR-044-document-converter-producer-requests.md; spec/tests.md; tests/document_converter_producer_cli.rs; Makefile"
 review_set: subset
 relationships:
-  - target: ix://agent-ix/engineering-assurance/FR-044
+  - target: ix://agent-ix/engineering-assurance/FR-045
     type: references
 ---
 
@@ -47,3 +47,11 @@ The two `#[ignore]` real-converter tests are acceptable and well specified, for 
 ## Verdict
 
 Trace coverage is complete, and the stand-in tests pass. One medium gap remains: the real-converter run has not been executed. It does not block the merge, but it blocks ticking ticket AC 2.
+
+## Dispositions
+
+Round 1, at head 4be67958. "FR-044" in this file means the converter FR, now FR-045 after renumber 4be6795. The relationship target was repointed to FR-045. `quoin matrix` still tags FR-045-AC-1 to AC-5 and CON-1, and AC-6 is `tagged-by-ignored-test`.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | deferred | The fix round did not execute TC-374 or TC-375, and none is available here because pandoc and typst are not installed on this host. As stated in the review, this does not block the merge. Ticket PLAT-1602 AC 2 must stay unchecked, and the ticket must not be closed, until `make converter-integration` has passed once on a host with both tools. |

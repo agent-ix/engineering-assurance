@@ -35,3 +35,14 @@ Rust idioms are fine:
 ## Verdict
 
 The code is correct and idiomatic. The focused tests, clippy and fmt pass. Nothing is vendored, and there is no pin, SHA or digest ceremony. The claim that no `src/` change is needed holds: the Syft precedent (FR-038) also has no `src/` code, and the stand-in tests pass against the existing executor unchanged. There is one low finding. The code is mergeable.
+
+## Dispositions
+
+Round 1, at head 4be67958. The fix round is a63a90c, followed by renumber 4be6795, which renamed FR-044 to FR-045 because main already holds FR-044, the Grype producer. In this file "FR-044" means the converter FR, now FR-045. Measured after the renumber, with `--features full`:
+- `cargo test --locked --test document_converter_producer_cli` gives 7 passed and 2 ignored.
+- `cargo clippy --test document_converter_producer_cli -- -D warnings` is clean.
+- `cargo fmt --check` is clean.
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | TC-373 now compares all three argument lists (`PandocDocx`, `PandocTypst` and `TypstPdf`) and every output path with literals taken from the FR-032 table, instead of with `step.output()`. |
