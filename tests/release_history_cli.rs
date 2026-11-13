@@ -353,9 +353,20 @@ fn tc_506_leaves_the_repository_unchanged_and_refuses_bad_requests_before_git() 
     relative["repository"] = json!("relative/repo");
     let mut dashed_dir = good.clone();
     dashed_dir["records_dir"] = json!("-records");
+    let mut missing_tag = good.clone();
+    missing_tag
+        .as_object_mut()
+        .expect("object")
+        .remove("previous_release_tag");
     let mut dashed_tag = good.clone();
     dashed_tag["previous_release_tag"] = json!("-v1");
-    for bad in [unknown_member, relative, dashed_dir, dashed_tag] {
+    for bad in [
+        unknown_member,
+        relative,
+        dashed_dir,
+        missing_tag,
+        dashed_tag,
+    ] {
         assert_eq!(
             refused_with(&run_with_path(&bad, Some(nowhere.path()))),
             "release_history_request_invalid",
@@ -500,6 +511,18 @@ fn tc_512_shallow_clones_branch_named_tags_and_non_commit_tags_are_distinct_refu
         "release_history_previous_tag_unknown"
     );
 
+    // A ref outside refs/tags/ and a tag whose name starts with refs/tags/ must
+    // not be guessed into the tags v2 and v3.
+    repo.git(&["branch", "refs/tags/v2"]);
+    repo.tag("refs/tags/v3", &tip);
+    for tag in ["v2", "v3"] {
+        assert_eq!(
+            refused(&request(&repo, &tip, Some(tag))),
+            "release_history_previous_tag_unknown",
+            "{tag}"
+        );
+    }
+
     let tree = repo.git(&["rev-parse", "HEAD^{tree}"]);
     let blob = repo.git(&["rev-parse", &format!("HEAD:{}", record("a", 1))]);
     repo.git(&["tag", "tree-tag", &tree]);
@@ -525,4 +548,96 @@ fn tc_512_shallow_clones_branch_named_tags_and_non_commit_tags_are_distinct_refu
     let code = refused(&shallow_request);
     fs::remove_dir_all(&shallow).expect("clean up the clone");
     assert_eq!(code, "release_history_repository_shallow");
+}
+
+#[trace("TC-515", "FR-052-AC-15")]
+#[test]
+fn tc_515_a_previous_baseline_only_reachable_through_a_merge_is_refused() {
+    let repo = Repo::new();
+    repo.commit(&[("base.txt", "base\n")]);
+    repo.git(&["checkout", "-q", "-b", "rel"]);
+    let previous_baseline = repo.commit(&[(&record("inprev", 1), "{}")]);
+    let release = repo.commit(&[("release.md", "r\n")]);
+    repo.tag("v1", &release);
+    repo.git(&["checkout", "-q", "main"]);
+    repo.commit(&[("main.txt", "m\n")]);
+    repo.git(&[
+        "merge",
+        "-q",
+        "--no-ff",
+        "-m",
+        "merge release branch",
+        "rel",
+    ]);
+    let tip = repo.head();
+
+    let output = run(&request(&repo, &tip, Some("v1")));
+
+    assert_eq!(
+        refused_with(&output),
+        "release_history_previous_not_on_first_parent"
+    );
+    assert_ne!(previous_baseline, tip);
+}
+
+#[trace("TC-516", "FR-052-AC-16")]
+#[test]
+fn tc_516_git_failure_is_refused_and_replace_refs_and_grafts_change_nothing() {
+    let not_a_repository = tempfile::tempdir().expect("directory");
+    let repo = Repo::new();
+    let (baseline, _) = first_release(&repo);
+    let middle = repo.commit(&[(&record("mid", 1), "{}")]);
+    let tip = repo.commit(&[(&record("top", 1), "{}")]);
+    let mut broken = request(&repo, &tip, Some("v1"));
+    broken["repository"] = json!(not_a_repository.path().display().to_string());
+    assert_eq!(refused(&broken), "release_history_git_failed");
+
+    let request = request(&repo, &tip, Some("v1"));
+    let before = run(&request).stdout;
+    assert_eq!(triples(&listed(&request)).len(), 2);
+
+    // Replace the middle commit by a copy that adds no record.
+    let tree = repo.git(&["rev-parse", &format!("{baseline}^{{tree}}")]);
+    let parent = repo.git(&["rev-parse", &format!("{middle}^")]);
+    let forged = repo.git(&["commit-tree", &tree, "-p", &parent, "-m", "forged"]);
+    repo.git(&["replace", &middle, &forged]);
+    // Graft the tip so that it has no parent.
+    fs::write(repo.path().join(".git/info/grafts"), format!("{tip}\n")).expect("grafts");
+
+    assert_eq!(run(&request).stdout, before);
+}
+
+#[trace("TC-517", "FR-052-AC-17")]
+#[test]
+fn tc_517_a_record_path_that_cannot_be_reported_is_refused_unless_it_is_gone() {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+
+    let repo = Repo::new();
+    first_release(&repo);
+    let huge = record("a", 1).replace("/1.json", "/18446744073709551616.json");
+    repo.commit(&[(&huge, "{}")]);
+    let tip = repo.head();
+    let request_value = request(&repo, &tip, Some("v1"));
+    assert_eq!(
+        refused(&request_value),
+        "release_history_record_unrepresentable"
+    );
+
+    let gone = repo.change(&[], &[&huge], None);
+    assert_eq!(
+        triples(&listed(&self::request(&repo, &gone, Some("v1")))),
+        []
+    );
+
+    let directory = repo.path().join(DIR);
+    let raw = OsStr::from_bytes(b"\xff");
+    fs::create_dir_all(directory.join(raw)).expect("directory");
+    fs::write(directory.join(raw).join("1.json"), "{}").expect("file");
+    repo.git(&["add", "-A"]);
+    repo.git(&["commit", "-q", "-m", "non-utf8"]);
+    let tip = repo.head();
+    assert_eq!(
+        refused(&self::request(&repo, &tip, Some("v1"))),
+        "release_history_record_unrepresentable"
+    );
 }

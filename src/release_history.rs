@@ -49,28 +49,52 @@ pub fn is_tag_name(name: &str) -> bool {
         && !name.contains("//")
         && !name
             .chars()
-            .any(|c| c.is_control() || c.is_whitespace() || is_glob(c) || "~^:".contains(c))
+            .any(|c| c.is_control() || c.is_whitespace() || "*?[\\~^:".contains(c))
 }
 
-/// The `(record_id, revision)` of the git path `path` under `records_dir`, or
-/// `None` when the path is not `<records_dir>/<record_id>/<revision>.json` with
-/// the exact grammar of FR-052.
+/// What a git path is, relative to `records_dir`.
+#[derive(Debug, Eq, PartialEq)]
+pub enum RecordPath<'a> {
+    /// Not `<records_dir>/<record_id>/<revision>.json`: ignored.
+    NotARecord,
+    /// A record, with its `record_id` and its `revision`.
+    Record(&'a str, u64),
+    /// Fits the grammar but cannot be reported: the revision exceeds `u64::MAX`
+    /// or the `record_id` is not UTF-8.
+    Unrepresentable,
+}
+
+/// Classifies the git path `path` under `records_dir` by the exact grammar of FR-052.
 #[must_use]
-pub fn record_of_path<'a>(records_dir: &str, path: &'a [u8]) -> Option<(&'a str, u64)> {
+pub fn record_of_path<'a>(records_dir: &str, path: &'a [u8]) -> RecordPath<'a> {
     let dir = records_dir.strip_suffix('/').unwrap_or(records_dir);
-    let rest = path.strip_prefix(dir.as_bytes())?.strip_prefix(b"/")?;
-    let rest = std::str::from_utf8(rest).ok()?;
-    let (record_id, file) = rest.split_once('/')?;
+    let Some(rest) = path
+        .strip_prefix(dir.as_bytes())
+        .and_then(|rest| rest.strip_prefix(b"/"))
+    else {
+        return RecordPath::NotARecord;
+    };
+    let Some(slash) = rest.iter().position(|byte| *byte == b'/') else {
+        return RecordPath::NotARecord;
+    };
+    let (record_id, file) = (&rest[..slash], &rest[slash + 1..]);
     if record_id.is_empty()
         || record_id.len() > MAX_RECORD_ID_BYTES
-        || matches!(record_id, "." | "..")
+        || matches!(record_id, b"." | b"..")
     {
-        return None;
+        return RecordPath::NotARecord;
     }
-    let digits = file.strip_suffix(".json")?;
-    if !digits.bytes().all(|b| b.is_ascii_digit()) || digits.starts_with('0') {
-        return None;
+    let Some(digits) = file.strip_suffix(b".json") else {
+        return RecordPath::NotARecord;
+    };
+    if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) || digits[0] == b'0' {
+        return RecordPath::NotARecord;
     }
-    let revision: u64 = digits.parse().ok()?;
-    Some((record_id, revision))
+    let revision = std::str::from_utf8(digits)
+        .ok()
+        .and_then(|digits| digits.parse::<u64>().ok());
+    match (std::str::from_utf8(record_id), revision) {
+        (Ok(record_id), Some(revision)) => RecordPath::Record(record_id, revision),
+        _ => RecordPath::Unrepresentable,
+    }
 }

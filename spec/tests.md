@@ -667,9 +667,12 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-509 | With no previous tag a record present from the root is reported at the first first-parent commit that holds it | Integration | P0 | FR-052-AC-10 | ✅ `tests/release_history_cli.rs` passing |
 | TC-510 | Revisions 9 and 10 list in that order, and `x.json.tmp`, `v2.json`, deeper paths, staging directories, leading-zero, zero, fractional and signed revisions are ignored without an error | Integration | P0 | FR-052-AC-11 | ✅ `tests/release_history_cli.rs` passing |
 | TC-511 | A branch name, short hash, upper-case hash or over-long hash as `baseline_commit`, and an empty, absolute, `..` or glob `records_dir`, are refused before git starts | Integration | P0 | FR-052-AC-12 | ✅ `tests/release_history_cli.rs` passing |
-| TC-512 | A shallow clone, a branch named like a missing tag, and a tag on a tree or blob each give their own error code | Integration | P0 | FR-052-AC-13 | ✅ `tests/release_history_cli.rs` passing |
+| TC-512 | A shallow clone, a branch named like a missing tag, a tag on a tree or blob, a branch `refs/tags/v2` and a tag `refs/tags/v3` each give their own error code | Integration | P0 | FR-052-AC-13 | ✅ `tests/release_history_cli.rs` passing |
 | TC-513 | The record id is one to 256 bytes and the revision is an unsigned integer from one without leading zeros; other paths are not records | Unit | P0 | FR-052-AC-11 | ✅ `tests/release_history.rs` passing |
 | TC-514 | Hashes, records directories and tag names outside the request grammar are not accepted | Unit | P0 | FR-052-AC-12 | ✅ `tests/release_history.rs` passing |
+| TC-515 | A previous baseline reachable only through a merge of a release branch is refused with `release_history_previous_not_on_first_parent` | Integration | P0 | FR-052-AC-15 | ✅ `tests/release_history_cli.rs` passing |
+| TC-516 | A directory git cannot read yields `release_history_git_failed`, and a replace ref and a graft leave the output byte-identical | Integration | P0 | FR-052-AC-16 | ✅ `tests/release_history_cli.rs` passing |
+| TC-517 | A listed record with a revision above `u64::MAX` or a non-UTF-8 `record_id` is `release_history_record_unrepresentable`, and is not once deleted | Integration | P0 | FR-052-AC-17 | ✅ `tests/release_history_cli.rs` passing |
 
 ## Option Permutation Matrix
 

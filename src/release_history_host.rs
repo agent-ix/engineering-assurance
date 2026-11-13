@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use engineering_assurance::release_history::{
-    is_commit_hash, is_records_dir, is_tag_name, record_of_path,
+    RecordPath, is_commit_hash, is_records_dir, is_tag_name, record_of_path,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -29,8 +29,17 @@ struct Request {
     protocol: String,
     repository: PathBuf,
     baseline_commit: String,
+    #[serde(deserialize_with = "required_tag")]
     previous_release_tag: Option<String>,
     records_dir: String,
+}
+
+/// The member must be present: a tag name or `null`. With `deserialize_with`,
+/// serde no longer treats an absent `Option` member as `null`.
+fn required_tag<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<String>, D::Error> {
+    Option::deserialize(deserializer)
 }
 
 /// Typed refusal that produces no list.
@@ -54,6 +63,14 @@ pub(crate) enum ReleaseHistoryError {
     /// The previous baseline commit is not an ancestor of the baseline commit.
     #[error("release-history previous baseline commit is not an ancestor of the baseline commit")]
     PreviousNotAncestor,
+    /// The previous baseline commit is an ancestor, but not on the first-parent history.
+    #[error(
+        "release-history previous baseline commit is not on the baseline's first-parent history"
+    )]
+    PreviousNotOnFirstParent,
+    /// A record path fits the grammar but cannot be reported.
+    #[error("release-history record path fits the grammar but cannot be reported")]
+    RecordUnrepresentable,
     /// The repository is a shallow clone.
     #[error("release-history repository is shallow")]
     Shallow,
@@ -75,6 +92,8 @@ impl ReleaseHistoryError {
             Self::PreviousTagUnknown => "release_history_previous_tag_unknown",
             Self::PreviousNotReleaseCommit => "release_history_previous_not_a_release_commit",
             Self::PreviousNotAncestor => "release_history_previous_not_ancestor",
+            Self::PreviousNotOnFirstParent => "release_history_previous_not_on_first_parent",
+            Self::RecordUnrepresentable => "release_history_record_unrepresentable",
             Self::Shallow => "release_history_repository_shallow",
             Self::GitFailed => "release_history_git_failed",
             Self::ResultEncoding => "release_history_result_encoding_failed",
@@ -140,8 +159,16 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ReleaseHistoryError> {
     let previous_baseline = previous
         .as_ref()
         .map(|(_, release)| release.baseline.as_str());
-    let range = commits_in_range(repository, &baseline, previous_baseline)?;
-    let records = records_added(repository, &baseline, &range, &request.records_dir)?;
+    let records = if range_is_empty(repository, &baseline, previous_baseline)? {
+        Vec::new()
+    } else {
+        records_added(
+            repository,
+            &baseline,
+            previous_baseline,
+            &request.records_dir,
+        )?
+    };
     let line = ResultLine {
         protocol: RESULT_PROTOCOL,
         baseline_commit: &request.baseline_commit,
@@ -181,7 +208,7 @@ struct PreviousCommit {
 fn previous_release(repository: &Path, tag: &str) -> Result<PreviousCommit, ReleaseHistoryError> {
     let reference = format!("refs/tags/{tag}");
     let object =
-        object_id(repository, &reference)?.ok_or(ReleaseHistoryError::PreviousTagUnknown)?;
+        tag_object(repository, &reference)?.ok_or(ReleaseHistoryError::PreviousTagUnknown)?;
     let commit =
         commit_of(repository, &object)?.ok_or(ReleaseHistoryError::PreviousNotReleaseCommit)?;
     let mut parents = commit_ids(
@@ -213,36 +240,33 @@ fn commit_ids(repository: &Path, arguments: &[&str]) -> Result<Vec<String>, GitF
     Ok(text.split_whitespace().map(str::to_owned).collect())
 }
 
-/// The first-parent commits to read, newest first, and the first-parent commit
-/// below them that is already part of the previous release (none when the walk
-/// runs to the root).
-struct Range {
-    commits: Vec<String>,
-    boundary: Option<String>,
+/// The object id of the ref `reference` itself, or `None` when no such ref
+/// exists. Unlike `rev-parse`, `show-ref --verify` never guesses another ref.
+fn tag_object(repository: &Path, reference: &str) -> Result<Option<String>, GitFailure> {
+    let output = git(
+        repository,
+        &["show-ref", "--verify", "--hash", "--", reference],
+    )?;
+    if !output.status.success() {
+        return Ok(None);
+    }
+    let text = String::from_utf8(output.stdout).map_err(|_| GitFailure)?;
+    let id = text.trim_end_matches('\n');
+    Ok((!id.is_empty() && id.bytes().all(|b| b.is_ascii_hexdigit())).then(|| id.to_owned()))
 }
 
-/// The first-parent commits of `baseline` after `previous`. With no previous
-/// baseline the walk runs to the root.
-fn commits_in_range(
+/// Whether the range from `previous` to `baseline` holds no commit, after
+/// checking that `previous` is on the first-parent history of `baseline`.
+fn range_is_empty(
     repository: &Path,
     baseline: &str,
     previous: Option<&str>,
-) -> Result<Range, ReleaseHistoryError> {
-    let chain = commit_ids(
-        repository,
-        &["rev-list", "--first-parent", "--end-of-options", baseline],
-    )?;
+) -> Result<bool, ReleaseHistoryError> {
     let Some(previous) = previous else {
-        return Ok(Range {
-            commits: chain,
-            boundary: None,
-        });
+        return Ok(false);
     };
-    if let Some(position) = chain.iter().position(|commit| commit == previous) {
-        return Ok(Range {
-            commits: chain[..position].to_vec(),
-            boundary: Some(previous.to_owned()),
-        });
+    if previous == baseline {
+        return Ok(true);
     }
     let ancestor = git(
         repository,
@@ -253,31 +277,39 @@ fn commits_in_range(
         Some(1) => return Err(ReleaseHistoryError::PreviousNotAncestor),
         _ => return Err(ReleaseHistoryError::GitFailed),
     }
-    // The previous baseline joined by a merge: the range is the first-parent
-    // commits that are not among its ancestors.
-    let known: BTreeSet<String> =
-        commit_ids(repository, &["rev-list", "--end-of-options", previous])?
-            .into_iter()
-            .collect();
-    let position = chain.iter().position(|commit| known.contains(commit));
-    Ok(Range {
-        commits: chain[..position.unwrap_or(chain.len())].to_vec(),
-        boundary: position.map(|position| chain[position].clone()),
-    })
+    // The commits above `previous`: it is on the first-parent line exactly when
+    // the oldest of them has it as its first parent.
+    let excluded = format!("^{previous}");
+    let lines = git(
+        repository,
+        &[
+            "rev-list",
+            "--first-parent",
+            "--parents",
+            "--end-of-options",
+            baseline,
+            &excluded,
+        ],
+    )?;
+    if !lines.status.success() {
+        return Err(ReleaseHistoryError::GitFailed);
+    }
+    let text = String::from_utf8(lines.stdout).map_err(|_| GitFailure)?;
+    let oldest = text.lines().next_back().ok_or(GitFailure)?;
+    if oldest.split_whitespace().nth(1) == Some(previous) {
+        Ok(false)
+    } else {
+        Err(ReleaseHistoryError::PreviousNotOnFirstParent)
+    }
 }
 
 /// Records added by a commit of `range` and present at `baseline`, in result order.
 fn records_added(
     repository: &Path,
     baseline: &str,
-    range: &Range,
+    boundary: Option<&str>,
     records_dir: &str,
 ) -> Result<Vec<RecordLine>, ReleaseHistoryError> {
-    let Range { commits, boundary } = range;
-    let boundary = boundary.as_deref();
-    if commits.is_empty() {
-        return Ok(Vec::new());
-    }
     let mut arguments = vec![
         "--literal-pathspecs",
         "log",
@@ -317,17 +349,22 @@ fn records_added(
             if !present.contains(path) {
                 continue;
             }
-            if let Some((record_id, revision)) = record_of_path(records_dir, path) {
-                found.insert(
-                    (record_id.to_owned(), revision),
-                    RecordLine {
-                        record_id: record_id.to_owned(),
-                        revision,
-                        path: String::from_utf8_lossy(path).into_owned(),
-                        commit: commit.clone(),
-                    },
-                );
-            }
+            let (record_id, revision) = match record_of_path(records_dir, path) {
+                RecordPath::NotARecord => continue,
+                RecordPath::Unrepresentable => {
+                    return Err(ReleaseHistoryError::RecordUnrepresentable);
+                }
+                RecordPath::Record(record_id, revision) => (record_id, revision),
+            };
+            found.insert(
+                (record_id.to_owned(), revision),
+                RecordLine {
+                    record_id: record_id.to_owned(),
+                    revision,
+                    path: String::from_utf8_lossy(path).into_owned(),
+                    commit: commit.clone(),
+                },
+            );
         } else {
             commit = String::from_utf8(token.to_vec()).map_err(|_| GitFailure)?;
         }
