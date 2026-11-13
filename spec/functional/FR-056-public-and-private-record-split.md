@@ -82,6 +82,8 @@ Out of scope: the record kinds that fill these members (EA-97, EA-98).
 | FR-056-AC-6 | Over generated strings, the public form accepts a string in a member only when it matches that member's grammar, and no accepted string contains a character outside the grammar's alphabet. | Property |
 | FR-056-AC-7 | An approval statement published as a record has a public form of kind `approval` with the statement's digest in `hashes.statement`, and its meaning, pull request reference and approver appear only in the private form's `statement`. | Test |
 | FR-056-AC-8 | The decoded `signature` bundle's signed payload equals the canonical bytes of the public form (RFC 8785 canonical form, no `signature` member); a bundle over a full statement, or over any other bytes, is rejected before any sink call, and the test public log receives no entry carrying statement payload bytes. | Test |
+| FR-056-AC-9 | A caller-supplied public form that already carries a `signature` is refused when a `Record` is constructed; the signature is supplied only by the signing step required by [NFR-010](../non-functional/NFR-010-no-cryptography-of-our-own.md) and is never accepted from input. | Test |
+| FR-056-AC-10 | A private form that supplies JSON `null` for `ticket_text`, `statement` or `model_names` is rejected; these optional members may be omitted but cannot be supplied as `null`. | Test |
 
 ## Dependencies
 
