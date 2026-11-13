@@ -373,6 +373,48 @@ fn tc_301_npm_fixture_yields_declared_component_count() {
     assert_fixture(&sbom, 3, "pkg:npm/");
 }
 
+#[trace("TC-377", "FR-039-AC-8")]
+#[test]
+#[ignore = "needs EA_TEST_SYFT"]
+fn tc_377_licence_fixture_components_carry_the_expected_licences() {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/licence-npm");
+    let lock = fs::read_to_string(fixture.join("scan/package-lock.json")).expect("lock");
+    let package = fs::read_to_string(fixture.join("scan/package.json")).expect("package");
+    let expected: Value = serde_json::from_str(
+        &fs::read_to_string(fixture.join("expected.json")).expect("expected-result file"),
+    )
+    .expect("expected-result file is JSON");
+    let expected = expected.as_object().expect("purl map");
+    let sbom = sbom_for_source(&[("package.json", &package), ("package-lock.json", &lock)]);
+    assert_fixture(&sbom, expected.len(), "pkg:npm/");
+    assert!(
+        components(&sbom)
+            .iter()
+            .any(|component| component.get("licenses").is_some()),
+        "no component carries licenses: {sbom}"
+    );
+    for (purl, want) in expected {
+        let component = components(&sbom)
+            .iter()
+            .find(|component| component["purl"] == purl.as_str())
+            .unwrap_or_else(|| panic!("no component for {purl}: {sbom}"));
+        let licenses = component.get("licenses");
+        match want["field"].as_str().expect("field") {
+            "none" => assert!(licenses.is_none(), "{purl}: {licenses:?}"),
+            field => {
+                let entries = licenses.and_then(Value::as_array).expect("licenses");
+                assert_eq!(entries.len(), 1, "{purl}: {entries:?}");
+                let got = match field {
+                    "id" => &entries[0]["license"]["id"],
+                    "expression" => &entries[0]["expression"],
+                    other => panic!("{purl}: unknown expected field {other:?}"),
+                };
+                assert_eq!(got, &want["text"], "{purl}: {entries:?}");
+            }
+        }
+    }
+}
+
 #[trace("TC-302", "FR-039-AC-3")]
 #[test]
 #[ignore = "needs EA_TEST_SYFT"]

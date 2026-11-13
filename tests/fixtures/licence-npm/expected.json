@@ -1,0 +1,7 @@
+{
+  "pkg:npm/fx-lumen@1.2.0": {"field": "id", "text": "MIT"},
+  "pkg:npm/fx-ember@0.4.1": {"field": "id", "text": "GPL-3.0-only"},
+  "pkg:npm/fx-quill@2.0.0": {"field": "id", "text": "Apache-2.0"},
+  "pkg:npm/fx-vale@3.1.0": {"field": "expression", "text": "MIT OR BSD-3-Clause"},
+  "pkg:npm/fx-moss@0.9.0": {"field": "none"}
+}

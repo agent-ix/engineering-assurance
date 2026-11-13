@@ -605,6 +605,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-374 | Real pandoc converts the fixture to a DOCX zip whose `word/document.xml` holds the fixture headings and code text | Integration | P0 | FR-045-AC-6 | 🚧 |
 | TC-375 | Real pandoc and typst convert the fixture to a PDF starting with `%PDF` | Integration | P0 | FR-045-AC-6 | 🚧 |
 | TC-376 | `make converter-integration` with `EA_TEST_PANDOC` or `EA_TEST_TYPST` unset, relative or not executable exits non-zero with a message naming the variable | Unit | P0 | FR-045-CON-1 | ✅ |
+| TC-377 | The licence-bearing npm fixture, run through `producer-execute` with the Syft request, yields the declared package count with the licence field and text the expected-result file names per purl, and no `licenses` on the unlicensed entry | Integration | P0 | FR-039-AC-8 | ✅ `tests/syft_producer_cli.rs` passing against Syft 1.57.1; ignored by default, run by `make syft-integration` |
 
 ## Option Permutation Matrix
 
