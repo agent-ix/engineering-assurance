@@ -22,7 +22,11 @@ const REQUEST_SCHEMA: &str =
     include_str!("../src/producer_execute_schemas/producer-execution-request-v1.schema.json");
 const SBOM_PATH: &str = "in/sbom.cdx.json";
 const REPORT_PATH: &str = "out/osv-scanner.json";
-const OS_PURL: &str = "pkg:deb/debian/libc6@2.36-9%2Bdeb12u4?arch=amd64&distro=debian-12";
+const OS_NAME: &str = "libwebp";
+const OS_VERSION: &str = "0.6.1-2.1+deb11u1";
+const OS_PURL: &str = "pkg:deb/debian/libwebp@0.6.1-2.1%2Bdeb11u1?arch=amd64&distro=debian-11";
+const EXPECTED_OSV_ID: &str = "DEBIAN-CVE-2023-4863";
+const EXPECTED_CVE_ALIAS: &str = "CVE-2023-4863";
 
 struct OsvScanner {
     executable: PathBuf,
@@ -238,9 +242,9 @@ fn fixture_request(root: &Path, script: &str) -> Value {
     osv_request(root, &executable, "fixture", &db)
 }
 
-#[trace("TC-378", "FR-044-AC-6", "FR-044-AC-11")]
+#[trace("TC-9001", "FR-044-AC-6", "FR-044-AC-11")]
 #[test]
-fn tc_378_request_matches_the_published_osv_scanner_definition() {
+fn tc_9001_request_matches_the_published_osv_scanner_definition() {
     let root = workspace(br#"{"bomFormat":"CycloneDX","components":[]}"#);
     let db = root.path().join("db");
     let request = osv_request(root.path(), Path::new("/opt/osv-scanner"), "2.0.0", &db);
@@ -317,11 +321,21 @@ fn tc_378_request_matches_the_published_osv_scanner_definition() {
 }
 
 #[cfg(target_os = "linux")]
-#[trace("TC-379", "FR-044-AC-3", "FR-044-AC-4", "FR-044-AC-5", "FR-044-AC-7")]
+#[trace("TC-9002", "FR-044-AC-3", "FR-044-AC-4", "FR-044-AC-5", "FR-044-AC-7")]
 #[test]
-fn tc_379_failed_or_incomplete_fixture_scan_never_retains_report() {
+fn tc_9002_failed_or_incomplete_fixture_scan_never_retains_report() {
     let root = workspace(br#"{"bomFormat":"CycloneDX","components":[]}"#);
-    let mut request = fixture_request(root.path(), "exit 127");
+    let missing = root.path().join("missing-osv-scanner");
+    assert!(
+        !missing.exists(),
+        "the unavailable producer path must not exist"
+    );
+    let mut request = osv_request(root.path(), &missing, "fixture", &root.path().join("db"));
+    let value = result(&request);
+    assert_eq!(value["state"]["kind"], "unavailable", "{value}");
+    assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
+
+    request = fixture_request(root.path(), "exit 127");
     fs::write(root.path().join(REPORT_PATH), b"stale report").expect("stale report");
     let value = result(&request);
     assert_eq!(value["state"]["kind"], "failed", "{value}");
@@ -361,9 +375,9 @@ fn tc_379_failed_or_incomplete_fixture_scan_never_retains_report() {
     assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
 }
 
-#[trace("TC-382", "FR-044-AC-12")]
+#[trace("TC-9003", "FR-044-AC-12")]
 #[test]
-fn tc_382_database_validation_rejects_wolfi_and_missing_archives() {
+fn tc_9003_database_validation_rejects_wolfi_and_missing_archives() {
     let root = tempfile::tempdir().expect("database root");
     let missing = root.path().join("missing");
     fs::create_dir_all(&missing).expect("missing database directory");
@@ -384,9 +398,9 @@ fn tc_382_database_validation_rejects_wolfi_and_missing_archives() {
     );
 }
 
-#[trace("TC-380", "FR-044-CON-1", "FR-044-AC-9")]
+#[trace("TC-9004", "FR-044-CON-1", "FR-044-AC-9")]
 #[test]
-fn tc_380_integration_lane_refuses_missing_scanner_or_database() {
+fn tc_9004_integration_lane_refuses_missing_scanner_or_database() {
     let non_executable = tempfile::NamedTempFile::new().expect("plain file");
     let non_directory = tempfile::NamedTempFile::new().expect("plain file");
     for (scanner, db, expected) in [
@@ -425,10 +439,10 @@ fn tc_380_integration_lane_refuses_missing_scanner_or_database() {
     }
 }
 
-#[trace("TC-381", "FR-044-AC-13")]
+#[trace("TC-9005", "FR-044-AC-13", "FR-044-AC-14")]
 #[test]
 #[ignore = "needs EA_TEST_OSV_SCANNER and EA_TEST_OSV_DB; fixture outcomes are not compliance evidence"]
-fn tc_381_scans_the_debian_sbom_fixture_offline_and_captures_its_package() {
+fn tc_9005_scans_the_debian_sbom_fixture_for_its_expected_advisory() {
     let scanner = scanner();
     let supplied_database = database();
     let sbom = json!({
@@ -437,8 +451,8 @@ fn tc_381_scans_the_debian_sbom_fixture_offline_and_captures_its_package() {
         "version": 1,
         "components": [{
             "type": "library",
-            "name": "libc6",
-            "version": "2.36-9+deb12u4",
+            "name": OS_NAME,
+            "version": OS_VERSION,
             "purl": OS_PURL
         }]
     })
@@ -471,17 +485,29 @@ fn tc_381_scans_the_debian_sbom_fixture_offline_and_captures_its_package() {
     let report: Value = serde_json::from_slice(&report_bytes).expect("scanner report JSON");
     assert!(report.is_object(), "{report}");
     let results = report["results"].as_array().expect("OSV report results");
-    let captured = results
+    let expected_package = results
         .iter()
         .flat_map(|result| result["packages"].as_array().into_iter().flatten())
-        .any(|package| {
-            package["package"]["name"] == "libc6"
-                && package["package"]["version"] == "2.36-9+deb12u4"
+        .find(|package| {
+            package["package"]["name"] == OS_NAME
+                && package["package"]["version"] == OS_VERSION
                 && package["package"]["purl"] == OS_PURL
+        })
+        .unwrap_or_else(|| {
+            panic!("OSV report did not capture the declared Debian fixture package: {report}")
         });
     assert!(
-        captured,
-        "OSV report did not capture the declared Debian fixture package: {report}"
+        expected_package["vulnerabilities"]
+            .as_array()
+            .is_some_and(|vulnerabilities| {
+                vulnerabilities.iter().any(|vulnerability| {
+                    vulnerability["id"] == EXPECTED_OSV_ID
+                        || vulnerability["aliases"].as_array().is_some_and(|aliases| {
+                            aliases.iter().any(|alias| alias == EXPECTED_CVE_ALIAS)
+                        })
+                })
+            }),
+        "OSV report did not associate {EXPECTED_OSV_ID} with {OS_PURL}: {report}"
     );
     // Runtime fixture behavior is not a compliance claim. In particular this
     // test does not interpret an empty vulnerability list as clean evidence.
