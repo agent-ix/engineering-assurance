@@ -218,6 +218,16 @@ same canonical bundle and do not redefine these responsibilities.
   approval tags that name a change-assurance record, oldest first by claimed signing time, with every verdict shown.
 - [FR-045](./functional/FR-045-document-converter-producer-requests.md) — run the document converters pandoc and
   typst as `producer-execute` requests, with existing result states for failure.
+- [FR-046](./functional/FR-046-baseline-archetype.md) — declare a Baseline as a named set of configuration
+  items at one git commit, identified by the commit hash alone.
+- [FR-047](./functional/FR-047-release-record-and-signed-release-tag.md) — verify a Release as a Baseline plus a
+  named person's signed release tag, reusing the approval binding of FR-041.
+- [FR-048](./functional/FR-048-human-release-decision-workflow.md) — decide a release through a human-gated,
+  resumable workflow; no automatic decision.
+- [FR-049](./functional/FR-049-release-ownership-split-and-data-contract.md) — Engineering Assurance owns the
+  release record and verification; Quoin consumes the result as data and runs no git.
+- [FR-050](./functional/FR-050-record-named-persons-release-decision-stance.md) — state that Engineering Assurance
+  records a named person's release decision and never decides one.
 
 ### Non-Functional Requirements
 
@@ -234,6 +244,8 @@ same canonical bundle and do not redefine these responsibilities.
   ix-trace-rs test tracing.
 - [NFR-006](./non-functional/NFR-006-single-sbom-tool-single-execution-path.md) — Syft is the only
   SBOM generator, run only through the FR-019 executor, read only through the Quoin adapter.
+- [NFR-007](./non-functional/NFR-007-no-release-without-a-person.md) — a release is reported only for a verified
+  person's signed decision; no automatic decision, no baseline digest.
 
 ### Integration Tests
 

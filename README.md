@@ -8,8 +8,9 @@ one canonical onboarding skill and four resumable workflows for deciding what
 assurance work a repository actually needs.
 
 It is deliberately not a compliance oracle. Engineering Assurance does not
-calculate a trust score, import external rules, or approve a release. The
-decision owner remains responsible for the boundary, claims, exceptions,
+calculate a trust score or import external rules, and it never decides a
+release: it records a named person's signed release decision and verifies it.
+The decision owner remains responsible for the boundary, claims, exceptions,
 evidence sufficiency, and terminal decision.
 
 ## Setup
@@ -294,6 +295,7 @@ protocol is versioned and documented by the schemas under
 | `approval-verify` | Report whether a signed annotated git tag is a named person's approval of one exact change-assurance record, by running the `signature-verify` verification on the tag and comparing the `Approved-Record-Id` and `Approved-Record-Digest` trailers of the tag message to the supplied record id and digest (`--request <json>` or `-`), and print an `approved`, `wrong_record`, `untrusted_signer`, `meaning_missing`, `signed_bad`, `unsigned` or `unverifiable` result that echoes the supplied trust input and, when approved, carries the `approver` principal, the `Signed-off-meaning:` values and the signing time as the signer's own claim, neither attested nor checked for plausibility (`signed_at` in UTC with its `signed_at_source`, or `signed_at_missing`). |
 | `approval-tag` | Write one signed annotated approval tag for a change-assurance record (`--request <json>` or `-`): the tag message is a subject paragraph, then the `Approved-Record-Id`, `Approved-Record-Digest` (the caller-supplied `sha256:` record digest, copied verbatim and never computed here) and caller-chosen `Signed-off-meaning:` trailers that `approval-verify` accepts. Git signs it through the caller's own configuration (`git tag -s`, SSH or `gitsign`), which must sign without a terminal prompt (agent or unlocked key); an unsigned result is removed and refused; the command passes no key, never pushes, never edits configuration, and refuses, writing no tag, when the signing configuration, the record, the tag name or the meaning is missing or invalid. |
 | `approval-trail` | List, oldest first by the signer's claimed tagger date, every annotated git tag whose `Approved-Record-Id` trailer names a change-assurance record, each with its full `approval-verify` result and the tag object id, nothing hidden (`--request <json>` or `-`; `--format json` for the machine result, `--format table` for people). Annotated tags whose message cannot be read are listed by name in `unreadable` and make the result not `complete`; a truncated listing says so. The trail is read from git itself, with no log and no recorded digest. |
+| `release-verify` | Report whether a signed annotated git tag is a named person's release decision for one release record: it runs the `approval-verify` verification, reads the release record from the tagged commit, and checks that the baseline commit it names is that commit or an ancestor, that every baseline item exists there, and that the verified approver is the record's decision owner (`--request <json>` or `-`); it prints `released` or `not_released` with reasons and never decides a release. |
 
 Run `engineering-assurance --help` or
 `engineering-assurance <command> --help` for argument details. Maintainer-only
