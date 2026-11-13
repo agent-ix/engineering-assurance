@@ -4,8 +4,9 @@
 //! Contract tests for the pure signature-verification classifier (FR-036).
 
 use engineering_assurance::signature_verify::{
-    CommitObservation, GitGrade, MAX_REVISION_BYTES, Mapping, Presence, PrincipalLookup, Reason,
-    SignatureFormat, SshCheck, Status, TagObservation, TargetKind, classify_commit, classify_tag,
+    CommitObservation, GitGrade, GitsignIdentity, MAX_REVISION_BYTES, Mapping, Mismatch, Presence,
+    PrincipalLookup, Probe, Reason, Run, SignatureFormat, SignatureKind, SignerSource, SshCheck,
+    Status, TagObservation, TargetKind, classify_commit, classify_gitsign, classify_tag,
     commit_signature_format, is_plain_revision, object_message, signed_off_meaning,
     split_tag_object,
 };
@@ -151,7 +152,7 @@ fn tc_249_a_tag_object_splits_at_the_signature_header_line() {
     let x509 = b"tag t\n\nm\n-----BEGIN SIGNED MESSAGE-----\nAA\n";
     assert_eq!(
         split_tag_object(x509).expect("block").format,
-        SignatureFormat::Other
+        SignatureFormat::Cms
     );
     assert_eq!(split_tag_object(b"tag t\n\nplain message\n"), None);
     // Git matches a header by prefix, so a longer line still starts the block.
@@ -174,7 +175,7 @@ fn tc_248_commit_signature_header_names_its_format() {
     let pgp = b"tree 1\ngpgsig -----BEGIN PGP SIGNATURE-----\n AA\n\nbody\n";
     assert_eq!(commit_signature_format(pgp), Some(SignatureFormat::Other));
     let x509 = b"tree 1\ngpgsig -----BEGIN SIGNED MESSAGE-----\n AA\n\nbody\n";
-    assert_eq!(commit_signature_format(x509), Some(SignatureFormat::Other));
+    assert_eq!(commit_signature_format(x509), Some(SignatureFormat::Cms));
     let sha256 = b"tree 1\ngpgsig-sha256 -----BEGIN SSH SIGNATURE-----\n AA\n\nbody\n";
     assert_eq!(commit_signature_format(sha256), Some(SignatureFormat::Ssh));
     assert_eq!(commit_signature_format(b"tree 1\nauthor a\n\nbody\n"), None);
@@ -287,4 +288,190 @@ fn tc_275_a_message_is_everything_after_the_header_block() {
         b"msg\n"
     );
     assert_eq!(object_message(b"tree x\n"), b"");
+}
+
+fn identity() -> GitsignIdentity {
+    GitsignIdentity::new(
+        "alice@example.test".to_owned(),
+        concat!("https:", "//issuer.example.test").to_owned(),
+        "Alice Example".to_owned(),
+    )
+    .expect("valid identity")
+}
+
+/// Runs the classifier against a script of outcomes by probe; returns the
+/// verdict and the probes asked for, in order. The classifier takes no message
+/// text, so replacing the text of a captured outcome cannot change a verdict.
+fn gitsign(
+    identity: Option<&GitsignIdentity>,
+    repository_sets_key: bool,
+    outcomes: &[(Probe, Run)],
+) -> (engineering_assurance::signature_verify::Verdict, Vec<Probe>) {
+    let mut asked = Vec::new();
+    let verdict = classify_gitsign(TargetKind::Commit, identity, repository_sets_key, |probe| {
+        asked.push(probe);
+        outcomes
+            .iter()
+            .find(|(p, _)| *p == probe)
+            .map_or(Run::Exit(99), |(_, run)| *run)
+    });
+    (verdict, asked)
+}
+
+#[test]
+#[trace("TC-293", "FR-040-AC-10", "FR-040-CON-1")]
+fn tc_293_gitsign_outcomes_map_to_statuses_mismatches_and_reasons() {
+    let id = identity();
+    let (valid, asked) = gitsign(Some(&id), false, &[(Probe::Exact, Run::Exit(0))]);
+    assert_eq!(valid.status, Status::SignedValid);
+    assert_eq!(valid.signature_kind, Some(SignatureKind::Gitsign));
+    assert_eq!(asked, [Probe::Exact]);
+    let signer = valid.signer.expect("signer");
+    assert_eq!(signer.source, SignerSource::Request);
+    assert_eq!(signer.mapping, Mapping::Mapped);
+    assert_eq!(signer.principal.as_deref(), Some("Alice Example"));
+    assert_eq!(
+        valid.certificate.expect("certificate").identity,
+        "alice@example.test"
+    );
+
+    let wild = (Probe::AnyIdentityAnyIssuer, Run::Exit(0));
+    let cases = [
+        (Run::Exit(0), Run::Exit(1), Mismatch::Issuer, 3),
+        (Run::Exit(1), Run::Exit(0), Mismatch::Identity, 4),
+        (Run::Exit(1), Run::Exit(1), Mismatch::IdentityAndIssuer, 4),
+    ];
+    for (issuer, identity_probe, mismatch, count) in cases {
+        let (verdict, asked) = gitsign(
+            Some(&id),
+            false,
+            &[
+                (Probe::Exact, Run::Exit(1)),
+                wild,
+                (Probe::ExactIdentityAnyIssuer, issuer),
+                (Probe::AnyIdentityExactIssuer, identity_probe),
+            ],
+        );
+        assert_eq!(verdict.status, Status::SignedUntrusted);
+        assert_eq!(verdict.mismatch, Some(mismatch));
+        assert_eq!(verdict.certificate, None);
+        assert_eq!(verdict.signer.expect("signer").mapping, Mapping::Unmapped);
+        assert_eq!(asked.len(), count);
+    }
+
+    let unverifiable = |outcomes: &[(Probe, Run)], reason| {
+        let (verdict, _) = gitsign(Some(&id), false, outcomes);
+        assert_eq!(verdict.status, Status::Unverifiable, "{outcomes:?}");
+        assert_eq!(verdict.reason, Some(reason), "{outcomes:?}");
+        assert_eq!(verdict.signer, None);
+    };
+    let failed = Reason::GitsignVerificationFailed;
+    unverifiable(
+        &[
+            (Probe::Exact, Run::Exit(1)),
+            (Probe::AnyIdentityAnyIssuer, Run::Exit(1)),
+        ],
+        failed,
+    );
+    unverifiable(&[(Probe::Exact, Run::Exit(2))], failed);
+    unverifiable(&[(Probe::Exact, Run::Exit(-1))], failed);
+    unverifiable(
+        &[
+            (Probe::Exact, Run::Exit(1)),
+            (Probe::AnyIdentityAnyIssuer, Run::Exit(2)),
+        ],
+        failed,
+    );
+    unverifiable(
+        &[(Probe::Exact, Run::NotStarted)],
+        Reason::GitsignNotStarted,
+    );
+    unverifiable(&[(Probe::Exact, Run::TimedOut)], Reason::Timeout);
+    unverifiable(&[(Probe::Exact, Run::CutShort)], Reason::OutputExceeded);
+    unverifiable(
+        &[(Probe::Exact, Run::Unobserved)],
+        Reason::UnrecognizedOutput,
+    );
+    unverifiable(
+        &[
+            (Probe::Exact, Run::Exit(1)),
+            wild,
+            (Probe::ExactIdentityAnyIssuer, Run::Exit(1)),
+            (Probe::AnyIdentityExactIssuer, Run::TimedOut),
+        ],
+        Reason::Timeout,
+    );
+
+    // No identity or a repository `gitsign.*` key: nothing is run, never valid.
+    let (missing, asked) = gitsign(None, false, &[(Probe::Exact, Run::Exit(0))]);
+    assert_eq!(missing.reason, Some(Reason::GitsignIdentityMissing));
+    assert!(asked.is_empty());
+    let (configured, asked) = gitsign(Some(&id), true, &[(Probe::Exact, Run::Exit(0))]);
+    assert_eq!(configured.status, Status::Unverifiable);
+    assert_eq!(configured.reason, Some(Reason::GitsignRepositoryConfig));
+    assert!(asked.is_empty());
+}
+
+#[test]
+#[trace("TC-294", "FR-040-AC-9")]
+fn tc_294_cms_headers_are_detected_and_mixed_formats_are_unsupported() {
+    let cms = "-----BEGIN SIGNED MESSAGE-----";
+    let ssh = "-----BEGIN SSH SIGNATURE-----";
+    let object = |headers: &[(&str, &str)]| {
+        let mut text = String::from("tree t\nauthor a\n");
+        for (name, value) in headers {
+            text.extend([name, " ", value, "\n AAAA\n"]);
+        }
+        text.push_str("\nmessage\n");
+        text.into_bytes()
+    };
+    let format = |headers: &[(&str, &str)]| commit_signature_format(&object(headers));
+    assert_eq!(format(&[("gpgsig", cms)]), Some(SignatureFormat::Cms));
+    assert_eq!(
+        format(&[("gpgsig", "-----BEGIN SIGNED MESSAGE----- trailing")]),
+        Some(SignatureFormat::Cms)
+    );
+    assert_eq!(
+        format(&[("gpgsig", cms), ("gpgsig-sha256", cms)]),
+        Some(SignatureFormat::Cms)
+    );
+    assert_eq!(
+        format(&[("gpgsig", cms), ("gpgsig-sha256", ssh)]),
+        Some(SignatureFormat::Other)
+    );
+    assert_eq!(
+        format(&[("gpgsig", ssh), ("gpgsig-sha256", cms)]),
+        Some(SignatureFormat::Other)
+    );
+    assert_eq!(format(&[("gpgsig", ssh)]), Some(SignatureFormat::Ssh));
+    let tag = format!("object o\n\nmsg\n{cms}\nAAAA\n");
+    let split = split_tag_object(tag.as_bytes()).expect("signature");
+    assert_eq!(split.format, SignatureFormat::Cms);
+}
+
+#[test]
+#[trace("TC-296", "FR-040-AC-11")]
+fn tc_296_gitsign_identity_values_are_bounded() {
+    let make = |identity: &str, issuer: &str, principal: &str| {
+        GitsignIdentity::new(identity.to_owned(), issuer.to_owned(), principal.to_owned())
+    };
+    assert!(make("a", "issuer", "p").is_some());
+    assert!(make(&"x".repeat(256), "i", &"p".repeat(256)).is_some());
+    for (identity, issuer, principal) in [
+        ("", "i", "p"),
+        ("a", "", "p"),
+        ("a", "i", ""),
+        ("-a", "i", "p"),
+        ("a", "-i", "p"),
+        ("a\n", "i", "p"),
+        ("a", "i\u{7}", "p"),
+        ("a", "i", "p\u{7}"),
+    ] {
+        assert!(make(identity, issuer, principal).is_none(), "{identity:?}");
+    }
+    assert!(make(&"x".repeat(257), "i", "p").is_none());
+    assert!(make("a", &"x".repeat(257), "p").is_none());
+    assert!(make("a", "i", &"x".repeat(257)).is_none());
+    // A principal may begin with `-`: it is never an argument.
+    assert!(make("a", "i", "-p").is_some());
 }
