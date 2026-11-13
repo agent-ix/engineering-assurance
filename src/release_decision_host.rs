@@ -35,13 +35,15 @@ const REQUEST_PROTOCOL: &str = "engineering-assurance.release-decision-request/v
 const RESULT_PROTOCOL: &str = "engineering-assurance.release-decision-result/v1";
 const WORKFLOW: &str = "release-decision";
 const WORKFLOW_VERSION: &str = "0.1.0";
+const PRESENTATION_LIMIT: usize = 2 * 1024 * 1024;
 const NOT_PROVIDED: &str = "not provided";
 /// The largest supplied file read.
 const MAX_INPUT_BYTES: u64 = 1024 * 1024;
-/// The largest presentation after JSON escaping. ix-flow answers every command
-/// with the run's items, and the host reads at most 16 MiB of that answer, so a
-/// larger item would leave a run no command can read again.
-const MAX_PRESENTATION_BYTES: usize = 3 * 1024 * 1024;
+/// The largest presentation as ix-flow prints it. ix-flow pretty-prints its
+/// answers, and every answer carries the run's items (and the add-item event)
+/// at some depth, while the host reads at most 16 MiB of an answer. A larger
+/// item would leave a run no command can read again.
+const MAX_PRESENTATION_BYTES: usize = PRESENTATION_LIMIT;
 /// The closed Evidence Status vocabulary of `ix://agent-ix/quoin/FR-115`.
 const EVIDENCE_STATUSES: [&str; 5] = [
     "bound",
@@ -78,7 +80,7 @@ pub(crate) enum ReleaseDecisionError {
     #[error("Baseline items are absent at the baseline commit: {paths:?}")]
     BaselineItemAbsent { paths: Vec<String> },
     #[error(
-        "the presentation is {observed} bytes after JSON escaping; the limit is {MAX_PRESENTATION_BYTES}"
+        "the presentation is {observed} bytes as ix-flow prints it; the limit is {MAX_PRESENTATION_BYTES}"
     )]
     PresentationTooLarge { observed: usize },
     #[error("the run already holds a different release decision: {detail}")]
@@ -444,11 +446,20 @@ fn gather(request: &Request) -> Result<Value, ReleaseDecisionError> {
         "anomalies": anomalies,
         "snapshot": {"snapshot_path": request.snapshot_path, "file": snapshot_file},
     });
-    let observed = serde_json::to_vec(&presentation).map_or(usize::MAX, |bytes| bytes.len());
+    let observed = printed_size(&presentation);
     if observed > MAX_PRESENTATION_BYTES {
         return Err(ReleaseDecisionError::PresentationTooLarge { observed });
     }
     Ok(presentation)
+}
+
+/// The size of `presentation` as ix-flow prints it: two-space indented, at the
+/// depth it has inside an answer (`data.items.<kind>[]`).
+fn printed_size(presentation: &Value) -> usize {
+    serde_json::to_vec_pretty(&json!({
+        "data": {"items": {"release_presentation": [presentation]}}
+    }))
+    .map_or(usize::MAX, |bytes| bytes.len())
 }
 
 fn unreadable(file: &str, detail: &str) -> ReleaseDecisionError {
@@ -597,7 +608,9 @@ fn release_outcome(
         }
     }
     let stored = run.items("release_outcome")?.first().cloned();
-    let released = run.phase()? == "released";
+    // Once the owner's gate is acknowledged, or the run has left the gate, the
+    // outcome is fixed: a repeat can read it and nothing can write it.
+    let fixed = run.phase()? != "decision_ready" || run.terminal_acknowledged("released")?;
     if let Some(stored) = &stored {
         let same = text_at(stored, &["meaning"]) == meaning
             && stored["accepted_anomalies"].as_array().is_some_and(|ids| {
@@ -612,11 +625,21 @@ fn release_outcome(
                 tag_message: text_at(stored, &["tag_message"]).to_owned(),
             });
         }
-        if released {
+        if fixed {
             return Err(ReleaseDecisionError::DecisionChanged {
                 detail: "the meaning or the accepted anomaly ids differ from the acknowledged choice",
             });
         }
+    }
+    if fixed {
+        // A run past its gate, or with the gate acknowledged, that holds no
+        // outcome to repeat takes no release choice, and nothing is written.
+        return Err(ReleaseDecisionError::Workflow(
+            WorkflowHostError::DecisionConflict {
+                detail: "the run has no release outcome to repeat and its gate is closed"
+                    .to_owned(),
+            },
+        ));
     }
     let release = prepare_release(request, run, presentation, &wanted)?;
     let item = json!({

@@ -51,11 +51,13 @@ pub enum InvariantName {
     ChangeReviewReady,
     /// Require a retained presentation of the release candidate.
     ReleasePresentationReady,
+    /// Require the stored outcome of the owner's release choice.
+    ReleaseOutcomeReady,
 }
 
 impl InvariantName {
     /// Every invariant in canonical registration order.
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::SharedObservationReady,
         Self::SharedTerminalGates,
         Self::SharedExceptionsReady,
@@ -68,6 +70,7 @@ impl InvariantName {
         Self::ChangeSnapshotReady,
         Self::ChangeReviewReady,
         Self::ReleasePresentationReady,
+        Self::ReleaseOutcomeReady,
     ];
 
     /// Return the canonical ix-flow registration name.
@@ -86,6 +89,7 @@ impl InvariantName {
             Self::ChangeSnapshotReady => "change.snapshot_ready",
             Self::ChangeReviewReady => "change.review_ready",
             Self::ReleasePresentationReady => "release.presentation_ready",
+            Self::ReleaseOutcomeReady => "release.outcome_ready",
         }
     }
 }
@@ -219,6 +223,8 @@ pub enum InvariantFailureCode {
     CodeReviewMissing,
     /// The release candidate has no retained presentation.
     ReleasePresentationMissing,
+    /// The owner's release choice has no stored outcome.
+    ReleaseOutcomeMissing,
 }
 
 /// Structured details carried by the failure families that need them.
@@ -803,6 +809,7 @@ fn evaluate_one(
         InvariantName::ChangeSnapshotReady => change_snapshot_ready(instance, evaluated_at),
         InvariantName::ChangeReviewReady => change_review_ready(instance),
         InvariantName::ReleasePresentationReady => release_presentation_ready(instance),
+        InvariantName::ReleaseOutcomeReady => release_outcome_ready(instance),
     };
     match failure {
         None => InvariantVerdict::Passed,
@@ -1242,6 +1249,20 @@ fn release_presentation_ready(instance: &InvariantProjection) -> Option<Failure>
     });
     (items.release_request.is_empty() || !presented).then_some((
         InvariantFailureCode::ReleasePresentationMissing,
+        InvariantFailureDetails::default(),
+    ))
+}
+
+fn release_outcome_ready(instance: &InvariantProjection) -> Option<Failure> {
+    let text = |item: &Value, member: &str| nonempty(item.get(member).and_then(Value::as_str));
+    let stored = instance.items.release_outcome.iter().any(|item| {
+        ["id", "meaning", "document", "record_path", "tag_message"]
+            .iter()
+            .all(|member| text(item, member))
+            && item.get("accepted_anomalies").is_some_and(Value::is_array)
+    });
+    (!stored).then_some((
+        InvariantFailureCode::ReleaseOutcomeMissing,
         InvariantFailureDetails::default(),
     ))
 }

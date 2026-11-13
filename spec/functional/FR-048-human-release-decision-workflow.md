@@ -87,8 +87,8 @@ scheduled, or agent-made release choice; signing; pushing the tag.
 
 ## Outputs
 
-- The review presentation above, retained with the run. Its size after JSON escaping is bounded (3 MiB) so that the
-  run stays readable by every later command.
+- The review presentation above, retained with the run. Its size as the workflow engine prints it (indented, at the depth it has in an
+  answer) is bounded (2 MiB) so that the run stays readable by every later command.
 - On `release`: the Release document (decision owner, baseline commit,
   `snapshot_path` and accepted anomaly ids), the repository-relative `record_path` the owner is to
   commit it at, and the tag message text (subject paragraph, `Approved-Record-Id`,
@@ -133,9 +133,11 @@ scheduled, or agent-made release choice; signing; pushing the tag.
   workflow SHALL refuse it with `release_decision_changed` and change no state.
 - If a `decide` request names a run that does not exist, then the workflow SHALL refuse it with
   `workflow_run_not_found` and create no run.
-- The workflow SHALL NOT accept a release choice for a run that has no retained presentation, whether the run is driven
-  by the workflow command or by the generic workflow host.
-- If a supplied input file is not a regular file, is larger than 1 MiB, or would make the escaped presentation larger
+- The workflow SHALL NOT accept a release choice for a run that has no retained presentation, and the gate into
+  `released` SHALL NOT open for a run that has no stored release outcome, whether the run is driven by the workflow
+  command or by the generic workflow host.
+- A refused `release` choice SHALL change no state, and the outcome SHALL be stored only while the gate is unacknowledged.
+- If a supplied input file is not a regular file, is larger than 1 MiB, or would make the printed presentation larger
   than its bound, then the workflow SHALL refuse with `release_input_unreadable` naming the file, or with
   `release_presentation_too_large`, before it changes the run.
 - If `snapshot_path` exists at the baseline commit, then the workflow SHALL refuse the `release` choice with
@@ -168,7 +170,7 @@ scheduled, or agent-made release choice; signing; pushing the tag.
 | FR-048-AC-12 | A supplied snapshot file is presented verbatim and unparsed with its `snapshot_path`, and an unsupplied one is shown "not provided". | Test |
 | FR-048-AC-13 | A repeated `release` choice returns the Release document, `record_path` and tag message retained when the choice was acknowledged, and a repeat whose `meaning` or accepted anomaly ids differ is refused with `release_decision_changed` and changes no state. | Test |
 | FR-048-AC-14 | Neither the workflow command nor the generic workflow host takes a run with no retained presentation past `evidence_ready` or to `released`, and the Rust and JavaScript invariant evaluators agree on the presentation invariant. | Test |
-| FR-048-AC-15 | A `decide` on a run id that does not exist creates no run; a supplied file that is a FIFO, not UTF-8 or over 1 MiB is refused naming the file; a presentation over its escaped bound is refused before the run changes, and one just under it stays decidable. | Test |
+| FR-048-AC-15 | A `decide` on a run id that does not exist creates no run; a supplied file that is a FIFO, not UTF-8 or over 1 MiB is refused naming the file; a presentation over its printed bound, by escaping or by nesting, is refused before the run changes, and one just under it stays decidable. | Test |
 | FR-048-AC-16 | A `release` choice is refused, writing no Release document, when a Baseline item is absent at the baseline commit (`baseline_item_absent`) or `record_path` exists at it (`record_path_present_at_baseline`); `reject` stays available. | Test |
 | FR-048-AC-17 | A non-empty `unreadable` list of the supplied anomaly report is shown, a `release` that does not name each entry's `path` as accepted is refused, and each supplied Quoin document is presented verbatim. | Test |
 

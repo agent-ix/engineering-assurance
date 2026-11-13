@@ -224,9 +224,13 @@ fn passing_workflow_cases() -> Vec<(Value, Vec<&'static str>)> {
             workflow_projection(
                 "release-decision",
                 &["decision_ready->released", "decision_ready->rejected"],
-                &["release_request", "release_presentation"],
+                &["release_request", "release_presentation", "release_outcome"],
             ),
-            vec!["shared.terminal_gates", "release.presentation_ready"],
+            vec![
+                "shared.terminal_gates",
+                "release.presentation_ready",
+                "release.outcome_ready",
+            ],
         ),
     ]
 }
@@ -284,6 +288,21 @@ fn tc_106_failure_codes_and_time_boundaries_match_the_reference() {
         );
         assert_parity(&request(&partial, &["release.presentation_ready"]));
     }
+
+    let mut outcome = workflow_projection(
+        "release-decision",
+        &["decision_ready->released", "decision_ready->rejected"],
+        &["release_request", "release_presentation", "release_outcome"],
+    );
+    assert_parity(&request(&outcome, &["release.outcome_ready"]));
+    outcome["items"]["release_outcome"][0]["document"] = json!("");
+    assert_failed(
+        &request(&outcome, &["release.outcome_ready"]),
+        &["release_outcome_missing"],
+    );
+    assert_parity(&request(&outcome, &["release.outcome_ready"]));
+    outcome["items"]["release_outcome"] = json!([]);
+    assert_parity(&request(&outcome, &["release.outcome_ready"]));
 
     let mut expired = workflow_projection(
         "assurance-intake",

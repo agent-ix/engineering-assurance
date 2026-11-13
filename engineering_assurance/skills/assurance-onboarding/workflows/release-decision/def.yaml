@@ -17,7 +17,7 @@ transitions:
     to: decision_ready
     invariants: ["release.presentation_ready", "shared.terminal_gates"]
     defaultGate: auto
-  - { from: decision_ready, to: released, invariants: ["release.presentation_ready"], defaultGate: hitl }
+  - { from: decision_ready, to: released, invariants: ["release.presentation_ready", "release.outcome_ready"], defaultGate: hitl }
   - { from: decision_ready, to: rejected, invariants: [], defaultGate: hitl }
 itemSchemas:
   run_binding:

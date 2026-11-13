@@ -1059,6 +1059,17 @@ impl BoundRun {
         snapshot(&self.envelope)
     }
 
+    /// Whether the gate into the terminal phase `outcome` has been
+    /// acknowledged, whether or not the run has advanced into it yet.
+    pub(crate) fn terminal_acknowledged(&self, outcome: &str) -> Result<bool, WorkflowHostError> {
+        let key = format!("decision_ready->{outcome}");
+        Ok(self
+            .data()?
+            .satisfied_gates
+            .iter()
+            .any(|gate| gate.transition_key == key))
+    }
+
     fn mutate(&mut self, arguments: &[OsString], operation: &str) -> Result<(), WorkflowHostError> {
         verify_chain(
             &self.executable,

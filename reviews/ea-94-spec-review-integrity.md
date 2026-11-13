@@ -32,3 +32,10 @@ FR-007 judgement: making `release-decision` canonical-only fits FR-007-CON-1 and
 ## Verdict
 
 Spec inconsistency introduced by the PR: FND-001 is high and blocks merge until the population requirements are amended alongside the code. FND-002 is a low FR-048 amendment.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified on head 46b9e93: FR-002-AC-3: Canonical workflow discovery returns exactly the five promoted workflow names. FR-007-AC-2: For each pilot workflow name, pilot and canonical discovery yield equivalent ...; a canonical workflow promoted after the pilot path was frozen (`release-decision`) has no pilot copy. NFR-001-AC-2: All five promoted workflows ... FR-017: exactly the five declared canonical workflows and the four declared pilot workflows. |
+| FND-002 | fixed | Verified on head 46b9e93: - At presentation: the Release document `release_id` (`REL-` and digits, the id the Release schema requires) and the   repository-relative `record_path` the owner is to commit the Release document at, which differs from `snapshot_path`. - With the `release` choice: the `meaning`, the text of the `Signed-off-meaning:` trailer, which the owner states   because the tag has no default meaning ([FR-037](./FR-037-signer-mapping-and-signed-off-meaning.md)), and the   accepted anomaly ids. - Optional files, each a regular file of at most 1 MiB: evidence status, SOUP report, anomaly list, and the snaps |

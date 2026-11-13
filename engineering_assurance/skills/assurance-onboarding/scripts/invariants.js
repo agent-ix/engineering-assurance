@@ -327,6 +327,20 @@ const releasePresentationReady = ({ instance }) =>
     ? true
     : failure("release_presentation_missing");
 
+// A release is acknowledged only over the outcome the owner's choice produced.
+const releaseOutcomeReady = ({ instance }) =>
+  values(instance, "release_outcome").some(
+    (item) =>
+      nonempty(item.id) &&
+      nonempty(item.meaning) &&
+      nonempty(item.document) &&
+      nonempty(item.record_path) &&
+      nonempty(item.tag_message) &&
+      Array.isArray(item.accepted_anomalies),
+  )
+    ? true
+    : failure("release_outcome_missing");
+
 export const invariants = {
   "shared.observation_ready": observationReady,
   "shared.terminal_gates": terminalGates,
@@ -340,4 +354,5 @@ export const invariants = {
   "change.snapshot_ready": changeSnapshotReady,
   "change.review_ready": changeReviewReady,
   "release.presentation_ready": releasePresentationReady,
+  "release.outcome_ready": releaseOutcomeReady,
 };

@@ -839,9 +839,20 @@ fn tc_463_the_generic_workflow_host_cannot_reach_released_without_a_presentation
     assert_eq!(acknowledgements(&fixture, "run-generic"), 0);
 }
 
+/// A JSON document whose `pad` member nests `count` zeros `depth` deep: small
+/// compact, large once an indenting printer gives each zero its own indented line.
+fn nested_evidence(count: usize, depth: usize) -> String {
+    format!(
+        "{{\"requirements\":[],\"pad\":{}{}0{}}}",
+        "[".repeat(depth),
+        "0,".repeat(count),
+        "]".repeat(depth)
+    )
+}
+
 #[test]
 #[trace("TC-464", "FR-048-AC-15")]
-fn tc_464_the_escaped_presentation_is_bounded_so_no_input_can_wedge_a_run() {
+fn tc_464_the_printed_presentation_is_bounded_so_no_input_can_wedge_a_run() {
     let fixture = fixture();
     // 700 KiB of U+0001 is within the file limit and 4.2 MiB once escaped.
     let heavy = "\u{1}".repeat(700 * 1024);
@@ -855,11 +866,27 @@ fn tc_464_the_escaped_presentation_is_bounded_so_no_input_can_wedge_a_run() {
     let value = refused(&request, "release_input_unreadable");
     assert!(value["message"].as_str().expect("message").contains(&huge));
 
-    // Just under the bound the run is presented and still decidable.
-    let allowed = "\u{1}".repeat(480 * 1024);
-    let mut request = present_request(&fixture, "run-near");
-    request["snapshot_file"] = json!(fixture.input("near.txt", &allowed));
-    ok(&request);
+    // A 1 MiB file of zeros nested 20 deep is small compact but huge as ix-flow
+    // prints it; it is refused before the run changes.
+    let mut nested = present_request(&fixture, "run-nested");
+    nested["evidence_status"] = json!(fixture.input("nested.json", &nested_evidence(500_000, 20)));
+    refused(&nested, "release_presentation_too_large");
+    assert_eq!(phase(&fixture, "run-nested"), "capture");
+    let status = ix_flow(&fixture, &["status", "run-nested"]);
+    assert_eq!(status["data"]["items"]["release_presentation"], Value::Null);
+
+    // Just under the bound, whether by escaping or by nesting, the run is
+    // presented, ix-flow can still print it in full, and it is still decidable.
+    let mut near = present_request(&fixture, "run-near");
+    near["snapshot_file"] = json!(fixture.input("near.txt", &"\u{1}".repeat(150 * 1024)));
+    near["evidence_status"] = json!(fixture.input("near.json", &nested_evidence(20_000, 20)));
+    ok(&near);
+    let printed = Command::new("ix-flow")
+        .args(["status", "run-near", "--json", "--state-dir"])
+        .arg(fixture.state())
+        .output()
+        .expect("ix-flow");
+    assert!(printed.stdout.len() < 16 * 1024 * 1024);
     let decided = ok(&decide_request(&fixture, "run-near", Some("reject")));
     assert_eq!(decided["decision"]["outcome"], "rejected");
 }
@@ -1021,4 +1048,129 @@ fn tc_469_an_unreadable_anomaly_document_is_shown_and_must_be_named_as_accepted(
             .expect("document")
             .contains("accepted_anomalies:\n  - \"spec/anomalies/AN-9.md\"\n")
     );
+}
+
+/// A run presented with two anomalies and nothing accepted.
+fn presented_with_anomalies(fixture: &Fixture, run: &str) {
+    present_all(fixture, run, ANOMALIES);
+}
+
+#[test]
+#[trace("TC-471", "FR-048-AC-14")]
+fn tc_471_the_generic_host_cannot_release_a_presented_run_without_a_stored_outcome() {
+    let fixture = fixture();
+    presented_with_anomalies(&fixture, "run-generic-presented");
+    let binding = json!({
+        "run_id": "run-generic-presented",
+        "repository_id": fixture.repo(),
+        "workflow": "release-decision",
+        "workflow_version": "0.1.0",
+        "decision_boundary": serde_json::to_string(&json!({
+            "baseline_path": BASELINE_PATH,
+            "baseline_commit": fixture.baseline,
+            "snapshot_path": SNAPSHOT_PATH,
+        })).expect("boundary"),
+        "decision_owner": OWNER,
+    });
+    let before = tree_snapshot(&fixture.state());
+    let (output, value) = command(
+        "workflow-host",
+        &json!({
+            "protocol": "engineering-assurance.workflow-host/v1",
+            "operation": "decide",
+            "state_dir": fixture.state(),
+            "skill_root": skill_root(),
+            "ix_flow_executable": "ix-flow",
+            "binding": binding,
+            "choice": "release",
+        }),
+    );
+    assert_eq!(output.status.code(), Some(2), "{value}");
+    assert_eq!(tree_snapshot(&fixture.state()), before);
+    assert_eq!(phase(&fixture, "run-generic-presented"), "decision_ready");
+    assert_eq!(acknowledgements(&fixture, "run-generic-presented"), 0);
+    // Nor can the terminal be reached with a raw advance.
+    let blocked = ix_flow(&fixture, &["advance", "run-generic-presented", "released"]);
+    assert_eq!(
+        blocked["error"]["details"]["invariantCode"], "release_outcome_missing",
+        "{blocked}"
+    );
+    assert_eq!(phase(&fixture, "run-generic-presented"), "decision_ready");
+}
+
+#[test]
+#[trace("TC-472", "FR-048-AC-13")]
+fn tc_472_a_refused_release_on_a_rejected_run_changes_no_state() {
+    let fixture = fixture();
+    presented_with_anomalies(&fixture, "run-rejected");
+    ok(&decide_request(&fixture, "run-rejected", Some("reject")));
+    let before = tree_snapshot(&fixture.state());
+    let mut request = decide_request(&fixture, "run-rejected", Some("release"));
+    request["accepted_anomalies"] = json!(["ANOM-1", "ANOM-2"]);
+    refused(&request, "workflow_decision_conflict");
+    assert_eq!(tree_snapshot(&fixture.state()), before);
+    let status = ix_flow(&fixture, &["status", "run-rejected"]);
+    assert_eq!(status["data"]["items"]["release_outcome"], Value::Null);
+}
+
+#[test]
+#[trace("TC-473", "FR-048-AC-13")]
+fn tc_473_the_outcome_is_fixed_once_the_gate_is_acknowledged_even_before_the_terminal_advance() {
+    let fixture = fixture();
+    present_all(&fixture, "run-interrupted", r#"{"anomalies":[]}"#);
+    // The state an interruption leaves: the outcome stored, the gate
+    // acknowledged by the owner, the terminal advance not made.
+    let outcome = json!({
+        "id": "outcome",
+        "meaning": "first meaning",
+        "accepted_anomalies": [],
+        "document": "---\nid: REL-1\n---\n",
+        "record_path": RECORD_PATH,
+        "tag_message": "Release x\n",
+    })
+    .to_string();
+    ix_flow(
+        &fixture,
+        &[
+            "add-item",
+            "run-interrupted",
+            "release_outcome",
+            "--item",
+            &outcome,
+        ],
+    );
+    let gate = ix_flow(&fixture, &["advance", "run-interrupted", "released"]);
+    let token = gate["open_gates"][0]["token"]
+        .as_str()
+        .expect("gate token")
+        .to_owned();
+    let acked = ix_flow(
+        &fixture,
+        &[
+            "ack",
+            "run-interrupted",
+            &token,
+            "--reviewer",
+            OWNER,
+            "--kind",
+            "decision",
+            "--note",
+            "release",
+        ],
+    );
+    assert_eq!(acked["ok"], true, "{acked}");
+    assert_eq!(phase(&fixture, "run-interrupted"), "decision_ready");
+
+    let before = tree_snapshot(&fixture.state());
+    let mut changed = decide_request(&fixture, "run-interrupted", Some("release"));
+    changed["meaning"] = json!("second meaning");
+    refused(&changed, "release_decision_changed");
+    assert_eq!(tree_snapshot(&fixture.state()), before);
+
+    // The unchanged choice completes the interrupted advance with the stored outcome.
+    let mut same = decide_request(&fixture, "run-interrupted", Some("release"));
+    same["meaning"] = json!("first meaning");
+    let decided = ok(&same);
+    assert_eq!(decided["decision"]["outcome"], "released");
+    assert_eq!(decided["release"]["tag_message"], "Release x\n");
 }

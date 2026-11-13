@@ -32,3 +32,12 @@ FR-005 reuse holds, and so do FR-049 (files only, Quoin not invoked) and FR-053 
 ## Verdict
 
 All twelve FR-048 ACs are tagged, bound correctly and able to fail. The gaps are in the presentation's faithfulness to the Quoin inputs (FND-001 and FND-002, medium, each needing an FR-048 amendment plus code) and two lows.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified on head 46b9e93:     let soup_report = supplied(request.soup_report.as_deref(), \|source, document\| {         for row in array_member(source, &document, "rows")? {             string_member(source, row, "purl")?;         }         Ok(json!({"document": document}))     })?; |
+| FND-002 | fixed | Verified on head 46b9e93:         let unreadable_entries = match document.get("unreadable") {             None => Vec::new(),             Some(entries) => entries                 .as_array()                 .ok_or_else(\|\| unreadable(source, "the unreadable member is not a list"))?                 .iter()                 .map(\|entry\| {                     let path = string_member(source, entry, "path")?;                     Ok(json!({"path": path, "code": entry.get("code")}))                 })                 .collect::<Result<Vec<_>, ReleaseDecisionError>>()?,         };         Ok(json!({"items": items, "unreadable": |
+| FND-003 | fixed | Verified on head 46b9e93:     let absent: Vec<String> = presentation["baseline"]["items"]         .as_array()         .into_iter()         .flatten()         .filter(\|item\| item["present"] == false)         .filter_map(\|item\| item["path"].as_str().map(str::to_owned))         .collect();     if !absent.is_empty() {         return Err(ReleaseDecisionError::BaselineItemAbsent { paths: absent });     }     let stored = run         .items("release_request")?         .first()         .ok_or(ReleaseDecisionError::PresentationMissing)?;     let release_id = text_at(stored, &["release_id"]);     let record_path = text_at(stored |
+| FND-004 | fixed | Verified on head 46b9e93: tc_465_a_fifo_or_non_utf8_input_is_unreadable_and_never_hangs; tc_468_an_interrupted_run_resumes_from_evidence_ready |
