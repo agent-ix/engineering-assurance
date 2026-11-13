@@ -42,13 +42,17 @@ would add a second record kind to a writer that exists to compose one message,
 which the plain git command and the verifier already cover. FR-042 is unchanged.
 
 The release record is committed after the baseline commit, in a release commit
-whose single parent is the baseline commit and whose only change is the
-addition of the record file at `record_path`. The tag points at that release
-commit, so the tag's tree is the baseline plus the record and nothing else.
+whose single parent is the baseline commit and whose only changes are the
+addition of the record file at `record_path` and of the release evidence
+snapshot at `snapshot_path`
+([FR-051](./FR-051-release-evidence-snapshot-placement.md), which gives the
+reason the snapshot rides in the same commit). The tag points at that release
+commit, so the tag's tree is the baseline plus the record and the snapshot and
+nothing else.
 The record digest that binds the tag to the record is the object id git reports
 for `<release commit>:<record_path>`, written `git-blob:` followed by that id;
 Engineering Assurance reads it from git and computes no hash. The commit hash
-of the release commit already fixes the record bytes, so the baseline is
+of the release commit already fixes the record and snapshot bytes, so the baseline is
 identified by its commit hash alone.
 
 Out of scope: creating the tag, the release commit or any ref, deciding who
@@ -65,7 +69,9 @@ signature.
 - One Release document with a closed frontmatter schema: `id`, `title`,
   `type: Release`, `name`, `baseline` (an object with `path`, the
   repository-relative path of the Baseline file, and `commit`, the full commit
-  hash), `decision_owner` (a non-empty name that must equal the principal the
+  hash), `snapshot_path` (the repository-relative path of the release evidence
+  snapshot, with the path rules of a Baseline item and different from the
+  request's `record_path`), `decision_owner` (a non-empty name that must equal the principal the
   trust input maps the signing key to) and optional `accepted_anomalies` (a
   list of strings).
 
@@ -77,11 +83,11 @@ signature.
   FR-041 status other than `approved`, `record_unreadable`, `record_invalid`,
   `baseline_commit_unknown`, `baseline_file_absent`, `baseline_file_invalid`,
   `release_commit_not_child_of_baseline`, `release_commit_changes_other_paths`, `release_commit_record_not_added`,
-  `baseline_item_absent`, `decision_owner_mismatch`.
+  `release_commit_snapshot_not_added`, `baseline_item_absent`, `decision_owner_mismatch`.
 - The `approval` member, the unchanged FR-041 result for the tag, whenever the
   record was readable and valid; it is absent, and FR-041 is not run, when the
   reasons include `record_unreadable` or `record_invalid`.
-- On `released` only: `release` (record `id`, `name`), `baseline` (`name`,
+- On `released` only: `release` (record `id`, `name`, `snapshot_path`), `baseline` (`name`,
   `commit`, and each item `path`, `kind`), `approver`, `meaning`, `signed_at`
   with its source, and `accepted_anomalies`.
 - A request that yields no verdict writes the `engineering-assurance.error/v1`
@@ -106,10 +112,12 @@ signature.
   report `baseline_commit_unknown`.
 - If the release commit does not have exactly one parent equal to the baseline
   commit, then the command SHALL report `release_commit_not_child_of_baseline`.
-- If the release commit changes any path other than `record_path`, then the
+- If the release commit changes any path other than `record_path` and `snapshot_path`, then the
   command SHALL report `release_commit_changes_other_paths`.
 - If the release commit does not add `record_path`, then the command SHALL
   report `release_commit_record_not_added`.
+- If the release commit does not add `snapshot_path`, then the command SHALL
+  report `release_commit_snapshot_not_added`.
 - The command SHALL report `released` only when the FR-041 status is
   `approved` and every other check passes.
 - The command SHALL report every failing check it can evaluate.
@@ -138,12 +146,12 @@ signature.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-047-AC-1 | A tag signed by the key the allowed-signers file maps to the record's `decision_owner`, whose message carries the record id, the `git-blob:` id of the record at the release commit and a `Signed-off-meaning` trailer, on a release commit that is the single child of the baseline commit and adds only the record, with all baseline items present, yields `released` with `approver`, `meaning`, `signed_at` and the baseline items. | Test |
+| FR-047-AC-1 | A tag signed by the key the allowed-signers file maps to the record's `decision_owner`, whose message carries the record id, the `git-blob:` id of the record at the release commit and a `Signed-off-meaning` trailer, on a release commit that is the single child of the baseline commit and adds only the record and the snapshot, with all baseline items present, yields `released` with `approver`, `meaning`, `signed_at` and the baseline items. | Test |
 | FR-047-AC-2 | A tag whose message carries the `git-blob:` id of a different version of the record (a record edited and recommitted after the message was composed, with the tag moved to the new release commit) yields `not_released` with FR-041 status `wrong_record` and `binding.record_digest` `mismatch`. | Test |
 | FR-047-AC-3 | A tag signed by a mapped principal that differs from `decision_owner` yields `not_released` with reason `decision_owner_mismatch` and no `release` member. | Test |
 | FR-047-AC-4 | An unsigned annotated tag, a lightweight tag, a bad signature, an unmapped key and a tag with no `Signed-off-meaning` each yield `not_released` carrying the corresponding FR-041 status. | Test |
 | FR-047-AC-5 | A baseline commit not in the repository yields `baseline_commit_unknown`; a baseline item path absent at the baseline commit yields `baseline_item_absent` naming the path; a Baseline file absent or invalid at the baseline commit yields `baseline_file_absent` or `baseline_file_invalid`. | Test |
-| FR-047-AC-6 | A release commit with two parents, a different parent, or a parent that is a descendant of the baseline commit yields `release_commit_not_child_of_baseline`; a release commit that also changes another path yields `release_commit_changes_other_paths`; a release commit that does not add `record_path` yields `release_commit_record_not_added`. | Test |
+| FR-047-AC-6 | A release commit with two parents, a different parent, or a parent that is a descendant of the baseline commit yields `release_commit_not_child_of_baseline`; a release commit that also changes a path other than the record and the snapshot yields `release_commit_changes_other_paths`; a release commit that does not add `record_path` yields `release_commit_record_not_added`; a release commit that does not add `snapshot_path` yields `release_commit_snapshot_not_added`. | Test |
 | FR-047-AC-7 | A record whose frontmatter is invalid, or that carries any member outside the closed schema, yields `record_invalid` with no `approval` member; a missing record path at the release commit yields `record_unreadable` with no `approval` member. | Test |
 | FR-047-AC-8 | A record edited only in the working tree after tagging does not change the verdict, which is read from the release commit. | Test |
 | FR-047-AC-9 | A signed commit, a merge commit or a note carrying the record trailers yields `not_released` and never `released`. | Test |
@@ -158,4 +166,5 @@ signature.
   [FR-037](./FR-037-signer-mapping-and-signed-off-meaning.md),
   [FR-041](./FR-041-signed-tag-approval-of-a-change-assurance-record.md).
 - **Downstream**: [FR-048](./FR-048-human-release-decision-workflow.md),
+  [FR-051](./FR-051-release-evidence-snapshot-placement.md),
   [FR-049](./FR-049-release-ownership-split-and-data-contract.md).

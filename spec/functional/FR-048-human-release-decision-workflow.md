@@ -60,19 +60,21 @@ scheduled, or agent-made release choice; signing; pushing the tag.
 
 - The FR-005 inputs: workflow name, stable run id and state directory, and the
   named decision owner with their explicit choice.
-- The Baseline file path, the baseline commit hash, and the repository directory.
+- The Baseline file path, the baseline commit hash, the repository directory and
+  the repository-relative `snapshot_path` the owner is to commit the snapshot at.
 - Optional files: evidence status, SOUP report, anomaly list.
 
 ## Outputs
 
 - The review presentation above, retained with the run.
-- On `release`: the Release document (decision owner, baseline commit and
-  accepted anomaly ids), the repository-relative `record_path` the owner is to
+- On `release`: the Release document (decision owner, baseline commit,
+  `snapshot_path` and accepted anomaly ids), the repository-relative `record_path` the owner is to
   commit it at, and the tag message text (subject paragraph, `Approved-Record-Id`,
   `Signed-off-meaning:` trailer, and the `Approved-Record-Digest` line to be
   completed with the `git-blob:` id of the record at the release commit). The
   workflow ends there. The owner commits the record in a release commit whose
-  single parent is the baseline commit and whose only change is the record,
+  single parent is the baseline commit and whose only changes are the record and
+  the release evidence snapshot ([FR-051](./FR-051-release-evidence-snapshot-placement.md)),
   then signs the annotated tag with `git tag -s` and their own signing
   configuration; `release-verify` ([FR-047](./FR-047-release-record-and-signed-release-tag.md))
   later reports whether that tag is the release.
@@ -117,7 +119,7 @@ scheduled, or agent-made release choice; signing; pushing the tag.
 | FR-048-AC-6 | A `release` choice emits one terminal event with run id, workflow version, owner, choice and timestamp, and the workflow runs no `git tag`, no `git commit`, no signer and no push. | Test |
 | FR-048-AC-7 | Evidence in which every criterion is `bound`, an empty anomaly list or a failed input read never produces a `release` choice. | Test |
 | FR-048-AC-9 | An owner-named accepted anomaly id absent from the supplied anomaly list is refused and no Release document is written; an unreadable input file, or one lacking a presented member, yields `release_input_unreadable` naming the file and leaves the run before the gate. | Test |
-| FR-048-AC-10 | The `release` outcome carries the Release document, `record_path` and the tag message text with the digest line to complete; committing the record as a single child of the baseline commit and signing a tag with that message by `git tag -s` yields `released` from `release-verify`, with no workflow-run git write. | Test |
+| FR-048-AC-10 | The `release` outcome carries the Release document, `record_path` and the tag message text with the digest line to complete; committing the record and the snapshot as a single child of the baseline commit and signing a tag with that message by `git tag -s` yields `released` from `release-verify`, with no workflow-run git write. | Test |
 | FR-048-AC-8 | A run id reused with a different Baseline, baseline commit, repository or owner is refused without changing either run; an interrupted run resumes at its last completed phase. | Test |
 
 ## Dependencies
