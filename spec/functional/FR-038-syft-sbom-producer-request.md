@@ -83,7 +83,7 @@ The Syft producer definition fixes these fields of the request schema
 
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
-| FR-038-CON-1 | The Syft-dependent tests SHALL be ignored by a default `cargo test` and run only through `make syft-integration`, which SHALL exit non-zero with a message naming `EA_TEST_SYFT` when that variable, the absolute path of the Syft binary a test runs, is unset or does not name an executable file; a Syft-dependent test run without it fails rather than skips. The repository holds no Syft binary. | Test integrity | Test |
+| FR-038-CON-1 | If `EA_TEST_SYFT`, the absolute path of the Syft binary a test runs, is unset or does not name an executable file, then `make syft-integration` SHALL exit non-zero with a message naming `EA_TEST_SYFT`. A default `cargo test` does not run the Syft-dependent tests, and the repository holds no Syft binary. | Test integrity | Test |
 
 ## Acceptance Criteria
 
