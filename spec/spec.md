@@ -212,6 +212,8 @@ same canonical bundle and do not redefine these responsibilities.
   signer, signing time and meaning together.
 - [FR-042](./functional/FR-042-create-signed-approval-tag-for-a-change-assurance-record.md) — create a
   signed annotated tag that approves a change-assurance record, signed through the caller's git configuration.
+- [FR-043](./functional/FR-043-approval-trail-of-a-change-assurance-record.md) — list the audit trail of signed
+  approval tags that name a change-assurance record, oldest first by claimed signing time, with every verdict shown.
 
 ### Non-Functional Requirements
 

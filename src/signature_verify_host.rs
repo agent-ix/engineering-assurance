@@ -234,6 +234,71 @@ pub(crate) fn check_tag(
     .tag_checked(revision)
 }
 
+/// The refs under `refs/tags`, as `git for-each-ref` lists them.
+pub(crate) struct TagListing {
+    /// Each examined ref: its name without `refs/tags/` and whether it names an
+    /// annotated tag object. Refs whose name is not UTF-8 are not here.
+    pub(crate) refs: Vec<(String, bool)>,
+    /// The number of refs examined, names that are not UTF-8 included.
+    pub(crate) considered: usize,
+    /// The annotated tags examined whose name is not UTF-8.
+    pub(crate) unnamed: usize,
+    /// Whether more than `limit` refs exist.
+    pub(crate) truncated: bool,
+}
+
+/// Lists up to `limit` refs under `refs/tags` in ref-name order, with the type
+/// of the object each names, through the same isolated git as the verification.
+/// `None` when the repository cannot be listed.
+pub(crate) fn list_tags(
+    repository: &Path,
+    allowed_signers: &Path,
+    limit: usize,
+) -> Option<TagListing> {
+    let git = Git {
+        repository,
+        allowed_signers,
+        gitsign: None,
+    };
+    git.require_repository().ok()?;
+    let count = format!("--count={}", limit + 1);
+    let output = git
+        .successful(&[
+            "for-each-ref",
+            &count,
+            "--format=%(refname)%00%(objecttype)",
+            "refs/tags",
+        ])
+        .ok()?;
+    let mut lines: Vec<&[u8]> = output
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+        .collect();
+    let truncated = lines.len() > limit;
+    lines.truncate(limit);
+    let considered = lines.len();
+    let mut refs = Vec::new();
+    let mut unnamed = 0;
+    for line in lines {
+        let mut parts = line.splitn(2, |byte| *byte == 0);
+        let (Some(name), Some(kind)) = (parts.next(), parts.next()) else {
+            return None;
+        };
+        let Ok(name) = std::str::from_utf8(name) else {
+            unnamed += usize::from(kind == b"tag");
+            continue;
+        };
+        let name = name.strip_prefix("refs/tags/")?;
+        refs.push((name.to_owned(), kind == b"tag"));
+    }
+    Some(TagListing {
+        refs,
+        considered,
+        unnamed,
+        truncated,
+    })
+}
+
 struct Git<'a> {
     repository: &'a Path,
     allowed_signers: &'a Path,

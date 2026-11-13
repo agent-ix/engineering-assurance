@@ -207,6 +207,21 @@ path = "tests/approval_verify.rs"
 required-features = ["approval-verify"]
 
 [[test]]
+name = "approval_trail"
+path = "tests/approval_trail.rs"
+required-features = ["approval-trail"]
+
+[[test]]
+name = "approval_trail_cli"
+path = "tests/approval_trail_cli.rs"
+required-features = ["full"]
+
+[[test]]
+name = "approval_trail_gitsign"
+path = "tests/approval_trail_gitsign.rs"
+required-features = ["full"]
+
+[[test]]
 name = "approval_verify_cli"
 path = "tests/approval_verify_cli.rs"
 required-features = ["full"]
@@ -390,6 +405,9 @@ approval-verify = ["signature-verify", "dep:serde"]
 # FR-042: pure composition and preconditions of a signed approval tag; the git
 # adapter lives in the binary.
 approval-tag = ["approval-verify"]
+# FR-043: pure ordering of an approval trail and the test of whether a tag names
+# a record; the listing and every verification stay in the binary's adapter.
+approval-trail = ["approval-verify"]
 semantics = [
   "claim-strength",
   "exact-numbers",
@@ -417,6 +435,7 @@ exact-numbers = ["serde_json/arbitrary_precision"]
 # plus `exact-numbers`.
 full = [
   "approval-tag",
+  "approval-trail",
   "approval-verify",
   "atomic-publish",
   "campaign",

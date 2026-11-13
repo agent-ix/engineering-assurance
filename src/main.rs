@@ -8,6 +8,7 @@
 mod agent_evals_host;
 mod agent_evals_provider;
 mod approval_tag_host;
+mod approval_trail_host;
 mod approval_verify_host;
 mod content_rights_host;
 mod evaluation_report_host;
@@ -44,6 +45,7 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 const ERROR_PROTOCOL: &str = "engineering-assurance.error/v1";
 const APPROVAL_TAG_CAPABILITY: &str = "approval-tag";
 const APPROVAL_VERIFY_CAPABILITY: &str = "approval-verify";
+const APPROVAL_TRAIL_CAPABILITY: &str = "approval-trail";
 const AGENT_EVALS_PROVIDER_CAPABILITY: &str = "agent-evals-provider";
 const AGENT_EVALS_CAPABILITY: &str = "agent-evals";
 const CONTENT_RIGHTS_TREE_CAPABILITY: &str = "content-rights-tree";
@@ -129,6 +131,7 @@ fn command() -> Command {
         .subcommand(signature_verify_command())
         .subcommand(approval_verify_command())
         .subcommand(approval_tag_command())
+        .subcommand(approval_trail_command())
         .subcommand(
             Command::new(WORKFLOW_INVARIANTS_CAPABILITY)
                 .about("Evaluate a closed workflow projection against named invariants"),
@@ -225,6 +228,26 @@ fn approval_tag_command() -> Command {
         )
 }
 
+fn approval_trail_command() -> Command {
+    Command::new(APPROVAL_TRAIL_CAPABILITY)
+        .about(
+            "List every signed approval tag that names one change-assurance record, oldest first",
+        )
+        .arg(
+            Arg::new("request")
+                .long("request")
+                .value_name("JSON")
+                .help("Approval-trail request document, or - to read it from stdin")
+                .required(true),
+        )
+        .arg(
+            Arg::new("format")
+                .long("format")
+                .value_parser(["json", "table"])
+                .default_value("json"),
+        )
+}
+
 fn agent_evals_provider_command() -> Command {
     Command::new(AGENT_EVALS_PROVIDER_CAPABILITY)
         .about("Serve Engineering Assurance evaluation semantics to cli-agent-evals")
@@ -316,6 +339,7 @@ fn main() -> ExitCode {
         Some((SIGNATURE_VERIFY_CAPABILITY, arguments)) => run_signature_verify(arguments),
         Some((APPROVAL_VERIFY_CAPABILITY, arguments)) => run_approval_verify(arguments),
         Some((APPROVAL_TAG_CAPABILITY, arguments)) => run_approval_tag(arguments),
+        Some((APPROVAL_TRAIL_CAPABILITY, arguments)) => run_approval_trail(arguments),
         Some((WORKFLOW_INVARIANTS_CAPABILITY, _)) => run_workflow_invariants(),
         Some((WORKFLOW_HOST_CAPABILITY, _)) => run_workflow_host(),
         Some((PACKAGE_LIFECYCLE_CAPABILITY, arguments)) => run_package_lifecycle(arguments),
@@ -826,6 +850,23 @@ fn run_approval_tag(arguments: &ArgMatches) -> ExitCode {
         "approval_tag_request_unreadable",
         |bytes| {
             approval_tag_host::execute(bytes).map_err(|error| (error.code(), error.to_string()))
+        },
+    )
+}
+
+fn run_approval_trail(arguments: &ArgMatches) -> ExitCode {
+    let format = if arguments.get_one::<String>("format").map(String::as_str) == Some("table") {
+        approval_trail_host::Format::Table
+    } else {
+        approval_trail_host::Format::Json
+    };
+    run_request_line(
+        arguments,
+        APPROVAL_TRAIL_CAPABILITY,
+        "approval_trail_request_unreadable",
+        |bytes| {
+            approval_trail_host::execute(bytes, format)
+                .map_err(|error| (error.code(), error.to_string()))
         },
     )
 }

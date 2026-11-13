@@ -108,7 +108,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-007 | FR-007-AC-3 | TC-037 | ✅ Passing |
 | FR-007 | FR-007-AC-4 | TC-043 | ✅ Passing |
 | FR-014 | FR-014-AC-1 | TC-096 | ✅ Rust package foundation backed |
-| FR-014 | FR-014-AC-2 | TC-098 | ✅ `tests/package_boundary.rs` runs 15 machine-facing commands (onboarding, workflow-invariants, workflow-host, agent-evals-provider, producer-execute, scope-footprint, signature-verify, approval-verify, approval-tag, content-rights-tree, integration-evidence, package-audit, package-lifecycle, manifest-validate, evaluation-aggregate) through a refusal and requires exactly one versioned JSON line on stdout with diagnostics on stderr; `tests/manifest_host_cli.rs` covers the success path. `agent-evals` is outside the table because it launches real agents, and `onboard-report` is human-readable text, not a machine result |
+| FR-014 | FR-014-AC-2 | TC-098 | ✅ `tests/package_boundary.rs` runs 16 machine-facing commands (onboarding, workflow-invariants, workflow-host, agent-evals-provider, producer-execute, scope-footprint, signature-verify, approval-verify, approval-tag, approval-trail, content-rights-tree, integration-evidence, package-audit, package-lifecycle, manifest-validate, evaluation-aggregate) through a refusal and requires exactly one versioned JSON line on stdout with diagnostics on stderr; `tests/manifest_host_cli.rs` covers the success path. `agent-evals` is outside the table because it launches real agents, and `onboard-report` is human-readable text, not a machine result |
 | FR-014 | FR-014-AC-3 | TC-099 | ✅ Unknown protocol, malformed and oversized input, escaping target, unavailable host, and invalid host response each refuse with no write (onboarding, workflow-host and process-adapter tests) |
 | FR-014 | FR-014-AC-4 | TC-101 | ✅ Parsed library-module audit, lexical-alias/comment adverse cases, and mutations passing |
 | FR-014 | FR-014-AC-5 | TC-138 | ✅ Isolated offline downstream resolution/compile and activated direct-dependency census passing; `full`-package gate unaffected |
@@ -579,6 +579,18 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-348 | Unknown members, a wrong protocol, relative paths, an option-like or spaced tag or revision and a bad record id or digest are `approval_tag_request_invalid`; unreadable JSON is `approval_tag_request_unreadable`; none starts git | Integration | P0 | FR-042-AC-9 | 🚧 |
 | TC-349 | A relative `PATH` entry holding a `git` or a signing program in the repository is never run, and with only relative entries the command is `approval_tag_git_unavailable` | Integration | P0 | FR-042-AC-10 | 🚧 |
 | TC-350 | A signing program that exits nonzero, a missing SSH key file and a locked SSH key with no agent are `approval_tag_create_failed` at exit 2 and leave no tag | Integration | P0 | FR-042-AC-11 | 🚧 |
+| TC-351 | The trail order is by claimed time ascending, then absent times, then tag name in byte order, whatever the input order; a tag names the record when any `Approved-Record-Id` value equals the id byte for byte (repeated, different and case-variant values included) | Unit | P0 | FR-043-AC-12, FR-043-AC-5 | 🚧 |
+| TC-352 | An approval and a later revocation meaning of one record are both listed `approved`, oldest first by claimed time, even when created or named in the opposite order | Integration | P0 | FR-043-AC-1, FR-043-CON-3 | 🚧 |
+| TC-353 | A bad-signature tag, an unmapped-signer tag, a different-digest tag and a tag without a meaning, all naming the record, are listed with `signed_bad`, `untrusted_signer`, `wrong_record` and `meaning_missing` | Integration | P0 | FR-043-AC-2, FR-043-CON-3 | 🚧 |
+| TC-354 | Tags naming a different record, lightweight tags and annotated tags without the id trailer are not listed | Integration | P0 | FR-043-AC-3 | 🚧 |
+| TC-355 | Each entry equals the `approval-verify` result for the same tag less the request echo, plus `claimed_at` | Integration | P0 | FR-043-AC-4, FR-043-CON-1 | 🚧 |
+| TC-356 | Entries without a readable tagger date follow timed entries ordered by tag name, and `claimed_at` is reported for every status | Integration | P0 | FR-043-AC-5 | 🚧 |
+| TC-357 | More than 10000 refs under `refs/tags` yields `truncated` true with `tag_limit` and `considered` 10000; a small trail yields `truncated` false | Integration | P0 | FR-043-AC-6 | 🚧 |
+| TC-358 | A tag named `--help`, a revision-like name and a name with quote, dollar and semicolon characters are listed correctly and nothing runs | Integration | P0 | FR-043-AC-7 | 🚧 |
+| TC-359 | A validly signed tag whose message holds a NUL byte is excluded from the trail and counted in `skipped` | Integration | P0 | FR-043-AC-8 | 🚧 |
+| TC-360 | `--format table` prints a header, one row per entry in trail order and the final count line at exit 0 | Integration | P0 | FR-043-AC-9 | 🚧 |
+| TC-361 | Invalid requests, an invalid allowed-signers file and a path that is not a git repository yield their `approval_trail_*` codes at exit 2 | Integration | P0 | FR-043-AC-10 | 🚧 |
+| TC-362 | With a stand-in `gitsign`, a CMS-signed tag naming the record is listed `approved` with `signature_kind` `gitsign`, and a rejected identity is listed `untrusted_signer` | Integration | P0 | FR-043-AC-11 | 🚧 |
 
 ## Option Permutation Matrix
 
