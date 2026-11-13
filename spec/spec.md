@@ -207,6 +207,8 @@ same canonical bundle and do not redefine these responsibilities.
 - [FR-040](./functional/FR-040-gitsign-sigstore-keyless-commit-and-tag-verification.md) — verify
   gitsign (Sigstore keyless) signatures on commits and annotated tags by
   delegating to gitsign.
+- [FR-041](./functional/FR-041-signed-tag-approval-of-a-change-assurance-record.md) — verify a
+  signed annotated tag as a named person's approval of an exact change-assurance record.
 
 ### Non-Functional Requirements
 
