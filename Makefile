@@ -1,4 +1,4 @@
-.PHONY: syft-integration converter-integration rust-features rust-feature-list lint content-rights-tree test manifest-validate package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-gate release-gate
+.PHONY: syft-integration osv-scanner-integration converter-integration rust-features rust-feature-list lint content-rights-tree test manifest-validate package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-gate release-gate
 
 EVAL_AGENT ?= codex
 EVAL_RUN ?= canary
@@ -30,6 +30,23 @@ syft-integration:
 		exit 2; \
 	}
 	CARGO_BUILD_JOBS=2 cargo test --locked --features full --test syft_producer_cli -- --ignored
+
+osv-scanner-integration:
+	@case "$$EA_TEST_OSV_SCANNER" in /*) test -f "$$EA_TEST_OSV_SCANNER" && test -x "$$EA_TEST_OSV_SCANNER" ;; *) false ;; esac || { \
+		echo "EA_TEST_OSV_SCANNER must name the absolute path of an executable OSV-Scanner binary" >&2; \
+		exit 2; \
+	}
+	@case "$$EA_TEST_OSV_DB" in /*) test -d "$$EA_TEST_OSV_DB" ;; *) false ;; esac || { \
+		echo "EA_TEST_OSV_DB must name the absolute path of a local database directory" >&2; \
+		exit 2; \
+	}
+	@found=false; for database in "$$EA_TEST_OSV_DB"/osv-scalibr/*/all.zip; do \
+		if test -f "$$database"; then found=true; break; fi; \
+	done; test "$$found" = true || { \
+		echo "EA_TEST_OSV_DB must contain osv-scalibr/<ecosystem>/all.zip" >&2; \
+		exit 2; \
+	}
+	CARGO_BUILD_JOBS=2 cargo test --locked --features full --test osv_scanner_producer_cli -- --ignored
 
 converter-integration:
 	@case "$$EA_TEST_PANDOC" in /*) test -x "$$EA_TEST_PANDOC" ;; *) false ;; esac || { \
