@@ -204,8 +204,8 @@ same canonical bundle and do not redefine these responsibilities.
   `producer-execute` request shape emitting CycloneDX JSON, with existing result states for failure.
 - [FR-039](./functional/FR-039-syft-sbom-evidence-ingestion.md) — end Engineering Assurance's SBOM work at the retained
   CycloneDX artifact the Quoin SBOM adapter accepts, with no parser or quoin launch here.
-- [FR-044](./functional/FR-044-grype-advisory-scan-producer-request.md) — define the Grype advisory scan as one
-  `producer-execute` request shape reading the retained Syft SBOM, producing a JSON report, with no second SBOM.
+- [FR-044](./functional/FR-044-osv-scanner-advisory-scan-producer-request.md) — define the OSV-Scanner advisory scan as one
+  `producer-execute` request shape reading the retained Syft SBOM offline, producing a JSON report, with no second SBOM.
 - [FR-040](./functional/FR-040-gitsign-sigstore-keyless-commit-and-tag-verification.md) — verify
   gitsign (Sigstore keyless) signatures on commits and annotated tags by
   delegating to gitsign.
