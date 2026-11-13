@@ -110,3 +110,4 @@ The following hold and are recorded as clean:
 | FND-018 | fixed | 4b3675b: FR-048 and FR-049 cite `ix://agent-ix/quoin/FR-115`, `FR-144` and `FR-162`; all three exist on quoin origin/main. The FR-115 citation causes a vocabulary mismatch, recorded as new finding FND-021. |
 | FND-019 | fixed | 4b3675b: a separate reason, `release_commit_record_not_added`, has its own Behavior bullet and its own clause in FR-047-AC-6. |
 | FND-020 | fixed | 4b3675b: FR-050-AC-3 now says the row and the stance sentence are added to the README in the pull request that implements `release-verify`. |
+| FND-021 | fixed | 700dae8: FR-048 presents the FR-115 Evidence Status of each criterion (`bound`, `stale`, `suspect`, `undischarged`, `no run evidence`), reads the criterion id and status, and FR-048-AC-3, AC-7 and NFR-007 Verification use the same vocabulary; the FR-004 dependency is dropped. |
