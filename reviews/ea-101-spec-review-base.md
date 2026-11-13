@@ -76,3 +76,29 @@ The following hold and are recorded as clean:
   `records/<record_id>/<revision>.json` (quoin FR-063, FR-068).
 - EA-101's content criteria are addressed: ownership split, version history, the EA-97
   relationship and `quire validate`. The snapshot contents and format are on the Quoin side.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-015 | low | Regression from the FND-002 and FND-011 fixes. FR-048 has two refusals that both apply when `snapshot_path` names the Baseline file. The file always exists at the baseline commit, so `snapshot_path_present_at_baseline` applies, and the new path rule `release_snapshot_path_invalid` applies too. FR-048 does not say which code wins or whether both are reported, yet FR-048-AC-11 expects only `release_snapshot_path_invalid`. FR-047-AC-6 gives the same input to `release-verify` as `snapshot_path_present_at_baseline`. Fix: drop "names the Baseline file" from the path rule, since presence at the baseline already covers it, or state the precedence. | spec/functional/FR-048-human-release-decision-workflow.md:106-109; spec/functional/FR-048-human-release-decision-workflow.md:132; spec/functional/FR-047-release-record-and-signed-release-tag.md:156 |
+| FND-016 | low | A gap in the cross-repository contract, introduced with the new byte-for-byte echo. FR-052 now echoes the request's `baseline_commit` byte for byte. Quoin PR 861 (head d57d61b5) FR-166 accepts only a full lowercase 40- or 64-digit hash, and FR-168 refuses a history file whose `baseline_commit` differs from it by any byte. FR-052 says only "full commit hash" and states no format refusal. It can therefore accept and echo an upper-case or otherwise non-canonical value that git resolves, which no valid `--baseline-commit` can match. Fix: require a full lowercase 40- or 64-digit hex hash and refuse anything else with `release_history_request_invalid`, with an AC. | spec/functional/FR-052-release-history-since-the-previous-release.md:60; spec/functional/FR-052-release-history-since-the-previous-release.md:67 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | 14a7af2: FR-049 names two interfaces (`release-verify` and `release-history`) in its split table, data-contract prose, Outputs and Behavior, and gains the FR-052 relationship and dependency. |
+| FND-002 | fixed | 14a7af2: new reason `snapshot_path_present_at_baseline` in FR-047 (reasons list, Behavior, AC-6), FR-051 (rule prose, Behavior, AC-8) and the FR-048 workflow refusal (AC-11). |
+| FND-003 | fixed | 14a7af2: FR-052 defines adding against the first parent, the merge commit as the reported commit, "earliest" in first-parent order, and the walk to the root against an empty tree with no previous tag; AC-9 and AC-10 cover these. |
+| FND-004 | fixed | 14a7af2: exact path grammar for `record_id` and `revision`; `revision` is an integer ordered numerically; non-matching files are ignored; `records_dir` refusals are added; AC-11 and AC-12. |
+| FND-005 | fixed | 14a7af2: `release_history_repository_shallow`, `refs/tags/` resolution only, a tag peeling to a tree or blob refused, and the one-parent weakness stated; AC-13. |
+| FND-006 | fixed | 14a7af2: FR-053-AC-2 expects `release_verify_request_invalid` (exit 2) for a request member, and `not_released` for an attestation file in the repository fixture. |
+| FND-007 | fixed | 14a7af2: the emitter obligations and AC-4 are removed; the text defers them to the EA-97 attestation requirements. |
+| FND-008 | fixed | 14a7af2: FR-051-AC-6 keeps only the "no computed member" clause. |
+| FND-009 | fixed | 14a7af2: inspection clauses split into FR-051-AC-9 and FR-052-AC-14 (Inspection). |
+| FND-010 | fixed | 14a7af2: the duplicate FR-051 bullets are removed and the prose points to FR-047 Behavior. |
+| FND-011 | fixed | 14a7af2: `snapshot_path` joins the run identity (Behavior, AC-8), with a path-rule refusal `release_snapshot_path_invalid` (AC-11); the precedence issue this creates is FND-015. |
+| FND-012 | fixed | 14a7af2: FR-051 names the consumers: the dossier export reading Quoin's reports (quoin FR-162) and the people reviewing the release, outside this repository. |
+| FND-013 | fixed | 14a7af2: FR-052 frontmatter references quoin FR-068 and EA FR-043. |
+| FND-014 | fixed | 14a7af2: FR-048 presents a supplied snapshot file verbatim and unparsed, and states that the owner's signature covers the bytes at `snapshot_path` in the release commit; AC-12. |

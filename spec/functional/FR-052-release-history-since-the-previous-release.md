@@ -57,7 +57,7 @@ content, and any git write.
 ## Inputs
 
 - One request document `engineering-assurance.release-history-request/v1` with `protocol`, `repository` (absolute
-  directory), `baseline_commit` (full commit hash), `previous_release_tag` (a tag name or `null`) and `records_dir`
+  directory), `baseline_commit` (a full lowercase hexadecimal commit hash of 40 or 64 digits), `previous_release_tag` (a tag name or `null`) and `records_dir`
   (a repository-relative directory: non-empty, no `..` segment, no leading `/`, no glob character). Unknown members
   are rejected.
 
@@ -99,6 +99,8 @@ content, and any git write.
 - The command SHALL NOT create, move, push or delete any ref.
 - The command SHALL refuse a request with an unknown member, a relative `repository`, or a `-`-leading value with
   `release_history_request_invalid` before starting git.
+- The command SHALL refuse a `baseline_commit` that is not 40 or 64 lowercase hexadecimal digits with
+  `release_history_request_invalid`, before starting git.
 - The command SHALL refuse a `records_dir` that is empty, absolute, contains a `..` segment or contains a glob character
   with `release_history_request_invalid`.
 
@@ -117,7 +119,7 @@ content, and any git write.
 | FR-052-AC-9 | A record added by a side branch and merged into the baseline's first-parent history is reported with the merge commit as `commit`; a path added in two commits of the range is reported with the earlier one in first-parent order, whatever the commit dates. | Test |
 | FR-052-AC-10 | With `previous_release_tag` `null`, a record present from the root commit is reported with the first first-parent commit that holds it. | Test |
 | FR-052-AC-11 | Revisions 9 and 10 of one record are listed in the order 9, 10; `x.json.tmp`, a `v2.json` name, a deeper path and a staging directory under `records_dir` are ignored without an error. | Test |
-| FR-052-AC-12 | A `records_dir` that is empty, absolute, contains `..` or contains a glob character is refused with `release_history_request_invalid` before git starts. | Test |
+| FR-052-AC-12 | A `baseline_commit` that is a branch name, a short hash or an upper-case hash, and a `records_dir` that is empty, absolute, contains `..` or contains a glob character, are each refused with `release_history_request_invalid` before git starts. | Test |
 | FR-052-AC-13 | A shallow repository yields `release_history_repository_shallow`; a branch with the name of a missing tag yields `release_history_previous_tag_unknown`; a tag that peels to a tree or a blob yields `release_history_previous_not_a_release_commit`. | Test |
 | FR-052-AC-14 | Static inspection shows no code in this command that opens or hashes a record file. | Inspection |
 

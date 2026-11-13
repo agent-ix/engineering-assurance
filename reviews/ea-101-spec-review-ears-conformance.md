@@ -31,3 +31,9 @@ found one subject problem that quire does not flag.
 PASS with one low finding. Apart from FR-053, the new and edited statements conform: one SHALL
 per bullet, a named subject (`release-verify`, the command, the workflow), and conditional
 refusals in unwanted-behaviour form.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | 14a7af2: the two "An attestation ... SHALL" bullets are removed, the emitter obligations are deferred to EA-97, and "The repository SHALL NOT" becomes "The release module SHALL NOT". `quire validate` reports zero warnings on the changed files. |

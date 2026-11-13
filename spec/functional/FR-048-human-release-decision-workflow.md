@@ -105,7 +105,7 @@ scheduled, or agent-made release choice; signing; pushing the tag.
   leave the run before the gate.
 - If `snapshot_path` exists at the baseline commit, then the workflow SHALL refuse the `release` choice with
   `snapshot_path_present_at_baseline` and write no Release document.
-- If `snapshot_path` is absolute, contains `..` or a glob, or names the Baseline file, then the workflow SHALL refuse the `release` choice with
+- If `snapshot_path` is absolute or contains `..` or a glob, then the workflow SHALL refuse the `release` choice with
   `release_snapshot_path_invalid` and write no Release document.
 - The workflow SHALL NOT synthesize the `release` choice from evidence status,
   an empty anomaly list or a missing input.
@@ -129,7 +129,7 @@ scheduled, or agent-made release choice; signing; pushing the tag.
 | FR-048-AC-8 | A run id reused with a different Baseline, baseline commit, repository, `snapshot_path` or owner is refused without changing either run; an interrupted run resumes at its last completed phase. | Test |
 | FR-048-AC-9 | An owner-named accepted anomaly id absent from the supplied anomaly list is refused and no Release document is written; an unreadable input file, or one lacking a presented member, yields `release_input_unreadable` naming the file and leaves the run before the gate. | Test |
 | FR-048-AC-10 | The `release` outcome carries the Release document, `record_path` and the tag message text with the digest line to complete; committing the record and the snapshot as a single child of the baseline commit and signing a tag with that message by `git tag -s` yields `released` from `release-verify`, with no workflow-run git write. | Test |
-| FR-048-AC-11 | A `release` choice with a `snapshot_path` that exists at the baseline commit is refused with `snapshot_path_present_at_baseline`, and one that is absolute, contains `..` or a glob, or names the Baseline file is refused with `release_snapshot_path_invalid`; neither writes a Release document. | Test |
+| FR-048-AC-11 | A `release` choice with a `snapshot_path` that exists at the baseline commit is refused with `snapshot_path_present_at_baseline`, (which includes the Baseline file and any Baseline item) is refused with `snapshot_path_present_at_baseline`, and one that is absolute or contains `..` or a glob is refused with `release_snapshot_path_invalid`; neither writes a Release document. | Test |
 | FR-048-AC-12 | A supplied snapshot file is presented verbatim and unparsed with its `snapshot_path`, and an unsupplied one is shown "not provided". | Test |
 
 ## Dependencies
