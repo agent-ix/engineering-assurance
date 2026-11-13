@@ -102,3 +102,5 @@ The following hold and are recorded as clean:
 | FND-012 | fixed | 14a7af2: FR-051 names the consumers: the dossier export reading Quoin's reports (quoin FR-162) and the people reviewing the release, outside this repository. |
 | FND-013 | fixed | 14a7af2: FR-052 frontmatter references quoin FR-068 and EA FR-043. |
 | FND-014 | fixed | 14a7af2: FR-048 presents a supplied snapshot file verbatim and unparsed, and states that the owner's signature covers the bytes at `snapshot_path` in the release commit; AC-12. |
+| FND-015 | fixed | 2cef0ee, 15ff804: the FR-048 path rule no longer names the Baseline file. FR-048-AC-11 now says that a `snapshot_path` existing at the baseline commit, which includes the Baseline file and any Baseline item, is refused with `snapshot_path_present_at_baseline`, consistent with FR-047-AC-6. |
+| FND-016 | fixed | 2cef0ee: FR-052 Inputs require a full lowercase 40- or 64-digit hex `baseline_commit`. A Behavior bullet refuses anything else with `release_history_request_invalid` before git starts, and FR-052-AC-12 tests a branch name, a short hash and an upper-case hash. This matches quoin FR-166 and FR-168 at d57d61b5. |
