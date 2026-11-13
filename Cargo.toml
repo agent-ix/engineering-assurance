@@ -232,6 +232,11 @@ path = "tests/release.rs"
 required-features = ["release"]
 
 [[test]]
+name = "release_history"
+path = "tests/release_history.rs"
+required-features = ["release-history"]
+
+[[test]]
 name = "release_history_cli"
 path = "tests/release_history_cli.rs"
 required-features = ["full"]

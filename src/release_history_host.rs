@@ -120,7 +120,10 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ReleaseHistoryError> {
         || !request.repository.is_absolute()
         || !is_commit_hash(&request.baseline_commit)
         || !is_records_dir(&request.records_dir)
-        || !request.previous_release_tag.as_deref().is_none_or(is_tag_name)
+        || !request
+            .previous_release_tag
+            .as_deref()
+            .is_none_or(is_tag_name)
     {
         return Err(ReleaseHistoryError::Invalid);
     }
@@ -134,7 +137,9 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ReleaseHistoryError> {
         Some(tag) => Some((tag, previous_release(repository, tag)?)),
         None => None,
     };
-    let previous_baseline = previous.as_ref().map(|(_, release)| release.baseline.as_str());
+    let previous_baseline = previous
+        .as_ref()
+        .map(|(_, release)| release.baseline.as_str());
     let range = commits_in_range(repository, &baseline, previous_baseline)?;
     let records = records_added(repository, &baseline, &range, &request.records_dir)?;
     let line = ResultLine {
@@ -175,18 +180,25 @@ struct PreviousCommit {
 
 fn previous_release(repository: &Path, tag: &str) -> Result<PreviousCommit, ReleaseHistoryError> {
     let reference = format!("refs/tags/{tag}");
-    let object = object_id(repository, &reference)?.ok_or(ReleaseHistoryError::PreviousTagUnknown)?;
-    let commit = commit_of(repository, &object)?
-        .ok_or(ReleaseHistoryError::PreviousNotReleaseCommit)?;
+    let object =
+        object_id(repository, &reference)?.ok_or(ReleaseHistoryError::PreviousTagUnknown)?;
+    let commit =
+        commit_of(repository, &object)?.ok_or(ReleaseHistoryError::PreviousNotReleaseCommit)?;
     let mut parents = commit_ids(
         repository,
-        &["rev-list", "--parents", "-n", "1", "--end-of-options", &commit],
+        &[
+            "rev-list",
+            "--parents",
+            "-n",
+            "1",
+            "--end-of-options",
+            &commit,
+        ],
     )?
     .into_iter();
     // The first id is the commit itself; the release commit has exactly one parent.
-    let baseline = match (parents.next(), parents.next(), parents.next()) {
-        (Some(_), Some(parent), None) => parent,
-        _ => return Err(ReleaseHistoryError::PreviousNotReleaseCommit),
+    let (Some(_), Some(baseline), None) = (parents.next(), parents.next(), parents.next()) else {
+        return Err(ReleaseHistoryError::PreviousNotReleaseCommit);
     };
     Ok(PreviousCommit { commit, baseline })
 }
@@ -201,22 +213,36 @@ fn commit_ids(repository: &Path, arguments: &[&str]) -> Result<Vec<String>, GitF
     Ok(text.split_whitespace().map(str::to_owned).collect())
 }
 
-/// The first-parent commits of `baseline` after `previous`, newest first. With
-/// no previous baseline the walk runs to the root.
+/// The first-parent commits to read, newest first, and the first-parent commit
+/// below them that is already part of the previous release (none when the walk
+/// runs to the root).
+struct Range {
+    commits: Vec<String>,
+    boundary: Option<String>,
+}
+
+/// The first-parent commits of `baseline` after `previous`. With no previous
+/// baseline the walk runs to the root.
 fn commits_in_range(
     repository: &Path,
     baseline: &str,
     previous: Option<&str>,
-) -> Result<Vec<String>, ReleaseHistoryError> {
+) -> Result<Range, ReleaseHistoryError> {
     let chain = commit_ids(
         repository,
         &["rev-list", "--first-parent", "--end-of-options", baseline],
     )?;
     let Some(previous) = previous else {
-        return Ok(chain);
+        return Ok(Range {
+            commits: chain,
+            boundary: None,
+        });
     };
     if let Some(position) = chain.iter().position(|commit| commit == previous) {
-        return Ok(chain[..position].to_vec());
+        return Ok(Range {
+            commits: chain[..position].to_vec(),
+            boundary: Some(previous.to_owned()),
+        });
     }
     let ancestor = git(
         repository,
@@ -229,50 +255,49 @@ fn commits_in_range(
     }
     // The previous baseline joined by a merge: the range is the first-parent
     // commits that are not among its ancestors.
-    let known: BTreeSet<String> = commit_ids(
-        repository,
-        &["rev-list", "--end-of-options", previous],
-    )?
-    .into_iter()
-    .collect();
-    Ok(chain
-        .into_iter()
-        .take_while(|commit| !known.contains(commit))
-        .collect())
+    let known: BTreeSet<String> =
+        commit_ids(repository, &["rev-list", "--end-of-options", previous])?
+            .into_iter()
+            .collect();
+    let position = chain.iter().position(|commit| known.contains(commit));
+    Ok(Range {
+        commits: chain[..position.unwrap_or(chain.len())].to_vec(),
+        boundary: position.map(|position| chain[position].clone()),
+    })
 }
 
 /// Records added by a commit of `range` and present at `baseline`, in result order.
 fn records_added(
     repository: &Path,
     baseline: &str,
-    range: &[String],
+    range: &Range,
     records_dir: &str,
 ) -> Result<Vec<RecordLine>, ReleaseHistoryError> {
-    if range.is_empty() {
+    let Range { commits, boundary } = range;
+    let boundary = boundary.as_deref();
+    if commits.is_empty() {
         return Ok(Vec::new());
     }
-    let count = range.len().to_string();
-    let output = git(
-        repository,
-        &[
-            "--literal-pathspecs",
-            "log",
-            "--first-parent",
-            "--root",
-            "--no-renames",
-            "--diff-merges=first-parent",
-            "--raw",
-            "-z",
-            "--diff-filter=A",
-            "--format=%H",
-            "-n",
-            &count,
-            "--end-of-options",
-            baseline,
-            "--",
-            records_dir,
-        ],
-    )?;
+    let mut arguments = vec![
+        "--literal-pathspecs",
+        "log",
+        "--first-parent",
+        "--root",
+        "--no-renames",
+        "--diff-merges=first-parent",
+        "--raw",
+        "-z",
+        "--diff-filter=A",
+        "--format=%H",
+        "--end-of-options",
+        baseline,
+    ];
+    let excluded = boundary.map(|boundary| format!("^{boundary}"));
+    if let Some(excluded) = &excluded {
+        arguments.push(excluded);
+    }
+    arguments.extend(["--", records_dir]);
+    let output = git(repository, &arguments)?;
     if !output.status.success() {
         return Err(ReleaseHistoryError::GitFailed);
     }
@@ -285,6 +310,8 @@ fn records_added(
         .split(|byte| *byte == 0)
         .filter(|token| !token.is_empty());
     while let Some(token) = tokens.next() {
+        // `log` puts a newline between the commit line and its raw entries.
+        let token = token.strip_prefix(b"\n").unwrap_or(token);
         if token.starts_with(b":") {
             let path = tokens.next().ok_or(GitFailure)?;
             if !present.contains(path) {
