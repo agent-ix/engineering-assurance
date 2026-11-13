@@ -228,7 +228,20 @@ fn tc_370_missing_converter_is_unavailable_without_a_document() {
         let value = result(&converter_request(root.path(), &absent, step));
         assert_eq!(value["state"]["kind"], "unavailable", "{value}");
         assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
+        assert_eq!(value["producer"]["name"], step.name());
+        assert_eq!(
+            value["producer"]["executable"],
+            absent.display().to_string()
+        );
     }
+    let directory = fs::canonicalize(tools.path()).expect("tools");
+    let value = result(&converter_request(
+        root.path(),
+        &directory,
+        Step::PandocDocx,
+    ));
+    assert_eq!(value["state"]["kind"], "refused", "{value}");
+    assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
 }
 
 #[cfg(target_os = "linux")]
@@ -282,7 +295,12 @@ fn tc_373_requests_match_the_definition_and_the_published_schema() {
         .expect("root")
         .display()
         .to_string();
-    for step in [Step::PandocDocx, Step::PandocTypst, Step::TypstPdf] {
+    let steps = [
+        (Step::PandocDocx, "out/document.docx"),
+        (Step::PandocTypst, "typ/document.typ"),
+        (Step::TypstPdf, "out/document.pdf"),
+    ];
+    for (step, path) in steps {
         let request = converter_request(root.path(), Path::new("/opt/tools/bin/tool"), step);
         assert_valid_request(&request);
         assert_eq!(request["producer"]["version"], "unreported");
@@ -303,30 +321,53 @@ fn tc_373_requests_match_the_definition_and_the_published_schema() {
         );
         assert_eq!(
             request["outputs"],
-            json!([{"role": "document", "path": step.output(), "required": true}])
+            json!([{"role": "document", "path": path, "required": true}])
         );
     }
-    let pandoc = converter_request(root.path(), Path::new("/x/pandoc"), Step::PandocDocx);
-    let literals: Vec<&str> = pandoc["arguments"]
-        .as_array()
-        .expect("arguments")
-        .iter()
-        .map(|argument| argument["value"].as_str().expect("literal"))
-        .collect();
-    assert_eq!(
-        literals,
-        [
-            "--sandbox",
-            "--standalone",
-            "--from",
-            "markdown",
-            "--to",
-            "docx",
-            "--output",
-            "out/document.docx",
-            "in/document.md"
-        ]
-    );
+    let expected: [(Step, &[&str]); 3] = [
+        (
+            Step::PandocDocx,
+            &[
+                "--sandbox",
+                "--standalone",
+                "--from",
+                "markdown",
+                "--to",
+                "docx",
+                "--output",
+                "out/document.docx",
+                "in/document.md",
+            ],
+        ),
+        (
+            Step::PandocTypst,
+            &[
+                "--sandbox",
+                "--standalone",
+                "--from",
+                "markdown",
+                "--to",
+                "typst",
+                "--output",
+                "typ/document.typ",
+                "in/document.md",
+            ],
+        ),
+        (
+            Step::TypstPdf,
+            &["compile", "typ/document.typ", "out/document.pdf"],
+        ),
+    ];
+    for (step, literals) in expected {
+        let request = converter_request(root.path(), Path::new("/x/tool"), step);
+        let actual: Vec<&str> = request["arguments"]
+            .as_array()
+            .expect("arguments")
+            .iter()
+            .map(|argument| argument["value"].as_str().expect("literal"))
+            .collect();
+        assert_eq!(actual, literals);
+    }
 }
 
 /// A real converter a test runs, from the value of an `EA_TEST_*` variable.
