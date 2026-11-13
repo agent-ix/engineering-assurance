@@ -84,8 +84,8 @@ of "the signature" describe SSH signatures unless FR-040 is named.
   machine error for capability `signature-verify` to stdout and its message to
   stderr, and exits with status 2. The codes are
   `signature_verify_request_unreadable`, `signature_verify_request_invalid`,
-  `signature_verify_revision_invalid` and, from FR-037,
-  `signature_verify_allowed_signers_invalid`.
+  `signature_verify_revision_invalid`, `signature_verify_result_encoding_failed`
+  and, from FR-037, `signature_verify_allowed_signers_invalid`.
 
 ## Behavior
 

@@ -192,6 +192,21 @@ path = "tests/semantics_parity.rs"
 required-features = ["semantics"]
 
 [[test]]
+name = "approval_verify"
+path = "tests/approval_verify.rs"
+required-features = ["approval-verify"]
+
+[[test]]
+name = "approval_verify_cli"
+path = "tests/approval_verify_cli.rs"
+required-features = ["full"]
+
+[[test]]
+name = "approval_verify_gitsign"
+path = "tests/approval_verify_gitsign.rs"
+required-features = ["full"]
+
+[[test]]
 name = "signature_verify"
 path = "tests/signature_verify.rs"
 required-features = ["signature-verify"]
@@ -359,6 +374,9 @@ scope-footprint = ["content-rights", "dep:serde", "dep:thiserror"]
 # FR-036, FR-040: pure classification of git's and `gitsign`'s verdict on a signed
 # commit or tag; the git, `ssh-keygen` and `gitsign` adapter lives in the binary.
 signature-verify = ["dep:serde"]
+# FR-041: pure decision of whether a signed tag approves a record; the trailer
+# reading and every signature rule stay in `signature-verify`.
+approval-verify = ["signature-verify", "dep:serde"]
 semantics = [
   "claim-strength",
   "exact-numbers",
@@ -385,6 +403,7 @@ exact-numbers = ["serde_json/arbitrary_precision"]
 # and its `*_host` modules use (clap, cap-std, tar, zip, flate2, tempfile),
 # plus `exact-numbers`.
 full = [
+  "approval-verify",
   "atomic-publish",
   "campaign",
   "claim-strength",

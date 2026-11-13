@@ -7,6 +7,7 @@
 
 mod agent_evals_host;
 mod agent_evals_provider;
+mod approval_verify_host;
 mod content_rights_host;
 mod evaluation_report_host;
 mod integration_evidence_host;
@@ -40,6 +41,7 @@ use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 const ERROR_PROTOCOL: &str = "engineering-assurance.error/v1";
+const APPROVAL_VERIFY_CAPABILITY: &str = "approval-verify";
 const AGENT_EVALS_PROVIDER_CAPABILITY: &str = "agent-evals-provider";
 const AGENT_EVALS_CAPABILITY: &str = "agent-evals";
 const CONTENT_RIGHTS_TREE_CAPABILITY: &str = "content-rights-tree";
@@ -123,6 +125,7 @@ fn command() -> Command {
         .subcommand(producer_execute_command())
         .subcommand(scope_footprint_command())
         .subcommand(signature_verify_command())
+        .subcommand(approval_verify_command())
         .subcommand(
             Command::new(WORKFLOW_INVARIANTS_CAPABILITY)
                 .about("Evaluate a closed workflow projection against named invariants"),
@@ -191,6 +194,18 @@ fn signature_verify_command() -> Command {
                 .long("request")
                 .value_name("JSON")
                 .help("Signature-verify request document, or - to read it from stdin")
+                .required(true),
+        )
+}
+
+fn approval_verify_command() -> Command {
+    Command::new(APPROVAL_VERIFY_CAPABILITY)
+        .about("Report whether a signed annotated tag approves one change-assurance record")
+        .arg(
+            Arg::new("request")
+                .long("request")
+                .value_name("JSON")
+                .help("Approval-verify request document, or - to read it from stdin")
                 .required(true),
         )
 }
@@ -284,6 +299,7 @@ fn main() -> ExitCode {
         Some((PRODUCER_EXECUTE_CAPABILITY, arguments)) => run_producer_execute(arguments),
         Some((SCOPE_FOOTPRINT_CAPABILITY, arguments)) => run_scope_footprint(arguments),
         Some((SIGNATURE_VERIFY_CAPABILITY, arguments)) => run_signature_verify(arguments),
+        Some((APPROVAL_VERIFY_CAPABILITY, arguments)) => run_approval_verify(arguments),
         Some((WORKFLOW_INVARIANTS_CAPABILITY, _)) => run_workflow_invariants(),
         Some((WORKFLOW_HOST_CAPABILITY, _)) => run_workflow_host(),
         Some((PACKAGE_LIFECYCLE_CAPABILITY, arguments)) => run_package_lifecycle(arguments),
@@ -766,43 +782,65 @@ fn run_scope_footprint(arguments: &ArgMatches) -> ExitCode {
 }
 
 fn run_signature_verify(arguments: &ArgMatches) -> ExitCode {
+    run_request_line(
+        arguments,
+        SIGNATURE_VERIFY_CAPABILITY,
+        "signature_verify_request_unreadable",
+        |bytes| {
+            signature_verify_host::execute(bytes).map_err(|error| (error.code(), error.to_string()))
+        },
+    )
+}
+
+fn run_approval_verify(arguments: &ArgMatches) -> ExitCode {
+    run_request_line(
+        arguments,
+        APPROVAL_VERIFY_CAPABILITY,
+        "approval_verify_request_unreadable",
+        |bytes| {
+            approval_verify_host::execute(bytes).map_err(|error| (error.code(), error.to_string()))
+        },
+    )
+}
+
+/// Reads the `--request` document (inline, or stdin for `-`), runs `execute`
+/// on it and writes the one result line, or the machine error.
+fn run_request_line(
+    arguments: &ArgMatches,
+    capability: &'static str,
+    unreadable_code: &str,
+    execute: impl FnOnce(&[u8]) -> Result<Vec<u8>, (&'static str, String)>,
+) -> ExitCode {
     let Some(request) = arguments.get_one::<String>("request") else {
         return emit_error(
-            SIGNATURE_VERIFY_CAPABILITY,
-            "signature_verify_request_unreadable",
-            "signature-verify requires --request",
+            capability,
+            unreadable_code,
+            &format!("{capability} requires --request"),
         );
     };
     let bytes = if request == "-" {
-        match read_stdin(
-            SIGNATURE_VERIFY_CAPABILITY,
-            "signature_verify_request_unreadable",
-        ) {
+        match read_stdin(capability, unreadable_code) {
             Ok(bytes) => bytes,
             Err(exit_code) => return exit_code,
         }
     } else if request.len() > MAX_STDIN_BYTES {
         return emit_error(
-            SIGNATURE_VERIFY_CAPABILITY,
-            "signature_verify_request_unreadable",
-            "signature-verify request exceeds the input limit",
+            capability,
+            unreadable_code,
+            &format!("{capability} request exceeds the input limit"),
         );
     } else {
         request.clone().into_bytes()
     };
-    match signature_verify_host::execute(&bytes) {
+    match execute(&bytes) {
         Ok(line) => match ix_cli_kit::streams::write_primary_stdout(&line) {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
-                eprintln!("failed to write signature-verify output: {error}");
+                eprintln!("failed to write {capability} output: {error}");
                 ExitCode::from(2)
             }
         },
-        Err(error) => emit_error(
-            SIGNATURE_VERIFY_CAPABILITY,
-            error.code(),
-            &error.to_string(),
-        ),
+        Err((code, message)) => emit_error(capability, code, &message),
     }
 }
 

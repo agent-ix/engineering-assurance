@@ -31,6 +31,7 @@
 //!
 //! | Feature | Module(s) | Other features it enables | Extra dependencies |
 //! |---|---|---|---|
+//! | `approval-verify` | `approval_verify` | `signature-verify` | `serde` |
 //! | `atomic-publish` | `atomic_publish` | | `rustix`, `thiserror` |
 //! | `claim-strength` | `claim_strength` | | `serde` |
 //! | `integrator-package` | `integrator_package`, `integrator_package_store` | `atomic-publish` | `rustix`, `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
@@ -59,6 +60,8 @@
 
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "approval-verify")]
+pub mod approval_verify;
 #[cfg(feature = "atomic-publish")]
 pub mod atomic_publish;
 #[cfg(feature = "campaign")]

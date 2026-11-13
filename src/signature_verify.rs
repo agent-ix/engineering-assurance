@@ -742,12 +742,7 @@ pub fn object_message(object: &[u8]) -> &[u8] {
 /// trailer of the message's trailer block.
 #[must_use]
 pub fn signed_off_meaning(parsed_trailers: &str) -> SignedOffMeaning {
-    let values: Vec<String> = parsed_trailers
-        .lines()
-        .filter_map(|line| line.split_once(':'))
-        .filter(|(token, _)| token.trim().eq_ignore_ascii_case(MEANING_TOKEN))
-        .map(|(_, value)| value.trim().to_owned())
-        .collect();
+    let values = trailer_values(parsed_trailers, MEANING_TOKEN);
     SignedOffMeaning {
         presence: if values.is_empty() {
             Presence::Missing
@@ -756,6 +751,23 @@ pub fn signed_off_meaning(parsed_trailers: &str) -> SignedOffMeaning {
         },
         values,
     }
+}
+
+/// Every value of the trailers named `token` in the output of
+/// `git interpret-trailers --parse`, in order.
+///
+/// That output is one unfolded `token: value` line per trailer. The token
+/// matches ASCII case-insensitively and exactly, and the value is trimmed of
+/// ASCII whitespace only, as git trims it.
+#[must_use]
+pub fn trailer_values(parsed_trailers: &str, token: &str) -> Vec<String> {
+    const SPACE: [char; 6] = [' ', '\t', '\n', '\r', '\x0b', '\x0c'];
+    parsed_trailers
+        .lines()
+        .filter_map(|line| line.split_once(':'))
+        .filter(|(name, _)| name.eq_ignore_ascii_case(token))
+        .map(|(_, value)| value.trim_matches(SPACE).to_owned())
+        .collect()
 }
 
 /// Whether `revision` is a plain revision name: not empty, at most
