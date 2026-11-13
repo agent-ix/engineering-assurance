@@ -232,6 +232,11 @@ path = "tests/release.rs"
 required-features = ["release"]
 
 [[test]]
+name = "release_history_cli"
+path = "tests/release_history_cli.rs"
+required-features = ["full"]
+
+[[test]]
 name = "release_verify_cli"
 path = "tests/release_verify_cli.rs"
 required-features = ["full"]
@@ -427,6 +432,9 @@ approval-trail = ["approval-verify", "dep:serde"]
 # Baseline and the path and frontmatter rules it reads; the git adapter lives
 # in the binary.
 release = ["approval-verify", "dep:serde"]
+# FR-052: pure request rules and record path grammar of the release history; the
+# git adapter lives in the binary.
+release-history = []
 semantics = [
   "claim-strength",
   "exact-numbers",
@@ -473,6 +481,7 @@ full = [
   "package-membership",
   "producer-execution",
   "release",
+  "release-history",
   "scope-footprint",
   "semantics",
   "signature-verify",

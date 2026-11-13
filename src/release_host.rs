@@ -108,14 +108,14 @@ pub(crate) enum BaselineError {
 
 /// Git could not be run or its answer could not be read.
 #[derive(Clone, Copy, Debug)]
-struct GitFailure;
+pub(crate) struct GitFailure;
 
-fn git(repository: &Path, arguments: &[&str]) -> Result<CompletedProcess, GitFailure> {
+pub(crate) fn git(repository: &Path, arguments: &[&str]) -> Result<CompletedProcess, GitFailure> {
     run_git(repository, arguments).map_err(|_| GitFailure)
 }
 
 /// The object id git resolves `expression` to, or `None` when it names nothing.
-fn object_id(repository: &Path, expression: &str) -> Result<Option<String>, GitFailure> {
+pub(crate) fn object_id(repository: &Path, expression: &str) -> Result<Option<String>, GitFailure> {
     let output = git(
         repository,
         &[

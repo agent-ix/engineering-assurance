@@ -50,6 +50,7 @@
 //! | `package-membership` | `package_membership` | | `serde`, `thiserror` |
 //! | `producer-execution` | `producer_execution` | | `rustix`, `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
 //! | `release` | `release` | `approval-verify` | `serde` |
+//! | `release-history` | `release_history` | | |
 //! | `scope-footprint` | `scope_footprint` | `content-rights` | `serde`, `thiserror` |
 //! | `semantics` | `semantics` | `claim-strength`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
 //! | `signature-verify` | `signature_verify` | | `serde` |
@@ -105,6 +106,8 @@ pub mod package_membership;
 pub mod producer_execution;
 #[cfg(feature = "release")]
 pub mod release;
+#[cfg(feature = "release-history")]
+pub mod release_history;
 #[cfg(feature = "scope-footprint")]
 pub mod scope_footprint;
 #[cfg(feature = "semantics")]
