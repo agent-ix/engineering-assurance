@@ -96,8 +96,9 @@ carried by commits, merge commits or notes.
 - A request that yields no verdict writes the `engineering-assurance.error/v1`
   machine error for capability `approval-verify` to stdout and its message to
   stderr, and exits with status 2. The codes are
-  `approval_verify_request_unreadable`, `approval_verify_request_invalid` and
-  `approval_verify_allowed_signers_invalid`.
+  `approval_verify_request_unreadable`, `approval_verify_request_invalid`,
+  `approval_verify_allowed_signers_invalid` and
+  `approval_verify_result_encoding_failed`.
 
 ## Behavior
 
@@ -167,7 +168,7 @@ criteria use real signatures from throwaway keys generated in the test.
 | FR-041-AC-10 | A request with an unknown member, an empty or over-long `record_id` or `record_digest`, a leading `-`, a control character, a relative `repository` or `allowed_signers` path, or an invalid `gitsign` member writes `approval_verify_request_invalid` and exits 2; an invalid allowed-signers file writes `approval_verify_allowed_signers_invalid` and exits 2; neither starts git. | Test |
 | FR-041-AC-13 | A tag message made only of the trailer lines, with no subject paragraph, yields binding `missing` for both members and status `wrong_record`; the same trailers after a subject paragraph yield `match`. | Test |
 | FR-041-AC-14 | The result of an `approved` or any other status carries `trust` equal to the request's `allowed_signers` and `gitsign` members; a tag allowed-signers file naming a different principal for the same key yields a different `approver` under the different `trust`. | Test |
-| FR-041-AC-15 | A validly signed tag whose message cannot be read yields `unverifiable` with reason `trailer_unreadable` and not `wrong_record`. | Test |
+| FR-041-AC-15 | A validly signed tag whose message cannot be read yields `unverifiable` with reason `trailer_unreadable` and not `wrong_record`; a message cannot be read when git cannot parse it, when it holds a NUL byte, or when the parsed trailer output is not valid UTF-8, and no byte is replaced or truncated to make a trailer match. | Test |
 | FR-041-AC-11 | Every status other than a request error exits 0 and writes one JSON line carrying the result protocol, and a validly signed tag whose trailers are unrelated to the request still carries the unchanged `signature` verdict that `signature-verify` yields for the same tag. | Test |
 | FR-041-AC-12 | Static inspection shows no signature, certificate or trailer-parsing code in the approval module and no restated FR-036, FR-037 or FR-040 rule (CON-2). | Inspection |
 

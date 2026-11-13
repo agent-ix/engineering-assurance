@@ -70,12 +70,13 @@ struct Request {
     gitsign: Option<GitsignRequest>,
 }
 
-#[derive(Deserialize)]
+/// The `gitsign` member of a request, as the request documents spell it.
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct GitsignRequest {
-    certificate_identity: String,
-    certificate_oidc_issuer: String,
-    principal: String,
+pub(crate) struct GitsignRequest {
+    pub(crate) certificate_identity: String,
+    pub(crate) certificate_oidc_issuer: String,
+    pub(crate) principal: String,
 }
 
 #[derive(Serialize)]
@@ -168,7 +169,7 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, SignatureVerifyError> {
 /// Refuses an allowed-signers file git should not be given: one that is not a
 /// regular file, is over 1 MiB, cannot be read, or is not UTF-8. The grammar of
 /// the file is git's and `ssh-keygen`'s to read.
-fn check_allowed_signers(path: &Path) -> Result<(), SignatureVerifyError> {
+pub(crate) fn check_allowed_signers(path: &Path) -> Result<(), SignatureVerifyError> {
     let invalid = |_| SignatureVerifyError::AllowedSigners;
     // The type is checked before the open: opening a FIFO would block.
     let before = std::fs::metadata(path).map_err(invalid)?;
@@ -203,6 +204,31 @@ const fn mechanics_reason(error: &ProcessError, not_started: Reason) -> Reason {
         | ProcessError::Observation { .. }
         | ProcessError::OutputUnreadable { .. } => Reason::UnrecognizedOutput,
     }
+}
+
+/// A tag's verdict and the trailer block its message was read to hold.
+pub(crate) struct CheckedTag {
+    /// The FR-036, FR-037 and FR-040 verdict.
+    pub(crate) verdict: Verdict,
+    /// The output of `git interpret-trailers --parse` for the tag message;
+    /// `None` when the tag has no message to read or git could not read it.
+    pub(crate) trailers: Option<String>,
+}
+
+/// Verifies the tag `revision` exactly as `signature-verify` does for kind
+/// `tag`, and returns the parsed trailer block read for the same verdict.
+pub(crate) fn check_tag(
+    repository: &Path,
+    revision: &str,
+    allowed_signers: &Path,
+    gitsign: Option<&GitsignIdentity>,
+) -> CheckedTag {
+    Git {
+        repository,
+        allowed_signers,
+        gitsign,
+    }
+    .tag_checked(revision)
 }
 
 struct Git<'a> {
@@ -438,23 +464,34 @@ impl Git<'_> {
     }
 
     fn tag(&self, revision: &str) -> Verdict {
+        self.tag_checked(revision).verdict
+    }
+
+    fn tag_checked(&self, revision: &str) -> CheckedTag {
         let kind = TargetKind::Tag;
+        let without_message = |verdict| CheckedTag {
+            verdict,
+            trailers: None,
+        };
         let loaded = self.load_tag(revision);
         let (id, object) = match loaded {
             Ok(Some(loaded)) => loaded,
-            Ok(None) => return classify_tag(&TagObservation::Lightweight),
-            Err(reason) => return Verdict::unverifiable(kind, reason),
+            Ok(None) => return without_message(classify_tag(&TagObservation::Lightweight)),
+            Err(reason) => return without_message(Verdict::unverifiable(kind, reason)),
         };
         let split = split_tag_object(&object);
         let payload = split.as_ref().map_or(object.as_slice(), |s| s.payload);
-        let meaning = self.meaning(object_message(payload));
+        let trailers = self.parsed_trailers(object_message(payload));
+        let meaning = trailers.as_deref().map(signed_off_meaning);
         let format = split.as_ref().map(|s| s.format);
-        self.tag_verdict(revision, &id, split.as_ref())
+        let verdict = self
+            .tag_verdict(revision, &id, split.as_ref())
             .unwrap_or_else(|reason| {
                 Verdict::unverifiable(kind, reason)
                     .with_signature_kind(format.and_then(SignatureFormat::signature_kind))
             })
-            .with_meaning(meaning)
+            .with_meaning(meaning);
+        CheckedTag { verdict, trailers }
     }
 
     /// The id and object of an annotated tag; `None` for a lightweight tag.
@@ -584,8 +621,20 @@ impl Git<'_> {
     /// read them. Git runs in an empty directory it may not leave, so the
     /// verified repository's configuration cannot change what is read.
     fn meaning(&self, message: &[u8]) -> Option<SignedOffMeaning> {
+        self.parsed_trailers(message)
+            .as_deref()
+            .map(signed_off_meaning)
+    }
+
+    /// The output of `git interpret-trailers --parse --no-divider` for
+    /// `message`, read in the isolated directory `meaning` describes; `None` when
+    /// git could not read it.
+    fn parsed_trailers(&self, message: &[u8]) -> Option<String> {
         let directory = tempfile::tempdir().ok()?;
         let path = directory.path().join("message");
+        if message.contains(&0) {
+            return None;
+        }
         std::fs::write(&path, message).ok()?;
         let output = self
             .run_with_stdin(
@@ -597,8 +646,7 @@ impl Git<'_> {
         if !output.status.success() {
             return None;
         }
-        let text = String::from_utf8_lossy(&output.stdout);
-        Some(signed_off_meaning(&text))
+        String::from_utf8(output.stdout).ok()
     }
 
     fn require_repository(&self) -> Result<(), Reason> {

@@ -43,8 +43,9 @@ signature, is a claim that needs its own evidence.
   git accepted for which `ssh-keygen -Y find-principals` fails or prints
   nothing.
 - `signed_off_meaning` is omitted when no message was read (a lightweight tag,
-  an unresolved revision, or a trailer read that failed); non-UTF-8 bytes in a
-  value are replaced lossily.
+  an unresolved revision, or a trailer read that failed); a message that holds a
+  NUL byte, or trailer output that is not valid UTF-8, is a trailer read that
+  failed, and no byte is replaced.
 - A missing, unreadable or invalid allowed-signers file writes the machine
   error `signature_verify_allowed_signers_invalid` and exits with status 2.
 
@@ -67,7 +68,8 @@ signature, is a claim that needs its own evidence.
   the message. For a
   tag it SHALL first remove the trailing signature block from the tag message,
   because git appends that block after the trailer.
-- The command SHALL yield every value of a repeated trailer in order.
+- The command SHALL yield every value of a repeated trailer in order, each as
+  git prints it with leading and trailing ASCII whitespace removed.
 - The command SHALL report a trailer with an empty value as `present` with
   that empty value.
 - The command SHALL yield `presence` `missing` and no `values` for a message
