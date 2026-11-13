@@ -329,6 +329,17 @@ pub(crate) fn load_tag(
     .load(revision)
 }
 
+/// Runs git in `repository` with the isolation the verification uses, for
+/// object reads that decide nothing about a signature.
+pub(crate) fn run_git(repository: &Path, arguments: &[&str]) -> Result<CompletedProcess, Reason> {
+    Git {
+        repository,
+        allowed_signers: Path::new("/dev/null"),
+        gitsign: None,
+    }
+    .run(arguments)
+}
+
 /// Verifies a tag read by [`load_tag`], exactly as [`check_tag`] verifies it.
 pub(crate) fn verify_loaded_tag(
     repository: &Path,

@@ -227,6 +227,16 @@ path = "tests/approval_trail_gitsign.rs"
 required-features = ["full"]
 
 [[test]]
+name = "release"
+path = "tests/release.rs"
+required-features = ["release"]
+
+[[test]]
+name = "release_verify_cli"
+path = "tests/release_verify_cli.rs"
+required-features = ["full"]
+
+[[test]]
 name = "approval_verify_cli"
 path = "tests/approval_verify_cli.rs"
 required-features = ["full"]
@@ -413,6 +423,10 @@ approval-tag = ["approval-verify"]
 # FR-043: pure ordering of an approval trail and the test of whether a tag names
 # a record; the listing and every verification stay in the binary's adapter.
 approval-trail = ["approval-verify", "dep:serde"]
+# FR-047, FR-051: pure decision of whether a signed tag is a release of a
+# Baseline and the path and frontmatter rules it reads; the git adapter lives
+# in the binary.
+release = ["approval-verify", "dep:serde"]
 semantics = [
   "claim-strength",
   "exact-numbers",
@@ -458,6 +472,7 @@ full = [
   "package-lifecycle",
   "package-membership",
   "producer-execution",
+  "release",
   "scope-footprint",
   "semantics",
   "signature-verify",
