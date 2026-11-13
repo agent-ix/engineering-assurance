@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-//! The document converter producer requests (FR-044) run through
+//! The document converter producer requests (FR-045) run through
 //! `producer-execute`.
 //!
 //! Tests that run the real converters read their absolute paths from
 //! `EA_TEST_PANDOC` and `EA_TEST_TYPST` and fail, never skip, when one is absent
-//! (FR-044-CON-1). The other tests run shell stand-ins written into a temporary
+//! (FR-045-CON-1). The other tests run shell stand-ins written into a temporary
 //! directory, so the repository holds no converter binary, template or
 //! reference document.
 
@@ -91,7 +91,7 @@ fn workspace() -> tempfile::TempDir {
     root
 }
 
-/// The converter producer definition of FR-044 for one step.
+/// The converter producer definition of FR-045 for one step.
 fn converter_request(root: &Path, executable: &Path, step: Step) -> Value {
     let root = fs::canonicalize(root).expect("root").display().to_string();
     json!({
@@ -188,7 +188,7 @@ const PANDOC_COPY: &str = "while [ $# -gt 0 ]; do\n  case \"$1\" in\n    --outpu
 const TYPST_COPY: &str = "test \"$1\" = compile || exit 64\ncp \"$2\" \"$3\"\n";
 
 #[cfg(target_os = "linux")]
-#[trace("TC-368", "FR-044-AC-1")]
+#[trace("TC-368", "FR-045-AC-1")]
 #[test]
 fn tc_368_stand_in_pandoc_makes_a_docx_document() {
     let tools = tempfile::tempdir().expect("tools");
@@ -200,7 +200,7 @@ fn tc_368_stand_in_pandoc_makes_a_docx_document() {
 }
 
 #[cfg(target_os = "linux")]
-#[trace("TC-369", "FR-044-AC-2")]
+#[trace("TC-369", "FR-045-AC-2")]
 #[test]
 fn tc_369_stand_in_pandoc_then_typst_share_one_capability_root() {
     let tools = tempfile::tempdir().expect("tools");
@@ -216,7 +216,7 @@ fn tc_369_stand_in_pandoc_then_typst_share_one_capability_root() {
 }
 
 #[cfg(target_os = "linux")]
-#[trace("TC-370", "FR-044-AC-3")]
+#[trace("TC-370", "FR-045-AC-3")]
 #[test]
 fn tc_370_missing_converter_is_unavailable_without_a_document() {
     let tools = tempfile::tempdir().expect("tools");
@@ -245,7 +245,7 @@ fn tc_370_missing_converter_is_unavailable_without_a_document() {
 }
 
 #[cfg(target_os = "linux")]
-#[trace("TC-371", "FR-044-AC-4")]
+#[trace("TC-371", "FR-045-AC-4")]
 #[test]
 fn tc_371_converter_failure_is_failed_and_carries_its_stderr() {
     let tools = tempfile::tempdir().expect("tools");
@@ -276,7 +276,7 @@ fn tc_371_converter_failure_is_failed_and_carries_its_stderr() {
 }
 
 #[cfg(target_os = "linux")]
-#[trace("TC-372", "FR-044-AC-4")]
+#[trace("TC-372", "FR-045-AC-4")]
 #[test]
 fn tc_372_exit_zero_without_the_required_output_is_failed() {
     let tools = tempfile::tempdir().expect("tools");
@@ -287,7 +287,7 @@ fn tc_372_exit_zero_without_the_required_output_is_failed() {
     assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
 }
 
-#[trace("TC-373", "FR-044-AC-5")]
+#[trace("TC-373", "FR-045-AC-5")]
 #[test]
 fn tc_373_requests_match_the_definition_and_the_published_schema() {
     let root = workspace();
@@ -392,7 +392,7 @@ fn tool(variable: &str) -> PathBuf {
     resolve_tool(variable, std::env::var_os(variable)).unwrap_or_else(|message| panic!("{message}"))
 }
 
-#[trace("TC-374", "FR-044-AC-6")]
+#[trace("TC-374", "FR-045-AC-6")]
 #[test]
 #[ignore = "needs EA_TEST_PANDOC"]
 fn tc_374_real_pandoc_converts_the_fixture_to_docx() {
@@ -412,7 +412,7 @@ fn tc_374_real_pandoc_converts_the_fixture_to_docx() {
     }
 }
 
-#[trace("TC-375", "FR-044-AC-6")]
+#[trace("TC-375", "FR-045-AC-6")]
 #[test]
 #[ignore = "needs EA_TEST_PANDOC and EA_TEST_TYPST"]
 fn tc_375_real_pandoc_and_typst_convert_the_fixture_to_pdf() {
@@ -428,7 +428,7 @@ fn tc_375_real_pandoc_and_typst_convert_the_fixture_to_pdf() {
     assert!(pdf.starts_with(b"%PDF"), "the output must be a PDF");
 }
 
-#[trace("TC-376", "FR-044-CON-1")]
+#[trace("TC-376", "FR-045-CON-1")]
 #[test]
 fn tc_376_missing_converter_fails_the_integration_target_naming_the_variable() {
     let not_executable = tempfile::NamedTempFile::new().expect("plain file");

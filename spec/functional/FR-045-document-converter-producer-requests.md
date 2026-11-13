@@ -1,5 +1,5 @@
 ---
-id: FR-044
+id: FR-045
 title: "Run the document converters pandoc and typst through producer-execute requests"
 type: FR
 relationships:
@@ -11,7 +11,7 @@ relationships:
     type: "references"
 ---
 
-# FR-044: Run the document converters pandoc and typst through producer-execute requests
+# FR-045: Run the document converters pandoc and typst through producer-execute requests
 
 ## Description
 
@@ -60,18 +60,18 @@ artifact, role `document`.
 
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
-| FR-044-CON-1 | If `EA_TEST_PANDOC` or `EA_TEST_TYPST`, the absolute path of the binary a test runs, is unset or does not name an executable file, then `make converter-integration` SHALL exit non-zero with a message naming the variable. A default `cargo test` does not run the real-converter tests, and the repository holds no converter binary. | Test integrity | Test |
+| FR-045-CON-1 | If `EA_TEST_PANDOC` or `EA_TEST_TYPST`, the absolute path of the binary a test runs, is unset or does not name an executable file, then `make converter-integration` SHALL exit non-zero with a message naming the variable. A default `cargo test` does not run the real-converter tests, and the repository holds no converter binary. | Test integrity | Test |
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-044-AC-1 | A pandoc request over a fixture Markdown document, with a stand-in executable, is accepted by `producer-execute` and yields state `completed` with one retained `document` artifact at the requested path. | Test |
-| FR-044-AC-2 | A pandoc request writing `typ/document.typ` followed by a typst request compiling it to `out/document.pdf`, over one capability root, each yield `completed` with one retained `document` artifact. | Test |
-| FR-044-AC-3 | A request naming a pandoc or typst executable that does not exist yields state `unavailable`, no artifact, and a result whose `producer.name` and `producer.executable` equal the request's; one naming a directory yields `refused`. | Test |
-| FR-044-AC-4 | A converter that exits 7 with a message on stderr yields state `failed` with exit code 7 and that message in `process.stderr`; one that exits 0 without writing its output yields `failed`. | Test |
-| FR-044-AC-5 | The requests used by the tests pass the published request schema of `producer-execute --schema request` and match the quire-cli FR-032 field table for `caller`, `environment`, `inputs`, `stdin`, `outputs`, `containment`, `cancellation` and `arguments`. | Test |
-| FR-044-AC-6 | With real pandoc and typst, the fixture converts to a DOCX that opens as a zip whose `word/document.xml` holds the fixture headings and code text, and to a PDF that starts with `%PDF`. A missing tool fails the test, naming the variable. | Test |
+| FR-045-AC-1 | A pandoc request over a fixture Markdown document, with a stand-in executable, is accepted by `producer-execute` and yields state `completed` with one retained `document` artifact at the requested path. | Test |
+| FR-045-AC-2 | A pandoc request writing `typ/document.typ` followed by a typst request compiling it to `out/document.pdf`, over one capability root, each yield `completed` with one retained `document` artifact. | Test |
+| FR-045-AC-3 | A request naming a pandoc or typst executable that does not exist yields state `unavailable`, no artifact, and a result whose `producer.name` and `producer.executable` equal the request's; one naming a directory yields `refused`. | Test |
+| FR-045-AC-4 | A converter that exits 7 with a message on stderr yields state `failed` with exit code 7 and that message in `process.stderr`; one that exits 0 without writing its output yields `failed`. | Test |
+| FR-045-AC-5 | The requests used by the tests pass the published request schema of `producer-execute --schema request` and match the quire-cli FR-032 field table for `caller`, `environment`, `inputs`, `stdin`, `outputs`, `containment`, `cancellation` and `arguments`. | Test |
+| FR-045-AC-6 | With real pandoc and typst, the fixture converts to a DOCX that opens as a zip whose `word/document.xml` holds the fixture headings and code text, and to a PDF that starts with `%PDF`. A missing tool fails the test, naming the variable. | Test |
 
 ## Dependencies
 
