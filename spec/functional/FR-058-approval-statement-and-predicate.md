@@ -25,8 +25,9 @@ request and the merged commit, so that it survives a squash merge: the merged co
 head commit is a predicate member.
 
 The statement has the in-toto statement type, one subject (the repository and the merged commit as its git commit
-digest), the predicate type `https://schemas.agent-ix.ai/attestation/approval/v1` and the predicate below. The
-predicate type is an identity string; no document needs to be hosted at that address. The statement and predicate are
+digest), the approval predicate type and the predicate below. The
+predicate type is the URI with scheme `https`, host `schemas.agent-ix.ai` and path `/attestation/approval/v1` (the
+repository's content-rights check admits no spelled-out external URL). It is an identity string; no document needs to be hosted at that address. The statement and predicate are
 closed schemas ([NFR-008](../non-functional/NFR-008-closed-schemas.md)). The signature is made through the signing
 stack named in [NFR-010](../non-functional/NFR-010-no-cryptography-of-our-own.md).
 
@@ -50,7 +51,7 @@ approval statements (EA-98), and the signed-tag path for release decisions
 
 - The statement writer SHALL produce one statement per approval.
 - The statement writer SHALL set the statement subject to the repository and the merged commit.
-- The statement writer SHALL set the predicate type to `https://schemas.agent-ix.ai/attestation/approval/v1`.
+- The statement writer SHALL set the predicate type to the URI with scheme `https`, host `schemas.agent-ix.ai` and path `/attestation/approval/v1`.
 - The statement writer SHALL copy `approver` from the source's report without changing it.
 - The statement writer SHALL take `meaning` from the `Signed-off-meaning:` line of the review body.
 - The statement writer SHALL take `signed_at` from the source's timestamp.
