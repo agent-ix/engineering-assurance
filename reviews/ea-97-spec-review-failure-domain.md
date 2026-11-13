@@ -57,9 +57,16 @@ a branch the implementation would otherwise have to invent.
 | FND-008 | medium | The `grace_minutes` exclusion has no defined clock, and the in-progress exclusion has no bound. Commit dates are set by the author, so a bypass push with a future committer date would never be listed. "In progress, or newer than `grace_minutes`" also lets a stuck run hide a commit forever. Fix: measure age from the time the commit became reachable from the default branch, as the platform's push event reports it, never from commit dates; exclude an in-progress run only while it is within `grace_minutes`; add an AC with a future-dated commit. | spec/functional/FR-077-missing-receipt-check.md:29 |
 | FND-009 | low | FR-067's resolution has no outcome for a failed source lookup of the merged pull request, the analogue of FR-063's `approval_source_unavailable`. An implementer would report `release_roles_no_pull_request` for a transient failure. Fix: add a retryable `release_roles_source_unavailable` with an AC. | spec/functional/FR-067-release-attestations-bind-to-the-signed-release-tag.md:30 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-010 | medium | FR-078 groups a note's lines "by `record_id`", but only the change-record predicate has a `record_id`. The verification summary may carry no custom member (FR-068/FR-074 use the third-party VSA as defined), and the test-result statement has none either, so two of the three statements cannot be assigned to a group. (The round-1 fix suggested this key; the suggestion was wrong.) Fix: group by the summary: each summary's input attestations name its change-record and test-result statements by digest, so a group is a summary plus the two statements whose digests it lists; update FR-078-AC-7. | spec/functional/FR-078-receipt-verify.md:20 |
+| FND-011 | medium | FR-077 measures age "from the push time of the workflow run", but the commits this check exists for (a ruleset bypass, or a push whose receipt workflow never ran) have no receipt run to report a push time. The age source is therefore undefined exactly where it matters, and an implementer may treat such commits as young. Fix: take the push time from the platform's record of pushes to the default branch, independent of any workflow run (for GitHub, the repository activity record); list a commit whose push time cannot be determined as `status_unknown`; add an AC for a bypass push with no run. | spec/functional/FR-077-missing-receipt-check.md:29 |
+
 ## Dispositions
 
-Round 1, head 428c2bd (fix commits 5bab3f1..428c2bd).
+Round 1 rows (findings of the review pass) at head 428c2bd; round 2 rows (findings of disposition pass 1, listed after them) at head a6895e7.
 
 | FND | outcome | reason |
 | --- | --- | --- |
@@ -69,3 +76,6 @@ Round 1, head 428c2bd (fix commits 5bab3f1..428c2bd).
 | FND-004 | fixed | - |
 | FND-005 | fixed | - |
 | FND-006 | fixed | - |
+| FND-007 | fixed | - |
+| FND-008 | fixed | - |
+| FND-009 | fixed | - |

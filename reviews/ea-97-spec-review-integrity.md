@@ -58,9 +58,17 @@ Both have small, local fixes. FND-003 to FND-007 belong to the same fix round.
 | FND-011 | medium | FR-067 says "a squash or merge-commit merge of the release pull request must produce" the release commit. FR-047 requires the release commit to have exactly one parent, the baseline commit, and a merge commit has two, so `release-verify` always reports `release_commit_not_child_of_baseline` for that method. Fix: name squash, or a rebase merge whose tip is the release commit, as the methods that yield a valid release commit; state that a merge-commit merge yields `not_released`; add it to FR-067-AC-8. | spec/functional/FR-067-release-attestations-bind-to-the-signed-release-tag.md:28 |
 | FND-012 | low | The new FR-064-AC-13 and FR-064-AC-14 have no tests.md rows. No wave-1 FR-054..FR-065 AC has one on main either, so this continues an existing gap rather than introducing a new one. Fix: add TC rows for the two new ACs (and, separately, for the wave-1 set). | spec/functional/FR-064-verify-approval-statement-with-workflow-identity-policy.md:97 |
 
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-013 | medium | FR-069 now says the release attestation workflow supplies the computed artifact subject to the Quoin export (PLAT-1687's shape). FR-070's table still feeds `release-attestation.yml` a caller-built `test_result_artifact` input, so the export would already exist before the reusable workflow computes the digests, and no requirement says which job runs the export. If it runs in `attest`, a tool reading repository data runs inside the signing job. Fix: run the export in the reusable workflow's `verify` job (`contents: read`) from an evidence-store artifact with the computed subject, renaming the input to `evidence_artifact` in FR-070; or keep the caller-built export and only check its subject against the computed digests, dropping "supplies" from FR-069. | spec/functional/FR-069-test-result-export-is-consumed-as-data.md:16 |
+| FND-014 | low | "A commit that already has a verified receipt is skipped" does not say whether a valid failed receipt (`verified_failed`) counts as verified. A re-run after a flaky gate either can or cannot add a superseding receipt, and FR-078's latest-group rule assumes it can. Fix: state that a commit with `verified` is skipped and one with `verified_failed` may receive a new group (or the reverse), and add the case to FR-076-AC-7. | spec/functional/FR-076-receipt-storage-in-git-notes.md:31 |
+| FND-015 | low | FR-078's parenthetical list of matched members ("signer workflow and ref, source repository and source ref") omits the new `source_workflow_path` and `event`, so a reader of FR-078 alone would implement a partial match. Fix: list all members, or drop the parenthetical and keep "on every member of the FR-064 entry". | spec/functional/FR-078-receipt-verify.md:20 |
+
 ## Dispositions
 
-Round 1, head 428c2bd (fix commits 5bab3f1..428c2bd).
+Round 1 rows (findings of the review pass) at head 428c2bd; round 2 rows (findings of disposition pass 1, listed after them) at head a6895e7.
 
 | FND | outcome | reason |
 | --- | --- | --- |
@@ -72,3 +80,7 @@ Round 1, head 428c2bd (fix commits 5bab3f1..428c2bd).
 | FND-006 | fixed | - |
 | FND-007 | fixed | - |
 | FND-008 | fixed | - |
+| FND-009 | fixed | - |
+| FND-010 | fixed | - |
+| FND-011 | fixed | - |
+| FND-012 | fixed | - |

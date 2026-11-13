@@ -62,7 +62,7 @@ itself only needs the citation) and FND-002 states the EA-109 boundary.
 
 ## Dispositions
 
-Round 1, head 428c2bd (fix commits 5bab3f1..428c2bd).
+Round 1 rows (findings of the review pass) at head 428c2bd; round 2 rows (findings of disposition pass 1, listed after them) at head a6895e7.
 
 | FND | outcome | reason |
 | --- | --- | --- |
@@ -70,3 +70,4 @@ Round 1, head 428c2bd (fix commits 5bab3f1..428c2bd).
 | FND-002 | fixed | - |
 | FND-003 | fixed | - |
 | FND-004 | fixed | - |
+| FND-005 | fixed | - |

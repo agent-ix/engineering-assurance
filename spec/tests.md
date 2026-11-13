@@ -274,70 +274,72 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-069 | FR-069-AC-1 | TC-553 | 🚧 Specified |
 | FR-069 | FR-069-AC-2 | TC-554 | 🚧 Specified |
 | FR-069 | FR-069-AC-3 | TC-555 | 🚧 Specified |
-| FR-070 | FR-070-AC-1 | TC-556 | 🚧 Specified |
-| FR-070 | FR-070-AC-2 | TC-557 | 🚧 Specified |
-| FR-070 | FR-070-AC-3 | TC-558 | 🚧 Specified |
-| FR-070 | FR-070-AC-4 | TC-559 | 🚧 Specified |
-| FR-070 | FR-070-AC-5 | TC-560 | 🚧 Specified |
-| FR-070 | FR-070-AC-6 | TC-561 | 🚧 Specified |
-| FR-070 | FR-070-AC-7 | TC-562 | 🚧 Specified |
-| FR-071 | FR-071-AC-1 | TC-563 | 🚧 Specified |
-| FR-071 | FR-071-AC-2 | TC-564 | 🚧 Specified |
-| FR-071 | FR-071-AC-3 | TC-565 | 🚧 Specified |
-| FR-071 | FR-071-AC-4 | TC-566 | 🚧 Specified |
-| FR-071 | FR-071-AC-5 | TC-567 | 🚧 Specified |
-| FR-071 | FR-071-AC-6 | TC-568 | 🚧 Specified |
-| FR-072 | FR-072-AC-1 | TC-569 | 🚧 Specified |
-| FR-072 | FR-072-AC-2 | TC-570 | 🚧 Specified |
-| FR-072 | FR-072-AC-3 | TC-571 | 🚧 Specified |
-| FR-072 | FR-072-AC-4 | TC-572 | 🚧 Specified |
-| FR-072 | FR-072-AC-5 | TC-573 | 🚧 Specified |
-| FR-072 | FR-072-AC-6 | TC-574 | 🚧 Specified |
-| FR-072 | FR-072-AC-7 | TC-575 | 🚧 Specified |
-| FR-073 | FR-073-AC-1 | TC-576 | 🚧 Specified |
-| FR-073 | FR-073-AC-2 | TC-577 | 🚧 Specified |
-| FR-073 | FR-073-AC-3 | TC-578 | 🚧 Specified |
-| FR-073 | FR-073-AC-4 | TC-579 | 🚧 Specified |
-| FR-073 | FR-073-AC-5 | TC-580 | 🚧 Specified |
-| FR-073 | FR-073-AC-6 | TC-581 | 🚧 Specified |
-| FR-074 | FR-074-AC-1 | TC-582 | 🚧 Specified |
-| FR-074 | FR-074-AC-2 | TC-583 | 🚧 Specified |
-| FR-074 | FR-074-AC-3 | TC-584 | 🚧 Specified |
-| FR-074 | FR-074-AC-4 | TC-585 | 🚧 Specified |
-| FR-074 | FR-074-AC-5 | TC-586 | 🚧 Specified |
-| FR-074 | FR-074-AC-6 | TC-587 | 🚧 Specified |
-| FR-074 | FR-074-AC-7 | TC-588 | 🚧 Specified |
-| FR-075 | FR-075-AC-1 | TC-589 | 🚧 Specified |
-| FR-075 | FR-075-AC-2 | TC-590 | 🚧 Specified |
-| FR-075 | FR-075-AC-3 | TC-591 | 🚧 Specified |
-| FR-075 | FR-075-AC-4 | TC-592 | 🚧 Specified |
-| FR-075 | FR-075-AC-5 | TC-593 | 🚧 Specified |
-| FR-075 | FR-075-AC-6 | TC-594 | 🚧 Specified |
-| FR-075 | FR-075-AC-7 | TC-595 | 🚧 Specified |
-| FR-076 | FR-076-AC-1 | TC-596 | 🚧 Specified |
-| FR-076 | FR-076-AC-2 | TC-597 | 🚧 Specified |
-| FR-076 | FR-076-AC-3 | TC-598 | 🚧 Specified |
-| FR-076 | FR-076-AC-4 | TC-599 | 🚧 Specified |
-| FR-076 | FR-076-AC-5 | TC-600 | 🚧 Specified |
-| FR-076 | FR-076-AC-6 | TC-601 | 🚧 Specified |
-| FR-076 | FR-076-AC-7 | TC-602 | 🚧 Specified |
-| FR-077 | FR-077-AC-1 | TC-603 | 🚧 Specified |
-| FR-077 | FR-077-AC-2 | TC-604 | 🚧 Specified |
-| FR-077 | FR-077-AC-3 | TC-605 | 🚧 Specified |
-| FR-077 | FR-077-AC-4 | TC-606 | 🚧 Specified |
-| FR-077 | FR-077-AC-5 | TC-607 | 🚧 Specified |
-| FR-077 | FR-077-AC-6 | TC-608 | 🚧 Specified |
-| FR-078 | FR-078-AC-1 | TC-609 | 🚧 Specified |
-| FR-078 | FR-078-AC-2 | TC-610 | 🚧 Specified |
-| FR-078 | FR-078-AC-3 | TC-611 | 🚧 Specified |
-| FR-078 | FR-078-AC-4 | TC-612 | 🚧 Specified |
-| FR-078 | FR-078-AC-5 | TC-613 | 🚧 Specified |
-| FR-078 | FR-078-AC-6 | TC-614 | 🚧 Specified |
-| FR-078 | FR-078-AC-7 | TC-615 | 🚧 Specified |
-| FR-079 | FR-079-AC-1 | TC-616 | 🚧 Specified |
-| FR-079 | FR-079-AC-2 | TC-617 | 🚧 Specified |
-| FR-079 | FR-079-AC-3 | TC-618 | 🚧 Specified |
-| FR-079 | FR-079-AC-4 | TC-619 | 🚧 Specified |
+| FR-069 | FR-069-AC-4 | TC-556 | 🚧 Specified |
+| FR-070 | FR-070-AC-1 | TC-557 | 🚧 Specified |
+| FR-070 | FR-070-AC-2 | TC-558 | 🚧 Specified |
+| FR-070 | FR-070-AC-3 | TC-559 | 🚧 Specified |
+| FR-070 | FR-070-AC-4 | TC-560 | 🚧 Specified |
+| FR-070 | FR-070-AC-5 | TC-561 | 🚧 Specified |
+| FR-070 | FR-070-AC-6 | TC-562 | 🚧 Specified |
+| FR-070 | FR-070-AC-7 | TC-563 | 🚧 Specified |
+| FR-071 | FR-071-AC-1 | TC-564 | 🚧 Specified |
+| FR-071 | FR-071-AC-2 | TC-565 | 🚧 Specified |
+| FR-071 | FR-071-AC-3 | TC-566 | 🚧 Specified |
+| FR-071 | FR-071-AC-4 | TC-567 | 🚧 Specified |
+| FR-071 | FR-071-AC-5 | TC-568 | 🚧 Specified |
+| FR-071 | FR-071-AC-6 | TC-569 | 🚧 Specified |
+| FR-072 | FR-072-AC-1 | TC-570 | 🚧 Specified |
+| FR-072 | FR-072-AC-2 | TC-571 | 🚧 Specified |
+| FR-072 | FR-072-AC-3 | TC-572 | 🚧 Specified |
+| FR-072 | FR-072-AC-4 | TC-573 | 🚧 Specified |
+| FR-072 | FR-072-AC-5 | TC-574 | 🚧 Specified |
+| FR-072 | FR-072-AC-6 | TC-575 | 🚧 Specified |
+| FR-072 | FR-072-AC-7 | TC-576 | 🚧 Specified |
+| FR-073 | FR-073-AC-1 | TC-577 | 🚧 Specified |
+| FR-073 | FR-073-AC-2 | TC-578 | 🚧 Specified |
+| FR-073 | FR-073-AC-3 | TC-579 | 🚧 Specified |
+| FR-073 | FR-073-AC-4 | TC-580 | 🚧 Specified |
+| FR-073 | FR-073-AC-5 | TC-581 | 🚧 Specified |
+| FR-073 | FR-073-AC-6 | TC-582 | 🚧 Specified |
+| FR-074 | FR-074-AC-1 | TC-583 | 🚧 Specified |
+| FR-074 | FR-074-AC-2 | TC-584 | 🚧 Specified |
+| FR-074 | FR-074-AC-3 | TC-585 | 🚧 Specified |
+| FR-074 | FR-074-AC-4 | TC-586 | 🚧 Specified |
+| FR-074 | FR-074-AC-5 | TC-587 | 🚧 Specified |
+| FR-074 | FR-074-AC-6 | TC-588 | 🚧 Specified |
+| FR-074 | FR-074-AC-7 | TC-589 | 🚧 Specified |
+| FR-075 | FR-075-AC-1 | TC-590 | 🚧 Specified |
+| FR-075 | FR-075-AC-2 | TC-591 | 🚧 Specified |
+| FR-075 | FR-075-AC-3 | TC-592 | 🚧 Specified |
+| FR-075 | FR-075-AC-4 | TC-593 | 🚧 Specified |
+| FR-075 | FR-075-AC-5 | TC-594 | 🚧 Specified |
+| FR-075 | FR-075-AC-6 | TC-595 | 🚧 Specified |
+| FR-075 | FR-075-AC-7 | TC-596 | 🚧 Specified |
+| FR-076 | FR-076-AC-1 | TC-597 | 🚧 Specified |
+| FR-076 | FR-076-AC-2 | TC-598 | 🚧 Specified |
+| FR-076 | FR-076-AC-3 | TC-599 | 🚧 Specified |
+| FR-076 | FR-076-AC-4 | TC-600 | 🚧 Specified |
+| FR-076 | FR-076-AC-5 | TC-601 | 🚧 Specified |
+| FR-076 | FR-076-AC-6 | TC-602 | 🚧 Specified |
+| FR-076 | FR-076-AC-7 | TC-603 | 🚧 Specified |
+| FR-077 | FR-077-AC-1 | TC-604 | 🚧 Specified |
+| FR-077 | FR-077-AC-2 | TC-605 | 🚧 Specified |
+| FR-077 | FR-077-AC-3 | TC-606 | 🚧 Specified |
+| FR-077 | FR-077-AC-4 | TC-607 | 🚧 Specified |
+| FR-077 | FR-077-AC-5 | TC-608 | 🚧 Specified |
+| FR-077 | FR-077-AC-6 | TC-609 | 🚧 Specified |
+| FR-077 | FR-077-AC-7 | TC-610 | 🚧 Specified |
+| FR-078 | FR-078-AC-1 | TC-611 | 🚧 Specified |
+| FR-078 | FR-078-AC-2 | TC-612 | 🚧 Specified |
+| FR-078 | FR-078-AC-3 | TC-613 | 🚧 Specified |
+| FR-078 | FR-078-AC-4 | TC-614 | 🚧 Specified |
+| FR-078 | FR-078-AC-5 | TC-615 | 🚧 Specified |
+| FR-078 | FR-078-AC-6 | TC-616 | 🚧 Specified |
+| FR-078 | FR-078-AC-7 | TC-617 | 🚧 Specified |
+| FR-079 | FR-079-AC-1 | TC-618 | 🚧 Specified |
+| FR-079 | FR-079-AC-2 | TC-619 | 🚧 Specified |
+| FR-079 | FR-079-AC-3 | TC-620 | 🚧 Specified |
+| FR-079 | FR-079-AC-4 | TC-621 | 🚧 Specified |
 
 ### Non-Functional Requirement Coverage
 
@@ -347,7 +349,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | NFR-002 | Agent evaluation against fixture-authorized outcomes | TC-039 | ✅ `tests/evaluation_parity.rs`: the aggregate gate withholds on any unsupported addition, any inferred terminal decision, and any incomplete or failing cell of the declared qualification population, and ignores an unqualified host |
 | NFR-003 | Wheel/npm member audit plus compatibility invocation | TC-040 | ✅ Passing |
 | NFR-005 | Exact toolchain build, unsafe audit, executable-path audit, Quire reconciliation, matrix row integrity | TC-115..TC-118, TC-205 | ✅ Executable-language and host-configuration audit (workflow YAML excluded), trace-marker and reconciliation checks passing |
-| NFR-011 | Source inspection of the workflow files; YAML-parsing test; stand-in signer test | TC-620, TC-621 | 🚧 Specified |
+| NFR-011 | Source inspection of the workflow files; YAML-parsing test; stand-in signer test | TC-622, TC-623 | 🚧 Specified |
 
 ### Constraint Coverage
 
@@ -814,72 +816,74 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-553 | A fixture export with one passing, one failing and one stale entry, whose stale and failing entries are in `failedTests` and whose `result` is `FAILED`, yields a signed statement whose predicate equals the exported predicate ... | Integration | P0 | FR-069-AC-1 | 🚧 |
 | TC-554 | A missing export, an export with an unknown predicate member, an export whose `result` is `PASSED` while `failedTests` is not empty, an export whose subject differs from the supplied one, and an export that is not JSON each ... | Integration | P0 | FR-069-AC-2 | 🚧 |
 | TC-555 | Static inspection shows the workflow and the statement builder call no Quoin evidence command that reads git or the network | Static | P0 | FR-069-AC-3 | 🚧 |
-| TC-556 | Parsing the five files yields exactly the triggers, jobs and per-job permissions of the table, and no file declares `pull_request_target` or `workflow_run` | Integration | P0 | FR-070-AC-1 | 🚧 |
-| TC-557 | No `run:` value in any file contains an expression over `github.ref_name`, `github.head_ref`, an event title or body, a commit message or `inputs.`; each such value appears only under `env:` | Integration | P0 | FR-070-AC-2 | 🚧 |
-| TC-558 | Every `uses:` in a job with `id-token: write` ends in a 40-hex SHA, and every checkout step has `persist-credentials: false` | Integration | P0 | FR-070-AC-3 | 🚧 |
-| TC-559 | The `gates` job holds only `contents: read`, the `record` job runs no step that executes a repository file or a command from the receipt policy, and the `notes` job holds no `id-token` | Integration | P0 | FR-070-AC-4 | 🚧 |
-| TC-560 | No step in any of the five files invokes an agent harness or model client | Static | P0 | FR-070-AC-5 | 🚧 |
-| TC-561 | A `change-receipt.yml` run with a `commit` input that is not the pushed commit fails with `receipt_input_commit_mismatch`, and a `release-attestation.yml` run with a `tag` input that is not the triggering tag fails with ... | Integration | P0 | FR-070-AC-6 | 🚧 |
-| TC-562 | The `gates` job declares no `secrets` and no `environment`, and its `runs-on` is a GitHub-hosted label or an ephemeral runner label | Integration | P0 | FR-070-AC-7 | 🚧 |
-| TC-563 | A public repository on the public sink with a clean leak check publishes a trimmed record of kind `release_attestation` whose bytes hold the summary digest, the release commit, the verdict `released` and timestamps only | Integration | P0 | FR-071-AC-1 | 🚧 |
-| TC-564 | A public repository referencing a private Linear team in the release record is refused by the leak check, and the stand-in attestation action is not called | Integration | P0 | FR-071-AC-2 | 🚧 |
-| TC-565 | A public repository configured `private_store` fails with `release_attestation_public_log_required` and the stand-in log receives no call | Integration | P0 | FR-071-AC-3 | 🚧 |
-| TC-566 | A private repository on the private store attests through the private instance stand-in and the stand-in public log receives zero calls; with the private instance stand-in unavailable it fails with ... | Integration | P0 | FR-071-AC-4 | 🚧 |
-| TC-567 | A public repository and a private repository, each on sink `none`, fail with `release_attestation_private_store_required` and no other code, before any stand-in call | Integration | P0 | FR-071-AC-5 | 🚧 |
-| TC-568 | A refused release still has its full private form in the private store, and a `not_released` outcome publishes no record | Integration | P0 | FR-071-AC-6 | 🚧 |
-| TC-569 | A fixture change with a ticket, two criteria, two reviews and three satisfied roles yields a predicate with exactly the listed members, status `passed`, three `covered` approvals each with a statement digest and an empty ... | Integration | P0 | FR-072-AC-1 | 🚧 |
-| TC-570 | A predicate with an unknown member, a value outside its grammar or a ticket id of kind `repo` fails schema validation | Integration | P0 | FR-072-AC-2 | 🚧 |
-| TC-571 | A change with the `engineer` role unsigned yields status `failed`, an approvals entry `missing` for `engineer` without a `statement_digest` and the failure `approvals_incomplete`; a policy with an unstaffed role adds ... | Integration | P0 | FR-072-AC-3 | 🚧 |
-| TC-572 | The serialized predicate contains none of the fixture's ticket title, criterion text, model name, approver name or meaning | Integration | P0 | FR-072-AC-4 | 🚧 |
-| TC-573 | The statement's subject carries the squash commit and its tree for a squash-merged fixture | Integration | P0 | FR-072-AC-5 | 🚧 |
-| TC-574 | The predicate type is the URI with scheme `https`, host `schemas.agent-ix.ai` and path `/attestation/change-record/v1` | Integration | P0 | FR-072-AC-6 | 🚧 |
-| TC-575 | Recomputing each digest from the canonical bytes of the named document reproduces the predicate's value, `artifact_digest` reproduces from the raw bytes of the fixture review file, and the stored change record has no ... | Integration | P0 | FR-072-AC-7 | 🚧 |
-| TC-576 | A fixture session descriptor yields a document that validates against the CycloneDX 1.7 schema and holds one application component, one machine-learning-model component with a matching service, plugin components with purls and ... | Integration | P0 | FR-073-AC-1 | 🚧 |
-| TC-577 | Every property the builder writes has the prefix `agent-ix:`, and each `agent-ix:reported-by` property equals `producer` | Integration | P0 | FR-073-AC-2 | 🚧 |
-| TC-578 | A document with a `formulation` section is rejected | Integration | P0 | FR-073-AC-3 | 🚧 |
-| TC-579 | The public record bytes and the git note content for the fixture change contain no model name; the private store holds the BOM under the record's id | Integration | P0 | FR-073-AC-4 | 🚧 |
-| TC-580 | A missing session descriptor yields no BOM and a failed receipt with the failure `contract_missing` | Integration | P0 | FR-073-AC-5 | 🚧 |
-| TC-581 | Two BOMs built from identical session descriptors have different `serialNumber` values and different digests | Integration | P0 | FR-073-AC-6 | 🚧 |
-| TC-582 | A passing fixture change yields three signed statements, a `passed` change record and a `PASSED` summary whose input digests equal the other two statements | Integration | P0 | FR-074-AC-1 | 🚧 |
-| TC-583 | A change whose gate command exits non-zero yields a receipt with status `failed`, failure `gate_failed` and a `FAILED` summary | Integration | P0 | FR-074-AC-2 | 🚧 |
-| TC-584 | A change with an incomplete role set yields status `failed` with `approvals_incomplete`, and the same receipt is produced for a commit that landed with no pull request | Integration | P0 | FR-074-AC-3 | 🚧 |
-| TC-585 | Altering one statement of the fixture receipt makes the summary's input digest check fail | Integration | P0 | FR-074-AC-4 | 🚧 |
-| TC-586 | The private store holds the full private form for the fixture change before the statements are signed, and holds it also for the failed receipt | Integration | P0 | FR-074-AC-5 | 🚧 |
-| TC-587 | A private repository's receipt, including a run with the private signing stand-in unavailable, makes zero calls to the stand-in public transparency log, and the unavailable run fails with `receipt_private_signing_unavailable` | Integration | P0 | FR-074-AC-6 | 🚧 |
-| TC-588 | A public repository configured `private_store` fails with `receipt_public_log_required`; a public and a private repository on `none` each fail with `receipt_private_store_required` and no other code; the stand-in public log ... | Integration | P0 | FR-074-AC-7 | 🚧 |
-| TC-589 | A fixture squash-merged pull request with three covering approval statements and a receipt input yields a passed receipt on the merge commit | Integration | P0 | FR-075-AC-1 | 🚧 |
-| TC-590 | A push with no pull request yields a failed receipt with `approvals_incomplete`, and a pull request with no receipt input yields a failed receipt with `contract_missing` | Integration | P0 | FR-075-AC-2 | 🚧 |
-| TC-591 | A gate that exits non-zero yields a failed receipt, and the default branch ref is unchanged by the failed run | Integration | P0 | FR-075-AC-3 | 🚧 |
-| TC-592 | A receipt policy on the pushed branch that differs from the protected base branch's does not change the gates that run | Integration | P0 | FR-075-AC-4 | 🚧 |
-| TC-593 | A commit before `adopted_at` gets no receipt and is not reported by the missing-receipt check | Integration | P0 | FR-075-AC-5 | 🚧 |
-| TC-594 | A gate command in the fixture receipt policy that tries to read the signing token or run the signing tooling runs only in the `gates` job, which has neither, receives no secrets and runs on a GitHub-hosted or ephemeral runner | Integration | P0 | FR-075-AC-6 | 🚧 |
-| TC-595 | A repository on sink `none` fails with `receipt_private_store_required` and no receipt is written | Integration | P0 | FR-075-AC-7 | 🚧 |
-| TC-596 | A fixture receipt appears as a note of three JSON lines on the pushed commit under the notes ref, and the note survives a second push to the default branch | Integration | P0 | FR-076-AC-1 | 🚧 |
-| TC-597 | A note whose content would exceed 1 MiB is refused with `receipt_note_too_large` and no note is written | Integration | P0 | FR-076-AC-2 | 🚧 |
-| TC-598 | Two concurrent receipt runs for two commits both end with their notes present on the notes ref; a fixture remote that rejects six pushes in a row fails the run with `receipt_note_conflict` and leaves no partial note | Integration | P0 | FR-076-AC-3 | 🚧 |
-| TC-599 | A public repository whose record references a private Linear team gets a failed receipt with `leak_check_refused`, no `ticket` member and no public-log call for the refused references | Integration | P0 | FR-076-AC-4 | 🚧 |
-| TC-600 | The public sink record of the fixture receipt holds the summary digest, the commit, the verdict `recorded` (`failed` for a failed receipt) and timestamps only, and the private store holds the full form | Integration | P0 | FR-076-AC-5 | 🚧 |
-| TC-601 | The note bytes of the fixture receipt contain none of the fixture's ticket title, criterion text or model name | Integration | P0 | FR-076-AC-6 | 🚧 |
-| TC-602 | A second run of the receipt workflow for a commit that already has a verified receipt writes no second note, and the note still has three lines | Integration | P0 | FR-076-AC-7 | 🚧 |
-| TC-603 | A fixture history of five commits, one without a note, one with a tampered note and one with an unreadable note, lists exactly those three with the reasons `no_note`, `invalid_receipt` and `status_unknown` | Integration | P0 | FR-077-AC-1 | 🚧 |
-| TC-604 | A commit with a verified failed receipt is listed as `failed_receipt` and does not fail the workflow by itself | Integration | P0 | FR-077-AC-2 | 🚧 |
-| TC-605 | A commit pushed by a ruleset bypass with no receipt is listed with `no_note` | Integration | P0 | FR-077-AC-3 | 🚧 |
-| TC-606 | Commits before `adopted_at` are not listed, and an `adopted_at` on a side branch only is refused with `receipt_policy_adopted_at_invalid` | Integration | P0 | FR-077-AC-4 | 🚧 |
-| TC-607 | A commit pushed within `grace_minutes`, and a commit whose receipt run is in progress within that window, are not listed; the same commit after the window with no note is listed, including a stuck run; a commit with a ... | Integration | P0 | FR-077-AC-5 | 🚧 |
-| TC-608 | An empty list leaves the workflow green, and a non-empty list fails it | Integration | P0 | FR-077-AC-6 | 🚧 |
-| TC-609 | The fixture receipt of a passing change yields `verified`, and of a failing change yields `verified_failed` | Integration | P0 | FR-078-AC-1 | 🚧 |
-| TC-610 | A receipt signed by another workflow, by the change-receipt workflow from a pull request or tag source ref, or from another source repository, yields `untrusted_signer` | Integration | P0 | FR-078-AC-2 | 🚧 |
-| TC-611 | A receipt copied to another commit yields `wrong_subject`; one with a changed byte yields `signature_invalid`; one with an extra predicate member yields `predicate_invalid` | Integration | P0 | FR-078-AC-3 | 🚧 |
-| TC-612 | A change record that claims all roles `covered` while one approval statement is missing yields `approvals_mismatch` | Integration | P0 | FR-078-AC-4 | 🚧 |
-| TC-613 | A missing note, an unparsable note, an unreadable trust root and an unreadable policy yield `unverifiable` with `note_absent`, `note_unreadable`, `trust_root_unreadable` and `policy_unreadable`, and a result with another ... | Integration | P0 | FR-078-AC-5 | 🚧 |
-| TC-614 | A role policy changed on the pushed branch does not change the policy used | Integration | P0 | FR-078-AC-6 | 🚧 |
-| TC-615 | A note holding two complete groups for one commit, with the lines in any order, verifies as the group with the latest verified summary; a note with lines in a different order from the writer's verifies the same way; a note ... | Integration | P0 | FR-078-AC-7 | 🚧 |
-| TC-616 | The two literal predicate URIs pass the check in a Markdown file and in a Rust source file | Integration | P0 | FR-079-AC-1 | 🚧 |
-| TC-617 | A lookalike host (the admitted host as a subdomain of another domain, or followed by a credential separator) is rejected with the unapproved external URL finding | Integration | P0 | FR-079-AC-2 | 🚧 |
-| TC-618 | The same host with the path `/other/` and with the `http` scheme is rejected | Integration | P0 | FR-079-AC-3 | 🚧 |
-| TC-619 | The full tree check passes on a tree that contains the literal URIs | Integration | P0 | FR-079-AC-4 | 🚧 |
-| TC-620 | No step of a signing job in the workflow files invokes an agent harness or model client, and no signing job executes repository code | Static | P0 | NFR-011 | 🚧 |
-| TC-621 | Every signing job's identity in the fixture is the workflow identity, checked with a stand-in signer | Integration | P0 | NFR-011 | 🚧 |
+| TC-556 | The export runs in the `verify` job, with the evidence store taken from the `evidence_artifact` input and the subject computed by the workflow; the `attest` job runs no Quoin command, and a caller-built export is not accepted | Integration | P0 | FR-069-AC-4 | 🚧 |
+| TC-557 | Parsing the five files yields exactly the triggers, jobs and per-job permissions of the table, and no file declares `pull_request_target` or `workflow_run` | Integration | P0 | FR-070-AC-1 | 🚧 |
+| TC-558 | No `run:` value in any file contains an expression over `github.ref_name`, `github.head_ref`, an event title or body, a commit message or `inputs.`; each such value appears only under `env:` | Integration | P0 | FR-070-AC-2 | 🚧 |
+| TC-559 | Every `uses:` in a job with `id-token: write` ends in a 40-hex SHA, and every checkout step has `persist-credentials: false` | Integration | P0 | FR-070-AC-3 | 🚧 |
+| TC-560 | The `gates` job holds only `contents: read`, the `record` job runs no step that executes a repository file or a command from the receipt policy, and the `notes` job holds no `id-token` | Integration | P0 | FR-070-AC-4 | 🚧 |
+| TC-561 | No step in any of the five files invokes an agent harness or model client | Static | P0 | FR-070-AC-5 | 🚧 |
+| TC-562 | A `change-receipt.yml` run with a `commit` input that is not the pushed commit fails with `receipt_input_commit_mismatch`, and a `release-attestation.yml` run with a `tag` input that is not the triggering tag fails with ... | Integration | P0 | FR-070-AC-6 | 🚧 |
+| TC-563 | The `gates` job declares no `secrets` and no `environment`, and its `runs-on` is a GitHub-hosted label or an ephemeral runner label | Integration | P0 | FR-070-AC-7 | 🚧 |
+| TC-564 | A public repository on the public sink with a clean leak check publishes a trimmed record of kind `release_attestation` whose bytes hold the summary digest, the release commit, the verdict `released` and timestamps only | Integration | P0 | FR-071-AC-1 | 🚧 |
+| TC-565 | A public repository referencing a private Linear team in the release record is refused by the leak check, and the stand-in attestation action is not called | Integration | P0 | FR-071-AC-2 | 🚧 |
+| TC-566 | A public repository configured `private_store` fails with `release_attestation_public_log_required` and the stand-in log receives no call | Integration | P0 | FR-071-AC-3 | 🚧 |
+| TC-567 | A private repository on the private store attests through the private instance stand-in and the stand-in public log receives zero calls; with the private instance stand-in unavailable it fails with ... | Integration | P0 | FR-071-AC-4 | 🚧 |
+| TC-568 | A public repository and a private repository, each on sink `none`, fail with `release_attestation_private_store_required` and no other code, before any stand-in call | Integration | P0 | FR-071-AC-5 | 🚧 |
+| TC-569 | A refused release still has its full private form in the private store, and a `not_released` outcome publishes no record | Integration | P0 | FR-071-AC-6 | 🚧 |
+| TC-570 | A fixture change with a ticket, two criteria, two reviews and three satisfied roles yields a predicate with exactly the listed members, status `passed`, three `covered` approvals each with a statement digest and an empty ... | Integration | P0 | FR-072-AC-1 | 🚧 |
+| TC-571 | A predicate with an unknown member, a value outside its grammar or a ticket id of kind `repo` fails schema validation | Integration | P0 | FR-072-AC-2 | 🚧 |
+| TC-572 | A change with the `engineer` role unsigned yields status `failed`, an approvals entry `missing` for `engineer` without a `statement_digest` and the failure `approvals_incomplete`; a policy with an unstaffed role adds ... | Integration | P0 | FR-072-AC-3 | 🚧 |
+| TC-573 | The serialized predicate contains none of the fixture's ticket title, criterion text, model name, approver name or meaning | Integration | P0 | FR-072-AC-4 | 🚧 |
+| TC-574 | The statement's subject carries the squash commit and its tree for a squash-merged fixture | Integration | P0 | FR-072-AC-5 | 🚧 |
+| TC-575 | The predicate type is the URI with scheme `https`, host `schemas.agent-ix.ai` and path `/attestation/change-record/v1` | Integration | P0 | FR-072-AC-6 | 🚧 |
+| TC-576 | Recomputing each digest from the canonical bytes of the named document reproduces the predicate's value, `artifact_digest` reproduces from the raw bytes of the fixture review file, and the stored change record has no ... | Integration | P0 | FR-072-AC-7 | 🚧 |
+| TC-577 | A fixture session descriptor yields a document that validates against the CycloneDX 1.7 schema and holds one application component, one machine-learning-model component with a matching service, plugin components with purls and ... | Integration | P0 | FR-073-AC-1 | 🚧 |
+| TC-578 | Every property the builder writes has the prefix `agent-ix:`, and each `agent-ix:reported-by` property equals `producer` | Integration | P0 | FR-073-AC-2 | 🚧 |
+| TC-579 | A document with a `formulation` section is rejected | Integration | P0 | FR-073-AC-3 | 🚧 |
+| TC-580 | The public record bytes and the git note content for the fixture change contain no model name; the private store holds the BOM under the record's id | Integration | P0 | FR-073-AC-4 | 🚧 |
+| TC-581 | A missing session descriptor yields no BOM and a failed receipt with the failure `contract_missing` | Integration | P0 | FR-073-AC-5 | 🚧 |
+| TC-582 | Two BOMs built from identical session descriptors have different `serialNumber` values and different digests | Integration | P0 | FR-073-AC-6 | 🚧 |
+| TC-583 | A passing fixture change yields three signed statements, a `passed` change record and a `PASSED` summary whose input digests equal the other two statements | Integration | P0 | FR-074-AC-1 | 🚧 |
+| TC-584 | A change whose gate command exits non-zero yields a receipt with status `failed`, failure `gate_failed` and a `FAILED` summary | Integration | P0 | FR-074-AC-2 | 🚧 |
+| TC-585 | A change with an incomplete role set yields status `failed` with `approvals_incomplete`, and the same receipt is produced for a commit that landed with no pull request | Integration | P0 | FR-074-AC-3 | 🚧 |
+| TC-586 | Altering one statement of the fixture receipt makes the summary's input digest check fail | Integration | P0 | FR-074-AC-4 | 🚧 |
+| TC-587 | The private store holds the full private form for the fixture change before the statements are signed, and holds it also for the failed receipt | Integration | P0 | FR-074-AC-5 | 🚧 |
+| TC-588 | A private repository's receipt, including a run with the private signing stand-in unavailable, makes zero calls to the stand-in public transparency log, and the unavailable run fails with `receipt_private_signing_unavailable` | Integration | P0 | FR-074-AC-6 | 🚧 |
+| TC-589 | A public repository configured `private_store` fails with `receipt_public_log_required`; a public and a private repository on `none` each fail with `receipt_private_store_required` and no other code; the stand-in public log ... | Integration | P0 | FR-074-AC-7 | 🚧 |
+| TC-590 | A fixture squash-merged pull request with three covering approval statements and a receipt input yields a passed receipt on the merge commit | Integration | P0 | FR-075-AC-1 | 🚧 |
+| TC-591 | A push with no pull request yields a failed receipt with `approvals_incomplete`, and a pull request with no receipt input yields a failed receipt with `contract_missing` | Integration | P0 | FR-075-AC-2 | 🚧 |
+| TC-592 | A gate that exits non-zero yields a failed receipt, and the default branch ref is unchanged by the failed run | Integration | P0 | FR-075-AC-3 | 🚧 |
+| TC-593 | A receipt policy on the pushed branch that differs from the protected base branch's does not change the gates that run | Integration | P0 | FR-075-AC-4 | 🚧 |
+| TC-594 | A commit before `adopted_at` gets no receipt and is not reported by the missing-receipt check | Integration | P0 | FR-075-AC-5 | 🚧 |
+| TC-595 | A gate command in the fixture receipt policy that tries to read the signing token or run the signing tooling runs only in the `gates` job, which has neither, receives no secrets and runs on a GitHub-hosted or ephemeral runner | Integration | P0 | FR-075-AC-6 | 🚧 |
+| TC-596 | A repository on sink `none` fails with `receipt_private_store_required` and no receipt is written | Integration | P0 | FR-075-AC-7 | 🚧 |
+| TC-597 | A fixture receipt appears as a note of three JSON lines on the pushed commit under the notes ref, and the note survives a second push to the default branch | Integration | P0 | FR-076-AC-1 | 🚧 |
+| TC-598 | A note whose content would exceed 1 MiB is refused with `receipt_note_too_large` and no note is written | Integration | P0 | FR-076-AC-2 | 🚧 |
+| TC-599 | Two concurrent receipt runs for two commits both end with their notes present on the notes ref; a fixture remote that rejects six pushes in a row fails the run with `receipt_note_conflict` and leaves no partial note | Integration | P0 | FR-076-AC-3 | 🚧 |
+| TC-600 | A public repository whose record references a private Linear team gets a failed receipt with `leak_check_refused`, no `ticket` member and no public-log call for the refused references | Integration | P0 | FR-076-AC-4 | 🚧 |
+| TC-601 | The public sink record of the fixture receipt holds the summary digest, the commit, the verdict `recorded` (`failed` for a failed receipt) and timestamps only, and the private store holds the full form | Integration | P0 | FR-076-AC-5 | 🚧 |
+| TC-602 | The note bytes of the fixture receipt contain none of the fixture's ticket title, criterion text or model name | Integration | P0 | FR-076-AC-6 | 🚧 |
+| TC-603 | A second run of the receipt workflow for a commit that already has a `verified` receipt, and for a commit that already has a `verified_failed` receipt, writes no second note, and the note still has three lines | Integration | P0 | FR-076-AC-7 | 🚧 |
+| TC-604 | A fixture history of five commits, one without a note, one with a tampered note and one with an unreadable note, lists exactly those three with the reasons `no_note`, `invalid_receipt` and `status_unknown` | Integration | P0 | FR-077-AC-1 | 🚧 |
+| TC-605 | A commit with a verified failed receipt is listed as `failed_receipt` and does not fail the workflow by itself | Integration | P0 | FR-077-AC-2 | 🚧 |
+| TC-606 | A commit pushed by a ruleset bypass with no receipt is listed with `no_note` | Integration | P0 | FR-077-AC-3 | 🚧 |
+| TC-607 | Commits before `adopted_at` are not listed, and an `adopted_at` on a side branch only is refused with `receipt_policy_adopted_at_invalid` | Integration | P0 | FR-077-AC-4 | 🚧 |
+| TC-608 | A commit pushed within `grace_minutes`, and a commit whose receipt run is in progress within that window, are not listed; the same commit after the window with no note is listed, including a stuck run; a commit with a ... | Integration | P0 | FR-077-AC-5 | 🚧 |
+| TC-609 | An empty list leaves the workflow green, and a non-empty list fails it | Integration | P0 | FR-077-AC-6 | 🚧 |
+| TC-610 | A commit pushed by a ruleset bypass that triggered no workflow run is aged from the platform's push record and listed with `no_note` once older than `grace_minutes`; a commit absent from the push record is listed with ... | Integration | P0 | FR-077-AC-7 | 🚧 |
+| TC-611 | The fixture receipt of a passing change yields `verified`, and of a failing change yields `verified_failed` | Integration | P0 | FR-078-AC-1 | 🚧 |
+| TC-612 | A receipt signed by another workflow, by the change-receipt workflow from a pull request or tag source ref, or from another source repository, yields `untrusted_signer` | Integration | P0 | FR-078-AC-2 | 🚧 |
+| TC-613 | A receipt copied to another commit yields `wrong_subject`; one with a changed byte yields `signature_invalid`; one with an extra predicate member yields `predicate_invalid` | Integration | P0 | FR-078-AC-3 | 🚧 |
+| TC-614 | A change record that claims all roles `covered` while one approval statement is missing yields `approvals_mismatch` | Integration | P0 | FR-078-AC-4 | 🚧 |
+| TC-615 | A missing note, an unparsable note, an unreadable trust root and an unreadable policy yield `unverifiable` with `note_absent`, `note_unreadable`, `trust_root_unreadable` and `policy_unreadable`, and a result with another ... | Integration | P0 | FR-078-AC-5 | 🚧 |
+| TC-616 | A role policy changed on the pushed branch does not change the policy used | Integration | P0 | FR-078-AC-6 | 🚧 |
+| TC-617 | A note holding two complete groups for one commit, with the lines in any order, verifies as the group of the verified summary with the latest `timeVerified`, each group being a summary plus the two statements its input digests ... | Integration | P0 | FR-078-AC-7 | 🚧 |
+| TC-618 | The two literal predicate URIs pass the check in a Markdown file and in a Rust source file | Integration | P0 | FR-079-AC-1 | 🚧 |
+| TC-619 | A lookalike host (the admitted host as a subdomain of another domain, or followed by a credential separator) is rejected with the unapproved external URL finding | Integration | P0 | FR-079-AC-2 | 🚧 |
+| TC-620 | The same host with the path `/other/` and with the `http` scheme is rejected | Integration | P0 | FR-079-AC-3 | 🚧 |
+| TC-621 | The full tree check passes on a tree that contains the literal URIs | Integration | P0 | FR-079-AC-4 | 🚧 |
+| TC-622 | No step of a signing job in the workflow files invokes an agent harness or model client, and no signing job executes repository code | Static | P0 | NFR-011 | 🚧 |
+| TC-623 | Every signing job's identity in the fixture is the workflow identity, checked with a stand-in signer | Integration | P0 | NFR-011 | 🚧 |
 
 ## Option Permutation Matrix
 

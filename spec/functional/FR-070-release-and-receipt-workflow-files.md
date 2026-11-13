@@ -23,7 +23,7 @@ Tracked by Linear EA-97. This requirement describes the workflow files the featu
 
 | File | Trigger | Job | Permissions | Runs |
 | --- | --- | --- | --- | --- |
-| `.github/workflows/release-attestation.yml` | `workflow_call`, inputs `tag`, `artifact_name`, `test_result_artifact` (strings) | `verify` | `contents: read` | Engineering Assurance tooling only: `release-verify`, role step ([FR-067](./FR-067-release-attestations-bind-to-the-signed-release-tag.md)) |
+| `.github/workflows/release-attestation.yml` | `workflow_call`, inputs `tag`, `artifact_name`, `evidence_artifact` (strings) | `verify` | `contents: read` | Engineering Assurance tooling and the Quoin test-result export only: `release-verify`, role step ([FR-067](./FR-067-release-attestations-bind-to-the-signed-release-tag.md)), the digests of the artifact files, and the export of [FR-069](./FR-069-test-result-export-is-consumed-as-data.md) from the evidence store in `evidence_artifact` |
 | same | same | `attest` | `contents: read`, `id-token: write`, `attestations: write` | Engineering Assurance tooling and the attestation actions; no repository code |
 | `.github/workflows/change-receipt.yml` | `workflow_call`, input `commit` (string) | `gates` | `contents: read` | The repository's gates from the receipt policy ([FR-075](./FR-075-push-to-main-receipt-workflow.md)); nothing else |
 | same | same | `record` | `contents: read`, `id-token: write` | Engineering Assurance tooling only; no repository code |
