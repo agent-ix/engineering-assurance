@@ -239,6 +239,21 @@ fn find_executable(name: &str, search: &OsStr) -> Option<PathBuf> {
         })
 }
 
+/// Finds `program` for a run: its absolute path and the `PATH` to pass on. Both
+/// come from the absolute entries of the inherited `PATH` alone, so a program
+/// in the verified repository (the working directory) is never found, whether
+/// we start it or a program we start does.
+fn resolve_program(program: &str) -> Result<(PathBuf, OsString), ProcessError> {
+    let unavailable = || ProcessError::Unavailable {
+        detail: format!("{program} is not in an absolute PATH entry"),
+    };
+    let search = std::env::var_os("PATH")
+        .map(|path| absolute_search_path(&path))
+        .ok_or_else(unavailable)?;
+    let executable = find_executable(program, &search).ok_or_else(unavailable)?;
+    Ok((executable, search))
+}
+
 /// Runs `program` as `gitsign` and the configuration check need it run: found
 /// by absolute path in the absolute entries of the inherited `PATH`, in the
 /// repository, with exactly `PATH` (those entries), `HOME`,
@@ -248,20 +263,12 @@ fn run_tool(
     arguments: &[&OsStr],
     repository: &Path,
 ) -> Result<CompletedProcess, ProcessError> {
-    let search = std::env::var_os("PATH").map(|path| absolute_search_path(&path));
-    let executable = search
-        .as_deref()
-        .and_then(|search| find_executable(program, search))
-        .ok_or_else(|| ProcessError::Unavailable {
-            detail: format!("{program} is not in an absolute PATH entry"),
-        })?;
-    let mut set: Vec<(OsString, OsString)> = vec![
+    let (executable, search) = resolve_program(program)?;
+    let set: Vec<(OsString, OsString)> = vec![
         ("GIT_CONFIG_NOSYSTEM".into(), "1".into()),
         ("GIT_CONFIG_GLOBAL".into(), "/dev/null".into()),
+        ("PATH".into(), search),
     ];
-    if let Some(search) = search {
-        set.push(("PATH".into(), search));
-    }
     let removed: Vec<OsString> = std::env::vars_os()
         .map(|(name, _)| name)
         .filter(|name| !KEPT_ENVIRONMENT.iter().any(|kept| OsStr::new(kept) == name))
@@ -546,14 +553,16 @@ impl Git<'_> {
             OsStr::new("-f"),
             self.allowed_signers.as_os_str(),
         ];
-        let result = process_host::run_configured(
-            OsStr::new("ssh-keygen"),
-            &arguments,
-            Some(directory.path()),
-            &[],
-            &[],
-            limits(),
-        );
+        let result = resolve_program("ssh-keygen").and_then(|(executable, path)| {
+            process_host::run_configured(
+                executable.as_os_str(),
+                &arguments,
+                Some(directory.path()),
+                &[(OsStr::new("PATH"), path.as_os_str())],
+                &[],
+                limits(),
+            )
+        });
         match result {
             Ok(output) if output.status.success() => {
                 let first = std::str::from_utf8(&output.stdout)
@@ -674,9 +683,12 @@ impl Git<'_> {
             environment.push((OsStr::new("GIT_CEILING_DIRECTORIES"), parent.as_os_str()));
         }
         let directory = isolated.unwrap_or(self.repository);
+        let (git, path) = resolve_program("git")
+            .map_err(|error| mechanics_reason(&error, Reason::GitNotStarted))?;
+        environment.push((OsStr::new("PATH"), path.as_os_str()));
         match stdin {
             Some(stdin) => process_host::run_configured_stdin(
-                OsStr::new("git"),
+                git.as_os_str(),
                 &all,
                 Some(directory),
                 &environment,
@@ -685,7 +697,7 @@ impl Git<'_> {
                 limits(),
             ),
             None => process_host::run_configured(
-                OsStr::new("git"),
+                git.as_os_str(),
                 &all,
                 Some(directory),
                 &environment,
@@ -721,15 +733,17 @@ fn ssh_check(signature: &[u8], payload: &[u8]) -> Result<SshCheck, Reason> {
         OsStr::new("-s"),
         signature_path.as_os_str(),
     ];
-    let result = process_host::run_configured_stdin(
-        OsStr::new("ssh-keygen"),
-        &arguments,
-        Some(directory.path()),
-        &[],
-        &[],
-        stdin,
-        limits(),
-    );
+    let result = resolve_program("ssh-keygen").and_then(|(executable, path)| {
+        process_host::run_configured_stdin(
+            executable.as_os_str(),
+            &arguments,
+            Some(directory.path()),
+            &[(OsStr::new("PATH"), path.as_os_str())],
+            &[],
+            stdin,
+            limits(),
+        )
+    });
     match result {
         Ok(output) if output.status.success() => Ok(SshCheck::Accepted),
         Ok(_) => Ok(SshCheck::Rejected),

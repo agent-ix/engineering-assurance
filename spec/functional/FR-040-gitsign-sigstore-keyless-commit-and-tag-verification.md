@@ -170,10 +170,12 @@ remain `unverifiable`, FR-036).
   `unverifiable` with the matching FR-036 reason.
 - The command SHALL pin the program: it runs the executable named `gitsign`,
   and SHALL NOT take a name or path from the request, the repository or git
-  configuration. It SHALL find `gitsign`, and the `git` of the configuration
-  check, only in the absolute entries of `PATH`, run them by that absolute path,
-  and pass on a `PATH` without its relative entries, so the repository under
-  verification (the working directory) can never supply either program. It SHALL report `unverifiable` with reason `gitsign_not_started`
+  configuration. This program-resolution rule covers every external program the
+  command runs, `git`, `ssh-keygen` and `gitsign` alike: each is found only in
+  the absolute entries of the inherited `PATH`, is run by that absolute path,
+  and is given a `PATH` without its relative entries, so the repository under
+  verification (the working directory) can never supply a program, directly or
+  through a program the command starts. It SHALL report `unverifiable` with reason `gitsign_not_started`
   when `gitsign` cannot start.
 - The command SHALL run `gitsign` with the repository as its working directory,
   through the process host of FR-019 with the same 60 second wall-clock timeout

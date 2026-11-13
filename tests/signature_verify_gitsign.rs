@@ -490,6 +490,16 @@ fn tc_286_a_malformed_gitsign_member_is_refused_before_git_starts() {
     assert_eq!(fixture.calls(), 0);
 }
 
+/// Executables that record that they ran, then exit 0.
+fn install_hooks(directory: &Path, marker: &Path, programs: &[&str]) {
+    for program in programs {
+        let script = format!("#!/bin/sh\n: > {}\nexit 0\n", marker.display());
+        fs::write(directory.join(program), script).expect("hook");
+        fs::set_permissions(directory.join(program), fs::Permissions::from_mode(0o755))
+            .expect("mode");
+    }
+}
+
 fn ssh_fixture() -> (Fixture, String) {
     let fixture = fixture();
     let root = fixture.root();
@@ -685,15 +695,13 @@ fn tc_291_a_tag_that_is_not_an_annotated_tag_ref_never_starts_gitsign() {
 
 #[test]
 #[trace("TC-297", "FR-040-CON-1")]
-fn tc_297_a_relative_path_entry_never_supplies_gitsign() {
+fn tc_297_a_relative_path_entry_never_supplies_gitsign_or_git() {
     let fixture = fixture_with_commit();
-    // A `gitsign` inside the repository that would report a valid signature.
+    // Programs inside the repository that would report a valid signature.
     let hook = fixture.repo().join("hook");
     fs::create_dir(&hook).expect("hook dir");
     let marker = fixture.root().join("hook-ran");
-    let script = format!("#!/bin/sh\n: > {}\nexit 0\n", marker.display());
-    fs::write(hook.join("gitsign"), script).expect("hook");
-    fs::set_permissions(hook.join("gitsign"), fs::Permissions::from_mode(0o755)).expect("mode");
+    install_hooks(&hook, &marker, &["gitsign", "git"]);
     let request = request(&fixture, "signed", "commit", true);
     // The absolute `gitsign` is used, never the one in the relative entry.
     let path = std::env::join_paths([Path::new("hook"), fixture.bin().as_path()]).expect("path");
@@ -707,6 +715,69 @@ fn tc_297_a_relative_path_entry_never_supplies_gitsign() {
     let path = std::env::join_paths([Path::new("hook"), bare.as_path()]).expect("path");
     let result = verdict_on(&fixture, &request, Path::new(&path));
     assert_eq!(result["reason"], "gitsign_not_started", "{result}");
+    assert!(!marker.exists(), "a program from the repository ran");
+}
+
+#[test]
+#[trace("TC-299", "FR-036-AC-1", "FR-036-CON-1")]
+fn tc_299_a_relative_path_entry_never_supplies_git_or_ssh_keygen_on_the_ssh_path() {
+    let (fixture, key) = ssh_fixture();
+    let repo = fixture.repo();
+    let setting = format!("user.signingkey={key}");
+    git(
+        &repo,
+        &[
+            "-c",
+            "gpg.format=ssh",
+            "-c",
+            &setting,
+            "commit",
+            "-q",
+            "-S",
+            "--allow-empty",
+            "-m",
+            "s",
+        ],
+    );
+    git(
+        &repo,
+        &[
+            "-c",
+            "gpg.format=ssh",
+            "-c",
+            &setting,
+            "tag",
+            "-s",
+            "-m",
+            "t",
+            "v-ssh",
+        ],
+    );
+    let hook = repo.join("hook");
+    fs::create_dir(&hook).expect("hook dir");
+    let marker = fixture.root().join("hook-ran");
+    install_hooks(&hook, &marker, &["git", "ssh-keygen"]);
+    let real = fixture.root().join("real-bin");
+    fs::create_dir(&real).expect("real-bin");
+    for program in ["git", "ssh-keygen"] {
+        symlink(which(program), real.join(program)).expect("link");
+    }
+    let path = std::env::join_paths([Path::new("hook"), real.as_path()]).expect("path");
+    for (revision, kind) in [("HEAD", "commit"), ("v-ssh", "tag")] {
+        let result = verdict_on(
+            &fixture,
+            &request(&fixture, revision, kind, false),
+            Path::new(&path),
+        );
+        assert_eq!(result["status"], "signed_valid", "{result}");
+    }
+    // Only the relative entry holds the programs: they are not found at all.
+    let result = verdict_on(
+        &fixture,
+        &request(&fixture, "HEAD", "commit", false),
+        Path::new("hook"),
+    );
+    assert_eq!(result["reason"], "git_not_started", "{result}");
     assert!(!marker.exists(), "a program from the repository ran");
 }
 

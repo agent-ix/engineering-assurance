@@ -525,8 +525,9 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-294 | A CMS `gpgsig` header (including trailing characters on its line) is CMS, a commit mixing CMS and SSH headers is unsupported, and a tag splits at a CMS header | Unit | P0 | FR-040-AC-9 | 🚧 |
 | TC-295 | A simulated timeout, oversized output and unstartable `gitsign` and a signal-ended run are observed as the timed-out, cut-short, not-started and signaled runs | Unit | P0 | FR-040-AC-7 | 🚧 |
 | TC-296 | The `gitsign` identity accepts values up to 256 bytes and refuses empty, oversized, control-character and leading-`-` identity and issuer values | Unit | P0 | FR-040-AC-11 | 🚧 |
-| TC-297 | A relative `PATH` entry holding a `gitsign` inside the verified repository never supplies it: the absolute `gitsign` runs, and with none the verdict is `gitsign_not_started` | Integration | P0 | FR-040-CON-1 | 🚧 |
+| TC-297 | A relative `PATH` entry holding a `gitsign` or `git` inside the verified repository never supplies it: the absolute programs run, and with none the verdict is `gitsign_not_started` | Integration | P0 | FR-040-CON-1 | 🚧 |
 | TC-298 | Config output is read line by line for a first token starting `gitsign.`, ASCII case-insensitively, and a `gitsign.` text elsewhere in a line is not a key | Unit | P0 | FR-040-AC-17 | 🚧 |
+| TC-299 | On the SSH path, a relative `PATH` entry holding a `git` and an `ssh-keygen` inside the verified repository never supplies either, including the `ssh-keygen` git starts; with only that entry the command reports `git_not_started` | Integration | P0 | FR-036-AC-1, FR-036-CON-1 | 🚧 |
 
 ## Option Permutation Matrix
 
