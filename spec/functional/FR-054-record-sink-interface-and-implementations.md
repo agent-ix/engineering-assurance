@@ -16,13 +16,15 @@ relationships:
 ## Description
 
 Tracked by Linear EA-105. A record sink is the place an assurance record goes after it is made. Engineering Assurance
-owns one sink interface with exactly three implementations: the public transparency log, the private store, and none.
+owns one sink interface with three implementations: the public transparency log, the private store, and none.
 Later record kinds (the release attestations of EA-97 and the change-record receipt of EA-98) publish through this
-interface and add no sink of their own.
+interface and add no sink of their own. Approval statements ([FR-058](./FR-058-approval-statement-and-predicate.md))
+are stored and published through it as well, with the same split and the same leak check.
 
 The public log is an append-only transparency log reached at an endpoint named in the sink configuration
 ([FR-055](./FR-055-per-repo-sink-configuration-and-visibility-default.md)). The private store is a destination named
-in the same configuration that only the repository's own principals can read. `none` accepts a record and keeps it
+in the same configuration. Restricting who can read that destination is a requirement on its configuration by the
+repository's operator; Engineering Assurance neither enforces nor checks it. `none` accepts a record and keeps it
 nowhere.
 
 Out of scope: the record kinds themselves, the signing of a record ([NFR-010](../non-functional/NFR-010-no-cryptography-of-our-own.md)),

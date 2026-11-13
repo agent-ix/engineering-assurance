@@ -14,7 +14,7 @@ relationships:
 
 ## Statement
 
-Engineering Assurance shall send a record to the public log only when every reference in the record resolves to public.
+Engineering Assurance shall send a record to, or sign a record through, a public log only when the publishing repository, the record's subject and every reference in the record resolve to public.
 
 ## Scope
 
@@ -22,14 +22,14 @@ Engineering Assurance shall send a record to the public log only when every refe
 
 ## Rationale
 
-A public transparency log cannot delete what it accepts. The leak check is the only barrier, so it fails closed: an
+A public transparency log cannot delete what it accepts, and a keyless signature on it names the repository and workflow. The leak check is the only barrier, so it fails closed: an
 unknown visibility is private, and a missing visibility source blocks the send.
 
 ## Measurement and Evaluation
 
 | Metric | Target | Threshold | Method |
 | --- | --- | --- | --- |
-| Count of public-log sends where any reference is private or undeterminable, over generated records and visibility maps | 0 | 0 | Property test over the sink layer |
+| Count of public-log sends or public-log signatures where the publishing repository, the subject or any reference is private or undeterminable, over generated records and visibility maps | 0 | 0 | Property test over the sink layer |
 | Count of code paths that reach the public-log send without passing the leak check | 0 | 0 | Source inspection |
 
 ## Verification

@@ -23,7 +23,7 @@ predicate, role policy and workflow-identity policy that carries a member its sc
 
 ## Scope
 
-- Applies to: the documents of FR-055, FR-056, FR-058, FR-061 and FR-064, and the publish result of FR-054.
+- Applies to: the documents of FR-055, FR-056, FR-058, FR-061 and FR-064 (including the workflow-identity entries), and the publish result of FR-054.
 
 ## Rationale
 

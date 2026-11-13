@@ -3,6 +3,8 @@ id: FR-061
 title: "Require every role in the repository's approval policy to be signed by a distinct individual"
 type: FR
 relationships:
+  - target: "ix://agent-ix/engineering-assurance/FR-055"
+    type: "references"
   - target: "ix://agent-ix/engineering-assurance/FR-058"
     type: "references"
   - target: "ix://agent-ix/engineering-assurance/FR-062"
@@ -18,61 +20,88 @@ relationships:
 ## Description
 
 Tracked by Linear PLAT-1685. Regulated practice uses separate sign-offs, for example developer, engineer and
-stakeholder, so approval is not one flag. A per-repository role policy lists the required roles. The approval gate
-passes only when every listed role is covered by a verified approval statement from a distinct individual: one person
-cannot fill two roles. A lighter repository lists one role. No approver, role name or number of roles is hardcoded.
+stakeholder, so approval is not one flag. A per-repository role policy lists the required roles. The role evaluation
+passes only when every listed role is covered by an approval from a distinct individual: one person cannot fill two
+roles. A lighter repository lists one role. No approver, role name or number of roles is hardcoded.
 
 The policy is one JSON document, `engineering-assurance.approval-policy/v1`, at
-`.engineering-assurance/approval-policy.json`, read from the repository's protected base branch and never from the
-pull request under change. It is a closed schema ([NFR-008](../non-functional/NFR-008-closed-schemas.md)). Its
-members are `protocol`, `required_roles` (a non-empty list of unique role names), `roles` (for each role name, the
-`source` and the list of account identifiers the source adapter maps to the role), and `agents` (a list of identities
-that are agents, read by [FR-062](./FR-062-ai-agents-are-never-approvers.md); default empty).
+`.engineering-assurance/approval-policy.json`, read from the protected base branch
+([FR-055](./FR-055-per-repo-sink-configuration-and-visibility-default.md)). It is a closed schema
+([NFR-008](../non-functional/NFR-008-closed-schemas.md)) with these members and no other:
 
-Distinct individual is judged on the approver identity as the source reports it. The same source identity in two
-statements is one individual; identities from different sources are distinct unless the policy's `roles` lists both
-under a shared `individual` key, which is the only way the policy equates identities. The gate does not fall back to
-fewer roles, and does not count one statement for two roles.
+- `protocol`: the literal `engineering-assurance.approval-policy/v1`.
+- `required_roles`: a non-empty list of unique role names.
+- `individuals`: a map from an individual name to a non-empty list of accounts `{source, id}`, where `id` is the
+  source's stable account identifier. Individual names and role names use the grammar `a-z 0-9 _ -`, 1 to 32
+  characters, starting with a letter or digit.
+- `roles`: a map from each role name to the list of individual names that may fill it.
+- `agents`: a list of accounts `{source, id}` that are agents ([FR-062](./FR-062-ai-agents-are-never-approvers.md));
+  the default is the empty list.
 
-Out of scope: how statements are verified ([FR-064](./FR-064-verify-approval-statement-with-workflow-identity-policy.md))
-and the unstaffed-role failure ([FR-063](./FR-063-unstaffed-required-role-fails-visibly.md)).
+An account belongs to at most one individual. Distinctness is by individual, not by account: two accounts of one
+individual are one person. An account that no individual lists never fills a role. An individual may be listed for
+several roles but fills at most one role for a pull request; the role that an approval fills is the one the review
+names in its `Role:` line ([FR-059](./FR-059-source-adapter-interface-and-github-review-adapter.md)), and that role
+must be one the individual is listed for. Distinctness rests on the accounts the policy lists; an individual with an
+account the policy does not list is not detectable.
+
+One evaluation function, a pure function of the policy and a set of approvals, decides the role evaluation. Its
+input is a list of approvals, each `{source, account id, role}`. The function is used twice, on different inputs, and
+nowhere else: before the merge on the platform reviews, by the review gate, and after the merge on verified statements,
+by the verifier ([FR-065](./FR-065-workflow-roles-and-relation-to-signed-release-tags.md),
+[FR-064](./FR-064-verify-approval-statement-with-workflow-identity-policy.md)).
+
+The evaluation is deterministic. The required roles are taken in ascending order of role name. A role is covered if
+some counting approval for it can be assigned to an individual different from the individuals assigned to the roles
+already covered; a role that would leave no valid assignment for the roles already covered stays uncovered. When one
+individual holds two required roles and no other individual covers either, the earlier role by name is covered and the
+later one is named as missing.
 
 ## Outputs
 
-- The gate verdict, `engineering-assurance.approval-gate/v1`, with `status` `satisfied` or `unsatisfied`, the
-  `required_roles`, and per role the approver and statement that covered it. On `unsatisfied` it adds `missing`, the
-  roles with no distinct covering individual, each with the reason `no_statement`, `shared_individual` or
-  `agent_only`, and the named error from [FR-063](./FR-063-unstaffed-required-role-fails-visibly.md) where it applies.
+- The verdict, `engineering-assurance.approval-gate/v1`, with `status` `satisfied`, `unsatisfied` or `unavailable`
+  ([FR-063](./FR-063-unstaffed-required-role-fails-visibly.md)), the `required_roles`, and per covered role the
+  individual and the approval that covered it. On `unsatisfied` it adds `missing`, the uncovered roles in ascending
+  order, each with the reason `no_approval` (no approval names the role), `shared_individual` (counting approvals exist
+  but their individuals fill other roles) or `agent_only` (only non-human approvals name the role), and the named error
+  of FR-063 where it applies.
 
 ## Behavior
 
-- The approval gate SHALL read the policy from the protected base branch.
-- The approval gate SHALL return `satisfied` only when each required role is covered by a verified statement.
-- The approval gate SHALL assign each required role a different individual.
-- The approval gate SHALL return `unsatisfied` when no assignment of distinct individuals to all required roles exists.
-- The approval gate SHALL name each role it could not cover.
-- The approval gate SHALL NOT count one individual for two roles.
-- The approval gate SHALL NOT pass with fewer roles than the policy lists.
-- The approval gate SHALL NOT name a role, approver or role count in code.
+- The role evaluation SHALL read the policy from the protected base branch.
+- The role evaluation SHALL return `satisfied` only when each required role is covered.
+- The role evaluation SHALL count an approval only when its account belongs to an individual listed for the approval's
+  role.
+- The role evaluation SHALL assign each covered role a different individual.
+- The role evaluation SHALL take the required roles in ascending order of role name.
+- The role evaluation SHALL name each uncovered role in ascending order.
+- The role evaluation SHALL give the same verdict for the same policy and approvals whatever their order.
+- The role evaluation SHALL NOT count an account that no individual lists.
+- The role evaluation SHALL NOT count one individual for two roles.
+- The role evaluation SHALL NOT pass with fewer roles than the policy lists.
+- The role evaluation SHALL NOT name a role, approver or role count in code.
 
 ## Acceptance Criteria
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-061-AC-1 | A policy of roles `developer`, `engineer`, `stakeholder` with verified statements from three different individuals yields `satisfied` with one approver per role. | Test |
-| FR-061-AC-2 | The same policy with one individual holding statements for `developer` and `engineer` yields `unsatisfied`, with `missing` naming the role left uncovered with reason `shared_individual`. | Test |
-| FR-061-AC-3 | A one-role policy with one verified statement yields `satisfied`; a policy with role names other than the three above is evaluated the same way. | Test |
+| FR-061-AC-1 | A policy of roles `developer`, `engineer`, `stakeholder` with approvals from three different individuals, each for a role they are listed for, yields `satisfied` with one individual per role. | Test |
+| FR-061-AC-2 | The same policy with one individual holding approvals for `developer` and `engineer` and nobody else covering either yields `unsatisfied`, with `missing` equal to `[engineer]` with reason `shared_individual`, and the same verdict for either order of the approvals. | Test |
+| FR-061-AC-3 | A one-role policy with one approval yields `satisfied`; a policy with role names other than the three above is evaluated the same way. | Test |
 | FR-061-AC-4 | A policy change on the pull request branch does not change the policy used; the base branch's document is used. | Test |
-| FR-061-AC-5 | A policy with an unknown member, an empty or duplicated `required_roles`, or a required role absent from `roles` is refused with `approval_policy_invalid`, and the gate is `unsatisfied`. | Test |
-| FR-061-AC-6 | Over generated policies and generated statement sets, `satisfied` is returned only when an assignment of distinct individuals to all roles exists. | Property |
-| FR-061-AC-7 | Two statements from the same source identity for two roles, and one more statement from a second identity for the second role, yield `satisfied` with the second identity covering that role. | Test |
-| FR-061-AC-8 | Two identities from different sources are two individuals, and become one individual when the policy equates them under a shared `individual` key. | Test |
+| FR-061-AC-5 | A policy with an unknown member, an empty or duplicated `required_roles`, a required role absent from `roles`, an individual named in `roles` but not declared, an account under two individuals, or an account both in an individual and in `agents`, is refused with `approval_policy_invalid`, and the evaluation is `unsatisfied`. | Test |
+| FR-061-AC-6 | Over generated policies and generated approval sets, `satisfied` is returned only when an assignment of distinct individuals to all required roles exists, and the verdict does not change when the approvals are reordered. | Property |
+| FR-061-AC-7 | An individual listed for `developer` and `engineer` who approves as `developer`, and a second individual listed for `engineer` who approves as `engineer`, yield `satisfied`; an approval naming a role the individual is not listed for is not counted. | Test |
+| FR-061-AC-8 | Two accounts listed under one individual that approve for two roles count as one individual, and an account that no individual lists approving for a role counts for nothing. | Test |
+| FR-061-AC-9 | The review gate and the statement verifier return the same verdict for the same policy when given the same approvals as reviews and as verified statements. | Test |
 
 ## Dependencies
 
-- **Upstream**: [FR-058](./FR-058-approval-statement-and-predicate.md),
+- **Upstream**: [FR-055](./FR-055-per-repo-sink-configuration-and-visibility-default.md),
+  [FR-058](./FR-058-approval-statement-and-predicate.md),
   [FR-062](./FR-062-ai-agents-are-never-approvers.md),
   [NFR-008](../non-functional/NFR-008-closed-schemas.md).
 - **Downstream**: [FR-063](./FR-063-unstaffed-required-role-fails-visibly.md),
-  [FR-064](./FR-064-verify-approval-statement-with-workflow-identity-policy.md); the required-check, change-record and
+  [FR-064](./FR-064-verify-approval-statement-with-workflow-identity-policy.md),
+  [FR-065](./FR-065-workflow-roles-and-relation-to-signed-release-tags.md); the required-check, change-record and
   receipt requirements of EA-98 and EA-97 that evaluate this policy.

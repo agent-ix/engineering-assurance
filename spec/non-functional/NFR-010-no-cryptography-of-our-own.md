@@ -10,14 +10,16 @@ relationships:
     type: "constrains"
   - target: "ix://agent-ix/engineering-assurance/FR-056"
     type: "constrains"
+  - target: "ix://agent-ix/engineering-assurance/FR-057"
+    type: "constrains"
 ---
 
 # NFR-010: Engineering Assurance implements no cryptography of its own
 
 ## Statement
 
-Engineering Assurance shall create and verify every statement and record signature through the Sigstore signing and
-verification libraries and in-toto statement types named in Linear PLAT-1481.
+Engineering Assurance shall create and verify every statement and record signature through Sigstore signing and
+verification libraries and in-toto statement types.
 
 ## Scope
 
@@ -27,18 +29,20 @@ verification libraries and in-toto statement types named in Linear PLAT-1481.
 ## Rationale
 
 Signature and certificate rules are security-critical and already specified by the delegated libraries. Own code would
-add an unreviewed implementation. The git-signature path keeps its own delegation under FR-036 and FR-040.
+add an unreviewed implementation. A keyless signature uploaded to a public log discloses the signing repository and
+workflow, so the upload is part of publishing and is gated like it. The git-signature path keeps its own delegation under FR-036 and FR-040.
 
 ## Measurement and Evaluation
 
 | Metric | Target | Threshold | Method |
 | --- | --- | --- | --- |
 | Count of signature, certificate or hash-based signing primitives implemented in the approval and sink modules | 0 | 0 | Source inspection |
+| Count of public-log uploads made without a passing FR-057 check | 0 | 0 | Test with a stand-in public log client |
 | Count of statements or record signatures accepted whose verification did not run through the delegated library | 0 | 0 | Test with a stand-in library |
 
 ## Verification
 
-A source inspection checks the first count; a test that substitutes the delegated library with a stand-in that rejects
+A source inspection checks the first count; a stand-in public log client checks the second (FR-057-AC-10); a test that substitutes the delegated library with a stand-in that rejects
 every signature checks the second.
 
 ## Dependencies
