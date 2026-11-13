@@ -655,6 +655,24 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-426 | A non-UTF-8 path in the release commit is not mistaken for a snapshot path containing U+FFFD | Integration | P0 | FR-047-AC-6 | ✅ `tests/release_verify_cli.rs` passing |
 | TC-427 | A Baseline with 1025 items is `baseline_file_invalid` | Integration | P0 | FR-046-AC-6 | ✅ `tests/release_verify_cli.rs` passing |
 | TC-428 | A Baseline item spelled as pathspec magic is tested as a literal path: present when it exists, otherwise `baseline_item_absent`, never a git failure | Integration | P0 | FR-046-AC-4 | ✅ `tests/release_verify_cli.rs` passing |
+| TC-500 | With a previous release tag and a baseline three first-parent commits later, exactly the records added in the range are listed with their adding commits, ordered by `record_id`, `revision`, `commit` | Integration | P0 | FR-052-AC-1 | ✅ `tests/release_history_cli.rs` passing |
+| TC-501 | A record added before the previous baseline and a record added then deleted inside the range are not listed | Integration | P0 | FR-052-AC-2 | ✅ `tests/release_history_cli.rs` passing |
+| TC-502 | With `previous_release_tag` `null`, every matching file present at the baseline is listed and `previous_release` is `null` | Integration | P0 | FR-052-AC-3 | ✅ `tests/release_history_cli.rs` passing |
+| TC-503 | A previous release commit never merged into the baseline's branch still yields the records added after its parent | Integration | P0 | FR-052-AC-4 | ✅ `tests/release_history_cli.rs` passing |
+| TC-504 | A two-parent tagged commit, an unknown tag, an unknown baseline and a non-ancestor previous baseline each give their own error code at exit 2 | Integration | P0 | FR-052-AC-5 | ✅ `tests/release_history_cli.rs` passing |
+| TC-505 | A record file edited, removed or added in the working tree, or holding invalid JSON, does not change the result | Integration | P0 | FR-052-AC-6 | ✅ `tests/release_history_cli.rs` passing |
+| TC-506 | The command leaves refs, index and working tree unchanged; an unknown member, a relative repository or a `-`-leading value is refused before git starts | Integration | P0 | FR-052-AC-7 | ✅ `tests/release_history_cli.rs` passing |
+| TC-507 | Two runs over one repository state give byte-identical output | Integration | P0 | FR-052-AC-8 | ✅ `tests/release_history_cli.rs` passing |
+| TC-508 | A record merged from a side branch is reported at the merge commit, and a path added twice in the range is reported at the earlier first-parent commit whatever the commit dates | Integration | P0 | FR-052-AC-9 | ✅ `tests/release_history_cli.rs` passing |
+| TC-509 | With no previous tag a record present from the root is reported at the first first-parent commit that holds it | Integration | P0 | FR-052-AC-10 | ✅ `tests/release_history_cli.rs` passing |
+| TC-510 | Revisions 9 and 10 list in that order, and `x.json.tmp`, `v2.json`, deeper paths, staging directories, leading-zero, zero, fractional and signed revisions are ignored without an error | Integration | P0 | FR-052-AC-11 | ✅ `tests/release_history_cli.rs` passing |
+| TC-511 | A branch name, short hash, upper-case hash or over-long hash as `baseline_commit`, and an empty, absolute, `..` or glob `records_dir`, are refused before git starts | Integration | P0 | FR-052-AC-12 | ✅ `tests/release_history_cli.rs` passing |
+| TC-512 | A shallow clone, a branch named like a missing tag, a tag on a tree or blob, a branch `refs/tags/v2` and a tag `refs/tags/v3` each give their own error code | Integration | P0 | FR-052-AC-13 | ✅ `tests/release_history_cli.rs` passing |
+| TC-513 | The record id is one to 256 bytes and the revision is an unsigned integer from one without leading zeros; other paths are not records | Unit | P0 | FR-052-AC-11 | ✅ `tests/release_history.rs` passing |
+| TC-514 | Hashes, records directories and tag names outside the request grammar are not accepted | Unit | P0 | FR-052-AC-12 | ✅ `tests/release_history.rs` passing |
+| TC-515 | A previous baseline reachable only through a merge of a release branch is refused with `release_history_previous_not_on_first_parent` | Integration | P0 | FR-052-AC-15 | ✅ `tests/release_history_cli.rs` passing |
+| TC-516 | A directory git cannot read yields `release_history_git_failed`, and a replace ref and a graft leave the output byte-identical | Integration | P0 | FR-052-AC-16 | ✅ `tests/release_history_cli.rs` passing |
+| TC-517 | A listed record with a revision above `u64::MAX` or a non-UTF-8 `record_id` is `release_history_record_unrepresentable`, and is not once deleted | Integration | P0 | FR-052-AC-17 | ✅ `tests/release_history_cli.rs` passing |
 
 ## Option Permutation Matrix
 

@@ -59,7 +59,12 @@ content, and any git write.
 - One request document `engineering-assurance.release-history-request/v1` with `protocol`, `repository` (absolute
   directory), `baseline_commit` (a full lowercase hexadecimal commit hash of 40 or 64 digits), `previous_release_tag` (a tag name or `null`) and `records_dir`
   (a repository-relative directory: non-empty, no `..` segment, no leading `/`, no glob character). Unknown members
-  are rejected.
+  are rejected, and so is a missing member: `previous_release_tag` is a tag name or `null`, and leaving it out is not `null`.
+- Beyond the rules above, a `records_dir` with an empty segment (`a//b`), a `.` segment (`./x`, `a/.`), a control
+  character or a leading `-` is refused (one trailing `/` is allowed); the glob characters are `*`, `?`, `[`, `]`, `{`,
+  `}` and `\`. A `previous_release_tag` that is empty, begins with `-` or `/`, ends with `/` or `.`, or contains `..`,
+  `//`, `@{`, a control character, whitespace, or any of `*`, `?`, `[`, `\`, `~`, `^`, `:` is refused (a name git allows,
+  including one with `{` or `}`, is accepted).
 
 ## Outputs
 
@@ -70,7 +75,10 @@ content, and any git write.
 - A request that yields no result writes the `engineering-assurance.error/v1` machine error and exits 2, with the
   codes `release_history_request_invalid`, `release_history_baseline_commit_unknown`,
   `release_history_previous_tag_unknown`, `release_history_previous_not_a_release_commit`,
-  `release_history_previous_not_ancestor` and `release_history_repository_shallow`. `revision` in the result is an integer.
+  `release_history_previous_not_ancestor`, `release_history_previous_not_on_first_parent`,
+  `release_history_repository_shallow`, `release_history_record_unrepresentable`, `release_history_request_unreadable`,
+  `release_history_git_failed` (git could not answer a read the list needs) and `release_history_result_encoding_failed`.
+  `revision` in the result is an integer.
 
 ## Behavior
 
@@ -91,6 +99,14 @@ content, and any git write.
 - The command SHALL ignore a file under `records_dir` that does not match the path grammar, without an error.
 - If the previous baseline commit is not an ancestor of, or equal to, the baseline commit, then the command SHALL
   report `release_history_previous_not_ancestor`.
+- If the previous baseline commit is an ancestor of the baseline commit but is not on its first-parent history (for
+  example a release cut on a branch that was merged back), then the command SHALL report
+  `release_history_previous_not_on_first_parent` and list no record.
+- If a record path under `records_dir` fits the path grammar but its `revision` exceeds 18446744073709551615 or its
+  `record_id` is not UTF-8, and the file is listed by the other rules, then the command SHALL report
+  `release_history_record_unrepresentable` rather than omit it.
+- If git fails to answer a read, then the command SHALL report `release_history_git_failed` and no partial list.
+- The command SHALL read git with replace refs and graft files ignored.
 - If the previous baseline commit equals the baseline commit, then the command SHALL write an empty `records`.
 - The command SHALL list a record once for each `(record_id, revision)`.
 - The command SHALL order `records` by `record_id` bytewise, then `revision` numerically, then `commit` bytewise.
@@ -114,14 +130,17 @@ content, and any git write.
 | FR-052-AC-4 | A previous release commit that was never merged into the baseline's branch still yields the records added after its parent. | Test |
 | FR-052-AC-5 | A tag that peels to a two-parent commit, a tag that is unknown, a baseline commit that is unknown and a previous baseline that is not an ancestor yield `release_history_previous_not_a_release_commit`, `release_history_previous_tag_unknown`, `release_history_baseline_commit_unknown` and `release_history_previous_not_ancestor` with exit 2. | Test |
 | FR-052-AC-6 | A record file edited in the working tree, or whose bytes are invalid JSON, does not change the result. | Test |
-| FR-052-AC-7 | The command leaves refs, index and working tree unchanged, and a request with an unknown member, a relative path or a `-`-leading value is refused with `release_history_request_invalid` before git starts. | Test |
+| FR-052-AC-7 | The command leaves refs, index and working tree unchanged, and a request with an unknown or missing member, a relative path or a `-`-leading value is refused with `release_history_request_invalid` before git starts. | Test |
 | FR-052-AC-8 | Running the command twice over the same repository state yields byte-identical output. | Test |
 | FR-052-AC-9 | A record added by a side branch and merged into the baseline's first-parent history is reported with the merge commit as `commit`; a path added in two commits of the range is reported with the earlier one in first-parent order, whatever the commit dates. | Test |
 | FR-052-AC-10 | With `previous_release_tag` `null`, a record present from the root commit is reported with the first first-parent commit that holds it. | Test |
 | FR-052-AC-11 | Revisions 9 and 10 of one record are listed in the order 9, 10; `x.json.tmp`, a `v2.json` name, a deeper path and a staging directory under `records_dir` are ignored without an error. | Test |
 | FR-052-AC-12 | A `baseline_commit` that is a branch name, a short hash or an upper-case hash, and a `records_dir` that is empty, absolute, contains `..` or contains a glob character, are each refused with `release_history_request_invalid` before git starts. | Test |
-| FR-052-AC-13 | A shallow repository yields `release_history_repository_shallow`; a branch with the name of a missing tag yields `release_history_previous_tag_unknown`; a tag that peels to a tree or a blob yields `release_history_previous_not_a_release_commit`. | Test |
+| FR-052-AC-13 | A shallow repository yields `release_history_repository_shallow`; a branch with the name of a missing tag yields `release_history_previous_tag_unknown`; a tag that peels to a tree or a blob yields `release_history_previous_not_a_release_commit`; a branch named `refs/tags/v2` and a tag named `refs/tags/v3` do not make `v2` or `v3` resolve. | Test |
 | FR-052-AC-14 | Static inspection shows no code in this command that opens or hashes a record file. | Inspection |
+| FR-052-AC-15 | A previous baseline that is an ancestor of the baseline commit only through a merge (a release cut on a branch and merged back) yields `release_history_previous_not_on_first_parent` and no records. | Test |
+| FR-052-AC-16 | A git that cannot read the repository yields `release_history_git_failed` at exit 2 and no list, and a replace ref or a graft in the repository changes neither the commits walked nor the records listed. | Test |
+| FR-052-AC-17 | A listed path with a revision above 18446744073709551615 or a non-UTF-8 `record_id` yields `release_history_record_unrepresentable`, and the same path deleted before the baseline commit does not. | Test |
 
 ## Dependencies
 
