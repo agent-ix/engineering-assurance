@@ -157,6 +157,11 @@ path = "tests/syft_producer_cli.rs"
 required-features = ["full"]
 
 [[test]]
+name = "document_converter_producer_cli"
+path = "tests/document_converter_producer_cli.rs"
+required-features = ["full"]
+
+[[test]]
 name = "producer_execute_cli"
 path = "tests/producer_execute_cli.rs"
 required-features = ["full"]

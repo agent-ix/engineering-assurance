@@ -1,4 +1,4 @@
-.PHONY: syft-integration rust-features rust-feature-list lint content-rights-tree test manifest-validate package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-gate release-gate
+.PHONY: syft-integration converter-integration rust-features rust-feature-list lint content-rights-tree test manifest-validate package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-gate release-gate
 
 EVAL_AGENT ?= codex
 EVAL_RUN ?= canary
@@ -30,6 +30,17 @@ syft-integration:
 		exit 2; \
 	}
 	CARGO_BUILD_JOBS=2 cargo test --locked --features full --test syft_producer_cli -- --ignored
+
+converter-integration:
+	@case "$$EA_TEST_PANDOC" in /*) test -x "$$EA_TEST_PANDOC" ;; *) false ;; esac || { \
+		echo "EA_TEST_PANDOC must name the absolute path of an executable pandoc binary" >&2; \
+		exit 2; \
+	}
+	@case "$$EA_TEST_TYPST" in /*) test -x "$$EA_TEST_TYPST" ;; *) false ;; esac || { \
+		echo "EA_TEST_TYPST must name the absolute path of an executable typst binary" >&2; \
+		exit 2; \
+	}
+	CARGO_BUILD_JOBS=2 cargo test --locked --features full --test document_converter_producer_cli -- --ignored
 
 manifest-validate:
 	@test -n "$(strip $(MANIFEST_SCHEMA_ROOT))" || { \
