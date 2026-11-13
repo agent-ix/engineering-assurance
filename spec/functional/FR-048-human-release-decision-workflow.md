@@ -33,7 +33,10 @@ provided" when the source was not supplied, never as "none" or "clean":
 - the SOUP report: the SOUP records of the Baseline and the report the caller
   supplies for them;
 - the unresolved anomalies: the list the caller supplies, each with its id and
-  status.
+  status;
+- the snapshot file, if supplied, shown verbatim and unparsed with its `snapshot_path`. The owner's signature on the
+  tag covers whatever bytes the release commit holds at `snapshot_path`; the workflow does not check that they are
+  the bytes shown.
 
 The evidence status, SOUP report and anomaly list are Quoin outputs, supplied
 to the workflow as files in the formats that Quoin requirements define: the
@@ -60,19 +63,22 @@ scheduled, or agent-made release choice; signing; pushing the tag.
 
 - The FR-005 inputs: workflow name, stable run id and state directory, and the
   named decision owner with their explicit choice.
-- The Baseline file path, the baseline commit hash, and the repository directory.
-- Optional files: evidence status, SOUP report, anomaly list.
+- The Baseline file path, the baseline commit hash, the repository directory and
+  the repository-relative `snapshot_path` the owner is to commit the snapshot at.
+- Optional files: evidence status, SOUP report, anomaly list, and the snapshot file Quoin wrote for the owner to
+  commit ([FR-051](./FR-051-release-evidence-snapshot-placement.md)).
 
 ## Outputs
 
 - The review presentation above, retained with the run.
-- On `release`: the Release document (decision owner, baseline commit and
-  accepted anomaly ids), the repository-relative `record_path` the owner is to
+- On `release`: the Release document (decision owner, baseline commit,
+  `snapshot_path` and accepted anomaly ids), the repository-relative `record_path` the owner is to
   commit it at, and the tag message text (subject paragraph, `Approved-Record-Id`,
   `Signed-off-meaning:` trailer, and the `Approved-Record-Digest` line to be
   completed with the `git-blob:` id of the record at the release commit). The
   workflow ends there. The owner commits the record in a release commit whose
-  single parent is the baseline commit and whose only change is the record,
+  single parent is the baseline commit and whose only changes are the record and
+  the release evidence snapshot ([FR-051](./FR-051-release-evidence-snapshot-placement.md)),
   then signs the annotated tag with `git tag -s` and their own signing
   configuration; `release-verify` ([FR-047](./FR-047-release-record-and-signed-release-tag.md))
   later reports whether that tag is the release.
@@ -97,12 +103,16 @@ scheduled, or agent-made release choice; signing; pushing the tag.
 - If a supplied input file cannot be read or lacks a member the presentation
   needs, then the workflow SHALL refuse with `release_input_unreadable` and
   leave the run before the gate.
+- If `snapshot_path` exists at the baseline commit, then the workflow SHALL refuse the `release` choice with
+  `snapshot_path_present_at_baseline` and write no Release document.
+- If `snapshot_path` is absolute or contains `..` or a glob, then the workflow SHALL refuse the `release` choice with
+  `release_snapshot_path_invalid` and write no Release document.
 - The workflow SHALL NOT synthesize the `release` choice from evidence status,
   an empty anomaly list or a missing input.
 - The workflow SHALL record an anomaly acceptance only from the owner's explicit
   naming of the anomaly id.
-- If a run id is reused with a different repository, Baseline, baseline commit
-  or decision owner, then the workflow SHALL refuse the run without changing
+- If a run id is reused with a different repository, Baseline, baseline commit,
+  `snapshot_path` or decision owner, then the workflow SHALL refuse the run without changing
   either run, as FR-005 does.
 
 ## Acceptance Criteria
@@ -116,9 +126,11 @@ scheduled, or agent-made release choice; signing; pushing the tag.
 | FR-048-AC-5 | A `reject` choice retains the rejection outcome and writes no Release document and no tag. | Test |
 | FR-048-AC-6 | A `release` choice emits one terminal event with run id, workflow version, owner, choice and timestamp, and the workflow runs no `git tag`, no `git commit`, no signer and no push. | Test |
 | FR-048-AC-7 | Evidence in which every criterion is `bound`, an empty anomaly list or a failed input read never produces a `release` choice. | Test |
+| FR-048-AC-8 | A run id reused with a different Baseline, baseline commit, repository, `snapshot_path` or owner is refused without changing either run; an interrupted run resumes at its last completed phase. | Test |
 | FR-048-AC-9 | An owner-named accepted anomaly id absent from the supplied anomaly list is refused and no Release document is written; an unreadable input file, or one lacking a presented member, yields `release_input_unreadable` naming the file and leaves the run before the gate. | Test |
-| FR-048-AC-10 | The `release` outcome carries the Release document, `record_path` and the tag message text with the digest line to complete; committing the record as a single child of the baseline commit and signing a tag with that message by `git tag -s` yields `released` from `release-verify`, with no workflow-run git write. | Test |
-| FR-048-AC-8 | A run id reused with a different Baseline, baseline commit, repository or owner is refused without changing either run; an interrupted run resumes at its last completed phase. | Test |
+| FR-048-AC-10 | The `release` outcome carries the Release document, `record_path` and the tag message text with the digest line to complete; committing the record and the snapshot as a single child of the baseline commit and signing a tag with that message by `git tag -s` yields `released` from `release-verify`, with no workflow-run git write. | Test |
+| FR-048-AC-11 | A `release` choice with a `snapshot_path` that exists at the baseline commit (which includes the Baseline file and any Baseline item) is refused with `snapshot_path_present_at_baseline`, and one that is absolute or contains `..` or a glob is refused with `release_snapshot_path_invalid`; neither writes a Release document. | Test |
+| FR-048-AC-12 | A supplied snapshot file is presented verbatim and unparsed with its `snapshot_path`, and an unsupplied one is shown "not provided". | Test |
 
 ## Dependencies
 

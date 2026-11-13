@@ -228,6 +228,12 @@ same canonical bundle and do not redefine these responsibilities.
   release record and verification; Quoin consumes the result as data and runs no git.
 - [FR-050](./functional/FR-050-record-named-persons-release-decision-stance.md) — state that Engineering Assurance
   records a named person's release decision and never decides one.
+- [FR-051](./functional/FR-051-release-evidence-snapshot-placement.md) — place the Quoin-written release evidence
+  snapshot in the release commit beside the record, and check it is present there.
+- [FR-052](./functional/FR-052-release-history-since-the-previous-release.md) — list the change-assurance records
+  merged since the previous release, as data for the snapshot.
+- [FR-053](./functional/FR-053-snapshot-and-attestations-never-replace-the-decision.md) — attestations may carry the
+  snapshot and never replace the signed release decision.
 
 ### Non-Functional Requirements
 
