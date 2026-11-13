@@ -234,6 +234,18 @@ same canonical bundle and do not redefine these responsibilities.
   merged since the previous release, as data for the snapshot.
 - [FR-053](./functional/FR-053-snapshot-and-attestations-never-replace-the-decision.md) — attestations may carry the
   snapshot and never replace the signed release decision.
+- [FR-054](./functional/FR-054-record-sink-interface-and-implementations.md) — publish a record through a sink interface with a public log, a private store and a none implementation.
+- [FR-055](./functional/FR-055-per-repo-sink-configuration-and-visibility-default.md) — select a sink per repository, defaulting from visibility.
+- [FR-056](./functional/FR-056-public-and-private-record-split.md) — split a record into a trimmed public form and a full private form linked by id.
+- [FR-057](./functional/FR-057-fail-closed-pre-publish-leak-check.md) — refuse a public publish and public-log signing when the publishing repo or a reference is private or undeterminable.
+- [FR-058](./functional/FR-058-approval-statement-and-predicate.md) — record a change approval as a CI-signed in-toto statement bound to the pull request and merged commit.
+- [FR-059](./functional/FR-059-source-adapter-interface-and-github-review-adapter.md) — read approvals through a source adapter interface, GitHub review adapter first.
+- [FR-060](./functional/FR-060-approval-binds-to-the-merged-head-commit.md) — bind an approval to the head that merged and survive a squash merge.
+- [FR-061](./functional/FR-061-role-policy-and-distinct-individuals.md) — require every policy role to be signed by a distinct individual.
+- [FR-062](./functional/FR-062-ai-agents-are-never-approvers.md) — never accept an AI agent identity as an approver.
+- [FR-063](./functional/FR-063-unstaffed-required-role-fails-visibly.md) — fail with a named error when a required role has no staffed approver.
+- [FR-064](./functional/FR-064-verify-approval-statement-with-workflow-identity-policy.md) — verify approval statements against the trusted CI workflow identity and the role policy.
+- [FR-065](./functional/FR-065-workflow-roles-and-relation-to-signed-release-tags.md) — name the CI workflow roles, gate on reviews before merge; release decisions stay person-signed tags.
 
 ### Non-Functional Requirements
 
@@ -252,6 +264,9 @@ same canonical bundle and do not redefine these responsibilities.
   SBOM generator, run only through the FR-019 executor, read only through the Quoin adapter.
 - [NFR-007](./non-functional/NFR-007-no-release-without-a-person.md) — a release is reported only for a verified
   person's signed decision.
+- [NFR-008](./non-functional/NFR-008-closed-schemas.md) — records, configuration, statements and policies use closed schemas.
+- [NFR-009](./non-functional/NFR-009-no-private-reference-reaches-a-public-log.md) — no private reference reaches a public log.
+- [NFR-010](./non-functional/NFR-010-no-cryptography-of-our-own.md) — no cryptography of our own.
 
 ### Integration Tests
 
