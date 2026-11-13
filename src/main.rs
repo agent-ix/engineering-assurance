@@ -7,6 +7,7 @@
 
 mod agent_evals_host;
 mod agent_evals_provider;
+mod approval_tag_host;
 mod approval_verify_host;
 mod content_rights_host;
 mod evaluation_report_host;
@@ -41,6 +42,7 @@ use serde::Serialize;
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 const ERROR_PROTOCOL: &str = "engineering-assurance.error/v1";
+const APPROVAL_TAG_CAPABILITY: &str = "approval-tag";
 const APPROVAL_VERIFY_CAPABILITY: &str = "approval-verify";
 const AGENT_EVALS_PROVIDER_CAPABILITY: &str = "agent-evals-provider";
 const AGENT_EVALS_CAPABILITY: &str = "agent-evals";
@@ -126,6 +128,7 @@ fn command() -> Command {
         .subcommand(scope_footprint_command())
         .subcommand(signature_verify_command())
         .subcommand(approval_verify_command())
+        .subcommand(approval_tag_command())
         .subcommand(
             Command::new(WORKFLOW_INVARIANTS_CAPABILITY)
                 .about("Evaluate a closed workflow projection against named invariants"),
@@ -206,6 +209,18 @@ fn approval_verify_command() -> Command {
                 .long("request")
                 .value_name("JSON")
                 .help("Approval-verify request document, or - to read it from stdin")
+                .required(true),
+        )
+}
+
+fn approval_tag_command() -> Command {
+    Command::new(APPROVAL_TAG_CAPABILITY)
+        .about("Write one signed annotated approval tag for a change-assurance record")
+        .arg(
+            Arg::new("request")
+                .long("request")
+                .value_name("JSON")
+                .help("Approval-tag request document, or - to read it from stdin")
                 .required(true),
         )
 }
@@ -300,6 +315,7 @@ fn main() -> ExitCode {
         Some((SCOPE_FOOTPRINT_CAPABILITY, arguments)) => run_scope_footprint(arguments),
         Some((SIGNATURE_VERIFY_CAPABILITY, arguments)) => run_signature_verify(arguments),
         Some((APPROVAL_VERIFY_CAPABILITY, arguments)) => run_approval_verify(arguments),
+        Some((APPROVAL_TAG_CAPABILITY, arguments)) => run_approval_tag(arguments),
         Some((WORKFLOW_INVARIANTS_CAPABILITY, _)) => run_workflow_invariants(),
         Some((WORKFLOW_HOST_CAPABILITY, _)) => run_workflow_host(),
         Some((PACKAGE_LIFECYCLE_CAPABILITY, arguments)) => run_package_lifecycle(arguments),
@@ -799,6 +815,17 @@ fn run_approval_verify(arguments: &ArgMatches) -> ExitCode {
         "approval_verify_request_unreadable",
         |bytes| {
             approval_verify_host::execute(bytes).map_err(|error| (error.code(), error.to_string()))
+        },
+    )
+}
+
+fn run_approval_tag(arguments: &ArgMatches) -> ExitCode {
+    run_request_line(
+        arguments,
+        APPROVAL_TAG_CAPABILITY,
+        "approval_tag_request_unreadable",
+        |bytes| {
+            approval_tag_host::execute(bytes).map_err(|error| (error.code(), error.to_string()))
         },
     )
 }

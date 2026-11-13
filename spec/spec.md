@@ -210,6 +210,8 @@ same canonical bundle and do not redefine these responsibilities.
 - [FR-041](./functional/FR-041-signed-tag-approval-of-a-change-assurance-record.md) — verify a
   signed annotated tag as a named person's approval of an exact change-assurance record, reporting the
   signer, signing time and meaning together.
+- [FR-042](./functional/FR-042-create-signed-approval-tag-for-a-change-assurance-record.md) — create a
+  signed annotated tag that approves a change-assurance record, signed through the caller's git configuration.
 
 ### Non-Functional Requirements
 

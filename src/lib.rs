@@ -31,6 +31,7 @@
 //!
 //! | Feature | Module(s) | Other features it enables | Extra dependencies |
 //! |---|---|---|---|
+//! | `approval-tag` | `approval_tag` | `approval-verify` | |
 //! | `approval-verify` | `approval_verify` | `signature-verify` | `serde` |
 //! | `atomic-publish` | `atomic_publish` | | `rustix`, `thiserror` |
 //! | `claim-strength` | `claim_strength` | | `serde` |
@@ -60,6 +61,8 @@
 
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "approval-tag")]
+pub mod approval_tag;
 #[cfg(feature = "approval-verify")]
 pub mod approval_verify;
 #[cfg(feature = "atomic-publish")]

@@ -17,7 +17,8 @@ use serde::{Deserialize, Serialize};
 /// Longest accepted revision in bytes.
 pub const MAX_REVISION_BYTES: usize = 256;
 
-const MEANING_TOKEN: &str = "Signed-off-meaning";
+/// Name of the trailer that carries the approval meaning (FR-037).
+pub const MEANING_TOKEN: &str = "Signed-off-meaning";
 const SSH_BEGIN: &[u8] = b"-----BEGIN SSH SIGNATURE-----";
 const CMS_BEGIN: &[u8] = b"-----BEGIN SIGNED MESSAGE-----";
 const OTHER_BEGIN: [&[u8]; 2] = [
