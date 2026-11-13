@@ -42,3 +42,10 @@ yields exactly one `approved` combination.
 
 Not mergeable until the failure-domain finding FND-001 (SR-144, medium) is fixed; the two
 low findings here are wording fixes in the same PR.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | 549939c: rule 1 maps signed_valid with no readable message to unverifiable/trailer_unreadable; AC-15 added |
+| FND-002 | fixed | 549939c: AC-7 names unverifiable/revision_unresolved; note case dropped |
