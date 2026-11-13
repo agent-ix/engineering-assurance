@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.agent-ix.org/agent-ix/engineering-assurance-campaign/release-frontmatter.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "title",
+    "type",
+    "name",
+    "baseline",
+    "snapshot_path",
+    "decision_owner"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^REL-[0-9]+$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "const": "Release"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "commit"
+      ],
+      "description": "The Baseline file and the full git commit hash at which it is read.",
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^(?:[^/.*?\\[\\]{}\\\\ \\u0000-\\u001f\\u007f][^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]*|\\.[^/.*?\\[\\]{}\\\\ \\u0000-\\u001f\\u007f][^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]*|\\.\\.[^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]+)(?:/(?:[^/.*?\\[\\]{}\\\\ \\u0000-\\u001f\\u007f][^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]*|\\.[^/.*?\\[\\]{}\\\\ \\u0000-\\u001f\\u007f][^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]*|\\.\\.[^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]+))*$",
+          "description": "Repository-relative file path: no leading slash, no `..` or `.` segment, no empty segment and no glob character, no control character and no segment starting with a space."
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$",
+          "description": "Full lowercase hexadecimal git commit hash."
+        }
+      }
+    },
+    "snapshot_path": {
+      "type": "string",
+      "pattern": "^(?:[^/.*?\\[\\]{}\\\\ \\u0000-\\u001f\\u007f][^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]*|\\.[^/.*?\\[\\]{}\\\\ \\u0000-\\u001f\\u007f][^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]*|\\.\\.[^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]+)(?:/(?:[^/.*?\\[\\]{}\\\\ \\u0000-\\u001f\\u007f][^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]*|\\.[^/.*?\\[\\]{}\\\\ \\u0000-\\u001f\\u007f][^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]*|\\.\\.[^/*?\\[\\]{}\\\\\\u0000-\\u001f\\u007f]+))*$",
+      "description": "Repository-relative path of the release evidence snapshot, with the same path rules as a Baseline item. It must differ from the release record's own path; that comparison is made at verification, which knows the record path."
+    },
+    "decision_owner": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The person who decides the release. Release verification requires the signer of the release tag to map to exactly this name."
+    },
+    "accepted_anomalies": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Anomalies the decision owner accepted, as stated by that person."
+    }
+  }
+}

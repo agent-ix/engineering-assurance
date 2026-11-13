@@ -211,7 +211,7 @@ after installing.
 
 ### Artifact types
 
-The module supplies Quire schemas and Markdown skeletons for five artifact
+The module supplies Quire schemas and Markdown skeletons for seven artifact
 types:
 
 | Type | Purpose |
@@ -221,6 +221,8 @@ types:
 | `ArchitectureDescription` | Record system boundaries, views, architecture decisions, and risks. |
 | `ComponentAssuranceContract` | State required component behavior, failure handling, controls, and replacement. |
 | `AssuranceArgument` | Record a claim, reasoning, sufficiency decision, and challenges. |
+| `Baseline` | Name a set of configuration items by repository path, read at one git commit. |
+| `Release` | Record a release: its Baseline and commit, the named decision owner, and the anomalies that person accepted. |
 
 ### Agent skill and workflows
 

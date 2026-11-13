@@ -82,7 +82,7 @@ git write.
 | FR-051-AC-1 | A release commit that is the single child of the baseline commit and adds exactly the record and the snapshot yields `released` with `release.snapshot_path`, and the tag's tree differs from the baseline tree by those two paths only. | Test |
 | FR-051-AC-2 | A release commit that adds the record but not `snapshot_path` yields `release_commit_snapshot_not_added`, with the other checks still evaluated. | Test |
 | FR-051-AC-3 | A release commit that adds the record, the snapshot and one further path yields `release_commit_changes_other_paths`; a snapshot present only in the working tree, or added in a later commit, yields `release_commit_snapshot_not_added`. | Test |
-| FR-051-AC-4 | A Release document whose `snapshot_path` equals the request's `record_path`, is absolute, contains `..` or a glob, or is missing is refused as `record_invalid`. | Test |
+| FR-051-AC-4 | A Release document whose `snapshot_path` equals the request's `record_path`, breaks the path rules of a Baseline item (absolute, `..`, glob, control character, space-leading segment), or is missing is refused as `record_invalid`. | Test |
 | FR-051-AC-5 | A snapshot whose bytes are not valid JSON, committed at `snapshot_path`, does not change the verdict. | Test |
 | FR-051-AC-6 | The result carries no member that Engineering Assurance computed from the snapshot's content. | Test |
 | FR-051-AC-7 | The release-decision workflow run to a `release` choice leaves the repository unchanged and writes no snapshot. | Test |

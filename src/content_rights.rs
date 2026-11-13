@@ -39,6 +39,8 @@ const SEMANTIC_EXPORT_SCHEMAS: &[&str] = &[
     "architecture-description-frontmatter.schema.json",
     "component-assurance-contract-frontmatter.schema.json",
     "assurance-argument-frontmatter.schema.json",
+    "baseline-frontmatter.schema.json",
+    "release-frontmatter.schema.json",
 ];
 
 const SEMANTIC_POLICY_FILES: &[&str] = &[

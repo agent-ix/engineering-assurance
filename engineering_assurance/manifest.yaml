@@ -13,6 +13,8 @@ semantic:
     - ArchitectureDescription
     - ComponentAssuranceContract
     - AssuranceArgument
+    - Baseline
+    - Release
     - campaign_value
     - campaign_enum
   imports: {}
@@ -47,6 +49,14 @@ archetypes:
     name: Assurance Argument
     doc_backed: true
     supports_membership: false
+  - kind: baseline
+    name: Baseline
+    doc_backed: true
+    supports_membership: false
+  - kind: release
+    name: Release
+    doc_backed: true
+    supports_membership: false
 grammars:
   - name: engineering-assurance
     version: 0.2.0
@@ -57,6 +67,8 @@ grammars:
       - architecture-description
       - component-assurance-contract
       - assurance-argument
+      - baseline
+      - release
 artifact_types:
   - name: AssuranceProfile
     grammar_ref: engineering-assurance
@@ -134,6 +146,32 @@ artifact_types:
           reasoning: { from: section_body, after_heading: Reasoning, required: true }
           sufficiency: { from: section_body, after_heading: Sufficiency Decision, required: true }
           challenges: { from: section_body, after_heading: Challenges, required: true }
+  - name: Baseline
+    grammar_ref: engineering-assurance
+    frontmatter_schema_ref: schemas/baseline-frontmatter.schema.json
+    data_schema:
+      schema: schemas/baseline-frontmatter.schema.json
+    defaults:
+      id_pattern: BL-{next:03d}
+    allowed_links: [references]
+    body_extraction:
+      yield_pattern:
+        match:
+          purpose: { from: section_body, after_heading: Purpose, required: true }
+          items: { from: section_body, after_heading: Items, required: true }
+  - name: Release
+    grammar_ref: engineering-assurance
+    frontmatter_schema_ref: schemas/release-frontmatter.schema.json
+    data_schema:
+      schema: schemas/release-frontmatter.schema.json
+    defaults:
+      id_pattern: REL-{next:03d}
+    allowed_links: [references]
+    body_extraction:
+      yield_pattern:
+        match:
+          summary: { from: section_body, after_heading: Release Summary, required: true }
+          anomalies: { from: section_body, after_heading: Accepted Anomalies, required: true }
 lint_rules: []
 object_types:
   - name: campaign_value
