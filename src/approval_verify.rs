@@ -13,7 +13,7 @@
 
 use serde::Serialize;
 
-use crate::signature_verify::{Presence, Reason, SignatureKind, Status, Verdict};
+use crate::signature_verify::{Presence, Reason, SignatureKind, SignedAt, Status, Verdict};
 
 /// Trailer naming the record the tag approves.
 pub const RECORD_ID_TRAILER: &str = "Approved-Record-Id";
@@ -139,7 +139,7 @@ pub enum SigningTime {
     /// A UTC instant and where it comes from.
     Known {
         /// The signing time, `YYYY-MM-DDTHH:MM:SSZ`.
-        signed_at: String,
+        signed_at: SignedAt,
         /// Where the time comes from.
         signed_at_source: SignedAtSource,
     },
@@ -151,7 +151,7 @@ pub enum SigningTime {
 }
 
 impl SigningTime {
-    fn from_tagger(tagger_signed_at: Option<String>) -> Self {
+    fn from_tagger(tagger_signed_at: Option<SignedAt>) -> Self {
         match tagger_signed_at {
             Some(signed_at) => Self::Known {
                 signed_at,
@@ -217,7 +217,7 @@ impl Decision {
 pub fn decide(
     verdict: &Verdict,
     bindings: Option<Bindings>,
-    tagger_signed_at: Option<String>,
+    tagger_signed_at: Option<SignedAt>,
 ) -> Decision {
     match verdict.status {
         Status::Unsigned => Decision::status(ApprovalStatus::Unsigned),
@@ -234,7 +234,7 @@ pub fn decide(
 fn decide_valid(
     verdict: &Verdict,
     bindings: Option<Bindings>,
-    tagger_signed_at: Option<String>,
+    tagger_signed_at: Option<SignedAt>,
 ) -> Decision {
     let Some(bindings) = bindings else {
         return Decision::unverifiable(UnverifiableReason::Trailer(

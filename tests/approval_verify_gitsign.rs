@@ -36,6 +36,7 @@ for a in "$@"; do
     --certificate-oidc-issuer-regexp) iss=any ;;
   esac
 done
+echo run >> "$d/invocations"
 status=0
 if [ -e "$d/exit_${id}_${iss}" ]; then read -r status < "$d/exit_${id}_${iss}"; fi
 exit "$status"
@@ -273,6 +274,9 @@ fn tc_336_a_gitsign_tag_reports_its_tagger_date_and_gitsign_never_changes_the_st
     assert_eq!(approved["approver"], PRINCIPAL);
     assert_eq!(approved["signed_at"], "2023-11-14T22:13:20Z");
     assert_eq!(approved["signed_at_source"], "tagger_date");
+    // Reading the time starts no gitsign run: one approval ran it once.
+    let runs = fs::read_to_string(fixture.bin().join("invocations")).expect("log");
+    assert_eq!(runs.lines().count(), 1, "{runs:?}");
     // A rejected identity is untrusted and carries no time.
     fixture.script("exact_exact", 1);
     let untrusted = result(&fixture, &request(&fixture, "v-cms", true));
@@ -281,7 +285,7 @@ fn tc_336_a_gitsign_tag_reports_its_tagger_date_and_gitsign_never_changes_the_st
 }
 
 #[test]
-#[trace("TC-337", "FR-041-AC-18")]
+#[trace("TC-337", "FR-041-AC-18", "FR-041-CON-3")]
 fn tc_337_an_approval_with_no_readable_tagger_date_reports_the_time_missing() {
     let fixture = fixture();
     forged_tag_with_tagger(&fixture, "v-none", None, &good_message(), CMS_BLOCK);

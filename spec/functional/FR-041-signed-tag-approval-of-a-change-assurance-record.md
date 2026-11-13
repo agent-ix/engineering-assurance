@@ -41,10 +41,10 @@ through v0.18.0) prints the Rekor integrated time from `gitsign verify` or
 `gitsign verify-tag`: they print the log index, the certificate identifier, the
 signer line and claim lines only, and `gitsign show` prints an in-toto statement
 without it. The command therefore reads no transparency-log time and invents no
-output format for one. The value `transparency_log` of the ticketed source
-vocabulary is reserved, and is reported only after a gitsign release exposes the
-integrated time in a documented form and this requirement is amended to parse it
-(an owner decision recorded in the pull request).
+output format for one. The source value `transparency_log` is reserved: it is
+reported only after a gitsign release documents how it exposes the integrated
+time and this requirement is amended to parse it. Until then every `signed_at`
+has the source `tagger_date`.
 
 An annotated tag is the approval object because a squash merge replaces a
 commit a person signed with a commit the hosting service signed, so a commit
@@ -170,6 +170,15 @@ carried by commits, merge commits or notes.
   verification time, the current time, the commit date or the author date for
   `signed_at`, and an `approved` result whose tagger date is unreadable stays
   `approved` and reports `signed_at_missing`.
+- The command SHALL report the claimed time exactly as claimed, with no
+  plausibility check: a date in the future, epoch 0, or a date before the
+  signing key existed is reported verbatim. The time is the signer's claim in
+  every rendering. For gitsign the tagger date is not checked against the
+  short-lived certificate's validity window. For SSH, git 2.35 and later passes
+  the claimed tagger date to `ssh-keygen` as `-Overify-time`, so key validity
+  windows in the allowed-signers file are judged at the claimed time and not at
+  the verification time (earlier git versions judge them at the verification
+  time); in neither case does the verification attest the time.
 - The command SHALL NOT run `gitsign`, or change any invocation, status, probe
   or classification of FR-040, to obtain the signing time, and SHALL NOT parse
   `gitsign` output text for it.
@@ -218,7 +227,7 @@ criteria use real signatures from throwaway keys generated in the test.
 | FR-041-AC-12 | Static inspection shows no signature, certificate or trailer-parsing code in the approval module and no restated FR-036, FR-037 or FR-040 rule (CON-2). | Inspection |
 | FR-041-AC-16 | A mapped, validly signed SSH tag with matching trailers and a `Signed-off-meaning` trailer, created with a known tagger date in a non-UTC zone (`+0530`, and `-0800` across a UTC day boundary), yields `approved` carrying `approver`, `meaning`, `signed_at` equal to the UTC instant of that date and `signed_at_source` `tagger_date`, for a bare and a `refs/tags/` name. | Test |
 | FR-041-AC-17 | The tagger time is read from the tag header block only: a tagger-shaped line in the message, two tagger headers, a missing or non-digit epoch, an epoch past 9999-12-31T23:59:59Z, a malformed zone, extra fields or non-UTF-8 text yield no time, and epochs `0`, a leap day and the last accepted instant format correctly. | Test (captured) |
-| FR-041-AC-18 | An `approved` result for a tag whose tagger date is missing or malformed carries `signed_at_missing` `tagger_date_unreadable` and neither `signed_at` nor `signed_at_source`, together with `approver` and `meaning`, and no member holds the verification time. | Test (stand-in) |
+| FR-041-AC-18 | An `approved` result for a tag whose tagger date is missing or malformed carries `signed_at_missing` `tagger_date_unreadable` and neither `signed_at` nor `signed_at_source`, together with `approver` and `meaning`, and the result carries no time member other than `signed_at_missing`. | Test (stand-in) |
 | FR-041-AC-19 | `wrong_record`, `untrusted_signer` and `meaning_missing` results for tags with a readable tagger date carry none of `signed_at`, `signed_at_source` and `signed_at_missing`, and supplying a time to the pure decision changes no status or reason for any combination. | Test |
 | FR-041-AC-20 | A gitsign-signed tag approved through the stand-in reports `signed_at` from its tagger date (normalized from a non-UTC zone) with `signed_at_source` `tagger_date`; a stand-in rejecting the identity still yields `untrusted_signer` with no time; the time read starts no `gitsign` run. | Test (stand-in) |
 | FR-041-AC-21 | The `signature-verify` output for the same tag has no signing-time member and equals the `signature` member of the approval result. | Test |

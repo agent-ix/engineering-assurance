@@ -740,6 +740,20 @@ pub fn object_message(object: &[u8]) -> &[u8] {
 /// Latest accepted tagger time in seconds since the epoch, 9999-12-31T23:59:59Z.
 const MAX_TAGGER_EPOCH: u64 = 253_402_300_799;
 
+/// A signing time in UTC (`YYYY-MM-DDTHH:MM:SSZ`) that [`tagger_signed_at`]
+/// read from a tagger line. Only that parser builds one.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(transparent)]
+pub struct SignedAt(String);
+
+impl SignedAt {
+    /// The instant as `YYYY-MM-DDTHH:MM:SSZ`.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// The time the tag's tagger line claims, as a UTC instant
 /// (`YYYY-MM-DDTHH:MM:SSZ`), read from the header block of a tag object.
 ///
@@ -754,7 +768,7 @@ const MAX_TAGGER_EPOCH: u64 = 253_402_300_799;
 /// The tagger line is part of the payload the signature covers, so a validly
 /// signed tag cannot have it altered; it is still the signer's own claim.
 #[must_use]
-pub fn tagger_signed_at(tag_payload: &[u8]) -> Option<String> {
+pub fn tagger_signed_at(tag_payload: &[u8]) -> Option<SignedAt> {
     let headers = tag_payload
         .windows(2)
         .position(|pair| pair == b"\n\n")
@@ -783,7 +797,7 @@ pub fn tagger_signed_at(tag_payload: &[u8]) -> Option<String> {
         return None;
     }
     let seconds: u64 = epoch.parse().ok().filter(|s| *s <= MAX_TAGGER_EPOCH)?;
-    Some(format_utc(seconds))
+    Some(SignedAt(format_utc(seconds)))
 }
 
 /// Formats seconds since the epoch as `YYYY-MM-DDTHH:MM:SSZ` (proleptic

@@ -26,8 +26,8 @@ use std::{
 
 use engineering_assurance::signature_verify::{
     CommitObservation, GitGrade, GitsignIdentity, PrincipalLookup, Probe, Reason, Run,
-    SignatureFormat, SignedOffMeaning, SplitTag, SshCheck, TagObservation, TargetKind, Verdict,
-    classify_commit, classify_gitsign, classify_tag, commit_signature_format,
+    SignatureFormat, SignedAt, SignedOffMeaning, SplitTag, SshCheck, TagObservation, TargetKind,
+    Verdict, classify_commit, classify_gitsign, classify_tag, commit_signature_format,
     config_sets_gitsign_key, is_plain_revision, object_message, signed_off_meaning,
     split_tag_object, tagger_signed_at,
 };
@@ -215,7 +215,7 @@ pub(crate) struct CheckedTag {
     pub(crate) trailers: Option<String>,
     /// The UTC instant the tag's tagger line claims; `None` when the tag has no
     /// readable tagger line.
-    pub(crate) tagger_signed_at: Option<String>,
+    pub(crate) tagger_signed_at: Option<SignedAt>,
 }
 
 /// Verifies the tag `revision` exactly as `signature-verify` does for kind
