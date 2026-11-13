@@ -197,6 +197,11 @@ path = "tests/signature_verify_cli.rs"
 required-features = ["full"]
 
 [[test]]
+name = "signature_verify_gitsign"
+path = "tests/signature_verify_gitsign.rs"
+required-features = ["full"]
+
+[[test]]
 name = "source_audit"
 path = "tests/source_audit.rs"
 required-features = ["full"]
@@ -346,8 +351,8 @@ package-membership = ["dep:serde", "dep:thiserror"]
 # the normalized-relative-path rule of `content-rights`, so it adds no second
 # validator; the git adapter lives in the binary.
 scope-footprint = ["content-rights", "dep:serde", "dep:thiserror"]
-# FR-036: pure classification of git's verdict on a signed commit or tag; the
-# git and `ssh-keygen` adapter lives in the binary.
+# FR-036, FR-040: pure classification of git's and `gitsign`'s verdict on a signed
+# commit or tag; the git, `ssh-keygen` and `gitsign` adapter lives in the binary.
 signature-verify = ["dep:serde"]
 semantics = [
   "claim-strength",

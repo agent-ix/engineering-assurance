@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-//! Git and `ssh-keygen` adapter for the `signature-verify` command (FR-036).
+//! Git, `ssh-keygen` and `gitsign` adapter for the `signature-verify` command
+//! (FR-036, FR-040).
+//!
+//! A CMS-signed object is never given to git: the adapter checks that the
+//! repository sets no `gitsign.*` key, then runs `gitsign verify` or
+//! `gitsign verify-tag` in the exit-status procedure the classifier drives.
 //!
 //! The adapter reads the allowed-signers file, then runs `git verify-commit`,
 //! `git log --format=%G?%x00%GF%x00%GS`, `git verify-tag`, `git
@@ -20,9 +25,10 @@ use std::{
 };
 
 use engineering_assurance::signature_verify::{
-    CommitObservation, GitGrade, PrincipalLookup, Reason, SignatureFormat, SignedOffMeaning,
-    SplitTag, SshCheck, TagObservation, TargetKind, Verdict, classify_commit, classify_tag,
-    commit_signature_format, is_plain_revision, object_message, signed_off_meaning,
+    CommitObservation, GitGrade, GitsignIdentity, PrincipalLookup, Probe, Reason, Run,
+    SignatureFormat, SignedOffMeaning, SplitTag, SshCheck, TagObservation, TargetKind, Verdict,
+    classify_commit, classify_gitsign, classify_tag, commit_signature_format,
+    config_sets_gitsign_key, is_plain_revision, object_message, signed_off_meaning,
     split_tag_object,
 };
 use serde::{Deserialize, Serialize};
@@ -61,6 +67,15 @@ struct Request {
     revision: String,
     kind: TargetKind,
     allowed_signers: PathBuf,
+    gitsign: Option<GitsignRequest>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct GitsignRequest {
+    certificate_identity: String,
+    certificate_oidc_issuer: String,
+    principal: String,
 }
 
 #[derive(Serialize)]
@@ -120,10 +135,22 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, SignatureVerifyError> {
     if !is_plain_revision(&request.revision) {
         return Err(SignatureVerifyError::Revision);
     }
+    let gitsign = request
+        .gitsign
+        .map(|g| {
+            GitsignIdentity::new(
+                g.certificate_identity,
+                g.certificate_oidc_issuer,
+                g.principal,
+            )
+            .ok_or(SignatureVerifyError::Invalid)
+        })
+        .transpose()?;
     check_allowed_signers(&request.allowed_signers)?;
     let git = Git {
         repository: &request.repository,
         allowed_signers: &request.allowed_signers,
+        gitsign: gitsign.as_ref(),
     };
     let verdict = match request.kind {
         TargetKind::Commit => git.commit(&request.revision),
@@ -181,6 +208,100 @@ const fn mechanics_reason(error: &ProcessError, not_started: Reason) -> Reason {
 struct Git<'a> {
     repository: &'a Path,
     allowed_signers: &'a Path,
+    gitsign: Option<&'a GitsignIdentity>,
+}
+
+/// Name of the verifier program for CMS signatures; never taken from input.
+const GITSIGN_PROGRAM: &str = "gitsign";
+
+/// Environment variables `gitsign` and the configuration check keep from the
+/// parent; `GIT_CONFIG_NOSYSTEM` and `GIT_CONFIG_GLOBAL` are set, not kept.
+const KEPT_ENVIRONMENT: [&str; 2] = ["PATH", "HOME"];
+
+/// The absolute entries of `path`, which are the only directories a verifier
+/// program is looked up in: a relative entry would resolve inside the
+/// repository under verification, the working directory of the run.
+fn absolute_search_path(path: &OsStr) -> OsString {
+    let kept: Vec<PathBuf> = std::env::split_paths(path)
+        .filter(|entry| entry.is_absolute())
+        .collect();
+    std::env::join_paths(kept).unwrap_or_default()
+}
+
+/// The executable `name` in the first directory of `search` that holds one.
+fn find_executable(name: &str, search: &OsStr) -> Option<PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+    std::env::split_paths(search)
+        .map(|directory| directory.join(name))
+        .find(|candidate| {
+            std::fs::metadata(candidate)
+                .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
+        })
+}
+
+/// Finds `program` for a run: its absolute path and the `PATH` to pass on. Both
+/// come from the absolute entries of the inherited `PATH` alone, so a program
+/// in the verified repository (the working directory) is never found, whether
+/// we start it or a program we start does.
+fn resolve_program(program: &str) -> Result<(PathBuf, OsString), ProcessError> {
+    let unavailable = || ProcessError::Unavailable {
+        detail: format!("{program} is not in an absolute PATH entry"),
+    };
+    let search = std::env::var_os("PATH")
+        .map(|path| absolute_search_path(&path))
+        .ok_or_else(unavailable)?;
+    let executable = find_executable(program, &search).ok_or_else(unavailable)?;
+    Ok((executable, search))
+}
+
+/// Runs `program` as `gitsign` and the configuration check need it run: found
+/// by absolute path in the absolute entries of the inherited `PATH`, in the
+/// repository, with exactly `PATH` (those entries), `HOME`,
+/// `GIT_CONFIG_NOSYSTEM=1` and `GIT_CONFIG_GLOBAL=/dev/null`.
+fn run_tool(
+    program: &str,
+    arguments: &[&OsStr],
+    repository: &Path,
+) -> Result<CompletedProcess, ProcessError> {
+    let (executable, search) = resolve_program(program)?;
+    let set: Vec<(OsString, OsString)> = vec![
+        ("GIT_CONFIG_NOSYSTEM".into(), "1".into()),
+        ("GIT_CONFIG_GLOBAL".into(), "/dev/null".into()),
+        ("PATH".into(), search),
+    ];
+    let removed: Vec<OsString> = std::env::vars_os()
+        .map(|(name, _)| name)
+        .filter(|name| !KEPT_ENVIRONMENT.iter().any(|kept| OsStr::new(kept) == name))
+        .filter(|name| !set.iter().any(|(set_name, _)| set_name == name))
+        .collect();
+    let set: Vec<(&OsStr, &OsStr)> = set
+        .iter()
+        .map(|(name, value)| (name.as_os_str(), value.as_os_str()))
+        .collect();
+    let removed: Vec<&OsStr> = removed.iter().map(OsString::as_os_str).collect();
+    process_host::run_configured(
+        executable.as_os_str(),
+        arguments,
+        Some(repository),
+        &set,
+        &removed,
+        limits(),
+    )
+}
+
+/// What the process host observed of a delegated run, as the classifier reads it.
+fn observed(result: &Result<CompletedProcess, ProcessError>) -> Run {
+    match result {
+        Ok(output) => output.status.code().map_or(Run::Signaled, Run::Exit),
+        Err(ProcessError::Unavailable { .. }) => Run::NotStarted,
+        Err(ProcessError::TimedOut { .. }) => Run::TimedOut,
+        Err(ProcessError::OutputTooLarge { .. }) => Run::CutShort,
+        Err(
+            ProcessError::PipeUnavailable { .. }
+            | ProcessError::Observation { .. }
+            | ProcessError::OutputUnreadable { .. },
+        ) => Run::Unobserved,
+    }
 }
 
 impl Git<'_> {
@@ -191,8 +312,12 @@ impl Git<'_> {
             Err(reason) => return Verdict::unverifiable(kind, reason),
         };
         let meaning = self.meaning(object_message(&object));
-        self.commit_verdict(&id, &object)
-            .unwrap_or_else(|reason| Verdict::unverifiable(kind, reason))
+        let format = commit_signature_format(&object);
+        self.commit_verdict(&id, format)
+            .unwrap_or_else(|reason| {
+                Verdict::unverifiable(kind, reason)
+                    .with_signature_kind(format.and_then(SignatureFormat::signature_kind))
+            })
             .with_meaning(meaning)
     }
 
@@ -203,14 +328,85 @@ impl Git<'_> {
         Ok((id, object))
     }
 
-    fn commit_verdict(&self, id: &str, object: &[u8]) -> Result<Verdict, Reason> {
-        let format = commit_signature_format(object);
-        let git = if format == Some(SignatureFormat::Other) {
-            None
-        } else {
-            Some(self.grade(id)?)
+    fn commit_verdict(&self, id: &str, format: Option<SignatureFormat>) -> Result<Verdict, Reason> {
+        let git = match format {
+            Some(SignatureFormat::Cms) => {
+                return self.gitsign_verdict(TargetKind::Commit, id);
+            }
+            Some(SignatureFormat::Other) => None,
+            Some(SignatureFormat::Ssh) | None => Some(self.grade(id)?),
         };
         Ok(classify_commit(&CommitObservation { format, git }))
+    }
+
+    /// Delegates a CMS-signed object to `gitsign`; `target` is the commit id or
+    /// the bare tag name. Without a supplied identity nothing is started.
+    fn gitsign_verdict(&self, kind: TargetKind, target: &str) -> Result<Verdict, Reason> {
+        let Some(identity) = self.gitsign else {
+            // The classifier asks for no probe without an identity.
+            return Ok(classify_gitsign(kind, None, false, |_| Run::Unobserved));
+        };
+        let sets_key = self.repository_sets_gitsign_key()?;
+        Ok(classify_gitsign(kind, Some(identity), sets_key, |probe| {
+            self.gitsign_run(identity, kind, target, probe)
+        }))
+    }
+
+    /// Whether the configuration `gitsign` will see sets any `gitsign.*` key,
+    /// asked as gitsign asks it, `git config --get-regexp .*` with no setting
+    /// added, in `gitsign`'s own environment, and read as gitsign reads it.
+    fn repository_sets_gitsign_key(&self) -> Result<bool, Reason> {
+        let arguments = ["config", "--get-regexp", ".*"].map(OsStr::new);
+        let output = run_tool("git", &arguments, self.repository)
+            .map_err(|error| mechanics_reason(&error, Reason::GitNotStarted))?;
+        match output.status.code() {
+            Some(0) => Ok(config_sets_gitsign_key(&output.stdout)),
+            Some(1) => Ok(false),
+            _ => Err(Reason::UnrecognizedOutput),
+        }
+    }
+
+    /// One `gitsign` invocation of the procedure, as separate arguments and
+    /// never through a shell.
+    fn gitsign_run(
+        &self,
+        identity: &GitsignIdentity,
+        kind: TargetKind,
+        target: &str,
+        probe: Probe,
+    ) -> Run {
+        let (identity_flag, identity_value) = match probe {
+            Probe::Exact | Probe::ExactIdentityAnyIssuer => {
+                ("--certificate-identity", identity.certificate_identity())
+            }
+            Probe::AnyIdentityAnyIssuer | Probe::AnyIdentityExactIssuer => {
+                ("--certificate-identity-regexp", ".*")
+            }
+        };
+        let (issuer_flag, issuer_value) = match probe {
+            Probe::Exact | Probe::AnyIdentityExactIssuer => (
+                "--certificate-oidc-issuer",
+                identity.certificate_oidc_issuer(),
+            ),
+            Probe::AnyIdentityAnyIssuer | Probe::ExactIdentityAnyIssuer => {
+                ("--certificate-oidc-issuer-regexp", ".*")
+            }
+        };
+        let subcommand = match kind {
+            TargetKind::Commit => "verify",
+            TargetKind::Tag => "verify-tag",
+        };
+        let arguments = [
+            subcommand,
+            identity_flag,
+            identity_value,
+            issuer_flag,
+            issuer_value,
+            "--",
+            target,
+        ]
+        .map(OsStr::new);
+        observed(&run_tool(GITSIGN_PROGRAM, &arguments, self.repository))
     }
 
     fn grade(&self, id: &str) -> Result<GitGrade, Reason> {
@@ -252,8 +448,12 @@ impl Git<'_> {
         let split = split_tag_object(&object);
         let payload = split.as_ref().map_or(object.as_slice(), |s| s.payload);
         let meaning = self.meaning(object_message(payload));
-        self.tag_verdict(&id, split.as_ref())
-            .unwrap_or_else(|reason| Verdict::unverifiable(kind, reason))
+        let format = split.as_ref().map(|s| s.format);
+        self.tag_verdict(revision, &id, split.as_ref())
+            .unwrap_or_else(|reason| {
+                Verdict::unverifiable(kind, reason)
+                    .with_signature_kind(format.and_then(SignatureFormat::signature_kind))
+            })
             .with_meaning(meaning)
     }
 
@@ -272,12 +472,38 @@ impl Git<'_> {
         }
     }
 
-    fn tag_verdict(&self, id: &str, split: Option<&SplitTag<'_>>) -> Result<Verdict, Reason> {
+    fn tag_verdict(
+        &self,
+        revision: &str,
+        id: &str,
+        split: Option<&SplitTag<'_>>,
+    ) -> Result<Verdict, Reason> {
+        if split.is_some_and(|split| split.format == SignatureFormat::Cms) {
+            let name = self.tag_name(revision, id)?;
+            return self.gitsign_verdict(TargetKind::Tag, name);
+        }
         let observation = match split {
             Some(split) => self.annotated_tag(id, split)?,
             None => TagObservation::NoSignature,
         };
         Ok(classify_tag(&observation))
+    }
+
+    /// The bare name of the tag `revision` names: `refs/tags/<name>` must be a
+    /// valid ref that resolves to the tag object `id`.
+    fn tag_name<'r>(&self, revision: &'r str, id: &str) -> Result<&'r str, Reason> {
+        let name = revision.strip_prefix("refs/tags/").unwrap_or(revision);
+        // `gitsign` would read such a name as an option.
+        if name.starts_with('-') {
+            return Err(Reason::RevisionUnresolved);
+        }
+        let full = format!("refs/tags/{name}");
+        let valid = self.run(&["check-ref-format", &full])?.status.success();
+        if valid && self.resolve(&full).is_ok_and(|resolved| resolved == id) {
+            Ok(name)
+        } else {
+            Err(Reason::RevisionUnresolved)
+        }
     }
 
     /// Whether `revision` names a ref under `refs/tags/`.
@@ -327,14 +553,16 @@ impl Git<'_> {
             OsStr::new("-f"),
             self.allowed_signers.as_os_str(),
         ];
-        let result = process_host::run_configured(
-            OsStr::new("ssh-keygen"),
-            &arguments,
-            Some(directory.path()),
-            &[],
-            &[],
-            limits(),
-        );
+        let result = resolve_program("ssh-keygen").and_then(|(executable, path)| {
+            process_host::run_configured(
+                executable.as_os_str(),
+                &arguments,
+                Some(directory.path()),
+                &[(OsStr::new("PATH"), path.as_os_str())],
+                &[],
+                limits(),
+            )
+        });
         match result {
             Ok(output) if output.status.success() => {
                 let first = std::str::from_utf8(&output.stdout)
@@ -455,9 +683,12 @@ impl Git<'_> {
             environment.push((OsStr::new("GIT_CEILING_DIRECTORIES"), parent.as_os_str()));
         }
         let directory = isolated.unwrap_or(self.repository);
+        let (git, path) = resolve_program("git")
+            .map_err(|error| mechanics_reason(&error, Reason::GitNotStarted))?;
+        environment.push((OsStr::new("PATH"), path.as_os_str()));
         match stdin {
             Some(stdin) => process_host::run_configured_stdin(
-                OsStr::new("git"),
+                git.as_os_str(),
                 &all,
                 Some(directory),
                 &environment,
@@ -466,7 +697,7 @@ impl Git<'_> {
                 limits(),
             ),
             None => process_host::run_configured(
-                OsStr::new("git"),
+                git.as_os_str(),
                 &all,
                 Some(directory),
                 &environment,
@@ -502,15 +733,17 @@ fn ssh_check(signature: &[u8], payload: &[u8]) -> Result<SshCheck, Reason> {
         OsStr::new("-s"),
         signature_path.as_os_str(),
     ];
-    let result = process_host::run_configured_stdin(
-        OsStr::new("ssh-keygen"),
-        &arguments,
-        Some(directory.path()),
-        &[],
-        &[],
-        stdin,
-        limits(),
-    );
+    let result = resolve_program("ssh-keygen").and_then(|(executable, path)| {
+        process_host::run_configured_stdin(
+            executable.as_os_str(),
+            &arguments,
+            Some(directory.path()),
+            &[(OsStr::new("PATH"), path.as_os_str())],
+            &[],
+            stdin,
+            limits(),
+        )
+    });
     match result {
         Ok(output) if output.status.success() => Ok(SshCheck::Accepted),
         Ok(_) => Ok(SshCheck::Rejected),
@@ -524,6 +757,45 @@ mod tests {
     use ix_trace_rs::trace;
 
     use super::*;
+
+    #[test]
+    #[trace("TC-295", "FR-040-AC-7")]
+    fn gitsign_process_failures_are_observed_as_runs() {
+        use engineering_assurance::signature_verify::Run;
+        let failure = |error| observed(&Err(error));
+        assert_eq!(
+            failure(ProcessError::TimedOut {
+                timeout: PROCESS_TIMEOUT
+            }),
+            Run::TimedOut
+        );
+        assert_eq!(
+            failure(ProcessError::OutputTooLarge {
+                stream: "stdout",
+                limit: MAX_OUTPUT_BYTES
+            }),
+            Run::CutShort
+        );
+        assert_eq!(
+            failure(ProcessError::Unavailable {
+                detail: "missing".to_owned()
+            }),
+            Run::NotStarted
+        );
+        {
+            use std::os::unix::process::ExitStatusExt;
+            let killed = CompletedProcess {
+                status: std::process::ExitStatus::from_raw(9),
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+            };
+            assert_eq!(observed(&Ok(killed)), Run::Signaled);
+        }
+        assert_eq!(
+            failure(ProcessError::PipeUnavailable { stream: "stdout" }),
+            Run::Unobserved
+        );
+    }
 
     #[test]
     #[trace("TC-255", "FR-036-AC-6")]

@@ -116,6 +116,8 @@ of "the signature" describe SSH signatures unless FR-040 is named.
   limits.
 - The command SHALL report `unverifiable` with reason `ssh_keygen_not_started`
   when a required `ssh-keygen` cannot start.
+- The command SHALL find `git` and `ssh-keygen` as FR-040 pins its programs:
+  only in the absolute entries of `PATH`, never in the repository.
 - The command SHALL run git without the user's or the system's git
   configuration other than that setting, and without repository-selecting
   environment variables.
