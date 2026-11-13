@@ -236,15 +236,18 @@ pub(crate) fn check_tag(
 
 /// The refs under `refs/tags`, as `git for-each-ref` lists them.
 pub(crate) struct TagListing {
-    /// Each examined ref: its name without `refs/tags/` and whether it names an
-    /// annotated tag object. Refs whose name is not UTF-8 are not here.
-    pub(crate) refs: Vec<(String, bool)>,
-    /// The number of refs examined, names that are not UTF-8 included.
-    pub(crate) considered: usize,
-    /// The annotated tags examined whose name is not UTF-8.
-    pub(crate) unnamed: usize,
+    /// The refs in git's ref-name (byte) order, at most the limit.
+    pub(crate) refs: Vec<ListedRef>,
     /// Whether more than `limit` refs exist.
     pub(crate) truncated: bool,
+}
+
+/// One ref under `refs/tags`.
+pub(crate) struct ListedRef {
+    /// The name without `refs/tags/`, as git printed it.
+    pub(crate) name: Vec<u8>,
+    /// Whether the ref names an annotated tag object.
+    pub(crate) annotated: bool,
 }
 
 /// Lists up to `limit` refs under `refs/tags` in ref-name order, with the type
@@ -276,27 +279,70 @@ pub(crate) fn list_tags(
         .collect();
     let truncated = lines.len() > limit;
     lines.truncate(limit);
-    let considered = lines.len();
-    let mut refs = Vec::new();
-    let mut unnamed = 0;
+    let mut refs = Vec::with_capacity(lines.len());
     for line in lines {
         let mut parts = line.splitn(2, |byte| *byte == 0);
         let (Some(name), Some(kind)) = (parts.next(), parts.next()) else {
             return None;
         };
-        let Ok(name) = std::str::from_utf8(name) else {
-            unnamed += usize::from(kind == b"tag");
-            continue;
-        };
-        let name = name.strip_prefix("refs/tags/")?;
-        refs.push((name.to_owned(), kind == b"tag"));
+        let name = name.strip_prefix(b"refs/tags/")?;
+        refs.push(ListedRef {
+            name: name.to_vec(),
+            annotated: kind == b"tag",
+        });
     }
-    Some(TagListing {
-        refs,
-        considered,
-        unnamed,
-        truncated,
-    })
+    Some(TagListing { refs, truncated })
+}
+
+/// An annotated tag read but not yet verified.
+pub(crate) struct LoadedTag {
+    id: String,
+    object: Vec<u8>,
+    trailers: Option<String>,
+}
+
+impl LoadedTag {
+    /// The tag object id.
+    pub(crate) fn id(&self) -> &str {
+        &self.id
+    }
+
+    /// The output of `git interpret-trailers --parse` for the tag message;
+    /// `None` when git could not read it.
+    pub(crate) fn trailers(&self) -> Option<&str> {
+        self.trailers.as_deref()
+    }
+}
+
+/// Resolves the ref `revision` and reads its tag object and trailer block,
+/// without verifying a signature; `Ok(None)` for a lightweight tag.
+pub(crate) fn load_tag(
+    repository: &Path,
+    revision: &str,
+    allowed_signers: &Path,
+) -> Result<Option<LoadedTag>, Reason> {
+    Git {
+        repository,
+        allowed_signers,
+        gitsign: None,
+    }
+    .load(revision)
+}
+
+/// Verifies a tag read by [`load_tag`], exactly as [`check_tag`] verifies it.
+pub(crate) fn verify_loaded_tag(
+    repository: &Path,
+    revision: &str,
+    allowed_signers: &Path,
+    gitsign: Option<&GitsignIdentity>,
+    loaded: LoadedTag,
+) -> CheckedTag {
+    Git {
+        repository,
+        allowed_signers,
+        gitsign,
+    }
+    .verify_loaded(revision, loaded)
 }
 
 struct Git<'a> {
@@ -542,15 +588,39 @@ impl Git<'_> {
             trailers: None,
             tagger_signed_at: None,
         };
-        let loaded = self.load_tag(revision);
-        let (id, object) = match loaded {
-            Ok(Some(loaded)) => loaded,
-            Ok(None) => return without_message(classify_tag(&TagObservation::Lightweight)),
-            Err(reason) => return without_message(Verdict::unverifiable(kind, reason)),
+        match self.load(revision) {
+            Ok(Some(loaded)) => self.verify_loaded(revision, loaded),
+            Ok(None) => without_message(classify_tag(&TagObservation::Lightweight)),
+            Err(reason) => without_message(Verdict::unverifiable(kind, reason)),
+        }
+    }
+
+    /// Resolves the tag `revision` and reads its object and trailer block;
+    /// `None` for a lightweight tag.
+    fn load(&self, revision: &str) -> Result<Option<LoadedTag>, Reason> {
+        let Some((id, object)) = self.load_tag(revision)? else {
+            return Ok(None);
         };
         let split = split_tag_object(&object);
         let payload = split.as_ref().map_or(object.as_slice(), |s| s.payload);
         let trailers = self.parsed_trailers(object_message(payload));
+        Ok(Some(LoadedTag {
+            id,
+            object,
+            trailers,
+        }))
+    }
+
+    /// Verifies a loaded tag exactly as `tag_checked` does.
+    fn verify_loaded(&self, revision: &str, loaded: LoadedTag) -> CheckedTag {
+        let kind = TargetKind::Tag;
+        let LoadedTag {
+            id,
+            object,
+            trailers,
+        } = loaded;
+        let split = split_tag_object(&object);
+        let payload = split.as_ref().map_or(object.as_slice(), |s| s.payload);
         let meaning = trailers.as_deref().map(signed_off_meaning);
         let format = split.as_ref().map(|s| s.format);
         let verdict = self

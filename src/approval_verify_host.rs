@@ -59,6 +59,20 @@ pub(crate) struct Assessment {
     binding: Option<Bindings>,
 }
 
+impl Assessment {
+    pub(crate) const fn status(&self) -> ApprovalStatus {
+        self.status
+    }
+
+    pub(crate) const fn reason(&self) -> Option<UnverifiableReason> {
+        self.reason
+    }
+
+    pub(crate) const fn approval(&self) -> Option<&Approval> {
+        self.approval.as_ref()
+    }
+}
+
 /// Decides the FR-041 result for a tag already verified by `check_tag`.
 pub(crate) fn assess(checked: CheckedTag, record_id: &str, record_digest: &str) -> Assessment {
     let bindings = checked.trailers.as_deref().map(|trailers| Bindings {

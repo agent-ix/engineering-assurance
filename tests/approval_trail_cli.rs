@@ -278,7 +278,8 @@ fn tc_352_an_approval_and_a_later_revocation_are_listed_in_time_order() {
         fixture.allowed().display().to_string()
     );
     assert_eq!(result["considered"], 2);
-    assert_eq!(result["skipped"], 0);
+    assert_eq!(result["unreadable"], json!([]));
+    assert_eq!(result["complete"], true);
     assert_eq!(result["truncated"], false);
     assert!(result.get("truncation").is_none());
 }
@@ -357,7 +358,8 @@ fn tc_354_other_records_and_non_approval_tags_are_not_listed() {
     let result = trail(&fixture);
     assert_eq!(tags(&result), ["v-mine"]);
     assert_eq!(result["considered"], 4);
-    assert_eq!(result["skipped"], 0);
+    assert_eq!(result["unreadable"], json!([]));
+    assert_eq!(result["complete"], true);
 }
 
 #[test]
@@ -387,6 +389,14 @@ fn tc_355_each_entry_is_the_approval_verify_result_for_its_tag() {
         }
         let mut listed = entry(&result, tag).clone();
         let claimed = listed.as_object_mut().expect("object").remove("claimed_at");
+        let object = listed.as_object_mut().expect("object").remove("object");
+        assert_eq!(
+            object,
+            Some(json!(
+                git(&fixture.repo(), &["rev-parse", &format!("refs/tags/{tag}")]).trim()
+            )),
+            "{tag}"
+        );
         assert_eq!(listed, verified, "{tag}");
         assert_eq!(claimed, Some(json!("2026-05-01T17:00:00Z")), "{tag}");
     }
@@ -470,11 +480,11 @@ fn tc_358_hostile_tag_names_are_listed_and_run_nothing() {
         "--end-of-options",
         "HEAD",
         "main",
-        "v1;touch;pwned",
-        "$(touch,pwned)",
+        "a;touch${IFS}pwned",
+        "a$(touch${IFS}pwned)",
         "it's",
         "a\"b",
-        "a`touch,pwned`",
+        "b`touch${IFS}pwned`",
     ];
     for name in names {
         git(
@@ -493,11 +503,55 @@ fn tc_358_hostile_tag_names_are_listed_and_run_nothing() {
         assert_eq!(entry(&result, tag)["status"], "approved", "{tag}");
     }
     assert!(!repo.join("pwned").exists());
+    assert!(!Path::new("pwned").exists());
+}
+
+/// Signs an annotated tag whose message is exactly `message` (bytes), with the
+/// tagger date 1700000000.
+fn forged_signed_tag(fixture: &Fixture, key: &str, name: &str, message: &[u8]) {
+    let repo = fixture.repo();
+    let commit = git(&repo, &["rev-parse", "HEAD"]);
+    let mut payload = format!(
+        "object {}\ntype commit\ntag {name}\ntagger t <t@example.invalid> 1700000000 +0000\n\n",
+        commit.trim()
+    )
+    .into_bytes();
+    payload.extend_from_slice(message);
+    let path = fixture.root().join(format!("{name}.payload"));
+    fs::write(&path, &payload).expect("payload");
+    let private = fixture.root().join(key);
+    run_program(
+        "ssh-keygen",
+        fixture.root(),
+        &[
+            "-Y",
+            "sign",
+            "-n",
+            "git",
+            "-f",
+            private.to_str().expect("utf-8"),
+            path.to_str().expect("utf-8"),
+        ],
+        None,
+    );
+    let mut object = payload;
+    object.extend(fs::read(fixture.root().join(format!("{name}.payload.sig"))).expect("sig"));
+    let id = run_program(
+        "git",
+        &repo,
+        &["hash-object", "-t", "tag", "-w", "--literally", "--stdin"],
+        Some(&object),
+    );
+    let id = String::from_utf8(id).expect("utf-8");
+    git(
+        &repo,
+        &["update-ref", &format!("refs/tags/{name}"), id.trim()],
+    );
 }
 
 #[test]
 #[trace("TC-359", "FR-043-AC-8")]
-fn tc_359_a_tag_whose_message_cannot_be_read_is_skipped_and_counted() {
+fn tc_359_a_signed_tag_whose_message_cannot_be_read_is_listed_as_unreadable() {
     let fixture = fixture();
     signed_tag(
         &fixture,
@@ -509,16 +563,143 @@ fn tc_359_a_tag_whose_message_cannot_be_read_is_skipped_and_counted() {
     let nul = format!(
         "Approve the change\n\nApproved-Record-Id: {RECORD_ID}\0\nApproved-Record-Digest: {DIGEST}\n"
     );
-    forged_tag(
-        &fixture,
-        "v-nul",
-        Some("t <t@example.invalid> 1700000000 +0000"),
-        nul.as_bytes(),
-    );
+    forged_signed_tag(&fixture, "a", "v-nul", nul.as_bytes());
     let result = trail(&fixture);
     assert_eq!(tags(&result), ["v-ok"]);
-    assert_eq!(result["skipped"], 1);
+    assert_eq!(
+        result["unreadable"],
+        json!([{"tag": "v-nul", "reason": "trailer_unreadable"}])
+    );
+    assert_eq!(result["complete"], false);
+    assert_eq!(result["truncated"], false);
     assert_eq!(result["considered"], 2);
+}
+
+#[test]
+#[trace("TC-363", "FR-043-AC-14")]
+fn tc_363_a_tag_with_a_non_utf8_name_is_listed_escaped() {
+    use std::os::unix::ffi::OsStrExt;
+    let fixture = fixture();
+    signed_tag(
+        &fixture,
+        "a",
+        "base",
+        &good("approved"),
+        "2026-05-01T09:00:00+0000",
+    );
+    let repo = fixture.repo();
+    let id = git(&repo, &["rev-parse", "refs/tags/base"]);
+    let status = Command::new("git")
+        .arg("update-ref")
+        .arg(std::ffi::OsStr::from_bytes(b"refs/tags/caf\xe9"))
+        .arg(id.trim())
+        .current_dir(&repo)
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .status()
+        .expect("git");
+    assert!(status.success());
+    let result = trail(&fixture);
+    assert_eq!(tags(&result), ["base"]);
+    assert_eq!(
+        result["unreadable"],
+        json!([{
+            "tag": "caf\\xe9",
+            "tag_escaped": true,
+            "tag_hex": "636166e9",
+            "reason": "tag_name_not_utf8",
+        }])
+    );
+    assert_eq!(result["complete"], false);
+}
+
+#[test]
+#[trace("TC-364", "FR-043-AC-15")]
+fn tc_364_a_tag_over_the_output_bound_is_listed_with_the_approval_verify_reason() {
+    let fixture = fixture();
+    let mut message = vec![b'x'; 9 * 1024 * 1024];
+    message.extend_from_slice(
+        format!(
+            "\n\nApproved-Record-Id: {RECORD_ID}\nApproved-Record-Digest: {DIGEST}\nSigned-off-meaning: revoked\n"
+        )
+        .as_bytes(),
+    );
+    forged_tag(
+        &fixture,
+        "v-huge",
+        Some("t <t@example.invalid> 1700000000 +0000"),
+        &message,
+    );
+    let mut body = request(&fixture);
+    body["tag"] = json!("v-huge");
+    body["protocol"] = json!("engineering-assurance.approval-verify-request/v1");
+    let output = run_command("approval-verify", body.to_string().as_bytes(), &[]);
+    let verified: Value = serde_json::from_slice(&output.stdout).expect("json");
+    assert_eq!(verified["status"], "unverifiable");
+    assert_eq!(verified["reason"], "output_exceeded");
+    let result = trail(&fixture);
+    assert_eq!(tags(&result), Vec::<String>::new());
+    assert_eq!(
+        result["unreadable"],
+        json!([{"tag": "v-huge", "reason": "output_exceeded"}])
+    );
+    assert_eq!(result["complete"], false);
+}
+
+#[test]
+#[trace("TC-366", "FR-043-AC-17")]
+fn tc_366_entries_carry_the_verified_tag_object_id() {
+    let fixture = fixture();
+    signed_tag(
+        &fixture,
+        "a",
+        "v-1",
+        &good("approved"),
+        "2026-05-01T09:00:00+0000",
+    );
+    let repo = fixture.repo();
+    let id = git(&repo, &["rev-parse", "refs/tags/v-1"]);
+    git(&repo, &["update-ref", "refs/tags/v-1-copy", id.trim()]);
+    signed_tag(
+        &fixture,
+        "a",
+        "v-2",
+        &good("revoked"),
+        "2026-05-02T09:00:00+0000",
+    );
+    let other = git(&repo, &["rev-parse", "refs/tags/v-2"]);
+    let result = trail(&fixture);
+    assert_eq!(entry(&result, "v-1")["object"], id.trim());
+    assert_eq!(entry(&result, "v-1-copy")["object"], id.trim());
+    assert_eq!(entry(&result, "v-2")["object"], other.trim());
+}
+
+#[test]
+#[trace("TC-367", "FR-043-AC-18")]
+fn tc_367_the_table_replaces_terminal_and_bidi_characters() {
+    let fixture = fixture();
+    let name = "a\u{202e}b\u{85}c\u{200b}d";
+    signed_tag(
+        &fixture,
+        "a",
+        name,
+        &good("ok\u{1b}[31mred\u{2067}x"),
+        "2026-05-01T09:00:00+0000",
+    );
+    let output = run_command(
+        "approval-trail",
+        request(&fixture).to_string().as_bytes(),
+        &["--format", "table"],
+    );
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    let text = String::from_utf8(output.stdout).expect("utf-8");
+    let row = text.lines().nth(1).expect("row");
+    assert!(row.ends_with("a?b?c?d"), "{row:?}");
+    assert!(row.contains("ok?[31mred?x"), "{row:?}");
+    assert!(
+        !text.chars().any(|c| c != '\n'
+            && (c.is_control() || ('\u{200b}'..='\u{202e}').contains(&c) || c == '\u{2067}')),
+        "{text:?}"
+    );
 }
 
 #[test]
@@ -546,6 +727,12 @@ fn tc_360_the_table_lists_the_trail_for_people() {
         &good("approved"),
         "2026-05-03T09:00:00+0000",
     );
+    forged_tag(
+        &fixture,
+        "v-nul",
+        None,
+        format!("Approved-Record-Id: {RECORD_ID}\0\n").as_bytes(),
+    );
     let output = run_command(
         "approval-trail",
         request(&fixture).to_string().as_bytes(),
@@ -554,7 +741,7 @@ fn tc_360_the_table_lists_the_trail_for_people() {
     assert_eq!(output.status.code(), Some(0), "{output:?}");
     let text = String::from_utf8(output.stdout).expect("utf-8");
     let lines: Vec<&str> = text.lines().collect();
-    assert_eq!(lines.len(), 5, "{text}");
+    assert_eq!(lines.len(), 6, "{text}");
     let columns = |line: &str| {
         line.split_whitespace()
             .map(str::to_owned)
@@ -562,21 +749,56 @@ fn tc_360_the_table_lists_the_trail_for_people() {
     };
     assert_eq!(
         columns(lines[0]),
-        ["CLAIMED_AT", "STATUS", "APPROVER", "MEANING", "TAG"]
+        [
+            "CLAIMED_AT",
+            "STATUS",
+            "REASON",
+            "APPROVER",
+            "MEANING",
+            "TAG"
+        ]
     );
     assert_eq!(
         columns(lines[1]),
-        ["2026-05-01T09:00:00Z", "approved", ALICE, "approved", "v-1"]
+        [
+            "2026-05-01T09:00:00Z",
+            "approved",
+            "-",
+            ALICE,
+            "approved",
+            "v-1"
+        ]
     );
     assert_eq!(
         columns(lines[2]),
-        ["2026-05-02T09:00:00Z", "approved", ALICE, "revoked", "v-2"]
+        [
+            "2026-05-02T09:00:00Z",
+            "approved",
+            "-",
+            ALICE,
+            "revoked",
+            "v-2"
+        ]
     );
     assert_eq!(
         columns(lines[3]),
-        ["2026-05-03T09:00:00Z", "untrusted_signer", "-", "-", "v-3"]
+        [
+            "2026-05-03T09:00:00Z",
+            "untrusted_signer",
+            "-",
+            "-",
+            "-",
+            "v-3"
+        ]
     );
-    assert_eq!(lines[4], "considered 3, skipped 0, truncated no");
+    assert_eq!(
+        columns(lines[4]),
+        ["-", "unreadable", "trailer_unreadable", "-", "-", "v-nul"]
+    );
+    assert_eq!(
+        lines[5],
+        "considered 4, unreadable 1, truncated no, complete no"
+    );
 }
 
 #[test]

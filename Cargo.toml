@@ -407,7 +407,7 @@ approval-verify = ["signature-verify", "dep:serde"]
 approval-tag = ["approval-verify"]
 # FR-043: pure ordering of an approval trail and the test of whether a tag names
 # a record; the listing and every verification stay in the binary's adapter.
-approval-trail = ["approval-verify"]
+approval-trail = ["approval-verify", "dep:serde"]
 semantics = [
   "claim-strength",
   "exact-numbers",

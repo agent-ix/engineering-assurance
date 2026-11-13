@@ -32,7 +32,7 @@
 //! | Feature | Module(s) | Other features it enables | Extra dependencies |
 //! |---|---|---|---|
 //! | `approval-tag` | `approval_tag` | `approval-verify` | |
-//! | `approval-trail` | `approval_trail` | `approval-verify` | |
+//! | `approval-trail` | `approval_trail` | `approval-verify` | `serde` |
 //! | `approval-verify` | `approval_verify` | `signature-verify` | `serde` |
 //! | `atomic-publish` | `atomic_publish` | | `rustix`, `thiserror` |
 //! | `claim-strength` | `claim_strength` | | `serde` |

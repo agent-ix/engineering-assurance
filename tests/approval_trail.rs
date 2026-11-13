@@ -3,7 +3,9 @@
 
 //! Contract tests for the pure approval-trail ordering and record test (FR-043).
 
-use engineering_assurance::approval_trail::{OrderKey, compare, names_record};
+use engineering_assurance::approval_trail::{
+    OrderKey, compare, escape_name, hex, is_unprintable, names_record,
+};
 use ix_trace_rs::trace;
 
 fn key<'a>(claimed_at: Option<&'a str>, tag: &'a str) -> OrderKey<'a> {
@@ -44,4 +46,31 @@ fn tc_351_a_tag_names_the_record_when_any_id_value_is_byte_equal() {
     assert!(!names_record(&values(&["R-1"]), "r-1"));
     assert!(!names_record(&values(&[" r-1"]), "r-1"));
     assert!(!names_record(&[], "r-1"));
+}
+
+#[test]
+#[trace("TC-363", "FR-043-AC-14")]
+fn tc_363_names_are_escaped_byte_exactly() {
+    assert_eq!(escape_name(b"plain"), ("plain".to_owned(), false));
+    assert_eq!(escape_name(b"caf\xe9"), ("caf\\xe9".to_owned(), true));
+    assert_eq!(
+        escape_name("caf\u{e9}".as_bytes()),
+        ("caf\u{e9}".to_owned(), false)
+    );
+    assert_eq!(escape_name(b"a\x1bb"), ("a\\x1bb".to_owned(), true));
+    assert_eq!(hex(b"caf\xe9"), "636166e9");
+}
+
+#[test]
+#[trace("TC-367", "FR-043-AC-18")]
+fn tc_367_unprintable_covers_controls_and_format_characters() {
+    for c in [
+        '\u{1b}', '\u{85}', '\u{7f}', '\u{200e}', '\u{202e}', '\u{2066}', '\u{2069}', '\u{200b}',
+        '\u{feff}', '\u{2028}',
+    ] {
+        assert!(is_unprintable(c), "{c:?}");
+    }
+    for c in ['a', ' ', '\u{e9}', '\u{4e2d}'] {
+        assert!(!is_unprintable(c), "{c:?}");
+    }
 }
