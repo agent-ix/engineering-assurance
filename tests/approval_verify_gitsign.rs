@@ -147,11 +147,27 @@ fn store(repo: &Path, kind: &str, object: &str) -> String {
 
 /// An annotated tag named `name` whose message ends in `block`.
 fn forged_tag(fixture: &Fixture, name: &str, message: &str, block: &str) -> String {
+    forged_tag_with_tagger(
+        fixture,
+        name,
+        Some("t <t@example.test> 1700000000 +0000"),
+        message,
+        block,
+    )
+}
+
+/// As [`forged_tag`], with the given tagger line (none when `None`).
+fn forged_tag_with_tagger(
+    fixture: &Fixture,
+    name: &str,
+    tagger: Option<&str>,
+    message: &str,
+    block: &str,
+) -> String {
     let repo = fixture.repo();
     let commit = git(&repo, &["rev-parse", "HEAD"]).trim().to_owned();
-    let object = format!(
-        "object {commit}\ntype commit\ntag {name}\ntagger t <t@example.test> 1700000000 +0000\n\n{message}\n{block}"
-    );
+    let tagger = tagger.map_or_else(String::new, |line| format!("tagger {line}\n"));
+    let object = format!("object {commit}\ntype commit\ntag {name}\n{tagger}\n{message}\n{block}");
     let id = store(&repo, "tag", &object);
     git(&repo, &["update-ref", &format!("refs/tags/{name}"), &id]);
     id
@@ -239,4 +255,50 @@ fn tc_329_an_identity_gitsign_does_not_accept_is_untrusted_and_a_missing_one_is_
     assert_eq!(missing["status"], "unverifiable", "{missing}");
     assert_eq!(missing["reason"], "gitsign_identity_missing");
     assert!(missing["trust"].get("gitsign").is_none());
+}
+
+#[test]
+#[trace("TC-336", "FR-041-AC-20")]
+fn tc_336_a_gitsign_tag_reports_its_tagger_date_and_gitsign_never_changes_the_status() {
+    let fixture = fixture();
+    forged_tag_with_tagger(
+        &fixture,
+        "v-cms",
+        Some("t <t@example.test> 1700000000 -0700"),
+        &good_message(),
+        CMS_BLOCK,
+    );
+    let approved = result(&fixture, &request(&fixture, "v-cms", true));
+    assert_eq!(approved["status"], "approved", "{approved}");
+    assert_eq!(approved["approver"], PRINCIPAL);
+    assert_eq!(approved["signed_at"], "2023-11-14T22:13:20Z");
+    assert_eq!(approved["signed_at_source"], "tagger_date");
+    // A rejected identity is untrusted and carries no time.
+    fixture.script("exact_exact", 1);
+    let untrusted = result(&fixture, &request(&fixture, "v-cms", true));
+    assert_eq!(untrusted["status"], "untrusted_signer", "{untrusted}");
+    assert!(untrusted.get("signed_at").is_none());
+}
+
+#[test]
+#[trace("TC-337", "FR-041-AC-18")]
+fn tc_337_an_approval_with_no_readable_tagger_date_reports_the_time_missing() {
+    let fixture = fixture();
+    forged_tag_with_tagger(&fixture, "v-none", None, &good_message(), CMS_BLOCK);
+    forged_tag_with_tagger(
+        &fixture,
+        "v-bad",
+        Some("t <t@example.test> yesterday +0000"),
+        &good_message(),
+        CMS_BLOCK,
+    );
+    for tag in ["v-none", "v-bad"] {
+        let approved = result(&fixture, &request(&fixture, tag, true));
+        assert_eq!(approved["status"], "approved", "{approved}");
+        assert_eq!(approved["approver"], PRINCIPAL);
+        assert_eq!(approved["meaning"], json!(["reviewed"]));
+        assert_eq!(approved["signed_at_missing"], "tagger_date_unreadable");
+        assert!(approved.get("signed_at").is_none());
+        assert!(approved.get("signed_at_source").is_none());
+    }
 }

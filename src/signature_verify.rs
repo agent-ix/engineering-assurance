@@ -737,6 +737,82 @@ pub fn object_message(object: &[u8]) -> &[u8] {
         .map_or(&[], |at| &object[at + 2..])
 }
 
+/// Latest accepted tagger time in seconds since the epoch, 9999-12-31T23:59:59Z.
+const MAX_TAGGER_EPOCH: u64 = 253_402_300_799;
+
+/// The time the tag's tagger line claims, as a UTC instant
+/// (`YYYY-MM-DDTHH:MM:SSZ`), read from the header block of a tag object.
+///
+/// The tagger line is `tagger <name> <email> <epoch> <zone>`. The epoch counts
+/// seconds since 1970-01-01T00:00:00Z whatever the zone, so the instant is the
+/// epoch formatted in UTC and the zone only records the signer's local offset.
+/// Only the header block is read (never message text), the object must have
+/// exactly one `tagger` header, the epoch must be 1 to 12 ASCII digits no later
+/// than year 9999, and the zone must be a sign and four digits with minutes
+/// below 60. Anything else yields `None`, and no time is guessed.
+///
+/// The tagger line is part of the payload the signature covers, so a validly
+/// signed tag cannot have it altered; it is still the signer's own claim.
+#[must_use]
+pub fn tagger_signed_at(tag_payload: &[u8]) -> Option<String> {
+    let headers = tag_payload
+        .windows(2)
+        .position(|pair| pair == b"\n\n")
+        .map_or(tag_payload, |at| &tag_payload[..at]);
+    let mut taggers = headers
+        .split(|b| *b == b'\n')
+        .filter_map(|line| line.strip_prefix(b"tagger "));
+    let line = taggers.next()?;
+    if taggers.next().is_some() {
+        return None;
+    }
+    let after_email = &line[line.iter().rposition(|b| *b == b'>')? + 1..];
+    let text = std::str::from_utf8(after_email).ok()?;
+    let mut fields = text.strip_prefix(' ')?.split(' ');
+    let (epoch, zone) = (fields.next()?, fields.next()?);
+    if fields.next().is_some() {
+        return None;
+    }
+    let zone = zone.as_bytes();
+    let zone_ok = zone.len() == 5
+        && matches!(zone[0], b'+' | b'-')
+        && zone[1..].iter().all(u8::is_ascii_digit)
+        && zone[3] < b'6';
+    let epoch_ok = (1..=12).contains(&epoch.len()) && epoch.bytes().all(|b| b.is_ascii_digit());
+    if !zone_ok || !epoch_ok {
+        return None;
+    }
+    let seconds: u64 = epoch.parse().ok().filter(|s| *s <= MAX_TAGGER_EPOCH)?;
+    Some(format_utc(seconds))
+}
+
+/// Formats seconds since the epoch as `YYYY-MM-DDTHH:MM:SSZ` (proleptic
+/// Gregorian calendar, years 1970 to 9999).
+fn format_utc(seconds: u64) -> String {
+    let (days, rest) = (seconds / 86_400, seconds % 86_400);
+    // Days since 1970-01-01 to a civil date, counting years from 1 March.
+    let shifted = days + 719_468;
+    let era = shifted / 146_097;
+    let day_of_era = shifted % 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_index = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_index + 2) / 5 + 1;
+    let month = if month_index < 10 {
+        month_index + 3
+    } else {
+        month_index - 9
+    };
+    let year = year_of_era + era * 400 + u64::from(month <= 2);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        rest / 3_600,
+        rest % 3_600 / 60,
+        rest % 60
+    )
+}
+
 /// Reads the `Signed-off-meaning:` trailers from the output of
 /// `git interpret-trailers --parse`, which prints one `token: value` line per
 /// trailer of the message's trailer block.

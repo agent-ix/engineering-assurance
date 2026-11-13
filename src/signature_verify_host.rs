@@ -29,7 +29,7 @@ use engineering_assurance::signature_verify::{
     SignatureFormat, SignedOffMeaning, SplitTag, SshCheck, TagObservation, TargetKind, Verdict,
     classify_commit, classify_gitsign, classify_tag, commit_signature_format,
     config_sets_gitsign_key, is_plain_revision, object_message, signed_off_meaning,
-    split_tag_object,
+    split_tag_object, tagger_signed_at,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -213,6 +213,9 @@ pub(crate) struct CheckedTag {
     /// The output of `git interpret-trailers --parse` for the tag message;
     /// `None` when the tag has no message to read or git could not read it.
     pub(crate) trailers: Option<String>,
+    /// The UTC instant the tag's tagger line claims; `None` when the tag has no
+    /// readable tagger line.
+    pub(crate) tagger_signed_at: Option<String>,
 }
 
 /// Verifies the tag `revision` exactly as `signature-verify` does for kind
@@ -472,6 +475,7 @@ impl Git<'_> {
         let without_message = |verdict| CheckedTag {
             verdict,
             trailers: None,
+            tagger_signed_at: None,
         };
         let loaded = self.load_tag(revision);
         let (id, object) = match loaded {
@@ -491,7 +495,11 @@ impl Git<'_> {
                     .with_signature_kind(format.and_then(SignatureFormat::signature_kind))
             })
             .with_meaning(meaning);
-        CheckedTag { verdict, trailers }
+        CheckedTag {
+            verdict,
+            trailers,
+            tagger_signed_at: tagger_signed_at(payload),
+        }
     }
 
     /// The id and object of an annotated tag; `None` for a lightweight tag.

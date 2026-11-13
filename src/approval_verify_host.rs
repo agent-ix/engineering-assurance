@@ -139,7 +139,7 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalVerifyError> {
             &request.record_digest,
         ),
     });
-    let decision = decide(&checked.verdict, bindings);
+    let decision = decide(&checked.verdict, bindings, checked.tagger_signed_at);
     let tag = request
         .tag
         .strip_prefix("refs/tags/")

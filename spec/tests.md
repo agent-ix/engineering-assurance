@@ -559,6 +559,13 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-328 | With a stand-in `gitsign` accepting the identity and issuer, a CMS-signed tag with matching trailers is `approved` with `signature_kind` `gitsign`, the request's principal as `approver` and the `gitsign` trust echoed | Integration | P0 | FR-041-AC-8 | 🚧 |
 | TC-329 | A stand-in rejecting the exact identity yields `untrusted_signer`; a CMS-signed tag with no `gitsign` member yields `unverifiable` with `gitsign_identity_missing` | Integration | P0 | FR-041-AC-8 | 🚧 |
 | TC-330 | A validly signed tag whose message holds a NUL byte or git's trailer output is not valid UTF-8 is `unverifiable` with reason `trailer_unreadable`, not `approved`, even when the truncated or lossily decoded value equals the request | Integration | P0 | FR-041-AC-15, FR-041-CON-1 | 🚧 |
+| TC-331 | The tagger line gives a UTC instant from its epoch whatever the zone (epoch 0, a leap day and the last accepted instant included), and a malformed epoch, zone, extra field or missing email gives none | Unit | P0 | FR-041-AC-16, FR-041-AC-17 | 🚧 |
+| TC-332 | Only the single tagger header counts: a tagger-shaped message line, two tagger headers, non-UTF-8 and empty objects give none | Unit | P0 | FR-041-AC-17, FR-041-CON-3 | 🚧 |
+| TC-333 | The pure decision gives an approval the time and source, or `signed_at_missing`, and a non-approved decision carries no approval members | Unit | P0 | FR-041-AC-16, FR-041-AC-18, FR-041-AC-19 | 🚧 |
+| TC-334 | An SSH approval created with `+0530` and `-0800` tagger dates reports the person, meaning and the UTC `signed_at` with source `tagger_date`, and `signature-verify` output for the same tag has no time member | Integration | P0 | FR-041-AC-16, FR-041-AC-21 | 🚧 |
+| TC-335 | `wrong_record`, `untrusted_signer` and `meaning_missing` results carry no signing-time member | Integration | P0 | FR-041-AC-19 | 🚧 |
+| TC-336 | A stand-in gitsign approval reports its tagger date as `signed_at` with source `tagger_date`, and a rejected identity is `untrusted_signer` without a time | Integration | P0 | FR-041-AC-20 | 🚧 |
+| TC-337 | An approval whose tag has no tagger line or an unparseable one is still `approved` with `signed_at_missing` and neither `signed_at` nor `signed_at_source` | Integration | P0 | FR-041-AC-18, FR-041-CON-3 | 🚧 |
 
 ## Option Permutation Matrix
 

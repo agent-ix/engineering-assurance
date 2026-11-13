@@ -115,6 +115,55 @@ pub enum TrailerUnreadable {
     TrailerUnreadable,
 }
 
+/// Where the signing time comes from.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SignedAtSource {
+    /// The tag's tagger line: inside the signed payload, and the signer's claim.
+    TaggerDate,
+}
+
+/// Why an `approved` result has no signing time.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SignedAtMissing {
+    /// The tag has no readable, well-formed tagger line.
+    TaggerDateUnreadable,
+}
+
+/// The signing time of an approval, or the explicit statement that none is
+/// obtainable. It is never defaulted to the verification time.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum SigningTime {
+    /// A UTC instant and where it comes from.
+    Known {
+        /// The signing time, `YYYY-MM-DDTHH:MM:SSZ`.
+        signed_at: String,
+        /// Where the time comes from.
+        signed_at_source: SignedAtSource,
+    },
+    /// No time is obtainable.
+    Missing {
+        /// Why there is no time.
+        signed_at_missing: SignedAtMissing,
+    },
+}
+
+impl SigningTime {
+    fn from_tagger(tagger_signed_at: Option<String>) -> Self {
+        match tagger_signed_at {
+            Some(signed_at) => Self::Known {
+                signed_at,
+                signed_at_source: SignedAtSource::TaggerDate,
+            },
+            None => Self::Missing {
+                signed_at_missing: SignedAtMissing::TaggerDateUnreadable,
+            },
+        }
+    }
+}
+
 /// The members only an `approved` result carries.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Approval {
@@ -124,6 +173,9 @@ pub struct Approval {
     pub meaning: Vec<String>,
     /// Which verifier checked the signature.
     pub signature_kind: SignatureKind,
+    /// When the approval was signed, or why that is not known.
+    #[serde(flatten)]
+    pub signing_time: SigningTime,
 }
 
 /// What the status decision yields.
@@ -157,9 +209,16 @@ impl Decision {
 
 /// Decides the status from the signature verdict and the bindings, in order:
 /// the signature status, then the record binding, then the meaning. `bindings`
-/// is `None` when the tag message could not be read.
+/// is `None` when the tag message could not be read. `tagger_signed_at` is the
+/// UTC instant the tag's tagger line claims, or `None` when it has none; it
+/// only fills the signing time of an `approved` result and never changes a
+/// status.
 #[must_use]
-pub fn decide(verdict: &Verdict, bindings: Option<Bindings>) -> Decision {
+pub fn decide(
+    verdict: &Verdict,
+    bindings: Option<Bindings>,
+    tagger_signed_at: Option<String>,
+) -> Decision {
     match verdict.status {
         Status::Unsigned => Decision::status(ApprovalStatus::Unsigned),
         Status::SignedBad => Decision::status(ApprovalStatus::SignedBad),
@@ -168,11 +227,15 @@ pub fn decide(verdict: &Verdict, bindings: Option<Bindings>) -> Decision {
             |reason| Decision::unverifiable(UnverifiableReason::Signature(reason)),
         ),
         Status::SignedUntrusted => Decision::status(ApprovalStatus::UntrustedSigner),
-        Status::SignedValid => decide_valid(verdict, bindings),
+        Status::SignedValid => decide_valid(verdict, bindings, tagger_signed_at),
     }
 }
 
-fn decide_valid(verdict: &Verdict, bindings: Option<Bindings>) -> Decision {
+fn decide_valid(
+    verdict: &Verdict,
+    bindings: Option<Bindings>,
+    tagger_signed_at: Option<String>,
+) -> Decision {
     let Some(bindings) = bindings else {
         return Decision::unverifiable(UnverifiableReason::Trailer(
             TrailerUnreadable::TrailerUnreadable,
@@ -198,6 +261,7 @@ fn decide_valid(verdict: &Verdict, bindings: Option<Bindings>) -> Decision {
                 approver,
                 meaning: meaning.values.clone(),
                 signature_kind,
+                signing_time: SigningTime::from_tagger(tagger_signed_at),
             }),
             ..Decision::status(ApprovalStatus::Approved)
         },

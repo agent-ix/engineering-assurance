@@ -746,3 +746,120 @@ fn tc_330_a_nul_or_non_utf8_message_is_unreadable_and_never_approves() {
         assert!(unreadable.get("approver").is_none());
     }
 }
+
+/// Signs an annotated tag whose tagger date is `date` (a git date with a zone).
+fn signed_tag_at(fixture: &Fixture, key: &str, name: &str, message: &str, date: &str) {
+    let public = fixture.public(key);
+    let output = Command::new("git")
+        .args([
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@example.invalid",
+            "-c",
+            "gpg.format=ssh",
+            "-c",
+            &format!("user.signingkey={}", public.display()),
+            "tag",
+            "-s",
+            "-m",
+            message,
+            name,
+        ])
+        .current_dir(fixture.repo())
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_COMMITTER_DATE", date)
+        .env_remove("GIT_DIR")
+        .output()
+        .expect("git");
+    assert!(output.status.success(), "{output:?}");
+}
+
+#[test]
+#[trace("TC-334", "FR-041-AC-16", "FR-041-AC-21")]
+fn tc_334_an_approval_carries_person_meaning_and_utc_signing_time_together() {
+    let fixture = fixture();
+    // Local +0530 and -0800 offsets both normalize to UTC.
+    signed_tag_at(
+        &fixture,
+        "a",
+        "v-east",
+        &good_message(),
+        "2026-03-04T10:00:00+0530",
+    );
+    signed_tag_at(
+        &fixture,
+        "a",
+        "v-west",
+        &good_message(),
+        "2026-12-31T20:30:00-0800",
+    );
+    let east = status(&fixture, "v-east");
+    assert_eq!(east["status"], "approved", "{east}");
+    assert_eq!(east["approver"], ALICE);
+    assert_eq!(east["meaning"], json!(["reviewed"]));
+    assert_eq!(east["signed_at"], "2026-03-04T04:30:00Z");
+    assert_eq!(east["signed_at_source"], "tagger_date");
+    assert!(east.get("signed_at_missing").is_none());
+    let west = status(&fixture, "refs/tags/v-west");
+    assert_eq!(west["signed_at"], "2027-01-01T04:30:00Z");
+    assert_eq!(west["signed_at_source"], "tagger_date");
+    // signature-verify output is unchanged by the signing time.
+    let body = json!({
+        "protocol": "engineering-assurance.signature-verify-request/v1",
+        "repository": fixture.repo().display().to_string(),
+        "revision": "v-east",
+        "kind": "tag",
+        "allowed_signers": fixture.allowed().display().to_string(),
+    });
+    let output = run_command("signature-verify", body.to_string().as_bytes(), None);
+    let plain: Value = serde_json::from_slice(&output.stdout).expect("json");
+    assert!(plain.get("signed_at").is_none(), "{plain}");
+    assert_eq!(east["signature"], {
+        let mut plain = plain;
+        plain.as_object_mut().expect("object").remove("protocol");
+        plain
+    });
+}
+
+#[test]
+#[trace("TC-335", "FR-041-AC-19")]
+fn tc_335_a_status_other_than_approved_carries_no_signing_time() {
+    let fixture = fixture();
+    signed_tag_at(
+        &fixture,
+        "a",
+        "v-wrong",
+        &good_message().replace(DIGEST, "sha256:0"),
+        "2026-03-04T10:00:00+0000",
+    );
+    signed_tag_at(
+        &fixture,
+        "b",
+        "v-untrusted",
+        &good_message(),
+        "2026-03-04T10:00:00+0000",
+    );
+    signed_tag_at(
+        &fixture,
+        "a",
+        "v-nomeaning",
+        &approval(&[
+            &format!("Approved-Record-Id: {RECORD_ID}"),
+            &format!("Approved-Record-Digest: {DIGEST}"),
+        ]),
+        "2026-03-04T10:00:00+0000",
+    );
+    for (tag, expected) in [
+        ("v-wrong", "wrong_record"),
+        ("v-untrusted", "untrusted_signer"),
+        ("v-nomeaning", "meaning_missing"),
+    ] {
+        let other = status(&fixture, tag);
+        assert_eq!(other["status"], expected, "{other}");
+        for member in ["signed_at", "signed_at_source", "signed_at_missing"] {
+            assert!(other.get(member).is_none(), "{tag} {member}: {other}");
+        }
+    }
+}
