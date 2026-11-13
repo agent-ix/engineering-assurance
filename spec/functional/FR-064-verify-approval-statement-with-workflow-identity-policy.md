@@ -29,11 +29,21 @@ review gate used.
 Which workflow identity is trusted is configuration, not code. The workflow-identity policy is a closed-schema document
 read from the protected base branch ([FR-055](./FR-055-per-repo-sink-configuration-and-visibility-default.md)),
 `.engineering-assurance/workflow-identities.json`, with `protocol`
-`engineering-assurance.workflow-identities/v1` and the member `identities`: a list of `{role, issuer, repository,
-workflow_path, ref}` where `role` is `statement_writer` or `record_publisher`. Matching is exact on every member, with
-no wildcard, and `ref` is the protected base branch's ref (`refs/heads/` followed by the branch name). A signing
-certificate whose workflow ref is a pull request ref, or any ref other than the listed one, matches no entry, so a
-workflow edited on a pull request branch cannot sign a trusted statement. A statement signed by any other identity is
+`engineering-assurance.workflow-identities/v1` and the member `identities`: a list of entries whose `role` is one of
+`statement_writer`, `record_publisher`, `release_attester` or `receipt_writer`. Every entry has `role`, `issuer`,
+`repository`, `workflow_path` and `ref`, matched against the signing certificate's signer workflow (the workflow whose
+code signed), its repository, path and ref. For `statement_writer` and `record_publisher` the workflow runs in the
+repository itself and `ref` is the protected base branch's ref (`refs/heads/` followed by the branch name). For the
+reusable workflows `release_attester` and `receipt_writer` the signer workflow is an Engineering Assurance workflow
+called from another repository: `repository` and `workflow_path` name the Engineering Assurance reusable workflow, and
+`ref` is the `refs/heads/` or `refs/tags/` ref at which callers pin it. These two entries also carry `source_repository`
+(the repository that triggered the run, exact `owner/name`), `source_workflow_path` (the path of the caller workflow in that
+repository), `event` (the literal `push`, the trigger event the certificate records) and exactly one of `source_ref` (an exact ref, the default
+branch's `refs/heads/` ref for `receipt_writer`) and `source_ref_prefix` (a literal prefix of the form `refs/tags/`
+followed by the tag prefix, for `release_attester`, whose release runs are triggered by a tag push). Matching is exact
+on every member, with no wildcard; a prefix is compared as literal text. A signing certificate whose signer ref or
+source ref is a pull request ref, or any ref other than the listed one, matches no entry, so a workflow edited on a
+pull request branch cannot sign a trusted statement. A statement signed by any other identity is
 `untrusted_signer`.
 
 The verification command reports one line of JSON, `engineering-assurance.approval-verify-statement-result/v1`, with
@@ -85,6 +95,9 @@ Out of scope: the git-signature `approval-verify` command of
 | FR-064-AC-10 | Statements for three roles from three individuals, all `verified`, yield the role verdict `satisfied`; with one statement `untrusted_signer`, the verdict is `unsatisfied` naming that role. | Test |
 | FR-064-AC-11 | Statements published for a repository on the public sink are read from the private store and verify; for a repository on `none`, verification returns `unverifiable` with `statements_not_retained` while the review gate still returns its verdict. | Test |
 | FR-064-AC-12 | A statement that the leak check refused is read from the private store and yields `unverifiable` with `reason` `publish_refused`; a result with a `reason` member on any other status, or with an unknown member, fails the result schema. | Test |
+| FR-064-AC-13 | A release statement signed by the `release_attester` workflow called from a tag push `refs/tags/v1.2.0` of the listed source repository verifies against an entry with `source_ref_prefix` `refs/tags/v`; the same signature from a pull request ref, a branch ref, another source repository or an unlisted signer ref yields `untrusted_signer`. | Test |
+| FR-064-AC-14 | A receipt signed by the `receipt_writer` workflow called from the listed source repository's default branch ref verifies against an entry with `source_ref`; the same signature from a tag ref yields `untrusted_signer`; an entry for these roles without `source_repository` or with both `source_ref` and `source_ref_prefix` is refused as invalid. | Test |
+| FR-064-AC-15 | A release or receipt signed through the listed reusable workflow by a caller workflow at another path in the source repository, or from a run whose trigger event is `schedule`, `workflow_dispatch`, `issue_comment` or `pull_request_target`, yields `untrusted_signer`; an entry for these roles without `source_workflow_path` or `event`, or with an `event` other than `push`, is refused as invalid. | Test |
 
 ## Dependencies
 
