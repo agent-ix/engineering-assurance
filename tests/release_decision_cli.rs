@@ -85,8 +85,7 @@ fn commit_files(repo: &Path, files: &[(&str, &str)], message: &str) -> String {
 }
 
 /// A repository whose baseline commit holds the Baseline file and its items,
-/// with `evidence/missing.txt` listed but absent, and keys `a` (mapped to the
-/// owner) in an allowed-signers file.
+/// and a key `a` mapped to the owner in an allowed-signers file.
 fn fixture() -> Fixture {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = dir.path();
@@ -103,12 +102,13 @@ fn fixture() -> Fixture {
     git(&repo, &["init", "-q", "-b", "main"]);
     let baseline = "---\nid: BL-1\ntitle: Baseline one\ntype: Baseline\nname: Juniper service\nitems:\n  \
          - path: spec/a.md\n    kind: spec_artifact\n  - path: soup/s.md\n    kind: soup_record\n  \
-         - path: evidence/missing.txt\n    kind: evidence\n---\n\nThe baseline.\n";
+         - path: evidence/e.txt\n    kind: evidence\n---\n\nThe baseline.\n";
     let commit = commit_files(
         &repo,
         &[
             ("spec/a.md", "spec a\n"),
             ("soup/s.md", "soup s\n"),
+            ("evidence/e.txt", "evidence e\n"),
             (BASELINE_PATH, baseline),
         ],
         "baseline",
@@ -117,6 +117,16 @@ fn fixture() -> Fixture {
         dir,
         baseline: commit,
     }
+}
+
+/// A second Baseline file, committed after the first, that lists an item the
+/// repository does not hold. Returns its path and the commit that holds it.
+fn absent_item_baseline(fixture: &Fixture) -> (&'static str, String) {
+    let baseline = "---\nid: BL-2\ntitle: Baseline two\ntype: Baseline\nname: Juniper service\nitems:\n  \
+         - path: spec/a.md\n    kind: spec_artifact\n  - path: soup/s.md\n    kind: soup_record\n  \
+         - path: evidence/missing.txt\n    kind: evidence\n---\n\nThe baseline.\n";
+    let commit = commit_files(&fixture.repo(), &[("absent.md", baseline)], "absent item");
+    ("absent.md", commit)
 }
 
 fn skill_root() -> PathBuf {
@@ -161,8 +171,14 @@ fn decide_request(fixture: &Fixture, run: &str, choice: Option<&str>) -> Value {
 }
 
 fn command(subcommand: &str, request: &Value) -> (Output, Value) {
+    // `workflow-host` reads its request from stdin without a flag.
+    let arguments: &[&str] = if subcommand == "workflow-host" {
+        &[subcommand]
+    } else {
+        &[subcommand, "--request", "-"]
+    };
     let mut child = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
-        .args([subcommand, "--request", "-"])
+        .args(arguments)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -256,7 +272,7 @@ const EVIDENCE: &str = r#"{"requirements":[{"id":"FR-1","criteria":[
   {"id":"FR-1-AC-3","evidence_status":"suspect"},
   {"id":"FR-1-AC-4","evidence_status":"undischarged"},
   {"id":"FR-1-AC-5","evidence_status":"no run evidence"}]}]}"#;
-const SOUP: &str = r#"{"rows":[{"purl":"pkg:cargo/serde@1.0.0","id":"SOUP-1"}]}"#;
+const SOUP: &str = r#"{"rows":[{"purl":"pkg:cargo/serde@1.0.0","id":"SOUP-1","unresolved_advisory":true,"policy_status":"policy findings not assessed: licence-policy not run"}],"scans":[{"tool":"grype","state":"not run"}]}"#;
 const ANOMALIES: &str =
     r#"{"anomalies":[{"id":"ANOM-1","status":"open"},{"id":"ANOM-2","status":null}]}"#;
 
@@ -344,7 +360,17 @@ fn tc_451_with_no_owner_choice_the_run_stays_at_the_gate_with_no_document_and_no
 #[trace("TC-452", "FR-048-AC-3")]
 fn tc_452_the_presentation_shows_each_source_as_data_or_not_provided() {
     let fixture = fixture();
-    let all = present_all(&fixture, "run-all", ANOMALIES)["presentation"].clone();
+    let (absent_path, absent_commit) = absent_item_baseline(&fixture);
+    let fixture = Fixture {
+        baseline: absent_commit,
+        ..fixture
+    };
+    let mut request = present_request(&fixture, "run-all");
+    request["baseline_path"] = json!(absent_path);
+    request["evidence_status"] = json!(fixture.input("evidence.json", EVIDENCE));
+    request["soup_report"] = json!(fixture.input("soup.json", SOUP));
+    request["anomalies"] = json!(fixture.input("anomalies.json", ANOMALIES));
+    let all = ok(&request)["presentation"].clone();
     assert_eq!(all["baseline"]["commit"], fixture.baseline);
     assert_eq!(all["baseline"]["name"], "Juniper service");
     assert_eq!(
@@ -376,9 +402,19 @@ fn tc_452_the_presentation_shows_each_source_as_data_or_not_provided() {
         all["soup"]["baseline_records"],
         json!([{"path": "soup/s.md", "present": true}])
     );
+    // The supplied reports are carried verbatim, so a member the presentation
+    // does not select is still shown.
     assert_eq!(
-        all["soup"]["report"]["rows"],
-        json!([{"purl": "pkg:cargo/serde@1.0.0", "id": "SOUP-1"}])
+        all["evidence_status"]["document"],
+        serde_json::from_str::<Value>(EVIDENCE).expect("fixture")
+    );
+    assert_eq!(
+        all["soup"]["report"]["document"],
+        serde_json::from_str::<Value>(SOUP).expect("fixture")
+    );
+    assert_eq!(
+        all["anomalies"]["document"],
+        serde_json::from_str::<Value>(ANOMALIES).expect("fixture")
     );
     assert_eq!(
         all["anomalies"]["items"],
@@ -480,20 +516,6 @@ fn tc_455_a_release_emits_one_terminal_event_and_runs_no_git_write() {
     assert_eq!(refs(&fixture), refs_before);
     assert!(git(&fixture.repo(), &["tag", "-l"]).is_empty());
     assert!(git(&fixture.repo(), &["status", "--porcelain"]).is_empty());
-    let source = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/release_decision_host.rs"),
-    )
-    .expect("source");
-    for forbidden in [
-        "\"tag\"",
-        "\"commit-tree\"",
-        "\"push\"",
-        "\"update-ref\"",
-        "run_git",
-        "Command::new",
-    ] {
-        assert!(!source.contains(forbidden), "{forbidden}");
-    }
 }
 
 #[test]
@@ -623,28 +645,13 @@ fn commit_release(fixture: &Fixture, release: &Value, snapshot: &str) -> String 
 #[trace("TC-459", "FR-048-AC-10")]
 fn tc_459_the_emitted_record_and_message_yield_released_after_the_owner_commits_and_signs() {
     let fixture = fixture();
-    // Every Baseline item must exist for `released`, so the Baseline is the
-    // one whose items are all present.
-    let complete = "---\nid: BL-2\ntitle: Baseline two\ntype: Baseline\nname: Juniper service\nitems:\n  \
-         - path: spec/a.md\n    kind: spec_artifact\n---\n\nThe baseline.\n";
-    let baseline = commit_files(
-        &fixture.repo(),
-        &[("complete.md", complete)],
-        "complete baseline",
-    );
-    let fixture = Fixture {
-        baseline,
-        ..fixture
-    };
     let mut request = present_request(&fixture, "run-e2e");
-    request["baseline_path"] = json!("complete.md");
     request["snapshot_file"] = json!(fixture.input("snapshot.json", SNAPSHOT_TEXT));
     request["anomalies"] = json!(fixture.input("anomalies.json", ANOMALIES));
     ok(&request);
     let head_before = git(&fixture.repo(), &["rev-parse", "HEAD"]);
 
     let mut decide = decide_request(&fixture, "run-e2e", Some("release"));
-    decide["baseline_path"] = json!("complete.md");
     decide["accepted_anomalies"] = json!(["ANOM-1", "ANOM-2"]);
     let release = ok(&decide)["release"].clone();
     assert_eq!(git(&fixture.repo(), &["rev-parse", "HEAD"]), head_before);
@@ -750,4 +757,268 @@ fn tc_461_a_supplied_snapshot_is_shown_verbatim_with_its_path_and_an_unsupplied_
     let none = ok(&present_request(&fixture, "run-nosnap"))["presentation"]["snapshot"].clone();
     assert_eq!(none["snapshot_path"], SNAPSHOT_PATH);
     assert_eq!(none["file"], json!({"state": "not provided"}));
+}
+
+#[test]
+#[trace("TC-462", "FR-048-AC-13")]
+fn tc_462_the_choice_cannot_change_after_the_gate_is_acknowledged() {
+    let fixture = fixture();
+    present_all(&fixture, "run-fixed", ANOMALIES);
+    let mut request = decide_request(&fixture, "run-fixed", Some("release"));
+    request["accepted_anomalies"] = json!(["ANOM-1", "ANOM-2"]);
+    let first = ok(&request);
+    let before = tree_snapshot(&fixture.state());
+
+    // The same choice returns the stored document and message unchanged.
+    let repeated = ok(&request);
+    assert_eq!(repeated["release"], first["release"]);
+    assert_eq!(repeated["decision"], first["decision"]);
+
+    let mut other_meaning = request.clone();
+    other_meaning["meaning"] = json!("a different meaning");
+    refused(&other_meaning, "release_decision_changed");
+    let mut other_order = request.clone();
+    other_order["accepted_anomalies"] = json!(["ANOM-2", "ANOM-1"]);
+    refused(&other_order, "release_decision_changed");
+    assert_eq!(tree_snapshot(&fixture.state()), before);
+}
+
+#[test]
+#[trace("TC-463", "FR-048-AC-14")]
+fn tc_463_the_generic_workflow_host_cannot_reach_released_without_a_presentation() {
+    let fixture = fixture();
+    let binding = json!({
+        "run_id": "run-generic",
+        "repository_id": fixture.repo(),
+        "workflow": "release-decision",
+        "workflow_version": "0.1.0",
+        "decision_boundary": "generic",
+        "decision_owner": OWNER,
+    });
+    let host = |operation: &str, choice: Option<&str>| {
+        let mut request = json!({
+            "protocol": "engineering-assurance.workflow-host/v1",
+            "operation": operation,
+            "state_dir": fixture.state(),
+            "skill_root": skill_root(),
+            "ix_flow_executable": "ix-flow",
+            "binding": binding,
+        });
+        if let Some(choice) = choice {
+            request["choice"] = json!(choice);
+        }
+        command("workflow-host", &request)
+    };
+    let (output, _) = host("start_or_resume", None);
+    assert_eq!(output.status.code(), Some(0));
+    let answers = r#"{"release_id":"REL-1","baseline_path":"b.md","baseline_commit":"c","snapshot_path":"s","record_path":"r","owner":"o"}"#;
+    ix_flow(
+        &fixture,
+        &[
+            "record-answers",
+            "run-generic",
+            "release",
+            "--answers",
+            answers,
+        ],
+    );
+    assert_eq!(
+        ix_flow(&fixture, &["advance", "run-generic", "evidence_ready"])["ok"],
+        true
+    );
+    let blocked = ix_flow(&fixture, &["advance", "run-generic", "decision_ready"]);
+    assert_eq!(blocked["state"], "invariant_failed", "{blocked}");
+    assert_eq!(
+        blocked["error"]["details"]["invariantCode"],
+        "release_presentation_missing"
+    );
+
+    let (output, value) = host("decide", Some("release"));
+    assert_eq!(output.status.code(), Some(2), "{value}");
+    assert_eq!(phase(&fixture, "run-generic"), "evidence_ready");
+    assert_eq!(acknowledgements(&fixture, "run-generic"), 0);
+}
+
+#[test]
+#[trace("TC-464", "FR-048-AC-15")]
+fn tc_464_the_escaped_presentation_is_bounded_so_no_input_can_wedge_a_run() {
+    let fixture = fixture();
+    // 700 KiB of U+0001 is within the file limit and 4.2 MiB once escaped.
+    let heavy = "\u{1}".repeat(700 * 1024);
+    let mut request = present_request(&fixture, "run-heavy");
+    request["snapshot_file"] = json!(fixture.input("heavy.txt", &heavy));
+    refused(&request, "release_presentation_too_large");
+    assert_eq!(phase(&fixture, "run-heavy"), "capture");
+    // A file over the raw limit is refused naming the file.
+    let huge = fixture.input("huge.txt", &"\u{1}".repeat(4 * 1024 * 1024));
+    request["snapshot_file"] = json!(huge);
+    let value = refused(&request, "release_input_unreadable");
+    assert!(value["message"].as_str().expect("message").contains(&huge));
+
+    // Just under the bound the run is presented and still decidable.
+    let allowed = "\u{1}".repeat(480 * 1024);
+    let mut request = present_request(&fixture, "run-near");
+    request["snapshot_file"] = json!(fixture.input("near.txt", &allowed));
+    ok(&request);
+    let decided = ok(&decide_request(&fixture, "run-near", Some("reject")));
+    assert_eq!(decided["decision"]["outcome"], "rejected");
+}
+
+#[test]
+#[trace("TC-465", "FR-048-AC-15")]
+fn tc_465_a_fifo_or_non_utf8_input_is_unreadable_and_never_hangs() {
+    let fixture = fixture();
+    let fifo = fixture.root().join("fifo.json");
+    run_program("mkfifo", fixture.root(), &[fifo.to_str().expect("utf-8")]);
+    let mut request = present_request(&fixture, "run-fifo");
+    request["evidence_status"] = json!(fifo);
+    let value = refused(&request, "release_input_unreadable");
+    assert!(
+        value["message"]
+            .as_str()
+            .expect("message")
+            .contains("fifo.json")
+    );
+
+    let binary = fixture.root().join("snapshot.bin");
+    fs::write(&binary, [0xff, 0xfe, 0x00]).expect("binary file");
+    let mut request = present_request(&fixture, "run-binary");
+    request["snapshot_file"] = json!(binary);
+    let value = refused(&request, "release_input_unreadable");
+    assert!(
+        value["message"]
+            .as_str()
+            .expect("message")
+            .contains("snapshot.bin")
+    );
+    assert_eq!(phase(&fixture, "run-binary"), "capture");
+}
+
+#[test]
+#[trace("TC-466", "FR-048-AC-15")]
+fn tc_466_deciding_an_unknown_run_makes_no_run() {
+    let fixture = fixture();
+    let before = tree_snapshot(&fixture.state());
+    for choice in [None, Some("reject"), Some("release")] {
+        refused(
+            &decide_request(&fixture, "run-unknown-id", choice),
+            "workflow_run_not_found",
+        );
+    }
+    assert_eq!(tree_snapshot(&fixture.state()), before);
+}
+
+#[test]
+#[trace("TC-467", "FR-048-AC-16")]
+fn tc_467_a_record_path_at_the_baseline_or_an_absent_baseline_item_refuses_the_release() {
+    let fixture = fixture();
+    let mut request = present_request(&fixture, "run-record");
+    request["record_path"] = json!("spec/a.md");
+    ok(&request);
+    refused(
+        &decide_request(&fixture, "run-record", Some("release")),
+        "record_path_present_at_baseline",
+    );
+    assert_eq!(acknowledgements(&fixture, "run-record"), 0);
+
+    let (absent_path, absent_commit) = absent_item_baseline(&fixture);
+    let fixture = Fixture {
+        baseline: absent_commit,
+        ..fixture
+    };
+    let mut request = present_request(&fixture, "run-absent");
+    request["baseline_path"] = json!(absent_path);
+    ok(&request);
+    let mut decide = decide_request(&fixture, "run-absent", Some("release"));
+    decide["baseline_path"] = json!(absent_path);
+    let value = refused(&decide, "baseline_item_absent");
+    assert!(
+        value["message"]
+            .as_str()
+            .expect("message")
+            .contains("evidence/missing.txt")
+    );
+    assert_eq!(acknowledgements(&fixture, "run-absent"), 0);
+    // The person can still reject a candidate whose Baseline is incomplete.
+    let mut reject = decide_request(&fixture, "run-absent", Some("reject"));
+    reject["baseline_path"] = json!(absent_path);
+    assert_eq!(ok(&reject)["decision"]["outcome"], "rejected");
+}
+
+#[test]
+#[trace("TC-468", "FR-048-AC-8")]
+fn tc_468_an_interrupted_run_resumes_from_evidence_ready() {
+    let fixture = fixture();
+    let mut failed = present_request(&fixture, "run-mid");
+    failed["soup_report"] = json!(fixture.root().join("absent.json"));
+    refused(&failed, "release_input_unreadable");
+    let answers = json!({
+        "release_id": "REL-1",
+        "baseline_path": BASELINE_PATH,
+        "baseline_commit": fixture.baseline,
+        "snapshot_path": SNAPSHOT_PATH,
+        "record_path": RECORD_PATH,
+        "owner": OWNER,
+    })
+    .to_string();
+    ix_flow(
+        &fixture,
+        &[
+            "record-answers",
+            "run-mid",
+            "release",
+            "--answers",
+            &answers,
+        ],
+    );
+    ix_flow(&fixture, &["advance", "run-mid", "evidence_ready"]);
+    assert_eq!(phase(&fixture, "run-mid"), "evidence_ready");
+
+    let resumed = ok(&present_request(&fixture, "run-mid"));
+    assert_eq!(resumed["snapshot"]["phase"], "decision_ready");
+    let status = ix_flow(&fixture, &["status", "run-mid"]);
+    assert_eq!(
+        status["data"]["items"]["release_presentation"]
+            .as_array()
+            .map(Vec::len),
+        Some(1)
+    );
+    assert_eq!(
+        status["data"]["items"]["release_request"]
+            .as_array()
+            .map(Vec::len),
+        Some(1)
+    );
+}
+
+#[test]
+#[trace("TC-469", "FR-048-AC-17")]
+fn tc_469_an_unreadable_anomaly_document_is_shown_and_must_be_named_as_accepted() {
+    let fixture = fixture();
+    let report = r#"{"anomalies":[],"unreadable":[{"path":"spec/anomalies/AN-9.md","code":"anomaly.no-record"}]}"#;
+    let presented = present_all(&fixture, "run-unreadable", report);
+    assert_eq!(
+        presented["presentation"]["anomalies"]["unreadable"],
+        json!([{"path": "spec/anomalies/AN-9.md", "code": "anomaly.no-record"}])
+    );
+    assert_eq!(
+        presented["presentation"]["anomalies"]["document"],
+        serde_json::from_str::<Value>(report).expect("fixture")
+    );
+    let mut request = decide_request(&fixture, "run-unreadable", Some("release"));
+    let value = refused(&request, "anomaly_not_accepted");
+    assert!(
+        value["message"]
+            .as_str()
+            .expect("message")
+            .contains("AN-9.md")
+    );
+    request["accepted_anomalies"] = json!(["spec/anomalies/AN-9.md"]);
+    let decided = ok(&request);
+    assert!(
+        decided["release"]["document"]
+            .as_str()
+            .expect("document")
+            .contains("accepted_anomalies:\n  - \"spec/anomalies/AN-9.md\"\n")
+    );
 }

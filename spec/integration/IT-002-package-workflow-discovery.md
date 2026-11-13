@@ -43,12 +43,12 @@ ix-flow are installed.
 2. Validate the fictional document through the installed module root using
    Quire.
    - IT-002-SC-02: both installed module roots validate the document.
-3. Discover the canonical onboarding skill and its four workflows in each root.
+3. Discover the canonical onboarding skill and its five workflows in each root.
    - IT-002-SC-03: both installations expose identical canonical content.
 4. Run ix-flow discovery through both the canonical path and compatibility pilot
    path for every workflow.
-   - IT-002-SC-04: all eight path-and-workflow combinations load and expose
-     equivalent definitions.
+   - IT-002-SC-04: all five canonical workflows and all four pilot workflows
+     load, and each pilot definition equals its canonical definition.
 
 ## Expected Results
 

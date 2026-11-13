@@ -389,13 +389,13 @@ fn gather(request: &Request) -> Result<Value, ReleaseDecisionError> {
 
     let evidence = supplied(request.evidence_status.as_deref(), |source, document| {
         let criteria = evidence_criteria(source, &document)?;
-        Ok(json!({"criteria": criteria, "report": document}))
+        Ok(json!({"criteria": criteria, "document": document}))
     })?;
     let soup_report = supplied(request.soup_report.as_deref(), |source, document| {
         for row in array_member(source, &document, "rows")? {
             string_member(source, row, "purl")?;
         }
-        Ok(json!({"report": document}))
+        Ok(json!({"document": document}))
     })?;
     let anomalies = supplied(request.anomalies.as_deref(), |source, document| {
         let items = array_member(source, &document, "anomalies")?
@@ -423,7 +423,7 @@ fn gather(request: &Request) -> Result<Value, ReleaseDecisionError> {
                 })
                 .collect::<Result<Vec<_>, ReleaseDecisionError>>()?,
         };
-        Ok(json!({"items": items, "unreadable": unreadable_entries, "report": document}))
+        Ok(json!({"items": items, "unreadable": unreadable_entries, "document": document}))
     })?;
     let snapshot_file = supplied_text(request.snapshot_file.as_deref(), |text| {
         Ok(json!({"text": text}))

@@ -481,7 +481,7 @@ mod tests {
             &accepted.path().join("engineering_assurance"),
         )
         .unwrap();
-        assert_eq!(result.canonical_file_count(), 5);
+        assert_eq!(result.canonical_file_count(), 6);
 
         let extra_skill = complete_bundle();
         write(

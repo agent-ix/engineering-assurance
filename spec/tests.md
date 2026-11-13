@@ -389,7 +389,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-008 | Inventory separates all required collections | Unit | P1 | FR-001-AC-5 | ✅ |
 | TC-009 | Exactly one canonical onboarding skill exists | Static | P0 | FR-002-AC-1 | ✅ |
 | TC-010 | Four host surfaces resolve one canonical skill | Integration | P0 | FR-002-AC-2, US-002-EX-1 | ✅ |
-| TC-011 | Canonical skill exposes exactly four workflows | Integration | P0 | FR-002-AC-3, US-002-EX-2 | ✅ |
+| TC-011 | Canonical skill exposes exactly five workflows | Integration | P0 | FR-002-AC-3, US-002-EX-2 | ✅ |
 | TC-012 | Behavioral text in a host manifest is rejected | Static | P1 | FR-002-AC-4 | ✅ |
 | TC-013 | Missing or escaping canonical target is rejected | Unit | P0 | FR-002-AC-5 | ✅ |
 | TC-014 | Wheel includes explicit module and onboarding members | Integration | P0 | FR-003-AC-1 | ✅ |
@@ -414,7 +414,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-033 | Missing executable fails aggregate gate | E2E | P0 | FR-006-AC-3 | ✅ |
 | TC-034 | Aggregate passes only for complete passing scenarios | Property | P0 | FR-006-AC-4 | ✅ |
 | TC-035 | Four pilot workflow invocations still load | Integration | P0 | FR-007-AC-1 | ✅ |
-| TC-036 | Pilot and canonical workflows are equivalent | Property | P0 | FR-007-AC-2 | ✅ |
+| TC-036 | Each pilot workflow is equivalent to its canonical workflow | Property | P0 | FR-007-AC-2 | ✅ |
 | TC-037 | Canonical install docs precede compatibility path | Static | P1 | FR-007-AC-3 | ✅ |
 | TC-038 | Cross-agent canonical parity reaches all thresholds | Integration | P0 | NFR-001-AC-1, NFR-001-AC-2, NFR-001-AC-3 | ✅ |
 | TC-039 | Evaluation produces zero unsupported outcomes | E2E | P0 | NFR-002-AC-1, NFR-002-AC-2, NFR-002-AC-3 | ✅ |
@@ -790,6 +790,15 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-459 | The emitted record and tag message, committed with the snapshot as one child of the baseline commit and signed by `git tag -s`, yield `released` from `release-verify`, with no git write by the workflow | Integration | P0 | FR-048-AC-10 | ✅ `tests/release_decision_cli.rs` passing |
 | TC-460 | A snapshot path that exists at the baseline commit (Baseline file, item or directory) is refused with `snapshot_path_present_at_baseline`, and one that breaks the path rules with `release_snapshot_path_invalid`; neither writes a Release document | Integration | P0 | FR-048-AC-11 | ✅ `tests/release_decision_cli.rs` passing |
 | TC-461 | A supplied snapshot file is presented verbatim and unparsed with its snapshot path and retained in the run; an unsupplied one is `not provided` | Integration | P0 | FR-048-AC-12 | ✅ `tests/release_decision_cli.rs` passing |
+| TC-462 | A repeated release choice returns the stored document and tag message, and a call whose meaning or accepted anomaly ids differ is refused with `release_decision_changed` and changes no state | Integration | P0 | FR-048-AC-13 | ✅ `tests/release_decision_cli.rs` passing |
+| TC-463 | The generic workflow-host and raw ix-flow advances cannot take a release-decision run past `evidence_ready` or to `released` without a retained presentation | Integration | P0 | FR-048-AC-14 | ✅ `tests/release_decision_cli.rs` passing |
+| TC-464 | The JSON-escaped presentation is bounded: an input that would exceed the bound is refused before any ix-flow mutation, and a presentation just under it stays decidable | Integration | P0 | FR-048-AC-15 | ✅ `tests/release_decision_cli.rs` passing |
+| TC-465 | A FIFO or non-UTF-8 input file is refused with `release_input_unreadable` naming the file and does not hang | Integration | P0 | FR-048-AC-15 | ✅ `tests/release_decision_cli.rs` passing |
+| TC-466 | Deciding a run id that does not exist is refused with `workflow_run_not_found` and creates no run | Integration | P0 | FR-048-AC-15 | ✅ `tests/release_decision_cli.rs` passing |
+| TC-467 | A `record_path` that exists at the baseline commit, or a Baseline item absent at it, refuses the release choice; the reject choice stays available | Integration | P0 | FR-048-AC-16 | ✅ `tests/release_decision_cli.rs` passing |
+| TC-468 | A run interrupted at `evidence_ready` resumes to the gate with one presentation and one request item | Integration | P0 | FR-048-AC-8 | ✅ `tests/release_decision_cli.rs` passing |
+| TC-469 | A non-empty `unreadable` list of the anomaly report is shown, and each entry must be named as accepted like an unresolved anomaly | Integration | P0 | FR-048-AC-17 | ✅ `tests/release_decision_cli.rs` passing |
+| TC-470 | The Rust and JavaScript evaluators agree on `release.presentation_ready` for a release-decision projection with both items, either alone and neither | Integration | P0 | FR-048-AC-14 | ✅ `tests/workflow_invariants_parity.rs` passing |
 | TC-518 | A release statement signed by the `release_attester` workflow called from a tag push `refs/tags/v1.2.0` of the listed source repository verifies against an entry with `source_ref_prefix` `refs/tags/v`; the same signature from ... | Integration | P0 | FR-064-AC-13 | 🚧 |
 | TC-519 | A receipt signed by the `receipt_writer` workflow called from the listed source repository's default branch ref verifies against an entry with `source_ref`; the same signature from a tag ref yields `untrusted_signer`; an entry ... | Integration | P0 | FR-064-AC-14 | 🚧 |
 | TC-520 | A release or receipt signed through the listed reusable workflow by a caller workflow at another path in the source repository, or from a run whose trigger event is `schedule`, `workflow_dispatch`, `issue_comment` or ... | Integration | P0 | FR-064-AC-15 | 🚧 |
@@ -1035,7 +1044,7 @@ INT-006 is withdrawn with FR-016-AC-4. Its row is removed and the identifier is 
 | TC-047 | INT-003 | Human acceptance | Named owner acceptance action | One attributed acceptance terminal event | P0 |
 | TC-048 | INT-003 | Run identity mismatch | Existing id with changed binding | Refused with both runs unchanged | P0 |
 | TC-010 | INT-004 | Host discovery permutations | Two sources by four hosts | Same canonical skill | P0 |
-| TC-011 | INT-004 | Workflow discovery | Canonical skill | Exactly four workflow definitions | P0 |
+| TC-011 | INT-004 | Workflow discovery | Canonical skill | Exactly five workflow definitions | P0 |
 | TC-107 | INT-008 | Run lifecycle and human gates | Versioned Rust provider and fictional runs | Existing ix-flow state behavior is preserved | P0 |
 | TC-109 | INT-007 | Complete declared-host evaluation | Seven scenarios on every declared host | One valid result cell per declared cell, with explicit decisions | P0 |
 | TC-110 | INT-007 | Invalid or incomplete evaluation | Missing and malformed host results | Aggregate gate remains withheld | P0 |

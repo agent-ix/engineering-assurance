@@ -1103,7 +1103,7 @@ impl BoundRun {
 
     /// Add one item through a file, so that its size is not an argument limit.
     pub(crate) fn add_item(&mut self, kind: &str, item: &Value) -> Result<(), WorkflowHostError> {
-        let file = self.temporary_json(item)?;
+        let file = Self::temporary_json(item)?;
         self.mutate(
             &[
                 OsString::from("add-item"),
@@ -1123,7 +1123,7 @@ impl BoundRun {
         item_id: &str,
         patch: &Value,
     ) -> Result<(), WorkflowHostError> {
-        let file = self.temporary_json(patch)?;
+        let file = Self::temporary_json(patch)?;
         self.mutate(
             &[
                 OsString::from("update-item"),
@@ -1137,7 +1137,7 @@ impl BoundRun {
         )
     }
 
-    fn temporary_json(&self, value: &Value) -> Result<tempfile::NamedTempFile, WorkflowHostError> {
+    fn temporary_json(value: &Value) -> Result<tempfile::NamedTempFile, WorkflowHostError> {
         let request_error = |source: &dyn std::fmt::Display| WorkflowHostError::Request {
             detail: source.to_string(),
         };

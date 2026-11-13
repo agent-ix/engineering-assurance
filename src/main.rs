@@ -22,8 +22,8 @@ mod package_host;
 mod package_install;
 mod process_host;
 mod producer_execute_host;
-mod release_history_host;
 mod release_decision_host;
+mod release_history_host;
 mod release_host;
 mod scope_footprint_host;
 mod signature_verify_host;
@@ -920,6 +920,10 @@ fn run_release_history(arguments: &ArgMatches) -> ExitCode {
         "release_history_request_unreadable",
         |bytes| {
             release_history_host::execute(bytes).map_err(|error| (error.code(), error.to_string()))
+        },
+    )
+}
+
 fn run_release_decision(arguments: &ArgMatches) -> ExitCode {
     run_request_line(
         arguments,

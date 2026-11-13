@@ -262,6 +262,7 @@ fn tc_106_all_canonical_invariants_match_the_reference_in_request_order() {
 }
 
 #[trace("TC-106", "FR-016-AC-2", "FR-016-CON-3")]
+#[trace("TC-470", "FR-048-AC-14")]
 #[test]
 fn tc_106_failure_codes_and_time_boundaries_match_the_reference() {
     let empty = json!({"defName": "change-assurance", "items": {}});
