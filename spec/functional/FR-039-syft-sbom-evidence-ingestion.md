@@ -7,6 +7,8 @@ relationships:
     type: "extends"
   - target: "ix://agent-ix/quoin/FR-041"
     type: "references"
+  - target: "ix://agent-ix/quoin/FR-150"
+    type: "references"
 ---
 
 # FR-039: Retain the Syft CycloneDX artifact as the input the Quoin SBOM adapter accepts
@@ -30,6 +32,12 @@ a Rust crate with a lock file, an npm package with a lock file, a Python project
 with a pinned requirements file, and a container image archive holding a small
 package database and no `os-release` file.
 
+A fifth fixture, the **licence fixture** (added for `ix://agent-ix/quoin/FR-150`, PLAT-1671), is an npm package
+with a lock file whose pinned third-party entries declare licences: one entry with a permissive SPDX identifier,
+one with a copyleft SPDX identifier, one with an SPDX expression of two identifiers, and one with no `license`
+field. An expected-result file beside it names each entry's purl and the licence value its lock entry declares.
+The fixture is fictional and pins no real package name that could be mistaken for a vendored copy.
+
 ## Outputs
 
 The retained `sbom` artifact of the FR-038 result, unchanged.
@@ -46,6 +54,8 @@ The retained `sbom` artifact of the FR-038 result, unchanged.
 - Each fixture SHALL yield an artifact whose top-level `components` array holds
   exactly the declared package count and no nested components, because the quoin
   adapter reads the top-level array only.
+- The licence fixture SHALL yield an artifact whose top-level `components` array holds exactly its declared package count, and whose components carry `licenses` entries only for the lock entries that declare a licence.
+- The test SHALL fail if every component of the licence fixture's artifact lacks `licenses`, because the fixture exists to supply licence-bearing Syft output.
 - Engineering Assurance SHALL NOT launch quoin, link quoin or read components in
   production code.
 - If the FR-038 result state is not `completed`, then Engineering Assurance SHALL
@@ -62,6 +72,7 @@ The retained `sbom` artifact of the FR-038 result, unchanged.
 | FR-039-AC-5 | The Syft-dependent tests obtain Syft as FR-038-CON-1 states; a missing Syft fails them. | Test |
 | FR-039-AC-6 | A non-`completed` FR-038 result (`unavailable`, `failed`, `timed_out`) is reported as that state with no artifact presented. | Test |
 | FR-039-AC-7 | Design review confirms Engineering Assurance contains no CycloneDX component reader, no quoin dependency and no quoin launch path in production code. Test code that counts the array in AC-1 to AC-4 is the only reader. | Inspection |
+| FR-039-AC-8 | The licence fixture's retained artifact has the declared package count with `pkg:npm/` purls; the components of the entries that declare a licence carry a `licenses` entry whose value matches the expected-result file; the entry that declares none carries no `licenses` entry; and at least one component carries a `licenses` entry. | Test |
 
 ## Dependencies
 
