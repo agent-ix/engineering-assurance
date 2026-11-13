@@ -55,3 +55,16 @@ resolves, then the publish refuses with `sink_config_incomplete` before anything
 fails closed and is accepted; the spec has no default endpoint, so such a repository never publishes until it adds
 one — a spec question, not a code defect. #1, #3-#6, #8, #9 are accepted. Config is read only through
 `PolicySource::read_from_base_branch` behind a `Some(true)` protection check; sink `none` sends, stores and signs nothing.
+
+## Dispositions
+
+Round 1, fix commit 6c195a4 (rebased onto main eae09ed).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | `PublicLogClient::send` now takes `&CheckedEntry`, whose only field is private and which only `PublicLogSink::publish` builds, after a passing `leak_check` and a verified signature (sink.rs). The `Sinks` table is gone: `SinkLayer::new` builds its own `PublicLogSink`, and only the private-store slot is replaceable (`register_private_store`). TC-652 shows a registered implementation is never reached for a `public_log` selection and a leaking record sends and public-signs nothing. |
+| FND-002 | fixed | `Signer::sign_for_public_log(&self, proof)` takes no bytes; `PublicPathProof` carries `signed_bytes` computed by `leak_check` from the checked record (an unencodable form is `CheckRefusal::Unencodable`, no proof). The post-sign payload equality is kept, checked against `proof.signed_bytes()`. TC-652 asserts the proof's bytes equal the record's RFC 8785 bytes. |
+| FND-003 | fixed | `PublicLogSink::new(selection, publishing_repo, ports)` and `PrivateStoreSink::new(selection, ports)` read endpoint, destination and `public_linear_teams` from the one `SinkSelection`; the struct fields are private, and `SinkLayer::new` builds both from the same selection. |
+| FND-004 | fixed | `SinkResult` deserializes through `RawSinkResult` + `TryFrom`: `error` present iff `refused`, `offending` only with `public_sink_private_reference`, `null` rejected. tc_628 covers each combination. |
+| FND-005 | fixed | `no_null` / `no_null_value` reject JSON `null` on every optional member of the public form, private form, sink config and result; `null_is_not_a_member_value_in_any_closed_document` covers each document kind. |
+| FND-006 | fixed | The stand-ins share one `events` log; tc_629 asserts `private_write` is first and precedes lookup, sign and send. The import-only `let _ = (...)` line is removed. |

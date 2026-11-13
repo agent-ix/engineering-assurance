@@ -246,7 +246,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-055 | FR-055-AC-2 | TC-630 | ✅ `tests/record_sink.rs` passing |
 | FR-055 | FR-055-AC-3 | TC-631 | ✅ `tests/record_sink.rs` passing |
 | FR-055 | FR-055-AC-4 | TC-632 | ✅ `tests/record_sink.rs` passing |
-| FR-055 | FR-055-AC-5 | TC-633 | 🚧 The `PolicySource` contract (base branch only) is tested in `tests/record_sink.rs`; the git or hosting-service adapter that reads a real repository belongs to the publishing workflow (FR-065), where the pull-request-branch case is tested |
+| FR-055 | FR-055-AC-5 | TC-633 | 🚧 Not closed here: the repository `PolicySource` adapter is not implemented in this change and the case where a pull request branch edits `sinks.json` is untested. `tests/record_sink.rs` tests only the `PolicySource` contract with a stand-in. PLAT-1685 builds the adapter and closes FR-055-AC-5 |
 | FR-055 | FR-055-AC-6 | TC-634 | ✅ `tests/record_sink.rs` passing |
 | FR-055 | FR-055-AC-7 | TC-635 | ✅ `tests/record_sink.rs` passing |
 | FR-056 | FR-056-AC-1 | TC-636 | ✅ `tests/record_sink.rs` passing |
@@ -952,7 +952,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-630 | The visibility default and the configured override resolve the sink, and a private repository configured `public_log` is refused | Unit | P0 | FR-055-AC-1, FR-055-AC-2 | ✅ `tests/record_sink.rs` passing |
 | TC-631 | An undeterminable visibility resolves `private_store` and refuses a configured `public_log` | Unit | P0 | FR-055-AC-3 | ✅ `tests/record_sink.rs` passing |
 | TC-632 | An unknown member, unknown sink value, non-https endpoint, missing endpoint or missing destination is refused with `sink_config_invalid` or `sink_config_incomplete` | Unit | P0 | FR-055-AC-4, NFR-008-M-1 | ✅ `tests/record_sink.rs` passing |
-| TC-633 | The policy document is read from the protected base branch and not from the pull request branch | Unit | P0 | FR-055-AC-5 | 🚧 contract tested with a stand-in source in `tests/record_sink.rs`; the repository adapter test is owned by FR-065 |
+| TC-633 | The policy document is read from the protected base branch and not from the pull request branch | Unit | P0 | FR-055-AC-5 | 🚧 only the contract is tested, with a stand-in source in `tests/record_sink.rs`; the repository adapter and the pull-request-branch case are not implemented or tested here, and PLAT-1685 builds the adapter and closes FR-055-AC-5 |
 | TC-634 | An unprotected or unreported base branch refuses each policy document with `policy_branch_unprotected` | Unit | P0 | FR-055-AC-6 | ✅ `tests/record_sink.rs` passing |
 | TC-635 | An absent document or one without a private store destination is `sink_config_incomplete` and nothing is sent or stored | Unit | P0 | FR-055-AC-7 | ✅ `tests/record_sink.rs` passing |
 | TC-636 | The public form holds none of the ticket text, criteria text or model names, the private form holds them, and both carry one record id and no other shared member | Unit | P0 | FR-056-AC-1, FR-056-AC-2 | ✅ `tests/record_sink.rs` passing |

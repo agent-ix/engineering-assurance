@@ -42,3 +42,16 @@ public-path signs over 500 generated visibility maps). Vacuous or partial bindin
 Every functional AC is tagged and most are behaviourally backed. Two ✅ rows (FR-055-AC-5, FR-055-AC-7) rest on
 assertions that cannot fail, and the NFR-010 row overclaims a metric no test touches. Not mergeable until
 FND-001..FND-003 are fixed; FND-004..FND-006 are small and should ride in the same fix round.
+
+## Dispositions
+
+Round 1, fix commit 6c195a4 (rebased onto main eae09ed).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | still-open | The tautology is gone and the FR-055-AC-5 / TC-633 rows are now 🚧, but both rows (spec/tests.md) say the repository adapter and its pull-request-branch test belong to FR-065. FR-065 has no criterion about reading a policy document from the base branch or ignoring a PR-branch `sinks.json`, and no `PolicySource` adapter exists in `src/`. Reword both rows to say the adapter is not implemented and the PR-branch case is untested, and name the Linear ticket that will build the adapter (or the ticket where FR-055-AC-5 stays open). |
+| FND-002 | fixed | tc_635 now publishes through `SinkLayer` with `private_store_destination: None` for `public_log` and `private_store`, and asserts `refused` / `sink_config_incomplete`, `nothing_sent_or_stored()`, no non-public sign and an empty event log. |
+| FND-003 | fixed | The NFR-010 row now reads "✅ M-1 and M-2 in `tests/record_sink.rs`; 🚧 M-3, which needs the verifier of FR-064"; the TC-642 overclaim is gone. |
+| FND-004 | fixed | Trace tags are `NFR-008-M-1` (TC-628/632/637), `NFR-009-M-1` (TC-649), `NFR-009-M-2` (new TC-652), `NFR-010-M-1` (TC-651), `NFR-010-M-2` (TC-650); spec/tests.md rows match. |
+| FND-005 | fixed | `SignMode::NonCanonical` signs `to_string_pretty` of the same members; tc_642 asserts `signature_payload_mismatch` with nothing sent or stored for both `public_log` and `private_store`. |
+| FND-006 | fixed | `check_structured` checks `record_id`, `subject_commit`, timestamps and Linear issue ids against independent oracles over the generated noise and over mutations of valid samples. |
