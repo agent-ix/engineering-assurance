@@ -272,7 +272,7 @@ const EVIDENCE: &str = r#"{"requirements":[{"id":"FR-1","criteria":[
   {"id":"FR-1-AC-3","evidence_status":"suspect"},
   {"id":"FR-1-AC-4","evidence_status":"undischarged"},
   {"id":"FR-1-AC-5","evidence_status":"no run evidence"}]}]}"#;
-const SOUP: &str = r#"{"rows":[{"purl":"pkg:cargo/serde@1.0.0","id":"SOUP-1","unresolved_advisory":true,"policy_status":"policy findings not assessed: licence-policy not run"}],"scans":[{"tool":"grype","state":"not run"}]}"#;
+const SOUP: &str = r#"{"rows":[{"purl":"pkg:cargo/serde@1.0.0","id":"SOUP-1","unresolved_advisory":true,"policy_status":"policy findings not assessed: licence-policy not run"}],"scans":[{"tool":"osv-scanner","state":"not run"}]}"#;
 const ANOMALIES: &str =
     r#"{"anomalies":[{"id":"ANOM-1","status":"open"},{"id":"ANOM-2","status":null}]}"#;
 
