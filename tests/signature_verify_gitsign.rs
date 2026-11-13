@@ -634,7 +634,7 @@ fn tc_289_a_gitsign_key_in_any_repository_configuration_stops_the_run() {
         move |f: &Fixture| {
             let config = f.repo().join(".git").join("config");
             let mut text = fs::read_to_string(&config).expect("config");
-            text.push_str(&format!("[foo]\n\tbar = \"x\\n{name}.fulcioRoot evil\"\n"));
+            text.extend(["[foo]\n\tbar = \"x\\n", name, ".fulcioRoot evil\"\n"]);
             fs::write(&config, text).expect("config");
             let listed = git(&f.repo(), &["config", "--get-regexp", ".*"]);
             assert!(listed.contains(name), "{listed}");
