@@ -57,7 +57,7 @@ fn run_cli(args: &[&str], stdin: &[u8]) -> std::process::Output {
 fn tc_098_every_machine_facing_command_emits_one_versioned_json_result_on_stdout() {
     let missing = std::env::temp_dir().join("engineering-assurance-absent-root");
     let missing = missing.to_str().expect("temp path must be UTF-8");
-    let cases: [(&str, Vec<&str>, &[u8]); 15] = [
+    let cases: [(&str, Vec<&str>, &[u8]); 16] = [
         (
             "agent-evals-provider",
             vec!["agent-evals-provider", "--root", missing],
@@ -93,6 +93,11 @@ fn tc_098_every_machine_facing_command_emits_one_versioned_json_result_on_stdout
         (
             "approval-tag",
             vec!["approval-tag", "--request", "{not json"],
+            b"",
+        ),
+        (
+            "approval-trail",
+            vec!["approval-trail", "--request", "{not json"],
             b"",
         ),
         (

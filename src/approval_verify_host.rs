@@ -21,7 +21,7 @@ use engineering_assurance::signature_verify::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::signature_verify_host::{GitsignRequest, check_allowed_signers, check_tag};
+use crate::signature_verify_host::{CheckedTag, GitsignRequest, check_allowed_signers, check_tag};
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.approval-verify-request/v1";
 const RESULT_PROTOCOL: &str = "engineering-assurance.approval-verify-result/v1";
@@ -40,27 +40,67 @@ struct Request {
 
 /// The trust input a verdict was made against, copied from the request.
 #[derive(Serialize)]
-struct Trust<'a> {
-    allowed_signers: &'a Path,
+pub(crate) struct Trust<'a> {
+    pub(crate) allowed_signers: &'a Path,
     #[serde(skip_serializing_if = "Option::is_none")]
-    gitsign: Option<&'a GitsignRequest>,
+    pub(crate) gitsign: Option<&'a GitsignRequest>,
+}
+
+/// The FR-041 result for one tag, less the members that echo the request.
+#[derive(Serialize)]
+pub(crate) struct Assessment {
+    status: ApprovalStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<UnverifiableReason>,
+    signature: Verdict,
+    #[serde(flatten)]
+    approval: Option<Approval>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    binding: Option<Bindings>,
+}
+
+impl Assessment {
+    pub(crate) const fn status(&self) -> ApprovalStatus {
+        self.status
+    }
+
+    pub(crate) const fn reason(&self) -> Option<UnverifiableReason> {
+        self.reason
+    }
+
+    pub(crate) const fn approval(&self) -> Option<&Approval> {
+        self.approval.as_ref()
+    }
+}
+
+/// Decides the FR-041 result for a tag already verified by `check_tag`.
+pub(crate) fn assess(checked: CheckedTag, record_id: &str, record_digest: &str) -> Assessment {
+    let bindings = checked.trailers.as_deref().map(|trailers| Bindings {
+        record_id: bind(&trailer_values(trailers, RECORD_ID_TRAILER), record_id),
+        record_digest: bind(
+            &trailer_values(trailers, RECORD_DIGEST_TRAILER),
+            record_digest,
+        ),
+    });
+    let decision = decide(&checked.verdict, bindings, checked.tagger_signed_at);
+    Assessment {
+        status: decision.status,
+        reason: decision.reason,
+        signature: checked.verdict,
+        approval: decision.approval,
+        binding: bindings,
+    }
 }
 
 #[derive(Serialize)]
 struct ResultLine<'a> {
     protocol: &'static str,
-    status: ApprovalStatus,
     tag: &'a str,
     record_id: &'a str,
     record_digest: &'a str,
     trust: Trust<'a>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    reason: Option<UnverifiableReason>,
-    signature: &'a Verdict,
     #[serde(flatten)]
-    approval: Option<Approval>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    binding: Option<Bindings>,
+    assessment: Assessment,
 }
 
 /// Typed refusal that produces no verdict.
@@ -129,24 +169,13 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalVerifyError> {
         &request.allowed_signers,
         identity.as_ref(),
     );
-    let bindings = checked.trailers.as_deref().map(|trailers| Bindings {
-        record_id: bind(
-            &trailer_values(trailers, RECORD_ID_TRAILER),
-            &request.record_id,
-        ),
-        record_digest: bind(
-            &trailer_values(trailers, RECORD_DIGEST_TRAILER),
-            &request.record_digest,
-        ),
-    });
-    let decision = decide(&checked.verdict, bindings, checked.tagger_signed_at);
+    let assessment = assess(checked, &request.record_id, &request.record_digest);
     let tag = request
         .tag
         .strip_prefix("refs/tags/")
         .unwrap_or(&request.tag);
     let mut line = serde_json::to_vec(&ResultLine {
         protocol: RESULT_PROTOCOL,
-        status: decision.status,
         tag,
         record_id: &request.record_id,
         record_digest: &request.record_digest,
@@ -154,10 +183,7 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalVerifyError> {
             allowed_signers: &request.allowed_signers,
             gitsign: request.gitsign.as_ref(),
         },
-        reason: decision.reason,
-        signature: &checked.verdict,
-        approval: decision.approval,
-        binding: bindings,
+        assessment,
     })
     .map_err(|_| ApprovalVerifyError::ResultEncoding)?;
     line.push(b'\n');
