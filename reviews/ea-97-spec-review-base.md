@@ -53,3 +53,13 @@ Checked clean:
 
 Not mergeable on the base checklist until FND-001 is removed. Structure, validation and AC-to-TC coverage are
 clean. See the sibling analyses for the substantive findings.
+
+## Dispositions
+
+Round 1, head 428c2bd (fix commits 5bab3f1..428c2bd).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |

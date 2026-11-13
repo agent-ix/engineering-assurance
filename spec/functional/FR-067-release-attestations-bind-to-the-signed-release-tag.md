@@ -25,10 +25,11 @@ Tracked by Linear EA-97. The release attestation workflow attests a release only
 
 The workflow then evaluates the role policy ([FR-061](./FR-061-role-policy-and-distinct-individuals.md)). The role step is attestation workflow code and lives outside the release module, which reads no approval statement ([FR-065](./FR-065-workflow-roles-and-relation-to-signed-release-tags.md)). The signed tag stays the only release decision ([NFR-007](../non-functional/NFR-007-no-release-without-a-person.md)); the roles are an additional condition. The role step works as follows.
 
-- The pull request is found from the statements, not from the tag: the statements to evaluate are those whose `merged_commit` equals the commit the tag peels to ([FR-060](./FR-060-approval-binds-to-the-merged-head-commit.md)). The tagged commit is the release commit of [FR-047](./FR-047-release-record-and-signed-release-tag.md), so a squash or merge-commit merge of the release pull request must produce it and the tag must point at that merged commit, not at the pull request head. A rebase merge binds only the rebased tip; a tag on any other rebased commit finds no statements.
+- The pull request is found from the statements, not from the tag: the statements to evaluate are those whose `merged_commit` equals the commit the tag peels to ([FR-060](./FR-060-approval-binds-to-the-merged-head-commit.md)). The tagged commit is the release commit of [FR-047](./FR-047-release-record-and-signed-release-tag.md), so a squash merge of the release pull request, or a rebase merge whose tip is the release commit, produces it and the tag must point at that merged commit, not at the pull request head. A merge-commit merge yields a commit with two parents, so `release-verify` reports `not_released` (`release_commit_not_child_of_baseline`) and nothing is attested. A rebase merge binds only the rebased tip; a tag on any other rebased commit finds no statements.
 - If the source reports a merged pull request whose merge result is the tagged commit but no statements exist yet, the statement writer has not run: the result is `release_roles_statements_pending`, a retryable result, and nothing is written.
 - If no merged pull request has the tagged commit as its merge result (a direct push, or a rebased commit that is not the tip), the result is `release_roles_no_pull_request`.
-- If the repository's sink is `none`, statements are not retained ([FR-064](./FR-064-verify-approval-statement-with-workflow-identity-policy.md)) and the result is `release_roles_statements_not_retained`.
+- If the source lookup of the merged pull request fails, the result is `release_roles_source_unavailable`, a retryable result, and nothing is written; a failed lookup is never reported as `release_roles_no_pull_request`.
+- A repository whose resolved sink is `none` never reaches this step: the workflow already failed with `release_attestation_private_store_required` ([FR-071](./FR-071-release-attestations-publish-through-the-sinks.md)), which is checked first.
 - Otherwise the statements are verified under [FR-064](./FR-064-verify-approval-statement-with-workflow-identity-policy.md) and evaluated with the function of [FR-061](./FR-061-role-policy-and-distinct-individuals.md); an unsatisfied evaluation, including `approval_role_unstaffed`, writes nothing and reports the evaluation's named result.
 
 The verification summary names the tag in its resource and the release commit as a subject ([FR-068](./FR-068-verification-summary-signed-by-the-pinned-workflow.md)). A verifier that rereads the tag, and finds it altered, moved or re-signed by another key, gets a different `release-verify` result and rejects the set.
@@ -42,7 +43,7 @@ The verification summary names the tag in its resource and the release commit as
 - The release attestation workflow SHALL evaluate the role policy over those statements with the evaluation function of FR-061.
 - The release attestation workflow SHALL write nothing and report `release_roles_statements_pending` when the source reports a merged pull request for the tagged commit and no statement exists.
 - The release attestation workflow SHALL write nothing and report `release_roles_no_pull_request` when no merged pull request has the tagged commit as its merge result.
-- The release attestation workflow SHALL write nothing and report `release_roles_statements_not_retained` when the repository's sink is `none`.
+- The release attestation workflow SHALL write nothing and report `release_roles_source_unavailable` when the source lookup of the merged pull request fails.
 - The release attestation workflow SHALL write nothing and report `approval_role_unstaffed` naming the role when a required role is unstaffed.
 - The release attestation workflow SHALL write nothing when the role evaluation is not `satisfied`.
 - The release module SHALL NOT read an approval statement.
@@ -58,8 +59,8 @@ The verification summary names the tag in its resource and the release commit as
 | FR-067-AC-4 | A release with a valid tag and a policy of three roles with two covered yields nothing and names the missing role; a policy that lists an unstaffed role yields `approval_role_unstaffed` naming it. | Test |
 | FR-067-AC-5 | A tag pushed before the statement writer ran yields `release_roles_statements_pending`; after the statements exist the same run succeeds. | Test |
 | FR-067-AC-6 | A tag on a commit pushed directly, and a tag on a rebased commit that is not the tip, yield `release_roles_no_pull_request`. | Test |
-| FR-067-AC-7 | A repository with sink `none` yields `release_roles_statements_not_retained`. | Test |
-| FR-067-AC-8 | A tag pointing at the release pull request's head commit instead of the merged commit finds no statements and yields `release_roles_no_pull_request`. | Test |
+| FR-067-AC-7 | A source lookup that fails yields `release_roles_source_unavailable`, not `release_roles_no_pull_request`; after the source recovers the same run proceeds. | Test |
+| FR-067-AC-8 | A tag pointing at the release pull request's head commit instead of the merged commit finds no statements and yields `release_roles_no_pull_request`; a release pull request merged by a merge commit yields `not_released` with `release_commit_not_child_of_baseline` and no statement; a rebase merge whose tip is the release commit and a squash merge each attest. | Test |
 | FR-067-AC-9 | A fixture tag moved to another commit after attestation makes the verification of the set fail, and a satisfied role evaluation with no signed tag yields no statement. | Test |
 | FR-067-AC-10 | Static inspection shows no code path of the release module reads an approval statement and that the role step is in the attestation workflow code (FR-065-AC-5). | Inspection |
 

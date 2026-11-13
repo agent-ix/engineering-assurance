@@ -36,3 +36,14 @@ findings below are statements that conform to the grammar but cannot be tested a
 
 Conforms to EARS. FND-001 and FND-002 need fixing for the ACs to be testable; FND-003 and FND-004 are
 wording.
+
+## Dispositions
+
+Round 1, head 428c2bd (fix commits 5bab3f1..428c2bd).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |

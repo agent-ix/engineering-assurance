@@ -48,3 +48,27 @@ the FR-058 instruction to admit the prefix before writing the literal URI.
 
 Not mergeable: FND-001 and FND-002 make the identity policy and the public record unbuildable as written.
 Both have small, local fixes. FND-003 to FND-007 belong to the same fix round.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-009 | medium | Sink `none` now has competing error codes. A public repository on `none` gets `release_attestation_public_log_required` (FR-071 Behavior, FR-071-AC-3) and also `release_attestation_private_store_required` ("a repository whose resolved sink is `none`", FR-071-AC-5), and FR-067 adds a third, `release_roles_statements_not_retained` (FR-067-AC-7). FR-074 has the same pair for receipts (`receipt_public_log_required` and `receipt_private_store_required`; FR-074-AC-7 asserts both), and the evaluation order is unspecified, so the code reported depends on the implementation. Fix: check `none` first, whatever the visibility, with one code per feature (`release_attestation_private_store_required`, `receipt_private_store_required`); limit the `*_public_log_required` rules to a public repository on `private_store`; replace `release_roles_statements_not_retained` with FR-071's code, or state that it is never reached; update FR-071-AC-3 and FR-074-AC-7. | spec/functional/FR-071-release-attestations-publish-through-the-sinks.md:24 |
+| FND-010 | medium | "Every digest in this specification is `sha256:` ... over the RFC 8785 canonical bytes of the named JSON document" overreaches. It contradicts FR-047 (the record digest is a git blob id and the release module computes no hash), FR-056 `subject_commit` (a git object id) and FR-066 (artifact files hashed over their raw bytes). `reviews[].artifact_digest` is a digest of a Markdown SpecReview file, not a JSON document, so the rule cannot apply to it and that member's old grammar line was removed. Fix: "every digest in this predicate"; define `artifact_digest` as `sha256:` plus 64 lowercase hex over the file's raw bytes; add it to FR-072-AC-7. | spec/functional/FR-072-change-record-predicate.md:26 |
+| FND-011 | medium | FR-067 says "a squash or merge-commit merge of the release pull request must produce" the release commit. FR-047 requires the release commit to have exactly one parent, the baseline commit, and a merge commit has two, so `release-verify` always reports `release_commit_not_child_of_baseline` for that method. Fix: name squash, or a rebase merge whose tip is the release commit, as the methods that yield a valid release commit; state that a merge-commit merge yields `not_released`; add it to FR-067-AC-8. | spec/functional/FR-067-release-attestations-bind-to-the-signed-release-tag.md:28 |
+| FND-012 | low | The new FR-064-AC-13 and FR-064-AC-14 have no tests.md rows. No wave-1 FR-054..FR-065 AC has one on main either, so this continues an existing gap rather than introducing a new one. Fix: add TC rows for the two new ACs (and, separately, for the wave-1 set). | spec/functional/FR-064-verify-approval-statement-with-workflow-identity-policy.md:97 |
+
+## Dispositions
+
+Round 1, head 428c2bd (fix commits 5bab3f1..428c2bd).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |
+| FND-005 | fixed | - |
+| FND-006 | fixed | - |
+| FND-007 | fixed | - |
+| FND-008 | fixed | - |

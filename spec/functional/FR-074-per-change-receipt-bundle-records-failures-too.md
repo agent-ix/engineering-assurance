@@ -27,7 +27,7 @@ Tracked by Linear EA-98. A receipt is the evidence for one commit that landed on
 
 A failing change gets a receipt too. A failed gate, an incomplete role set, a missing contract or a leak-check refusal produce a receipt with `status` `failed` and the matching failure codes, and a verification summary with result `FAILED`; a failure is never dropped to look like a pass. A commit with no receipt is itself the finding ([FR-077](./FR-077-missing-receipt-check.md)).
 
-The full private form goes to the private store first ([FR-056](./FR-056-public-and-private-record-split.md)). The signing configuration follows the resolved sink, as for releases ([FR-071](./FR-071-release-attestations-publish-through-the-sinks.md)): for a public repository the public transparency log is used only when the resolved sink is `public_log` and the leak check of [FR-057](./FR-057-fail-closed-pre-publish-leak-check.md) passed, and a public repository whose resolved sink is the private store or `none` fails with `receipt_public_log_required`; a private repository signs only through the platform's private instance, and when it is unavailable the workflow fails with `receipt_private_signing_unavailable` and never uses the public log; a repository whose resolved sink is `none` fails with `receipt_private_store_required`, because the receipt input and statements are not retained. Statement-level outcomes in the change record use the sink record verdicts: a receipt with status `passed` is published as `recorded` and `failed` as `failed` ([FR-076](./FR-076-receipt-storage-in-git-notes.md)).
+The full private form goes to the private store first ([FR-056](./FR-056-public-and-private-record-split.md)). The signing configuration follows the resolved sink, as for releases ([FR-071](./FR-071-release-attestations-publish-through-the-sinks.md)): for a public repository the public transparency log is used only when the resolved sink is `public_log` and the leak check of [FR-057](./FR-057-fail-closed-pre-publish-leak-check.md) passed, and a public repository whose resolved sink is the private store fails with `receipt_public_log_required`; a private repository signs only through the platform's private instance, and when it is unavailable the workflow fails with `receipt_private_signing_unavailable` and never uses the public log. The resolved sink is checked first, whatever the visibility: a repository whose resolved sink is `none` fails with `receipt_private_store_required`, because the receipt input and statements are not retained, and no other code is reported for it. The gate results in the test-result statement are as the `gates` job reported them: that job runs the merged code, and the receipt binds the commit, so a falsified result is attributable to it. Statement-level outcomes in the change record use the sink record verdicts: a receipt with status `passed` is published as `recorded` and `failed` as `failed` ([FR-076](./FR-076-receipt-storage-in-git-notes.md)).
 
 ## Behavior
 
@@ -38,9 +38,9 @@ The full private form goes to the private store first ([FR-056](./FR-056-public-
 - The receipt workflow SHALL list the input attestations of the summary by the digest of their RFC 8785 canonical bytes.
 - The receipt workflow SHALL write the full private form to the private store before signing.
 - The receipt workflow SHALL use the public transparency log for a public repository only when the resolved sink is `public_log` and the leak check passed.
-- The receipt workflow SHALL fail with `receipt_public_log_required` for a public repository whose resolved sink is the private store or `none`.
+- The receipt workflow SHALL fail with `receipt_public_log_required` for a public repository whose resolved sink is the private store.
 - The receipt workflow SHALL fail with `receipt_private_signing_unavailable` when a private repository's private signing instance is unavailable.
-- The receipt workflow SHALL fail with `receipt_private_store_required` for a repository whose resolved sink is `none`.
+- The receipt workflow SHALL fail with `receipt_private_store_required` for a repository whose resolved sink is `none`, whatever its visibility, before any other check.
 - The receipt workflow SHALL NOT use a public transparency log for a private repository.
 - The receipt workflow SHALL NOT sign with any credential an agent holds.
 
@@ -54,7 +54,7 @@ The full private form goes to the private store first ([FR-056](./FR-056-public-
 | FR-074-AC-4 | Altering one statement of the fixture receipt makes the summary's input digest check fail. | Test |
 | FR-074-AC-5 | The private store holds the full private form for the fixture change before the statements are signed, and holds it also for the failed receipt. | Test |
 | FR-074-AC-6 | A private repository's receipt, including a run with the private signing stand-in unavailable, makes zero calls to the stand-in public transparency log, and the unavailable run fails with `receipt_private_signing_unavailable`. | Test |
-| FR-074-AC-7 | A public repository configured `private_store` or `none` fails with `receipt_public_log_required`, and a repository on `none` fails with `receipt_private_store_required`; the stand-in public log receives no call. | Test |
+| FR-074-AC-7 | A public repository configured `private_store` fails with `receipt_public_log_required`; a public and a private repository on `none` each fail with `receipt_private_store_required` and no other code; the stand-in public log receives no call in any of the three cases. | Test |
 
 ## Dependencies
 

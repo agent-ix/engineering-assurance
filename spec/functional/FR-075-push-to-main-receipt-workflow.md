@@ -48,7 +48,7 @@ A direct push with no pull request, or a pull request with no receipt input, sti
 | FR-075-AC-3 | A gate that exits non-zero yields a failed receipt, and the default branch ref is unchanged by the failed run. | Test |
 | FR-075-AC-4 | A receipt policy on the pushed branch that differs from the protected base branch's does not change the gates that run. | Test |
 | FR-075-AC-5 | A commit before `adopted_at` gets no receipt and is not reported by the missing-receipt check. | Test |
-| FR-075-AC-6 | A gate command in the fixture receipt policy that tries to read the signing token or write a signed statement runs only in the `gates` job, which has neither the token nor the signing tooling, and the forged result file is verified against the digest of the artifact the signing job received. | Test |
+| FR-075-AC-6 | A gate command in the fixture receipt policy that tries to read the signing token or run the signing tooling runs only in the `gates` job, which has neither, receives no secrets and runs on a GitHub-hosted or ephemeral runner. | Test |
 | FR-075-AC-7 | A repository on sink `none` fails with `receipt_private_store_required` and no receipt is written. | Test |
 
 ## Dependencies

@@ -35,7 +35,7 @@ Out of scope: the signed tag and the release record ([FR-047](./FR-047-release-r
 
 - The release attestation workflow SHALL write one SLSA Provenance v1 statement for the release artifacts.
 - The release attestation workflow SHALL write one CycloneDX SBOM statement whose document comes from the Syft ingestion of FR-039.
-- The release attestation workflow SHALL write one test-result statement from the exported file of FR-069.
+- The release attestation workflow SHALL write one test-result statement from the export consumed under FR-069.
 - The release attestation workflow SHALL write one verification summary statement as FR-068 defines.
 - The release attestation workflow SHALL give the three statements other than the summary the artifact files as subjects.
 - The release attestation workflow SHALL give the verification summary the artifact files and the release commit as subjects.

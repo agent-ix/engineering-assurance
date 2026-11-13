@@ -53,3 +53,20 @@ with FR-047, FR-048 and NFR-007.
 
 Mergeable on scope once FND-001 is turned into a Quoin requirement request with a blocking edge (the EA spec
 itself only needs the citation) and FND-002 states the EA-109 boundary.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | medium | FR-069's quoted Quoin capability and PLAT-1687 (the Quoin ticket that blocks EA-97 and EA-108) disagree. PLAT-1687 exports a full Test Result statement with a caller-supplied subject and lists only passed and failed entries, with no stale or WARNED rule; FR-069 consumes a predicate file and adds the subjects itself. FR-069 does not name PLAT-1687, so the dependency cannot be followed. Fix: cite PLAT-1687 in FR-069, and later the Quoin FR id that replaces the quoted text; ask the quoin lane to align PLAT-1687's scope with the quoted capability (predicate only, stale in `failedTests`, the `result` rule). | spec/functional/FR-069-test-result-export-is-consumed-as-data.md:18 |
+
+## Dispositions
+
+Round 1, head 428c2bd (fix commits 5bab3f1..428c2bd).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | deferred | The EA side now states the required Quoin capability in FR-069; the Quoin requirement itself is tracked by PLAT-1687, which blocks EA-97 and EA-108 in Linear. Its scope does not yet match FR-069 (new FND-005). |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |

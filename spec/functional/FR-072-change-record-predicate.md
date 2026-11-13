@@ -23,14 +23,14 @@ relationships:
 
 Tracked by Linear EA-98. A per-change receipt carries one custom predicate, `change-record/v1`. Its type is the URI with scheme `https`, host `schemas.agent-ix.ai` and path `/attestation/change-record/v1`; the URI is an identity string and no document needs to be hosted there. The statement is a closed schema ([NFR-008](../non-functional/NFR-008-closed-schemas.md)) with one subject: the repository, the merged commit as a git commit digest and the merged tree as a git tree digest, so the receipt survives a squash merge.
 
-The predicate is written to be stored beside the code (git notes, [FR-076](./FR-076-receipt-storage-in-git-notes.md)), so it holds no ticket text, criteria text or model name. Those go to the private form ([FR-056](./FR-056-public-and-private-record-split.md)) and the predicate carries the hash that binds it. Every digest in this specification is `sha256:` followed by 64 lowercase hexadecimal characters computed over the RFC 8785 canonical bytes of the named JSON document; for the members below the named documents are the approval statement, the test-result statement, the agent BOM and the full private form. The private form's `change_record` is the text-bearing change record without the predicate's `private_form` member, so no digest contains itself. The predicate members are:
+The predicate is written to be stored beside the code (git notes, [FR-076](./FR-076-receipt-storage-in-git-notes.md)), so it holds no ticket text, criteria text or model name. Those go to the private form ([FR-056](./FR-056-public-and-private-record-split.md)) and the predicate carries the hash that binds it. Every digest in this predicate, except `artifact_digest`, is `sha256:` followed by 64 lowercase hexadecimal characters computed over the RFC 8785 canonical bytes of the named JSON document; for the members below the named documents are the approval statement, the test-result statement, the agent BOM and the full private form. The private form's `change_record` is the text-bearing change record without the predicate's `private_form` member, so no digest contains itself. The predicate members are:
 
 - `record_id`: the lowercase UUID of the record, equal in the private form.
 - `status`: `passed` or `failed`.
 - `ticket`: one reference `{kind, id}` of kind `linear_issue`, with the grammar of [FR-056](./FR-056-public-and-private-record-split.md); absent when the contract is missing.
 - `criteria`: the acceptance-criterion ids of the ticket, each of the form `AC-N` with N of 1 to 3 digits.
 - `spec_criteria`: the spec criterion ids those criteria trace to, each of the form `FR-N-AC-N` or `NFR-N-AC-N`.
-- `reviews`: a list of `{kind, verdict, artifact_digest}`; `kind` is one of `spec_review`, `code_review`, `rust_review`, `gap_analysis`; `verdict` is `pass`, `findings` or `fail`.
+- `reviews`: a list of `{kind, verdict, artifact_digest}`; `kind` is one of `spec_review`, `code_review`, `rust_review`, `gap_analysis`; `verdict` is `pass`, `findings` or `fail`; `artifact_digest` is `sha256:` followed by 64 lowercase hexadecimal characters computed over the raw bytes of the review artifact file, which is a Markdown file and not a JSON document.
 - `approvals`: one entry per role of the role policy ([FR-061](./FR-061-role-policy-and-distinct-individuals.md)): `{role, verdict}` with `verdict` `covered` or `missing`, plus `statement_digest` if and only if `verdict` is `covered`.
 - `test_results`: the digest of the test-result statement ([FR-074](./FR-074-per-change-receipt-bundle-records-failures-too.md)).
 - `agent_bom`: the digest of the agent BOM ([FR-073](./FR-073-agent-bom-in-cyclonedx-1-7.md)).
@@ -63,7 +63,7 @@ The predicate lists one `approvals` entry for every required role of the policy,
 | FR-072-AC-4 | The serialized predicate contains none of the fixture's ticket title, criterion text, model name, approver name or meaning. | Test |
 | FR-072-AC-5 | The statement's subject carries the squash commit and its tree for a squash-merged fixture. | Test |
 | FR-072-AC-6 | The predicate type is the URI with scheme `https`, host `schemas.agent-ix.ai` and path `/attestation/change-record/v1`. | Test |
-| FR-072-AC-7 | Recomputing each digest from the canonical bytes of the named document reproduces the predicate's value, and the stored change record has no `private_form` member. | Test |
+| FR-072-AC-7 | Recomputing each digest from the canonical bytes of the named document reproduces the predicate's value, `artifact_digest` reproduces from the raw bytes of the fixture review file, and the stored change record has no `private_form` member. | Test |
 
 ## Dependencies
 

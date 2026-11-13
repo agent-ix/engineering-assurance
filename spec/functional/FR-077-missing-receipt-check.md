@@ -17,7 +17,7 @@ relationships:
 
 ## Description
 
-Tracked by Linear EA-98. A commit pushed by a ruleset bypass, or a commit whose workflow failed to run, has no receipt, and nothing else would say so. There is no merge queue and no merge-time receipt check: the receipt is a post-merge record, and this check takes the place of a merge-time check as the detector. The `receipt-missing` command lists the first-parent commits of the default branch from `adopted_at` of the receipt policy ([FR-075](./FR-075-push-to-main-receipt-workflow.md)) that have no valid receipt, and the workflow `missing-receipt-check.yml` ([FR-070](./FR-070-release-and-receipt-workflow-files.md)) runs it on a schedule and on demand and fails when the list is not empty. An `adopted_at` that is not on the first-parent history of the default branch is refused with `receipt_policy_adopted_at_invalid`. Each listed commit has a reason: `no_note` (no note under the notes ref), `invalid_receipt` (the receipt does not verify under [FR-078](./FR-078-receipt-verify.md)) or `status_unknown` (the note or the verification could not be read). A commit with unknown status counts as missing. A commit whose receipt run is still in progress, or that is newer than `grace_minutes` of the policy, is not listed. A valid receipt whose status is `failed` is not missing: it is listed separately as `failed_receipt`, so a recorded failure is visible without being called absent.
+Tracked by Linear EA-98. A commit pushed by a ruleset bypass, or a commit whose workflow failed to run, has no receipt, and nothing else would say so. There is no merge queue and no merge-time receipt check: the receipt is a post-merge record, and this check takes the place of a merge-time check as the detector. The `receipt-missing` command lists the first-parent commits of the default branch from `adopted_at` of the receipt policy ([FR-075](./FR-075-push-to-main-receipt-workflow.md)) that have no valid receipt, and the workflow `missing-receipt-check.yml` ([FR-070](./FR-070-release-and-receipt-workflow-files.md)) runs it on a schedule and on demand and fails when the list is not empty. An `adopted_at` that is not on the first-parent history of the default branch is refused with `receipt_policy_adopted_at_invalid`. Each listed commit has a reason: `no_note` (no note under the notes ref), `invalid_receipt` (the receipt does not verify under [FR-078](./FR-078-receipt-verify.md)) or `status_unknown` (the note or the verification could not be read). A commit with unknown status counts as missing. A commit's age is measured from the time it became reachable from the default branch, as the push event of the workflow run reports it, and never from the commit's author or committer date, which its author sets. A commit younger than `grace_minutes` of the policy is not listed, and a commit whose receipt run is still in progress is not listed only while it is within `grace_minutes`, so a stuck run cannot hide a commit. A valid receipt whose status is `failed` is not missing: it is listed separately as `failed_receipt`, so a recorded failure is visible without being called absent.
 
 ## Behavior
 
@@ -26,7 +26,8 @@ Tracked by Linear EA-98. A commit pushed by a ruleset bypass, or a commit whose 
 - The `receipt-missing` command SHALL list a commit whose receipt cannot be read with the reason `status_unknown`.
 - The `receipt-missing` command SHALL list a commit with a verified failed receipt as `failed_receipt` and not as missing.
 - The `receipt-missing` command SHALL refuse an `adopted_at` that is not on the first-parent history with `receipt_policy_adopted_at_invalid`.
-- The `receipt-missing` command SHALL exclude a commit whose receipt run is in progress or that is newer than `grace_minutes`.
+- The `receipt-missing` command SHALL measure a commit's age from the push time of the workflow run and not from a commit date.
+- The `receipt-missing` command SHALL exclude a commit younger than `grace_minutes` and a commit whose receipt run is in progress within `grace_minutes`.
 - The missing-receipt workflow SHALL fail when the list of missing commits is not empty.
 - The `receipt-missing` command SHALL NOT list a commit before `adopted_at`.
 
@@ -38,7 +39,7 @@ Tracked by Linear EA-98. A commit pushed by a ruleset bypass, or a commit whose 
 | FR-077-AC-2 | A commit with a verified failed receipt is listed as `failed_receipt` and does not fail the workflow by itself. | Test |
 | FR-077-AC-3 | A commit pushed by a ruleset bypass with no receipt is listed with `no_note`. | Test |
 | FR-077-AC-4 | Commits before `adopted_at` are not listed, and an `adopted_at` on a side branch only is refused with `receipt_policy_adopted_at_invalid`. | Test |
-| FR-077-AC-5 | A commit younger than `grace_minutes`, and a commit whose receipt run is in progress, are not listed; the same commit after the window with no note is listed. | Test |
+| FR-077-AC-5 | A commit pushed within `grace_minutes`, and a commit whose receipt run is in progress within that window, are not listed; the same commit after the window with no note is listed, including a stuck run; a commit with a committer date far in the future is listed once the push time is older than the window. | Test |
 | FR-077-AC-6 | An empty list leaves the workflow green, and a non-empty list fails it. | Test |
 
 ## Dependencies

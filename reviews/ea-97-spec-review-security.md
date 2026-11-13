@@ -49,3 +49,23 @@ tag runs foreign code in a job that can mint the trusted signing identity.
 
 Not mergeable: FND-001 to FND-003 are design-level holes in the signing boundary that the workflow code
 would inherit. FND-004 to FND-006 belong to the same round.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | medium | The reusable-workflow identity matches no trigger event and no caller workflow. Any consumer workflow that runs at the default branch ref (`schedule`, `workflow_dispatch`, `issue_comment`, or a `pull_request_target` in the consumer repository) can call `change-receipt.yml` and get a certificate that matches the `receipt_writer` entry. It can also pass any `commit` input, including a fork pull-request head that is reachable in the repository. Likewise `release.yml`'s `tag` input can name a tag other than the one that triggered the run. Fix: add the trigger `event` (`push`) and the caller `source_workflow_path` to the `release_attester` and `receipt_writer` entries in FR-064, matched against the certificate. Require the reusable workflows to reject an `inputs.commit` other than the pushed commit and an `inputs.tag` other than the triggering tag, or drop those inputs and read the trigger context. Add ACs. | spec/functional/FR-064-verify-approval-statement-with-workflow-identity-policy.md:40 |
+| FND-008 | low | FR-075-AC-6's "the forged result file is verified against the digest of the artifact the signing job received" is vacuous. The `gates` job runs the merged code and can write any result file, and the digest only shows that the bytes downloaded equal the bytes uploaded, so a forged file passes. The `gates` job is also not stated to receive no secrets or to run on an ephemeral runner. Fix: drop the digest clause; state in FR-074 that gate results are as reported by the `gates` job, which runs the merged code (the receipt binds the commit, so a falsified result is attributable); require the `gates` job to receive no secrets and to run on a GitHub-hosted or ephemeral runner. | spec/functional/FR-075-push-to-main-receipt-workflow.md:51 |
+
+## Dispositions
+
+Round 1, head 428c2bd (fix commits 5bab3f1..428c2bd).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |
+| FND-005 | fixed | - |
+| FND-006 | fixed | - |

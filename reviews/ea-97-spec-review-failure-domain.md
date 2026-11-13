@@ -48,3 +48,24 @@ Checked clean: failing changes still get receipts; unknown status counts as miss
 
 Mergeable on failure-domain grounds once FND-001 to FND-005 are specified. None needs a redesign, but each is
 a branch the implementation would otherwise have to invent.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | medium | `git notes merge -s cat_sort_uniq` concatenates and sorts the notes when both sides have a note for the same commit: a re-run of the receipt workflow, or a retry after `receipt_note_conflict`. That gives a six-line note with the line order lost, while FR-076 specifies three lines and FR-078 reads one receipt. Fix: the `notes` job skips a commit that already has a verified receipt; FR-078 identifies the three statements by predicate type, not line position, and specifies the result for more than three lines (for example: group by `record_id`, the latest verified receipt wins); add an AC for a re-run on the same commit. | spec/functional/FR-076-receipt-storage-in-git-notes.md:22 |
+| FND-008 | medium | The `grace_minutes` exclusion has no defined clock, and the in-progress exclusion has no bound. Commit dates are set by the author, so a bypass push with a future committer date would never be listed. "In progress, or newer than `grace_minutes`" also lets a stuck run hide a commit forever. Fix: measure age from the time the commit became reachable from the default branch, as the platform's push event reports it, never from commit dates; exclude an in-progress run only while it is within `grace_minutes`; add an AC with a future-dated commit. | spec/functional/FR-077-missing-receipt-check.md:29 |
+| FND-009 | low | FR-067's resolution has no outcome for a failed source lookup of the merged pull request, the analogue of FR-063's `approval_source_unavailable`. An implementer would report `release_roles_no_pull_request` for a transient failure. Fix: add a retryable `release_roles_source_unavailable` with an AC. | spec/functional/FR-067-release-attestations-bind-to-the-signed-release-tag.md:30 |
+
+## Dispositions
+
+Round 1, head 428c2bd (fix commits 5bab3f1..428c2bd).
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
+| FND-002 | fixed | - |
+| FND-003 | fixed | - |
+| FND-004 | fixed | - |
+| FND-005 | fixed | - |
+| FND-006 | fixed | - |
