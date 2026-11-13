@@ -19,3 +19,9 @@ Reviewed the producer boundary, its caller-owned offline database, supported fix
 | ID | Severity | Summary | Refs | Escape Cause |
 | --- | --- | --- | --- | --- |
 | FND-001 | medium | Lean component coverage is undecided, with no requirement to report unsupported components instead of allowing a clean result | spec/functional/FR-044-osv-scanner-advisory-scan-producer-request.md:103-113,162-163 | missing-requirement |
+
+## Dispositions
+
+| FND | outcome | reason / after_excerpt |
+| --- | --- | --- |
+| FND-001 | still-open | The updated fixture list now requires container OS-package coverage, but it still does not decide whether Lean manifest components are scanned or require an explicit unsupported outcome that cannot be read as clean. |

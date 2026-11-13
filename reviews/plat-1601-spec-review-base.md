@@ -23,3 +23,9 @@ The new scanner request is bounded to the retained SBOM and the existing produce
 | ID | Severity | Summary | Refs | Escape Cause |
 | --- | --- | --- | --- | --- |
 | FND-001 | high | Research and fixture instructions pin an exact scanner release and package versions | spec/functional/FR-044-osv-scanner-advisory-scan-producer-request.md:41-43,105-110 | wrong-requirement |
+
+## Dispositions
+
+| FND | outcome | reason / after_excerpt |
+| --- | --- | --- |
+| FND-001 | fixed | `The documented behavior below was reviewed from the OSV-Scanner project documentation and source.` The fixture requirement now names ecosystems and fixture contracts without pinning vulnerable package versions; output records observed report fields without pinning a scanner release. |
