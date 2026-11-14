@@ -753,7 +753,6 @@ mod tests {
         );
         assert_eq!(result.status, ApprovalStatementStatus::Verified);
         assert_eq!(result.role_verdict, before_merge);
-
     }
 
     #[trace("TC-969", "FR-065-AC-7")]
