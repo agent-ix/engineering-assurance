@@ -321,6 +321,11 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-070 | FR-070-AC-5 | TC-561 | 🚧 Specified |
 | FR-070 | FR-070-AC-6 | TC-562 | 🚧 Specified |
 | FR-070 | FR-070-AC-7 | TC-563 | 🚧 Specified |
+| FR-070 | FR-070-AC-8 | TC-664 | 🚧 Specified |
+| FR-070 | FR-070-AC-9 | TC-665 | 🚧 Specified |
+| FR-070 | FR-070-AC-10 | TC-666 | 🚧 Specified |
+| FR-070 | FR-070-AC-11 | TC-667 | 🚧 Specified |
+| FR-070 | FR-070-AC-12 | TC-668 | 🚧 Specified |
 | FR-071 | FR-071-AC-1 | TC-564 | 🚧 Specified |
 | FR-071 | FR-071-AC-2 | TC-565 | 🚧 Specified |
 | FR-071 | FR-071-AC-3 | TC-566 | 🚧 Specified |
@@ -895,6 +900,11 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-561 | No step in any of the five files invokes an agent harness or model client | Static | P0 | FR-070-AC-5 | 🚧 |
 | TC-562 | A `change-receipt.yml` run with a `commit` input that is not the pushed commit fails with `receipt_input_commit_mismatch`, and a `release-attestation.yml` run with a `tag` input that is not the triggering tag fails with ... | Integration | P0 | FR-070-AC-6 | 🚧 |
 | TC-563 | The `gates` job declares no `secrets` and no `environment`, and its `runs-on` is a GitHub-hosted label or an ephemeral runner label | Integration | P0 | FR-070-AC-7 | 🚧 |
+| TC-664 | YAML parsing confirms that quoin, quire-cli and quire-rs preserve their `workflow_dispatch` release workflows and add separate `tag-attestation.yml` workflows triggered by `push` of a `v*` tag, with build `contents: read`, an attestation reusable-workflow call with `contents: read`, `id-token: write`, `attestations: write`, and no dependency on the preserved publish workflows | Integration | P0 | FR-070-AC-8 | 🚧 |
+| TC-665 | Every caller uploads release files from `build` under the shared `artifact_name` default `release-artifacts`; quoin and quire-rs upload their existing `spec/evidence` stores under the shared `evidence_artifact` default `release-evidence`; the reusable workflow downloads named artifacts in `verify` | Integration | P0 | FR-070-AC-9 | 🚧 |
+| TC-666 | Quoin and quire-rs tag-attestation build jobs upload their existing `spec/evidence` stores; the Quoin exporter reads retained run records and `bindings.json`, uses workflow-computed artifact subjects, and performs no Git or network access | Integration | P0 | FR-070-AC-10 | 🚧 |
+| TC-667 | Engineering Assurance and quire-cli, with no retained evidence store, fail with `no_retained_evidence_store` before writing statements and neither upload an empty store nor accept a caller-built Test Result | Integration | P0 | FR-070-AC-11 | 🚧 |
+| TC-668 | YAML parsing confirms every caller's `ea_tooling_tag` matches the static reusable-workflow ref after `@` and is used for the trusted Engineering Assurance tooling download; `record_path` is explicit, and `allowed_signers_path` is read from the protected base even when the tag tree contains a different file | Integration | P0 | FR-070-AC-12 | 🚧 |
 | TC-564 | A public repository on the public sink with a clean leak check publishes a trimmed record of kind `release_attestation` whose bytes hold the summary digest, the release commit, the verdict `released` and timestamps only | Integration | P0 | FR-071-AC-1 | 🚧 |
 | TC-565 | A public repository referencing a private Linear team in the release record is refused by the leak check, and the stand-in attestation action is not called | Integration | P0 | FR-071-AC-2 | 🚧 |
 | TC-566 | A public repository configured `private_store` fails with `release_attestation_public_log_required` and the stand-in log receives no call | Integration | P0 | FR-071-AC-3 | 🚧 |
