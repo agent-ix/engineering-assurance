@@ -9,7 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::config::{ErrorCode, SinkKind, SinkSelection};
+use super::config::{ErrorCode, SinkKind, SinkSelection, valid_repository};
 use super::form::{PrivateRecord, PublicRecord, Record, RecordId, Signature};
 use super::leak::{CheckRefusal, Offending, PublicPathProof, VisibilityLookup, leak_check};
 
@@ -522,7 +522,7 @@ impl RecordSink for SinkLayer<'_> {
             let Some(destination) = self.selection.private_store_destination.as_deref() else {
                 return SinkResult::refused(kind, record.id(), ErrorCode::SinkConfigIncomplete);
             };
-            if !valid_repository_destination(destination)
+            if !valid_repository(destination)
                 || destination.eq_ignore_ascii_case(self.publishing_repository)
             {
                 return SinkResult::refused(kind, record.id(), ErrorCode::SinkConfigInvalid);
@@ -582,17 +582,4 @@ impl RecordSink for SinkLayer<'_> {
         }
         result
     }
-}
-
-fn valid_repository_destination(value: &str) -> bool {
-    let Some((owner, repository)) = value.split_once('/') else {
-        return false;
-    };
-    let valid_component = |part: &str| {
-        (1..=100).contains(&part.len())
-            && part
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
-    };
-    valid_component(owner) && valid_component(repository)
 }

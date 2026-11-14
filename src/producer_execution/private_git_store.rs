@@ -9,9 +9,9 @@
 //! Sigstore ports.
 
 use std::{
-    fs,
-    io::Read,
-    path::{Path, PathBuf},
+    fs::{self, OpenOptions},
+    io::{Read, Write},
+    path::{Component, Path, PathBuf},
     process::{Command, Output, Stdio},
     thread,
     time::{Duration, Instant},
@@ -26,7 +26,7 @@ use crate::{
         WorkflowRole,
     },
     record_sink::{
-        config::{PolicySource, SinkKind},
+        config::{PolicySource, SinkKind, valid_repository},
         form::{PrivateRecord, PublicRecord, RecordId},
         sink::{
             ApprovalStatementLookup, ApprovalStatementPublishOutcome, ApprovalStatementReadError,
@@ -215,17 +215,10 @@ impl<'a> GitPrivateStore<'a> {
             .tempdir()
             .map_err(|_| StoreError)?;
         let repository = temp.path().join("store");
-        let cloned = self.git(
-            None,
-            &[
-                "clone",
-                "--no-checkout",
-                "--",
-                &remote,
-                path_arg(&repository)?,
-            ],
-        )?;
-        require_success(&cloned)?;
+        let initialized = self.git(None, &["init", "--quiet", path_arg(&repository)?])?;
+        require_success(&initialized)?;
+        let origin = self.git(Some(&repository), &["remote", "add", "origin", &remote])?;
+        require_success(&origin)?;
         self.checkout_store_ref(&repository)?;
         operation(&repository)
     }
@@ -302,8 +295,13 @@ impl<'a> GitPrivateStore<'a> {
     fn write_file(&self, repository: &Path, path: &str, bytes: &[u8]) -> Result<(), StoreError> {
         let absolute = repository.join(path);
         let parent = absolute.parent().ok_or(StoreError)?;
-        fs::create_dir_all(parent).map_err(|_| StoreError)?;
-        fs::write(&absolute, bytes).map_err(|_| StoreError)?;
+        create_checkout_parents(repository, parent)?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&absolute)
+            .map_err(|_| StoreError)?;
+        file.write_all(bytes).map_err(|_| StoreError)?;
         let added = self.git(Some(repository), &["add", "--", path])?;
         require_success(&added)?;
         let committed = self.git(
@@ -361,28 +359,35 @@ impl<'a> GitPrivateStore<'a> {
         repository: &Path,
         record_path: &str,
         record_id: &RecordId,
-    ) -> Result<Option<OutcomeStatement>, StoreError> {
+    ) -> Result<Option<OutcomeStatement>, OutcomeReadError> {
         let path = format!("{record_path}outcome.json");
-        let Some(bytes) = self.read_file(repository, &path)? else {
+        let Some(bytes) = self
+            .read_file(repository, &path)
+            .map_err(|_| OutcomeReadError::Store)?
+        else {
             return Ok(None);
         };
-        let envelope: SignedOutcome = serde_json::from_slice(&bytes).map_err(|_| StoreError)?;
+        let envelope: SignedOutcome =
+            serde_json::from_slice(&bytes).map_err(|_| OutcomeReadError::Invalid)?;
         if envelope.protocol != ENVELOPE_PROTOCOL {
-            return Err(StoreError);
+            return Err(OutcomeReadError::Invalid);
         }
-        if serde_json_canonicalizer::to_vec(&envelope).map_err(|_| StoreError)? != bytes {
-            return Err(StoreError);
+        if serde_json_canonicalizer::to_vec(&envelope).map_err(|_| OutcomeReadError::Invalid)?
+            != bytes
+        {
+            return Err(OutcomeReadError::Invalid);
         }
         let statement_bytes = envelope.statement.as_bytes();
         let statement: OutcomeStatement =
-            serde_json::from_slice(statement_bytes).map_err(|_| StoreError)?;
+            serde_json::from_slice(statement_bytes).map_err(|_| OutcomeReadError::Invalid)?;
         if statement.protocol != PROTOCOL
             || statement.record_id != record_id.as_str()
             || statement.sink == SinkKind::None
         {
-            return Err(StoreError);
+            return Err(OutcomeReadError::Invalid);
         }
-        let canonical = serde_json_canonicalizer::to_vec(&statement).map_err(|_| StoreError)?;
+        let canonical =
+            serde_json_canonicalizer::to_vec(&statement).map_err(|_| OutcomeReadError::Invalid)?;
         if canonical != statement_bytes
             || self
                 .verifier
@@ -393,7 +398,7 @@ impl<'a> GitPrivateStore<'a> {
                 )
                 .is_err()
         {
-            return Err(StoreError);
+            return Err(OutcomeReadError::Invalid);
         }
         Ok(Some(statement))
     }
@@ -413,11 +418,14 @@ impl<'a> GitPrivateStore<'a> {
                     return Err(StoreError);
                 }
                 self.validate_public_state(repository, record_path, expected)?;
-                if let Some(current) = self.verified_outcome(
-                    repository,
-                    record_path,
-                    &RecordId::try_from(expected.record_id.clone()).map_err(|_| StoreError)?,
-                )? {
+                if let Some(current) = self
+                    .verified_outcome(
+                        repository,
+                        record_path,
+                        &RecordId::try_from(expected.record_id.clone()).map_err(|_| StoreError)?,
+                    )
+                    .map_err(|_| StoreError)?
+                {
                     self.validate_public_state(repository, record_path, &current)?;
                     return if current == *expected {
                         Ok(true)
@@ -501,6 +509,12 @@ struct OutcomeStatement {
     outcome: PublishOutcome,
 }
 
+#[derive(Clone, Copy)]
+enum OutcomeReadError {
+    Invalid,
+    Store,
+}
+
 impl PrivateStore for GitPrivateStore<'_> {
     fn write_private(&self, destination: &str, private: &PrivateRecord) -> Result<(), StoreError> {
         let repository = Self::record_path(&private.record_id, &self.publishing_repository)?;
@@ -535,13 +549,22 @@ impl PrivateStore for GitPrivateStore<'_> {
                         preparation = StorePreparation::NewRecord;
                     }
                     Some(existing) if existing == bytes => {
-                        let Some(outcome) =
-                            self.verified_outcome(repo, &repository, &private.record_id)?
-                        else {
+                        let outcome =
+                            match self.verified_outcome(repo, &repository, &private.record_id) {
+                                Ok(Some(outcome)) => outcome,
+                                Ok(None) | Err(OutcomeReadError::Invalid) => {
+                                    preparation = StorePreparation::OutcomeIncomplete;
+                                    return Ok(());
+                                }
+                                Err(OutcomeReadError::Store) => return Err(StoreError),
+                            };
+                        if self
+                            .validate_public_state(repo, &repository, &outcome)
+                            .is_err()
+                        {
                             preparation = StorePreparation::OutcomeIncomplete;
                             return Ok(());
-                        };
-                        self.validate_public_state(repo, &repository, &outcome)?;
+                        }
                         if outcome.sink != sink {
                             return Err(StoreError);
                         }
@@ -664,7 +687,8 @@ impl ApprovalStatementReader for GitPrivateStore<'_> {
                     .strip_suffix("private.json")
                     .ok_or(StoreError)?;
                 let outcome = self
-                    .verified_outcome(repository, record_path, &private.record_id)?
+                    .verified_outcome(repository, record_path, &private.record_id)
+                    .map_err(|_| StoreError)?
                     .ok_or(StoreError)?;
                 self.validate_public_state(repository, record_path, &outcome)?;
                 let Some(envelope_value) = private.statement.as_ref() else {
@@ -763,19 +787,6 @@ fn statement_matches(
     Ok(subject_matches && predicate_matches)
 }
 
-fn valid_repository(value: &str) -> bool {
-    let Some((owner, name)) = value.split_once('/') else {
-        return false;
-    };
-    let valid_component = |part: &str| {
-        (1..=100).contains(&part.len())
-            && part
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
-    };
-    valid_component(owner) && valid_component(name)
-}
-
 fn canonical_repository(value: &str) -> String {
     value.to_ascii_lowercase()
 }
@@ -848,10 +859,30 @@ fn path_arg(path: &Path) -> Result<&str, StoreError> {
     path.to_str().ok_or(StoreError)
 }
 
+fn create_checkout_parents(root: &Path, parent: &Path) -> Result<(), StoreError> {
+    let relative = parent.strip_prefix(root).map_err(|_| StoreError)?;
+    let mut current = root.to_path_buf();
+    for component in relative.components() {
+        let Component::Normal(name) = component else {
+            return Err(StoreError);
+        };
+        current.push(name);
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                fs::create_dir(&current).map_err(|_| StoreError)?;
+            }
+            Ok(_) | Err(_) => return Err(StoreError),
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
         collections::BTreeMap,
+        hash::{Hash, Hasher},
         path::Path,
         process::Command,
         sync::{
@@ -875,21 +906,26 @@ mod tests {
     const PULL_REQUEST: &str = "acme/ledger#42";
     static NEXT_CHECKOUT: AtomicUsize = AtomicUsize::new(0);
     const OIDC_ISSUER: &str = concat!("https:", "//token.actions.githubusercontent.com");
+    type FixturePayloads = Arc<Mutex<BTreeMap<String, (Vec<u8>, String)>>>;
 
-    fn identity_policy() -> Vec<u8> {
+    fn identity_policy(repository: &str) -> Vec<u8> {
         format!(
-            r#"{{"protocol":"engineering-assurance.workflow-identities/v1","identities":[{{"role":"record_publisher","issuer":"{OIDC_ISSUER}","repository":"acme/ledger","workflow_path":".github/workflows/publish.yml","ref":"refs/heads/main"}}]}}"#
+            r#"{{"protocol":"engineering-assurance.workflow-identities/v1","identities":[{{"role":"record_publisher","issuer":"{OIDC_ISSUER}","repository":"{repository}","workflow_path":".github/workflows/publish.yml","ref":"refs/heads/main"}}]}}"#
         )
         .into_bytes()
     }
 
     struct FixturePolicySource {
         protected: bool,
+        publisher_repository: String,
     }
 
     impl Default for FixturePolicySource {
         fn default() -> Self {
-            Self { protected: true }
+            Self {
+                protected: true,
+                publisher_repository: REPOSITORY.to_owned(),
+            }
         }
     }
 
@@ -899,7 +935,7 @@ mod tests {
         }
 
         fn read_from_base_branch(&self, path: &str) -> Option<Vec<u8>> {
-            (path == WORKFLOW_IDENTITIES_PATH).then(identity_policy)
+            (path == WORKFLOW_IDENTITIES_PATH).then(|| identity_policy(&self.publisher_repository))
         }
     }
 
@@ -916,10 +952,39 @@ mod tests {
         }
     }
 
-    #[derive(Clone, Default)]
+    #[derive(Clone)]
     struct FixtureSignatures {
-        next: Arc<AtomicUsize>,
-        payloads: Arc<Mutex<BTreeMap<String, Vec<u8>>>>,
+        payloads: FixturePayloads,
+        signing_repository: String,
+    }
+
+    impl Default for FixtureSignatures {
+        fn default() -> Self {
+            Self::for_repository(REPOSITORY)
+        }
+    }
+
+    impl FixtureSignatures {
+        fn for_repository(repository: &str) -> Self {
+            Self {
+                payloads: Arc::default(),
+                signing_repository: repository.to_owned(),
+            }
+        }
+
+        fn delegated_to(&self, repository: &str) -> Self {
+            Self {
+                payloads: self.payloads.clone(),
+                signing_repository: repository.to_owned(),
+            }
+        }
+
+        fn bundle_for(payload: &[u8], repository: &str) -> String {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            repository.hash(&mut hasher);
+            payload.hash(&mut hasher);
+            format!("AA{:016x}==", hasher.finish())
+        }
     }
 
     impl Signer for FixtureSignatures {
@@ -934,12 +999,14 @@ mod tests {
             &self,
             canonical: &[u8],
         ) -> Result<String, crate::record_sink::sink::SigningFailed> {
-            let index = self.next.fetch_add(1, Ordering::SeqCst);
-            let bundle = format!("fixture-outcome-{index}");
+            let bundle = Self::bundle_for(canonical, &self.signing_repository);
             self.payloads
                 .lock()
                 .map_err(|_| crate::record_sink::sink::SigningFailed)?
-                .insert(bundle.clone(), canonical.to_vec());
+                .insert(
+                    bundle.clone(),
+                    (canonical.to_vec(), self.signing_repository.clone()),
+                );
             Ok(bundle)
         }
 
@@ -951,7 +1018,7 @@ mod tests {
                 .lock()
                 .map_err(|_| crate::record_sink::sink::SigningFailed)?
                 .get(bundle)
-                .cloned()
+                .map(|(payload, _)| payload.clone())
                 .ok_or(crate::record_sink::sink::SigningFailed)
         }
     }
@@ -963,19 +1030,92 @@ mod tests {
             bundle_json: &str,
             policy: &WorkflowIdentityPolicy,
         ) -> Result<(), VerificationFailure> {
-            let payloads = self
-                .payloads
-                .lock()
-                .map_err(|_| VerificationFailure::InvalidSignature)?;
-            if policy.repository == "acme/ledger"
-                && payloads
-                    .get(bundle_json)
-                    .is_some_and(|signed| signed == payload)
-            {
+            if bundle_json == Self::bundle_for(payload, &policy.repository) {
                 Ok(())
             } else {
                 Err(VerificationFailure::InvalidSignature)
             }
+        }
+    }
+
+    struct CountingStore<'a> {
+        inner: &'a GitPrivateStore<'a>,
+        sink_calls: &'a Path,
+    }
+
+    impl ApprovalStatementReader for CountingStore<'_> {
+        fn lookup_approval_statements(
+            &self,
+            destination: &str,
+            lookup: ApprovalStatementLookup<'_>,
+        ) -> Result<Vec<RetainedApprovalStatement>, ApprovalStatementReadError> {
+            self.inner.lookup_approval_statements(destination, lookup)
+        }
+    }
+
+    impl PrivateStore for CountingStore<'_> {
+        fn write_private(
+            &self,
+            destination: &str,
+            private: &PrivateRecord,
+        ) -> Result<(), StoreError> {
+            self.inner.write_private(destination, private)
+        }
+
+        fn prepare_record(
+            &self,
+            destination: &str,
+            private: &PrivateRecord,
+            public: &PublicRecord,
+            sink: SinkKind,
+        ) -> Result<StorePreparation, StoreError> {
+            self.inner
+                .prepare_record(destination, private, public, sink)
+        }
+
+        fn write_public(&self, destination: &str, public: &PublicRecord) -> Result<(), StoreError> {
+            let mut file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(self.sink_calls)
+                .map_err(|_| StoreError)?;
+            file.write_all(b"sink\n").map_err(|_| StoreError)?;
+            self.inner.write_public(destination, public)
+        }
+
+        fn write_publish_outcome(
+            &self,
+            destination: &str,
+            record_id: &RecordId,
+            sink: SinkKind,
+            outcome: ApprovalStatementPublishOutcome,
+        ) -> Result<(), StoreError> {
+            self.inner
+                .write_publish_outcome(destination, record_id, sink, outcome)
+        }
+    }
+
+    struct PublicVisibility;
+
+    impl crate::record_sink::leak::VisibilityLookup for PublicVisibility {
+        fn repo_visibility(
+            &self,
+            _repo: &str,
+        ) -> Result<crate::record_sink::config::Visibility, crate::record_sink::leak::LookupFailed>
+        {
+            Ok(crate::record_sink::config::Visibility::Public)
+        }
+    }
+
+    struct UnusedPublicLog;
+
+    impl crate::record_sink::sink::PublicLogClient for UnusedPublicLog {
+        fn send(
+            &self,
+            _endpoint: &str,
+            _entry: &crate::record_sink::sink::CheckedEntry,
+        ) -> Result<(), crate::record_sink::sink::LogRejected> {
+            Err(crate::record_sink::sink::LogRejected)
         }
     }
 
@@ -1053,6 +1193,43 @@ mod tests {
         );
     }
 
+    fn remove_remote_file(executable: &Path, bare: &Path, path: &str, root: &Path) {
+        let checkout = root.join(format!(
+            "remove-checkout-{}",
+            NEXT_CHECKOUT.fetch_add(1, Ordering::SeqCst)
+        ));
+        git(
+            executable,
+            None,
+            &[
+                "clone",
+                "--branch",
+                BRANCH,
+                path_arg(bare).expect("bare path"),
+                path_arg(&checkout).expect("checkout path"),
+            ],
+        );
+        git(executable, Some(&checkout), &["rm", "--", path]);
+        git(
+            executable,
+            Some(&checkout),
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "commit",
+                "-m",
+                "remove private fixture file",
+            ],
+        );
+        git(
+            executable,
+            Some(&checkout),
+            &["push", "origin", &format!("HEAD:{PRIVATE_RECORDS_REF}")],
+        );
+    }
+
     fn fixture_git() -> PathBuf {
         ["/usr/bin/git", "/usr/local/bin/git"]
             .into_iter()
@@ -1117,11 +1294,92 @@ mod tests {
         bare
     }
 
-    fn approval_record(repository: &str) -> Record {
-        approval_record_with_id(repository, RECORD_ID)
+    fn add_remote_branch(root: &Path, bare: &Path, executable: &Path, name: &str) {
+        let checkout = root.join(format!("branch-{name}"));
+        git(
+            executable,
+            None,
+            &[
+                "clone",
+                "--branch",
+                "main",
+                path_arg(bare).unwrap(),
+                path_arg(&checkout).unwrap(),
+            ],
+        );
+        git(executable, Some(&checkout), &["checkout", "-b", name]);
+        fs::write(checkout.join("unrelated.txt"), b"not fetched\n")
+            .expect("unrelated branch fixture writes");
+        git(executable, Some(&checkout), &["add", "unrelated.txt"]);
+        git(
+            executable,
+            Some(&checkout),
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "commit",
+                "-m",
+                "add unrelated branch",
+            ],
+        );
+        git(
+            executable,
+            Some(&checkout),
+            &["push", "origin", &format!("HEAD:refs/heads/{name}")],
+        );
     }
 
-    fn approval_record_with_id(repository: &str, record_id: &str) -> Record {
+    #[cfg(unix)]
+    fn add_owner_symlink_branch(root: &Path, bare: &Path, executable: &Path, outside: &Path) {
+        use std::os::unix::fs::symlink;
+
+        let checkout = root.join("symlink-seed");
+        git(
+            executable,
+            None,
+            &[
+                "clone",
+                "--branch",
+                "main",
+                path_arg(bare).unwrap(),
+                path_arg(&checkout).unwrap(),
+            ],
+        );
+        fs::create_dir_all(checkout.join("records")).expect("records fixture directory");
+        symlink(outside, checkout.join("records/61636d65"))
+            .expect("fixture uses an absolute symlink outside the checkout");
+        git(executable, Some(&checkout), &["add", "records"]);
+        git(
+            executable,
+            Some(&checkout),
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "commit",
+                "-m",
+                "seed malicious symlink",
+            ],
+        );
+        git(
+            executable,
+            Some(&checkout),
+            &["push", "origin", &format!("HEAD:{PRIVATE_RECORDS_REF}")],
+        );
+    }
+
+    fn approval_record(signatures: &FixtureSignatures, repository: &str) -> Record {
+        approval_record_with_id(signatures, repository, RECORD_ID)
+    }
+
+    fn approval_record_with_id(
+        signatures: &FixtureSignatures,
+        repository: &str,
+        record_id: &str,
+    ) -> Record {
         let statement = json!({
             "_type": STATEMENT_TYPE,
             "subject": [{"name": REPOSITORY, "digest": {"gitCommit": MERGED_COMMIT}}],
@@ -1153,12 +1411,76 @@ mod tests {
             .as_bytes(),
         )
         .expect("valid public form");
+        let statement_bytes =
+            serde_json_canonicalizer::to_vec(&statement).expect("canonical approval statement");
+        let signature_bundle = signatures
+            .sign_without_public_log(&statement_bytes)
+            .expect("fixture signer returns the approval bundle");
         let mut private = PrivateRecord::new(public.record_id.clone());
         private.statement = Some(json!({
             "statement": statement,
-            "signature_bundle": "exact-approval-bundle"
+            "signature_bundle": signature_bundle
         }));
         Record::new(public, private).expect("record forms share id")
+    }
+
+    fn signed_approval_fixture(
+        record: &Record,
+        signatures: &FixtureSignatures,
+    ) -> (Vec<u8>, String) {
+        let private_statement = record.private().statement.as_ref().expect("approval form");
+        let statement_bytes = serde_json_canonicalizer::to_vec(&private_statement["statement"])
+            .expect("canonical approval statement");
+        let signature_bundle = private_statement["signature_bundle"]
+            .as_str()
+            .expect("approval bundle is a string")
+            .to_owned();
+        assert!(
+            signatures
+                .payloads
+                .lock()
+                .expect("fixture signature map")
+                .get(&signature_bundle)
+                .is_some_and(|(payload, repository)| {
+                    payload == &statement_bytes && repository == REPOSITORY
+                }),
+            "fixture signer established this trusted bundle before storage"
+        );
+        (statement_bytes, signature_bundle)
+    }
+
+    fn persist_record_outcome(
+        store: &GitPrivateStore<'_>,
+        signatures: &FixtureSignatures,
+        record: &Record,
+        sink: SinkKind,
+        outcome: ApprovalStatementPublishOutcome,
+    ) {
+        assert_eq!(
+            store
+                .prepare_record(
+                    "agent-ix/private-records",
+                    record.private(),
+                    record.public(),
+                    sink,
+                )
+                .expect("record prepares"),
+            StorePreparation::NewRecord
+        );
+        if sink == SinkKind::PrivateStore && outcome == ApprovalStatementPublishOutcome::Published {
+            let bytes = record.public().signed_bytes().expect("public bytes");
+            let bundle = signatures
+                .sign_without_public_log(&bytes)
+                .expect("fixture signature");
+            let mut public = record.public().clone();
+            public.signature = Some(Signature::try_from(bundle).expect("valid fixture bundle"));
+            store
+                .write_public("agent-ix/private-records", &public)
+                .expect("public form is linked");
+        }
+        store
+            .write_publish_outcome("agent-ix/private-records", record.id(), sink, outcome)
+            .expect("signed terminal outcome is retained");
     }
 
     fn store<'a>(
@@ -1182,49 +1504,767 @@ mod tests {
         .expect("publisher identity is in protected policy")
     }
 
-    #[trace(
-        "TC-973",
-        "FR-054-AC-7",
-        "FR-054-AC-8",
-        "TC-974",
-        "FR-054-AC-8",
-        "TC-975",
-        "FR-054-AC-9",
-        "TC-980",
-        "FR-054-AC-14",
-        "TC-982",
-        "FR-054-AC-16"
-    )]
+    fn install_push_hook(bare: &Path, counter: &Path, wait_for: Option<usize>, reject: bool) {
+        use std::os::unix::fs::PermissionsExt;
+
+        let counter = path_arg(counter).expect("counter path");
+        assert!(!counter.contains('\''), "temp paths have no shell quote");
+        let barrier = wait_for.map_or_else(String::new, |target| {
+            format!("while [ \"$(wc -l < '{counter}')\" -lt {target} ]; do sleep 0.01; done\n")
+        });
+        let reject = if reject { "exit 1" } else { "exit 0" };
+        let script = format!("#!/bin/sh\nprintf 'push\\n' >> '{counter}'\n{barrier}{reject}\n");
+        let hook = bare.join("hooks/pre-receive");
+        fs::write(&hook, script).expect("pre-receive hook is installed");
+        let mut permissions = fs::metadata(&hook).expect("hook metadata").permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&hook, permissions).expect("hook is executable");
+    }
+
+    fn spawn_test_worker(
+        test_name: &str,
+        bare: &Path,
+        record_id: &str,
+        counter: &Path,
+    ) -> std::process::Child {
+        let test = format!("producer_execution::private_git_store::tests::{test_name}");
+        Command::new(std::env::current_exe().expect("current test executable"))
+            .args(["--exact", &test, "--nocapture"])
+            .env(
+                "EA_PRIVATE_STORE_REMOTE",
+                format!("file://{}", bare.display()),
+            )
+            .env("EA_PRIVATE_STORE_RECORD_ID", record_id)
+            .env("EA_PRIVATE_STORE_COUNTER", counter)
+            .spawn()
+            .expect("test worker starts")
+    }
+
+    fn private_write_worker_if_requested() -> bool {
+        let Ok(remote) = std::env::var("EA_PRIVATE_STORE_REMOTE") else {
+            return false;
+        };
+        let record_id = std::env::var("EA_PRIVATE_STORE_RECORD_ID").expect("worker record id");
+        let resolver = LocalResolver(remote);
+        let signatures = FixtureSignatures::default();
+        let store = store(&resolver, &signatures, &fixture_git());
+        let record = approval_record_with_id(&signatures, REPOSITORY, &record_id);
+        store
+            .write_private("agent-ix/private-records", record.private())
+            .expect("concurrent private write succeeds after bounded retry");
+        true
+    }
+
+    fn same_id_sink_worker_if_requested() -> bool {
+        let Ok(remote) = std::env::var("EA_PRIVATE_STORE_REMOTE") else {
+            return false;
+        };
+        let record_id = std::env::var("EA_PRIVATE_STORE_RECORD_ID").expect("worker record id");
+        let counter =
+            PathBuf::from(std::env::var("EA_PRIVATE_STORE_COUNTER").expect("worker call counter"));
+        let resolver = LocalResolver(remote);
+        let signatures = FixtureSignatures::default();
+        let git_executable = fixture_git();
+        let private_store = store(&resolver, &signatures, &git_executable);
+        let counted_store = CountingStore {
+            inner: &private_store,
+            sink_calls: &counter,
+        };
+        let lookup = PublicVisibility;
+        let client = UnusedPublicLog;
+        let ports = crate::record_sink::sink::Ports {
+            store: &counted_store,
+            lookup: &lookup,
+            signer: &signatures,
+            client: &client,
+        };
+        let selection = crate::record_sink::config::SinkSelection {
+            sink: SinkKind::PrivateStore,
+            source: crate::record_sink::config::SelectionSource::Configured,
+            public_log_endpoint: None,
+            private_store_destination: Some("agent-ix/private-records".to_owned()),
+            public_linear_teams: Vec::new(),
+        };
+        let layer = crate::record_sink::sink::SinkLayer::new(&selection, REPOSITORY, ports);
+        let record = approval_record_with_id(&signatures, REPOSITORY, &record_id);
+        let result = crate::record_sink::sink::RecordSink::publish(&layer, &record);
+        fs::write(
+            counter.with_extension(format!("{}.result", std::process::id())),
+            format!("{:?}", result.status),
+        )
+        .expect("worker result is retained");
+        true
+    }
+
+    fn assert_worker_succeeded(worker: std::process::Child) {
+        let output = worker.wait_with_output().expect("worker completes");
+        assert!(
+            output.status.success(),
+            "worker failed: {}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[trace("TC-976", "FR-054-AC-10")]
     #[test]
-    fn git_store_writes_canonical_forms_only_to_the_fixed_private_ref() {
+    fn concurrent_distinct_record_writes_retry_without_losing_either_file() {
+        if private_write_worker_if_requested() {
+            return;
+        }
         let temp = tempfile::tempdir().expect("temp dir");
         let git_executable = fixture_git();
         let bare = initialized_remote(temp.path(), &git_executable);
-        let source_root = temp.path().join("source");
-        fs::create_dir_all(&source_root).expect("source fixture directory");
-        let source_bare = initialized_remote(&source_root, &git_executable);
-        let remote = format!("file://{}", bare.display());
-        let resolver = LocalResolver(remote);
+        let resolver = LocalResolver(format!("file://{}", bare.display()));
         let signatures = FixtureSignatures::default();
-        let unprotected = FixturePolicySource { protected: false };
-        assert!(
-            GitPrivateStore::new(
-                &resolver,
-                &signatures,
-                &signatures,
-                &unprotected,
-                &RecordPublisherIdentity {
-                    repository: REPOSITORY.to_owned(),
-                    workflow_path: ".github/workflows/publish.yml".to_owned(),
-                    reference: "refs/heads/main".to_owned(),
-                },
-                REPOSITORY,
-                &git_executable,
-            )
-            .is_err()
+        let private_store = store(&resolver, &signatures, &git_executable);
+        let seed = approval_record_with_id(
+            &signatures,
+            REPOSITORY,
+            "1b9d6a3e-4f1c-4a52-9d0e-6c1f7a2b8e30",
         );
+        private_store
+            .write_private("agent-ix/private-records", seed.private())
+            .expect("private branch is seeded before the concurrent writes");
+        let pushes = temp.path().join("concurrent-pushes");
+        install_push_hook(&bare, &pushes, Some(2), false);
+        let ids = [
+            "1b9d6a3e-4f1c-4a52-9d0e-6c1f7a2b8e31",
+            "1b9d6a3e-4f1c-4a52-9d0e-6c1f7a2b8e32",
+        ];
+        let workers: Vec<_> = ids
+            .iter()
+            .map(|id| {
+                spawn_test_worker(
+                    "concurrent_distinct_record_writes_retry_without_losing_either_file",
+                    &bare,
+                    id,
+                    &pushes,
+                )
+            })
+            .collect();
+        for worker in workers {
+            assert_worker_succeeded(worker);
+        }
+        let refs = git_output(
+            &git_executable,
+            &[
+                "--git-dir",
+                path_arg(&bare).unwrap(),
+                "ls-tree",
+                "-r",
+                "--name-only",
+                PRIVATE_RECORDS_REF,
+            ],
+        );
+        let refs = String::from_utf8(refs).expect("private tree filenames are UTF-8");
+        assert!(refs.contains(&format!("{}/private.json", ids[0])));
+        assert!(refs.contains(&format!("{}/private.json", ids[1])));
+        assert!(
+            fs::read_to_string(pushes)
+                .expect("push attempts are logged")
+                .lines()
+                .count()
+                >= 3,
+            "the non-fast-forward writer refreshed and retried"
+        );
+    }
+
+    #[trace("TC-975", "FR-054-AC-9")]
+    #[test]
+    fn concurrent_reapplication_of_identical_private_bytes_survives_non_fast_forward() {
+        if private_write_worker_if_requested() {
+            return;
+        }
+        let temp = tempfile::tempdir().expect("temp dir");
+        let git_executable = fixture_git();
+        let bare = initialized_remote(temp.path(), &git_executable);
+        let pushes = temp.path().join("same-bytes-pushes");
+        install_push_hook(&bare, &pushes, Some(2), false);
+        let workers: Vec<_> = (0..2)
+            .map(|_| {
+                spawn_test_worker(
+                    "concurrent_reapplication_of_identical_private_bytes_survives_non_fast_forward",
+                    &bare,
+                    RECORD_ID,
+                    &pushes,
+                )
+            })
+            .collect();
+        for worker in workers {
+            assert_worker_succeeded(worker);
+        }
+        let private_path = format!(
+            "{}private.json",
+            GitPrivateStore::record_path(
+                &RecordId::try_from(RECORD_ID).expect("record id"),
+                REPOSITORY
+            )
+            .expect("record path")
+        );
+        let stored = git_output(
+            &git_executable,
+            &[
+                "--git-dir",
+                path_arg(&bare).unwrap(),
+                "show",
+                &format!("{PRIVATE_RECORDS_REF}:{private_path}"),
+            ],
+        );
+        let signatures = FixtureSignatures::default();
+        let record = approval_record(&signatures, REPOSITORY);
+        assert_eq!(
+            stored,
+            serde_json_canonicalizer::to_vec(record.private()).expect("canonical private form")
+        );
+        assert!(
+            fs::read_to_string(pushes)
+                .expect("push attempts are logged")
+                .lines()
+                .count()
+                >= 2,
+            "one identical writer had to retry the conflicting push"
+        );
+    }
+
+    #[trace("TC-976", "FR-054-AC-10")]
+    #[test]
+    fn five_rejected_pushes_leave_the_remote_ref_unchanged() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let git_executable = fixture_git();
+        let bare = initialized_remote(temp.path(), &git_executable);
+        let pushes = temp.path().join("rejected-pushes");
+        install_push_hook(&bare, &pushes, None, true);
+        let resolver = LocalResolver(format!("file://{}", bare.display()));
+        let signatures = FixtureSignatures::default();
         let store = store(&resolver, &signatures, &git_executable);
-        let record = approval_record(REPOSITORY);
+        let record = approval_record(&signatures, REPOSITORY);
+        assert!(
+            store
+                .write_private("agent-ix/private-records", record.private())
+                .is_err(),
+            "the bounded five-attempt write fails closed"
+        );
+        assert_eq!(
+            fs::read_to_string(pushes)
+                .expect("rejected pushes are logged")
+                .lines()
+                .count(),
+            MAX_PUSH_ATTEMPTS
+        );
+        assert!(
+            !Command::new(&git_executable)
+                .args([
+                    "--git-dir",
+                    path_arg(&bare).unwrap(),
+                    "show-ref",
+                    "--verify",
+                    PRIVATE_RECORDS_REF,
+                ])
+                .output()
+                .expect("fixed-ref query runs")
+                .status
+                .success()
+        );
+    }
+
+    #[trace("TC-984", "FR-054-AC-18")]
+    #[test]
+    fn concurrent_same_id_publish_invokes_the_selected_sink_at_most_once() {
+        if same_id_sink_worker_if_requested() {
+            return;
+        }
+        let temp = tempfile::tempdir().expect("temp dir");
+        let git_executable = fixture_git();
+        let bare = initialized_remote(temp.path(), &git_executable);
+        let pushes = temp.path().join("same-id-pushes");
+        let sink_calls = temp.path().join("selected-sink-calls");
+        install_push_hook(&bare, &pushes, Some(2), false);
+        let workers: Vec<_> = (0..2)
+            .map(|_| {
+                spawn_test_worker(
+                    "concurrent_same_id_publish_invokes_the_selected_sink_at_most_once",
+                    &bare,
+                    RECORD_ID,
+                    &sink_calls,
+                )
+            })
+            .collect();
+        for worker in workers {
+            assert_worker_succeeded(worker);
+        }
+        assert_eq!(
+            fs::read_to_string(&sink_calls).expect("the winning sink invocation is logged"),
+            "sink\n",
+            "only the process that prepared a new record invokes the sink"
+        );
+        let worker_results: Vec<_> = fs::read_dir(temp.path())
+            .expect("worker result directory")
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("selected-sink-calls.")
+            })
+            .map(|entry| fs::read_to_string(entry.path()).expect("worker result readable"))
+            .collect();
+        assert_eq!(
+            worker_results.len(),
+            2,
+            "worker statuses: {worker_results:?}"
+        );
+        let resolver = LocalResolver(format!("file://{}", bare.display()));
+        let signatures = FixtureSignatures::default();
+        let store = store(&resolver, &signatures, &git_executable);
+        let record = approval_record(&signatures, REPOSITORY);
+        assert_eq!(
+            store
+                .prepare_record(
+                    "agent-ix/private-records",
+                    record.private(),
+                    record.public(),
+                    SinkKind::PrivateStore,
+                )
+                .expect("winning terminal outcome is readable"),
+            StorePreparation::AlreadyPublished,
+            "worker statuses: {worker_results:?}"
+        );
+    }
+
+    #[trace("TC-993", "FR-055-AC-9")]
+    #[test]
+    fn private_store_fetches_only_its_fixed_ref_and_rejects_ref_configuration() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let git_executable = fixture_git();
+        let bare = initialized_remote(temp.path(), &git_executable);
+        let resolver = LocalResolver(format!("file://{}", bare.display()));
+        let signatures = FixtureSignatures::default();
+        let store = store(&resolver, &signatures, &git_executable);
+        let record = approval_record(&signatures, REPOSITORY);
+        store
+            .write_private("agent-ix/private-records", record.private())
+            .expect("fixed private branch is created");
+        add_remote_branch(temp.path(), &bare, &git_executable, "unrelated-secret");
+
+        let tracking_refs = store
+            .with_repository("agent-ix/private-records", |repository| {
+                let output = store.git(
+                    Some(repository),
+                    &["for-each-ref", "--format=%(refname)", "refs/remotes/origin"],
+                )?;
+                require_success(&output)?;
+                String::from_utf8(output.stdout).map_err(|_| StoreError)
+            })
+            .expect("only configured store ref is fetched");
+        assert_eq!(tracking_refs, format!("refs/remotes/origin/{BRANCH}\n"));
+        assert!(
+            crate::record_sink::config::SinkConfig::parse(
+                br#"{"protocol":"engineering-assurance.sink-config/v1","private_store":{"destination":"agent-ix/private-records","ref":"refs/heads/other"}}"#
+            )
+            .is_err(),
+            "an alternative ref member is rejected by the closed sink config"
+        );
+    }
+
+    #[trace("TC-987", "FR-056-AC-11")]
+    #[test]
+    fn approval_envelope_keeps_exact_statement_and_bundle_and_rejects_unknown_members() {
+        let signatures = FixtureSignatures::default();
+        let record = approval_record(&signatures, REPOSITORY);
+        let (signed_statement, signed_bundle) = signed_approval_fixture(&record, &signatures);
+        let private_envelope = record.private().statement.as_ref().expect("private form");
+        let decoded: ApprovalEnvelope = serde_json::from_value(private_envelope.clone())
+            .expect("exact statement envelope is accepted");
+        assert_eq!(
+            serde_json_canonicalizer::to_vec(&decoded.statement).expect("canonical statement"),
+            signed_statement
+        );
+        assert_eq!(decoded.signature_bundle, signed_bundle);
+
+        let mut unknown = private_envelope.clone();
+        unknown
+            .as_object_mut()
+            .expect("statement envelope object")
+            .insert("unexpected".to_owned(), json!(true));
+        assert!(
+            serde_json::from_value::<ApprovalEnvelope>(unknown).is_err(),
+            "unknown statement-envelope members fail closed"
+        );
+    }
+
+    #[trace("TC-990", "FR-064-AC-22")]
+    #[test]
+    fn malformed_private_form_and_git_read_failure_return_no_partial_lookup() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let git_executable = fixture_git();
+        let bare = initialized_remote(temp.path(), &git_executable);
+        let resolver = LocalResolver(format!("file://{}", bare.display()));
+        let signatures = FixtureSignatures::default();
+        let private_store = store(&resolver, &signatures, &git_executable);
+        let first = approval_record_with_id(
+            &signatures,
+            REPOSITORY,
+            "0a9d6a3e-4f1c-4a52-9d0e-6c1f7a2b8e34",
+        );
+        let second = approval_record_with_id(
+            &signatures,
+            REPOSITORY,
+            "1b9d6a3e-4f1c-4a52-9d0e-6c1f7a2b8e34",
+        );
+        persist_record_outcome(
+            &private_store,
+            &signatures,
+            &first,
+            SinkKind::PrivateStore,
+            ApprovalStatementPublishOutcome::Published,
+        );
+        persist_record_outcome(
+            &private_store,
+            &signatures,
+            &second,
+            SinkKind::PrivateStore,
+            ApprovalStatementPublishOutcome::Published,
+        );
+        let missing_outcome = approval_record_with_id(
+            &signatures,
+            REPOSITORY,
+            "2b9d6a3e-4f1c-4a52-9d0e-6c1f7a2b8e34",
+        );
+        assert_eq!(
+            private_store
+                .prepare_record(
+                    "agent-ix/private-records",
+                    missing_outcome.private(),
+                    missing_outcome.public(),
+                    SinkKind::PublicLog,
+                )
+                .expect("missing-outcome fixture is prepared"),
+            StorePreparation::NewRecord
+        );
+        let lookup = ApprovalStatementLookup {
+            repository: REPOSITORY,
+            merged_pull_request: PULL_REQUEST,
+            merged_commit: MERGED_COMMIT,
+        };
+        assert!(
+            private_store
+                .lookup_approval_statements("agent-ix/private-records", lookup)
+                .is_err(),
+            "a missing signed outcome makes the whole lookup unreadable"
+        );
+        private_store
+            .write_publish_outcome(
+                "agent-ix/private-records",
+                missing_outcome.id(),
+                SinkKind::PublicLog,
+                ApprovalStatementPublishOutcome::Refused,
+            )
+            .expect("fixture now has a signed refusal outcome");
+        let second_private = format!(
+            "{}private.json",
+            GitPrivateStore::record_path(second.id(), REPOSITORY).expect("record path")
+        );
+        update_remote_file(
+            &git_executable,
+            &bare,
+            &second_private,
+            b"{ malformed private form",
+            temp.path(),
+        );
+        assert!(
+            private_store
+                .lookup_approval_statements("agent-ix/private-records", lookup)
+                .is_err(),
+            "the first matching record is not returned partially when a later form is malformed"
+        );
+
+        let missing_resolver = LocalResolver(format!(
+            "file://{}",
+            temp.path().join("missing-private-store.git").display()
+        ));
+        let missing_store = store(&missing_resolver, &signatures, &git_executable);
+        assert!(
+            missing_store
+                .lookup_approval_statements("agent-ix/private-records", lookup)
+                .is_err(),
+            "failed Git tree access is input-unreadable"
+        );
+    }
+
+    #[trace("TC-983", "FR-054-AC-17", "TC-992", "FR-064-AC-24")]
+    #[test]
+    fn structurally_valid_changed_outcome_field_fails_lookup() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let git_executable = fixture_git();
+        let bare = initialized_remote(temp.path(), &git_executable);
+        let resolver = LocalResolver(format!("file://{}", bare.display()));
+        let signatures = FixtureSignatures::default();
+        let private_store = store(&resolver, &signatures, &git_executable);
+        let record = approval_record(&signatures, REPOSITORY);
+        persist_record_outcome(
+            &private_store,
+            &signatures,
+            &record,
+            SinkKind::PrivateStore,
+            ApprovalStatementPublishOutcome::Published,
+        );
+        let outcome_path = format!(
+            "{}outcome.json",
+            GitPrivateStore::record_path(record.id(), REPOSITORY).expect("record path")
+        );
+        let original = git_output(
+            &git_executable,
+            &[
+                "--git-dir",
+                path_arg(&bare).unwrap(),
+                "show",
+                &format!("{PRIVATE_RECORDS_REF}:{outcome_path}"),
+            ],
+        );
+        let mut envelope: SignedOutcome =
+            serde_json::from_slice(&original).expect("signed outcome parses");
+        let mut statement: OutcomeStatement =
+            serde_json::from_str(&envelope.statement).expect("outcome statement parses");
+        statement.outcome = PublishOutcome::Refused;
+        envelope.statement = String::from_utf8(
+            serde_json_canonicalizer::to_vec(&statement).expect("canonical changed outcome"),
+        )
+        .expect("canonical outcome is UTF-8");
+        update_remote_file(
+            &git_executable,
+            &bare,
+            &outcome_path,
+            &serde_json_canonicalizer::to_vec(&envelope).expect("canonical envelope"),
+            temp.path(),
+        );
+        assert_eq!(
+            private_store
+                .prepare_record(
+                    "agent-ix/private-records",
+                    record.private(),
+                    record.public(),
+                    SinkKind::PrivateStore,
+                )
+                .expect("invalid retained outcome is incomplete"),
+            StorePreparation::OutcomeIncomplete
+        );
+        assert!(
+            private_store
+                .lookup_approval_statements(
+                    "agent-ix/private-records",
+                    ApprovalStatementLookup {
+                        repository: REPOSITORY,
+                        merged_pull_request: PULL_REQUEST,
+                        merged_commit: MERGED_COMMIT,
+                    },
+                )
+                .is_err()
+        );
+    }
+
+    #[trace("TC-983", "FR-054-AC-17")]
+    #[test]
+    fn valid_signature_from_foreign_record_publisher_fails_lookup() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let git_executable = fixture_git();
+        let bare = initialized_remote(temp.path(), &git_executable);
+        let resolver = LocalResolver(format!("file://{}", bare.display()));
+        let signatures = FixtureSignatures::default();
+        let private_store = store(&resolver, &signatures, &git_executable);
+        let record = approval_record(&signatures, REPOSITORY);
+        persist_record_outcome(
+            &private_store,
+            &signatures,
+            &record,
+            SinkKind::PrivateStore,
+            ApprovalStatementPublishOutcome::Published,
+        );
+        let outcome_path = format!(
+            "{}outcome.json",
+            GitPrivateStore::record_path(record.id(), REPOSITORY).expect("record path")
+        );
+        let original = git_output(
+            &git_executable,
+            &[
+                "--git-dir",
+                path_arg(&bare).unwrap(),
+                "show",
+                &format!("{PRIVATE_RECORDS_REF}:{outcome_path}"),
+            ],
+        );
+        let mut envelope: SignedOutcome =
+            serde_json::from_slice(&original).expect("signed outcome parses");
+        let foreign_signer = signatures.delegated_to("acme/other-publisher");
+        envelope.signature_bundle = foreign_signer
+            .sign_without_public_log(envelope.statement.as_bytes())
+            .expect("foreign identity fixture signs the outcome");
+        let foreign_document =
+            WorkflowIdentityDocument::parse(&identity_policy("acme/other-publisher"))
+                .expect("foreign identity policy parses");
+        let foreign_policy = foreign_document
+            .signer_policy(
+                WorkflowRole::RecordPublisher,
+                "acme/other-publisher",
+                ".github/workflows/publish.yml",
+                "refs/heads/main",
+                TransparencyRequirement::TimestampOnly,
+            )
+            .expect("foreign publisher is trusted by its own policy fixture");
+        assert!(
+            foreign_signer
+                .verify(
+                    envelope.statement.as_bytes(),
+                    &envelope.signature_bundle,
+                    &foreign_policy,
+                )
+                .is_ok()
+        );
+        update_remote_file(
+            &git_executable,
+            &bare,
+            &outcome_path,
+            &serde_json_canonicalizer::to_vec(&envelope).expect("canonical foreign envelope"),
+            temp.path(),
+        );
+        assert!(
+            private_store
+                .lookup_approval_statements(
+                    "agent-ix/private-records",
+                    ApprovalStatementLookup {
+                        repository: REPOSITORY,
+                        merged_pull_request: PULL_REQUEST,
+                        merged_commit: MERGED_COMMIT,
+                    },
+                )
+                .is_err()
+        );
+    }
+
+    #[cfg(unix)]
+    #[trace("TC-973", "FR-054-AC-7")]
+    #[test]
+    fn checked_out_symlink_cannot_redirect_private_write_outside_the_clone() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let git_executable = fixture_git();
+        let bare = initialized_remote(temp.path(), &git_executable);
+        let outside = temp.path().join("outside-checkout");
+        fs::create_dir(&outside).expect("outside fixture directory");
+        add_owner_symlink_branch(temp.path(), &bare, &git_executable, &outside);
+
+        let resolver = LocalResolver(format!("file://{}", bare.display()));
+        let signatures = FixtureSignatures::default();
+        let store = store(&resolver, &signatures, &git_executable);
+        let record = approval_record(&signatures, REPOSITORY);
+        assert!(
+            store
+                .write_private("agent-ix/private-records", record.private())
+                .is_err(),
+            "a remote-controlled symlink in an ancestor component refuses the write"
+        );
+        assert!(
+            !outside
+                .join("6c6564676572")
+                .join(RECORD_ID)
+                .join("private.json")
+                .exists(),
+            "no file is written through the symlink outside the cloned checkout"
+        );
+    }
+
+    fn assert_persisted_forms_are_canonical(
+        record: &Record,
+        public: &PublicRecord,
+        bare: &Path,
+        git_executable: &Path,
+    ) -> (String, String) {
+        let private_path = format!(
+            "{}private.json",
+            GitPrivateStore::record_path(record.id(), REPOSITORY).expect("record path")
+        );
+        let public_path = format!(
+            "{}public.json",
+            GitPrivateStore::record_path(record.id(), REPOSITORY).expect("record path")
+        );
+        let outcome_path = format!(
+            "{}outcome.json",
+            GitPrivateStore::record_path(record.id(), REPOSITORY).expect("record path")
+        );
+        assert_eq!(
+            git_output(
+                git_executable,
+                &[
+                    "--git-dir",
+                    path_arg(bare).unwrap(),
+                    "show",
+                    &format!("{PRIVATE_RECORDS_REF}:{private_path}")
+                ],
+            ),
+            serde_json_canonicalizer::to_vec(record.private()).expect("canonical private form")
+        );
+        assert_eq!(
+            git_output(
+                git_executable,
+                &[
+                    "--git-dir",
+                    path_arg(bare).unwrap(),
+                    "show",
+                    &format!("{PRIVATE_RECORDS_REF}:{public_path}")
+                ],
+            ),
+            public.entry_bytes().expect("canonical public form")
+        );
+        let outcome: SignedOutcome = serde_json::from_slice(&git_output(
+            git_executable,
+            &[
+                "--git-dir",
+                path_arg(bare).unwrap(),
+                "show",
+                &format!("{PRIVATE_RECORDS_REF}:{outcome_path}"),
+            ],
+        ))
+        .expect("signed outcome envelope");
+        assert_eq!(outcome.protocol, ENVELOPE_PROTOCOL);
+        (private_path, public_path)
+    }
+
+    fn assert_source_repository_is_unchanged(source_bare: &Path, git_executable: &Path) {
+        assert_eq!(
+            git_output(
+                git_executable,
+                &[
+                    "--git-dir",
+                    path_arg(source_bare).unwrap(),
+                    "for-each-ref",
+                    "--format=%(refname)",
+                    "refs/heads/"
+                ],
+            ),
+            b"refs/heads/main\n"
+        );
+        assert!(
+            !Command::new(git_executable)
+                .args([
+                    "--git-dir",
+                    path_arg(source_bare).unwrap(),
+                    "show-ref",
+                    "--verify",
+                    "refs/notes/engineering-assurance-receipts",
+                ])
+                .output()
+                .expect("source notes lookup runs")
+                .status
+                .success()
+        );
+    }
+
+    fn assert_private_form_round_trip(
+        store: &GitPrivateStore<'_>,
+        record: &Record,
+        bare: &Path,
+        source_bare: &Path,
+        git_executable: &Path,
+    ) -> (String, String) {
         assert_eq!(
             store
                 .prepare_record(
@@ -1244,7 +2284,7 @@ mod tests {
                     record.public(),
                     SinkKind::PrivateStore,
                 )
-                .expect("an unfinished prior record fails closed"),
+                .expect("unfinished prior record fails closed"),
             StorePreparation::OutcomeIncomplete
         );
         let mut public = record.public().clone();
@@ -1260,122 +2300,23 @@ mod tests {
                 ApprovalStatementPublishOutcome::Published,
             )
             .expect("signed outcome is stored");
-        let private_path = format!("records/61636d65/6c6564676572/{RECORD_ID}/private.json");
-        let public_path = format!("records/61636d65/6c6564676572/{RECORD_ID}/public.json");
-        let outcome_path = format!("records/61636d65/6c6564676572/{RECORD_ID}/outcome.json");
-        let git_dir = ["--git-dir", bare.to_str().unwrap()];
-        let stored_private = git_output(
-            &git_executable,
-            &[
-                &git_dir[0],
-                &git_dir[1],
-                "show",
-                &format!("{PRIVATE_RECORDS_REF}:{private_path}"),
-            ],
-        );
-        assert_eq!(
-            stored_private,
-            serde_json_canonicalizer::to_vec(record.private()).expect("canonical private form")
-        );
-        let stored_public = git_output(
-            &git_executable,
-            &[
-                &git_dir[0],
-                &git_dir[1],
-                "show",
-                &format!("{PRIVATE_RECORDS_REF}:{public_path}"),
-            ],
-        );
-        assert_eq!(
-            stored_public,
-            public.entry_bytes().expect("canonical public form")
-        );
-        let stored_outcome: SignedOutcome = serde_json::from_slice(&git_output(
-            &git_executable,
-            &[
-                &git_dir[0],
-                &git_dir[1],
-                "show",
-                &format!("{PRIVATE_RECORDS_REF}:{outcome_path}"),
-            ],
-        ))
-        .expect("signed outcome envelope");
-        assert_eq!(stored_outcome.protocol, ENVELOPE_PROTOCOL);
-        let source_refs = git_output(
-            &git_executable,
-            &[
-                "--git-dir",
-                source_bare.to_str().unwrap(),
-                "for-each-ref",
-                "--format=%(refname)",
-                "refs/heads/",
-            ],
-        );
-        assert_eq!(source_refs, b"refs/heads/main\n");
-        assert!(
-            !Command::new(&git_executable)
-                .args([
-                    "--git-dir",
-                    source_bare.to_str().unwrap(),
-                    "show-ref",
-                    "--verify",
-                    "refs/notes/engineering-assurance-receipts"
-                ])
-                .output()
-                .expect("source notes lookup runs")
-                .status
-                .success()
-        );
-        let private_path = format!("records/61636d65/6c6564676572/{RECORD_ID}/private.json");
-        let private_blob = git_stdout(
-            &git_executable,
-            &[
-                "--git-dir",
-                bare.to_str().unwrap(),
-                "rev-parse",
-                &format!("{PRIVATE_RECORDS_REF}:{private_path}"),
-            ],
-        );
-        store
-            .write_private("agent-ix/private-records", record.private())
-            .expect("identical private writes are idempotent");
-        assert_eq!(
-            git_stdout(
-                &git_executable,
-                &[
-                    "--git-dir",
-                    bare.to_str().unwrap(),
-                    "rev-parse",
-                    &format!("{PRIVATE_RECORDS_REF}:{private_path}"),
-                ],
-            ),
-            private_blob
-        );
-        let mut changed_private = record.private().clone();
-        changed_private.ticket_text = Some("different ticket".to_owned());
-        assert!(
-            store
-                .write_private("agent-ix/private-records", &changed_private)
-                .is_err()
-        );
-        assert_eq!(
-            git_stdout(
-                &git_executable,
-                &[
-                    "--git-dir",
-                    bare.to_str().unwrap(),
-                    "rev-parse",
-                    &format!("{PRIVATE_RECORDS_REF}:{private_path}"),
-                ],
-            ),
-            private_blob
-        );
-        let outcome_path = format!("records/61636d65/6c6564676572/{RECORD_ID}/outcome.json");
+        let paths = assert_persisted_forms_are_canonical(record, &public, bare, git_executable);
+        assert_source_repository_is_unchanged(source_bare, git_executable);
+        paths
+    }
+
+    fn assert_signed_outcome_is_immutable(
+        store: &GitPrivateStore<'_>,
+        record: &Record,
+        bare: &Path,
+        outcome_path: &str,
+        git_executable: &Path,
+    ) {
         let outcome_blob = git_stdout(
-            &git_executable,
+            git_executable,
             &[
                 "--git-dir",
-                bare.to_str().unwrap(),
+                path_arg(bare).unwrap(),
                 "rev-parse",
                 &format!("{PRIVATE_RECORDS_REF}:{outcome_path}"),
             ],
@@ -1387,29 +2328,85 @@ mod tests {
                 SinkKind::PrivateStore,
                 ApprovalStatementPublishOutcome::Published,
             )
-            .expect("same final outcome is idempotent");
-        assert!(
-            store
-                .write_publish_outcome(
-                    "agent-ix/private-records",
-                    record.id(),
-                    SinkKind::PrivateStore,
-                    ApprovalStatementPublishOutcome::Refused,
-                )
-                .is_err()
-        );
+            .expect("same signed outcome is idempotent");
+        for (sink, outcome) in [
+            (
+                SinkKind::PrivateStore,
+                ApprovalStatementPublishOutcome::Refused,
+            ),
+            (
+                SinkKind::PublicLog,
+                ApprovalStatementPublishOutcome::Published,
+            ),
+        ] {
+            assert!(
+                store
+                    .write_publish_outcome("agent-ix/private-records", record.id(), sink, outcome)
+                    .is_err()
+            );
+        }
         assert_eq!(
             git_stdout(
-                &git_executable,
+                git_executable,
                 &[
                     "--git-dir",
-                    bare.to_str().unwrap(),
+                    path_arg(bare).unwrap(),
                     "rev-parse",
-                    &format!("{PRIVATE_RECORDS_REF}:{outcome_path}"),
+                    &format!("{PRIVATE_RECORDS_REF}:{outcome_path}")
                 ],
             ),
             outcome_blob
         );
+    }
+
+    fn assert_private_writes_are_idempotent_and_outcomes_are_immutable(
+        store: &GitPrivateStore<'_>,
+        record: &Record,
+        bare: &Path,
+        public_path: &str,
+        temp_root: &Path,
+        git_executable: &Path,
+    ) {
+        let private_path = format!(
+            "{}private.json",
+            GitPrivateStore::record_path(record.id(), REPOSITORY).expect("record path")
+        );
+        let outcome_path = format!(
+            "{}outcome.json",
+            GitPrivateStore::record_path(record.id(), REPOSITORY).expect("record path")
+        );
+        let private_blob = git_stdout(
+            git_executable,
+            &[
+                "--git-dir",
+                path_arg(bare).unwrap(),
+                "rev-parse",
+                &format!("{PRIVATE_RECORDS_REF}:{private_path}"),
+            ],
+        );
+        store
+            .write_private("agent-ix/private-records", record.private())
+            .expect("identical private writes are idempotent");
+        let mut changed_private = record.private().clone();
+        changed_private.ticket_text = Some("different ticket".to_owned());
+        assert!(
+            store
+                .write_private("agent-ix/private-records", &changed_private)
+                .is_err()
+        );
+        assert_eq!(
+            git_stdout(
+                git_executable,
+                &[
+                    "--git-dir",
+                    path_arg(bare).unwrap(),
+                    "rev-parse",
+                    &format!("{PRIVATE_RECORDS_REF}:{private_path}")
+                ],
+            ),
+            private_blob
+        );
+        assert_signed_outcome_is_immutable(store, record, bare, &outcome_path, git_executable);
         assert_eq!(
             store
                 .prepare_record(
@@ -1418,22 +2415,32 @@ mod tests {
                     record.public(),
                     SinkKind::PrivateStore,
                 )
-                .expect("replay verifies the outcome"),
+                .expect("replay verifies outcome"),
             StorePreparation::AlreadyPublished
         );
-        let branch = Command::new(&git_executable)
-            .args([
-                "--git-dir",
-                bare.to_str().unwrap(),
-                "show-ref",
-                "--verify",
-                PRIVATE_RECORDS_REF,
-            ])
-            .output()
-            .expect("show-ref runs");
-        assert!(branch.status.success());
-        let public_log_record =
-            approval_record_with_id(REPOSITORY, "1b9d6a3e-4f1c-4a52-9d0e-6c1f7a2b8e35");
+        remove_remote_file(git_executable, bare, public_path, temp_root);
+        assert_eq!(
+            store
+                .prepare_record(
+                    "agent-ix/private-records",
+                    record.private(),
+                    record.public(),
+                    SinkKind::PrivateStore,
+                )
+                .expect("inconsistent public state is incomplete"),
+            StorePreparation::OutcomeIncomplete
+        );
+    }
+
+    fn assert_public_log_and_refused_replay(
+        store: &GitPrivateStore<'_>,
+        signatures: &FixtureSignatures,
+    ) {
+        let public_log_record = approval_record_with_id(
+            signatures,
+            REPOSITORY,
+            "1b9d6a3e-4f1c-4a52-9d0e-6c1f7a2b8e35",
+        );
         assert_eq!(
             store
                 .prepare_record(
@@ -1452,19 +2459,114 @@ mod tests {
                 SinkKind::PublicLog,
                 ApprovalStatementPublishOutcome::Published,
             )
-            .expect("public-log outcome is retained without a public form");
-        let public_log_path = format!(
-            "records/61636d65/6c6564676572/{}/public.json",
-            public_log_record.id().as_str()
+            .expect("public-log outcome is retained without public form");
+        let public_path = format!(
+            "{}public.json",
+            GitPrivateStore::record_path(public_log_record.id(), REPOSITORY)
+                .expect("public-log path")
         );
         assert!(
             store
                 .with_repository("agent-ix/private-records", |repository| {
-                    store.read_file(repository, &public_log_path)
+                    store.read_file(repository, &public_path)
                 })
                 .expect("public-log private store can be read")
                 .is_none()
         );
+        let refused_record = approval_record_with_id(
+            signatures,
+            REPOSITORY,
+            "1b9d6a3e-4f1c-4a52-9d0e-6c1f7a2b8e36",
+        );
+        persist_record_outcome(
+            store,
+            signatures,
+            &refused_record,
+            SinkKind::PublicLog,
+            ApprovalStatementPublishOutcome::Refused,
+        );
+        assert_eq!(
+            store
+                .prepare_record(
+                    "agent-ix/private-records",
+                    refused_record.private(),
+                    refused_record.public(),
+                    SinkKind::PublicLog,
+                )
+                .expect("refused outcome replays"),
+            StorePreparation::AlreadyRefused
+        );
+    }
+
+    fn assert_unprotected_policy_is_refused(
+        resolver: &LocalResolver,
+        signatures: &FixtureSignatures,
+        git_executable: &Path,
+    ) {
+        let unprotected = FixturePolicySource {
+            protected: false,
+            publisher_repository: REPOSITORY.to_owned(),
+        };
+        assert!(
+            GitPrivateStore::new(
+                resolver,
+                signatures,
+                signatures,
+                &unprotected,
+                &RecordPublisherIdentity {
+                    repository: REPOSITORY.to_owned(),
+                    workflow_path: ".github/workflows/publish.yml".to_owned(),
+                    reference: "refs/heads/main".to_owned(),
+                },
+                REPOSITORY,
+                git_executable,
+            )
+            .is_err()
+        );
+    }
+
+    #[trace(
+        "TC-973",
+        "FR-054-AC-7",
+        "FR-054-AC-8",
+        "TC-974",
+        "FR-054-AC-8",
+        "TC-975",
+        "FR-054-AC-9",
+        "TC-979",
+        "FR-054-AC-13",
+        "TC-980",
+        "FR-054-AC-14",
+        "TC-981",
+        "FR-054-AC-15",
+        "TC-982",
+        "FR-054-AC-16"
+    )]
+    #[test]
+    fn git_store_writes_canonical_forms_only_to_the_fixed_private_ref() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let git_executable = fixture_git();
+        let bare = initialized_remote(temp.path(), &git_executable);
+        let source_root = temp.path().join("source");
+        fs::create_dir_all(&source_root).expect("source fixture directory");
+        let source_bare = initialized_remote(&source_root, &git_executable);
+        let resolver = LocalResolver(format!("file://{}", bare.display()));
+        let signatures = FixtureSignatures::default();
+        assert_unprotected_policy_is_refused(&resolver, &signatures, &git_executable);
+        let store = store(&resolver, &signatures, &git_executable);
+        let record = approval_record(&signatures, REPOSITORY);
+        let (private_path, public_path) =
+            assert_private_form_round_trip(&store, &record, &bare, &source_bare, &git_executable);
+        assert_private_writes_are_idempotent_and_outcomes_are_immutable(
+            &store,
+            &record,
+            &bare,
+            &public_path,
+            temp.path(),
+            &git_executable,
+        );
+        assert_public_log_and_refused_replay(&store, &signatures);
+        assert!(private_path.ends_with("/private.json"));
     }
 
     #[trace("TC-977", "FR-054-AC-11")]
@@ -1480,9 +2582,88 @@ mod tests {
         );
     }
 
+    fn exact_lookup() -> ApprovalStatementLookup<'static> {
+        ApprovalStatementLookup {
+            repository: REPOSITORY,
+            merged_pull_request: PULL_REQUEST,
+            merged_commit: MERGED_COMMIT,
+        }
+    }
+
+    fn assert_lookup_mismatches_are_omitted(store: &GitPrivateStore<'_>) {
+        for lookup in [
+            ApprovalStatementLookup {
+                repository: REPOSITORY,
+                merged_pull_request: "acme/ledger#43",
+                merged_commit: MERGED_COMMIT,
+            },
+            ApprovalStatementLookup {
+                repository: "different/repository",
+                merged_pull_request: PULL_REQUEST,
+                merged_commit: MERGED_COMMIT,
+            },
+            ApprovalStatementLookup {
+                repository: REPOSITORY,
+                merged_pull_request: PULL_REQUEST,
+                merged_commit: "ffffffffffffffffffffffffffffffffffffffff",
+            },
+        ] {
+            assert!(
+                store
+                    .lookup_approval_statements("agent-ix/private-records", lookup)
+                    .expect("nonmatching query is readable")
+                    .is_empty()
+            );
+        }
+    }
+
+    fn assert_tampered_outcome_bundle_is_rejected(
+        store: &GitPrivateStore<'_>,
+        git_executable: &Path,
+        bare: &Path,
+        root: &Path,
+        record: &Record,
+    ) {
+        let outcome_path = format!(
+            "{}outcome.json",
+            GitPrivateStore::record_path(record.id(), REPOSITORY).expect("record path")
+        );
+        let mut altered: SignedOutcome = serde_json::from_slice(&git_output(
+            git_executable,
+            &[
+                "--git-dir",
+                path_arg(bare).unwrap(),
+                "show",
+                &format!("{PRIVATE_RECORDS_REF}:{outcome_path}"),
+            ],
+        ))
+        .expect("stored outcome parses");
+        altered.signature_bundle = "changed-bundle".to_owned();
+        update_remote_file(
+            git_executable,
+            bare,
+            &outcome_path,
+            &serde_json_canonicalizer::to_vec(&altered).expect("canonical altered outcome"),
+            root,
+        );
+        assert!(
+            store
+                .lookup_approval_statements("agent-ix/private-records", exact_lookup())
+                .is_err()
+        );
+        update_remote_file(git_executable, bare, &outcome_path, b"{ malformed", root);
+        assert!(
+            store
+                .lookup_approval_statements("agent-ix/private-records", exact_lookup())
+                .is_err()
+        );
+    }
+
     #[trace(
         "TC-978",
         "FR-054-AC-12",
+        "TC-988",
+        "FR-058-AC-10",
         "TC-989",
         "FR-064-AC-21",
         "TC-990",
@@ -1500,71 +2681,46 @@ mod tests {
         let resolver = LocalResolver(format!("file://{}", bare.display()));
         let signatures = FixtureSignatures::default();
         let store = store(&resolver, &signatures, &git_executable);
-        let record = approval_record(REPOSITORY);
-        store
-            .prepare_record(
-                "agent-ix/private-records",
-                record.private(),
-                record.public(),
-                SinkKind::PrivateStore,
-            )
-            .expect("record prepared");
-        let mut public = record.public().clone();
-        public.signature = Some(Signature::try_from("dGVzdA==").expect("fixture signature"));
-        store
-            .write_public("agent-ix/private-records", &public)
-            .expect("public form stored");
-        store
-            .write_publish_outcome(
-                "agent-ix/private-records",
-                record.id(),
-                SinkKind::PrivateStore,
-                ApprovalStatementPublishOutcome::Published,
-            )
-            .expect("signed outcome stored");
+        let record = approval_record(&signatures, REPOSITORY);
+        let (expected_statement_bytes, expected_bundle) =
+            signed_approval_fixture(&record, &signatures);
+        persist_record_outcome(
+            &store,
+            &signatures,
+            &record,
+            SinkKind::PrivateStore,
+            ApprovalStatementPublishOutcome::Published,
+        );
+        let earlier = approval_record_with_id(
+            &signatures,
+            REPOSITORY,
+            "0a9d6a3e-4f1c-4a52-9d0e-6c1f7a2b8e34",
+        );
+        let (_, earlier_bundle) = signed_approval_fixture(&earlier, &signatures);
+        persist_record_outcome(
+            &store,
+            &signatures,
+            &earlier,
+            SinkKind::PrivateStore,
+            ApprovalStatementPublishOutcome::Published,
+        );
 
         let retained = store
-            .lookup_approval_statements(
-                "agent-ix/private-records",
-                ApprovalStatementLookup {
-                    repository: REPOSITORY,
-                    merged_pull_request: PULL_REQUEST,
-                    merged_commit: MERGED_COMMIT,
-                },
-            )
-            .expect("exact approval statement is readable");
-        assert_eq!(retained.len(), 1);
-        assert_eq!(retained[0].signature_bundle, "exact-approval-bundle");
-        assert_eq!(
-            serde_json_canonicalizer::to_vec(
-                &serde_json::from_value::<Value>(
-                    record.private().statement.as_ref().unwrap()["statement"].clone()
+            .lookup_approval_statements("agent-ix/private-records", exact_lookup())
+            .expect("exact approval statements are readable");
+        assert_eq!(retained.len(), 2);
+        assert_eq!(retained[0].statement_bytes, expected_statement_bytes);
+        assert_eq!(retained[1].statement_bytes, expected_statement_bytes);
+        assert_eq!(retained[0].signature_bundle, earlier_bundle);
+        assert_eq!(retained[1].signature_bundle, expected_bundle);
+        assert!(retained.iter().all(|item| {
+            item.publish_outcome == ApprovalStatementPublishOutcome::Published
+                && serde_json_canonicalizer::to_vec(
+                    &serde_json::from_slice::<Value>(&item.statement_bytes)
+                        .expect("retained statement parses"),
                 )
-                .expect("nested statement")
-            )
-            .expect("canonical nested statement"),
-            retained[0].statement_bytes
-        );
-        assert_eq!(
-            retained[0].publish_outcome,
-            ApprovalStatementPublishOutcome::Published
-        );
-        assert_eq!(
-            serde_json_canonicalizer::to_vec(
-                &serde_json::from_slice::<Value>(&retained[0].statement_bytes,)
-                    .expect("statement JSON")
-            )
-            .expect("canonical statement"),
-            retained[0].statement_bytes
-        );
-        signatures
-            .payloads
-            .lock()
-            .expect("fixture signature map")
-            .insert(
-                retained[0].signature_bundle.clone(),
-                retained[0].statement_bytes.clone(),
-            );
+                .is_ok_and(|canonical| canonical == item.statement_bytes)
+        }));
         assert!(
             store
                 .verifier
@@ -1576,9 +2732,7 @@ mod tests {
                 .is_ok()
         );
         let mut changed_statement = retained[0].statement_bytes.clone();
-        if let Some(first) = changed_statement.first_mut() {
-            *first = b' ';
-        }
+        changed_statement[0] = b' ';
         assert!(
             store
                 .verifier
@@ -1589,83 +2743,13 @@ mod tests {
                 )
                 .is_err()
         );
-        assert!(
-            store
-                .lookup_approval_statements(
-                    "agent-ix/private-records",
-                    ApprovalStatementLookup {
-                        repository: REPOSITORY,
-                        merged_pull_request: "acme/ledger#43",
-                        merged_commit: MERGED_COMMIT,
-                    },
-                )
-                .expect("different pull request returns no match")
-                .is_empty()
-        );
-        assert!(
-            store
-                .lookup_approval_statements(
-                    "agent-ix/private-records",
-                    ApprovalStatementLookup {
-                        repository: REPOSITORY,
-                        merged_pull_request: PULL_REQUEST,
-                        merged_commit: "ffffffffffffffffffffffffffffffffffffffff",
-                    },
-                )
-                .expect("different merged commit returns no match")
-                .is_empty()
-        );
-        let outcome_path = format!("records/61636d65/6c6564676572/{RECORD_ID}/outcome.json");
-        let mut altered: SignedOutcome = serde_json::from_slice(&git_output(
-            &git_executable,
-            &[
-                "--git-dir",
-                bare.to_str().unwrap(),
-                "show",
-                &format!("{PRIVATE_RECORDS_REF}:{outcome_path}"),
-            ],
-        ))
-        .expect("stored outcome parses");
-        altered.signature_bundle = "changed-bundle".to_owned();
-        let altered_bytes =
-            serde_json_canonicalizer::to_vec(&altered).expect("canonical altered outcome");
-        update_remote_file(
+        assert_lookup_mismatches_are_omitted(&store);
+        assert_tampered_outcome_bundle_is_rejected(
+            &store,
             &git_executable,
             &bare,
-            &outcome_path,
-            &altered_bytes,
             temp.path(),
-        );
-        assert!(
-            store
-                .lookup_approval_statements(
-                    "agent-ix/private-records",
-                    ApprovalStatementLookup {
-                        repository: REPOSITORY,
-                        merged_pull_request: PULL_REQUEST,
-                        merged_commit: MERGED_COMMIT,
-                    },
-                )
-                .is_err()
-        );
-        update_remote_file(
-            &git_executable,
-            &bare,
-            &outcome_path,
-            b"{ malformed",
-            temp.path(),
-        );
-        assert!(
-            store
-                .lookup_approval_statements(
-                    "agent-ix/private-records",
-                    ApprovalStatementLookup {
-                        repository: REPOSITORY,
-                        merged_pull_request: PULL_REQUEST,
-                        merged_commit: MERGED_COMMIT,
-                    },
-                )
-                .is_err()
+            &record,
         );
     }
 }

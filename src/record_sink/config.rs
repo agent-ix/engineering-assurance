@@ -163,7 +163,7 @@ fn is_https_url(text: &str) -> bool {
     })
 }
 
-fn valid_repository(value: &str) -> bool {
+pub(crate) fn valid_repository(value: &str) -> bool {
     let Some((owner, name)) = value.split_once('/') else {
         return false;
     };
