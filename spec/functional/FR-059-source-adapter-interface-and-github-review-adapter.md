@@ -25,7 +25,7 @@ statement of [FR-058](./FR-058-approval-statement-and-predicate.md) does not dep
 approval, so a second adapter (Jira or another tracker) is added without a change to the predicate.
 
 An adapter approval carries the source, the account's stable identifier and display name, the source's timestamp, the
-commit the approval was given on, the pull request reference, the role, the meaning and the body as submitted.
+commit the approval was given on, the pull request reference, the role, the meaning and the body of an unedited review.
 
 The first adapter reads GitHub pull request reviews. Per reviewer, only that reviewer's latest review in the state
 `APPROVED`, `CHANGES_REQUESTED` or `DISMISSED` decides: a review in `COMMENTED` changes nothing, a later
@@ -34,9 +34,11 @@ review is `APPROVED`. The approver is the review author's account, identified by
 display only. Matching to the policy is by source and stable id only, so a renamed or re-registered login grants
 nothing.
 
-The review body is taken as submitted: the adapter reads the body from the submission of the review and ignores later
-edits, so a person with write access who edits another person's review body can neither add nor remove a marker line.
-Two marker lines are required, each at the start of a line, in a body whose line ends are LF or CRLF:
+The GitHub adapter accepts marker lines only from an unedited submitted review. If the source reports a last-edit
+timestamp or any edit-history entry, the review yields no approval regardless of whether the edit added or removed a
+marker line; the reviewer must submit a new review. If the adapter cannot establish that the review is unedited, it
+fails closed and returns no approval. It does not reconstruct or persist prior review bodies. Two marker lines are
+required, each at the start of a line, in a body whose line ends are LF or CRLF:
 
 - `Signed-off-meaning:` followed by one optional space and a value of 1 to 256 bytes of UTF-8 with no control
   character, with leading and trailing ASCII spaces removed.
@@ -60,7 +62,9 @@ Out of scope: any adapter other than GitHub, the writing of the statement (FR-05
 - The GitHub adapter SHALL decide each reviewer's approval from that reviewer's latest review in the state
   `APPROVED`, `CHANGES_REQUESTED` or `DISMISSED`.
 - The GitHub adapter SHALL return an approval only when that latest review is `APPROVED`.
-- The GitHub adapter SHALL read the review body as submitted and ignore later edits.
+- The GitHub adapter SHALL return no approval when the review has a last-edit timestamp or a non-empty edit history.
+- The GitHub adapter SHALL fail closed and return no approval when it cannot establish whether the review body was edited.
+- The reviewer SHALL submit a new review after editing a submitted review body for that approval to count.
 - The GitHub adapter SHALL read the meaning and the role from lines that start with `Signed-off-meaning:` and `Role:`
   in the review body.
 - The GitHub adapter SHALL return no approval for a body with zero or more than one line of either key.
@@ -82,7 +86,7 @@ Out of scope: any adapter other than GitHub, the writing of the statement (FR-05
 | FR-059-AC-3 | An `APPROVED` review with no meaning line, an empty meaning, a meaning over 256 bytes, a control character in the meaning, a mid-line `Signed-off-meaning`, no `Role:` line, or a role name outside the grammar, yields no approval; a CRLF-ended body with valid lines yields an approval. | Test |
 | FR-059-AC-4 | An `APPROVED` review with two meaning lines, or two `Role:` lines, even when equal, yields no approval. | Test |
 | FR-059-AC-5 | An `APPROVED` review followed by a `CHANGES_REQUESTED` review by the same reviewer on the same head yields no approval; a later dismissal yields none; a later `COMMENTED` review leaves the approval; a later `APPROVED` after `CHANGES_REQUESTED` restores it. | Test |
-| FR-059-AC-6 | A review body edited after submission to add a valid line yields no approval, and a body edited after submission to remove a line still yields the approval from the submitted body. | Test |
+| FR-059-AC-6 | An `APPROVED` review with a last-edit timestamp or non-empty edit history yields no approval whether the edit adds or removes a valid marker line; missing edit metadata yields no approval; a newly submitted, unedited `APPROVED` review with valid lines by that eligible reviewer yields one approval. | Test |
 | FR-059-AC-7 | An `APPROVED` review by an account listed under no individual, or naming a role the reviewer's individual is not listed for, yields no approval. | Test |
 | FR-059-AC-8 | A policy that lists a login-like string in place of the numeric id matches no account; an account renamed to a listed login that has a different numeric id yields no approval. | Test |
 | FR-059-AC-9 | A test adapter implementing the interface with a different source identifier produces approvals that FR-058 writes into statements with the unchanged predicate type and members. | Test |
