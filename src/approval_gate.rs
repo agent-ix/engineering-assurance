@@ -1341,8 +1341,6 @@ mod tests {
         "TC-931",
         "TC-932",
         "TC-933",
-        "FR-061-AC-10",
-        "FR-061-AC-11",
         "FR-061-AC-12"
     )]
     fn chooses_the_lexicographically_smallest_maximum_matching() {
