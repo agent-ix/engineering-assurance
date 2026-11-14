@@ -270,6 +270,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-057 | FR-057-AC-10 | TC-650 | ✅ `tests/record_sink.rs` passing |
 | FR-057 | FR-057-AC-11 | TC-650 | ✅ `tests/record_sink.rs` passing |
 | FR-058 | FR-058-AC-1 | TC-661 | ✅ `src/attestation_signing.rs` approval-statement fixture shape and canonicalization |
+| FR-058 | FR-058-AC-1 | TC-964 | ✅ `src/approval_statement.rs` an approval statement with an additional subject is rejected |
 | FR-058 | FR-058-AC-7 | TC-663 | ✅ `src/attestation_signing.rs` missing-OIDC refusal |
 | FR-061 | FR-061-AC-2 | TC-948 | 🚧 Specified; test implementation and trace tag await merge of the EA-110 code branch |
 | FR-061 | FR-061-AC-3 | TC-947 | 🚧 Specified; test implementation and trace tag await merge of the EA-110 code branch |
@@ -1032,6 +1033,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-961 | A verified statement naming an account listed as an agent leaves its role unsatisfied with `agent_only` | Unit | P0 | FR-062-AC-4 | ✅ `src/approval_statement.rs` passing |
 | TC-962 | A GitHub review approval and its verified statement produce identical FR-061 role verdicts under the same policy | Unit | P0 | FR-061-AC-9 | ✅ `src/approval_statement.rs` passing |
 | TC-963 | A statement naming the workflow identity as approver remains `untrusted_signer` when its signature bundle has an untrusted signer | Unit | P0 | FR-064-AC-6 | ✅ `src/approval_statement.rs` passing |
+| TC-964 | An authenticated approval statement with a second subject is rejected with `wrong_subject` and does not satisfy a role | Unit | P0 | FR-058-AC-1 | ✅ `src/approval_statement.rs` passing |
 | TC-912 | Source inspection finds zero public-log send paths that bypass the leak check | Static | P0 | NFR-009-AC-3, NFR-009-M-2 | 🚧 Unverified; source inspection not yet completed |
 | TC-913 | The CLI returns `satisfied` for an agent-authored pull request with distinct human approvals for the two required roles and reports both assigned account ids | Integration | P0 | FR-059-AC-1, FR-065-AC-10 | 🚧 `tests/approval_gate_cli.rs::agent_authored_pull_request_passes_with_distinct_human_role_approvals` is in merged #252; per-field source-approval assertions, the missing-role case, and agent/bot-review cases are not asserted here |
 | TC-914 | The latest review state controls an approval: a later change request or dismissal revokes it, a comment leaves it intact, and a fresh approval restores it; an old-head review and a bot review are excluded | Unit | P0 | FR-059-AC-2, FR-059-AC-5, FR-062-AC-1 | 🚧 `src/approval_gate.rs::tests::only_latest_valid_same_head_human_review_counts_and_agents_do_not` and `latest_decision_revokes_and_later_fresh_approval_restores` are in merged #252 |

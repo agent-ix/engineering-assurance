@@ -192,13 +192,16 @@ fn approval_from_statement(
     {
         return Err(VerificationFailure::InvalidStatement);
     }
-    let subject_matches = statement.subject.iter().any(|subject| {
-        subject.name == lookup.repository
-            && subject
-                .digest
-                .get("gitCommit")
-                .is_some_and(|commit| commit == lookup.merged_commit)
-    });
+    let subject_matches = match statement.subject.as_slice() {
+        [subject] => {
+            subject.name == lookup.repository
+                && subject
+                    .digest
+                    .get("gitCommit")
+                    .is_some_and(|commit| commit == lookup.merged_commit)
+        }
+        _ => false,
+    };
     if !subject_matches {
         return Err(VerificationFailure::WrongSubject);
     }
@@ -900,6 +903,47 @@ mod tests {
                 StatementStatus::SignatureInvalid,
             ]),
             (ApprovalStatementStatus::SignatureInvalid, None)
+        );
+    }
+
+    #[trace("TC-964", "FR-058-AC-1")]
+    #[test]
+    fn an_approval_with_an_additional_subject_is_rejected() {
+        let mut payload: Value =
+            serde_json::from_slice(&statement("1", "extra-subject-bundle").statement_bytes)
+                .expect("fixture parses");
+        payload["subject"]
+            .as_array_mut()
+            .expect("fixture has a subject list")
+            .push(json!({
+                "name": "fictional/other",
+                "digest": {"gitCommit": "another-commit"}
+            }));
+        let bytes = serde_json::to_vec(&payload).expect("changed fixture serializes");
+        let retained = RetainedApprovalStatement {
+            statement_bytes: bytes.clone(),
+            signature_bundle: "extra-subject-bundle".to_owned(),
+            publish_outcome: ApprovalStatementPublishOutcome::Published,
+        };
+        let verifier = FixtureVerifier {
+            expected: vec![(bytes, retained.signature_bundle.clone(), Ok(()))],
+            ..FixtureVerifier::default()
+        };
+        let reader = reader_for(vec![(LOOKUP.merged_pull_request, retained)]);
+
+        let result = verify_approval_statements(
+            &reader,
+            "private-store-a",
+            LOOKUP,
+            &identity_policy(),
+            &role_policy(),
+            &verifier,
+        );
+
+        assert_eq!(result.status, ApprovalStatementStatus::WrongSubject);
+        assert_eq!(
+            result.role_verdict.status,
+            approval_gate::GateStatus::Unsatisfied
         );
     }
 
