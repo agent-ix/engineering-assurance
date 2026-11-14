@@ -6,7 +6,8 @@
 
 use std::process::{Command, Stdio};
 
-use serde_json::{Value, json};
+use ix_trace_rs::trace;
+use serde_json::{json, Value};
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.review-gate-request/v1";
 
@@ -73,9 +74,9 @@ fn request(reviews: Vec<Value>) -> Value {
     })
 }
 
-/// Trace: FR-059-AC-1, FR-061-AC-1, FR-065-AC-2
+#[trace("FR-059-AC-1", "FR-061-AC-1", "FR-065-AC-10")]
 #[test]
-fn accepts_agent_authored_change_with_distinct_human_role_approvals() {
+fn agent_authored_pull_request_passes_with_distinct_human_role_approvals() {
     let result = run(request(vec![
         review("101", "security", "APPROVED", false),
         review("202", "technical", "APPROVED", false),
@@ -87,9 +88,17 @@ fn accepts_agent_authored_change_with_distinct_human_role_approvals() {
     );
     assert_eq!(result["assignments"][0]["account"]["id"], "101");
     assert_eq!(result["assignments"][1]["account"]["id"], "202");
+
+    let workflow = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/.github/workflows/review-gate.yml"
+    ))
+    .expect("review-gate workflow exists");
+    assert!(workflow.contains("  pull_request:"));
+    assert!(!workflow.contains("github.event.pull_request.user.type"));
 }
 
-/// Trace: FR-059-AC-6, FR-062-AC-1, FR-063-AC-1
+#[trace("FR-059-AC-6", "FR-062-AC-1")]
 #[test]
 fn edited_reviews_and_bot_reviews_cannot_satisfy_a_role() {
     let result = run(request(vec![
@@ -104,7 +113,7 @@ fn edited_reviews_and_bot_reviews_cannot_satisfy_a_role() {
     );
 }
 
-/// Trace: FR-065-AC-1, FR-070-AC-2, FR-070-AC-3
+#[trace("FR-061-AC-4", "FR-070-AC-2", "FR-070-AC-3")]
 #[test]
 fn workflow_is_explicitly_opt_in_and_has_no_signing_identity() {
     let workflow = std::fs::read_to_string(concat!(
@@ -115,12 +124,72 @@ fn workflow_is_explicitly_opt_in_and_has_no_signing_identity() {
     assert!(workflow.contains("vars.EA_REVIEW_GATE_ENABLED == 'true'"));
     assert!(workflow.contains("contents: read"));
     assert!(workflow.contains("pull-requests: read"));
+    assert!(workflow.contains("bash engine/scripts/prepare-review-gate-request.sh"));
     assert!(!workflow.contains("id-token:"));
     assert!(!workflow.contains("pull_request_target"));
     assert!(!workflow.contains("workflow_run"));
+    assert!(workflow.contains("ref: ${{ github.event.pull_request.base.sha || github.sha }}"));
+
+    let gate_source =
+        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/approval_gate.rs"))
+            .expect("approval gate implementation exists");
+    let gate_host = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/approval_gate_host.rs"
+    ))
+    .expect("approval gate adapter exists");
+    for signing_symbol in ["sign_approval", "sign_statement", "gitsign", "cosign"] {
+        assert!(!gate_source.contains(signing_symbol));
+        assert!(!gate_host.contains(signing_symbol));
+        assert!(!workflow.contains(signing_symbol));
+    }
+
+    let ruleset: Value =
+        serde_json::from_str(include_str!("../examples/main-review-gate-ruleset.json"))
+            .expect("review-gate ruleset is JSON");
+    let rules = ruleset["rules"].as_array().expect("rules");
+    let rule_types: Vec<_> = rules
+        .iter()
+        .filter_map(|rule| rule["type"].as_str())
+        .collect();
+    assert!(rule_types.contains(&"pull_request"));
+    assert!(rule_types.contains(&"required_status_checks"));
+    assert!(rule_types.contains(&"non_fast_forward"));
+    assert!(rule_types.contains(&"deletion"));
+    assert!(!rule_types.contains(&"merge_queue"));
+    let pull_request = rules
+        .iter()
+        .find(|rule| rule["type"] == "pull_request")
+        .expect("pull-request protection");
+    assert_eq!(
+        pull_request["parameters"]["dismiss_stale_reviews_on_push"],
+        true
+    );
+    assert_eq!(
+        pull_request["parameters"]["require_last_push_approval"],
+        true
+    );
+    let status_checks = rules
+        .iter()
+        .find(|rule| rule["type"] == "required_status_checks")
+        .expect("required review-gate status");
+    assert_eq!(
+        status_checks["parameters"]["strict_required_status_checks_policy"],
+        true
+    );
+    assert_eq!(
+        status_checks["parameters"]["required_status_checks"][0]["context"],
+        "review-gate / review-gate"
+    );
+    assert_eq!(
+        ruleset["bypass_actors"][0]["actor_type"],
+        "OrganizationAdmin"
+    );
+    assert_eq!(ruleset["bypass_actors"][0]["actor_id"], Value::Null);
+    assert_eq!(ruleset["bypass_actors"][0]["bypass_mode"], "pull_request");
 }
 
-/// Trace: FR-059-AC-6, FR-059-AC-7
+#[trace("FR-059-AC-6", "FR-063-AC-6")]
 #[test]
 fn unavailable_source_metadata_never_yields_approval() {
     let mut request = request(vec![review("101", "security", "APPROVED", false)]);
@@ -129,4 +198,73 @@ fn unavailable_source_metadata_never_yields_approval() {
     assert_eq!(result["status"], "unavailable");
     assert_eq!(result["assignments"], json!([]));
     assert_eq!(result["error"], "approval_source_unavailable");
+}
+
+#[trace("FR-061-AC-1", "FR-065-AC-6", "TC-526")]
+#[test]
+fn review_gate_requires_all_three_distinct_roles_before_merge() {
+    let policy = json!({
+        "protocol": "engineering-assurance.approval-policy/v1",
+        "required_roles": ["security", "technical", "stakeholder"],
+        "individuals": {
+            "alice": [{"source": "github", "id": "101"}],
+            "bob": [{"source": "github", "id": "202"}],
+            "carol": [{"source": "github", "id": "404"}]
+        },
+        "roles": {
+            "security": ["alice"],
+            "technical": ["bob"],
+            "stakeholder": ["carol"]
+        },
+        "agents": [{"source": "github", "id": "303"}]
+    });
+    let request_for_reviews = |reviews| {
+        json!({
+            "protocol": REQUEST_PROTOCOL,
+            "current_head": "head-1",
+            "policy": policy,
+            "reviews": reviews,
+            "account_types": [
+                {"account": {"source": "github", "id": "101"}, "account_type": "human"},
+                {"account": {"source": "github", "id": "202"}, "account_type": "human"},
+                {"account": {"source": "github", "id": "404"}, "account_type": "human"}
+            ]
+        })
+    };
+    let all_roles = run(request_for_reviews(vec![
+        review("101", "security", "APPROVED", false),
+        review("202", "technical", "APPROVED", false),
+        review("404", "stakeholder", "APPROVED", false),
+    ]));
+    assert_eq!(all_roles["status"], "satisfied");
+    assert_eq!(
+        all_roles["assignments"]
+            .as_array()
+            .expect("assignments")
+            .len(),
+        3
+    );
+
+    let missing_stakeholder = run(request_for_reviews(vec![
+        review("101", "security", "APPROVED", false),
+        review("202", "technical", "APPROVED", false),
+    ]));
+    assert_eq!(missing_stakeholder["status"], "unsatisfied");
+    assert_eq!(missing_stakeholder["missing"][0]["role"], "stakeholder");
+}
+
+#[trace("FR-063-AC-1")]
+#[test]
+fn an_empty_required_role_fails_visibly() {
+    let mut request = request(Vec::new());
+    request["policy"]["required_roles"]
+        .as_array_mut()
+        .expect("required roles")
+        .push(json!("stakeholder"));
+    request["policy"]["roles"]["stakeholder"] = json!([]);
+
+    let result = run(request);
+    assert_eq!(result["status"], "unsatisfied");
+    assert_eq!(result["error"], "approval_role_unstaffed");
+    assert_eq!(result["missing"][0]["role"], "stakeholder");
 }
