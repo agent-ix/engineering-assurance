@@ -20,7 +20,7 @@
 use std::{
     collections::{BTreeMap, btree_map::Entry},
     future::Future,
-    sync::Mutex,
+    sync::{Arc, Mutex},
     thread,
 };
 
@@ -368,20 +368,44 @@ where
 /// bounded, one-shot cache so blob bundles need not duplicate artifact bytes.
 pub struct SigstoreSigner {
     pending_payloads: Mutex<BTreeMap<String, Vec<u8>>>,
+    backend: Arc<dyn SigningBackend>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum SigningPath {
     PublicLog,
     NoPublicLog,
+}
+
+trait SigningBackend: Send + Sync {
+    fn sign(&self, payload: &[u8], signing_path: SigningPath) -> Result<String, SigningFailure>;
+}
+
+struct SigstoreSigningBackend;
+
+impl SigningBackend for SigstoreSigningBackend {
+    fn sign(&self, payload: &[u8], signing_path: SigningPath) -> Result<String, SigningFailure> {
+        let payload = payload.to_vec();
+        run_signing_thread(move || async move {
+            match signing_path {
+                SigningPath::PublicLog => sign_public_payload(&payload).await,
+                SigningPath::NoPublicLog => sign_private_payload(&payload).await,
+            }
+        })
+    }
 }
 
 impl SigstoreSigner {
     /// Construct a signer whose operations use ambient keyless OIDC.
     #[must_use]
     pub fn new() -> Self {
+        Self::with_backend(Arc::new(SigstoreSigningBackend))
+    }
+
+    fn with_backend(backend: Arc<dyn SigningBackend>) -> Self {
         Self {
             pending_payloads: Mutex::new(BTreeMap::new()),
+            backend,
         }
     }
 
@@ -399,14 +423,10 @@ impl SigstoreSigner {
             return Err(SinkSigningFailed);
         }
         let payload = payload.to_vec();
-        let payload_for_signing = payload.clone();
-        let bundle = run_signing_thread(move || async move {
-            match signing_path {
-                SigningPath::PublicLog => sign_public_payload(&payload_for_signing).await,
-                SigningPath::NoPublicLog => sign_private_payload(&payload_for_signing).await,
-            }
-        })
-        .map_err(|_| SinkSigningFailed)?;
+        let bundle = self
+            .backend
+            .sign(&payload, signing_path)
+            .map_err(|_| SinkSigningFailed)?;
         match pending.entry(bundle.clone()) {
             Entry::Vacant(entry) => {
                 entry.insert(payload);
@@ -588,6 +608,13 @@ impl StatementEncodingError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use crate::record_sink::{
+        config::Visibility,
+        form::PublicRecord,
+        leak::{LookupFailed, VisibilityLookup, leak_check},
+    };
     use ix_trace_rs::trace;
 
     const PAYLOAD: &[u8] = concat!(
@@ -829,6 +856,57 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct MissingOidcBackend {
+        sign_calls: AtomicUsize,
+        paths: Mutex<Vec<SigningPath>>,
+        service_start_calls: Arc<AtomicUsize>,
+        failures: Mutex<Vec<SigningFailure>>,
+    }
+
+    impl SigningBackend for MissingOidcBackend {
+        fn sign(
+            &self,
+            _payload: &[u8],
+            signing_path: SigningPath,
+        ) -> Result<String, SigningFailure> {
+            self.sign_calls.fetch_add(1, Ordering::Relaxed);
+            self.paths
+                .lock()
+                .map_err(|_| SigningFailure::SigningFailed)?
+                .push(signing_path);
+
+            let service_start_calls = Arc::clone(&self.service_start_calls);
+            let result = run_signing_thread(move || async move {
+                sign_after_ambient_oidc(async { Ok(None) }, |_| {
+                    service_start_calls.fetch_add(1, Ordering::Relaxed);
+                    async { Ok::<String, SigningFailure>("fixture-bundle".to_owned()) }
+                })
+                .await
+            });
+            if let Err(failure) = &result {
+                self.failures
+                    .lock()
+                    .map_err(|_| SigningFailure::SigningFailed)?
+                    .push(*failure);
+            }
+            result
+        }
+    }
+
+    struct PublicRepositoryLookup;
+
+    impl VisibilityLookup for PublicRepositoryLookup {
+        fn repo_visibility(&self, _repo: &str) -> Result<Visibility, LookupFailed> {
+            Ok(Visibility::Public)
+        }
+    }
+
+    fn public_path_proof<'a>(record: &'a PublicRecord) -> PublicPathProof<'a> {
+        leak_check("fictional/publisher", record, &[], &PublicRepositoryLookup)
+            .expect("fictional public repositories pass the leak check")
+    }
+
     #[trace("NFR-010-M-3")]
     #[test]
     fn rejecting_sigstore_verifier_rejects_policy_payload_and_subject_cases() {
@@ -887,30 +965,46 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn signing_requires_an_ambient_oidc_token_before_service_setup() {
-        let missing_token = || async { Ok(None) };
-        for (signer_kind, result) in [
-            (
-                "public-good payload signer",
-                sign_public_payload_with(b"fictional payload", missing_token()).await,
-            ),
-            (
-                "private-instance payload signer",
-                sign_private_payload_with(b"fictional payload", missing_token()).await,
-            ),
-            (
-                "raw-statement signer",
-                sign_statement_without_public_log_with(b"fictional statement", missing_token())
-                    .await,
-            ),
-        ] {
-            assert_eq!(
-                result,
-                Err(SigningFailure::AmbientOidcUnavailable),
-                "{signer_kind} signer must fail with the named missing-token error"
-            );
-        }
+    #[test]
+    fn ea105_signer_methods_fail_without_oidc_before_service_start() {
+        let public_record = PublicRecord::from_json(
+            concat!(
+                r#"{"protocol":"engineering-assurance.record-public/v1","record_id":"11111111-1111-4111-8111-111111111111","kind":"change_record","subject":{"kind":"repo","id":"fictional/source"},"references":[],"hashes":{"private_form":"sha256:0000000000000000000000000000000000000000000000000000000000000000","subject_commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"verdicts":{"change_record":"recorded"},"timestamps":{"created":"2026-11-13T10:00:00Z"}}"#
+            )
+            .as_bytes(),
+        )
+        .expect("fictional public form is valid");
+        let proof = public_path_proof(&public_record);
+        let backend = Arc::new(MissingOidcBackend::default());
+        let signer = SigstoreSigner::with_backend(backend.clone());
+
+        assert_eq!(
+            Signer::sign_without_public_log(&signer, b"fictional canonical payload"),
+            Err(SinkSigningFailed)
+        );
+        assert_eq!(
+            Signer::sign_for_public_log(&signer, &proof),
+            Err(SinkSigningFailed)
+        );
+        assert_eq!(backend.sign_calls.load(Ordering::Relaxed), 2);
+        assert_eq!(
+            *backend
+                .paths
+                .lock()
+                .expect("signing paths remain available"),
+            [SigningPath::NoPublicLog, SigningPath::PublicLog]
+        );
+        assert_eq!(backend.service_start_calls.load(Ordering::Relaxed), 0);
+        assert_eq!(
+            *backend
+                .failures
+                .lock()
+                .expect("failure codes remain available"),
+            [
+                SigningFailure::AmbientOidcUnavailable,
+                SigningFailure::AmbientOidcUnavailable,
+            ]
+        );
     }
 
     #[test]

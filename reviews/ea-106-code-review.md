@@ -41,3 +41,24 @@ Examined all four changed paths (`Cargo.toml`, `Cargo.lock`, `src/attestation_si
 - Wrapped `cargo test --locked --lib --no-default-features --features attestation-signing attestation_signing::tests` — passed (5 passed, 0 failed).
 - Every Cargo command above ran through `locked-build.sh` with the worktree-local `target` directory.
 - No workflow diff or live signing test was run.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-009 | medium | TC-112's release guard misses GitHub CLI release operations such as `gh release upload` and `gh release edit`; a workflow can perform a release operation while this audit reports no violation. | tests/python_port/module.rs:1417-1426 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | `SigstoreSigner` now implements the EA-105 trait and accepts `PublicPathProof` for public-log signing. |
+| FND-002 | fixed | `SubjectKind::Sha256` selects and compares the `sha256` subject digest. |
+| FND-003 | fixed | An opt-in integration test uses `TrustedRoot::production()` and `SigstoreBundleVerifier` to verify a public-good signed bundle. The test is available through the manually dispatched job; it was not run in this review. |
+| FND-004 | fixed | Fixture assertions now reject a mismatching tree digest and an absent sha256 digest. |
+| FND-005 | still-open | The test calls the injected `*_with` helpers and checks the missing-token error, but it does not observe whether the service-start closure or network setup was skipped, nor does it exercise the public `Signer` methods. The no-network guarantee remains unverified by this test oracle. |
+| FND-006 | fixed | The rejecting-verifier input array now includes a trusted commit, wrong policy, tampered payload, and wrong-tree case, and checks that each propagates the delegated verifier's rejection. |
+| FND-007 | fixed | `WorkflowIdentityPolicy.references` is a set and tests allow both main and release refs while rejecting an outside ref. |
+| FND-008 | fixed | The generic Statement serialization test no longer claims FR-058-AC-1 trace coverage. |
+
+The new TC-112 finding is not disposed in this round; its latest outcome remains open for the next fix round.

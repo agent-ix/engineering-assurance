@@ -1421,7 +1421,9 @@ fn tc112_workflow_violations(text: &str) -> BTreeSet<&'static str> {
     let invokes_release_publisher = normalized
         .lines()
         .any(|line| line.trim_start().contains("uses:") && line.contains("release"))
-        || normalized.contains("gh release create");
+        || ["gh release create", "gh release upload", "gh release edit"]
+            .iter()
+            .any(|command| normalized.contains(command));
     if invokes_release_publisher {
         violations.insert("release_publish");
     }
@@ -1442,6 +1444,20 @@ fn package_and_release_publication_or_automatic_workflow_triggers_are_refused() 
         tc112_workflow_violations(release_publisher),
         BTreeSet::from(["release_publish"])
     );
+
+    for release_command in [
+        "gh release upload v1.2.3 artifact.tar.gz",
+        "gh release edit v1.2.3",
+    ] {
+        let github_cli_release_operation = format!(
+            "on:\n  workflow_dispatch:\njobs:\n  verify:\n    steps:\n      - run: {release_command}\n"
+        );
+        assert_eq!(
+            tc112_workflow_violations(&github_cli_release_operation),
+            BTreeSet::from(["release_publish"]),
+            "TC-112 must reject `{release_command}`"
+        );
+    }
 
     let automatic_trigger =
         "on:\n  push:\njobs:\n  verify:\n    steps:\n      - run: echo verify\n";

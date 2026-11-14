@@ -34,3 +34,11 @@ Ran the planless repository matrix and reverse-gap review, then checked the new 
 - Untraced behavior or stubs introduced by the diff: 2 material EA-106 scope gaps (the missing `Signer` implementation and missing `sha256` artifact-subject path), also recorded in the code-review artifact.
 - Plan completion: not assessed.
 - Semantic review: skipped; no opt-in was requested.
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | The computed matrix now reports NFR-010-M-3 tagged to `tests::rejecting_sigstore_verifier_rejects_policy_payload_and_subject_cases`. |
+| FND-002 | fixed | `SigstoreSigner` now implements the existing `Signer` trait, including `signed_payload`. |
+| FND-003 | fixed | `SubjectKind::Sha256` and the `sha256` digest comparison now implement the artifact-subject path. |
