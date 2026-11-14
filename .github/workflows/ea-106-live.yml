@@ -1,0 +1,88 @@
+name: EA-106 public-good Sigstore integration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare-fixture:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Prepare fictional artifact and in-toto statement
+        shell: bash
+        run: |
+          mkdir -p live-fixture
+          printf '%s' 'fictional EA-106 public-good integration artifact' > live-fixture/artifact.bin
+          digest=$(sha256sum live-fixture/artifact.bin | cut -d ' ' -f 1)
+          {
+            printf '%s' '{"_type":"https:'
+            printf '%s' '//in-toto.io/Statement/v1","predicate":{},"predicateType":"urn:example:predicate:v1","subject":[{"digest":{"sha256":"'
+            printf '%s' "$digest"
+            printf '%s' '"},"name":"fixture-artifact"}]}'
+          } > live-fixture/statement.json
+          printf '%s\n' "$digest" > live-fixture/sha256.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ea-106-live-payload
+          path: live-fixture/
+          if-no-files-found: error
+          retention-days: 1
+
+  sign-public-good:
+    needs: prepare-fixture
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: none
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ea-106-live-payload
+          path: live-fixture
+      - uses: sigstore/gh-action-sigstore-python@790bc6befb9d733738f18d8f895854b453640ec9 # v3.5.0
+        with:
+          inputs: live-fixture/statement.json
+          upload-signing-artifacts: true
+          release-signing-artifacts: false
+
+  verify-public-good:
+    needs: sign-public-good
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ea-106-live-payload
+          path: live-fixture
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: signing-artifacts-*
+          path: sigstore-artifacts
+          merge-multiple: true
+      - name: Verify public-good Sigstore bundle through the Rust verifier
+        shell: bash
+        env:
+          EA_LIVE_PAYLOAD_PATH: live-fixture/statement.json
+          EA_LIVE_SHA256_PATH: live-fixture/sha256.txt
+        run: |
+          bundle_path=$(find sigstore-artifacts -type f -name 'statement.json.sigstore.json' -print -quit)
+          test -n "$bundle_path"
+          EA_LIVE_BUNDLE_PATH="$bundle_path" \
+            EA_LIVE_SHA256="$(cat "$EA_LIVE_SHA256_PATH")" \
+            cargo test --features attestation-signing --test attestation_signing_live -- --ignored
