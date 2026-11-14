@@ -1,0 +1,41 @@
+{
+  "protocol": "engineering-assurance.release-adopter-fixtures/v1",
+  "sources": [
+    {
+      "repository": "agent-ix/quoin",
+      "pull_request": 899,
+      "base_commit": "b8eac0189e358ffa2d78cd0bfce2f624fa9180d9",
+      "head_commit": "453fda114d81ed2aefe630028dcebd4bfcd8ae1b",
+      "additive_workflow": "tag-attestation.yml",
+      "additive_workflow_sha256": "0f02a8ae9a10adc128856190297a34b426a63c19c95f07477bf17ab5160cc5cc",
+      "preserved_manual_workflow": "release.yml",
+      "base_manual_workflow_fixture": "base-release.yml.txt",
+      "base_manual_workflow_sha256": "7664e48ff95ec3c3838d734028864e014ace64d8fbd3f3634452240c5feeda0d",
+      "preserved_manual_workflow_sha256": "7664e48ff95ec3c3838d734028864e014ace64d8fbd3f3634452240c5feeda0d"
+    },
+    {
+      "repository": "agent-ix/quire-rs",
+      "pull_request": 682,
+      "base_commit": "5a45ec949737a41c69a90f6ac5eefcafb2e10716",
+      "head_commit": "258f73e201a34f2d683a98a9fd1cf213895322ad",
+      "additive_workflow": "tag-attestation.yml",
+      "additive_workflow_sha256": "6efaac3125c276bf614b06fd864670791cd68bad3d7324a13ca655b6d0926d6c",
+      "preserved_manual_workflow": "wheels.yml",
+      "base_manual_workflow_fixture": "base-wheels.yml.txt",
+      "base_manual_workflow_sha256": "158d86d5fcef94c16f0f8e6c1778d12bc85beb14d1f3937bcf9b23beaa338c15",
+      "preserved_manual_workflow_sha256": "29f503fb48081406ffb7920a08d54bbf387fd22ed4f1fe03c125d2b983bafd6e"
+    },
+    {
+      "repository": "agent-ix/quire-cli",
+      "pull_request": 201,
+      "base_commit": "3b1965894a00e7955b5386dd0acafe1ce4af610a",
+      "head_commit": "5ebc5fa90364ab4d52e1822f9f4a59f1af0775ec",
+      "additive_workflow": "tag-attestation.yml",
+      "additive_workflow_sha256": "96cb83765ad4dec7a6ecde84387e11838e9ea89d6cb2a07f4037e28c96bf2714",
+      "preserved_manual_workflow": "release.yml",
+      "base_manual_workflow_fixture": "base-release.yml.txt",
+      "base_manual_workflow_sha256": "774218c38a3b8ed264102e74cde57bf069e872bff01b66814e1b543ff3ea5c9b",
+      "preserved_manual_workflow_sha256": "774218c38a3b8ed264102e74cde57bf069e872bff01b66814e1b543ff3ea5c9b"
+    }
+  ]
+}
