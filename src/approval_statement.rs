@@ -181,11 +181,10 @@ pub fn verify_approval_statements(
             ApprovalStatementPublishOutcome::Published => {
                 let status = verify_one(verifier, retained, lookup, identity_policy);
                 statuses.push(status);
-                if status == StatementStatus::Verified {
-                    if let Ok(approval) = approval_from_statement(&retained.statement_bytes, lookup)
-                    {
-                        approvals.push(approval);
-                    }
+                if status == StatementStatus::Verified
+                    && let Ok(approval) = approval_from_statement(&retained.statement_bytes, lookup)
+                {
+                    approvals.push(approval);
                 }
             }
         }
@@ -199,7 +198,7 @@ fn verify_one(
     lookup: ApprovalStatementLookup<'_>,
     identity_policy: &WorkflowIdentityPolicy,
 ) -> StatementStatus {
-    let verified = verify_statement(
+    let verification = verify_statement(
         verifier,
         &retained.statement_bytes,
         &retained.signature_bundle,
@@ -209,7 +208,7 @@ fn verify_one(
             value: lookup.merged_commit,
         },
     );
-    match verified {
+    match verification {
         Err(VerificationFailure::InvalidSignature) => return StatementStatus::SignatureInvalid,
         Err(VerificationFailure::UntrustedSigner) => return StatementStatus::UntrustedSigner,
         Err(VerificationFailure::WrongSubject) => return StatementStatus::WrongSubject,
@@ -257,7 +256,7 @@ fn approval_from_statement(
         .approver
         .split_once(':')
         .ok_or(VerificationFailure::InvalidStatement)?;
-    let _approver_name = predicate.approver_name;
+    drop(predicate.approver_name);
     if source.is_empty() || id.is_empty() || predicate.source != source {
         return Err(VerificationFailure::InvalidStatement);
     }
