@@ -1420,7 +1420,7 @@ fn tc112_workflow_violations(text: &str) -> BTreeSet<&'static str> {
     }
     let invokes_release_publisher = normalized
         .lines()
-        .any(|line| line.trim_start().starts_with("uses:") && line.contains("release"))
+        .any(|line| line.trim_start().contains("uses:") && line.contains("release"))
         || normalized.contains("gh release create");
     if invokes_release_publisher {
         violations.insert("release_publish");
