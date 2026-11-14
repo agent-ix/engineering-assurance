@@ -103,7 +103,17 @@ fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_
         verify["permissions"],
         serde_json::json!({"contents": "read"})
     );
+    assert_eq!(
+        verify["outputs"]["attestation_inputs_artifact"],
+        "${{ steps.attestation-artifact-name.outputs.name }}"
+    );
     let verify_steps = verify["steps"].as_array().expect("verify steps");
+    assert!(verify_steps.iter().any(|step| {
+        step["id"] == "attestation-artifact-name"
+            && step["run"]
+                .as_str()
+                .is_some_and(|run| run.contains("secrets.token_hex(32)"))
+    }));
     let tag_check = verify_steps
         .iter()
         .position(|step| step["name"] == "Check the triggering release tag")
@@ -160,4 +170,8 @@ fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_
     assert!(attest_steps.iter().any(|step| {
         step["with"]["predicate-type"] == concat!("https:", "//slsa.dev/verification_summary/v1")
     }));
+    assert_eq!(
+        attest_steps[1]["with"]["name"],
+        "${{ needs.verify.outputs.attestation_inputs_artifact }}"
+    );
 }

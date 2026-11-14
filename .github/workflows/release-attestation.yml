@@ -32,7 +32,16 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+    outputs:
+      attestation_inputs_artifact: ${{ steps.attestation-artifact-name.outputs.name }}
     steps:
+      - name: Generate an unpredictable handoff artifact name
+        id: attestation-artifact-name
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'name=verified-release-inputs-%s\n' "$(python3 -c 'import secrets; print(secrets.token_hex(32))')" >> "$GITHUB_OUTPUT"
+
       - name: Check the triggering release tag
         shell: bash
         env:
@@ -142,6 +151,13 @@ jobs:
           echo "::error::release_roles_source_unavailable"
           exit 1
 
+      - name: Upload verified attestation inputs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ steps.attestation-artifact-name.outputs.name }}
+          path: attestation-inputs/
+          if-no-files-found: error
+
   attest:
     needs: verify
     runs-on: ubuntu-24.04
@@ -159,7 +175,7 @@ jobs:
       - name: Download verified attestation inputs
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: release-attestation-inputs
+          name: ${{ needs.verify.outputs.attestation_inputs_artifact }}
           path: attestation-inputs
 
       - name: Attest SLSA provenance
