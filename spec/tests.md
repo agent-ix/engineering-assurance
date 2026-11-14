@@ -330,7 +330,6 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-070 | FR-070-AC-5 | TC-561 | 🚧 Specified |
 | FR-070 | FR-070-AC-6 | TC-562 | 🚧 Specified |
 | FR-070 | FR-070-AC-7 | TC-563 | 🚧 Specified |
-| FR-070 | FR-070-AC-8 | TC-664 | 🚧 Specified |
 | FR-070 | FR-070-AC-9 | TC-665 | 🚧 Specified |
 | FR-070 | FR-070-AC-10 | TC-666 | 🚧 Specified |
 | FR-070 | FR-070-AC-11 | TC-667 | 🚧 Specified |
@@ -910,7 +909,6 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-561 | No step in any of the five files invokes an agent harness or model client | Static | P0 | FR-070-AC-5 | 🚧 |
 | TC-562 | A `change-receipt.yml` run with a `commit` input that is not the pushed commit fails with `receipt_input_commit_mismatch`, and a `release-attestation.yml` run with a `tag` input that is not the triggering tag fails with ... | Integration | P0 | FR-070-AC-6 | 🚧 |
 | TC-563 | The `gates` job declares no `secrets` and no `environment`, and its `runs-on` is a GitHub-hosted label or an ephemeral runner label | Integration | P0 | FR-070-AC-7 | 🚧 |
-| TC-664 | YAML parsing confirms that quoin, quire-cli and quire-rs preserve their `workflow_dispatch` release workflows and add separate `tag-attestation.yml` workflows triggered by `push` of a `v*` tag, with build `contents: read`, an attestation reusable-workflow call with `contents: read`, `id-token: write`, `attestations: write`, and no dependency on the preserved publish workflows | Integration | P0 | FR-070-AC-8 | 🚧 |
 | TC-665 | Every caller uploads release files from `build` under the shared `artifact_name` default `release-artifacts`; Quoin runs `make evidence` and uploads its generated `spec/evidence` store under the shared `evidence_artifact` default `release-evidence` only when TC-666's store validity conditions pass; the reusable workflow downloads named artifacts in `verify` | Integration | P0 | FR-070-AC-9 | 🚧 |
 | TC-666 | Quoin's tag-attestation build runs documented `make evidence`; successful output validates, has a run record for the tagged commit, and has a real binding from a passing case. Missing, empty, malformed, stale, or unbound output, including the committed empty `bindings.json` skeleton, fails with `no_retained_evidence_store` before upload or statement creation; the exporter reads retained records and bindings, uses workflow-computed subjects, and performs no Git or network access | Integration | P0 | FR-070-AC-10 | 🚧 |
 | TC-667 | Engineering Assurance and quire-cli have no retained evidence store, and quire-rs has only benchmark measurement JSON without retained release test runs or `bindings.json`; all three fail with `no_retained_evidence_store` before writing statements, without uploading an empty store or accepting a caller-built Test Result | Integration | P0 | FR-070-AC-11 | 🚧 |
