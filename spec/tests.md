@@ -285,6 +285,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-064 | FR-064-AC-4 | TC-660, TC-662 | ✅ `src/attestation_signing.rs` wrong git subject and stable failure codes |
 | FR-064 | FR-064-AC-5 | TC-959 | ✅ `src/approval_statement.rs` rejects an open approval predicate and wrong predicate type |
 | FR-064 | FR-064-AC-1, FR-064-AC-10 | TC-960 | ✅ `src/approval_statement.rs` verified statements satisfy three roles; an untrusted statement leaves its role missing |
+| FR-061 | FR-061-AC-9 | TC-962 | ✅ `src/approval_statement.rs` the review-gate and verified-statement paths return the same role verdict |
 | FR-062 | FR-062-AC-4 | TC-961 | ✅ `src/approval_statement.rs` a verified statement naming a listed agent does not count toward a role |
 | FR-064 | FR-064-AC-16 | TC-954 | ✅ `src/approval_statement.rs` exact tuple lookup verifies every retained match using its bytes and bundle |
 | FR-064 | FR-064-AC-17 | TC-955 | ✅ `src/approval_statement.rs` no exact match returns `statements_not_retained` |
@@ -1027,6 +1028,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-959 | A correctly signed approval statement with an extra predicate member or a different predicate type returns `predicate_invalid` | Unit | P0 | FR-064-AC-5 | ✅ `src/approval_statement.rs` passing |
 | TC-960 | Three verified statements from distinct individuals satisfy three roles; when one statement is untrusted, the aggregate is `untrusted_signer` and its role remains missing | Unit | P0 | FR-064-AC-1, FR-064-AC-10 | ✅ `src/approval_statement.rs` passing |
 | TC-961 | A verified statement naming an account listed as an agent leaves its role unsatisfied with `agent_only` | Unit | P0 | FR-062-AC-4 | ✅ `src/approval_statement.rs` passing |
+| TC-962 | A GitHub review approval and its verified statement produce identical FR-061 role verdicts under the same policy | Unit | P0 | FR-061-AC-9 | ✅ `src/approval_statement.rs` passing |
 | TC-912 | Source inspection finds zero public-log send paths that bypass the leak check | Static | P0 | NFR-009-AC-3, NFR-009-M-2 | 🚧 Unverified; source inspection not yet completed |
 | TC-913 | The CLI returns `satisfied` for an agent-authored pull request with distinct human approvals for the two required roles and reports both assigned account ids | Integration | P0 | FR-059-AC-1, FR-065-AC-10 | 🚧 `tests/approval_gate_cli.rs::agent_authored_pull_request_passes_with_distinct_human_role_approvals` is in merged #252; per-field source-approval assertions, the missing-role case, and agent/bot-review cases are not asserted here |
 | TC-914 | The latest review state controls an approval: a later change request or dismissal revokes it, a comment leaves it intact, and a fresh approval restores it; an old-head review and a bot review are excluded | Unit | P0 | FR-059-AC-2, FR-059-AC-5, FR-062-AC-1 | 🚧 `src/approval_gate.rs::tests::only_latest_valid_same_head_human_review_counts_and_agents_do_not` and `latest_decision_revokes_and_later_fresh_approval_restores` are in merged #252 |

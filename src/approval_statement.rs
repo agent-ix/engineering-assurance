@@ -318,7 +318,10 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::*;
-    use crate::attestation_signing::TransparencyRequirement;
+    use crate::{
+        approval_gate::{ApprovalSource, GitHubReviewAdapter, ReviewSnapshot, ReviewState},
+        attestation_signing::TransparencyRequirement,
+    };
 
     const LOOKUP: ApprovalStatementLookup<'static> = ApprovalStatementLookup {
         repository: "fictional/project",
@@ -654,6 +657,56 @@ mod tests {
             result.role_verdict.missing[0].reason,
             approval_gate::MissingReason::AgentOnly
         );
+    }
+
+    #[trace("TC-962", "FR-061-AC-9")]
+    #[test]
+    fn verified_statement_and_review_approvals_produce_the_same_role_verdict() {
+        let policy = role_policy();
+        let review = ReviewSnapshot {
+            review_id: 1,
+            account: AccountRef {
+                source: "github".to_owned(),
+                id: "1".to_owned(),
+            },
+            account_type: AccountType::Human,
+            state: ReviewState::Approved,
+            submitted_body: "Signed-off-meaning: reviewed the change\nRole: developer".to_owned(),
+            body_edited: false,
+            submitted_at: "2026-11-13T10:00:00Z".to_owned(),
+            commit: "reviewed-head".to_owned(),
+            pull_request: LOOKUP.merged_pull_request.to_owned(),
+        };
+        let review_approvals = GitHubReviewAdapter.approvals(&policy, &[review], "reviewed-head");
+        let account_types = policy
+            .individuals
+            .values()
+            .flatten()
+            .map(|account| (account.clone(), AccountType::Human))
+            .collect();
+        let review_verdict = approval_gate::evaluate(&policy, &review_approvals, &account_types);
+        let retained = statement("1", "review-parity-bundle");
+        let verifier = FixtureVerifier {
+            expected: vec![(
+                retained.statement_bytes.clone(),
+                retained.signature_bundle.clone(),
+                Ok(()),
+            )],
+            ..FixtureVerifier::default()
+        };
+        let reader = reader_for(vec![(LOOKUP.merged_pull_request, retained)]);
+        let statement_result = verify_approval_statements(
+            &reader,
+            "private-store-a",
+            LOOKUP,
+            &identity_policy(),
+            &policy,
+            &verifier,
+        );
+
+        assert_eq!(statement_result.status, ApprovalStatementStatus::Verified);
+        assert_eq!(statement_result.role_verdict, review_verdict);
+        assert_eq!(review_verdict.status, approval_gate::GateStatus::Satisfied);
     }
 
     #[trace("TC-954", "FR-064-AC-16", "FR-064-AC-20")]
