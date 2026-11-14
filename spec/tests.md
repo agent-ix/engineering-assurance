@@ -972,6 +972,11 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-650 | Signing for the private store or `none` makes no public-log call; the public path signs only after the check passed and never for a refused record | Unit | P0 | FR-057-AC-10, FR-057-AC-11, NFR-010-AC-1, NFR-010-M-2 | ✅ `tests/record_sink.rs` passing |
 | TC-651 | The sink module source implements no signature primitive | Static | P0 | NFR-010-AC-2, NFR-010-M-1 | ✅ `tests/record_sink.rs` passing |
 | TC-652 | A registered implementation cannot reach the public log: a public-log selection still runs the leak check, a leaking record sends and public-signs nothing, and the proof carries the checked bytes | Unit | P0 | FR-057-AC-8, NFR-009-M-2 | ✅ `tests/record_sink.rs` passing |
+| TC-9001 | The OSV-Scanner request validates and carries the defined arguments, environment, input, output, containment and exit policy | Unit | P0 | FR-044-AC-6 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
+| TC-9002 | A nonexistent scanner is unavailable; fixture exits 127/128 fail, exit 1 completes, missing output and timeout withhold the report, and stale output is removed | Integration | P0 | FR-044-AC-3, FR-044-AC-4, FR-044-AC-7 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
+| TC-9003 | A caller mirror without `all.zip`, or with a Wolfi archive, is rejected | Unit | P0 | FR-044-AC-12 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
+| TC-9004 | `make osv-scanner-integration` refuses missing, relative or invalid scanner/database paths and names the missing variable | Unit | P0 | FR-044-CON-1, FR-044-AC-9 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
+| TC-9005 | The offline scanner report associates the expected Debian advisory with the fixture's exact libwebp name, version and purl | Integration | P0 | FR-044-AC-13, FR-044-AC-14 | 🚧 Ignored; local Debian database and runtime advisory match unavailable |
 
 ## Option Permutation Matrix
 

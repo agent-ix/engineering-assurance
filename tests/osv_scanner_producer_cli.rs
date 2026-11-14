@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-//! The OSV-Scanner producer request (FR-044) run through `producer-execute`.
+//! The OSV-Scanner producer request run through `producer-execute`.
 //!
 //! Scanner and database dependent cases are ignored by default and run only in
 //! `make osv-scanner-integration`. Fixture scanner cases exercise executor
@@ -242,7 +242,7 @@ fn fixture_request(root: &Path, script: &str) -> Value {
     osv_request(root, &executable, "fixture", &db)
 }
 
-#[trace("TC-9001", "FR-044-AC-6", "FR-044-AC-11")]
+#[trace("TC-9001", "FR-044-AC-6")]
 #[test]
 fn tc_9001_request_matches_the_published_osv_scanner_definition() {
     let root = workspace(br#"{"bomFormat":"CycloneDX","components":[]}"#);
@@ -321,7 +321,7 @@ fn tc_9001_request_matches_the_published_osv_scanner_definition() {
 }
 
 #[cfg(target_os = "linux")]
-#[trace("TC-9002", "FR-044-AC-3", "FR-044-AC-4", "FR-044-AC-5", "FR-044-AC-7")]
+#[trace("TC-9002", "FR-044-AC-3", "FR-044-AC-4", "FR-044-AC-7")]
 #[test]
 fn tc_9002_failed_or_incomplete_fixture_scan_never_retains_report() {
     let root = workspace(br#"{"bomFormat":"CycloneDX","components":[]}"#);
