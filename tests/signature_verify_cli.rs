@@ -266,7 +266,7 @@ fn git_recording_path(fixture: &Fixture, name: &str, log: &Path, fail_cat_file: 
         .expect("real git on PATH");
     let script = directory.join("git");
     let fail = if fail_cat_file {
-        "if [ \"$1\" = cat-file ]; then exit 1; fi\n"
+        "case \"$*\" in *' cat-file commit '*) exit 1 ;; esac\n"
     } else {
         ""
     };
@@ -401,9 +401,11 @@ fn tc_278_commit_alias_and_id_return_one_identity_used_by_git_verifiers() {
     let alias_calls = fs::read_to_string(&log).expect("recorded git calls");
     assert_eq!(alias["status"], "unsigned");
     assert_eq!(alias["verified_commit_id"], id);
-    assert!(alias_calls.lines().any(|call| call == format!("verify-commit {id}")));
+    assert!(alias_calls
+        .lines()
+        .any(|call| call.ends_with(&format!("verify-commit {id}"))));
     assert!(alias_calls.lines().any(|call| {
-        call == format!("log -1 --no-show-signature --format=%G?%x00%GF%x00%GS {id}")
+        call.ends_with(&format!("log -1 --no-show-signature --format=%G?%x00%GF%x00%GS {id}"))
     }));
 
     fs::write(&log, "").expect("clear git call log");
