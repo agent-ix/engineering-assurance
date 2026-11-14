@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "additionalProperties": false,
-  "required": ["record_id", "status", "criteria", "spec_criteria", "reviews", "approvals", "test_results", "agent_bom", "private_form", "failures"],
+  "required": ["record_id", "status", "criteria", "spec_criteria", "reviews", "approvals", "test_results", "private_form", "failures"],
   "properties": {
     "record_id": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
     "status": {"enum": ["passed", "failed"]},
@@ -28,6 +28,7 @@
   },
   "allOf": [
     {"if": {"properties": {"status": {"const": "passed"}}, "required": ["status"]}, "then": {"properties": {"failures": {"maxItems": 0}}}},
+    {"if": {"required": ["agent_bom"]}, "then": {}, "else": {"properties": {"status": {"const": "failed"}, "failures": {"contains": {"const": "contract_missing"}}}}},
     {"if": {"properties": {"ticket": {"type": "object"}}, "required": ["ticket"]}, "then": {}, "else": {"properties": {"failures": {"contains": {"const": "contract_missing"}}}}}
   ],
   "$defs": {"digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}

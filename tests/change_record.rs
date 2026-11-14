@@ -6,20 +6,29 @@
 use std::collections::BTreeMap;
 
 use engineering_assurance::change_record::{
-    build_bom, build_predicate, validate_bom_value, verify_private_form_digest, AgentSession,
-    ApprovalDecision, ApprovalVerdict, BomError, Failure, McpServer, Plugin, PredicateInput,
-    Review, ReviewKind, ReviewVerdict, Status, Ticket, TicketKind,
+    AgentSession, ApprovalDecision, ApprovalVerdict, BomError, ChangeSubjectInput, Failure,
+    McpServer, Plugin, PredicateInput, ReviewInput, ReviewKind, ReviewVerdict, Status, Ticket,
+    TicketKind, build_bom, build_change_record, canonical_digest, validate_bom_value,
+    verify_private_form_digest,
 };
+use engineering_assurance::record_sink::form::{PrivateRecord, RecordId};
 use ix_trace_rs::trace;
-use serde_json::{json, Value};
-
-fn sha(fill: char) -> String {
-    format!("sha256:{}", fill.to_string().repeat(64))
-}
+use serde_json::{Value, json};
 
 fn fixture() -> PredicateInput {
+    let record_id = "8a6b6ed3-a08a-4bad-9163-2c318ff2f4a1";
+    let mut private_form = PrivateRecord::new(RecordId::try_from(record_id).expect("record id"));
+    private_form.ticket_text = Some("Fictional ticket title".to_owned());
+    private_form.criteria_text = Some("Private acceptance sentence".to_owned());
+    private_form.change_record = Some(json!({
+        "title": "Fictional ticket title",
+        "criteria": ["Private acceptance sentence"],
+        "model_name": "Private Model Name",
+        "approval_meaning": "Private meaning",
+        "approver": "Fictional Person"
+    }));
     PredicateInput {
-        record_id: "8a6b6ed3-a08a-4bad-9163-2c318ff2f4a1".to_owned(),
+        record_id: record_id.to_owned(),
         ticket: Some(Ticket {
             kind: TicketKind::LinearIssue,
             id: "EA-107".to_owned(),
@@ -27,15 +36,15 @@ fn fixture() -> PredicateInput {
         criteria: vec!["AC-1".to_owned(), "AC-2".to_owned()],
         spec_criteria: vec!["FR-072-AC-1".to_owned(), "FR-073-AC-1".to_owned()],
         reviews: vec![
-            Review {
+            ReviewInput {
                 kind: ReviewKind::CodeReview,
                 verdict: ReviewVerdict::Pass,
-                artifact_digest: sha('a'),
+                artifact_bytes: b"# Code review\nPass.\n".to_vec(),
             },
-            Review {
+            ReviewInput {
                 kind: ReviewKind::GapAnalysis,
                 verdict: ReviewVerdict::Pass,
-                artifact_digest: sha('b'),
+                artifact_bytes: b"# Gap analysis\nPass.\n".to_vec(),
             },
         ],
         approvals: ["developer", "engineer", "stakeholder"]
@@ -45,20 +54,19 @@ fn fixture() -> PredicateInput {
                     ApprovalDecision::Covered {
                         individual: format!("{role}-person"),
                         is_human: true,
-                        statement_digest: sha('c'),
+                        statement: json!({"_type": engineering_assurance::change_record::STATEMENT_TYPE, "predicateType":"approval/v1", "subject":[], "predicate":{"role": role}}),
                     },
                 )
             })
             .into(),
-        test_results: sha('d'),
-        agent_bom: sha('e'),
-        private_form: json!({
-            "ticket_title": "Fictional ticket title",
-            "criterion_text": "Private acceptance sentence",
-            "model_name": "Private Model Name",
-            "approval_meaning": "Private meaning",
-            "approver": "Fictional Person"
-        }),
+        test_results: json!({"_type": engineering_assurance::change_record::STATEMENT_TYPE, "predicateType":"test-result/v1", "subject":[], "predicate":{"result":"passed"}}),
+        subject: ChangeSubjectInput {
+            repository: "fictional/project".to_owned(),
+            merged_commit: "a".repeat(40),
+            merged_tree: "b".repeat(40),
+        },
+        session: Some(session()),
+        private_form,
         failures: vec![],
     }
 }
@@ -74,9 +82,9 @@ fn fixture() -> PredicateInput {
 #[test]
 fn predicate_has_exact_public_shape_and_excludes_private_text() {
     let input = fixture();
-    let private_form = input.private_form.clone();
-    let predicate = build_predicate(input).expect("fixture builds");
-    let value = serde_json::to_value(&predicate).expect("serializes");
+    let record = build_change_record(input).expect("fixture builds");
+    let predicate = &record.statement.predicate;
+    let value = serde_json::to_value(predicate).expect("serializes");
     assert_eq!(predicate.status, Status::Passed);
     assert_eq!(
         engineering_assurance::change_record::PREDICATE_TYPE,
@@ -101,31 +109,28 @@ fn predicate_has_exact_public_shape_and_excludes_private_text() {
     ] {
         assert!(!String::from_utf8_lossy(&bytes).contains(private));
     }
-    assert!(verify_private_form_digest(&predicate, &private_form));
+    assert!(verify_private_form_digest(predicate, &record.private_form));
 }
 
 #[trace("TC-571", "FR-072-AC-2")]
 #[test]
 fn predicate_deserialization_and_schema_reject_invalid_shapes() {
-    let predicate = build_predicate(fixture()).expect("fixture builds");
-    let mut unknown = serde_json::to_value(&predicate).expect("json");
-    unknown["unexpected"] = json!(true);
-    assert!(
-        serde_json::from_value::<engineering_assurance::change_record::ChangePredicate>(unknown)
-            .is_err()
-    );
-    let mut bad_grammar = serde_json::to_value(&predicate).expect("json");
-    bad_grammar["criteria"][0] = json!("AC-0000");
+    let predicate = build_change_record(fixture())
+        .expect("fixture builds")
+        .statement
+        .predicate;
     let schema = include_str!("../src/change_record_schemas/change-record-v1.schema.json");
     let schema: Value = serde_json::from_str(schema).expect("schema");
     let validator = jsonschema::validator_for(&schema).expect("compiled schema");
+    let mut unknown = serde_json::to_value(&predicate).expect("json");
+    unknown["unexpected"] = json!(true);
+    assert!(!validator.is_valid(&unknown));
+    let mut bad_grammar = serde_json::to_value(&predicate).expect("json");
+    bad_grammar["criteria"][0] = json!("AC-0000");
     assert!(!validator.is_valid(&bad_grammar));
     let mut repo = serde_json::to_value(&predicate).expect("json");
     repo["ticket"]["kind"] = json!("repo");
-    assert!(
-        serde_json::from_value::<engineering_assurance::change_record::ChangePredicate>(repo)
-            .is_err()
-    );
+    assert!(!validator.is_valid(&repo));
 }
 
 #[trace("TC-572", "FR-072-AC-3")]
@@ -137,10 +142,25 @@ fn predicate_shows_missing_unstaffed_and_unavailable_roles() {
         ("developer".to_owned(), ApprovalDecision::Unstaffed),
         ("stakeholder".to_owned(), ApprovalDecision::Unavailable),
     ];
-    let predicate = build_predicate(input).expect("failed predicate serializes");
+    let predicate = build_change_record(input)
+        .expect("failed predicate serializes")
+        .statement
+        .predicate;
     assert_eq!(predicate.status, Status::Failed);
-    assert_eq!(predicate.approvals[0].verdict, ApprovalVerdict::Missing);
-    assert_eq!(predicate.approvals[0].statement_digest, None);
+    let engineer = predicate
+        .approvals
+        .iter()
+        .find(|entry| entry.role == "engineer")
+        .expect("engineer approval");
+    assert_eq!(engineer.verdict, ApprovalVerdict::Missing);
+    assert_eq!(engineer.statement_digest, None);
+    let developer = predicate
+        .approvals
+        .iter()
+        .find(|entry| entry.role == "developer")
+        .expect("developer approval");
+    assert_eq!(developer.verdict, ApprovalVerdict::Missing);
+    assert_eq!(developer.statement_digest, None);
     for failure in [
         Failure::ApprovalsIncomplete,
         Failure::ApprovalRoleUnstaffed,
@@ -160,7 +180,7 @@ fn one_individual_cannot_cover_multiple_public_roles() {
             ApprovalDecision::Covered {
                 individual: "same-person".to_owned(),
                 is_human: true,
-                statement_digest: sha('a'),
+                statement: json!({"role":"developer"}),
             },
         ),
         (
@@ -168,7 +188,7 @@ fn one_individual_cannot_cover_multiple_public_roles() {
             ApprovalDecision::Covered {
                 individual: "same-person".to_owned(),
                 is_human: true,
-                statement_digest: sha('b'),
+                statement: json!({"role":"engineer"}),
             },
         ),
         (
@@ -176,11 +196,14 @@ fn one_individual_cannot_cover_multiple_public_roles() {
             ApprovalDecision::Covered {
                 individual: "other-person".to_owned(),
                 is_human: true,
-                statement_digest: sha('c'),
+                statement: json!({"role":"stakeholder"}),
             },
         ),
     ];
-    let predicate = build_predicate(input).expect("incomplete predicate is emitted");
+    let predicate = build_change_record(input)
+        .expect("incomplete predicate is emitted")
+        .statement
+        .predicate;
     assert_eq!(predicate.status, Status::Failed);
     assert_eq!(
         predicate
@@ -202,10 +225,13 @@ fn agent_approval_is_emitted_as_missing() {
         ApprovalDecision::Covered {
             individual: "agent-identity".to_owned(),
             is_human: false,
-            statement_digest: sha('a'),
+            statement: json!({"role":"developer"}),
         },
     )];
-    let predicate = build_predicate(input).expect("failed predicate builds");
+    let predicate = build_change_record(input)
+        .expect("failed predicate builds")
+        .statement
+        .predicate;
     assert_eq!(predicate.status, Status::Failed);
     assert_eq!(predicate.approvals[0].verdict, ApprovalVerdict::Missing);
     assert_eq!(predicate.approvals[0].statement_digest, None);
@@ -214,13 +240,88 @@ fn agent_approval_is_emitted_as_missing() {
 
 #[trace("TC-576", "FR-072-AC-7")]
 #[test]
-fn one_private_form_byte_change_breaks_digest_verification() {
+fn canonical_digests_bind_each_document_and_private_form_change() {
     let input = fixture();
-    let private_form = input.private_form.clone();
-    let predicate = build_predicate(input).expect("fixture builds");
-    let mut changed = private_form;
-    changed["ticket_title"] = json!("Fictional ticket titlf");
-    assert!(!verify_private_form_digest(&predicate, &changed));
+    let review_bytes = input
+        .reviews
+        .iter()
+        .map(|review| review.artifact_bytes.clone())
+        .collect::<Vec<_>>();
+    let approvals = input
+        .approvals
+        .iter()
+        .map(|(_, decision)| match decision {
+            ApprovalDecision::Covered { statement, .. } => statement.clone(),
+            _ => panic!("fixture approval is covered"),
+        })
+        .collect::<Vec<_>>();
+    let test_results = input.test_results.clone();
+    let mut record = build_change_record(input).expect("fixture builds");
+    let predicate = &record.statement.predicate;
+    let stored_approvals = record
+        .private_form
+        .statement
+        .as_ref()
+        .and_then(Value::as_array)
+        .expect("private approval statements");
+    assert_eq!(stored_approvals, &approvals);
+    for (approval, entry) in approvals.iter().zip(&predicate.approvals) {
+        assert_eq!(
+            entry.statement_digest.as_deref(),
+            Some(
+                canonical_digest(approval)
+                    .expect("approval digest")
+                    .as_str()
+            )
+        );
+    }
+    assert_eq!(
+        predicate.test_results,
+        canonical_digest(&test_results).expect("test results digest")
+    );
+    let bom = record.private_form.agent_bom.as_ref().expect("private BOM");
+    assert_eq!(
+        predicate.agent_bom.as_ref(),
+        Some(&canonical_digest(bom).expect("BOM digest"))
+    );
+    for (review, bytes) in predicate.reviews.iter().zip(review_bytes) {
+        assert_eq!(review.artifact_digest, raw_sha256(&bytes));
+    }
+    assert!(
+        record
+            .private_form
+            .change_record
+            .as_ref()
+            .expect("private change record")
+            .get("private_form")
+            .is_none()
+    );
+    let private_form_json = serde_json::to_value(&record.private_form).expect("private form JSON");
+    assert_eq!(
+        predicate.private_form,
+        canonical_digest(&private_form_json).expect("private form digest")
+    );
+
+    let original = record.private_form.clone();
+    record.private_form.ticket_text = Some("Fictional ticket titlf".to_owned());
+    assert!(!verify_private_form_digest(predicate, &record.private_form));
+    assert!(verify_private_form_digest(predicate, &original));
+}
+
+fn raw_sha256(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    format!("sha256:{:x}", Sha256::digest(bytes))
+}
+
+#[trace("TC-574", "FR-072-AC-5")]
+#[test]
+fn statement_subject_names_squash_commit_and_merged_tree() {
+    let record = build_change_record(fixture()).expect("fixture builds");
+    let statement = record.statement;
+    assert_eq!(statement.subject.len(), 1);
+    assert_eq!(statement.subject[0].name, "fictional/project");
+    assert_eq!(statement.subject[0].digest["gitCommit"], "a".repeat(40));
+    assert_eq!(statement.subject[0].digest["gitTree"], "b".repeat(40));
 }
 
 fn session() -> AgentSession {
@@ -261,10 +362,11 @@ fn bom_validates_and_every_property_is_producer_reported() {
             .count(),
         1
     );
-    assert!(bom
-        .components
-        .iter()
-        .any(|component| component.purl.is_some()));
+    assert!(
+        bom.components
+            .iter()
+            .any(|component| component.purl.is_some())
+    );
     assert_eq!(bom.services.len(), 2);
     let service_names = bom
         .services
@@ -299,13 +401,65 @@ fn bom_validates_and_every_property_is_producer_reported() {
             .as_str()
             .is_some_and(|name| name.starts_with("agent-ix:"))
     }));
-    assert!(all_properties
-        .iter()
-        .filter(|property| property["name"] == "agent-ix:reported-by")
-        .all(|property| property["value"] == "producer"));
+    assert!(
+        all_properties
+            .iter()
+            .filter(|property| property["name"] == "agent-ix:reported-by")
+            .all(|property| property["value"] == "producer")
+    );
     assert!(validate_bom_value(&value).is_ok());
     let bom_bytes = serde_json::to_vec(&bom).expect("bom bytes");
     assert!(String::from_utf8_lossy(&bom_bytes).contains("Private Model Name"));
+}
+
+#[trace("TC-580", "FR-073-AC-4")]
+#[test]
+fn built_record_binds_private_bom_and_keeps_model_name_out_of_public_bytes() {
+    let record = build_change_record(fixture()).expect("record builds");
+    let predicate = &record.statement.predicate;
+    assert_eq!(record.private_form.record_id.as_str(), predicate.record_id);
+    let private_bom = record
+        .private_form
+        .agent_bom
+        .as_ref()
+        .expect("private BOM stored");
+    assert_eq!(
+        predicate.agent_bom.as_deref(),
+        Some(
+            canonical_digest(private_bom)
+                .expect("digest private BOM")
+                .as_str()
+        )
+    );
+    assert!(validate_bom_value(private_bom).is_ok());
+    let public_bytes = serde_json::to_vec(&record.statement).expect("public statement bytes");
+    assert!(!String::from_utf8_lossy(&public_bytes).contains("Private Model Name"));
+}
+
+#[trace("TC-581", "FR-073-AC-5")]
+#[test]
+fn missing_session_emits_no_bom_and_failed_contract_missing_receipt() {
+    let mut input = fixture();
+    input.session = None;
+    let record = build_change_record(input).expect("missing session is a failed receipt");
+    assert!(record.private_form.agent_bom.is_none());
+    assert!(record.statement.predicate.agent_bom.is_none());
+    assert_eq!(record.statement.predicate.status, Status::Failed);
+    assert!(
+        record
+            .statement
+            .predicate
+            .failures
+            .contains(&Failure::ContractMissing)
+    );
+}
+
+#[trace("FR-073-AC-4")]
+#[test]
+fn builder_rejects_unrelated_bom_material_in_private_form() {
+    let mut input = fixture();
+    input.private_form.agent_bom = Some(json!({"bomFormat":"CycloneDX", "specVersion":"1.7"}));
+    assert!(build_change_record(input).is_err());
 }
 
 #[trace("TC-579", "FR-073-AC-3")]

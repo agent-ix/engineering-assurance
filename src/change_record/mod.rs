@@ -8,10 +8,11 @@ pub mod bom;
 pub mod predicate;
 
 pub use bom::{
-    build_bom, validate_bom_value, AgentSession, BomError, CycloneDxBom, McpServer, Plugin,
+    AgentSession, BomError, CycloneDxBom, McpServer, Plugin, build_bom, validate_bom_value,
 };
 pub use predicate::{
-    build_predicate, canonical_digest, verify_private_form_digest, ApprovalDecision, ApprovalEntry,
-    ApprovalVerdict, ChangePredicate, Failure, PredicateError, PredicateInput, Review, ReviewKind,
-    ReviewVerdict, Status, Ticket, TicketKind, PREDICATE_TYPE,
+    ApprovalDecision, ApprovalEntry, ApprovalVerdict, BuiltChangeRecord, ChangePredicate,
+    ChangeStatement, ChangeSubjectInput, Failure, PREDICATE_TYPE, PredicateError, PredicateInput,
+    Review, ReviewInput, ReviewKind, ReviewVerdict, STATEMENT_TYPE, StatementSubject, Status,
+    Ticket, TicketKind, build_change_record, canonical_digest, verify_private_form_digest,
 };
