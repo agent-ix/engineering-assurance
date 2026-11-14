@@ -170,7 +170,7 @@ fn predicate_shows_missing_unstaffed_and_unavailable_roles() {
     }
 }
 
-#[trace("FR-061-AC-2")]
+#[trace("TC-948", "FR-061-AC-2")]
 #[test]
 fn one_individual_cannot_cover_multiple_public_roles() {
     let mut input = fixture();
@@ -216,7 +216,7 @@ fn one_individual_cannot_cover_multiple_public_roles() {
     assert!(predicate.failures.contains(&Failure::ApprovalsIncomplete));
 }
 
-#[trace("FR-061-AC-8")]
+#[trace("TC-951", "FR-061-AC-8")]
 #[test]
 fn agent_approval_is_emitted_as_missing() {
     let mut input = fixture();
@@ -309,8 +309,7 @@ fn canonical_digests_bind_each_document_and_private_form_change() {
 }
 
 fn raw_sha256(bytes: &[u8]) -> String {
-    use sha2::{Digest, Sha256};
-    format!("sha256:{:x}", Sha256::digest(bytes))
+    format!("sha256:{}", sigstore_verify::crypto::sha256(bytes).to_hex())
 }
 
 #[trace("TC-574", "FR-072-AC-5")]
@@ -454,7 +453,7 @@ fn missing_session_emits_no_bom_and_failed_contract_missing_receipt() {
     );
 }
 
-#[trace("FR-073-AC-4")]
+#[trace("TC-580", "FR-073-AC-4")]
 #[test]
 fn builder_rejects_unrelated_bom_material_in_private_form() {
     let mut input = fixture();

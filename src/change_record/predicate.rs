@@ -6,7 +6,6 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 
@@ -283,7 +282,10 @@ pub struct BuiltChangeRecord {
 /// Returns [`PredicateError::Invalid`] when canonical serialization fails.
 pub fn canonical_digest(value: &Value) -> Result<String, PredicateError> {
     let bytes = serde_json_canonicalizer::to_vec(value).map_err(|_| PredicateError::Invalid)?;
-    Ok(format!("sha256:{:x}", Sha256::digest(bytes)))
+    Ok(format!(
+        "sha256:{}",
+        sigstore_verify::crypto::sha256(&bytes).to_hex()
+    ))
 }
 
 /// Builds the private form, public predicate, and commit-bound statement.
@@ -471,7 +473,7 @@ fn build_reviews(reviews: Vec<ReviewInput>) -> Vec<Review> {
 }
 
 fn raw_digest(bytes: &[u8]) -> String {
-    format!("sha256:{:x}", Sha256::digest(bytes))
+    format!("sha256:{}", sigstore_verify::crypto::sha256(bytes).to_hex())
 }
 
 /// Validates the exact serialized predicate against its closed JSON Schema.

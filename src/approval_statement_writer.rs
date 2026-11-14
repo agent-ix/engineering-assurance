@@ -7,7 +7,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
@@ -364,7 +363,10 @@ fn approval_record(
 ) -> Result<Record, StatementWriteError> {
     let statement: Value =
         serde_json::from_slice(statement_bytes).map_err(|_| StatementWriteError::Encoding)?;
-    let digest = format!("sha256:{:x}", Sha256::digest(statement_bytes));
+    let digest = format!(
+        "sha256:{}",
+        sigstore_verify::crypto::sha256(statement_bytes).to_hex()
+    );
     let public = PublicRecord {
         protocol: PublicProtocol::V1,
         record_id: record_id.clone(),
@@ -998,6 +1000,7 @@ mod tests {
     }
 
     #[test]
+    #[trace("TC-117", "NFR-005-AC-2")]
     fn fixture_reader_uses_exact_approval_query_contract() {
         let reader = Reader::default();
         assert!(

@@ -578,23 +578,6 @@ mod tests {
     }
 
     fn sha256_canonical_bytes_for_test(canonical: &[u8]) -> Result<String, ()> {
-        use std::{io::Write as _, process::Command};
-
-        let mut file = tempfile::NamedTempFile::new().map_err(|_| ())?;
-        file.write_all(canonical).map_err(|_| ())?;
-        let output = Command::new("/usr/bin/sha256sum")
-            .arg("--")
-            .arg(file.path())
-            .output()
-            .map_err(|_| ())?;
-        if !output.status.success() {
-            return Err(());
-        }
-        String::from_utf8(output.stdout)
-            .map_err(|_| ())?
-            .split_ascii_whitespace()
-            .next()
-            .map(str::to_owned)
-            .ok_or(())
+        Ok(sigstore_verify::crypto::sha256(canonical).to_hex())
     }
 }

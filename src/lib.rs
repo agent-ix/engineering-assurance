@@ -56,7 +56,7 @@
 //! | `scope-footprint` | `scope_footprint` | `content-rights` | `serde`, `thiserror` |
 //! | `semantics` | `semantics` | `claim-strength`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
 //! | `signature-verify` | `signature_verify` | | `serde` |
-//! | `attestation-signing` | `attestation_signing`; with `approval-gate`, `approval_statement`, `approval_statement_writer` | `attestation-verify`, `record-sink` | `serde`, `serde_json`, `serde_json_canonicalizer`, `sha2`, `sigstore-sign`, `sigstore-types`, `sigstore-verify`, `thiserror`, `time`, `tokio` |
+//! | `attestation-signing` | `attestation_signing`; with `approval-gate`, `approval_statement`, `approval_statement_writer` | `attestation-verify`, `record-sink` | `serde`, `serde_json`, `serde_json_canonicalizer`, `sigstore-sign`, `sigstore-types`, `sigstore-verify`, `thiserror`, `time`, `tokio` |
 //! | `attestation-verify` | `attestation_signing`, `attestation_verify` | | `serde`, `serde_json`, `serde_json_canonicalizer`, `sigstore-types`, `sigstore-verify`, `thiserror` |
 //! | `source-audit` | `source_audit` | | `serde`, `syn`, `thiserror` |
 //! | `structured-yaml` | `structured_yaml` | | `serde_json`, `yaml_serde` |
