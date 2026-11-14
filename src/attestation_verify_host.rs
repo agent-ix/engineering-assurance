@@ -14,7 +14,8 @@ use std::{
 use engineering_assurance::{
     approval_gate::{RolePolicy, parse_policy},
     attestation_signing::{
-        SigstoreBundleVerifier, TransparencyRequirement, WorkflowIdentityDocument, WorkflowRole,
+        SigstoreBundleVerifier, SourceWorkflowPolicy, TransparencyRequirement,
+        WorkflowIdentityDocument, WorkflowIdentityPolicy, WorkflowRole,
     },
     attestation_verify::{
         ArtifactSubject, ExpectedRelease, ReleaseInputs, SignedStatement, VerificationConditions,
@@ -133,10 +134,7 @@ impl AttestationVerifyError {
 
 /// Verify one release-attestation set and the signed release tag it describes.
 pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, AttestationVerifyError> {
-    let value: serde_json::Value =
-        serde_json::from_slice(bytes).map_err(|_| AttestationVerifyError::Unreadable)?;
-    let request: Request =
-        serde_json::from_value(value).map_err(|_| AttestationVerifyError::Invalid)?;
+    let request = parse_request(bytes)?;
     validate_request(&request)?;
     if !checkout_matches_repository(&request.repository, &request.github_repository)? {
         return Err(AttestationVerifyError::Invalid);
@@ -146,34 +144,72 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, AttestationVerifyError> {
         &request.repository,
         &request.base_branch,
     )?;
+    let policies = load_verification_policies(&request, &base_commit)?;
+    let commit = verify_release_tag(&request, policies.allowed_signers.path())?;
+    let attestations = read_attestations(&request)?;
+    let expected = expected_release(
+        &request,
+        &commit,
+        attestations.artifacts.clone(),
+        attestations.input_digests.clone(),
+    );
+    verify_attestations(&policies, &expected, &attestations)?;
+    encode_result(request.tag, commit)
+}
 
+struct VerificationPolicies {
+    allowed_signers: tempfile::NamedTempFile,
+    signer: WorkflowIdentityPolicy,
+    source: SourceWorkflowPolicy,
+    transparency: TransparencyRequirement,
+}
+
+struct AttestationSet {
+    artifacts: Vec<ArtifactSubject>,
+    input_digests: [String; 3],
+    provenance: ReadStatement,
+    sbom: ReadStatement,
+    test_result: ReadStatement,
+    summary: ReadStatement,
+}
+
+fn parse_request(bytes: &[u8]) -> Result<Request, AttestationVerifyError> {
+    let value: serde_json::Value =
+        serde_json::from_slice(bytes).map_err(|_| AttestationVerifyError::Unreadable)?;
+    serde_json::from_value(value).map_err(|_| AttestationVerifyError::Invalid)
+}
+
+fn load_verification_policies(
+    request: &Request,
+    base_commit: &str,
+) -> Result<VerificationPolicies, AttestationVerifyError> {
     let allowed_signers_bytes = git_show_base_file(
         &request.repository,
-        &base_commit,
+        base_commit,
         &request.allowed_signers_path,
         1024 * 1024,
     )
-    .map_err(|_| AttestationVerifyError::Policy)?;
+    .map_err(|()| AttestationVerifyError::Policy)?;
     let mut allowed_signers =
         tempfile::NamedTempFile::new().map_err(|_| AttestationVerifyError::Policy)?;
     std::io::Write::write_all(&mut allowed_signers, &allowed_signers_bytes)
         .map_err(|_| AttestationVerifyError::Policy)?;
     let identity_bytes = git_show_base_file(
         &request.repository,
-        &base_commit,
+        base_commit,
         ".engineering-assurance/workflow-identities.json",
         MAX_DOCUMENT_BYTES,
     )
-    .map_err(|_| AttestationVerifyError::Policy)?;
+    .map_err(|()| AttestationVerifyError::Policy)?;
     let identities = WorkflowIdentityDocument::parse(&identity_bytes)
         .map_err(|_| AttestationVerifyError::Policy)?;
     let role_bytes = git_show_base_file(
         &request.repository,
-        &base_commit,
+        base_commit,
         ".engineering-assurance/approval-policy.json",
         MAX_DOCUMENT_BYTES,
     )
-    .map_err(|_| AttestationVerifyError::Policy)?;
+    .map_err(|()| AttestationVerifyError::Policy)?;
     let role_policy = parse_policy(&role_bytes).map_err(|_| AttestationVerifyError::Policy)?;
     verify_role_statements(&role_policy)?;
 
@@ -182,7 +218,7 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, AttestationVerifyError> {
         "timestamp_only" => TransparencyRequirement::TimestampOnly,
         _ => return Err(AttestationVerifyError::Invalid),
     };
-    let signer_policy = identities
+    let signer = identities
         .signer_policy(
             WorkflowRole::ReleaseAttester,
             &request.signer_repository,
@@ -191,7 +227,7 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, AttestationVerifyError> {
             transparency,
         )
         .ok_or(AttestationVerifyError::Policy)?;
-    let source_policy = identities
+    let source = identities
         .source_policy(
             WorkflowRole::ReleaseAttester,
             &request.signer_repository,
@@ -199,13 +235,24 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, AttestationVerifyError> {
             &request.signer_ref,
         )
         .ok_or(AttestationVerifyError::Policy)?;
+    Ok(VerificationPolicies {
+        allowed_signers,
+        signer,
+        source,
+        transparency,
+    })
+}
 
+fn verify_release_tag(
+    request: &Request,
+    allowed_signers: &Path,
+) -> Result<String, AttestationVerifyError> {
     let release_request = serde_json::json!({
         "protocol": "engineering-assurance.release-verify-request/v1",
         "repository": &request.repository,
         "tag": &request.tag,
         "record_path": &request.record_path,
-        "allowed_signers": allowed_signers.path().to_string_lossy(),
+        "allowed_signers": allowed_signers.to_string_lossy(),
     });
     let release_output = crate::release_host::execute(release_request.to_string().as_bytes())
         .map_err(|_| AttestationVerifyError::Release)?;
@@ -218,21 +265,22 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, AttestationVerifyError> {
     {
         return Err(AttestationVerifyError::Release);
     }
-    let commit = resolve_tag_commit(&request.repository, &request.tag)?;
+    resolve_tag_commit(&request.repository, &request.tag)
+}
 
+fn read_attestations(request: &Request) -> Result<AttestationSet, AttestationVerifyError> {
     let artifacts = request
         .artifacts
         .iter()
         .map(|artifact| {
             let path = absolute_file(&artifact.path, MAX_ARTIFACT_BYTES)
-                .map_err(|_| AttestationVerifyError::Invalid)?;
+                .map_err(|()| AttestationVerifyError::Invalid)?;
             Ok(ArtifactSubject {
                 name: artifact.name.clone(),
-                sha256: sha256_file(&path).map_err(|_| AttestationVerifyError::Statement)?,
+                sha256: sha256_file(&path).map_err(|()| AttestationVerifyError::Statement)?,
             })
         })
         .collect::<Result<Vec<_>, AttestationVerifyError>>()?;
-
     let provenance = read_signed_statement(&request.statements.provenance)?;
     let sbom = read_signed_statement(&request.statements.sbom)?;
     let test_result = read_signed_statement(&request.statements.test_result)?;
@@ -245,6 +293,22 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, AttestationVerifyError> {
         canonical_digest(&test_result.payload, sha256_canonical_bytes)
             .map_err(|_| AttestationVerifyError::Statement)?,
     ];
+    Ok(AttestationSet {
+        artifacts,
+        input_digests,
+        provenance,
+        sbom,
+        test_result,
+        summary,
+    })
+}
+
+fn expected_release(
+    request: &Request,
+    commit: &str,
+    artifacts: Vec<ArtifactSubject>,
+    input_digests: [String; 3],
+) -> ExpectedRelease {
     let repository = request.github_repository.clone();
     let verifier_id = format!(
         "{}{}github.com/{}/{}@{}",
@@ -254,16 +318,23 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, AttestationVerifyError> {
         "{}{}github.com/{}/blob/{}/.engineering-assurance/approval-policy.json",
         "https:", "//", repository, request.base_branch
     );
-    let expected = ExpectedRelease {
+    ExpectedRelease {
         repository,
         tag: request.tag.clone(),
-        commit: commit.clone(),
+        commit: commit.to_owned(),
         policy_uri,
         verifier_id,
         artifacts,
         input_digests,
-    };
-    let trusted_root_json = match transparency {
+    }
+}
+
+fn verify_attestations(
+    policies: &VerificationPolicies,
+    expected: &ExpectedRelease,
+    attestations: &AttestationSet,
+) -> Result<(), AttestationVerifyError> {
+    let trusted_root_json = match policies.transparency {
         TransparencyRequirement::PublicLog => {
             sigstore_verify::trust_root::SIGSTORE_PRODUCTION_TRUSTED_ROOT
         }
@@ -277,9 +348,9 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, AttestationVerifyError> {
         SigstoreBundleVerifier::new(&trusted_root).map_err(|_| AttestationVerifyError::Policy)?;
     verify_release_attestation_set(
         &verifier,
-        &signer_policy,
-        &source_policy,
-        &expected,
+        &policies.signer,
+        &policies.source,
+        expected,
         VerificationConditions {
             release_verified: true,
             roles_satisfied: true,
@@ -287,29 +358,32 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, AttestationVerifyError> {
         },
         ReleaseInputs {
             provenance: SignedStatement {
-                payload: &provenance.payload,
-                bundle_json: &provenance.bundle,
+                payload: &attestations.provenance.payload,
+                bundle_json: &attestations.provenance.bundle,
             },
             sbom: SignedStatement {
-                payload: &sbom.payload,
-                bundle_json: &sbom.bundle,
+                payload: &attestations.sbom.payload,
+                bundle_json: &attestations.sbom.bundle,
             },
             test_result: SignedStatement {
-                payload: &test_result.payload,
-                bundle_json: &test_result.bundle,
+                payload: &attestations.test_result.payload,
+                bundle_json: &attestations.test_result.bundle,
             },
         },
         SignedStatement {
-            payload: &summary.payload,
-            bundle_json: &summary.bundle,
+            payload: &attestations.summary.payload,
+            bundle_json: &attestations.summary.bundle,
         },
     )
     .map_err(|_| AttestationVerifyError::Statement)?;
+    Ok(())
+}
 
+fn encode_result(tag: String, commit: String) -> Result<Vec<u8>, AttestationVerifyError> {
     let mut result = serde_json::to_vec(&ResultLine {
         protocol: RESULT_PROTOCOL,
         status: "verified",
-        tag: request.tag,
+        tag,
         commit,
     })
     .map_err(|_| AttestationVerifyError::Encoding)?;
@@ -365,9 +439,9 @@ fn read_signed_statement(
     request: &SignedStatementRequest,
 ) -> Result<ReadStatement, AttestationVerifyError> {
     let payload = read_bounded(&request.payload, MAX_DOCUMENT_BYTES)
-        .map_err(|_| AttestationVerifyError::Statement)?;
+        .map_err(|()| AttestationVerifyError::Statement)?;
     let bundle = read_bounded(&request.bundle, MAX_DOCUMENT_BYTES)
-        .map_err(|_| AttestationVerifyError::Statement)?;
+        .map_err(|()| AttestationVerifyError::Statement)?;
     let bundle = String::from_utf8(bundle).map_err(|_| AttestationVerifyError::Statement)?;
     Ok(ReadStatement { payload, bundle })
 }
