@@ -45,6 +45,13 @@ The pure decision of FR-047-AC-12 is exercised over every combination, the
 workflow tests of FR-048 run with no owner choice and with evidence that
 has every criterion `bound`, and a source inspection checks the second count.
 
+## Acceptance Criteria
+
+| ID | Criteria | Verification |
+| --- | --- | --- |
+| NFR-007-AC-1 | Across every generated combination of approval status, owner match, Baseline state and release commit facts, `released` is returned for exactly the combination with an approved status, the decision owner as approver, a resolved complete Baseline, the required record and snapshot changes, and no snapshot at the Baseline. | Test |
+| NFR-007-AC-2 | Source inspection finds zero code paths in the release module and release-decision workflow that create, sign or push a tag or choose `release`. | Inspection |
+
 ## Dependencies
 
 - **Upstream**: [FR-047](../functional/FR-047-release-record-and-signed-release-tag.md),

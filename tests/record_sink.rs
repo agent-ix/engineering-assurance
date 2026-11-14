@@ -395,7 +395,7 @@ fn tc_627_a_registered_implementation_publishes_the_unchanged_forms() {
     assert!(world.store.public.borrow().is_empty());
 }
 
-#[trace("TC-628", "FR-054-AC-5", "NFR-008-M-1")]
+#[trace("TC-628", "FR-054-AC-5", "NFR-008-M-1", "NFR-008-AC-3")]
 #[test]
 fn tc_628_the_result_schema_is_closed() {
     let base = json!({
@@ -533,7 +533,7 @@ fn tc_631_undeterminable_visibility_counts_as_private() {
     );
 }
 
-#[trace("TC-632", "FR-055-AC-4", "NFR-008-M-1")]
+#[trace("TC-632", "FR-055-AC-4", "NFR-008-M-1", "NFR-008-AC-1")]
 #[test]
 fn tc_632_invalid_and_incomplete_configurations_are_refused() {
     let base = |extra: Value| {
@@ -739,7 +739,7 @@ fn tc_636_the_forms_split_private_text_from_public_members() {
     assert_eq!(id.as_str(), "ffffffff-ffff-4fff-bfff-ffffffffffff");
 }
 
-#[trace("TC-637", "FR-056-AC-3", "NFR-008-M-1")]
+#[trace("TC-637", "FR-056-AC-3", "NFR-008-M-1", "NFR-008-AC-2")]
 #[test]
 fn tc_637_both_forms_reject_an_extra_member() {
     let mut public = public_json(PUBLISHER, &[]);
@@ -1203,7 +1203,7 @@ fn tc_648_private_store_and_none_publish_what_the_public_sink_refused() {
     assert!(none.lookup.calls.borrow().is_empty());
 }
 
-#[trace("TC-649", "FR-057-AC-8", "NFR-009-M-1")]
+#[trace("TC-649", "FR-057-AC-8", "NFR-009-M-1", "NFR-009-AC-1")]
 #[test]
 fn tc_649_only_all_public_records_reach_or_sign_for_the_public_log() {
     let mut rng = Rng(0x2545_f491_4f6c_dd1d);
@@ -1514,7 +1514,7 @@ impl RecordSink for Rogue {
     }
 }
 
-#[trace("TC-652", "FR-057-AC-8", "NFR-009-M-2")]
+#[trace("TC-652", "FR-057-AC-8", "NFR-009-AC-2")]
 #[test]
 fn tc_652_the_public_log_is_reachable_only_through_the_checked_sink() {
     // A registered implementation takes the private-store slot only; a public-log

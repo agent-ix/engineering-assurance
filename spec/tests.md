@@ -381,10 +381,11 @@ and verification-semantics baseline and the verification of the Rust port.
 | NFR-002 | Agent evaluation against fixture-authorized outcomes | TC-039 | ✅ `tests/evaluation_parity.rs`: the aggregate gate withholds on any unsupported addition, any inferred terminal decision, and any incomplete or failing cell of the declared qualification population, and ignores an unqualified host |
 | NFR-003 | Wheel/npm member audit plus compatibility invocation | TC-040 | ✅ Passing |
 | NFR-005 | Exact toolchain build, unsafe audit, executable-path audit, Quire reconciliation, matrix row integrity | TC-115..TC-118, TC-205 | ✅ Executable-language and host-configuration audit (workflow YAML excluded), trace-marker and reconciliation checks passing |
-| NFR-008 | Schema test per document kind (sink config, public and private forms, publish result) | TC-628, TC-632, TC-637 (NFR-008-M-1) | ✅ `tests/record_sink.rs` passing |
-| NFR-009 | Property test over the sink layer; behavioural test that the public log is reachable only through the checked sink | TC-649 (NFR-009-M-1), TC-652 (NFR-009-M-2) | ✅ `tests/record_sink.rs` passing |
+| NFR-007 | Pure release decision across all generated approval, owner, Baseline and commit facts; source inspection of release-module/workflow decision ownership | TC-415 (NFR-007-AC-1) | ✅ `tests/release.rs` passing; 🚧 NFR-007-AC-2 source inspection has no test case |
+| NFR-008 | Schema rejection for sink configuration, public and private record forms, and publish result | TC-632 (NFR-008-AC-1), TC-637 (NFR-008-AC-2), TC-628 (NFR-008-AC-3) | ✅ `tests/record_sink.rs` passing for these four forms; 🚧 approval statement, predicate, role policy and workflow-identity policy forms are not covered by these cases |
+| NFR-009 | Property test over generated records and visibility maps; checked public-log behavior; source inspection of public-log send paths | TC-649 (NFR-009-AC-1), TC-652 (NFR-009-AC-2), TC-653 (NFR-009-AC-3, NFR-009-M-2) | ✅ TC-649/652 in `tests/record_sink.rs`; 🚧 TC-653 source inspection unverified |
 | NFR-010 | Source inspection (NFR-010-M-1); stand-in public log signer (NFR-010-M-2); stand-in library that rejects every signature (NFR-010-M-3) | TC-651 (M-1), TC-650 (M-2) | ✅ M-1 and M-2 in `tests/record_sink.rs`; 🚧 M-3, which needs the verifier of FR-064 |
-| NFR-011 | Source inspection of the workflow files; YAML-parsing test; stand-in signer test | TC-622, TC-623 | 🚧 Specified |
+| NFR-011 | Source inspection of agent steps and credential exposure; YAML parse and gate-isolation check; stand-in signer identity check | TC-622 (NFR-011-AC-1, NFR-011-AC-2), TC-623 (NFR-011-AC-3), TC-911 (NFR-011-AC-4, NFR-011-M-4) | 🚧 Specified; signing workflows and their tests are not present |
 
 ### Constraint Coverage
 
@@ -781,7 +782,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-410 | Attestation files in the working tree or a later commit leave a released result unchanged, and the same release commit under an unsigned tag is never released | Integration | P0 | FR-053-AC-1 | ✅ `tests/release_verify_cli.rs` passing |
 | TC-411 | A snapshot whose bytes are not JSON leaves the verdict `released` and the result members unchanged, and the only snapshot member is the recorded path | Integration | P0 | FR-051-AC-5, FR-051-AC-6 | ✅ `tests/release_verify_cli.rs` passing |
 | TC-412 | The released result carries every member a consumer retains in one result, and is identical with only git and ssh-keygen on the path | Integration | P0 | FR-049-AC-1, FR-049-AC-2 | ✅ `tests/release_verify_cli.rs` passing |
-| TC-415 | The decision is exercised over every combination of the FR-041 status, the owner match, the Baseline state and the release commit facts without any process, and `released` is returned for exactly one | Property | P0 | FR-047-AC-12, FR-047-CON-1, NFR-007-M-1 | ✅ `tests/release.rs` passing |
+| TC-415 | The decision is exercised over every combination of the FR-041 status, the owner match, the Baseline state and the release commit facts without any process, and `released` is returned for exactly one | Property | P0 | FR-047-AC-12, FR-047-CON-1, NFR-007-M-1, NFR-007-AC-1 | ✅ `tests/release.rs` passing |
 | TC-416 | The path rules refuse an empty, absolute, trailing-slash, empty-segment, `.`, `..`, glob, backslash, control-character and leading-space-segment path | Unit | P0 | FR-047-AC-10 | ✅ `tests/release.rs` passing |
 | TC-417 | The frontmatter is the block between the first two fences and nothing else | Unit | P0 | FR-047-AC-7 | ✅ `tests/release.rs` passing |
 | TC-418 | Each failed fact gives its own reason and no other | Unit | P0 | FR-047-AC-5, FR-047-AC-6 | ✅ `tests/release.rs` passing |
@@ -941,22 +942,22 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-619 | A lookalike host (the admitted host as a subdomain of another domain, or followed by a credential separator) is rejected with the unapproved external URL finding | Integration | P0 | FR-079-AC-2 | 🚧 |
 | TC-620 | The same host with the path `/other/` and with the `http` scheme is rejected | Integration | P0 | FR-079-AC-3 | 🚧 |
 | TC-621 | The full tree check passes on a tree that contains the literal URIs | Integration | P0 | FR-079-AC-4 | 🚧 |
-| TC-622 | No step of a signing job in the workflow files invokes an agent harness or model client, and no signing job executes repository code | Static | P0 | NFR-011 | 🚧 |
-| TC-623 | Every signing job's identity in the fixture is the workflow identity, checked with a stand-in signer | Integration | P0 | NFR-011 | 🚧 |
+| TC-622 | No step of a signing job in the workflow files invokes an agent harness or model client, and no signing job executes repository code | Static | P0 | NFR-011-AC-1, NFR-011-AC-2 | 🚧 |
+| TC-623 | Every signing job's identity in the fixture is the workflow identity, checked with a stand-in signer | Integration | P0 | NFR-011-AC-3 | 🚧 |
 | TC-624 | Publishing with each implementation returns `published`, `published` and `discarded` with the record's id and the closed result members; the public-log publish leaves the full private form in the private store and sends only the trimmed public form | Unit | P0 | FR-054-AC-1 | ✅ `tests/record_sink.rs` passing |
 | TC-625 | A publish to `none` sends nothing, stores nothing and signs nothing | Unit | P0 | FR-054-AC-2 | ✅ `tests/record_sink.rs` passing |
 | TC-626 | A public log that rejects the record yields `refused` with `public_log_rejected`, keeps the private form and publishes nothing through another sink | Unit | P0 | FR-054-AC-3 | ✅ `tests/record_sink.rs` passing |
 | TC-627 | A test implementation registered through the sink interface publishes the record with the forms unchanged | Unit | P0 | FR-054-AC-4 | ✅ `tests/record_sink.rs` passing |
-| TC-628 | The publish result schema rejects an unknown member and a status outside the three values | Unit | P0 | FR-054-AC-5, NFR-008-M-1 | ✅ `tests/record_sink.rs` passing |
+| TC-628 | The publish result schema rejects an unknown member and a status outside the three values | Unit | P0 | FR-054-AC-5, NFR-008-M-1, NFR-008-AC-3 | ✅ `tests/record_sink.rs` passing |
 | TC-629 | A record the leak check refuses still has its private form stored and sends nothing; a failing private store write fails the publish before the check runs | Unit | P0 | FR-054-AC-6 | ✅ `tests/record_sink.rs` passing |
 | TC-630 | The visibility default and the configured override resolve the sink, and a private repository configured `public_log` is refused | Unit | P0 | FR-055-AC-1, FR-055-AC-2 | ✅ `tests/record_sink.rs` passing |
 | TC-631 | An undeterminable visibility resolves `private_store` and refuses a configured `public_log` | Unit | P0 | FR-055-AC-3 | ✅ `tests/record_sink.rs` passing |
-| TC-632 | An unknown member, unknown sink value, non-https endpoint, missing endpoint or missing destination is refused with `sink_config_invalid` or `sink_config_incomplete` | Unit | P0 | FR-055-AC-4, NFR-008-M-1 | ✅ `tests/record_sink.rs` passing |
+| TC-632 | An unknown member, unknown sink value, non-https endpoint, missing endpoint or missing destination is refused with `sink_config_invalid` or `sink_config_incomplete` | Unit | P0 | FR-055-AC-4, NFR-008-M-1, NFR-008-AC-1 | ✅ `tests/record_sink.rs` passing |
 | TC-633 | The policy document is read from the protected base branch and not from the pull request branch | Unit | P0 | FR-055-AC-5 | 🚧 only the contract is tested, with a stand-in source in `tests/record_sink.rs`; the repository adapter and the pull-request-branch case are not implemented or tested here, and PLAT-1685 builds the adapter and closes FR-055-AC-5 |
 | TC-634 | An unprotected or unreported base branch refuses each policy document with `policy_branch_unprotected` | Unit | P0 | FR-055-AC-6 | ✅ `tests/record_sink.rs` passing |
 | TC-635 | An absent document or one without a private store destination is `sink_config_incomplete` and nothing is sent or stored | Unit | P0 | FR-055-AC-7 | ✅ `tests/record_sink.rs` passing |
 | TC-636 | The public form holds none of the ticket text, criteria text or model names, the private form holds them, and both carry one record id and no other shared member | Unit | P0 | FR-056-AC-1, FR-056-AC-2, FR-056-AC-10 | ✅ `tests/record_sink.rs` passing |
-| TC-637 | A public or private form with an extra member fails schema validation | Unit | P0 | FR-056-AC-3, NFR-008-M-1 | ✅ `tests/record_sink.rs` passing |
+| TC-637 | A public or private form with an extra member fails schema validation | Unit | P0 | FR-056-AC-3, NFR-008-M-1, NFR-008-AC-2 | ✅ `tests/record_sink.rs` passing |
 | TC-638 | A public form value outside its member's grammar is rejected before any sink is called | Unit | P0 | FR-056-AC-4 | ✅ `tests/record_sink.rs` passing |
 | TC-639 | Changing only the private form leaves the public form's signed bytes and signature unchanged | Unit | P0 | FR-056-AC-5 | ✅ `tests/record_sink.rs` passing |
 | TC-640 | Over generated strings a public member accepts a string only when it matches its grammar | Property | P0 | FR-056-AC-6 | ✅ `tests/record_sink.rs` passing |
@@ -968,10 +969,11 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-646 | The publishing repository and the subject are checked even when `references` is empty or omits them | Unit | P0 | FR-057-AC-4 | ✅ `tests/record_sink.rs` passing |
 | TC-647 | The check runs on each publish: a repository made private between two publishes refuses the second | Unit | P0 | FR-057-AC-6 | ✅ `tests/record_sink.rs` passing |
 | TC-648 | The private-store and `none` sinks publish the record the public sink refused and run no check; a refusal reaches no other sink | Unit | P0 | FR-057-AC-7, FR-057-AC-9 | ✅ `tests/record_sink.rs` passing |
-| TC-649 | Over generated records and visibility maps the public sink sends, and the signing step uses the public path, only when the publisher, subject and every reference are public | Property | P0 | FR-057-AC-8, NFR-009-M-1 | ✅ `tests/record_sink.rs` passing |
+| TC-649 | Over generated records and visibility maps the public sink sends, and the signing step uses the public path, only when the publisher, subject and every reference are public | Property | P0 | FR-057-AC-8, NFR-009-M-1, NFR-009-AC-1 | ✅ `tests/record_sink.rs` passing |
 | TC-650 | Signing for the private store or `none` makes no public-log call; the public path signs only after the check passed and never for a refused record | Unit | P0 | FR-057-AC-10, FR-057-AC-11, NFR-010-AC-1, NFR-010-M-2 | ✅ `tests/record_sink.rs` passing |
 | TC-651 | The sink module source implements no signature primitive | Static | P0 | NFR-010-AC-2, NFR-010-M-1 | ✅ `tests/record_sink.rs` passing |
-| TC-652 | A registered implementation cannot reach the public log: a public-log selection still runs the leak check, a leaking record sends and public-signs nothing, and the proof carries the checked bytes | Unit | P0 | FR-057-AC-8, NFR-009-M-2 | ✅ `tests/record_sink.rs` passing |
+| TC-652 | A registered implementation cannot reach the public log: a public-log selection still runs the leak check, a leaking record sends and public-signs nothing, and the proof carries the checked bytes | Unit | P0 | FR-057-AC-8, NFR-009-AC-2 | ✅ `tests/record_sink.rs` passing |
+| TC-653 | Source inspection finds zero public-log send paths that bypass the leak check | Static | P0 | NFR-009-AC-3, NFR-009-M-2 | 🚧 Unverified; source inspection not yet completed |
 | TC-900 | The OSV-Scanner request validates and carries the defined arguments, environment, input, output, containment and exit policy | Unit | P0 | FR-044-AC-6 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
 | TC-901 | A nonexistent scanner is unavailable; fixture exits 127/128 fail, exit 1 completes, missing output and timeout withhold the report, and stale output is removed | Integration | P0 | FR-044-AC-3, FR-044-AC-4, FR-044-AC-7 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
 | TC-902 | A caller mirror without `all.zip`, or with a Wolfi archive, is rejected | Unit | P0 | FR-044-AC-12 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
@@ -983,6 +985,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-908 | The offline scan of the Syft-generated npm SBOM reports the expected lodash advisory for its exact purl | Integration | P0 | FR-044-AC-1 | ✅ Opt-in lane passed against caller-supplied npm mirror; ignored by default |
 | TC-909 | The offline scan of the Syft-generated PyPI SBOM reports the expected Django advisory for its exact purl | Integration | P0 | FR-044-AC-2 | ✅ Opt-in lane passed against caller-supplied PyPI mirror; ignored by default |
 | TC-910 | The offline scan of the Syft-generated Go SBOM reports the expected Gin advisory for its exact purl | Integration | P0 | FR-044-AC-2 | ✅ Opt-in lane passed against caller-supplied Go mirror; ignored by default |
+| TC-911 | Source inspection finds no signing credential readable by an AI agent step or process in any signing job | Static | P0 | NFR-011-AC-4, NFR-011-M-4 | 🚧 Signing workflows are absent; inspection not yet possible |
 
 ## Option Permutation Matrix
 

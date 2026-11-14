@@ -77,7 +77,13 @@ fn all_facts() -> Vec<Facts> {
 }
 
 #[test]
-#[trace("TC-415", "FR-047-AC-12", "FR-047-CON-1", "NFR-007-M-1")]
+#[trace(
+    "TC-415",
+    "FR-047-AC-12",
+    "FR-047-CON-1",
+    "NFR-007-M-1",
+    "NFR-007-AC-1"
+)]
 fn tc_415_released_is_returned_for_exactly_one_combination_of_the_facts() {
     let released: Vec<Facts> = all_facts()
         .into_iter()

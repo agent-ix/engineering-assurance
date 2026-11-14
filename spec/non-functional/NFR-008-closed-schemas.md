@@ -40,6 +40,14 @@ ignored member that reads as enforced. A closed schema makes the member set the 
 
 A test per document kind adds one unknown member to a valid document and expects rejection.
 
+## Acceptance Criteria
+
+| ID | Criteria | Verification |
+| --- | --- | --- |
+| NFR-008-AC-1 | A valid sink configuration with an unknown member is rejected. | Test |
+| NFR-008-AC-2 | Public and private record forms with an unknown member are rejected. | Test |
+| NFR-008-AC-3 | A valid publish result with an unknown member is rejected. | Test |
+
 ## Dependencies
 
 - **Upstream**: none.

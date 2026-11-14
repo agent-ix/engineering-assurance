@@ -36,6 +36,14 @@ unknown visibility is private, and a missing visibility source blocks the send.
 
 The property test of FR-057-AC-8 covers the first count; a source inspection checks the second.
 
+## Acceptance Criteria
+
+| ID | Criteria | Verification |
+| --- | --- | --- |
+| NFR-009-AC-1 | Across generated records and visibility maps, a public-log send or signature occurs only when the publishing repository, subject and every reference resolve to public. | Test |
+| NFR-009-AC-2 | With a private-store implementation registered, a public-log selection still runs the leak check; a refused record is not sent through that implementation or the public log, no public signature is made, and a successful proof carries the checked public bytes. | Test |
+| NFR-009-AC-3 | Source inspection finds zero code paths that reach the public-log send without passing the leak check. | Inspection |
+
 ## Dependencies
 
 - **Upstream**: [FR-057](../functional/FR-057-fail-closed-pre-publish-leak-check.md),

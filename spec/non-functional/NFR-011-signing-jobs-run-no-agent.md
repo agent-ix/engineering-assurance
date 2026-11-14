@@ -35,10 +35,20 @@ A receipt or release attestation is evidence about what an agent produced. If th
 | Count of steps in a signing job that invoke an agent harness or model client | 0 | 0 | Source inspection of the workflow files |
 | Count of signing jobs that execute code from the repository under change | 0 | 0 | YAML-parsing test and source inspection |
 | Count of signing jobs whose identity is not the workflow identity | 0 | 0 | Test with a stand-in signer |
+| Count of signing jobs whose signing credential is readable by an AI agent step or process | 0 | 0 | Source inspection of workflow credential exposure |
 
 ## Verification
 
-A source inspection checks the first count over the workflow files; the YAML-parsing tests of FR-070 and the gate-isolation case of FR-075 check the second; the verification tests of FR-068 and FR-078 check the third.
+A source inspection checks the first count over the workflow files; the YAML-parsing tests of FR-070 and the gate-isolation case of FR-075 check the second; the verification tests of FR-068 and FR-078 check the third; a source inspection checks whether any signing credential is readable by an agent.
+
+## Acceptance Criteria
+
+| ID | Criteria | Verification |
+| --- | --- | --- |
+| NFR-011-AC-1 | Every signing-permission workflow job contains zero steps that invoke an AI agent harness or model client. | Inspection |
+| NFR-011-AC-2 | Every signing-permission workflow job executes no code from the repository under change. | Test |
+| NFR-011-AC-3 | Every signing-permission workflow job uses the workflow identity for signing. | Test |
+| NFR-011-AC-4 | No signing job makes a signing credential readable to an AI agent step or process. | Inspection |
 
 ## Dependencies
 
