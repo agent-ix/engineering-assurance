@@ -715,6 +715,7 @@ pub fn sign_statement_bytes(canonical_statement: &[u8]) -> Result<String, Signin
     let payload = canonical_statement.to_vec();
     run_signing_thread(move || async move { sign_statement_without_public_log(&payload).await })
 }
+#[cfg(feature = "attestation-signing")]
 async fn sign_statement_without_public_log_with<Detect>(
     canonical_statement: &[u8],
     detect: Detect,
