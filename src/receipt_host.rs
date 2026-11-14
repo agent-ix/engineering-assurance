@@ -249,79 +249,22 @@ fn separate_receipt_findings(
     })
 }
 
+struct MissingHistoryContext {
+    policy: ReceiptPolicy,
+    commits: Vec<String>,
+    pushed_at: BTreeMap<String, u64>,
+    in_progress: BTreeSet<String>,
+}
+
 fn missing_receipt_findings(
     request: &MissingRequest,
 ) -> Result<Vec<MissingReceipt>, ReceiptHostError> {
-    let repository_info = gh_api_json(&format!("repos/{}", request.github_repository))
-        .map_err(|_| ReceiptHostError::Git)?;
-    if repository_info
-        .get("default_branch")
-        .and_then(Value::as_str)
-        != Some(request.base_branch.as_str())
-    {
-        return Err(ReceiptHostError::MissingRequest);
-    }
-    let branch_json = gh_api_json(&format!(
-        "repos/{}/branches/{}",
-        request.github_repository,
-        encode_path_segment(&request.base_branch)
-    ))
-    .map_err(|_| ReceiptHostError::Git)?;
-    if branch_json.get("protected").and_then(Value::as_bool) != Some(true) {
-        return Err(ReceiptHostError::MissingRequest);
-    }
-    let base_commit = branch_json
-        .pointer("/commit/sha")
-        .and_then(Value::as_str)
-        .filter(|value| is_full_object_id(value))
-        .ok_or(ReceiptHostError::Git)?;
-    let policy_bytes = git_show_base_file(
-        &request.repository,
-        base_commit,
-        ".engineering-assurance/receipt-policy.json",
-    )
-    .map_err(|_| ReceiptHostError::Git)?;
-    let policy: ReceiptPolicy =
-        serde_json::from_slice(&policy_bytes).map_err(|_| ReceiptHostError::MissingRequest)?;
-    if policy.protocol != "engineering-assurance.receipt-policy/v1"
-        || policy.grace_minutes > 1440
-        || policy.gates.len() > 256
-        || policy.gates.iter().any(|gate| {
-            gate.name.is_empty() || gate.argv.is_empty() || gate.argv.iter().any(String::is_empty)
-        })
-    {
-        return Err(ReceiptHostError::MissingRequest);
-    }
-    let history_bytes = git_output(
-        &request.repository,
-        &[
-            "rev-list",
-            "--first-parent",
-            "--max-count=100001",
-            base_commit,
-        ],
-    )
-    .map_err(|_| ReceiptHostError::Git)?;
-    let history_commits = String::from_utf8(history_bytes)
-        .map_err(|_| ReceiptHostError::Git)?
-        .lines()
-        .map(str::to_owned)
-        .collect::<Vec<_>>();
-    if history_commits.is_empty() || history_commits.len() > 100_000 {
-        return Err(ReceiptHostError::MissingRequest);
-    }
-    let activities = github_push_activities(&request.github_repository, &request.base_branch)
-        .unwrap_or_default();
-    let branch_ref = format!("refs/heads/{}", request.base_branch);
-    let pushed_at = pushed_commit_times(
-        &request.repository,
-        &history_commits,
-        &activities,
-        &branch_ref,
-    )
-    .unwrap_or_default();
-    let in_progress = receipt_runs_in_progress(&request.github_repository, &request.base_branch)
-        .unwrap_or_default();
+    let MissingHistoryContext {
+        policy,
+        commits: history_commits,
+        pushed_at,
+        in_progress,
+    } = load_missing_history_context(request)?;
     let verify_template = VerifyRequest {
         protocol: VERIFY_REQUEST_PROTOCOL.to_owned(),
         repository: request.repository.clone(),
@@ -364,6 +307,87 @@ fn missing_receipt_findings(
             _ => ReceiptHostError::MissingRequest,
         },
     )
+}
+
+fn load_missing_history_context(
+    request: &MissingRequest,
+) -> Result<MissingHistoryContext, ReceiptHostError> {
+    let repository_info = gh_api_json(&format!("repos/{}", request.github_repository))
+        .map_err(|()| ReceiptHostError::Git)?;
+    if repository_info
+        .get("default_branch")
+        .and_then(Value::as_str)
+        != Some(request.base_branch.as_str())
+    {
+        return Err(ReceiptHostError::MissingRequest);
+    }
+    let branch_json = gh_api_json(&format!(
+        "repos/{}/branches/{}",
+        request.github_repository,
+        encode_path_segment(&request.base_branch)
+    ))
+    .map_err(|()| ReceiptHostError::Git)?;
+    if branch_json.get("protected").and_then(Value::as_bool) != Some(true) {
+        return Err(ReceiptHostError::MissingRequest);
+    }
+    let base_commit = branch_json
+        .pointer("/commit/sha")
+        .and_then(Value::as_str)
+        .filter(|value| is_full_object_id(value))
+        .ok_or(ReceiptHostError::Git)?;
+    let policy_bytes = git_show_base_file(
+        &request.repository,
+        base_commit,
+        ".engineering-assurance/receipt-policy.json",
+    )
+    .map_err(|()| ReceiptHostError::Git)?;
+    let policy: ReceiptPolicy =
+        serde_json::from_slice(&policy_bytes).map_err(|_| ReceiptHostError::MissingRequest)?;
+    if policy.protocol != "engineering-assurance.receipt-policy/v1"
+        || policy.grace_minutes > 1440
+        || policy.gates.len() > 256
+        || policy.gates.iter().any(|gate| {
+            gate.name.is_empty() || gate.argv.is_empty() || gate.argv.iter().any(String::is_empty)
+        })
+    {
+        return Err(ReceiptHostError::MissingRequest);
+    }
+    let history_bytes = git_output(
+        &request.repository,
+        &[
+            "rev-list",
+            "--first-parent",
+            "--max-count=100001",
+            base_commit,
+        ],
+    )
+    .map_err(|_| ReceiptHostError::Git)?;
+    let history_commits = String::from_utf8(history_bytes)
+        .map_err(|_| ReceiptHostError::Git)?
+        .lines()
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    if history_commits.is_empty() || history_commits.len() > 100_000 {
+        return Err(ReceiptHostError::MissingRequest);
+    }
+    let activities = github_push_activities(&request.github_repository, &request.base_branch)
+        .unwrap_or_default();
+    let branch_ref = format!("refs/heads/{}", request.base_branch);
+    let pushed_at = pushed_commit_times(
+        &request.repository,
+        &history_commits,
+        &activities,
+        &branch_ref,
+    )
+    .unwrap_or_default();
+    let in_progress = receipt_runs_in_progress(&request.github_repository, &request.base_branch)
+        .unwrap_or_default();
+    Ok(MissingHistoryContext {
+        policy,
+        commits: history_commits,
+        pushed_at,
+        in_progress,
+    })
 }
 
 fn receipt_state_for_commit(
@@ -433,7 +457,7 @@ fn github_push_activities(
         None,
         32 * 1024 * 1024,
     )
-    .map_err(|_| ReceiptHostError::Git)?;
+    .map_err(|()| ReceiptHostError::Git)?;
     let pages: Value = serde_json::from_slice(&output).map_err(|_| ReceiptHostError::Git)?;
     let pages = pages.as_array().ok_or(ReceiptHostError::Git)?;
     let mut activities = Vec::new();
@@ -538,7 +562,7 @@ fn receipt_runs_in_progress(
         None,
         8 * 1024 * 1024,
     )
-    .map_err(|_| ReceiptHostError::Git)?;
+    .map_err(|()| ReceiptHostError::Git)?;
     let pages: Value = serde_json::from_slice(&output).map_err(|_| ReceiptHostError::Git)?;
     let pages = pages.as_array().ok_or(ReceiptHostError::Git)?;
     let mut commits = BTreeSet::new();
@@ -550,14 +574,12 @@ fn receipt_runs_in_progress(
         for run in runs {
             if run.get("path").and_then(Value::as_str)
                 == Some(".github/workflows/change-receipt.yml")
-                && run
+                && let Some(commit) = run
                     .get("head_sha")
                     .and_then(Value::as_str)
-                    .is_some_and(is_full_object_id)
+                    .filter(|commit| is_full_object_id(commit))
             {
-                if let Some(commit) = run.get("head_sha").and_then(Value::as_str) {
-                    commits.insert(commit.to_owned());
-                }
+                commits.insert(commit.to_owned());
             }
         }
     }
@@ -645,60 +667,22 @@ struct VerificationSetup {
     verifier: SigstoreBundleVerifier,
 }
 
+struct ProtectedVerificationInputs {
+    private: bool,
+    identities: WorkflowIdentityDocument,
+    role_policy: engineering_assurance::approval_gate::RolePolicy,
+    sink_config: SinkConfig,
+}
+
 fn load_verification_setup(
     request: &VerifyRequest,
 ) -> Result<VerificationSetup, UnverifiableReason> {
-    let repository_json = gh_api_json(&format!("repos/{}", request.github_repository))
-        .map_err(|_| UnverifiableReason::PolicyUnreadable)?;
-    if repository_json
-        .get("default_branch")
-        .and_then(Value::as_str)
-        != Some(request.base_branch.as_str())
-    {
-        return Err(UnverifiableReason::PolicyUnreadable);
-    }
-    let private = repository_json
-        .get("private")
-        .and_then(Value::as_bool)
-        .ok_or(UnverifiableReason::PolicyUnreadable)?;
-    let branch_json = gh_api_json(&format!(
-        "repos/{}/branches/{}",
-        request.github_repository,
-        encode_path_segment(&request.base_branch)
-    ))
-    .map_err(|_| UnverifiableReason::PolicyUnreadable)?;
-    if branch_json.get("protected").and_then(Value::as_bool) != Some(true) {
-        return Err(UnverifiableReason::PolicyUnreadable);
-    }
-    let base_commit = branch_json
-        .pointer("/commit/sha")
-        .and_then(Value::as_str)
-        .filter(|value| is_full_object_id(value))
-        .ok_or(UnverifiableReason::PolicyUnreadable)?;
-    let identities_bytes = git_show_base_file(
-        &request.repository,
-        base_commit,
-        ".engineering-assurance/workflow-identities.json",
-    )
-    .map_err(|_| UnverifiableReason::PolicyUnreadable)?;
-    let identities = WorkflowIdentityDocument::parse(&identities_bytes)
-        .map_err(|_| UnverifiableReason::PolicyUnreadable)?;
-    let role_bytes = git_show_base_file(
-        &request.repository,
-        base_commit,
-        ".engineering-assurance/approval-policy.json",
-    )
-    .map_err(|_| UnverifiableReason::PolicyUnreadable)?;
-    let role_policy =
-        parse_policy(&role_bytes).map_err(|_| UnverifiableReason::PolicyUnreadable)?;
-    let sink_bytes = git_show_base_file(
-        &request.repository,
-        base_commit,
-        ".engineering-assurance/sinks.json",
-    )
-    .map_err(|_| UnverifiableReason::PolicyUnreadable)?;
-    let sink_config =
-        SinkConfig::parse(&sink_bytes).map_err(|_| UnverifiableReason::PolicyUnreadable)?;
+    let ProtectedVerificationInputs {
+        private,
+        identities,
+        role_policy,
+        sink_config,
+    } = load_protected_verification_inputs(request)?;
     let visibility = if private {
         Visibility::Private
     } else {
@@ -711,9 +695,10 @@ fn load_verification_setup(
         .filter(|destination| !destination.is_empty())
         .ok_or(UnverifiableReason::PolicyUnreadable)?;
 
-    let transparency = match private {
-        true => TransparencyRequirement::TimestampOnly,
-        false => TransparencyRequirement::PublicLog,
+    let transparency = if private {
+        TransparencyRequirement::TimestampOnly
+    } else {
+        TransparencyRequirement::PublicLog
     };
     let receipt_signer = identities
         .signer_policy(
@@ -763,6 +748,68 @@ fn load_verification_setup(
     })
 }
 
+fn load_protected_verification_inputs(
+    request: &VerifyRequest,
+) -> Result<ProtectedVerificationInputs, UnverifiableReason> {
+    let repository_json = gh_api_json(&format!("repos/{}", request.github_repository))
+        .map_err(|()| UnverifiableReason::PolicyUnreadable)?;
+    if repository_json
+        .get("default_branch")
+        .and_then(Value::as_str)
+        != Some(request.base_branch.as_str())
+    {
+        return Err(UnverifiableReason::PolicyUnreadable);
+    }
+    let private = repository_json
+        .get("private")
+        .and_then(Value::as_bool)
+        .ok_or(UnverifiableReason::PolicyUnreadable)?;
+    let branch_json = gh_api_json(&format!(
+        "repos/{}/branches/{}",
+        request.github_repository,
+        encode_path_segment(&request.base_branch)
+    ))
+    .map_err(|()| UnverifiableReason::PolicyUnreadable)?;
+    if branch_json.get("protected").and_then(Value::as_bool) != Some(true) {
+        return Err(UnverifiableReason::PolicyUnreadable);
+    }
+    let base_commit = branch_json
+        .pointer("/commit/sha")
+        .and_then(Value::as_str)
+        .filter(|value| is_full_object_id(value))
+        .ok_or(UnverifiableReason::PolicyUnreadable)?;
+    let identities_bytes = git_show_base_file(
+        &request.repository,
+        base_commit,
+        ".engineering-assurance/workflow-identities.json",
+    )
+    .map_err(|()| UnverifiableReason::PolicyUnreadable)?;
+    let identities = WorkflowIdentityDocument::parse(&identities_bytes)
+        .map_err(|_| UnverifiableReason::PolicyUnreadable)?;
+    let role_bytes = git_show_base_file(
+        &request.repository,
+        base_commit,
+        ".engineering-assurance/approval-policy.json",
+    )
+    .map_err(|()| UnverifiableReason::PolicyUnreadable)?;
+    let role_policy =
+        parse_policy(&role_bytes).map_err(|_| UnverifiableReason::PolicyUnreadable)?;
+    let sink_bytes = git_show_base_file(
+        &request.repository,
+        base_commit,
+        ".engineering-assurance/sinks.json",
+    )
+    .map_err(|()| UnverifiableReason::PolicyUnreadable)?;
+    let sink_config =
+        SinkConfig::parse(&sink_bytes).map_err(|_| UnverifiableReason::PolicyUnreadable)?;
+    Ok(ProtectedVerificationInputs {
+        private,
+        identities,
+        role_policy,
+        sink_config,
+    })
+}
+
 fn verify_groups_for_commit(
     request: &VerifyRequest,
     commit: &str,
@@ -807,10 +854,10 @@ fn verify_groups_for_commit(
         Err(engineering_assurance::receipt::ReceiptVerificationError::BundleInvalid) => {
             Ok(ReceiptStatus::SignatureInvalid)
         }
-        Err(engineering_assurance::receipt::ReceiptVerificationError::PredicateInvalid)
-        | Err(engineering_assurance::receipt::ReceiptVerificationError::DigestUnavailable) => {
-            Ok(ReceiptStatus::PredicateInvalid)
-        }
+        Err(
+            engineering_assurance::receipt::ReceiptVerificationError::PredicateInvalid
+            | engineering_assurance::receipt::ReceiptVerificationError::DigestUnavailable,
+        ) => Ok(ReceiptStatus::PredicateInvalid),
     }
 }
 
@@ -890,7 +937,9 @@ fn valid_github_repository(value: &str) -> bool {
             part.bytes()
                 .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
         })
-        && !repository.ends_with(".git")
+        && !Path::new(repository)
+            .extension()
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("git"))
 }
 
 fn valid_branch(value: &str) -> bool {
@@ -904,9 +953,13 @@ fn valid_branch(value: &str) -> bool {
         && !value
             .chars()
             .any(|character| character.is_control() || character.is_whitespace())
-        && value
-            .split('/')
-            .all(|part| !part.is_empty() && !part.starts_with('.') && !part.ends_with(".lock"))
+        && value.split('/').all(|part| {
+            !part.is_empty()
+                && !part.starts_with('.')
+                && !part
+                    .rsplit_once('.')
+                    .is_some_and(|(_, extension)| extension.eq_ignore_ascii_case("lock"))
+        })
 }
 
 fn valid_workflow_ref(value: &str) -> bool {
@@ -1112,7 +1165,7 @@ fn git_output(repository: &Path, arguments: &[&str]) -> Result<Vec<u8>, GitError
     if output.status.success() {
         Ok(output.stdout)
     } else if output.status.code() == Some(1)
-        && arguments.get(0) == Some(&"notes")
+        && arguments.first() == Some(&"notes")
         && arguments.get(3) == Some(&"show")
     {
         Err(GitError::NotFound)
@@ -1236,11 +1289,15 @@ mod tests {
         (directory, commit)
     }
 
+    fn command_succeeded(command: &mut Command) -> bool {
+        command.status().unwrap().success()
+    }
+
     fn request(
         operation: &str,
         repository: &Path,
         commit: &str,
-        bundles: Option<Value>,
+        bundles: Option<&Value>,
     ) -> Vec<u8> {
         serde_json::to_vec(&json!({
             "protocol": REQUEST_PROTOCOL,
@@ -1345,14 +1402,15 @@ mod tests {
     fn stores_and_reads_a_note_on_the_requested_commit() {
         let (directory, commit) = fixture_repo();
         let root = directory.path();
-        let stored = execute(&request("store", root, &commit, Some(bundle_value())))
+        let bundles = bundle_value();
+        let stored = execute(&request("store", root, &commit, Some(&bundles)))
             .expect("receipt note is written");
         assert!(
             String::from_utf8(stored)
                 .unwrap()
                 .contains("\"status\":\"stored\"")
         );
-        let duplicate = execute(&request("store", root, &commit, Some(bundle_value())))
+        let duplicate = execute(&request("store", root, &commit, Some(&bundles)))
             .expect_err("existing receipt is never overwritten");
         assert_eq!(duplicate.code(), "receipt_note_conflict");
         let read = execute(&request("read", root, &commit, None)).expect("receipt note is read");
@@ -1367,8 +1425,7 @@ mod tests {
         assert_eq!(
             raw_note
                 .stdout
-                .iter()
-                .filter(|byte| **byte == b'\n')
+                .split_inclusive(|byte| *byte == b'\n')
                 .count(),
             3
         );
@@ -1380,55 +1437,41 @@ mod tests {
         let (directory, commit) = fixture_repo();
         let repository = directory.path();
         let remote = TempDir::new().expect("local bare remote");
-        assert!(
+        assert!(command_succeeded(
             Command::new("git")
                 .args(["init", "-q", "--bare"])
                 .current_dir(remote.path())
-                .status()
-                .unwrap()
-                .success()
-        );
-        assert!(
+        ));
+        assert!(command_succeeded(
             Command::new("git")
                 .args(["branch", "-M", "main"])
                 .current_dir(repository)
-                .status()
-                .unwrap()
-                .success()
-        );
-        assert!(
+        ));
+        assert!(command_succeeded(
             Command::new("git")
                 .args(["remote", "add", "origin"])
                 .arg(remote.path())
                 .current_dir(repository)
-                .status()
-                .unwrap()
-                .success()
-        );
-        assert!(
+        ));
+        assert!(command_succeeded(
             Command::new("git")
                 .args(["push", "-u", "origin", "main"])
                 .current_dir(repository)
-                .status()
-                .unwrap()
-                .success()
-        );
+        ));
 
-        let stored = execute(&request("store", repository, &commit, Some(bundle_value())))
+        let bundles = bundle_value();
+        let stored = execute(&request("store", repository, &commit, Some(&bundles)))
             .expect("fixture receipt is stored locally");
         assert!(
             String::from_utf8(stored)
                 .unwrap()
                 .contains("\"status\":\"stored\"")
         );
-        assert!(
+        assert!(command_succeeded(
             Command::new("git")
                 .args(["push", "origin", RECEIPT_NOTES_REF])
                 .current_dir(repository)
-                .status()
-                .unwrap()
-                .success()
-        );
+        ));
         let note_ref_before = Command::new("git")
             .args(["--git-dir"])
             .arg(remote.path())
@@ -1446,30 +1489,21 @@ mod tests {
             "second default-branch push\n",
         )
         .unwrap();
-        assert!(
+        assert!(command_succeeded(
             Command::new("git")
                 .args(["add", "second.txt"])
                 .current_dir(repository)
-                .status()
-                .unwrap()
-                .success()
-        );
-        assert!(
+        ));
+        assert!(command_succeeded(
             Command::new("git")
                 .args(["commit", "-qm", "second push"])
                 .current_dir(repository)
-                .status()
-                .unwrap()
-                .success()
-        );
-        assert!(
+        ));
+        assert!(command_succeeded(
             Command::new("git")
                 .args(["push", "origin", "main"])
                 .current_dir(repository)
-                .status()
-                .unwrap()
-                .success()
-        );
+        ));
         let note_ref_after = Command::new("git")
             .args(["--git-dir"])
             .arg(remote.path())
@@ -1491,8 +1525,7 @@ mod tests {
         assert_eq!(
             remote_note
                 .stdout
-                .iter()
-                .filter(|byte| **byte == b'\n')
+                .split_inclusive(|byte| *byte == b'\n')
                 .count(),
             3
         );
@@ -1506,7 +1539,7 @@ mod tests {
             "change_record": {"payload": "x".repeat(1024 * 1024)},
             "test_result": {}, "summary": {}
         });
-        let error = execute(&request("store", directory.path(), &commit, Some(huge)))
+        let error = execute(&request("store", directory.path(), &commit, Some(&huge)))
             .expect_err("oversized note is rejected");
         assert_eq!(error.code(), "receipt_note_too_large");
         assert!(

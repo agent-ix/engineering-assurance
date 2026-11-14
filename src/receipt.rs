@@ -343,6 +343,11 @@ impl ReceiptBundleSet {
 
     /// Parse one or more complete receipt groups without relying on line order.
     /// Each summary binds its change-record and test-result by canonical digest.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error for oversized, malformed, or incomplete receipt
+    /// groups.
     pub fn parse_note_groups(bytes: &[u8]) -> Result<Vec<Self>, ReceiptNoteError> {
         if bytes.len() > MAX_RECEIPT_NOTE_BYTES {
             return Err(ReceiptNoteError::TooLarge);
@@ -500,7 +505,18 @@ fn verify_receipt_inner(
         }
     }
 
-    let change_statement = parse_change_record(&change.payload)?;
+    let change_statement =
+        verify_receipt_predicates(&change.payload, &test.payload, &summary.payload, context)?;
+    verify_receipt_approvals(&change_statement, context)
+}
+
+fn verify_receipt_predicates(
+    change_payload: &[u8],
+    test_payload: &[u8],
+    summary_payload: &[u8],
+    context: &ReceiptVerificationContext<'_>,
+) -> Result<ChangeStatement, ReceiptVerificationError> {
+    let change_statement = parse_change_record(change_payload)?;
     if change_statement.predicate_type != PREDICATE_TYPE
         || validate_predicate(&change_statement.predicate).is_err()
         || !change_statement_has_subject(
@@ -511,7 +527,7 @@ fn verify_receipt_inner(
     {
         return Err(ReceiptVerificationError::PredicateInvalid);
     }
-    let test_statement: StatementV1 = serde_json::from_slice(&test.payload)
+    let test_statement: StatementV1 = serde_json::from_slice(test_payload)
         .map_err(|_| ReceiptVerificationError::PredicateInvalid)?;
     let test_result = validate_test_result(
         &serde_json::to_value(&test_statement.predicate)
@@ -527,8 +543,9 @@ fn verify_receipt_inner(
     {
         return Err(ReceiptVerificationError::PredicateInvalid);
     }
-    let summary_statement: VerificationSummaryStatement = serde_json::from_slice(&summary.payload)
-        .map_err(|_| ReceiptVerificationError::PredicateInvalid)?;
+    let summary_statement: VerificationSummaryStatement =
+        serde_json::from_slice(summary_payload)
+            .map_err(|_| ReceiptVerificationError::PredicateInvalid)?;
     if summary_statement.type_ != crate::attestation_signing::STATEMENT_V1_TYPE
         || summary_statement.predicate_type
             != crate::attestation_verify::VERIFICATION_SUMMARY_PREDICATE
@@ -553,8 +570,8 @@ fn verify_receipt_inner(
         return Err(ReceiptVerificationError::PredicateInvalid);
     }
 
-    let change_digest = canonical_statement_digest(&change.payload)?;
-    let test_digest = canonical_statement_digest(&test.payload)?;
+    let change_digest = canonical_statement_digest(change_payload)?;
+    let test_digest = canonical_statement_digest(test_payload)?;
     let mut input_digests = summary_statement
         .predicate
         .input_attestations
@@ -574,7 +591,13 @@ fn verify_receipt_inner(
     if summary_statement.predicate.verification_result != expected_result {
         return Err(ReceiptVerificationError::PredicateInvalid);
     }
+    Ok(change_statement)
+}
 
+fn verify_receipt_approvals(
+    change_statement: &ChangeStatement,
+    context: &ReceiptVerificationContext<'_>,
+) -> Result<ReceiptStatus, ReceiptVerificationError> {
     let lookup = ApprovalStatementLookup {
         repository: &context.subject.repository,
         merged_pull_request: &context.subject.merged_pull_request,
@@ -595,9 +618,8 @@ fn verify_receipt_inner(
         if !retained_digests.insert(digest.clone()) {
             return Ok(ReceiptStatus::ApprovalsMismatch);
         }
-        let approval = match approval_from_statement(&statement.statement_bytes, lookup) {
-            Ok(approval) => approval,
-            Err(_) => return Ok(ReceiptStatus::ApprovalsMismatch),
+        let Ok(approval) = approval_from_statement(&statement.statement_bytes, lookup) else {
+            return Ok(ReceiptStatus::ApprovalsMismatch);
         };
         if !retained_roles.insert(approval.role.clone())
             || !retained_pairs.insert((approval.role, digest))
@@ -672,6 +694,11 @@ fn verify_receipt_inner(
 /// Verify grouped receipt history and choose the newest fully verified group.
 /// If every group fails verification, report the result belonging to the
 /// summary with the latest valid `timeVerified` value.
+///
+/// # Errors
+///
+/// Returns an error when no groups are supplied or a summary cannot be parsed
+/// or does not contain a valid `timeVerified` value.
 pub fn verify_receipt_groups(
     groups: &[ReceiptBundleSet],
     context: &ReceiptVerificationContext<'_>,
@@ -1128,7 +1155,12 @@ mod tests {
             signature_bundle: "fixture-approval-bundle".to_owned(),
             publish_outcome: crate::approval_statement::ApprovalStatementPublishOutcome::Published,
         });
-        let policy = RolePolicy {
+        let policy = fixture_role_policy();
+        (bundles, reader, policy)
+    }
+
+    fn fixture_role_policy() -> RolePolicy {
+        RolePolicy {
             protocol: crate::approval_gate::POLICY_PROTOCOL.to_owned(),
             required_roles: vec!["engineer".to_owned()],
             individuals: [(
@@ -1141,8 +1173,7 @@ mod tests {
             .into(),
             roles: [("engineer".to_owned(), vec!["alice".to_owned()])].into(),
             agents: Vec::new(),
-        };
-        (bundles, reader, policy)
+        }
     }
 
     fn valid_two_role_fixture() -> (ReceiptBundleSet, ManyApprovalReader, RolePolicy) {
@@ -1235,7 +1266,7 @@ mod tests {
     #[test]
     fn receipt_note_round_trips_three_json_lines_without_private_text() {
         let encoded = bundle_set().encode_note().expect("bounded note encoding");
-        assert_eq!(encoded.iter().filter(|byte| **byte == b'\n').count(), 3);
+        assert_eq!(encoded.split_inclusive(|byte| *byte == b'\n').count(), 3);
         assert!(!String::from_utf8_lossy(&encoded).contains("ticket title"));
         assert_eq!(ReceiptBundleSet::parse_note(&encoded), Ok(bundle_set()));
     }
@@ -1339,8 +1370,8 @@ mod tests {
         let role_policy = RolePolicy {
             protocol: "engineering-assurance.approval-policy/v1".to_owned(),
             required_roles: Vec::new(),
-            individuals: Default::default(),
-            roles: Default::default(),
+            individuals: std::collections::BTreeMap::default(),
+            roles: std::collections::BTreeMap::default(),
             agents: Vec::new(),
         };
         let context =
