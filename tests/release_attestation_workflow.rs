@@ -24,7 +24,16 @@ fn reusable_workflow() -> Value {
     yaml_serde::from_slice(&bytes).expect("release-attestation reusable workflow parses as YAML")
 }
 
-#[trace("TC-557", "FR-070-AC-1")]
+#[trace(
+    "TC-557",
+    "TC-665",
+    "TC-667",
+    "TC-668",
+    "FR-070-AC-1",
+    "FR-070-AC-9",
+    "FR-070-AC-11",
+    "FR-070-AC-12"
+)]
 #[test]
 fn engineering_assurance_tag_caller_builds_then_calls_the_matching_release_tag() {
     let workflow = workflow();
@@ -49,6 +58,11 @@ fn engineering_assurance_tag_caller_builds_then_calls_the_matching_release_tag()
             .is_some_and(|reference| reference.starts_with("actions/upload-artifact@"))
             && step["with"]["name"] == "release-artifacts"
     }));
+    assert!(
+        steps
+            .iter()
+            .all(|step| step["with"]["name"] != "release-evidence")
+    );
 
     let attest = &jobs["attest"];
     assert_eq!(attest["needs"], "build");
@@ -66,6 +80,12 @@ fn engineering_assurance_tag_caller_builds_then_calls_the_matching_release_tag()
     );
     assert_eq!(attest["with"]["tag"], "${{ github.ref_name }}");
     assert_eq!(attest["with"]["ea_tooling_tag"], "v0.9.0");
+    let reusable_ref = attest["uses"].as_str().expect("reusable workflow ref");
+    let reusable_tag = reusable_ref
+        .rsplit_once('@')
+        .expect("pinned workflow tag")
+        .1;
+    assert_eq!(attest["with"]["ea_tooling_tag"], reusable_tag);
     assert_eq!(attest["with"]["quoin_tooling_tag"], "0.30.1");
     assert_eq!(
         attest["with"]["record_path"],
@@ -111,11 +131,36 @@ fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_
     );
     let verify_steps = verify["steps"].as_array().expect("verify steps");
     assert!(verify_steps.iter().any(|step| {
+        step["uses"]
+            .as_str()
+            .is_some_and(|reference| reference.starts_with("actions/download-artifact@"))
+            && step["with"]["name"] == "${{ inputs.artifact_name }}"
+    }));
+    assert!(verify_steps.iter().any(|step| {
+        step["uses"]
+            .as_str()
+            .is_some_and(|reference| reference.starts_with("actions/download-artifact@"))
+            && step["with"]["name"] == "${{ inputs.evidence_artifact }}"
+    }));
+    assert!(verify_steps.iter().any(|step| {
         step["id"] == "attestation-artifact-name"
             && step["run"]
                 .as_str()
                 .is_some_and(|run| run.contains("secrets.token_hex(32)"))
     }));
+    let tooling_download = verify_steps
+        .iter()
+        .find(|step| step["name"] == "Download trusted Engineering Assurance tooling")
+        .expect("trusted EA release tooling is downloaded");
+    assert_eq!(
+        tooling_download["env"]["EA_TOOLING_TAG"],
+        "${{ inputs.ea_tooling_tag }}"
+    );
+    let tooling_script = tooling_download["run"]
+        .as_str()
+        .expect("tool download script");
+    assert!(tooling_script.contains("gh release download \"$EA_TOOLING_TAG\""));
+    assert!(tooling_script.contains("--repo agent-ix/engineering-assurance"));
     let tag_check = verify_steps
         .iter()
         .position(|step| step["name"] == "Check the triggering release tag")
@@ -124,6 +169,12 @@ fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_
         .iter()
         .position(|step| step["name"] == "Verify the signed release tag against protected policy")
         .expect("release-verify check exists");
+    let release_check_run = verify_steps[release_check]["run"]
+        .as_str()
+        .expect("release verification script");
+    assert!(
+        release_check_run.contains("git -C protected-base show \"HEAD:$ALLOWED_SIGNERS_PATH\"")
+    );
     let role_source_check = verify_steps
         .iter()
         .position(|step| step["name"] == "Refuse without a trusted approval-statement source")
