@@ -182,6 +182,7 @@ pub trait ApprovalStatementReader {
     /// the lookup or does not implement it.
     fn lookup_approval_statements(
         &self,
+        _destination: &str,
         _lookup: ApprovalStatementLookup<'_>,
     ) -> Result<Vec<RetainedApprovalStatement>, ApprovalStatementReadError> {
         Err(ApprovalStatementReadError)

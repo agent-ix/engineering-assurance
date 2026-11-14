@@ -99,12 +99,13 @@ struct ApprovalPredicate {
 #[must_use]
 pub fn verify_approval_statements(
     reader: &dyn ApprovalStatementReader,
+    destination: &str,
     lookup: ApprovalStatementLookup<'_>,
     identity_policy: &WorkflowIdentityPolicy,
     role_policy: &RolePolicy,
     verifier: &dyn BundleVerifier,
 ) -> ApprovalStatementResult {
-    let statements = match reader.lookup_approval_statements(lookup) {
+    let statements = match reader.lookup_approval_statements(destination, lookup) {
         Ok(statements) => statements,
         Err(ApprovalStatementReadError) => {
             return result(
@@ -335,16 +336,18 @@ mod tests {
     #[derive(Default)]
     struct FixtureReader {
         entries: Vec<Stored>,
-        lookups: RefCell<Vec<(String, String, String)>>,
+        lookups: RefCell<Vec<(String, String, String, String)>>,
         fail: bool,
     }
 
     impl ApprovalStatementReader for FixtureReader {
         fn lookup_approval_statements(
             &self,
+            destination: &str,
             lookup: ApprovalStatementLookup<'_>,
         ) -> Result<Vec<RetainedApprovalStatement>, ApprovalStatementReadError> {
             self.lookups.borrow_mut().push((
+                destination.to_owned(),
                 lookup.repository.to_owned(),
                 lookup.merged_pull_request.to_owned(),
                 lookup.merged_commit.to_owned(),
@@ -551,6 +554,7 @@ mod tests {
 
         let all_verified = verify_approval_statements(
             &reader,
+            "private-store-a",
             LOOKUP,
             &identity_policy(),
             &three_role_policy(),
@@ -599,6 +603,7 @@ mod tests {
         let mixed_reader = reader_for(mixed_entries);
         let mixed = verify_approval_statements(
             &mixed_reader,
+            "private-store-a",
             LOOKUP,
             &identity_policy(),
             &three_role_policy(),
@@ -644,8 +649,14 @@ mod tests {
         };
         let reader = reader_for(vec![(LOOKUP.merged_pull_request, retained)]);
 
-        let result =
-            verify_approval_statements(&reader, LOOKUP, &identity_policy(), &policy, &verifier);
+        let result = verify_approval_statements(
+            &reader,
+            "private-store-a",
+            LOOKUP,
+            &identity_policy(),
+            &policy,
+            &verifier,
+        );
 
         assert_eq!(result.status, ApprovalStatementStatus::Verified);
         assert_eq!(
@@ -669,8 +680,22 @@ mod tests {
         let reader = reader_for(vec![
             (LOOKUP.merged_pull_request, untrusted.clone()),
             (LOOKUP.merged_pull_request, verified_statement.clone()),
-            ("fictional/project#13", statement("2", "decoy-bundle")),
+            ("fictional/project#13", statement("2", "decoy-pull-request")),
         ]);
+        let other_repository = statement("2", "decoy-repository");
+        reader.entries.push(Stored {
+            repository: "fictional/other",
+            pull_request: LOOKUP.merged_pull_request,
+            commit: LOOKUP.merged_commit,
+            statement: other_repository.clone(),
+        });
+        let other_commit = statement("2", "decoy-commit");
+        reader.entries.push(Stored {
+            repository: LOOKUP.repository,
+            pull_request: LOOKUP.merged_pull_request,
+            commit: "another-commit",
+            statement: other_commit.clone(),
+        });
         let verifier = FixtureVerifier {
             expected: vec![
                 (
@@ -689,6 +714,7 @@ mod tests {
 
         let result = verify_approval_statements(
             &reader,
+            "private-store-a",
             LOOKUP,
             &identity_policy(),
             &role_policy(),
@@ -698,6 +724,7 @@ mod tests {
         assert_eq!(
             reader.lookups.borrow().as_slice(),
             &[(
+                "private-store-a".to_owned(),
                 LOOKUP.repository.to_owned(),
                 LOOKUP.merged_pull_request.to_owned(),
                 LOOKUP.merged_commit.to_owned(),
@@ -734,6 +761,7 @@ mod tests {
 
         let result = verify_approval_statements(
             &wrong_commit,
+            "private-store-a",
             LOOKUP,
             &identity_policy(),
             &role_policy(),
@@ -761,6 +789,7 @@ mod tests {
         };
         let result = verify_approval_statements(
             &reader,
+            "private-store-a",
             LOOKUP,
             &identity_policy(),
             &role_policy(),
@@ -787,6 +816,7 @@ mod tests {
         let verifier = FixtureVerifier::default();
         let result = verify_approval_statements(
             &reader,
+            "private-store-a",
             LOOKUP,
             &identity_policy(),
             &role_policy(),
@@ -887,6 +917,7 @@ mod tests {
             };
             let result = verify_approval_statements(
                 &reader,
+                "private-store-a",
                 LOOKUP,
                 &identity_policy(),
                 &role_policy(),
