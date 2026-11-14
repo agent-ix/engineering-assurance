@@ -40,6 +40,7 @@ Out of scope: the signed tag and the release record ([FR-047](./FR-047-release-r
 - The release attestation workflow SHALL give the three statements other than the summary the artifact files as subjects.
 - The release attestation workflow SHALL give the verification summary the artifact files and the release commit as subjects.
 - The release attestation workflow SHALL compute the SHA-256 digest of each artifact file itself.
+- The artifact subject verifier SHALL return `verified` when the requested SHA-256 artifact digest equals the in-toto subject digest and `wrong_subject` when they differ.
 - The release attestation workflow SHALL NOT build the artifacts.
 - The release attestation workflow SHALL NOT write the release evidence snapshot into any statement.
 - The release attestation workflow SHALL NOT write a statement of a predicate type outside the four.
@@ -57,6 +58,7 @@ Out of scope: the signed tag and the release record ([FR-047](./FR-047-release-r
 | FR-066-AC-5 | Changing one artifact file after attestation makes the verification of every statement fail on the subject digest, and a digest supplied by the caller in place of the computed one is ignored. | Test |
 | FR-066-AC-6 | No statement of the set contains the bytes of the snapshot file of the fixture release commit. | Test |
 | FR-066-AC-7 | Static inspection shows the reusable workflow has no build step and receives the artifact files only as a downloaded workflow artifact. | Inspection |
+| FR-066-AC-8 | For an in-toto statement with an artifact `sha256` subject, verification with the matching expected digest yields `verified`; verification with a different expected digest yields `wrong_subject`. | Test |
 
 ## Dependencies
 

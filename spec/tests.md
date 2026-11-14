@@ -288,6 +288,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-066 | FR-066-AC-5 | TC-534 | 🚧 Specified |
 | FR-066 | FR-066-AC-6 | TC-535 | 🚧 Specified |
 | FR-066 | FR-066-AC-7 | TC-536 | 🚧 Specified |
+| FR-066 | FR-066-AC-8 | TC-658 | 🚧 Specified |
 | FR-067 | FR-067-AC-1 | TC-537 | 🚧 Specified |
 | FR-067 | FR-067-AC-2 | TC-538 | 🚧 Specified |
 | FR-067 | FR-067-AC-3 | TC-539 | 🚧 Specified |
@@ -980,6 +981,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-652 | A registered implementation cannot reach the public log: a public-log selection still runs the leak check, a leaking record sends and public-signs nothing, and the proof carries the checked bytes | Unit | P0 | FR-057-AC-8, NFR-009-AC-2 | ✅ `tests/record_sink.rs` passing |
 | TC-653 | The signature feature adds only `serde`; the complete unified `full` dependency and feature graph matches its reviewed all-target baseline; parsed source finds no unknown imported crate roots and confirms SSH verification delegates to git/ssh-keygen while gitsign runs only in CMS branches | Static | P0 | FR-036-AC-12 | ✅ `tests/source_audit.rs` passing |
 | TC-654 | Source inspection of the signature classifier and binary adapters finds no in-tree signature parsing or cryptographic implementation | Static | P0 | FR-036-CON-2 | 🚧 Inspection not yet completed |
+| TC-658 | `tests/attestation_signing_live.rs` verifies a generic in-toto statement with a matching `sha256` artifact digest as `verified` and a differing expected digest as `wrong_subject` using the public-good Sigstore verifier | Integration | P0 | FR-066-AC-8 | 🚧 |
 | TC-912 | Source inspection finds zero public-log send paths that bypass the leak check | Static | P0 | NFR-009-AC-3, NFR-009-M-2 | 🚧 Unverified; source inspection not yet completed |
 | TC-900 | The OSV-Scanner request validates and carries the defined arguments, environment, input, output, containment and exit policy | Unit | P0 | FR-044-AC-6 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
 | TC-901 | A nonexistent scanner is unavailable; fixture exits 127/128 fail, exit 1 completes, missing output and timeout withhold the report, and stale output is removed | Integration | P0 | FR-044-AC-3, FR-044-AC-4, FR-044-AC-7 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
