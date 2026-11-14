@@ -89,7 +89,7 @@ and [NFR-007](../non-functional/NFR-007-no-release-without-a-person.md) is uncha
 | FR-065-AC-6 | Before the merge, with reviews from three individuals for three required roles and no statement in existence, the review gate returns `satisfied`; with one role missing it returns `unsatisfied` naming the role. | Test |
 | FR-065-AC-7 | After the merge, the statements written from those reviews verify, and the verifier's role verdict equals the review gate's verdict for the same policy. | Test |
 | FR-065-AC-8 | A change-assurance record carrying a validly signed approval tag by a person listed in the role policy, and no platform review, yields `unsatisfied` for that person's role. | Test |
-| FR-065-AC-9 | Approval statements are stored and published through the sink interface: a statement for a private repository goes to the private store with no public-log call, and a statement refused by the leak check is sent nowhere. | Test |
+| FR-065-AC-9 | Approval statements are stored and published through the sink interface: a statement for a private repository goes to the private store with no public-log call, and a statement refused by the leak check is sent nowhere public: no public signing, public-log entry, or public record is made, while the private form remains stored as required by FR-054-AC-6. | Test |
 | FR-065-AC-10 | A pull request authored by a listed agent account yields `satisfied` when distinct eligible human reviewers satisfy every required role; the same pull request yields `unsatisfied` when a role is missing, and an agent or bot review does not satisfy any role. | Test |
 
 ## Dependencies

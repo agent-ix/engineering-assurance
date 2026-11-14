@@ -56,7 +56,7 @@
 //! | `scope-footprint` | `scope_footprint` | `content-rights` | `serde`, `thiserror` |
 //! | `semantics` | `semantics` | `claim-strength`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
 //! | `signature-verify` | `signature_verify` | | `serde` |
-//! | `attestation-signing` | `attestation_signing` | `record-sink` | `serde`, `serde_json`, `serde_json_canonicalizer`, `sigstore-sign`, `sigstore-types`, `sigstore-verify`, `thiserror`, `tokio` |
+//! | `attestation-signing` | `attestation_signing`; with `approval-gate`, `approval_statement`, `approval_statement_writer` | `record-sink` | `serde`, `serde_json`, `serde_json_canonicalizer`, `sha2`, `sigstore-sign`, `sigstore-types`, `sigstore-verify`, `thiserror`, `time`, `tokio` |
 //! | `source-audit` | `source_audit` | | `serde`, `syn`, `thiserror` |
 //! | `structured-yaml` | `structured_yaml` | | `serde_json`, `yaml_serde` |
 //! | `workflow` | `workflow` | | `serde`, `serde_json`, `thiserror` |
@@ -71,6 +71,8 @@
 pub mod approval_gate;
 #[cfg(all(feature = "approval-gate", feature = "attestation-signing"))]
 pub mod approval_statement;
+#[cfg(all(feature = "approval-gate", feature = "attestation-signing"))]
+pub mod approval_statement_writer;
 #[cfg(feature = "approval-tag")]
 pub mod approval_tag;
 #[cfg(feature = "approval-trail")]

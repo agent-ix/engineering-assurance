@@ -13,8 +13,12 @@ use std::{
     process::{Command, Output, Stdio},
 };
 
+use engineering_assurance::approval_gate::{
+    AccountRef, AccountType, GateStatus, MissingReason, POLICY_PROTOCOL, RolePolicy, evaluate,
+};
 use ix_trace_rs::trace;
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 
 const RECORD_ID: &str = "change-record-17";
 const DIGEST: &str = "sha256:0123456789abcdef";
@@ -266,6 +270,36 @@ fn tc_316_a_bound_signed_tag_with_a_meaning_is_approved() {
         assert!(approved["signature"].get("protocol").is_none());
         assert!(approved.get("reason").is_none());
     }
+}
+
+#[test]
+#[trace("TC-970", "FR-065-AC-8")]
+fn a_valid_person_signed_approval_tag_does_not_replace_platform_reviews() {
+    let fixture = fixture();
+    signed_tag(&fixture, "a", "v-approval", &good_message());
+    let tag = status(&fixture, "v-approval");
+    assert_eq!(tag["status"], "approved", "{tag}");
+    assert_eq!(tag["approver"], ALICE);
+    assert_eq!(tag["signature"]["status"], "signed_valid");
+
+    let account = AccountRef {
+        source: "github".into(),
+        id: "101".into(),
+    };
+    let policy = RolePolicy {
+        protocol: POLICY_PROTOCOL.into(),
+        required_roles: vec!["developer".into()],
+        individuals: BTreeMap::from([("alice".into(), vec![account.clone()])]),
+        roles: BTreeMap::from([("developer".into(), vec!["alice".into()])]),
+        agents: Vec::new(),
+    };
+    let account_types = BTreeMap::from([(account, AccountType::Human)]);
+    let no_platform_reviews = Vec::new();
+    let gate = evaluate(&policy, &no_platform_reviews, &account_types);
+    assert_eq!(gate.status, GateStatus::Unsatisfied);
+    assert_eq!(gate.missing.len(), 1);
+    assert_eq!(gate.missing[0].role, "developer");
+    assert_eq!(gate.missing[0].reason, MissingReason::NoApproval);
 }
 
 #[test]

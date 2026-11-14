@@ -1516,6 +1516,45 @@ mod tests {
     }
 
     #[test]
+    #[trace("TC-965", "FR-063-AC-3")]
+    fn names_every_required_role_that_has_no_eligible_human() {
+        let policy = RolePolicy {
+            protocol: POLICY_PROTOCOL.to_owned(),
+            required_roles: vec!["developer".into(), "stakeholder".into()],
+            individuals: BTreeMap::from([
+                ("alice".into(), vec![account("101")]),
+                ("bob".into(), vec![account("202")]),
+            ]),
+            roles: BTreeMap::from([
+                ("developer".into(), Vec::new()),
+                ("stakeholder".into(), Vec::new()),
+            ]),
+            agents: Vec::new(),
+        };
+        let types = BTreeMap::from([
+            (account("101"), AccountType::Human),
+            (account("202"), AccountType::Human),
+        ]);
+        let result = evaluate(&policy, &[], &types);
+        assert_eq!(result.status, GateStatus::Unsatisfied);
+        assert_eq!(result.error, Some(GateErrorCode::ApprovalRoleUnstaffed));
+        assert_eq!(
+            result
+                .missing
+                .iter()
+                .map(|row| row.role.as_str())
+                .collect::<Vec<_>>(),
+            vec!["developer", "stakeholder"]
+        );
+        assert!(
+            result
+                .missing
+                .iter()
+                .all(|row| row.reason == MissingReason::NoApproval)
+        );
+    }
+
+    #[test]
     #[trace("TC-927", "FR-061-AC-6")]
     fn role_matching_is_order_independent_and_equivalent_to_exhaustive_search() {
         let roles = vec!["a".to_owned(), "b".to_owned()];
@@ -1574,6 +1613,77 @@ mod tests {
             );
             assert_eq!(forward.status, reverse.status, "mask {mask:04b}");
             assert_eq!(forward.assignments, reverse.assignments, "mask {mask:04b}");
+        }
+    }
+
+    #[test]
+    #[trace("TC-972", "FR-062-AC-5")]
+    fn generated_agent_approval_edges_never_change_the_human_role_matching() {
+        let policy = RolePolicy {
+            protocol: POLICY_PROTOCOL.to_owned(),
+            required_roles: vec!["a".into(), "b".into()],
+            individuals: BTreeMap::from([
+                ("x".into(), vec![account("101")]),
+                ("y".into(), vec![account("202")]),
+            ]),
+            roles: BTreeMap::from([
+                ("a".into(), vec!["x".into(), "y".into()]),
+                ("b".into(), vec!["x".into(), "y".into()]),
+            ]),
+            agents: vec![account("303")],
+        };
+        let types = BTreeMap::from([
+            (account("101"), AccountType::Human),
+            (account("202"), AccountType::Human),
+            (account("303"), AccountType::Human),
+        ]);
+        // Four role/person edges plus one agent edge per role. The exhaustive
+        // 64 generated sets include every combination of eligible and agent
+        // approvals; adding agent edges must preserve the human-only result.
+        for mask in 0_u8..64 {
+            let approvals = (0..6)
+                .filter(|edge| mask & (1 << edge) != 0)
+                .map(|edge| {
+                    let (role, id, human) = match edge {
+                        0 => ("a", "101", true),
+                        1 => ("a", "202", true),
+                        2 => ("b", "101", true),
+                        3 => ("b", "202", true),
+                        4 => ("a", "303", false),
+                        _ => ("b", "303", false),
+                    };
+                    Approval {
+                        source: "github".into(),
+                        account: account(id),
+                        human,
+                        role: role.into(),
+                        meaning: "reviewed".into(),
+                        timestamp: "2026-11-14T03:00:00Z".into(),
+                        commit: "head".into(),
+                        pull_request: "agent-ix/ea-109-sandbox#1".into(),
+                    }
+                })
+                .collect::<Vec<_>>();
+            let human_only: Vec<_> = approvals
+                .iter()
+                .filter(|approval| approval.human)
+                .cloned()
+                .collect();
+            let with_agents = evaluate(&policy, &approvals, &types);
+            let without_agents = evaluate(&policy, &human_only, &types);
+            assert_eq!(
+                with_agents.status, without_agents.status,
+                "agent approvals cannot change coverage for mask {mask:06b}"
+            );
+            assert_eq!(
+                with_agents.assignments, without_agents.assignments,
+                "agent approvals cannot change role assignments for mask {mask:06b}"
+            );
+            assert!(with_agents.assignments.iter().all(|assignment| {
+                policy.individuals[&assignment.individual]
+                    .iter()
+                    .all(|account| account.id != "303")
+            }));
         }
     }
 
