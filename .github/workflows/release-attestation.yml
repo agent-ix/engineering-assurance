@@ -9,6 +9,9 @@ on:
       ea_tooling_tag:
         required: true
         type: string
+      quoin_tooling_tag:
+        required: true
+        type: string
       record_path:
         required: true
         type: string
@@ -147,6 +150,25 @@ jobs:
             echo "::error::release_verify_not_released"
             exit 1
           fi
+
+      - name: Prepare an isolated Quoin tool directory
+        shell: bash
+        run: mkdir -p "$RUNNER_TEMP/quoin-tooling"
+
+      - name: Install the exact published Quoin exporter
+        working-directory: ${{ runner.temp }}/quoin-tooling
+        shell: bash
+        env:
+          NPMJS_REGISTRY: "\u0068ttps:\u002f\u002fregistry.npmjs.org"
+          NPM_CONFIG_USERCONFIG: /dev/null
+          QUOIN_TOOLING_TAG: ${{ inputs.quoin_tooling_tag }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$QUOIN_TOOLING_TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::quoin_tooling_tag_invalid"
+            exit 1
+          fi
+          npm install --ignore-scripts --registry="$NPMJS_REGISTRY" "@agent-ix/quoin@$QUOIN_TOOLING_TAG"
 
       - name: Refuse without a trusted approval-statement source
         shell: bash

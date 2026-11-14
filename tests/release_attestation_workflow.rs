@@ -66,6 +66,7 @@ fn engineering_assurance_tag_caller_builds_then_calls_the_matching_release_tag()
     );
     assert_eq!(attest["with"]["tag"], "${{ github.ref_name }}");
     assert_eq!(attest["with"]["ea_tooling_tag"], "v0.9.0");
+    assert_eq!(attest["with"]["quoin_tooling_tag"], "0.30.1");
     assert_eq!(
         attest["with"]["record_path"],
         "spec/releases/engineering-assurance.md"
@@ -80,7 +81,7 @@ fn engineering_assurance_tag_caller_builds_then_calls_the_matching_release_tag()
     );
 }
 
-#[trace("TC-562", "FR-070-AC-6", "FR-067-AC-7")]
+#[trace("TC-562", "TC-667", "FR-070-AC-6", "FR-070-AC-11", "FR-067-AC-7")]
 #[test]
 fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_statement_source() {
     let workflow = reusable_workflow();
@@ -90,6 +91,7 @@ fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_
         &serde_json::json!({
             "tag": {"required": true, "type": "string"},
             "ea_tooling_tag": {"required": true, "type": "string"},
+            "quoin_tooling_tag": {"required": true, "type": "string"},
             "record_path": {"required": true, "type": "string"},
             "allowed_signers_path": {"required": true, "type": "string"},
             "artifact_name": {"required": false, "type": "string", "default": "release-artifacts"},
@@ -127,6 +129,15 @@ fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_
         .position(|step| step["name"] == "Refuse without a trusted approval-statement source")
         .expect("missing statement source refuses");
     assert!(tag_check < release_check && release_check < role_source_check);
+    let missing_store = verify_steps
+        .iter()
+        .position(|step| step["name"] == "Refuse an empty retained release evidence artifact")
+        .expect("empty or absent evidence refuses");
+    let quoin_install = verify_steps
+        .iter()
+        .position(|step| step["name"] == "Install the exact published Quoin exporter")
+        .expect("Quoin installer exists");
+    assert!(missing_store < quoin_install && quoin_install < role_source_check);
     assert!(verify_steps.iter().any(|step| {
         step["run"]
             .as_str()
@@ -182,4 +193,35 @@ fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_
         attest_steps[1]["with"]["name"],
         "${{ needs.verify.outputs.attestation_inputs_artifact }}"
     );
+}
+
+#[trace("TC-669", "FR-070-AC-13")]
+#[test]
+fn reusable_workflow_installs_exact_quoin_version_from_explicit_npmjs_registry() {
+    let workflow = reusable_workflow();
+    let verify_steps = workflow["jobs"]["verify"]["steps"]
+        .as_array()
+        .expect("verify steps");
+    let install = verify_steps
+        .iter()
+        .find(|step| step["name"] == "Install the exact published Quoin exporter")
+        .expect("Quoin installer exists");
+    assert_eq!(
+        install["env"]["NPMJS_REGISTRY"],
+        concat!("https:", "//registry.npmjs.org")
+    );
+    assert_eq!(install["env"]["NPM_CONFIG_USERCONFIG"], "/dev/null");
+    assert_eq!(
+        install["env"]["QUOIN_TOOLING_TAG"],
+        "${{ inputs.quoin_tooling_tag }}"
+    );
+    assert_eq!(
+        install["working-directory"],
+        "${{ runner.temp }}/quoin-tooling"
+    );
+    let run = install["run"].as_str().expect("Quoin install script");
+    assert!(run.contains("npm install --ignore-scripts --registry=\"$NPMJS_REGISTRY\" \"@agent-ix/quoin@$QUOIN_TOOLING_TAG\""));
+    assert!(!run.contains("${{"), "input is passed through env");
+    assert!(!run.contains("latest"), "the published version is exact");
+    assert!(!run.contains("caller"), "the caller binary is not used");
 }

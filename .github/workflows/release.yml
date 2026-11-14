@@ -46,5 +46,6 @@ jobs:
     with:
       tag: ${{ github.ref_name }}
       ea_tooling_tag: v0.9.0
+      quoin_tooling_tag: 0.30.1
       record_path: spec/releases/engineering-assurance.md
       allowed_signers_path: .engineering-assurance/allowed_signers
