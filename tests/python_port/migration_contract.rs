@@ -11,10 +11,10 @@ use std::sync::LazyLock;
 use super::common::{read, root};
 
 const CAMPAIGN_REPOSITORIES: [&str; 8] = [
-    "quire-contract-ir",
-    "quire-contract-runtime",
-    "quire-contract-codegen",
-    "quire-analyze",
+    "filament-contract-ir",
+    "filament-contract-runtime",
+    "filament-contract-codegen",
+    "filament-analyze",
     "tl-syntax",
     "tl-parse",
     "tl-mltl",

@@ -47,7 +47,7 @@ configuration, artifacts, and qualification priorities.
 | Option | Disposition |
 | --- | --- |
 | Add a Rust library crate and native CLI to this repository | Selected. It preserves the existing owner and supplies one implementation boundary. |
-| Move the behavior into quire-verification | Rejected. Portable contracts and Engineering Assurance tooling have different owners. |
+| Move the behavior into filament-verification | Rejected. Portable contracts and Engineering Assurance tooling have different owners. |
 | Add the behavior to Quoin | Rejected. Quoin owns evidence retention, audit, and reporting, not Engineering Assurance execution. |
 | Create another Rust repository | Rejected. No distinct ownership or release boundary justifies it. |
 | Keep Python or JavaScript behind a Rust wrapper | Rejected. That would conceal rather than replace the old implementation. |

@@ -11,13 +11,13 @@ relationships:
 
 ## Objective
 
-Verify that `quire-verification` can execute a fictional producer through the
+Verify that `filament-verification` can execute a fictional producer through the
 public Engineering Assurance Rust library and receive its own typed observation
 without adding a local process runner, CLI-output parser, or evidence store.
 
 ## Target Integration
 
-The boundary is a Rust-to-Rust dependency from a `quire-verification` synthetic
+The boundary is a Rust-to-Rust dependency from a `filament-verification` synthetic
 consumer to the accepted `engineering_assurance::producer_execution` API. The
 producer is a deterministic fictional executable retained only by the test.
 
@@ -82,7 +82,7 @@ and evidence persistence stay with their authoritative owners.
 ## Metadata
 
 - Priority: P0
-- Target Integration: Engineering Assurance producer execution to quire-verification qualification case
+- Target Integration: Engineering Assurance producer execution to filament-verification qualification case
 - Automation: local-only automated contract test
 
 ## Dependencies

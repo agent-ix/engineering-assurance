@@ -201,8 +201,8 @@ unique within their respective request collections.
 ## Dependencies
 
 - **Upstream**: accepted [ADR-002](../assets/adr/0002-rust-native-engineering-assurance.md), the versioned Rust boundary in [FR-014](./FR-014-versioned-rust-boundary.md), and [NFR-004](../non-functional/NFR-004-no-parallel-assurance-framework.md).
-- **Downstream**: [IT-006](../integration/IT-006-producer-execution-consumer.md) and the consumer-owned `quire-verification` qualification cases.
-  The retired FR-019-AC-6 asserted that the real `quire-verification` consumer
+- **Downstream**: [IT-006](../integration/IT-006-producer-execution-consumer.md) and the consumer-owned `filament-verification` qualification cases.
+  The retired FR-019-AC-6 asserted that the real `filament-verification` consumer
   had adopted this boundary. Every technical claim it made about Engineering
   Assurance is proven here already — the feature-gated compile and dependency
   census by FR-019-AC-7, the caller-owned adapter with no stdout parsing by
