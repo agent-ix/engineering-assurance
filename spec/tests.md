@@ -232,7 +232,8 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-036 | FR-036-AC-10 | TC-258, TC-260, TC-261 | ✅ `tests/signature_verify_cli.rs` passing |
 | FR-036 | FR-036-AC-11 | TC-259 | ✅ `tests/signature_verify_cli.rs` passing |
 | FR-036 | FR-036-CON-1 | TC-248, TC-249, TC-250, TC-260, TC-261 | ✅ A valid status needs grade `G` with `git verify-commit` accepting, or `git verify-tag` exit 0 |
-| FR-036 | FR-036-AC-12, FR-036-CON-2 | Inspection | ✅ No crate dependency added; only git and `ssh-keygen` are invoked |
+| FR-036 | FR-036-AC-12 | TC-653 | ✅ `tests/source_audit.rs` passing; complete full-feature graph and verifier delegation audited |
+| FR-036 | FR-036-CON-2 | TC-654 | 🚧 Source inspection not yet completed |
 | FR-033 | FR-033-AC-1 | TC-244 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
 | FR-034 | FR-034-AC-1 | TC-246 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
 | FR-035 | FR-035-AC-1 | TC-247 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
@@ -973,6 +974,8 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-650 | Signing for the private store or `none` makes no public-log call; the public path signs only after the check passed and never for a refused record | Unit | P0 | FR-057-AC-10, FR-057-AC-11, NFR-010-AC-1, NFR-010-M-2 | ✅ `tests/record_sink.rs` passing |
 | TC-651 | The sink module source implements no signature primitive | Static | P0 | NFR-010-AC-2, NFR-010-M-1 | ✅ `tests/record_sink.rs` passing |
 | TC-652 | A registered implementation cannot reach the public log: a public-log selection still runs the leak check, a leaking record sends and public-signs nothing, and the proof carries the checked bytes | Unit | P0 | FR-057-AC-8, NFR-009-AC-2 | ✅ `tests/record_sink.rs` passing |
+| TC-653 | The signature feature adds only `serde`; the complete unified `full` dependency and feature graph matches its reviewed all-target baseline; parsed source finds no unknown imported crate roots and confirms SSH verification delegates to git/ssh-keygen while gitsign runs only in CMS branches | Static | P0 | FR-036-AC-12 | ✅ `tests/source_audit.rs` passing |
+| TC-654 | Source inspection of the signature classifier and binary adapters finds no in-tree signature parsing or cryptographic implementation | Static | P0 | FR-036-CON-2 | 🚧 Inspection not yet completed |
 | TC-912 | Source inspection finds zero public-log send paths that bypass the leak check | Static | P0 | NFR-009-AC-3, NFR-009-M-2 | 🚧 Unverified; source inspection not yet completed |
 | TC-900 | The OSV-Scanner request validates and carries the defined arguments, environment, input, output, containment and exit policy | Unit | P0 | FR-044-AC-6 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
 | TC-901 | A nonexistent scanner is unavailable; fixture exits 127/128 fail, exit 1 completes, missing output and timeout withhold the report, and stale output is removed | Integration | P0 | FR-044-AC-3, FR-044-AC-4, FR-044-AC-7 | ✅ `tests/osv_scanner_producer_cli.rs` passing |

@@ -141,6 +141,8 @@ fn direct_dependencies_for(features: &[&str]) -> BTreeSet<String> {
         "1",
         "--prefix",
         "none",
+        "--target",
+        "all",
     ]);
     command
         .arg("--manifest-path")
@@ -167,6 +169,52 @@ fn direct_dependencies_for(features: &[&str]) -> BTreeSet<String> {
         .collect()
 }
 
+/// Complete unified dependency and feature graph for the package's `full` feature
+/// on all targets. Update the fixture only after reviewing the complete graph diff
+/// and verifying that no added or changed dependency provides signature
+/// verification, cryptography or signature parsing. A package-name subset is not
+/// sufficient. Regenerate it with the exact command below, which is also the
+/// command this test compares with the checked-in fixture. Normalization removes
+/// checkout paths and repository URLs, while retaining package versions and source
+/// revisions.
+fn full_feature_dependency_graph() -> String {
+    let root = repository_root();
+    let output = Command::new(env!("CARGO"))
+        .args([
+            "tree",
+            "--offline",
+            "--locked",
+            "--no-default-features",
+            "--features",
+            "full",
+            "--edges",
+            "normal,features",
+            "--target",
+            "all",
+            "--manifest-path",
+        ])
+        .arg(root.join("Cargo.toml"))
+        .output()
+        .expect("Cargo full dependency graph must launch");
+    assert!(
+        output.status.success(),
+        "Cargo full dependency graph failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let graph = String::from_utf8(output.stdout)
+        .expect("Cargo full dependency graph must be UTF-8")
+        .replace(&root.to_string_lossy().to_string(), "<repo>");
+    let mut normalized = graph;
+    while let Some(start) = normalized.find("https://") {
+        let suffix = &normalized[start..];
+        let close_paren = suffix.find(')').unwrap_or(suffix.len());
+        let revision = suffix.find('#').unwrap_or(close_paren);
+        let end = start + revision.min(close_paren);
+        normalized.replace_range(start..end, "<external-source>");
+    }
+    normalized
+}
+
 #[derive(Default)]
 struct SignatureVerifierAudit {
     functions: Vec<String>,
@@ -177,6 +225,8 @@ struct SignatureVerifierAudit {
     gitsign_run_calls: Vec<String>,
     cms_branch_functions: BTreeSet<String>,
     direct_process_api: bool,
+    dependency_roots: BTreeSet<String>,
+    imported_roots: BTreeSet<String>,
     external_roots: BTreeSet<String>,
 }
 
@@ -288,6 +338,7 @@ impl SignatureVerifierAudit {
         match tree {
             UseTree::Path(path) => {
                 if prefix.is_empty() {
+                    self.imported_roots.insert(path.ident.to_string());
                     self.add_external_root(path.ident.to_string());
                 }
                 prefix.push(path.ident.to_string());
@@ -296,11 +347,19 @@ impl SignatureVerifierAudit {
                 prefix.pop();
             }
             UseTree::Name(name) => {
+                if prefix.is_empty() {
+                    self.imported_roots.insert(name.ident.to_string());
+                    self.add_external_root(name.ident.to_string());
+                }
                 prefix.push(name.ident.to_string());
                 self.inspect_process_prefix(prefix);
                 prefix.pop();
             }
             UseTree::Rename(rename) => {
+                if prefix.is_empty() {
+                    self.imported_roots.insert(rename.ident.to_string());
+                    self.add_external_root(rename.ident.to_string());
+                }
                 prefix.push(rename.ident.to_string());
                 self.inspect_process_prefix(prefix);
                 prefix.pop();
@@ -321,10 +380,7 @@ impl SignatureVerifierAudit {
     }
 
     fn add_external_root(&mut self, root: String) {
-        if matches!(
-            root.as_str(),
-            "engineering_assurance" | "serde" | "serde_json" | "tempfile" | "thiserror"
-        ) {
+        if self.dependency_roots.contains(&root) || root == "engineering_assurance" {
             self.external_roots.insert(root);
         }
     }
@@ -337,6 +393,22 @@ fn repository_source(relative_path: &str) -> String {
     syn::parse_file(&source)
         .unwrap_or_else(|error| panic!("cannot parse {}: {error}", path.display()));
     source
+}
+
+fn assert_import_roots_are_known(imported: &BTreeSet<String>, dependencies: &BTreeSet<String>) {
+    let standard_or_local = ["alloc", "core", "crate", "self", "std", "super"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+    let unknown = imported
+        .difference(&standard_or_local)
+        .filter(|root| *root != "engineering_assurance" && !dependencies.contains(*root))
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    assert!(
+        unknown.is_empty(),
+        "unrecognized imported crate roots must be reviewed explicitly: {unknown:?}"
+    );
 }
 
 fn gitsign_program_constant(source: &syn::File) -> Option<String> {
@@ -537,8 +609,14 @@ fn tc_127_producer_execution_owns_the_only_first_party_process_capability() {
 }
 
 #[test]
-#[trace("TC-653", "FR-036-AC-12", "FR-036-CON-2")]
+#[trace("TC-653", "FR-036-AC-12")]
 fn tc_653_signature_verification_delegates_to_system_verifiers() {
+    audit_signature_feature_dependencies();
+    audit_pure_signature_classifier();
+    audit_signature_adapter_delegation();
+}
+
+fn audit_signature_feature_dependencies() {
     let signature_dependencies = direct_dependencies_for(&["signature-verify"]);
     assert_eq!(
         signature_dependencies,
@@ -546,10 +624,27 @@ fn tc_653_signature_verification_delegates_to_system_verifiers() {
         "the signature-verify feature must add only its data-serialization dependency"
     );
 
+    let full_graph = full_feature_dependency_graph();
+    assert_eq!(
+        full_graph,
+        include_str!("fixtures/fr036-full-dependency-graph.txt"),
+        "review the complete full-feature dependency graph before updating its baseline"
+    );
+}
+
+fn audit_pure_signature_classifier() {
+    let signature_dependencies = direct_dependencies_for(&["signature-verify"]);
     let pure_source = repository_source("src/signature_verify.rs");
     let pure_syntax = syn::parse_file(&pure_source).expect("classifier parses");
-    let mut pure_audit = SignatureVerifierAudit::default();
+    let mut pure_audit = SignatureVerifierAudit {
+        dependency_roots: signature_dependencies
+            .iter()
+            .map(|name| name.replace('-', "_"))
+            .collect(),
+        ..SignatureVerifierAudit::default()
+    };
     pure_audit.visit_file(&pure_syntax);
+    assert_import_roots_are_known(&pure_audit.imported_roots, &pure_audit.dependency_roots);
     assert_eq!(
         pure_audit.external_roots,
         BTreeSet::from(["serde".to_owned()]),
@@ -559,11 +654,21 @@ fn tc_653_signature_verification_delegates_to_system_verifiers() {
         !pure_audit.direct_process_api,
         "the signature classifier must not invoke child programs"
     );
+}
 
+fn audit_signature_adapter_delegation() {
+    let full_dependency_roots = direct_dependencies_for(&["full"])
+        .into_iter()
+        .map(|name| name.replace('-', "_"))
+        .collect::<BTreeSet<_>>();
     let adapter_source = repository_source("src/signature_verify_host.rs");
     let adapter_syntax = syn::parse_file(&adapter_source).expect("adapter parses");
-    let mut adapter_audit = SignatureVerifierAudit::default();
+    let mut adapter_audit = SignatureVerifierAudit {
+        dependency_roots: full_dependency_roots.clone(),
+        ..SignatureVerifierAudit::default()
+    };
     adapter_audit.visit_file(&adapter_syntax);
+    assert_import_roots_are_known(&adapter_audit.imported_roots, &full_dependency_roots);
     assert_eq!(
         adapter_audit.external_roots,
         BTreeSet::from([
