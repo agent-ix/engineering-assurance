@@ -99,6 +99,7 @@ byte order.
 | FR-061-AC-10 | Roles `A` and `B`, individual X approving `A` and `B` through two accounts and individual Y approving `A`, yield `satisfied` with the assignment `A` to Y and `B` to X, whatever the order of the approvals. | Test |
 | FR-061-AC-11 | Roles `A` and `B` with individual X alone approving both yield `unsatisfied` with `missing` equal to `[B]`; roles `A`, `B` and `C` with X approving `A`, `B` and `C` and Y approving only `A` yield `unsatisfied` with `missing` equal to `[C]`. | Test |
 | FR-061-AC-12 | Roles `A`, `B` and `C` with individual X approving `A` and `B` and individual Y approving `A` and `C` yield `unsatisfied` with `missing` equal to `[B]`, because the smallest maximum matching as a sorted list of pairs is `(A, X), (C, Y)`. | Test |
+| FR-061-AC-13 | The embedded approval-gate request and result schemas each parse as JSON and compile with a Draft 2020-12 validator. | Test |
 
 ## Dependencies
 
