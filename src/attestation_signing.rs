@@ -204,7 +204,7 @@ impl SourceWorkflowPolicy {
     /// Whether all caller-workflow claims match this policy.
     #[must_use]
     pub fn matches(&self, claims: &AuthenticatedWorkflowClaims) -> bool {
-        if self.source_ref.is_some() == self.source_ref_prefix.is_some() {
+        if !self.is_valid() {
             return false;
         }
         let expected_repository_uri = format!("{}{}github.com/{}", "https:", "//", self.repository);
@@ -232,6 +232,28 @@ impl SourceWorkflowPolicy {
             && build_config_uri
                 .strip_prefix(&expected_workflow_prefix)
                 .is_some_and(|workflow_ref| workflow_ref == source_ref)
+    }
+
+    fn is_valid(&self) -> bool {
+        let mut repository_parts = self.repository.split('/');
+        let repository_valid = repository_parts
+            .next()
+            .is_some_and(|owner| !owner.is_empty())
+            && repository_parts.next().is_some_and(|name| !name.is_empty())
+            && repository_parts.next().is_none();
+        let workflow_path_valid = self.workflow_path.starts_with(".github/workflows/")
+            && !self.workflow_path.contains("..")
+            && !self.workflow_path.ends_with('/');
+        let ref_policy_valid = match (&self.source_ref, &self.source_ref_prefix) {
+            (Some(exact), None) => {
+                exact.starts_with("refs/heads/") && exact.len() > "refs/heads/".len()
+            }
+            (None, Some(prefix)) => {
+                prefix.starts_with("refs/tags/") && prefix.len() > "refs/tags/".len()
+            }
+            _ => false,
+        };
+        repository_valid && workflow_path_valid && self.event == "push" && ref_policy_valid
     }
 }
 
