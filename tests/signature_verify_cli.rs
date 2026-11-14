@@ -401,11 +401,15 @@ fn tc_278_commit_alias_and_id_return_one_identity_used_by_git_verifiers() {
     let alias_calls = fs::read_to_string(&log).expect("recorded git calls");
     assert_eq!(alias["status"], "unsigned");
     assert_eq!(alias["verified_commit_id"], id);
-    assert!(alias_calls
-        .lines()
-        .any(|call| call.ends_with(&format!("verify-commit {id}"))));
+    assert!(
+        alias_calls
+            .lines()
+            .any(|call| call.ends_with(&format!("verify-commit {id}")))
+    );
     assert!(alias_calls.lines().any(|call| {
-        call.ends_with(&format!("log -1 --no-show-signature --format=%G?%x00%GF%x00%GS {id}"))
+        call.ends_with(&format!(
+            "log -1 --no-show-signature --format=%G?%x00%GF%x00%GS {id}"
+        ))
     }));
 
     fs::write(&log, "").expect("clear git call log");
@@ -437,8 +441,14 @@ fn tc_280_tag_and_pre_resolution_verdicts_have_null_commit_identity() {
     assert_eq!(lightweight["reason"], "lightweight_tag");
 
     signed_tag(&fixture, "a", "v-signed");
-    assert_eq!(status(&fixture, "v-signed", "tag")["verified_commit_id"], Value::Null);
-    assert_eq!(status(&fixture, "missing", "commit")["verified_commit_id"], Value::Null);
+    assert_eq!(
+        status(&fixture, "v-signed", "tag")["verified_commit_id"],
+        Value::Null
+    );
+    assert_eq!(
+        status(&fixture, "missing", "commit")["verified_commit_id"],
+        Value::Null
+    );
 }
 
 #[test]
@@ -453,7 +463,11 @@ fn tc_281_gitsign_receives_the_resolved_commit_id() {
             1,
         )
     });
-    git(&fixture.repo(), None, &["update-ref", "refs/heads/main", &id]);
+    git(
+        &fixture.repo(),
+        None,
+        &["update-ref", "refs/heads/main", &id],
+    );
     let path = path_with(&fixture, "gitsign-bin", &["git"]);
     let gitsign_log = fixture.root().join("gitsign-args");
     let gitsign = path.join("gitsign");
@@ -476,7 +490,12 @@ fn tc_281_gitsign_receives_the_resolved_commit_id() {
     let result = verdict_with(&body, Some(&path));
     assert_eq!(result["verified_commit_id"], id);
     let calls = fs::read_to_string(gitsign_log).expect("recorded gitsign calls");
-    assert!(calls.lines().next().is_some_and(|call| call.ends_with(&format!("-- {id}"))));
+    assert!(
+        calls
+            .lines()
+            .next()
+            .is_some_and(|call| call.ends_with(&format!("-- {id}")))
+    );
 }
 
 #[test]
