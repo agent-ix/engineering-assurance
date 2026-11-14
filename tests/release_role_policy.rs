@@ -275,7 +275,7 @@ fn account_identity_and_role_eligibility_are_respected() {
 
 #[test]
 #[trace("TC-952", "FR-061-AC-10")]
-fn matching_reassigns_earlier_role_with_distinct_accounts_and_is_order_independent() {
+fn matching_reassigns_earlier_role_to_find_full_coverage() {
     let mut policy = policy(&[("a", &["x", "y"]), ("b", &["x"])]);
     policy
         .individuals
