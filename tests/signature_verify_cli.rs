@@ -284,7 +284,7 @@ fn git_recording_path(fixture: &Fixture, name: &str, log: &Path, fail_cat_file: 
 }
 
 #[test]
-#[trace("TC-250", "FR-036-AC-1", "FR-036-CON-1")]
+#[trace("TC-250", "FR-036-AC-1", "FR-036-AC-15", "FR-036-CON-1")]
 fn tc_250_valid_commit_and_tag_are_signed_valid() {
     let fixture = fixture();
     let id = signed_commit(&fixture, "a", "signed by a");
@@ -292,6 +292,7 @@ fn tc_250_valid_commit_and_tag_are_signed_valid() {
     let commit = status(&fixture, &id, "commit");
     assert_eq!(commit["status"], "signed_valid");
     assert_eq!(commit["kind"], "commit");
+    assert_eq!(commit["verified_commit_id"], id);
     assert_eq!(commit["key_fingerprint"], fixture.fingerprint("a"));
     assert!(commit.get("reason").is_none());
     let tag = status(&fixture, "v-valid", "tag");
@@ -322,13 +323,14 @@ fn tc_251_unsigned_commit_and_tag_are_unsigned() {
 }
 
 #[test]
-#[trace("TC-252", "FR-036-AC-3")]
+#[trace("TC-252", "FR-036-AC-3", "FR-036-AC-15")]
 fn tc_252_unlisted_key_is_untrusted_and_altered_objects_are_bad() {
     let fixture = fixture();
     let untrusted = signed_commit(&fixture, "b", "signed by b");
     signed_tag(&fixture, "b", "v-untrusted");
     let commit = status(&fixture, &untrusted, "commit");
     assert_eq!(commit["status"], "signed_untrusted");
+    assert_eq!(commit["verified_commit_id"], untrusted);
     assert_eq!(commit["key_fingerprint"], fixture.fingerprint("b"));
     assert_eq!(
         status(&fixture, "v-untrusted", "tag")["status"],
@@ -339,7 +341,9 @@ fn tc_252_unlisted_key_is_untrusted_and_altered_objects_are_bad() {
     let altered = rewrite(&fixture, "commit", &good, |o| {
         o.replace("signed by a", "signed by x")
     });
-    assert_eq!(status(&fixture, &altered, "commit")["status"], "signed_bad");
+    let bad_commit = status(&fixture, &altered, "commit");
+    assert_eq!(bad_commit["status"], "signed_bad");
+    assert_eq!(bad_commit["verified_commit_id"], altered);
     signed_tag(&fixture, "a", "v-altered");
     let altered_tag = rewrite(&fixture, "tag", "v-altered", |o| {
         o.replace("tag message", "tag messagf")
@@ -390,7 +394,7 @@ fn tc_254_unavailable_git_repository_or_revision_is_unverifiable() {
 }
 
 #[test]
-#[trace("TC-278", "FR-036-AC-13", "FR-036-AC-15")]
+#[trace("TC-429", "FR-036-AC-13", "FR-036-AC-15")]
 fn tc_278_commit_alias_and_id_return_one_identity_used_by_git_verifiers() {
     let fixture = fixture();
     let id = plain_commit(&fixture, "unsigned commit");
@@ -419,7 +423,7 @@ fn tc_278_commit_alias_and_id_return_one_identity_used_by_git_verifiers() {
 }
 
 #[test]
-#[trace("TC-279", "FR-036-AC-15")]
+#[trace("TC-430", "FR-036-AC-15")]
 fn tc_279_commit_id_survives_failure_after_resolution() {
     let fixture = fixture();
     let id = plain_commit(&fixture, "resolved before cat-file fails");
@@ -431,7 +435,7 @@ fn tc_279_commit_id_survives_failure_after_resolution() {
 }
 
 #[test]
-#[trace("TC-280", "FR-036-AC-14", "FR-036-AC-15")]
+#[trace("TC-431", "FR-036-AC-14", "FR-036-AC-15")]
 fn tc_280_tag_and_pre_resolution_verdicts_have_null_commit_identity() {
     let fixture = fixture();
     plain_commit(&fixture, "tag target");
@@ -452,7 +456,7 @@ fn tc_280_tag_and_pre_resolution_verdicts_have_null_commit_identity() {
 }
 
 #[test]
-#[trace("TC-281", "FR-036-AC-13", "FR-036-AC-15")]
+#[trace("TC-432", "FR-036-AC-13", "FR-036-AC-15")]
 fn tc_281_gitsign_receives_the_resolved_commit_id() {
     let fixture = fixture();
     let base = plain_commit(&fixture, "CMS commit");
