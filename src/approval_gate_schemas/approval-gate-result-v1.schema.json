@@ -1,0 +1,93 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:agent-ix:engineering-assurance:approval-gate-result:v1",
+  "title": "Engineering Assurance approval gate result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "status", "required_roles", "assignments", "missing"],
+  "properties": {
+    "protocol": {
+      "const": "engineering-assurance.approval-gate/v1"
+    },
+    "status": {
+      "enum": ["satisfied", "unsatisfied", "unavailable"]
+    },
+    "required_roles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/name"
+      }
+    },
+    "assignments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "individual", "account"],
+        "properties": {
+          "role": {
+            "$ref": "#/definitions/name"
+          },
+          "individual": {
+            "$ref": "#/definitions/name"
+          },
+          "account": {
+            "$ref": "#/definitions/account"
+          }
+        }
+      }
+    },
+    "missing": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "reason"],
+        "properties": {
+          "role": {
+            "$ref": "#/definitions/name"
+          },
+          "reason": {
+            "enum": ["no_approval", "shared_individual", "agent_only"]
+          }
+        }
+      }
+    },
+    "error": {
+      "enum": [
+        "approval_policy_invalid",
+        "approval_role_unstaffed",
+        "approval_source_unavailable"
+      ]
+    },
+    "unavailable_accounts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/account"
+      }
+    }
+  },
+  "definitions": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "account": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "id"],
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

@@ -335,15 +335,19 @@ fn launches_program(value: &Value) -> bool {
 fn only_approved_foreign_language_paths_remain() {
     // The approved set: the configuration-only package entry point, the inert
     // generated cross-language fixtures, the two JavaScript invariant providers
-    // ix-flow loads (an external-host dependency), and the cli-agent-evals host
-    // configuration. Any other tracked foreign-language path fails here until it
-    // is given an owner disposition by being added to this list.
+    // ix-flow loads (an external-host dependency), the cli-agent-evals host
+    // configuration, and the two reviewed review-gate shell adapters (source
+    // normalization and sandbox-only ruleset installation). Any other tracked
+    // foreign-language path fails here until it is given an owner disposition by
+    // being added to this list.
     let generated = "engineering_assurance/fixtures/verification-semantics/generated/";
     let approved = [
         "engineering_assurance/__init__.py",
         "engineering_assurance/skills/assurance-onboarding/scripts/invariants.js",
         "evals/cli-agent-evals.config.mjs",
         "pilots/assurance-workflows/scripts/invariants.js",
+        "scripts/install-review-gate-ruleset.sh",
+        "scripts/prepare-review-gate-request.sh",
     ];
     let unapproved: Vec<String> = foreign_executable_paths()
         .into_iter()

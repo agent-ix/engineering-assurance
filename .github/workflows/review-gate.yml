@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Agent-IX
+
+name: review-gate
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  workflow_call:
+    inputs:
+      tool_ref:
+        description: Trusted Engineering Assurance ref to build for the gate.
+        type: string
+        required: false
+        default: main
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: review-gate-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  review-gate:
+    if: ${{ vars.EA_REVIEW_GATE_ENABLED == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out protected base policy
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          path: policy
+          persist-credentials: false
+
+      - name: Check out trusted Engineering Assurance tool
+        uses: actions/checkout@v7
+        with:
+          repository: agent-ix/engineering-assurance
+          ref: ${{ inputs.tool_ref || 'main' }}
+          path: engine
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        run: rustup show active-toolchain || rustup toolchain install stable
+
+      - name: Build review-gate CLI
+        working-directory: engine
+        run: cargo build --locked --release --features full --bin engineering-assurance
+
+      - name: Collect source data and evaluate policy
+        if: ${{ github.event.pull_request.number != null }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEW_GATE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+          REVIEW_GATE_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REVIEW_GATE_REPOSITORY: ${{ github.repository }}
+          REVIEW_GATE_PULL_REQUEST: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          engine/scripts/prepare-review-gate-request.sh \
+            policy \
+            "$REVIEW_GATE_BASE_SHA" \
+            "$REVIEW_GATE_REPOSITORY" \
+            "$REVIEW_GATE_PULL_REQUEST" > request.json
+          engine/target/release/engineering-assurance review-gate --request - < request.json \
+            | tee result.json
+          jq -e '.status == "satisfied"' result.json >/dev/null
+
+      - name: Reject unsupported workflow event
+        if: ${{ github.event.pull_request.number == null }}
+        run: |
+          echo 'review-gate requires a pull_request event with a pull request number' >&2
+          exit 1

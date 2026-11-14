@@ -1,0 +1,13 @@
+{
+  "protocol": "engineering-assurance.approval-policy/v1",
+  "required_roles": ["security", "technical"],
+  "individuals": {
+    "alex": [{"source": "github", "id": "1001"}],
+    "sam": [{"source": "github", "id": "1002"}]
+  },
+  "roles": {
+    "security": ["alex"],
+    "technical": ["sam"]
+  },
+  "agents": [{"source": "github", "id": "1003"}]
+}
