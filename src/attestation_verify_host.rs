@@ -12,7 +12,7 @@ use std::{
 };
 
 use engineering_assurance::{
-    approval_policy::ApprovalPolicy,
+    approval_gate::{RolePolicy, parse_policy},
     attestation_signing::{
         SigstoreBundleVerifier, TransparencyRequirement, WorkflowIdentityDocument, WorkflowRole,
     },
@@ -104,6 +104,8 @@ pub(crate) enum AttestationVerifyError {
     Invalid,
     #[error("attestation-verify policy is not a valid protected policy document")]
     Policy,
+    #[error("attestation-verify approval-statement source is unavailable")]
+    RoleSourceUnavailable,
     #[error("attestation-verify policy base branch is not protected")]
     Unprotected,
     #[error("attestation-verify release tag is not verified")]
@@ -120,6 +122,7 @@ impl AttestationVerifyError {
             Self::Unreadable => "attestation_verify_request_unreadable",
             Self::Invalid => "attestation_verify_request_invalid",
             Self::Policy => "attestation_verify_policy_invalid",
+            Self::RoleSourceUnavailable => "release_roles_source_unavailable",
             Self::Unprotected => "policy_branch_unprotected",
             Self::Release => "release_not_verified",
             Self::Statement => "attestation_set_invalid",
@@ -171,11 +174,8 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, AttestationVerifyError> {
         MAX_DOCUMENT_BYTES,
     )
     .map_err(|_| AttestationVerifyError::Policy)?;
-    let role_policy: ApprovalPolicy =
-        serde_json::from_slice(&role_bytes).map_err(|_| AttestationVerifyError::Policy)?;
-    role_policy
-        .validate()
-        .map_err(|_| AttestationVerifyError::Policy)?;
+    let role_policy = parse_policy(&role_bytes).map_err(|_| AttestationVerifyError::Policy)?;
+    verify_role_statements(&role_policy)?;
 
     let transparency = match request.transparency.as_str() {
         "public_log" => TransparencyRequirement::PublicLog,
@@ -312,6 +312,15 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, AttestationVerifyError> {
     .map_err(|_| AttestationVerifyError::Encoding)?;
     result.push(b'\n');
     Ok(result)
+}
+
+/// Require role coverage from the shared FR-064 statement-verification path.
+///
+/// The private-store reader contract is not available in this command yet. A
+/// caller-provided role verdict or approval statement is not trusted input, so
+/// release verification cannot proceed until the single reader is wired here.
+fn verify_role_statements(_policy: &RolePolicy) -> Result<(), AttestationVerifyError> {
+    Err(AttestationVerifyError::RoleSourceUnavailable)
 }
 
 struct ReadStatement {
@@ -684,6 +693,17 @@ mod tests {
         request["unexpected"] = serde_json::Value::Bool(true);
         let error = execute(request.to_string().as_bytes()).expect_err("closed request rejected");
         assert!(matches!(error, AttestationVerifyError::Invalid));
+    }
+
+    #[trace("TC-672", "FR-068-AC-1", "FR-064-AC-10")]
+    #[test]
+    fn release_verification_fails_closed_without_verified_role_statements() {
+        let policy = parse_policy(
+            br#"{"protocol":"engineering-assurance.approval-policy/v1","required_roles":["release_owner"],"individuals":{"alice":[{"source":"github","id":"101"}]},"roles":{"release_owner":["alice"]}}"#,
+        )
+        .expect("fixture policy is valid");
+        let error = verify_role_statements(&policy).expect_err("no trusted FR-064 source");
+        assert_eq!(error.code(), "release_roles_source_unavailable");
     }
 
     #[trace("TC-680", "FR-055-AC-5", "FR-068-AC-1")]
