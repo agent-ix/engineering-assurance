@@ -1902,6 +1902,18 @@ struct DescendantObservation {
 
 #[cfg(target_os = "linux")]
 fn inspect_descendants(root: u32, maximum: usize) -> Result<DescendantObservation, ()> {
+    inspect_descendants_with(root, maximum, |parent| {
+        let path = format!("/proc/{parent}/task/{parent}/children");
+        std::fs::read_to_string(path)
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn inspect_descendants_with(
+    root: u32,
+    maximum: usize,
+    mut read_children: impl FnMut(i32) -> io::Result<String>,
+) -> Result<DescendantObservation, ()> {
     let root_raw = i32::try_from(root).map_err(|_| ())?;
     let Some(root_pid) = rustix::process::Pid::from_raw(root_raw) else {
         return Err(());
@@ -1910,11 +1922,10 @@ fn inspect_descendants(root: u32, maximum: usize) -> Result<DescendantObservatio
     let mut descendants = BTreeSet::new();
     let mut escaped = false;
     while let Some(parent) = pending.pop() {
-        let path = format!("/proc/{parent}/task/{parent}/children");
-        let children = match std::fs::read_to_string(path) {
+        let children = match read_children(parent) {
             Ok(value) => value,
-            Err(error) if error.kind() == io::ErrorKind::NotFound && parent != root_raw => continue,
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            Err(error) if is_vanished_process_error(&error) && parent != root_raw => continue,
+            Err(error) if is_vanished_process_error(&error) => {
                 return Ok(DescendantObservation {
                     descendants,
                     escaped,
@@ -1945,6 +1956,59 @@ fn inspect_descendants(root: u32, maximum: usize) -> Result<DescendantObservatio
         descendants,
         escaped,
     })
+}
+
+#[cfg(target_os = "linux")]
+fn is_vanished_process_error(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::NotFound
+        || error.raw_os_error() == Some(rustix::io::Errno::SRCH.raw_os_error())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod descendant_inspection_tests {
+    use super::inspect_descendants_with;
+    use ix_trace_rs::trace;
+    use std::collections::BTreeSet;
+    use std::io;
+
+    #[test]
+    #[trace("TC-125", "FR-019-AC-4")]
+    fn tc_125_vanished_process_esrch_is_tolerated_but_other_errors_fail() {
+        let root = std::process::id();
+        let root_raw = i32::try_from(root).expect("test process ID fits a Linux pid");
+        let esrch = rustix::io::Errno::SRCH.raw_os_error();
+
+        let root_result =
+            inspect_descendants_with(root, 64, |_| Err(io::Error::from_raw_os_error(esrch)))
+                .expect("an ESRCH for the root means its process entry vanished");
+        assert!(root_result.descendants.is_empty());
+        assert!(!root_result.escaped);
+
+        let child_pid = i32::MAX;
+        assert_ne!(child_pid, root_raw);
+        let mut read_root = false;
+        let descendant_result = inspect_descendants_with(root, 64, |parent| {
+            if parent == root_raw {
+                read_root = true;
+                Ok(format!("{child_pid}\n"))
+            } else {
+                assert_eq!(parent, child_pid, "only the listed child should be read");
+                Err(io::Error::from_raw_os_error(esrch))
+            }
+        })
+        .expect("an ESRCH for a descendant means that process entry vanished");
+        assert!(read_root);
+        assert_eq!(descendant_result.descendants, BTreeSet::from([child_pid]));
+        assert!(!descendant_result.escaped);
+
+        let eacces = rustix::io::Errno::ACCESS.raw_os_error();
+        let other_error =
+            inspect_descendants_with(root, 64, |_| Err(io::Error::from_raw_os_error(eacces)));
+        assert!(
+            other_error.is_err(),
+            "an unreadable child list is still a containment observation failure"
+        );
+    }
 }
 
 #[cfg(unix)]
