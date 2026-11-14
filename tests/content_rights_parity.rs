@@ -232,8 +232,8 @@ fn whole_file_boundaries_are_typed_and_short_circuit_content() {
     }
 
     for suffix in [
-        "", ".cfg", ".css", ".html", ".js", ".json", ".lock", ".md", ".mjs", ".py", ".rs", ".sh",
-        ".toml", ".ts", ".txt", ".yaml", ".yml",
+        "", ".cfg", ".css", ".html", ".js", ".json", ".lock", ".md", ".mod", ".mjs", ".py", ".rs",
+        ".sh", ".toml", ".ts", ".txt", ".yaml", ".yml",
     ] {
         let path = format!("candidate{suffix}");
         assert!(findings(&path, b"ordinary", &[]).is_empty(), "{suffix}");

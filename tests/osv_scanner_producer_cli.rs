@@ -56,7 +56,10 @@ fn resolve_osv(scanner: Option<OsString>) -> Result<OsvScanner, String> {
         .map_err(|error| format!("EA_TEST_OSV_SCANNER cannot be run: {error}"))?;
     let text = String::from_utf8_lossy(&output.stdout);
     let version = text
-        .split_whitespace()
+        .lines()
+        .next()
+        .into_iter()
+        .flat_map(str::split_whitespace)
         .last()
         .filter(|_| output.status.success())
         .ok_or_else(|| "EA_TEST_OSV_SCANNER did not report a version".to_owned())?
@@ -112,24 +115,16 @@ fn database() -> PathBuf {
     database_root(std::env::var_os("EA_TEST_OSV_DB")).unwrap_or_else(|message| panic!("{message}"))
 }
 
-fn copy_database(source: &Path, destination: &Path) {
-    let ecosystems =
-        fs::read_dir(source.join("osv-scalibr")).expect("database has osv-scalibr directory");
-    for ecosystem in ecosystems {
-        let ecosystem = ecosystem.expect("database ecosystem entry");
-        let name = ecosystem.file_name();
-        assert!(
-            name != "wolfi",
-            "EA_TEST_OSV_DB must not include the Wolfi ecosystem"
-        );
-        let archive = ecosystem.path().join("all.zip");
-        if archive.is_file() {
-            let target = destination.join("osv-scalibr").join(name).join("all.zip");
-            fs::create_dir_all(target.parent().expect("database parent"))
-                .expect("database directory");
-            fs::copy(archive, target).expect("copy caller-supplied database archive");
-        }
-    }
+fn copy_database(source: &Path, destination: &Path, ecosystem: &str) {
+    assert_ne!(ecosystem, "wolfi", "the mirror must exclude Wolfi");
+    let archive = source.join("osv-scalibr").join(ecosystem).join("all.zip");
+    assert!(archive.is_file(), "caller mirror lacks {ecosystem}/all.zip");
+    let target = destination
+        .join("osv-scalibr")
+        .join(ecosystem)
+        .join("all.zip");
+    fs::create_dir_all(target.parent().expect("database parent")).expect("database directory");
+    fs::copy(archive, target).expect("copy caller-supplied database archive");
 }
 
 /// Creates isolated input, config, home, cache and temporary directories.
@@ -259,6 +254,108 @@ fn debian_sbom() -> Vec<u8> {
     })
     .to_string()
     .into_bytes()
+}
+
+fn scanner_fixture(ecosystem: &str) -> (Vec<u8>, Value) {
+    let directory = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/osv-scanner")
+        .join(ecosystem);
+    let sbom = fs::read(directory.join("sbom.cdx.json")).expect("Syft-generated fixture SBOM");
+    let expected: Value = serde_json::from_slice(
+        &fs::read(directory.join("expected.json")).expect("fixture expected result"),
+    )
+    .expect("fixture expected result JSON");
+    (sbom, expected)
+}
+
+fn has_vulnerability_identifier(vulnerability: &Value, expected: &str) -> bool {
+    vulnerability["id"] == expected
+        || ["aliases", "upstream"].into_iter().any(|field| {
+            vulnerability[field]
+                .as_array()
+                .is_some_and(|identifiers| identifiers.iter().any(|value| value == expected))
+        })
+}
+
+fn assert_local_fixture_match(
+    scanner: &OsvScanner,
+    supplied_database: &Path,
+    database_ecosystem: &str,
+    sbom: &[u8],
+    expected: &Value,
+) {
+    let sbom_value: Value = serde_json::from_slice(sbom).expect("CycloneDX fixture JSON");
+    let root = workspace(sbom);
+    copy_database(
+        supplied_database,
+        &root.path().join("db"),
+        database_ecosystem,
+    );
+    let request = osv_request(
+        root.path(),
+        &scanner.executable,
+        &scanner.version,
+        &root.path().join("db"),
+    );
+    assert_valid_request(&request);
+    let value = result(&request);
+    assert_eq!(value["state"]["kind"], "completed", "{value}");
+    assert_eq!(value["state"]["observation"]["exitCode"], 1, "{value}");
+    let artifacts = value["artifacts"].as_array().expect("artifacts");
+    assert_eq!(artifacts.len(), 1, "{value}");
+    assert_eq!(artifacts[0]["role"], "advisory-report");
+    assert_eq!(artifacts[0]["path"], REPORT_PATH);
+    let report_bytes = fs::read(root.path().join(REPORT_PATH)).expect("retained report");
+    assert_eq!(artifacts[0]["byteLength"], report_bytes.len());
+    let report: Value = serde_json::from_slice(&report_bytes).expect("scanner report JSON");
+    let components = sbom_value["components"]
+        .as_array()
+        .expect("SBOM components");
+    let results = report["results"].as_array().expect("OSV report results");
+    for package in results
+        .iter()
+        .flat_map(|result| result["packages"].as_array().into_iter().flatten())
+    {
+        let observed = &package["package"];
+        assert!(
+            components.iter().any(|component| {
+                component["name"] == observed["name"]
+                    && component["version"] == observed["version"]
+                    && component["purl"] == observed["purl"]
+            }),
+            "OSV report named a package outside the retained SBOM: {package}"
+        );
+    }
+    let wanted = &expected["package"];
+    let matched = results
+        .iter()
+        .flat_map(|result| result["packages"].as_array().into_iter().flatten())
+        .find(|package| {
+            package["package"]["name"] == wanted["name"]
+                && package["package"]["version"] == wanted["version"]
+                && package["package"]["purl"] == wanted["purl"]
+        })
+        .unwrap_or_else(|| panic!("OSV report did not capture expected package: {report}"));
+    let expected_advisory = &expected["advisory"];
+    let expected_id = expected_advisory["id"]
+        .as_str()
+        .expect("expected advisory id");
+    let expected_alias = expected_advisory["alias"].as_str();
+    assert!(
+        matched["vulnerabilities"]
+            .as_array()
+            .is_some_and(|vulnerabilities| {
+                vulnerabilities.iter().any(|vulnerability| {
+                    has_vulnerability_identifier(vulnerability, expected_id)
+                        || expected_alias
+                            .is_some_and(|alias| has_vulnerability_identifier(vulnerability, alias))
+                })
+            }),
+        "OSV report did not associate {} or {} with {}: {report}",
+        expected_id,
+        expected_alias.unwrap_or("no alternate id"),
+        wanted["purl"]
+    );
 }
 
 fn write_network_isolated_scanner(root: &Path, scanner: &Path) -> PathBuf {
@@ -485,7 +582,7 @@ fn tc_9005_scans_the_debian_sbom_fixture_for_its_expected_advisory() {
     let supplied_database = database();
     let sbom = debian_sbom();
     let root = workspace(&sbom);
-    copy_database(&supplied_database, &root.path().join("db"));
+    copy_database(&supplied_database, &root.path().join("db"), "Debian");
     let request = osv_request(
         root.path(),
         &scanner.executable,
@@ -527,10 +624,8 @@ fn tc_9005_scans_the_debian_sbom_fixture_for_its_expected_advisory() {
             .as_array()
             .is_some_and(|vulnerabilities| {
                 vulnerabilities.iter().any(|vulnerability| {
-                    vulnerability["id"] == EXPECTED_OSV_ID
-                        || vulnerability["aliases"].as_array().is_some_and(|aliases| {
-                            aliases.iter().any(|alias| alias == EXPECTED_CVE_ALIAS)
-                        })
+                    has_vulnerability_identifier(vulnerability, EXPECTED_OSV_ID)
+                        || has_vulnerability_identifier(vulnerability, EXPECTED_CVE_ALIAS)
                 })
             }),
         "OSV report did not associate {EXPECTED_OSV_ID} with {OS_PURL}: {report}"
@@ -575,7 +670,7 @@ fn tc_9007_real_scanner_completes_with_network_disabled() {
     let scanner = scanner();
     let supplied_database = database();
     let root = workspace(&debian_sbom());
-    copy_database(&supplied_database, &root.path().join("db"));
+    copy_database(&supplied_database, &root.path().join("db"), "Debian");
     let isolated = write_network_isolated_scanner(root.path(), &scanner.executable);
     let request = osv_request(
         root.path(),
@@ -659,4 +754,34 @@ fn tc_9008_scanner_reads_the_retained_sbom_after_the_upstream_source_changes() {
         original
     );
     assert_eq!(fs::read(observed).expect("scanner input bytes"), original);
+}
+
+#[trace("TC-9009", "FR-044-AC-1")]
+#[test]
+#[ignore = "needs EA_TEST_OSV_SCANNER and EA_TEST_OSV_DB; fixture matches are not compliance evidence"]
+fn tc_9009_scans_the_syft_generated_npm_sbom_for_its_expected_advisory() {
+    let scanner = scanner();
+    let supplied_database = database();
+    let (sbom, expected) = scanner_fixture("npm");
+    assert_local_fixture_match(&scanner, &supplied_database, "npm", &sbom, &expected);
+}
+
+#[trace("TC-9010", "FR-044-AC-2")]
+#[test]
+#[ignore = "needs EA_TEST_OSV_SCANNER and EA_TEST_OSV_DB; fixture matches are not compliance evidence"]
+fn tc_9010_scans_the_syft_generated_pypi_sbom_for_its_expected_advisory() {
+    let scanner = scanner();
+    let supplied_database = database();
+    let (sbom, expected) = scanner_fixture("pypi");
+    assert_local_fixture_match(&scanner, &supplied_database, "PyPI", &sbom, &expected);
+}
+
+#[trace("TC-9011", "FR-044-AC-2")]
+#[test]
+#[ignore = "needs EA_TEST_OSV_SCANNER and EA_TEST_OSV_DB; fixture matches are not compliance evidence"]
+fn tc_9011_scans_the_syft_generated_go_sbom_for_its_expected_advisory() {
+    let scanner = scanner();
+    let supplied_database = database();
+    let (sbom, expected) = scanner_fixture("go");
+    assert_local_fixture_match(&scanner, &supplied_database, "Go", &sbom, &expected);
 }
