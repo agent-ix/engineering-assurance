@@ -495,6 +495,9 @@ attestation-signing = [
   "dep:sigstore-types",
   "dep:tokio",
 ]
+# FR-068: verify the fixed signed release-attestation set using the shared
+# delegated Sigstore verifier.
+attestation-verify = ["attestation-signing"]
 # Opt-in, and never part of `default`: turns on `serde_json/arbitrary_precision`. Cargo unifies features
 # across the whole dependency graph, so enabling this in one crate changes
 # serde_json's number representation for every crate in the same build (it is
@@ -511,6 +514,7 @@ full = [
   "approval-trail",
   "approval-verify",
   "attestation-signing",
+  "attestation-verify",
   "atomic-publish",
   "campaign",
   "claim-strength",

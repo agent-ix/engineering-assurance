@@ -57,6 +57,7 @@
 //! | `semantics` | `semantics` | `claim-strength`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
 //! | `signature-verify` | `signature_verify` | | `serde` |
 //! | `attestation-signing` | `attestation_signing` | `record-sink` | `serde`, `serde_json`, `serde_json_canonicalizer`, `sigstore-sign`, `sigstore-types`, `sigstore-verify`, `thiserror`, `tokio` |
+//! | `attestation-verify` | `attestation_verify` | `attestation-signing` | |
 //! | `source-audit` | `source_audit` | | `serde`, `syn`, `thiserror` |
 //! | `structured-yaml` | `structured_yaml` | | `serde_json`, `yaml_serde` |
 //! | `workflow` | `workflow` | | `serde`, `serde_json`, `thiserror` |
@@ -79,6 +80,8 @@ pub mod approval_verify;
 pub mod atomic_publish;
 #[cfg(feature = "attestation-signing")]
 pub mod attestation_signing;
+#[cfg(feature = "attestation-verify")]
+pub mod attestation_verify;
 #[cfg(feature = "campaign")]
 pub mod campaign;
 #[cfg(feature = "claim-strength")]
