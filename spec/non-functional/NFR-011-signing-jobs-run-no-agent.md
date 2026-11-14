@@ -35,7 +35,7 @@ A receipt or release attestation is evidence about what an agent produced. If th
 | Count of steps in a signing job that invoke an agent harness or model client | 0 | 0 | Source inspection of the workflow files |
 | Count of signing jobs that execute code from the repository under change | 0 | 0 | YAML-parsing test and source inspection |
 | Count of signing jobs whose identity is not the workflow identity | 0 | 0 | Test with a stand-in signer |
-| Count of signing jobs whose signing credential is readable by an AI agent step or process | 0 | 0 | Source inspection of workflow credential exposure |
+| Count of signing jobs whose signing credential is readable by an AI agent step or process | 0 | 0 | Inspection |
 
 ## Verification
 
