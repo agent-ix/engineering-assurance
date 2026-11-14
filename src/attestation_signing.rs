@@ -924,24 +924,74 @@ mod tests {
             repository: "fictional/untrusted".to_owned(),
             ..policy()
         };
+        let wrong_workflow_policy = WorkflowIdentityPolicy {
+            workflow_path: ".github/workflows/other.yml".to_owned(),
+            ..policy()
+        };
+        let outside_ref_policy = WorkflowIdentityPolicy {
+            references: ["refs/heads/release".to_owned()].into(),
+            ..policy()
+        };
         let trusted_policy = policy();
         let cases = [
-            (PAYLOAD, &trusted_policy, SubjectKind::Commit, "abc123"),
-            (PAYLOAD, &wrong_policy, SubjectKind::Commit, "abc123"),
             (
+                "valid commit subject",
+                PAYLOAD,
+                &trusted_policy,
+                SubjectKind::Commit,
+                "abc123",
+            ),
+            (
+                "repository identity mismatch",
+                PAYLOAD,
+                &wrong_policy,
+                SubjectKind::Commit,
+                "abc123",
+            ),
+            (
+                "workflow identity mismatch",
+                PAYLOAD,
+                &wrong_workflow_policy,
+                SubjectKind::Commit,
+                "abc123",
+            ),
+            (
+                "signer reference outside policy",
+                PAYLOAD,
+                &outside_ref_policy,
+                SubjectKind::Commit,
+                "abc123",
+            ),
+            (
+                "changed payload byte",
                 tampered_payload.as_slice(),
                 &trusted_policy,
                 SubjectKind::Commit,
                 "abc123",
             ),
             (
+                "mismatching gitTree subject",
                 PAYLOAD,
                 &trusted_policy,
                 SubjectKind::Tree,
                 "different-tree",
             ),
+            (
+                "matching gitTree subject",
+                PAYLOAD,
+                &trusted_policy,
+                SubjectKind::Tree,
+                "def456",
+            ),
+            (
+                "mismatching expected gitCommit",
+                PAYLOAD,
+                &trusted_policy,
+                SubjectKind::Commit,
+                "different-commit",
+            ),
         ];
-        for (payload, case_policy, kind, subject) in cases {
+        for (case, payload, case_policy, kind, subject) in cases {
             assert_eq!(
                 verify_statement(
                     &verifier,
@@ -953,7 +1003,8 @@ mod tests {
                         value: subject,
                     },
                 ),
-                Err(VerificationFailure::InvalidSignature)
+                Err(VerificationFailure::InvalidSignature),
+                "rejecting verifier must reject the {case} case before policy or subject comparison"
             );
         }
     }
