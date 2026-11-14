@@ -152,6 +152,87 @@ pub trait BundleVerifier {
         bundle_json: &str,
         policy: &WorkflowIdentityPolicy,
     ) -> Result<(), VerificationFailure>;
+
+    /// Verify a bundle and return the authenticated Fulcio CI claims.
+    ///
+    /// Implementations that cannot expose certificate claims return `None`;
+    /// callers that require source-workflow binding must refuse that result.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same signature or signer failure as [`Self::verify`].
+    fn verify_with_claims(
+        &self,
+        payload: &[u8],
+        bundle_json: &str,
+        policy: &WorkflowIdentityPolicy,
+    ) -> Result<Option<AuthenticatedWorkflowClaims>, VerificationFailure> {
+        self.verify(payload, bundle_json, policy)?;
+        Ok(None)
+    }
+}
+
+/// Fulcio CI claims authenticated with the certificate chain and signature.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct AuthenticatedWorkflowClaims {
+    /// Source repository URI from the signing certificate.
+    pub source_repository_uri: Option<String>,
+    /// Source repository ref from the signing certificate.
+    pub source_repository_ref: Option<String>,
+    /// Workflow configuration URI from the signing certificate.
+    pub build_config_uri: Option<String>,
+    /// Trigger event from the signing certificate.
+    pub build_trigger: Option<String>,
+}
+
+/// Policy for the caller of a trusted reusable release workflow.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SourceWorkflowPolicy {
+    /// Exact source repository in `owner/name` form.
+    pub repository: String,
+    /// Exact caller workflow path.
+    pub workflow_path: String,
+    /// Exact expected trigger event.
+    pub event: String,
+    /// Exact source ref, when the source ref is pinned exactly.
+    pub source_ref: Option<String>,
+    /// Literal source-ref prefix, used for release tags.
+    pub source_ref_prefix: Option<String>,
+}
+
+impl SourceWorkflowPolicy {
+    /// Whether all caller-workflow claims match this policy.
+    #[must_use]
+    pub fn matches(&self, claims: &AuthenticatedWorkflowClaims) -> bool {
+        if self.source_ref.is_some() == self.source_ref_prefix.is_some() {
+            return false;
+        }
+        let expected_repository_uri = format!("{}{}github.com/{}", "https:", "//", self.repository);
+        if claims.source_repository_uri.as_deref() != Some(expected_repository_uri.as_str())
+            || claims.build_trigger.as_deref() != Some(self.event.as_str())
+        {
+            return false;
+        }
+        let Some(source_ref) = claims.source_repository_ref.as_deref() else {
+            return false;
+        };
+        let ref_matches = self.source_ref.as_deref() == Some(source_ref)
+            || self
+                .source_ref_prefix
+                .as_deref()
+                .is_some_and(|prefix| source_ref.starts_with(prefix));
+        let expected_workflow_prefix = format!(
+            "{}{}github.com/{}/{}@",
+            "https:", "//", self.repository, self.workflow_path
+        );
+        let Some(build_config_uri) = claims.build_config_uri.as_deref() else {
+            return false;
+        };
+        ref_matches
+            && build_config_uri
+                .strip_prefix(&expected_workflow_prefix)
+                .is_some_and(|workflow_ref| workflow_ref == source_ref)
+    }
 }
 
 /// The production verifier backed by sigstore-rust and a caller-selected root.
@@ -181,6 +262,37 @@ impl BundleVerifier for SigstoreBundleVerifier {
         bundle_json: &str,
         policy: &WorkflowIdentityPolicy,
     ) -> Result<(), VerificationFailure> {
+        self.verify_authenticated(payload, bundle_json, policy)
+            .map(|_| ())
+    }
+
+    fn verify_with_claims(
+        &self,
+        payload: &[u8],
+        bundle_json: &str,
+        policy: &WorkflowIdentityPolicy,
+    ) -> Result<Option<AuthenticatedWorkflowClaims>, VerificationFailure> {
+        let result = self.verify_authenticated(payload, bundle_json, policy)?;
+        let claims = result.certificate().map(|certificate| {
+            let claims = &certificate.ci_claims;
+            AuthenticatedWorkflowClaims {
+                source_repository_uri: claims.source_repository_uri.clone(),
+                source_repository_ref: claims.source_repository_ref.clone(),
+                build_config_uri: claims.build_config_uri.clone(),
+                build_trigger: claims.build_trigger.clone(),
+            }
+        });
+        Ok(claims)
+    }
+}
+
+impl SigstoreBundleVerifier {
+    fn verify_authenticated(
+        &self,
+        payload: &[u8],
+        bundle_json: &str,
+        policy: &WorkflowIdentityPolicy,
+    ) -> Result<sigstore_verify::VerificationResult, VerificationFailure> {
         let bundle = sigstore_types::Bundle::from_json(bundle_json)
             .map_err(|_| VerificationFailure::InvalidSignature)?;
 
@@ -203,7 +315,7 @@ impl BundleVerifier for SigstoreBundleVerifier {
         if !identity_matches || result.issuer() != Some(policy.issuer.as_str()) {
             return Err(VerificationFailure::UntrustedSigner);
         }
-        Ok(())
+        Ok(result)
     }
 }
 
@@ -221,7 +333,24 @@ pub fn verify_statement(
     policy: &WorkflowIdentityPolicy,
     subject: ExpectedSubject<'_>,
 ) -> Result<VerificationStatus, VerificationFailure> {
-    verifier.verify(payload, bundle_json, policy)?;
+    verify_statement_with_source(verifier, payload, bundle_json, policy, None, subject)
+}
+
+/// Verify a statement and, when supplied, require authenticated reusable-workflow caller claims.
+pub fn verify_statement_with_source(
+    verifier: &dyn BundleVerifier,
+    payload: &[u8],
+    bundle_json: &str,
+    policy: &WorkflowIdentityPolicy,
+    source_policy: Option<&SourceWorkflowPolicy>,
+    subject: ExpectedSubject<'_>,
+) -> Result<VerificationStatus, VerificationFailure> {
+    let claims = verifier.verify_with_claims(payload, bundle_json, policy)?;
+    if let Some(source_policy) = source_policy {
+        if !claims.is_some_and(|claims| source_policy.matches(&claims)) {
+            return Err(VerificationFailure::UntrustedSigner);
+        }
+    }
     let statement: StatementV1 =
         serde_json::from_slice(payload).map_err(|_| VerificationFailure::InvalidStatement)?;
     if statement.type_ != STATEMENT_V1_TYPE {
@@ -686,6 +815,131 @@ mod tests {
             payload: payload.to_vec(),
             identity: policy.identity_uri(reference),
             issuer: policy.issuer,
+        }
+    }
+
+    struct ClaimsFixtureVerifier(AuthenticatedWorkflowClaims);
+
+    impl BundleVerifier for ClaimsFixtureVerifier {
+        fn verify(
+            &self,
+            _payload: &[u8],
+            _bundle_json: &str,
+            _policy: &WorkflowIdentityPolicy,
+        ) -> Result<(), VerificationFailure> {
+            Ok(())
+        }
+
+        fn verify_with_claims(
+            &self,
+            _payload: &[u8],
+            _bundle_json: &str,
+            _policy: &WorkflowIdentityPolicy,
+        ) -> Result<Option<AuthenticatedWorkflowClaims>, VerificationFailure> {
+            Ok(Some(self.0.clone()))
+        }
+    }
+
+    fn release_source_claims() -> AuthenticatedWorkflowClaims {
+        AuthenticatedWorkflowClaims {
+            source_repository_uri: Some(
+                concat!("https:", "//github.com/agent-ix/quoin").to_owned(),
+            ),
+            source_repository_ref: Some("refs/tags/v1.2.3".to_owned()),
+            build_config_uri: Some(
+                concat!(
+                    "https:",
+                    "//github.com/agent-ix/quoin/.github/workflows/release.yml@refs/tags/v1.2.3"
+                )
+                .to_owned(),
+            ),
+            build_trigger: Some("push".to_owned()),
+        }
+    }
+
+    fn release_source_policy() -> SourceWorkflowPolicy {
+        SourceWorkflowPolicy {
+            repository: "agent-ix/quoin".to_owned(),
+            workflow_path: ".github/workflows/release.yml".to_owned(),
+            event: "push".to_owned(),
+            source_ref: None,
+            source_ref_prefix: Some("refs/tags/v".to_owned()),
+        }
+    }
+
+    #[trace("TC-672", "FR-064-AC-13", "FR-064-AC-15", "FR-068-AC-3")]
+    #[test]
+    fn reusable_workflow_claims_bind_source_repository_workflow_event_and_tag_ref() {
+        let verifier = ClaimsFixtureVerifier(release_source_claims());
+        let source_policy = release_source_policy();
+        let subject = ExpectedSubject {
+            kind: SubjectKind::Commit,
+            value: "abc123",
+        };
+        assert_eq!(
+            verify_statement_with_source(
+                &verifier,
+                PAYLOAD,
+                BUNDLE,
+                &policy(),
+                Some(&source_policy),
+                subject,
+            ),
+            Ok(VerificationStatus::Verified)
+        );
+
+        let mut other_source = release_source_claims();
+        other_source.source_repository_uri =
+            Some(concat!("https:", "//github.com/other/quoin").to_owned());
+        let verifier = ClaimsFixtureVerifier(other_source);
+        assert_eq!(
+            verify_statement_with_source(
+                &verifier,
+                PAYLOAD,
+                BUNDLE,
+                &policy(),
+                Some(&source_policy),
+                subject,
+            ),
+            Err(VerificationFailure::UntrustedSigner)
+        );
+
+        for (field, value) in [
+            (
+                "caller workflow",
+                concat!(
+                    "https:",
+                    "//github.com/agent-ix/quoin/.github/workflows/other.yml@refs/tags/v1.2.3"
+                ),
+            ),
+            ("event", "schedule"),
+            ("branch", "refs/heads/main"),
+        ] {
+            let mut claims = release_source_claims();
+            match field {
+                "caller workflow" => claims.build_config_uri = Some(value.to_owned()),
+                "event" => claims.build_trigger = Some(value.to_owned()),
+                _ => {
+                    claims.source_repository_ref = Some(value.to_owned());
+                    claims.build_config_uri = Some(format!(
+                        "{}{}github.com/agent-ix/quoin/.github/workflows/release.yml@{value}",
+                        "https:", "//"
+                    ));
+                }
+            }
+            let verifier = ClaimsFixtureVerifier(claims);
+            assert_eq!(
+                verify_statement_with_source(
+                    &verifier,
+                    PAYLOAD,
+                    BUNDLE,
+                    &policy(),
+                    Some(&source_policy),
+                    subject,
+                ),
+                Err(VerificationFailure::UntrustedSigner),
+                "{field} must be rejected"
+            );
         }
     }
 
