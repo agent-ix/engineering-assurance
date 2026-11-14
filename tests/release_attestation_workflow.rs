@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-//! Guard the Engineering Assurance release caller's workflow contract.
+//! Guard the Engineering Assurance reusable release workflow's contract.
 
 use std::{fs, path::Path};
 
@@ -12,104 +12,17 @@ fn repository_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
 }
 
-fn workflow() -> Value {
-    let path = repository_root().join(".github/workflows/release.yml");
-    let bytes = fs::read(&path).expect("release caller workflow exists");
-    yaml_serde::from_slice(&bytes).expect("release caller workflow parses as YAML")
-}
-
 fn reusable_workflow() -> Value {
     let path = repository_root().join(".github/workflows/release-attestation.yml");
     let bytes = fs::read(&path).expect("release-attestation reusable workflow exists");
     yaml_serde::from_slice(&bytes).expect("release-attestation reusable workflow parses as YAML")
 }
 
-#[trace(
-    "TC-557",
-    "TC-665",
-    "TC-667",
-    "TC-668",
-    "FR-070-AC-1",
-    "FR-070-AC-9",
-    "FR-070-AC-11",
-    "FR-070-AC-12"
-)]
-#[test]
-fn engineering_assurance_tag_caller_builds_then_calls_the_matching_release_tag() {
-    let workflow = workflow();
-    assert_eq!(
-        workflow["on"]["push"]["tags"][0], "v*",
-        "the caller runs only for release tags"
-    );
-
-    let jobs = &workflow["jobs"];
-    let build = &jobs["build"];
-    assert_eq!(build["permissions"]["contents"], "read");
-    let steps = build["steps"].as_array().expect("build steps");
-    assert!(steps.iter().any(|step| {
-        step["uses"]
-            .as_str()
-            .is_some_and(|reference| reference.starts_with("actions/checkout@"))
-            && step["with"]["persist-credentials"] == false
-    }));
-    assert!(steps.iter().any(|step| {
-        step["uses"]
-            .as_str()
-            .is_some_and(|reference| reference.starts_with("actions/upload-artifact@"))
-            && step["with"]["name"] == "release-artifacts"
-    }));
-    assert!(
-        steps
-            .iter()
-            .all(|step| step["with"]["name"] != "release-evidence")
-    );
-
-    let attest = &jobs["attest"];
-    assert_eq!(attest["needs"], "build");
-    assert_eq!(
-        attest["permissions"],
-        serde_json::json!({
-            "contents":"read",
-            "id-token":"write",
-            "attestations":"write"
-        })
-    );
-    assert_eq!(
-        attest["uses"],
-        "agent-ix/engineering-assurance/.github/workflows/release-attestation.yml@v0.9.0"
-    );
-    assert_eq!(attest["with"]["tag"], "${{ github.ref_name }}");
-    assert_eq!(attest["with"]["ea_tooling_tag"], "v0.9.0");
-    let reusable_ref = attest["uses"].as_str().expect("reusable workflow ref");
-    let reusable_tag = reusable_ref
-        .rsplit_once('@')
-        .expect("pinned workflow tag")
-        .1;
-    assert_eq!(attest["with"]["ea_tooling_tag"], reusable_tag);
-    assert_eq!(attest["with"]["quoin_tooling_tag"], "0.30.1");
-    assert_eq!(
-        attest["with"]["record_path"],
-        "spec/releases/engineering-assurance.md"
-    );
-    assert_eq!(
-        attest["with"]["allowed_signers_path"],
-        ".engineering-assurance/allowed_signers"
-    );
-    assert!(
-        attest.get("steps").is_none(),
-        "attest job only calls the reusable workflow"
-    );
-}
-
 #[trace("TC-622", "NFR-011-AC-1", "NFR-011-AC-2")]
 #[test]
 fn signing_jobs_run_no_agent_or_repository_code() {
-    let caller = workflow();
     let reusable = reusable_workflow();
-    let signing_jobs = [
-        (&caller["jobs"]["attest"], "release caller"),
-        (&reusable["jobs"]["attest"], "reusable workflow"),
-    ];
+    let signing_jobs = [(&reusable["jobs"]["attest"], "reusable workflow")];
 
     for (job, name) in signing_jobs {
         let permissions = &job["permissions"];
@@ -207,10 +120,33 @@ fn signing_jobs_use_the_github_workflow_identity() {
     );
 }
 
-#[trace("TC-562", "TC-667", "FR-070-AC-6", "FR-070-AC-11", "FR-067-AC-7")]
+#[trace(
+    "TC-557",
+    "TC-562",
+    "TC-667",
+    "TC-668",
+    "FR-070-AC-1",
+    "FR-070-AC-6",
+    "FR-070-AC-11",
+    "FR-070-AC-12",
+    "FR-067-AC-7"
+)]
 #[test]
 fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_statement_source() {
     let workflow = reusable_workflow();
+    assert_eq!(
+        workflow["on"].as_object().map(serde_json::Map::len),
+        Some(1),
+        "the EA workflow is reusable only"
+    );
+    assert!(workflow["on"].get("workflow_call").is_some());
+    let job_names = workflow["jobs"]
+        .as_object()
+        .expect("reusable workflow jobs")
+        .keys()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    assert_eq!(job_names, ["attest", "verify"]);
     assert_workflow_inputs_and_permissions(&workflow);
     assert_verify_job(&workflow);
     assert_attest_job(&workflow);
