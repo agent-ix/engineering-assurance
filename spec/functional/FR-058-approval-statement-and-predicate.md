@@ -64,6 +64,8 @@ approval statements (EA-98).
 - The statement writer SHALL set the statement subject to the repository and the merged commit.
 - The statement writer SHALL set the predicate type to the URI with scheme `https`, host `schemas.agent-ix.ai` and path
   `/attestation/approval/v1`.
+- The statement writer SHALL serialize each statement to RFC 8785 canonical JSON bytes before passing those bytes to
+  the signer.
 - The statement writer SHALL build `approver` from the source and the account's stable identifier.
 - The statement writer SHALL take `meaning` and `role` from the review body as submitted.
 - The statement writer SHALL take `signed_at` from the source's timestamp.
@@ -85,6 +87,7 @@ approval statements (EA-98).
 | FR-058-AC-7 | The statement is signed with the CI workflow identity and verifies under FR-064; the same statement with one predicate byte changed does not verify. | Test |
 | FR-058-AC-8 | A statement published for a public repository's public sink yields a public record of kind `approval` whose bundle payload equals the canonical public form and which holds the statement digest only (FR-056-AC-8); the configured private store holds the full private form with the statement, under the same `record_id`, and the meaning, approver, approver name and pull request reference appear only there. | Test |
 | FR-058-AC-9 | A statement for a private repository whose resolved sink is the private store makes no public transparency log call. | Test |
+| FR-058-AC-10 | The bytes passed to the statement signer equal the RFC 8785 canonical JSON encoding of the full statement object; the private form stores that statement object and the exact signature-bundle string returned by the signer. | Test |
 
 ## Dependencies
 

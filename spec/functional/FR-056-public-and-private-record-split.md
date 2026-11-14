@@ -46,8 +46,9 @@ construction. The public form, `engineering-assurance.record-public/v1`, has the
   payload.
 
 The private form, `engineering-assurance.record-private/v1`, has the members `protocol`, `record_id`, and optionally
-`ticket_text`, `criteria_text`, `model_names`, `statement` (the full approval statement of
-[FR-058](./FR-058-approval-statement-and-predicate.md)), `change_record` (the full change record, with the ticket and
+`ticket_text`, `criteria_text`, `model_names`, `statement` (an object with exactly `statement`, the full approval
+statement of [FR-058](./FR-058-approval-statement-and-predicate.md), and `signature_bundle`, the exact JSON string
+returned by the statement signer), `change_record` (the full change record, with the ticket and
 criteria text and the review results, of [FR-072](./FR-072-change-record-predicate.md)) and `agent_bom` (the agent bill
 of materials of [FR-073](./FR-073-agent-bom-in-cyclonedx-1-7.md)). The two forms are linked only by equal `record_id`.
 
@@ -69,6 +70,7 @@ Out of scope: the record kinds that fill these members (EA-97, EA-98).
 - Engineering Assurance SHALL generate each `record_id` independently of the record's content.
 - Engineering Assurance SHALL NOT embed a private-form member in the public form under another name.
 - Engineering Assurance SHALL NOT include any private-form member in the signed bytes of the public form.
+- When a private form contains `statement`, it SHALL contain exactly the full statement object and its exact signer-returned signature-bundle string.
 
 ## Acceptance Criteria
 
@@ -84,6 +86,7 @@ Out of scope: the record kinds that fill these members (EA-97, EA-98).
 | FR-056-AC-8 | The decoded `signature` bundle's signed payload equals the canonical bytes of the public form (RFC 8785 canonical form, no `signature` member); a bundle over a full statement, or over any other bytes, is rejected before any sink call, and the test public log receives no entry carrying statement payload bytes. | Test |
 | FR-056-AC-9 | A caller-supplied public form that already carries a `signature` is refused when a `Record` is constructed; the signature is supplied only by the signing step required by [NFR-010](../non-functional/NFR-010-no-cryptography-of-our-own.md) and is never accepted from input. | Test |
 | FR-056-AC-10 | A private form that supplies JSON `null` for `ticket_text`, `statement` or `model_names` is rejected; these optional members may be omitted but cannot be supplied as `null`. | Test |
+| FR-056-AC-11 | An approval private form contains exactly the full statement object and the exact signature-bundle string returned by the signer; an unknown member inside the `statement` envelope is rejected. | Test |
 
 ## Dependencies
 
