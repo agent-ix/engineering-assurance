@@ -8,8 +8,8 @@ repositories once the shared interfaces are released. Answers
 
 | Agent | Repositories |
 | --- | --- |
-| A | `quire-contract-ir`, `quire-contract-runtime`, `quire-contract-codegen` |
-| B | `quire-analyze`, `tl-syntax` |
+| A | `filament-contract-ir`, `filament-contract-runtime`, `filament-contract-codegen` |
+| B | `filament-analyze`, `tl-syntax` |
 | C | `tl-parse`, `tl-mltl`, `tl-rewrite` |
 
 The existing allocation is preserved. A repository does not change hands as
@@ -62,7 +62,7 @@ writing, on the migration issue.
 envelope, a manifest, a collection, a run identity, or an audit — not a domain
 artifact — it is generic, and Quoin owns the shape. A repository may keep a
 schema that describes *its own domain output*: `tl-mltl`'s differential summary
-and `quire-contract-ir`'s conformance manifest both stay.
+and `filament-contract-ir`'s conformance manifest both stay.
 
 **No universal stdout corroboration.** A verdict recovered from console text is
 a verdict the producer never made. Native structured output is retained when it

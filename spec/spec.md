@@ -313,7 +313,7 @@ same canonical bundle and do not redefine these responsibilities.
 | Bounded native producer execution | engineering-assurance | Execute only an exact caller-declared tool through FR-019 and return a typed state without interpreting domain success. |
 | Native producer selection, response semantics, and domain result | campaign repository/domain tool | Select checks and preserve the domain result schema, oracle, and failure behavior through a caller-owned response adapter. |
 | Engineering Assurance executable behavior | engineering-assurance Rust crate | Implement repository-owned validation, generation, orchestration, evaluation, and qualification behavior. |
-| Portable verification contracts | quire-verification | Publish versioned shared contract types; this module consumes rather than copies accepted definitions. |
+| Portable verification contracts | filament-verification | Publish versioned shared contract types; this module consumes rather than copies accepted definitions. |
 
 ## Error and Failure Model
 
