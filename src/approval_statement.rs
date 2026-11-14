@@ -13,6 +13,8 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
+use crate::record_sink::sink::ApprovalStatementReader;
+
 use crate::{
     approval_gate::{self, AccountRef, AccountType, Approval, GateResult, RolePolicy},
     attestation_signing::{
@@ -24,55 +26,10 @@ use crate::{
 const APPROVAL_PREDICATE_TYPE: &str =
     concat!("https:", "//schemas.agent-ix.ai/attestation/approval/v1");
 
-/// One exact post-merge query to the private approval-statement store.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ApprovalStatementLookup<'a> {
-    /// The repository in `owner/name` form.
-    pub repository: &'a str,
-    /// The merged pull-request reference, such as `owner/name#12`.
-    pub merged_pull_request: &'a str,
-    /// The merged commit object id.
-    pub merged_commit: &'a str,
-}
-
-/// Whether the statement's publishing operation succeeded or was refused.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ApprovalStatementPublishOutcome {
-    /// The sink accepted publication.
-    Published,
-    /// The sink refused publication, including a leak-check refusal.
-    Refused,
-}
-
-/// One retained result returned by the approval-specific private-store query.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RetainedApprovalStatement {
-    /// The exact statement bytes covered by the signature bundle.
-    pub statement_bytes: Vec<u8>,
-    /// The associated Sigstore bundle in JSON form.
-    pub signature_bundle: String,
-    /// The sink's outcome for publishing this statement.
-    pub publish_outcome: ApprovalStatementPublishOutcome,
-}
-
-/// A private store that supports the narrow FR-064 approval lookup.
-pub trait ApprovalStatementReader {
-    /// Retrieve every retained statement matching the exact query tuple.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ApprovalStatementReadError`] when the private store cannot
-    /// complete the lookup.
-    fn lookup_approval_statements(
-        &self,
-        lookup: ApprovalStatementLookup<'_>,
-    ) -> Result<Vec<RetainedApprovalStatement>, ApprovalStatementReadError>;
-}
-
-/// The private store could not complete an approval-statement lookup.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-#[error("private approval-statement lookup failed")]
-pub struct ApprovalStatementReadError;
+pub use crate::record_sink::sink::{
+    ApprovalStatementLookup, ApprovalStatementPublishOutcome, ApprovalStatementReadError,
+    RetainedApprovalStatement,
+};
 
 /// The aggregate status of the matching statement set.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -473,6 +430,10 @@ mod tests {
     }
 
     fn statement(account: &str, bundle: &str) -> RetainedApprovalStatement {
+        statement_for_role(account, "developer", bundle)
+    }
+
+    fn statement_for_role(account: &str, role: &str, bundle: &str) -> RetainedApprovalStatement {
         let payload = json!({
             "_type": crate::attestation_signing::STATEMENT_V1_TYPE,
             "subject": [{
@@ -484,7 +445,7 @@ mod tests {
                 "source": "github",
                 "approver": format!("github:{account}"),
                 "approver_name": format!("reviewer-{account}"),
-                "role": "developer",
+                "role": role,
                 "meaning": "reviewed the change",
                 "signed_at": "2026-11-13T10:00:00Z",
                 "head_commit": "reviewed-head",
@@ -496,6 +457,46 @@ mod tests {
             statement_bytes: serde_json::to_vec(&payload).expect("fixture statement serializes"),
             signature_bundle: bundle.to_owned(),
             publish_outcome: ApprovalStatementPublishOutcome::Published,
+        }
+    }
+
+    fn three_role_policy() -> RolePolicy {
+        RolePolicy {
+            protocol: approval_gate::POLICY_PROTOCOL.to_owned(),
+            required_roles: vec![
+                "developer".to_owned(),
+                "engineer".to_owned(),
+                "stakeholder".to_owned(),
+            ],
+            individuals: BTreeMap::from([
+                (
+                    "alice".to_owned(),
+                    vec![AccountRef {
+                        source: "github".to_owned(),
+                        id: "1".to_owned(),
+                    }],
+                ),
+                (
+                    "bob".to_owned(),
+                    vec![AccountRef {
+                        source: "github".to_owned(),
+                        id: "2".to_owned(),
+                    }],
+                ),
+                (
+                    "carol".to_owned(),
+                    vec![AccountRef {
+                        source: "github".to_owned(),
+                        id: "3".to_owned(),
+                    }],
+                ),
+            ]),
+            roles: BTreeMap::from([
+                ("developer".to_owned(), vec!["alice".to_owned()]),
+                ("engineer".to_owned(), vec!["bob".to_owned()]),
+                ("stakeholder".to_owned(), vec!["carol".to_owned()]),
+            ]),
+            agents: Vec::new(),
         }
     }
 
@@ -512,6 +513,148 @@ mod tests {
                 .collect(),
             ..FixtureReader::default()
         }
+    }
+
+    #[trace("TC-960", "FR-064-AC-1", "FR-064-AC-10")]
+    #[test]
+    fn verified_statements_satisfy_roles_and_untrusted_statement_names_its_role() {
+        let roles = ["developer", "engineer", "stakeholder"];
+        let entries = roles
+            .iter()
+            .enumerate()
+            .map(|(index, role)| {
+                let account = (index + 1).to_string();
+                let bundle = format!("bundle-{role}");
+                (
+                    LOOKUP.merged_pull_request,
+                    statement_for_role(&account, role, &bundle),
+                )
+            })
+            .collect::<Vec<_>>();
+        let expected = entries
+            .iter()
+            .map(|(_, retained)| {
+                (
+                    retained.statement_bytes.clone(),
+                    retained.signature_bundle.clone(),
+                    Ok(()),
+                )
+            })
+            .collect();
+        let verifier = FixtureVerifier {
+            expected,
+            ..FixtureVerifier::default()
+        };
+        let reader = reader_for(entries);
+
+        let all_verified = verify_approval_statements(
+            &reader,
+            LOOKUP,
+            &identity_policy(),
+            &three_role_policy(),
+            &verifier,
+        );
+
+        assert_eq!(all_verified.status, ApprovalStatementStatus::Verified);
+        assert_eq!(
+            all_verified.role_verdict.status,
+            approval_gate::GateStatus::Satisfied
+        );
+        assert_eq!(all_verified.role_verdict.assignments.len(), 3);
+
+        let mixed_entries = roles
+            .iter()
+            .enumerate()
+            .map(|(index, role)| {
+                let account = (index + 1).to_string();
+                let bundle = format!("mixed-{role}");
+                (
+                    LOOKUP.merged_pull_request,
+                    statement_for_role(&account, role, &bundle),
+                )
+            })
+            .collect::<Vec<_>>();
+        let untrusted_payload = mixed_entries[2].1.statement_bytes.clone();
+        let untrusted_bundle = mixed_entries[2].1.signature_bundle.clone();
+        let mixed_verifier = FixtureVerifier {
+            expected: mixed_entries
+                .iter()
+                .map(|(_, retained)| {
+                    let result = if retained.signature_bundle == untrusted_bundle {
+                        Err(VerificationFailure::UntrustedSigner)
+                    } else {
+                        Ok(())
+                    };
+                    (
+                        retained.statement_bytes.clone(),
+                        retained.signature_bundle.clone(),
+                        result,
+                    )
+                })
+                .collect(),
+            ..FixtureVerifier::default()
+        };
+        let mixed_reader = reader_for(mixed_entries);
+        let mixed = verify_approval_statements(
+            &mixed_reader,
+            LOOKUP,
+            &identity_policy(),
+            &three_role_policy(),
+            &mixed_verifier,
+        );
+
+        assert_eq!(
+            mixed.status,
+            ApprovalStatementStatus::UntrustedSigner,
+            "one untrusted statement prevents an all-verified aggregate"
+        );
+        assert_eq!(
+            mixed.role_verdict.status,
+            approval_gate::GateStatus::Unsatisfied
+        );
+        assert_eq!(mixed.role_verdict.missing.len(), 1);
+        assert_eq!(mixed.role_verdict.missing[0].role, "stakeholder");
+        assert!(
+            mixed_verifier
+                .calls
+                .borrow()
+                .iter()
+                .any(|(payload, _)| payload == &untrusted_payload)
+        );
+    }
+
+    #[trace("TC-961", "FR-062-AC-4")]
+    #[test]
+    fn a_statement_naming_a_listed_agent_is_not_counted_for_a_role() {
+        let mut policy = role_policy();
+        policy.agents.push(AccountRef {
+            source: "github".to_owned(),
+            id: "agent".to_owned(),
+        });
+        let retained = statement("agent", "agent-bundle");
+        let verifier = FixtureVerifier {
+            expected: vec![(
+                retained.statement_bytes.clone(),
+                retained.signature_bundle.clone(),
+                Ok(()),
+            )],
+            ..FixtureVerifier::default()
+        };
+        let reader = reader_for(vec![(LOOKUP.merged_pull_request, retained)]);
+
+        let result =
+            verify_approval_statements(&reader, LOOKUP, &identity_policy(), &policy, &verifier);
+
+        assert_eq!(result.status, ApprovalStatementStatus::Verified);
+        assert_eq!(
+            result.role_verdict.status,
+            approval_gate::GateStatus::Unsatisfied
+        );
+        assert_eq!(result.role_verdict.missing.len(), 1);
+        assert_eq!(
+            result.role_verdict.missing[0].reason,
+            approval_gate::MissingReason::AgentOnly
+        );
     }
 
     #[trace("TC-954", "FR-064-AC-16", "FR-064-AC-20")]

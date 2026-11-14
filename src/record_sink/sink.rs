@@ -138,8 +138,63 @@ pub trait RecordSink {
 #[error("private store write failed")]
 pub struct StoreError;
 
+/// One exact post-merge query to the private approval-statement store.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ApprovalStatementLookup<'a> {
+    /// The repository in `owner/name` form.
+    pub repository: &'a str,
+    /// The merged pull-request reference, such as `owner/name#12`.
+    pub merged_pull_request: &'a str,
+    /// The merged commit object id.
+    pub merged_commit: &'a str,
+}
+
+/// Whether the statement's publishing operation succeeded or was refused.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ApprovalStatementPublishOutcome {
+    /// The sink accepted publication.
+    Published,
+    /// The sink refused publication, including a leak-check refusal.
+    Refused,
+}
+
+/// One retained result returned by the approval-specific private-store query.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RetainedApprovalStatement {
+    /// The exact statement bytes covered by the signature bundle.
+    pub statement_bytes: Vec<u8>,
+    /// The associated Sigstore bundle in JSON form.
+    pub signature_bundle: String,
+    /// The sink's outcome for publishing this statement.
+    pub publish_outcome: ApprovalStatementPublishOutcome,
+}
+
+/// A private store that supports the narrow FR-064 approval lookup.
+pub trait ApprovalStatementReader {
+    /// Retrieve every retained statement matching the exact query tuple.
+    ///
+    /// The default refuses the lookup so a write-only private store fails
+    /// closed until it implements retained approval reads.
+    ///
+    /// # Errors
+    ///
+    /// [`ApprovalStatementReadError`] when the private store cannot complete
+    /// the lookup or does not implement it.
+    fn lookup_approval_statements(
+        &self,
+        _lookup: ApprovalStatementLookup<'_>,
+    ) -> Result<Vec<RetainedApprovalStatement>, ApprovalStatementReadError> {
+        Err(ApprovalStatementReadError)
+    }
+}
+
+/// The private store could not complete an approval-statement lookup.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("private approval-statement lookup failed")]
+pub struct ApprovalStatementReadError;
+
 /// The private store: a destination named in the sink configuration.
-pub trait PrivateStore {
+pub trait PrivateStore: ApprovalStatementReader {
     /// Stores the full private form under `destination`.
     ///
     /// # Errors
