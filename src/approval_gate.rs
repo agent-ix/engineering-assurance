@@ -939,15 +939,21 @@ mod tests {
             "head",
         );
         assert_eq!(approvals.len(), 1);
-        assert!(approvals
-            .iter()
-            .any(|approval| approval.account.id == "101" && approval.human));
-        assert!(!approvals
-            .iter()
-            .any(|approval| approval.account.id == "303"));
-        assert!(!approvals
-            .iter()
-            .any(|approval| approval.account.id == "202"));
+        assert!(
+            approvals
+                .iter()
+                .any(|approval| approval.account.id == "101" && approval.human)
+        );
+        assert!(
+            !approvals
+                .iter()
+                .any(|approval| approval.account.id == "303")
+        );
+        assert!(
+            !approvals
+                .iter()
+                .any(|approval| approval.account.id == "202")
+        );
     }
 
     #[test]

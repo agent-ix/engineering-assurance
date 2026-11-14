@@ -4,10 +4,14 @@
 //! Process-boundary tests for the opt-in role-based review gate (FR-059, FR-061,
 //! FR-062, FR-063 and FR-065).
 
-use std::process::{Command, Stdio};
+use std::{
+    fs,
+    os::unix::fs::PermissionsExt,
+    process::{Command, Stdio},
+};
 
 use ix_trace_rs::trace;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.review-gate-request/v1";
 
@@ -72,6 +76,109 @@ fn request(reviews: Vec<Value>) -> Value {
             {"account": {"source": "github", "id": "202"}, "account_type": "human"}
         ]
     })
+}
+
+fn collect_request_with_fake_github(
+    rest_response: &str,
+    graphql_response: &str,
+) -> (tempfile::TempDir, Value, std::path::PathBuf) {
+    let temp = tempfile::tempdir().expect("temporary directory");
+    let policy_repo = temp.path().join("policy");
+    fs::create_dir_all(policy_repo.join(".engineering-assurance")).expect("policy directory");
+    let init = Command::new("git")
+        .args(["init", "--quiet", "--initial-branch=main"])
+        .current_dir(&policy_repo)
+        .status()
+        .expect("git init starts");
+    assert!(init.success(), "git init succeeds");
+    let config = Command::new("git")
+        .args(["config", "user.name", "Review Gate Fixture"])
+        .current_dir(&policy_repo)
+        .status()
+        .expect("git config starts");
+    assert!(config.success(), "git config succeeds");
+    let config = Command::new("git")
+        .args([
+            "config",
+            "user.email",
+            "review-gate-fixture@example.invalid",
+        ])
+        .current_dir(&policy_repo)
+        .status()
+        .expect("git config starts");
+    assert!(config.success(), "git config succeeds");
+    fs::write(
+        policy_repo.join(".engineering-assurance/approval-policy.json"),
+        serde_json::to_vec(&policy()).expect("policy serializes"),
+    )
+    .expect("policy file writes");
+    let add = Command::new("git")
+        .args(["add", ".engineering-assurance/approval-policy.json"])
+        .current_dir(&policy_repo)
+        .status()
+        .expect("git add starts");
+    assert!(add.success(), "git add succeeds");
+    let commit = Command::new("git")
+        .args(["commit", "--quiet", "-m", "fixture policy"])
+        .current_dir(&policy_repo)
+        .status()
+        .expect("git commit starts");
+    assert!(commit.success(), "git commit succeeds");
+    let base_sha = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(&policy_repo)
+        .output()
+        .expect("git rev-parse starts");
+    assert!(base_sha.status.success(), "git rev-parse succeeds");
+    let base_sha = String::from_utf8(base_sha.stdout)
+        .expect("commit id is UTF-8")
+        .trim()
+        .to_owned();
+
+    let fake_bin = temp.path().join("bin");
+    fs::create_dir(&fake_bin).expect("fake bin directory");
+    let fake_gh = fake_bin.join("gh");
+    fs::write(
+        &fake_gh,
+        "#!/bin/sh\ncase \"$*\" in\n  *graphql*) touch \"$FAKE_GRAPHQL_MARKER\"; printf '%s\\n' \"$FAKE_GRAPHQL_RESPONSE\" ;;\n  *'/pulls/1/reviews'*) printf '%s\\n' \"$FAKE_REST_RESPONSE\" ;;\n  *'/user/'*) printf '{\"type\":\"User\"}\\n' ;;\n  *) echo \"unexpected gh invocation\" >&2; exit 2 ;;\nesac\n",
+    )
+    .expect("fake gh writes");
+    fs::set_permissions(&fake_gh, fs::Permissions::from_mode(0o755))
+        .expect("fake gh is executable");
+    let graphql_marker = temp.path().join("graphql-called");
+    let original_path = std::env::var_os("PATH").expect("PATH exists");
+    let path = std::env::join_paths(
+        std::iter::once(fake_bin).chain(std::env::split_paths(&original_path)),
+    )
+    .expect("fake PATH joins");
+    let collector = Command::new("bash")
+        .args([
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/scripts/prepare-review-gate-request.sh"
+            ),
+            policy_repo.to_str().expect("policy path is UTF-8"),
+            &base_sha,
+            "agent-ix/ea-109-sandbox-20261114",
+            "1",
+        ])
+        .env("PATH", path)
+        .env(
+            "REVIEW_GATE_HEAD_SHA",
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        )
+        .env("FAKE_REST_RESPONSE", rest_response)
+        .env("FAKE_GRAPHQL_RESPONSE", graphql_response)
+        .env("FAKE_GRAPHQL_MARKER", &graphql_marker)
+        .output()
+        .expect("request collector starts");
+    assert!(
+        collector.status.success(),
+        "request collector failed: {}",
+        String::from_utf8_lossy(&collector.stderr)
+    );
+    let request = serde_json::from_slice(&collector.stdout).expect("collector emits JSON");
+    (temp, request, graphql_marker)
 }
 
 #[trace("FR-059-AC-1", "FR-061-AC-1", "FR-065-AC-10")]
@@ -209,6 +316,54 @@ fn unavailable_source_metadata_never_yields_approval() {
     let result = run(request);
     assert_eq!(result["status"], "unavailable");
     assert_eq!(result["assignments"], json!([]));
+    assert_eq!(result["error"], "approval_source_unavailable");
+}
+
+#[trace("FR-063-AC-4")]
+#[test]
+fn a_successful_empty_review_list_is_available_and_fails_as_missing_roles() {
+    let (_temp, request, graphql_marker) = collect_request_with_fake_github("[[]]", "");
+    assert_eq!(request["source_unavailable"], false);
+    assert_eq!(request["reviews"], json!([]));
+    assert!(
+        !graphql_marker.exists(),
+        "empty reviews need no edit metadata"
+    );
+
+    let result = run(request);
+    assert_eq!(result["status"], "unsatisfied");
+    assert_eq!(result["error"], Value::Null);
+    assert_eq!(
+        result["missing"].as_array().expect("missing roles").len(),
+        2
+    );
+    assert!(
+        result["missing"]
+            .as_array()
+            .expect("missing roles")
+            .iter()
+            .all(|role| role["reason"] == "no_approval")
+    );
+}
+
+#[trace("FR-059-AC-6", "FR-063-AC-6")]
+#[test]
+fn malformed_review_edit_metadata_remains_source_unavailable() {
+    let rest_response = concat!(
+        "[[{\"id\":1,\"user\":{\"id\":101,\"type\":\"User\"},",
+        "\"state\":\"APPROVED\",\"body\":\"Signed-off-meaning: reviewed\\nRole: security\",",
+        "\"submitted_at\":\"2026-11-14T03:00:00Z\",",
+        "\"commit_id\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}]]"
+    );
+    let (_temp, request, graphql_marker) = collect_request_with_fake_github(rest_response, "[]");
+    assert_eq!(request["source_unavailable"], true);
+    assert!(
+        graphql_marker.exists(),
+        "review items require edit metadata"
+    );
+
+    let result = run(request);
+    assert_eq!(result["status"], "unavailable");
     assert_eq!(result["error"], "approval_source_unavailable");
 }
 

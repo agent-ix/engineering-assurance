@@ -34,7 +34,7 @@ trap 'rm -f "$reviews_file" "$types_file" "$edit_metadata_file"' EXIT
 
 source_unavailable=false
 if gh api --paginate --slurp "repos/$repository/pulls/$pull_request/reviews" \
-  | jq -c 'add // []' >"$reviews_file"; then
+  | jq -ce 'if type == "array" and length > 0 and all(.[]; type == "array") then add else error("review pages are unavailable") end' >"$reviews_file"; then
   :
 else
   source_unavailable=true
@@ -43,7 +43,10 @@ fi
 
 # REST review bodies do not identify post-submission edits. Query the full
 # GraphQL review connection and fail closed if its edit metadata is incomplete.
-if [[ "$source_unavailable" == false ]]; then
+# An available empty REST review list needs no per-review edit metadata and is
+# a normal unsatisfied gate input, not a source outage.
+review_count=$(jq -r 'length' "$reviews_file")
+if [[ "$source_unavailable" == false && "$review_count" -gt 0 ]]; then
   owner=${repository%%/*}
   repo_name=${repository#*/}
   if ! gh api graphql --paginate --slurp \
