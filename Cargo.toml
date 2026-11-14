@@ -222,6 +222,11 @@ path = "tests/approval_trail_cli.rs"
 required-features = ["full"]
 
 [[test]]
+name = "change_record"
+path = "tests/change_record.rs"
+required-features = ["change-record"]
+
+[[test]]
 name = "approval_gate_cli"
 path = "tests/approval_gate_cli.rs"
 required-features = ["full"]
@@ -472,6 +477,19 @@ record-sink = [
   "dep:serde_json_canonicalizer",
   "dep:thiserror",
 ]
+# FR-072/FR-073: closed per-change predicates and CycloneDX 1.7 agent BOMs.
+change-record = [
+  "record-sink",
+  "approval-gate",
+  "dep:cyclonedx-bom",
+  "dep:jsonschema",
+  "dep:serde",
+  "dep:serde_json",
+  "dep:serde_json_canonicalizer",
+  "dep:sha2",
+  "dep:thiserror",
+  "dep:uuid",
+]
 # FR-052: pure request rules and record path grammar of the release history; the
 # git adapter lives in the binary.
 release-history = []
@@ -544,6 +562,7 @@ full = [
   "package-membership",
   "producer-execution",
   "record-sink",
+  "change-record",
   "release",
   "release-history",
   "scope-footprint",
@@ -570,6 +589,7 @@ cap-std = { version = "4", optional = true }
 clap = { version = "4.5", default-features = false, features = ["error-context", "help", "std", "usage"], optional = true }
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"], optional = true }
 jsonschema = { version = "0.56", default-features = false, optional = true }
+cyclonedx-bom = { version = "0.9", optional = true }
 regex = { version = "1.13", optional = true }
 rustix = { version = "1.1", features = ["fs", "process"], optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
@@ -586,6 +606,7 @@ tempfile = { version = "3.27", optional = true }
 thiserror = { version = "2.0", optional = true }
 time = { version = "0.3", features = ["formatting", "parsing"], optional = true }
 unicode-casefold = { version = "0.2", optional = true }
+uuid = { version = "1", features = ["v4"], optional = true }
 yaml_serde = { version = "0.10", optional = true }
 zip = { version = "9", default-features = false, features = ["deflate-flate2"], optional = true }
 

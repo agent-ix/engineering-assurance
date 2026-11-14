@@ -88,6 +88,8 @@ pub mod attestation_signing;
 pub mod attestation_verify;
 #[cfg(feature = "campaign")]
 pub mod campaign;
+#[cfg(feature = "change-record")]
+pub mod change_record;
 #[cfg(feature = "claim-strength")]
 pub mod claim_strength;
 #[cfg(feature = "content-rights")]
