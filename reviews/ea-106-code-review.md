@@ -60,5 +60,5 @@ Examined all four changed paths (`Cargo.toml`, `Cargo.lock`, `src/attestation_si
 | FND-006 | fixed | The rejecting-verifier input array now includes a trusted commit, wrong policy, tampered payload, and wrong-tree case, and checks that each propagates the delegated verifier's rejection. |
 | FND-007 | fixed | `WorkflowIdentityPolicy.references` is a set and tests allow both main and release refs while rejecting an outside ref. |
 | FND-008 | fixed | The generic Statement serialization test no longer claims FR-058-AC-1 trace coverage. |
-
-The new TC-112 finding is not disposed in this round; its latest outcome remains open for the next fix round.
+| FND-005 | fixed | The `Signer` public-method test now sends both signing paths through the missing-OIDC backend, which calls the shared service-start closure and asserts its call count remains zero. |
+| FND-009 | fixed | TC-112 now detects `gh release upload` and `gh release edit`, with negative fixtures for both; existing checks still cover package publication and non-manual triggers. |
