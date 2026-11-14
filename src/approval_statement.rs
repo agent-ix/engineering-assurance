@@ -520,38 +520,52 @@ mod tests {
         }
     }
 
-    #[trace("TC-960", "FR-064-AC-1", "FR-064-AC-10")]
-    #[test]
-    fn verified_statements_satisfy_roles_and_untrusted_statement_names_its_role() {
-        let roles = ["developer", "engineer", "stakeholder"];
-        let entries = roles
+    fn three_role_statements(prefix: &str) -> Vec<(&'static str, RetainedApprovalStatement)> {
+        ["developer", "engineer", "stakeholder"]
             .iter()
             .enumerate()
             .map(|(index, role)| {
                 let account = (index + 1).to_string();
-                let bundle = format!("bundle-{role}");
+                let bundle = format!("{prefix}-{role}");
                 (
                     LOOKUP.merged_pull_request,
                     statement_for_role(&account, role, &bundle),
                 )
             })
-            .collect::<Vec<_>>();
+            .collect()
+    }
+
+    fn verifier_for_statements(
+        entries: &[(&'static str, RetainedApprovalStatement)],
+        untrusted_bundle: Option<&str>,
+    ) -> FixtureVerifier {
         let expected = entries
             .iter()
             .map(|(_, retained)| {
+                let result = if Some(retained.signature_bundle.as_str()) == untrusted_bundle {
+                    Err(VerificationFailure::UntrustedSigner)
+                } else {
+                    Ok(())
+                };
                 (
                     retained.statement_bytes.clone(),
                     retained.signature_bundle.clone(),
-                    Ok(()),
+                    result,
                 )
             })
             .collect();
-        let verifier = FixtureVerifier {
+        FixtureVerifier {
             expected,
             ..FixtureVerifier::default()
-        };
-        let reader = reader_for(entries);
+        }
+    }
 
+    #[trace("TC-960", "FR-064-AC-1", "FR-064-AC-10")]
+    #[test]
+    fn verified_statements_satisfy_roles_and_untrusted_statement_names_its_role() {
+        let entries = three_role_statements("verified");
+        let verifier = verifier_for_statements(&entries, None);
+        let reader = reader_for(entries);
         let all_verified = verify_approval_statements(
             &reader,
             "private-store-a",
@@ -568,38 +582,10 @@ mod tests {
         );
         assert_eq!(all_verified.role_verdict.assignments.len(), 3);
 
-        let mixed_entries = roles
-            .iter()
-            .enumerate()
-            .map(|(index, role)| {
-                let account = (index + 1).to_string();
-                let bundle = format!("mixed-{role}");
-                (
-                    LOOKUP.merged_pull_request,
-                    statement_for_role(&account, role, &bundle),
-                )
-            })
-            .collect::<Vec<_>>();
-        let untrusted_payload = mixed_entries[2].1.statement_bytes.clone();
+        let mixed_entries = three_role_statements("mixed");
         let untrusted_bundle = mixed_entries[2].1.signature_bundle.clone();
-        let mixed_verifier = FixtureVerifier {
-            expected: mixed_entries
-                .iter()
-                .map(|(_, retained)| {
-                    let result = if retained.signature_bundle == untrusted_bundle {
-                        Err(VerificationFailure::UntrustedSigner)
-                    } else {
-                        Ok(())
-                    };
-                    (
-                        retained.statement_bytes.clone(),
-                        retained.signature_bundle.clone(),
-                        result,
-                    )
-                })
-                .collect(),
-            ..FixtureVerifier::default()
-        };
+        let untrusted_payload = mixed_entries[2].1.statement_bytes.clone();
+        let mixed_verifier = verifier_for_statements(&mixed_entries, Some(&untrusted_bundle));
         let mixed_reader = reader_for(mixed_entries);
         let mixed = verify_approval_statements(
             &mixed_reader,
