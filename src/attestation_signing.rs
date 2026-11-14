@@ -18,7 +18,7 @@
 //! whose signing service does not operate a transparency log.
 
 use std::{
-    collections::{BTreeMap, btree_map::Entry},
+    collections::{BTreeMap, BTreeSet, btree_map::Entry},
     future::Future,
     sync::{Arc, Mutex},
     thread,
@@ -125,6 +125,258 @@ pub enum TransparencyRequirement {
     /// Accept timestamp-only bundles from a Sigstore instance that operates
     /// no transparency log, such as GitHub's private-repository instance.
     TimestampOnly,
+}
+
+/// A trusted workflow role from FR-064's protected policy document.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowRole {
+    /// Workflow that writes approval statements in the source repository.
+    StatementWriter,
+    /// Workflow that publishes records in the source repository.
+    RecordPublisher,
+    /// Engineering Assurance reusable release workflow.
+    ReleaseAttester,
+    /// Engineering Assurance reusable receipt workflow.
+    ReceiptWriter,
+}
+
+/// A validated, closed FR-064 workflow identity policy.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkflowIdentityDocument {
+    identities: Vec<WorkflowIdentityEntry>,
+}
+
+/// One exact workflow identity and, for reusable workflows, its caller.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkflowIdentityEntry {
+    role: WorkflowRole,
+    issuer: String,
+    repository: String,
+    workflow_path: String,
+    #[serde(rename = "ref")]
+    reference: String,
+    #[serde(default, deserialize_with = "deserialize_non_null_option")]
+    source_repository: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_non_null_option")]
+    source_workflow_path: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_non_null_option")]
+    event: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_non_null_option")]
+    source_ref: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_non_null_option")]
+    source_ref_prefix: Option<String>,
+}
+
+fn deserialize_non_null_option<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorkflowIdentityDocumentWire {
+    protocol: String,
+    identities: Vec<WorkflowIdentityEntry>,
+}
+
+/// Failure to parse or validate a protected workflow-identity document.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum WorkflowIdentityPolicyError {
+    /// The document is not valid JSON or has an unknown or missing member.
+    #[error("workflow-identity policy is not a valid closed document")]
+    InvalidDocument,
+    /// The protocol identifier does not match FR-064.
+    #[error("workflow-identity policy protocol is invalid")]
+    InvalidProtocol,
+    /// The document has no identities or exceeds the supported bound.
+    #[error("workflow-identity policy identity count is invalid")]
+    InvalidCount,
+    /// An identity does not satisfy the exact FR-064 role schema.
+    #[error("workflow-identity policy entry is invalid")]
+    InvalidEntry,
+}
+
+impl WorkflowIdentityDocument {
+    /// Parse and validate one `engineering-assurance.workflow-identities/v1`
+    /// document. Callers must obtain the bytes from the protected base branch.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error for malformed JSON, an invalid protocol, an
+    /// invalid identity count, or an entry that violates the closed schema.
+    pub fn parse(bytes: &[u8]) -> Result<Self, WorkflowIdentityPolicyError> {
+        let wire: WorkflowIdentityDocumentWire = serde_json::from_slice(bytes)
+            .map_err(|_| WorkflowIdentityPolicyError::InvalidDocument)?;
+        if wire.protocol != "engineering-assurance.workflow-identities/v1" {
+            return Err(WorkflowIdentityPolicyError::InvalidProtocol);
+        }
+        if wire.identities.is_empty() || wire.identities.len() > 256 {
+            return Err(WorkflowIdentityPolicyError::InvalidCount);
+        }
+        let mut unique = BTreeSet::new();
+        if wire.identities.iter().any(|entry| {
+            !entry.is_valid()
+                || !unique.insert((
+                    entry.role,
+                    entry.repository.as_str(),
+                    entry.workflow_path.as_str(),
+                    entry.reference.as_str(),
+                ))
+        }) {
+            return Err(WorkflowIdentityPolicyError::InvalidEntry);
+        }
+        Ok(Self {
+            identities: wire.identities,
+        })
+    }
+
+    /// Find the entry for `role` that exactly matches a signer workflow ref.
+    #[must_use]
+    pub fn signer_policy(
+        &self,
+        role: WorkflowRole,
+        repository: &str,
+        workflow_path: &str,
+        reference: &str,
+        transparency: TransparencyRequirement,
+    ) -> Option<WorkflowIdentityPolicy> {
+        let entry = self.identities.iter().find(|entry| {
+            entry.role == role
+                && entry.repository == repository
+                && entry.workflow_path == workflow_path
+                && entry.reference == reference
+        })?;
+        Some(WorkflowIdentityPolicy {
+            repository: entry.repository.clone(),
+            workflow_path: entry.workflow_path.clone(),
+            references: BTreeSet::from([entry.reference.clone()]),
+            issuer: entry.issuer.clone(),
+            transparency,
+        })
+    }
+
+    /// Find the source workflow policy associated with an exact reusable
+    /// release or receipt signer entry.
+    #[must_use]
+    pub fn source_policy(
+        &self,
+        role: WorkflowRole,
+        repository: &str,
+        workflow_path: &str,
+        reference: &str,
+    ) -> Option<SourceWorkflowPolicy> {
+        let entry = self.identities.iter().find(|entry| {
+            entry.role == role
+                && entry.repository == repository
+                && entry.workflow_path == workflow_path
+                && entry.reference == reference
+        })?;
+        Some(SourceWorkflowPolicy {
+            repository: entry.source_repository.clone()?,
+            workflow_path: entry.source_workflow_path.clone()?,
+            event: entry.event.clone()?,
+            source_ref: entry.source_ref.clone(),
+            source_ref_prefix: entry.source_ref_prefix.clone(),
+        })
+    }
+}
+
+impl WorkflowIdentityEntry {
+    fn is_valid(&self) -> bool {
+        if self.issuer.is_empty()
+            || !valid_repository(&self.repository)
+            || !valid_workflow_path(&self.workflow_path)
+        {
+            return false;
+        }
+        match self.role {
+            WorkflowRole::StatementWriter | WorkflowRole::RecordPublisher => {
+                self.reference.starts_with("refs/heads/")
+                    && valid_ref(&self.reference)
+                    && self.source_repository.is_none()
+                    && self.source_workflow_path.is_none()
+                    && self.event.is_none()
+                    && self.source_ref.is_none()
+                    && self.source_ref_prefix.is_none()
+            }
+            WorkflowRole::ReleaseAttester => {
+                self.reference.starts_with("refs/tags/")
+                    && valid_ref(&self.reference)
+                    && self
+                        .source_repository
+                        .as_deref()
+                        .is_some_and(valid_repository)
+                    && self
+                        .source_workflow_path
+                        .as_deref()
+                        .is_some_and(valid_workflow_path)
+                    && self.event.as_deref() == Some("push")
+                    && self.source_ref.is_none()
+                    && self
+                        .source_ref_prefix
+                        .as_deref()
+                        .is_some_and(|prefix| prefix.starts_with("refs/tags/") && valid_ref(prefix))
+            }
+            WorkflowRole::ReceiptWriter => {
+                (self.reference.starts_with("refs/heads/")
+                    || self.reference.starts_with("refs/tags/"))
+                    && valid_ref(&self.reference)
+                    && self
+                        .source_repository
+                        .as_deref()
+                        .is_some_and(valid_repository)
+                    && self
+                        .source_workflow_path
+                        .as_deref()
+                        .is_some_and(valid_workflow_path)
+                    && self.event.as_deref() == Some("push")
+                    && self
+                        .source_ref
+                        .as_deref()
+                        .is_some_and(|value| value.starts_with("refs/heads/") && valid_ref(value))
+                    && self.source_ref_prefix.is_none()
+            }
+        }
+    }
+}
+
+fn valid_repository(value: &str) -> bool {
+    let mut parts = value.split('/');
+    parts.next().is_some_and(valid_ref_component)
+        && parts.next().is_some_and(valid_ref_component)
+        && parts.next().is_none()
+}
+
+fn valid_ref_component(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        && value != "."
+        && value != ".."
+}
+
+fn valid_ref(value: &str) -> bool {
+    let mut parts = value.split('/');
+    matches!(parts.next(), Some("refs"))
+        && parts
+            .next()
+            .is_some_and(|kind| matches!(kind, "heads" | "tags"))
+        && parts.all(valid_ref_component)
+        && value.matches('/').count() >= 2
+}
+
+fn valid_workflow_path(value: &str) -> bool {
+    value.starts_with(".github/workflows/")
+        && value.len() > ".github/workflows/".len()
+        && !value.contains("..")
+        && !value.ends_with('/')
+        && !value.bytes().any(|byte| byte.is_ascii_control())
 }
 
 /// The caller-provided expected statement subject digest.
@@ -782,6 +1034,150 @@ mod tests {
     )
     .as_bytes();
     const BUNDLE: &str = "fixture-bundle";
+
+    const TEST_OIDC_ISSUER: &str = concat!("https:", "//", "token.actions.githubusercontent.com");
+
+    fn release_identity_document() -> String {
+        serde_json::json!({
+            "protocol": "engineering-assurance.workflow-identities/v1",
+            "identities": [{
+                "role": "release_attester",
+                "issuer": TEST_OIDC_ISSUER,
+                "repository": "agent-ix/engineering-assurance",
+                "workflow_path": ".github/workflows/release-attestation.yml",
+                "ref": "refs/tags/v1.2.3",
+                "source_repository": "fictional/product",
+                "source_workflow_path": ".github/workflows/release.yml",
+                "event": "push",
+                "source_ref_prefix": "refs/tags/v"
+            }]
+        })
+        .to_string()
+    }
+
+    #[trace("TC-676", "FR-064-AC-13", "FR-064-AC-15", "FR-068-AC-3")]
+    #[test]
+    fn workflow_identity_document_produces_exact_release_and_caller_policies() {
+        let policy = release_identity_document();
+        let document =
+            WorkflowIdentityDocument::parse(policy.as_bytes()).expect("fixture policy is valid");
+        let signer = document
+            .signer_policy(
+                WorkflowRole::ReleaseAttester,
+                "agent-ix/engineering-assurance",
+                ".github/workflows/release-attestation.yml",
+                "refs/tags/v1.2.3",
+                TransparencyRequirement::PublicLog,
+            )
+            .expect("exact signer entry exists");
+        assert_eq!(
+            signer.references,
+            BTreeSet::from(["refs/tags/v1.2.3".to_owned()])
+        );
+        assert_eq!(signer.issuer, TEST_OIDC_ISSUER);
+        let caller = document
+            .source_policy(
+                WorkflowRole::ReleaseAttester,
+                "agent-ix/engineering-assurance",
+                ".github/workflows/release-attestation.yml",
+                "refs/tags/v1.2.3",
+            )
+            .expect("matching caller policy exists");
+        let source_repository_uri = format!("{}{}github.com/fictional/product", "https:", "//");
+        let build_config = format!(
+            "{}{}github.com/fictional/product/.github/workflows/release.yml@refs/tags/v2.0.0",
+            "https:", "//"
+        );
+        assert!(caller.matches(&AuthenticatedWorkflowClaims {
+            source_repository_uri: Some(source_repository_uri.clone()),
+            source_repository_ref: Some("refs/tags/v2.0.0".into()),
+            build_config_uri: Some(build_config.clone()),
+            build_trigger: Some("push".into()),
+        }));
+        assert!(!caller.matches(&AuthenticatedWorkflowClaims {
+            source_repository_uri: Some(source_repository_uri),
+            source_repository_ref: Some("refs/pull/9/merge".into()),
+            build_config_uri: Some(build_config.replace("refs/tags/v2.0.0", "refs/pull/9/merge")),
+            build_trigger: Some("push".into()),
+        }));
+    }
+
+    #[trace("TC-677", "FR-064-AC-9", "FR-064-AC-14", "FR-064-AC-15")]
+    #[test]
+    fn workflow_identity_document_rejects_open_or_malformed_entries() {
+        let valid = release_identity_document();
+        for invalid in [
+            valid.replace(
+                "\"source_ref_prefix\":\"refs/tags/v\"",
+                "\"source_ref_prefix\":\"refs/pull/\"",
+            ),
+            valid.replace(
+                "\"source_ref_prefix\":\"refs/tags/v\"",
+                "\"source_ref_prefix\":\"refs/tags/v*\"",
+            ),
+            valid.replace(
+                "\"ref\":\"refs/tags/v1.2.3\"",
+                "\"ref\":\"refs/heads/main\"",
+            ),
+            valid.replace(
+                "\"source_ref_prefix\":\"refs/tags/v\"",
+                "\"source_ref_prefix\":null",
+            ),
+            valid.replace(
+                "\"source_ref_prefix\":\"refs/tags/v\"",
+                "\"source_ref_prefix\":\"refs/tags/v\",\"unexpected\":true",
+            ),
+            valid.replace(
+                "\"source_ref_prefix\":\"refs/tags/v\"",
+                "\"source_ref_prefix\":\"refs/tags/v\",\"source_ref\":\"refs/heads/main\"",
+            ),
+        ] {
+            assert!(
+                WorkflowIdentityDocument::parse(invalid.as_bytes()).is_err(),
+                "invalid policy unexpectedly accepted: {invalid}"
+            );
+        }
+    }
+
+    #[trace("TC-678", "FR-064-AC-1", "FR-064-AC-9")]
+    #[test]
+    fn local_workflow_identity_requires_one_exact_protected_branch_ref() {
+        let bytes = serde_json::json!({
+            "protocol": "engineering-assurance.workflow-identities/v1",
+            "identities": [{
+                "role": "statement_writer",
+                "issuer": TEST_OIDC_ISSUER,
+                "repository": "fictional/product",
+                "workflow_path": ".github/workflows/approval.yml",
+                "ref": "refs/heads/main"
+            }]
+        })
+        .to_string();
+        let document =
+            WorkflowIdentityDocument::parse(bytes.as_bytes()).expect("valid local identity");
+        assert!(
+            document
+                .signer_policy(
+                    WorkflowRole::StatementWriter,
+                    "fictional/product",
+                    ".github/workflows/approval.yml",
+                    "refs/heads/main",
+                    TransparencyRequirement::PublicLog,
+                )
+                .is_some()
+        );
+        assert!(
+            document
+                .signer_policy(
+                    WorkflowRole::StatementWriter,
+                    "fictional/product",
+                    ".github/workflows/approval.yml",
+                    "refs/pull/7/merge",
+                    TransparencyRequirement::PublicLog,
+                )
+                .is_none()
+        );
+    }
 
     struct FixtureVerifier {
         payload: Vec<u8>,
