@@ -257,6 +257,32 @@ fn path_with(fixture: &Fixture, name: &str, programs: &[&str]) -> PathBuf {
     directory
 }
 
+fn git_recording_path(fixture: &Fixture, name: &str, log: &Path, fail_cat_file: bool) -> PathBuf {
+    let directory = fixture.root().join(name);
+    fs::create_dir(&directory).expect("bin dir");
+    let real_git = env::split_paths(&env::var_os("PATH").expect("PATH"))
+        .map(|dir| dir.join("git"))
+        .find(|candidate| candidate.is_file())
+        .expect("real git on PATH");
+    let script = directory.join("git");
+    let fail = if fail_cat_file {
+        "if [ \"$1\" = cat-file ]; then exit 1; fi\n"
+    } else {
+        ""
+    };
+    fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\n{fail}exec '{}' \"$@\"\n",
+            log.display(),
+            real_git.display()
+        ),
+    )
+    .expect("git recorder");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("mode");
+    directory
+}
+
 #[test]
 #[trace("TC-250", "FR-036-AC-1", "FR-036-CON-1")]
 fn tc_250_valid_commit_and_tag_are_signed_valid() {
@@ -344,6 +370,9 @@ fn tc_254_unavailable_git_repository_or_revision_is_unverifiable() {
         let unknown = status(&fixture, "no-such-revision", kind);
         assert_eq!(unknown["status"], "unverifiable", "{kind}");
         assert_eq!(unknown["reason"], "revision_unresolved");
+        if kind == "commit" {
+            assert_eq!(unknown["verified_commit_id"], Value::Null);
+        }
     }
     let plain = tempfile::tempdir().expect("tempdir");
     let mut elsewhere = request(&fixture, "HEAD", "commit");
@@ -358,6 +387,56 @@ fn tc_254_unavailable_git_repository_or_revision_is_unverifiable() {
     let no_git = verdict_with(&request(&fixture, "HEAD", "commit"), Some(&empty));
     assert_eq!(no_git["status"], "unverifiable");
     assert_eq!(no_git["reason"], "git_not_started");
+}
+
+#[test]
+#[trace("TC-278", "FR-036-AC-13", "FR-036-AC-15")]
+fn tc_278_commit_alias_and_id_return_one_identity_used_by_git_verifiers() {
+    let fixture = fixture();
+    let id = plain_commit(&fixture, "unsigned commit");
+    let log = fixture.root().join("git-args");
+    let path = git_recording_path(&fixture, "recording-bin", &log, false);
+
+    let alias = verdict_with(&request(&fixture, "HEAD", "commit"), Some(&path));
+    let alias_calls = fs::read_to_string(&log).expect("recorded git calls");
+    assert_eq!(alias["status"], "unsigned");
+    assert_eq!(alias["verified_commit_id"], id);
+    assert!(alias_calls.lines().any(|call| call == format!("verify-commit {id}")));
+    assert!(alias_calls.lines().any(|call| {
+        call == format!("log -1 --no-show-signature --format=%G?%x00%GF%x00%GS {id}")
+    }));
+
+    fs::write(&log, "").expect("clear git call log");
+    let by_id = verdict_with(&request(&fixture, &id, "commit"), Some(&path));
+    assert_eq!(by_id["verified_commit_id"], id);
+    assert_eq!(by_id["verified_commit_id"], alias["verified_commit_id"]);
+}
+
+#[test]
+#[trace("TC-279", "FR-036-AC-15")]
+fn tc_279_commit_id_survives_failure_after_resolution() {
+    let fixture = fixture();
+    let id = plain_commit(&fixture, "resolved before cat-file fails");
+    let log = fixture.root().join("git-args");
+    let path = git_recording_path(&fixture, "failing-bin", &log, true);
+    let result = verdict_with(&request(&fixture, "HEAD", "commit"), Some(&path));
+    assert_eq!(result["status"], "unverifiable");
+    assert_eq!(result["verified_commit_id"], id);
+}
+
+#[test]
+#[trace("TC-280", "FR-036-AC-14", "FR-036-AC-15")]
+fn tc_280_tag_and_pre_resolution_verdicts_have_null_commit_identity() {
+    let fixture = fixture();
+    plain_commit(&fixture, "tag target");
+    git(&fixture.repo(), None, &["tag", "v-light"]);
+    let lightweight = status(&fixture, "v-light", "tag");
+    assert_eq!(lightweight["verified_commit_id"], Value::Null);
+    assert_eq!(lightweight["reason"], "lightweight_tag");
+
+    signed_tag(&fixture, "a", "v-signed");
+    assert_eq!(status(&fixture, "v-signed", "tag")["verified_commit_id"], Value::Null);
+    assert_eq!(status(&fixture, "missing", "commit")["verified_commit_id"], Value::Null);
 }
 
 #[test]

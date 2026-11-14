@@ -276,6 +276,10 @@ pub struct Verdict {
     pub status: Status,
     /// What was verified.
     pub kind: TargetKind,
+    /// The canonical commit object id whose signature was checked. Always
+    /// present after a commit revision resolves; absent for tags and before
+    /// commit resolution succeeds.
+    pub verified_commit_id: Option<String>,
     /// Which verifier the identified signature block belongs to.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signature_kind: Option<SignatureKind>,
@@ -306,6 +310,7 @@ impl Verdict {
         Self {
             status: Status::Unverifiable,
             kind,
+            verified_commit_id: None,
             signature_kind: None,
             key_fingerprint: None,
             reason: Some(reason),
@@ -323,6 +328,13 @@ impl Verdict {
         self
     }
 
+    /// The canonical commit object id whose signature was checked.
+    #[must_use]
+    pub fn with_verified_commit_id(mut self, id: Option<String>) -> Self {
+        self.verified_commit_id = id;
+        self
+    }
+
     /// The verdict with the verifier of the identified signature block.
     #[must_use]
     pub const fn with_signature_kind(mut self, kind: Option<SignatureKind>) -> Self {
@@ -334,6 +346,7 @@ impl Verdict {
         Self {
             status,
             kind,
+            verified_commit_id: None,
             signature_kind: None,
             key_fingerprint: None,
             reason: None,

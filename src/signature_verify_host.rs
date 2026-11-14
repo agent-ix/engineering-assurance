@@ -458,9 +458,18 @@ fn observed(result: &Result<CompletedProcess, ProcessError>) -> Run {
 impl Git<'_> {
     fn commit(&self, revision: &str) -> Verdict {
         let kind = TargetKind::Commit;
-        let (id, object) = match self.load_commit(revision) {
-            Ok(loaded) => loaded,
+        if let Err(reason) = self.require_repository() {
+            return Verdict::unverifiable(kind, reason);
+        }
+        let id = match self.resolve(&format!("{revision}^{{commit}}")) {
+            Ok(id) => id,
             Err(reason) => return Verdict::unverifiable(kind, reason),
+        };
+        let object = match self.successful(&["cat-file", "commit", &id]) {
+            Ok(object) => object,
+            Err(reason) => {
+                return Verdict::unverifiable(kind, reason).with_verified_commit_id(Some(id));
+            }
         };
         let meaning = self.meaning(object_message(&object));
         let format = commit_signature_format(&object);
@@ -470,13 +479,7 @@ impl Git<'_> {
                     .with_signature_kind(format.and_then(SignatureFormat::signature_kind))
             })
             .with_meaning(meaning)
-    }
-
-    fn load_commit(&self, revision: &str) -> Result<(String, Vec<u8>), Reason> {
-        self.require_repository()?;
-        let id = self.resolve(&format!("{revision}^{{commit}}"))?;
-        let object = self.successful(&["cat-file", "commit", &id])?;
-        Ok((id, object))
+            .with_verified_commit_id(Some(id))
     }
 
     fn commit_verdict(&self, id: &str, format: Option<SignatureFormat>) -> Result<Verdict, Reason> {
