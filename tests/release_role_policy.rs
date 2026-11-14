@@ -76,7 +76,7 @@ fn account_types(policy: &RolePolicy) -> BTreeMap<AccountRef, AccountType> {
 }
 
 #[test]
-#[trace("FR-061-AC-1")]
+#[trace("TC-947", "FR-061-AC-3")]
 fn a_single_required_role_can_be_covered_by_one_person() {
     let policy = policy(&[("release_owner", &["one"])]);
     let result = evaluate(
@@ -90,17 +90,22 @@ fn a_single_required_role_can_be_covered_by_one_person() {
 }
 
 #[test]
-#[trace("FR-061-AC-2", "FR-061-AC-11")]
+#[trace("TC-952", "FR-061-AC-2")]
 fn one_individual_cannot_cover_two_roles_and_order_does_not_matter() {
-    let policy = policy(&[("developer", &["one"]), ("engineer", &["one"])]);
+    let mut policy = policy(&[("developer", &["one"]), ("engineer", &["one"])]);
+    policy
+        .individuals
+        .get_mut("one")
+        .expect("individual exists")
+        .push(account("303"));
     let first = evaluate(
         &policy,
-        &[approval("developer", "101"), approval("engineer", "101")],
+        &[approval("developer", "101"), approval("engineer", "303")],
         &account_types(&policy),
     );
     let second = evaluate(
         &policy,
-        &[approval("engineer", "101"), approval("developer", "101")],
+        &[approval("engineer", "303"), approval("developer", "101")],
         &account_types(&policy),
     );
     assert_eq!(first, second);
@@ -113,7 +118,17 @@ fn one_individual_cannot_cover_two_roles_and_order_does_not_matter() {
 }
 
 #[test]
-#[trace("FR-061-AC-5")]
+#[trace("TC-949", "FR-061-AC-5")]
+fn empty_required_roles_is_rejected_with_stable_code() {
+    let mut policy = policy(&[("developer", &["one"])]);
+    policy.required_roles.clear();
+    let result = evaluate(&policy, &[], &account_types(&policy));
+    assert_eq!(result.status, GateStatus::Unsatisfied);
+    assert_eq!(result.error, Some(GateErrorCode::ApprovalPolicyInvalid));
+}
+
+#[test]
+#[trace("TC-948", "FR-061-AC-5")]
 fn invalid_policy_is_rejected_with_stable_code() {
     let unknown = json!({
         "protocol": POLICY_PROTOCOL,
@@ -169,7 +184,7 @@ fn invalid_policy_is_rejected_with_stable_code() {
 }
 
 #[test]
-#[trace("FR-061-AC-6")]
+#[trace("TC-950", "FR-061-AC-6", "FR-061-AC-10")]
 fn generated_two_by_two_graphs_match_exhaustive_search() {
     let names = ["one", "two"];
     let role_names = ["a", "b"];
@@ -215,10 +230,24 @@ fn generated_two_by_two_graphs_match_exhaustive_search() {
             "mask={mask:04b}"
         );
     }
+
+    let reassignment_policy = policy(&[("a", &["one", "two"]), ("b", &["one"])]);
+    let reassignment = evaluate(
+        &reassignment_policy,
+        &[
+            approval("b", "101"),
+            approval("a", "101"),
+            approval("a", "202"),
+        ],
+        &account_types(&reassignment_policy),
+    );
+    assert_eq!(reassignment.status, GateStatus::Satisfied);
+    assert_eq!(reassignment.assignments[0].individual, "two");
+    assert_eq!(reassignment.assignments[1].individual, "one");
 }
 
 #[test]
-#[trace("FR-061-AC-7", "FR-061-AC-8")]
+#[trace("TC-951", "FR-061-AC-7", "FR-061-AC-8")]
 fn account_identity_and_role_eligibility_are_respected() {
     let mut policy = policy(&[("developer", &["one"]), ("engineer", &["one", "two"])]);
     policy.individuals.get_mut("one").unwrap().push(AccountRef {
@@ -259,48 +288,56 @@ fn account_identity_and_role_eligibility_are_respected() {
 }
 
 #[test]
-#[trace("FR-061-AC-10")]
-fn matching_reassigns_earlier_role_to_find_full_coverage() {
-    let policy = policy(&[("a", &["one", "two"]), ("b", &["one"])]);
-    let result = evaluate(
-        &policy,
-        &[
-            approval("b", "101"),
-            approval("a", "101"),
-            approval("a", "202"),
-        ],
-        &account_types(&policy),
-    );
-    assert_eq!(result.status, GateStatus::Satisfied);
-    assert_eq!(result.assignments[0].individual, "two");
-    assert_eq!(result.assignments[1].individual, "one");
-}
-
-#[test]
-#[trace("FR-061-AC-11", "FR-061-AC-12")]
+#[trace("TC-953", "FR-061-AC-11", "FR-061-AC-12")]
 fn missing_role_is_the_smallest_maximum_matching_complement() {
-    let policy = policy(&[("a", &["one"]), ("b", &["one"]), ("c", &["one", "two"])]);
-    let result = evaluate(
-        &policy,
+    let ac11_policy = policy(&[("a", &["x", "y"]), ("b", &["x"]), ("c", &["x"])]);
+    let ac11_result = evaluate(
+        &ac11_policy,
         &[
-            approval("c", "202"),
             approval("a", "101"),
             approval("b", "101"),
             approval("c", "101"),
+            approval("a", "202"),
         ],
-        &account_types(&policy),
+        &account_types(&ac11_policy),
     );
-    assert_eq!(result.status, GateStatus::Unsatisfied);
+    assert_eq!(ac11_result.status, GateStatus::Unsatisfied);
     assert_eq!(
-        result
+        ac11_result
+            .missing
+            .iter()
+            .map(|item| item.role.as_str())
+            .collect::<Vec<_>>(),
+        vec!["c"]
+    );
+    assert_eq!(
+        ac11_result.missing[0].reason,
+        engineering_assurance::approval_gate::MissingReason::SharedIndividual
+    );
+
+    let ac12_policy = policy(&[("a", &["x", "y"]), ("b", &["x"]), ("c", &["y"])]);
+    let ac12_result = evaluate(
+        &ac12_policy,
+        &[
+            approval("a", "101"),
+            approval("b", "101"),
+            approval("a", "202"),
+            approval("c", "202"),
+        ],
+        &account_types(&ac12_policy),
+    );
+    assert_eq!(ac12_result.status, GateStatus::Unsatisfied);
+    assert_eq!(
+        ac12_result
             .missing
             .iter()
             .map(|item| item.role.as_str())
             .collect::<Vec<_>>(),
         vec!["b"]
     );
-    assert_eq!(
-        result.missing[0].reason,
-        engineering_assurance::approval_gate::MissingReason::SharedIndividual
-    );
+    assert_eq!(ac12_result.assignments.len(), 2);
+    assert_eq!(ac12_result.assignments[0].role, "a");
+    assert_eq!(ac12_result.assignments[0].individual, "x");
+    assert_eq!(ac12_result.assignments[1].role, "c");
+    assert_eq!(ac12_result.assignments[1].individual, "y");
 }
