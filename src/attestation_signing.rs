@@ -701,7 +701,20 @@ pub async fn sign_statement_without_public_log(
     sign_statement_without_public_log_with(canonical_statement, detect_ambient_oidc()).await
 }
 
+/// Sign canonical in-toto statement bytes using ambient workflow OIDC.
+///
+/// This synchronous boundary runs the asynchronous Sigstore exchange on the
+/// dedicated signing thread used by this module.
+///
+/// # Errors
+///
+/// Returns [`SigningFailure::AmbientOidcUnavailable`] when the workflow has no
+/// ambient identity, or [`SigningFailure::SigningFailed`] when Sigstore fails.
 #[cfg(feature = "attestation-signing")]
+pub fn sign_statement_bytes(canonical_statement: &[u8]) -> Result<String, SigningFailure> {
+    let payload = canonical_statement.to_vec();
+    run_signing_thread(move || async move { sign_statement_without_public_log(&payload).await })
+}
 async fn sign_statement_without_public_log_with<Detect>(
     canonical_statement: &[u8],
     detect: Detect,

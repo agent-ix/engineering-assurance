@@ -14,8 +14,28 @@ use std::{
     process::{Command, Output, Stdio},
 };
 
+use engineering_assurance::{
+    approval_gate::{AccountRef, AccountType, Approval, POLICY_PROTOCOL, RolePolicy},
+    approval_statement::{
+        ApprovalStatementLookup, ApprovalStatementPublishOutcome, ApprovalStatementReadError,
+        ApprovalStatementStatus, RetainedApprovalStatement, verify_approval_statements,
+    },
+    approval_statement_writer::{
+        ApprovalStatementSigner, MergedPullRequest, StatementSigningError,
+        write_approval_statements,
+    },
+    attestation_signing::{
+        BundleVerifier, TransparencyRequirement, VerificationFailure, WorkflowIdentityPolicy,
+    },
+    record_sink::{
+        config::SinkKind,
+        form::{Record, RecordId},
+        sink::{ApprovalStatementReader, RecordSink, SinkResult},
+    },
+};
 use ix_trace_rs::trace;
 use serde_json::{Value, json};
+use std::collections::{BTreeMap, BTreeSet};
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.release-verify-request/v1";
 const RESULT_PROTOCOL: &str = "engineering-assurance.release-verify-result/v1";
@@ -28,6 +48,61 @@ const ITEMS: [(&str, &str); 3] = [
     ("soup/s.md", "soup_record"),
     ("evidence/e.txt", "evidence"),
 ];
+
+const APPROVAL_FIXTURE_REPOSITORY: &str = "agent-ix/approval-fixture";
+const WRITER_WORKFLOW: &str = ".github/workflows/statement-writer.yml";
+
+struct FixtureStatementSigner;
+
+impl ApprovalStatementSigner for FixtureStatementSigner {
+    fn sign_statement(&self, bytes: &[u8]) -> Result<String, StatementSigningError> {
+        let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+        Ok(format!("{WRITER_WORKFLOW}|{hex}"))
+    }
+}
+
+struct FixtureRecordSink;
+
+impl RecordSink for FixtureRecordSink {
+    fn publish(&self, record: &Record) -> SinkResult {
+        SinkResult::published(SinkKind::PrivateStore, record.id())
+    }
+}
+
+struct FixtureApprovalReader(RetainedApprovalStatement);
+
+impl ApprovalStatementReader for FixtureApprovalReader {
+    fn lookup_approval_statements(
+        &self,
+        _destination: &str,
+        _lookup: ApprovalStatementLookup<'_>,
+    ) -> Result<Vec<RetainedApprovalStatement>, ApprovalStatementReadError> {
+        Ok(vec![self.0.clone()])
+    }
+}
+
+struct FixtureStatementVerifier;
+
+impl BundleVerifier for FixtureStatementVerifier {
+    fn verify(
+        &self,
+        payload: &[u8],
+        bundle: &str,
+        policy: &WorkflowIdentityPolicy,
+    ) -> Result<(), VerificationFailure> {
+        let Some((identity, signed_hex)) = bundle.split_once('|') else {
+            return Err(VerificationFailure::InvalidSignature);
+        };
+        let expected_hex: String = payload.iter().map(|byte| format!("{byte:02x}")).collect();
+        if expected_hex != signed_hex {
+            return Err(VerificationFailure::InvalidSignature);
+        }
+        if identity != policy.workflow_path {
+            return Err(VerificationFailure::UntrustedSigner);
+        }
+        Ok(())
+    }
+}
 
 struct Fixture {
     dir: tempfile::TempDir,
@@ -256,6 +331,88 @@ fn standard(fixture: &Fixture) -> (String, String) {
     let digest = digest_at(fixture, &release);
     sign(fixture, "a", "v1", &release, &message(&digest));
     (baseline, release)
+}
+
+/// Produces and fixture-verifies a real writer output for the first commit in
+/// the test repository, returning the private statement envelope stored by
+/// the statement sink. The explicit test verifier models the signed workflow
+/// identity; it never impersonates a real account.
+fn verified_approval_statement_fixture(head_commit: &str) -> String {
+    let account = AccountRef {
+        source: "github".into(),
+        id: "101".into(),
+    };
+    let policy = RolePolicy {
+        protocol: POLICY_PROTOCOL.into(),
+        required_roles: vec!["developer".into()],
+        individuals: BTreeMap::from([("alice".into(), vec![account.clone()])]),
+        roles: BTreeMap::from([("developer".into(), vec!["alice".into()])]),
+        agents: Vec::new(),
+    };
+    let account_types = BTreeMap::from([(account.clone(), AccountType::Human)]);
+    let names = BTreeMap::from([(account.clone(), "alice".to_owned())]);
+    let pull_request = format!("{APPROVAL_FIXTURE_REPOSITORY}#1");
+    let approval = Approval {
+        source: "github".into(),
+        account,
+        human: true,
+        role: "developer".into(),
+        meaning: "reviewed the change".into(),
+        timestamp: "2026-11-14T10:00:00Z".into(),
+        commit: head_commit.into(),
+        pull_request: pull_request.clone(),
+    };
+    let merged = MergedPullRequest {
+        repository: APPROVAL_FIXTURE_REPOSITORY,
+        pull_request: &pull_request,
+        head_commit,
+        merged_commit: head_commit,
+    };
+    let (_, written) = write_approval_statements(
+        &FixtureRecordSink,
+        &FixtureStatementSigner,
+        merged,
+        &policy,
+        &[approval],
+        &account_types,
+        &names,
+        &[RecordId::from_random_bytes([8; 16])],
+    )
+    .expect("fixture approval statement is written");
+    let written = written.into_iter().next().expect("one selected approval");
+    let retained = RetainedApprovalStatement {
+        statement_bytes: written.statement_bytes.clone(),
+        signature_bundle: written.signature_bundle.clone(),
+        publish_outcome: ApprovalStatementPublishOutcome::Published,
+    };
+    let lookup = ApprovalStatementLookup {
+        repository: APPROVAL_FIXTURE_REPOSITORY,
+        merged_pull_request: &pull_request,
+        merged_commit: head_commit,
+    };
+    let identity_policy = WorkflowIdentityPolicy {
+        repository: APPROVAL_FIXTURE_REPOSITORY.into(),
+        workflow_path: WRITER_WORKFLOW.into(),
+        references: BTreeSet::from(["refs/heads/main".into()]),
+        issuer: concat!("https:", "//token.actions.githubusercontent.com").into(),
+        transparency: TransparencyRequirement::PublicLog,
+    };
+    let verified = verify_approval_statements(
+        &FixtureApprovalReader(retained),
+        "fixture-private-store",
+        lookup,
+        &identity_policy,
+        &policy,
+        &FixtureStatementVerifier,
+    );
+    assert_eq!(verified.status, ApprovalStatementStatus::Verified);
+    assert_eq!(
+        verified.role_verdict.status,
+        engineering_assurance::approval_gate::GateStatus::Satisfied
+    );
+    let statement: Value =
+        serde_json::from_slice(&written.statement_bytes).expect("statement JSON");
+    json!({"statement": statement, "signature_bundle": written.signature_bundle}).to_string()
 }
 
 fn request(fixture: &Fixture, tag: &str) -> Value {
@@ -1223,6 +1380,52 @@ fn tc_410_attestation_files_neither_make_nor_unmake_a_release() {
     );
     let result = verdict(&fixture, "v-unsigned");
     assert_not_released(&result, &["unsigned"]);
+}
+
+#[test]
+#[trace("TC-967", "FR-065-AC-2")]
+fn release_verify_refuses_an_approval_statement_request_member() {
+    let fixture = fixture();
+    let mut body = request(&fixture, "v1");
+    body["approval_statement"] = json!({"predicate": {"meaning": "reviewed"}});
+    let output = run_command("release-verify", body.to_string().as_bytes(), None);
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    let error: Value = serde_json::from_slice(&output.stdout).expect("error json");
+    assert_eq!(error["code"], "release_verify_request_invalid");
+}
+
+#[test]
+#[trace("TC-966", "FR-065-AC-1")]
+fn an_approval_statement_cannot_release_an_unsigned_tag() {
+    let with_statement = fixture();
+    git(
+        &with_statement.repo(),
+        None,
+        &["commit", "--allow-empty", "-q", "-m", "seed"],
+    );
+    let initial_commit = head(&with_statement);
+    let approval_statement = verified_approval_statement_fixture(&initial_commit);
+    let baseline = commit_baseline(
+        &with_statement,
+        &[("approval/statement.json", &approval_statement)],
+    );
+    let release = Release::standard(&baseline).commit(&with_statement);
+    let digest = digest_at(&with_statement, &release);
+    git(
+        &with_statement.repo(),
+        None,
+        &["tag", "-a", "-m", &message(&digest), "v1", &release],
+    );
+    let unsigned = verdict(&with_statement, "v1");
+    assert_not_released(&unsigned, &["unsigned"]);
+
+    // A separate equivalent release with the approval statement removed is
+    // accepted only when its release tag has the mapped human signature.
+    let without_statement = fixture();
+    let (_, _) = standard(&without_statement);
+    let signed = verdict(&without_statement, "v1");
+    assert_eq!(signed["status"], "released", "{signed}");
+    assert_eq!(signed["reasons"], json!([]));
 }
 
 #[test]
