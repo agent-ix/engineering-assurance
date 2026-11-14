@@ -633,9 +633,9 @@ mod tests {
     const BUNDLE: &str = "fixture-bundle";
 
     struct FixtureVerifier {
-        accepted_payload: Vec<u8>,
-        accepted_identity: String,
-        accepted_issuer: String,
+        payload: Vec<u8>,
+        identity: String,
+        issuer: String,
     }
 
     impl BundleVerifier for FixtureVerifier {
@@ -645,16 +645,16 @@ mod tests {
             bundle_json: &str,
             policy: &WorkflowIdentityPolicy,
         ) -> Result<(), VerificationFailure> {
-            if bundle_json != BUNDLE || payload != self.accepted_payload {
+            if bundle_json != BUNDLE || payload != self.payload {
                 return Err(VerificationFailure::InvalidSignature);
             }
             let accepted = policy.references.iter().any(|reference| {
                 format!(
                     "{}{}github.com/{}/{}@{}",
                     "https:", "//", policy.repository, policy.workflow_path, reference
-                ) == self.accepted_identity
+                ) == self.identity
             });
-            if !accepted || policy.issuer != self.accepted_issuer {
+            if !accepted || policy.issuer != self.issuer {
                 return Err(VerificationFailure::UntrustedSigner);
             }
             Ok(())
@@ -674,18 +674,18 @@ mod tests {
     fn verifier() -> FixtureVerifier {
         let policy = policy();
         FixtureVerifier {
-            accepted_payload: PAYLOAD.to_vec(),
-            accepted_identity: policy.identity_uri("refs/heads/main"),
-            accepted_issuer: policy.issuer,
+            payload: PAYLOAD.to_vec(),
+            identity: policy.identity_uri("refs/heads/main"),
+            issuer: policy.issuer,
         }
     }
 
     fn verifier_for(payload: &[u8], reference: &str) -> FixtureVerifier {
         let policy = policy();
         FixtureVerifier {
-            accepted_payload: payload.to_vec(),
-            accepted_identity: policy.identity_uri(reference),
-            accepted_issuer: policy.issuer,
+            payload: payload.to_vec(),
+            identity: policy.identity_uri(reference),
+            issuer: policy.issuer,
         }
     }
 
@@ -693,9 +693,16 @@ mod tests {
     #[test]
     fn verifies_policy_and_git_subjects_and_rejects_mismatches() {
         let verifier = verifier();
+        verifies_supported_subjects(&verifier);
+        verifies_allowed_branch();
+        rejects_untrusted_identities(&verifier);
+        rejects_invalid_signatures_and_subjects(&verifier);
+    }
+
+    fn verifies_supported_subjects(verifier: &FixtureVerifier) {
         assert_eq!(
             verify_statement(
-                &verifier,
+                verifier,
                 PAYLOAD,
                 BUNDLE,
                 &policy(),
@@ -708,7 +715,7 @@ mod tests {
         );
         assert_eq!(
             verify_statement(
-                &verifier,
+                verifier,
                 PAYLOAD,
                 BUNDLE,
                 &policy(),
@@ -721,7 +728,7 @@ mod tests {
         );
         assert_eq!(
             verify_statement(
-                &verifier,
+                verifier,
                 PAYLOAD,
                 BUNDLE,
                 &policy(),
@@ -732,7 +739,9 @@ mod tests {
             ),
             Ok(VerificationStatus::Verified)
         );
+    }
 
+    fn verifies_allowed_branch() {
         let allowed_refs = WorkflowIdentityPolicy {
             references: [
                 "refs/heads/main".to_owned(),
@@ -755,7 +764,9 @@ mod tests {
             ),
             Ok(VerificationStatus::Verified)
         );
+    }
 
+    fn rejects_untrusted_identities(verifier: &FixtureVerifier) {
         for changed in [
             WorkflowIdentityPolicy {
                 workflow_path: ".github/workflows/other.yml".to_owned(),
@@ -772,7 +783,7 @@ mod tests {
         ] {
             assert_eq!(
                 verify_statement(
-                    &verifier,
+                    verifier,
                     PAYLOAD,
                     BUNDLE,
                     &changed,
@@ -784,7 +795,9 @@ mod tests {
                 Err(VerificationFailure::UntrustedSigner)
             );
         }
+    }
 
+    fn rejects_invalid_signatures_and_subjects(verifier: &FixtureVerifier) {
         let mut changed_payload = PAYLOAD.to_vec();
         let changed_index = PAYLOAD
             .windows(b"abc123".len())
@@ -793,7 +806,7 @@ mod tests {
         changed_payload[changed_index] = b'z';
         assert_eq!(
             verify_statement(
-                &verifier,
+                verifier,
                 &changed_payload,
                 BUNDLE,
                 &policy(),
@@ -806,7 +819,7 @@ mod tests {
         );
         assert_eq!(
             verify_statement(
-                &verifier,
+                verifier,
                 PAYLOAD,
                 BUNDLE,
                 &policy(),
@@ -819,7 +832,7 @@ mod tests {
         );
         assert_eq!(
             verify_statement(
-                &verifier,
+                verifier,
                 PAYLOAD,
                 BUNDLE,
                 &policy(),
@@ -905,7 +918,7 @@ mod tests {
         }
     }
 
-    fn public_path_proof<'a>(record: &'a PublicRecord) -> PublicPathProof<'a> {
+    fn public_path_proof(record: &PublicRecord) -> PublicPathProof<'_> {
         leak_check("fictional/publisher", record, &[], &PublicRepositoryLookup)
             .expect("fictional public repositories pass the leak check")
     }
@@ -1056,9 +1069,7 @@ mod tests {
     #[test]
     fn ea105_signer_methods_fail_without_oidc_before_service_start() {
         let public_record = PublicRecord::from_json(
-            concat!(
-                r#"{"protocol":"engineering-assurance.record-public/v1","record_id":"11111111-1111-4111-8111-111111111111","kind":"change_record","subject":{"kind":"repo","id":"fictional/source"},"references":[],"hashes":{"private_form":"sha256:0000000000000000000000000000000000000000000000000000000000000000","subject_commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"verdicts":{"change_record":"recorded"},"timestamps":{"created":"2026-11-13T10:00:00Z"}}"#
-            )
+            r#"{"protocol":"engineering-assurance.record-public/v1","record_id":"11111111-1111-4111-8111-111111111111","kind":"change_record","subject":{"kind":"repo","id":"fictional/source"},"references":[],"hashes":{"private_form":"sha256:0000000000000000000000000000000000000000000000000000000000000000","subject_commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"verdicts":{"change_record":"recorded"},"timestamps":{"created":"2026-11-13T10:00:00Z"}}"#
             .as_bytes(),
         )
         .expect("fictional public form is valid");

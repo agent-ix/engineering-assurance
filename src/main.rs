@@ -7,6 +7,7 @@
 
 mod agent_evals_host;
 mod agent_evals_provider;
+mod approval_gate_host;
 mod approval_tag_host;
 mod approval_trail_host;
 mod approval_verify_host;
@@ -47,6 +48,7 @@ use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 const ERROR_PROTOCOL: &str = "engineering-assurance.error/v1";
 const APPROVAL_TAG_CAPABILITY: &str = "approval-tag";
+const APPROVAL_GATE_CAPABILITY: &str = "review-gate";
 const APPROVAL_VERIFY_CAPABILITY: &str = "approval-verify";
 const APPROVAL_TRAIL_CAPABILITY: &str = "approval-trail";
 const AGENT_EVALS_PROVIDER_CAPABILITY: &str = "agent-evals-provider";
@@ -138,6 +140,7 @@ fn command() -> Command {
         .subcommand(approval_verify_command())
         .subcommand(approval_tag_command())
         .subcommand(approval_trail_command())
+        .subcommand(approval_gate_command())
         .subcommand(release_verify_command())
         .subcommand(release_history_command())
         .subcommand(release_decision_command())
@@ -221,6 +224,18 @@ fn approval_verify_command() -> Command {
                 .long("request")
                 .value_name("JSON")
                 .help("Approval-verify request document, or - to read it from stdin")
+                .required(true),
+        )
+}
+
+fn approval_gate_command() -> Command {
+    Command::new(APPROVAL_GATE_CAPABILITY)
+        .about("Evaluate a pull request's platform reviews against the protected-base role policy")
+        .arg(
+            Arg::new("request")
+                .long("request")
+                .value_name("JSON")
+                .help("Review-gate request document, or - to read it from stdin")
                 .required(true),
         )
 }
@@ -386,6 +401,7 @@ fn main() -> ExitCode {
         Some((SIGNATURE_VERIFY_CAPABILITY, arguments)) => run_signature_verify(arguments),
         Some((APPROVAL_VERIFY_CAPABILITY, arguments)) => run_approval_verify(arguments),
         Some((APPROVAL_TAG_CAPABILITY, arguments)) => run_approval_tag(arguments),
+        Some((APPROVAL_GATE_CAPABILITY, arguments)) => run_approval_gate(arguments),
         Some((APPROVAL_TRAIL_CAPABILITY, arguments)) => run_approval_trail(arguments),
         Some((RELEASE_VERIFY_CAPABILITY, arguments)) => run_release_verify(arguments),
         Some((RELEASE_HISTORY_CAPABILITY, arguments)) => run_release_history(arguments),
@@ -900,6 +916,17 @@ fn run_approval_tag(arguments: &ArgMatches) -> ExitCode {
         "approval_tag_request_unreadable",
         |bytes| {
             approval_tag_host::execute(bytes).map_err(|error| (error.code(), error.to_string()))
+        },
+    )
+}
+
+fn run_approval_gate(arguments: &ArgMatches) -> ExitCode {
+    run_request_line(
+        arguments,
+        APPROVAL_GATE_CAPABILITY,
+        "review_gate_request_unreadable",
+        |bytes| {
+            approval_gate_host::execute(bytes).map_err(|error| (error.code(), error.to_string()))
         },
     )
 }

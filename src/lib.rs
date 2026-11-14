@@ -34,6 +34,7 @@
 //! | `approval-tag` | `approval_tag` | `approval-verify` | |
 //! | `approval-trail` | `approval_trail` | `approval-verify` | `serde` |
 //! | `approval-verify` | `approval_verify` | `signature-verify` | `serde` |
+//! | `approval-gate` | `approval_gate` | | `serde`, `serde_json`, `thiserror`, `jsonschema` |
 //! | `atomic-publish` | `atomic_publish` | | `rustix`, `thiserror` |
 //! | `claim-strength` | `claim_strength` | | `serde` |
 //! | `integrator-package` | `integrator_package`, `integrator_package_store` | `atomic-publish` | `rustix`, `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
@@ -66,6 +67,8 @@
 
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "approval-gate")]
+pub mod approval_gate;
 #[cfg(feature = "approval-tag")]
 pub mod approval_tag;
 #[cfg(feature = "approval-trail")]
