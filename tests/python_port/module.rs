@@ -1418,15 +1418,45 @@ fn tc112_workflow_violations(path: &str, text: &str) -> BTreeSet<&'static str> {
     let manual_only = workflow["on"]
         .as_object()
         .is_some_and(|triggers| triggers.len() == 1 && triggers.contains_key("workflow_dispatch"));
+    let reusable_attestation = path == ".github/workflows/release-attestation.yml"
+        && workflow["on"]
+            .as_object()
+            .is_some_and(|triggers| triggers.len() == 1 && triggers.contains_key("workflow_call"));
     let guarded_review_gate = path == ".github/workflows/review-gate.yml"
         && workflow["jobs"]["review-gate"]["if"].as_str()
             == Some("${{ vars.EA_REVIEW_GATE_ENABLED == 'true' }}");
-    if !manual_only && !guarded_review_gate {
+    if !manual_only && !guarded_review_gate && !reusable_attestation {
         violations.insert("non_manual_trigger");
     }
 
     let normalized = text.to_lowercase();
-    if normalized.contains("publish") {
+    let package_publish = if reusable_attestation {
+        let package_publish_action = normalized
+            .lines()
+            .any(|line| line.trim_start().starts_with("uses:") && line.contains("publish"));
+        let package_publish_command = [
+            "npm publish",
+            "npm run publish",
+            "pnpm publish",
+            "yarn publish",
+            "cargo publish",
+            "twine upload",
+            "python -m twine upload",
+            "poetry publish",
+            "flit publish",
+            "uv publish",
+            "gem push",
+            "mvn deploy",
+            "gradle publish",
+            "dotnet nuget push",
+        ]
+        .iter()
+        .any(|command| normalized.contains(command));
+        package_publish_action || package_publish_command
+    } else {
+        normalized.contains("publish")
+    };
+    if package_publish {
         violations.insert("package_publish");
     }
     let invokes_release_publisher = normalized
@@ -1444,6 +1474,36 @@ fn tc112_workflow_violations(path: &str, text: &str) -> BTreeSet<&'static str> {
 #[test]
 #[trace("TC-112", "FR-017-AC-4")]
 fn package_and_release_publication_or_automatic_workflow_triggers_are_refused() {
+    let reusable_attestation = concat!(
+        "on:\n  workflow_call:\n    inputs:\n      tag: {type: string}\n",
+        "jobs:\n  verify:\n    steps:\n      - run: echo verify\n"
+    );
+    assert!(
+        tc112_workflow_violations(
+            ".github/workflows/release-attestation.yml",
+            reusable_attestation
+        )
+        .is_empty()
+    );
+
+    let reusable_with_package_publish = concat!(
+        "on:\n  workflow_call:\njobs:\n  publish:\n    steps:\n",
+        "      - run: npm publish\n"
+    );
+    assert_eq!(
+        tc112_workflow_violations(
+            ".github/workflows/release-attestation.yml",
+            reusable_with_package_publish
+        ),
+        BTreeSet::from(["package_publish"])
+    );
+
+    let unrelated_workflow_call = "on:\n  workflow_call:\njobs: {}\n";
+    assert_eq!(
+        tc112_workflow_violations(".github/workflows/other.yml", unrelated_workflow_call),
+        BTreeSet::from(["non_manual_trigger"])
+    );
+
     let package_publisher = "on:\n  workflow_dispatch:\njobs:\n  verify:\n    steps:\n      - uses: pypa/gh-action-pypi-publish@v1\n";
     assert_eq!(
         tc112_workflow_violations("fixture.yml", package_publisher),
@@ -1475,6 +1535,15 @@ fn package_and_release_publication_or_automatic_workflow_triggers_are_refused() 
     assert_eq!(
         tc112_workflow_violations("fixture.yml", automatic_trigger),
         BTreeSet::from(["non_manual_trigger"])
+    );
+
+    let unrelated_release_publisher = concat!(
+        "on:\n  push:\n    tags: ['v*']\njobs:\n  release:\n    steps:\n",
+        "      - uses: softprops/action-gh-release@v2\n"
+    );
+    assert_eq!(
+        tc112_workflow_violations(".github/workflows/other.yml", unrelated_release_publisher),
+        BTreeSet::from(["non_manual_trigger", "release_publish"])
     );
 }
 
