@@ -1263,6 +1263,7 @@ mod tests {
         }
     }
 
+    #[trace("TC-597", "TC-602", "FR-076-AC-1", "FR-076-AC-6")]
     #[test]
     fn receipt_note_round_trips_three_json_lines_without_private_text() {
         let encoded = bundle_set().encode_note().expect("bounded note encoding");

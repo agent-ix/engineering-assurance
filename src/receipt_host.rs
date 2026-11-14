@@ -1231,7 +1231,7 @@ fn git_command(
 #[cfg(test)]
 mod tests {
     use ix_trace_rs::trace;
-    use std::{fs, process::Command};
+    use std::fs;
 
     use serde_json::Value;
     use serde_json::json;
@@ -1239,58 +1239,53 @@ mod tests {
 
     use super::*;
 
+    fn test_git(repository: &Path, arguments: &[&OsStr]) -> std::process::Output {
+        let mut command_arguments = vec![OsStr::new("-C"), repository.as_os_str()];
+        command_arguments.extend_from_slice(arguments);
+        let output = crate::process_host::run_configured(
+            OsStr::new("git"),
+            &command_arguments,
+            None,
+            &[],
+            &[],
+            crate::process_host::ProcessLimits {
+                timeout: PROCESS_TIMEOUT,
+                max_output_bytes: 8 * 1024 * 1024,
+            },
+        )
+        .expect("bounded Git test command runs");
+        std::process::Output {
+            status: output.status,
+            stdout: output.stdout,
+            stderr: output.stderr,
+        }
+    }
+
+    fn test_git_str(repository: &Path, arguments: &[&str]) -> std::process::Output {
+        let arguments = arguments.iter().map(OsStr::new).collect::<Vec<_>>();
+        test_git(repository, &arguments)
+    }
+
     fn fixture_repo() -> (TempDir, String) {
         let directory = TempDir::new().expect("temporary repository");
         let root = directory.path();
-        assert!(
-            Command::new("git")
-                .args(["init", "-q"])
-                .current_dir(root)
-                .status()
-                .unwrap()
-                .success()
-        );
+        assert!(test_git_str(root, &["init", "-q"]).status.success());
         for (key, value) in [
             ("user.name", "Receipt Test"),
             ("user.email", "receipt@example.invalid"),
         ] {
-            assert!(
-                Command::new("git")
-                    .args(["config", key, value])
-                    .current_dir(root)
-                    .status()
-                    .unwrap()
-                    .success()
-            );
+            assert!(test_git_str(root, &["config", key, value]).status.success());
         }
         fs::write(root.join("tracked.txt"), "fictional receipt fixture\n").unwrap();
+        assert!(test_git_str(root, &["add", "tracked.txt"]).status.success());
         assert!(
-            Command::new("git")
-                .args(["add", "tracked.txt"])
-                .current_dir(root)
-                .status()
-                .unwrap()
+            test_git_str(root, &["commit", "-qm", "fixture"])
+                .status
                 .success()
         );
-        assert!(
-            Command::new("git")
-                .args(["commit", "-qm", "fixture"])
-                .current_dir(root)
-                .status()
-                .unwrap()
-                .success()
-        );
-        let output = Command::new("git")
-            .args(["rev-parse", "HEAD"])
-            .current_dir(root)
-            .output()
-            .unwrap();
+        let output = test_git_str(root, &["rev-parse", "HEAD"]);
         let commit = String::from_utf8(output.stdout).unwrap().trim().to_owned();
         (directory, commit)
-    }
-
-    fn command_succeeded(command: &mut Command) -> bool {
-        command.status().unwrap().success()
     }
 
     fn request(
@@ -1417,11 +1412,10 @@ mod tests {
         let result: Value = serde_json::from_slice(&read).unwrap();
         assert_eq!(result["status"], "present");
         assert_eq!(result["bundles"][0], bundle_value());
-        let raw_note = Command::new("git")
-            .args(["notes", "--ref", RECEIPT_NOTES_REF, "show", &commit])
-            .current_dir(root)
-            .output()
-            .unwrap();
+        let raw_note = test_git_str(
+            root,
+            &["notes", "--ref", RECEIPT_NOTES_REF, "show", &commit],
+        );
         assert_eq!(
             raw_note
                 .stdout
@@ -1437,27 +1431,34 @@ mod tests {
         let (directory, commit) = fixture_repo();
         let repository = directory.path();
         let remote = TempDir::new().expect("local bare remote");
-        assert!(command_succeeded(
-            Command::new("git")
-                .args(["init", "-q", "--bare"])
-                .current_dir(remote.path())
-        ));
-        assert!(command_succeeded(
-            Command::new("git")
-                .args(["branch", "-M", "main"])
-                .current_dir(repository)
-        ));
-        assert!(command_succeeded(
-            Command::new("git")
-                .args(["remote", "add", "origin"])
-                .arg(remote.path())
-                .current_dir(repository)
-        ));
-        assert!(command_succeeded(
-            Command::new("git")
-                .args(["push", "-u", "origin", "main"])
-                .current_dir(repository)
-        ));
+        assert!(
+            test_git_str(remote.path(), &["init", "-q", "--bare"])
+                .status
+                .success()
+        );
+        assert!(
+            test_git_str(repository, &["branch", "-M", "main"])
+                .status
+                .success()
+        );
+        assert!(
+            test_git(
+                repository,
+                &[
+                    OsStr::new("remote"),
+                    OsStr::new("add"),
+                    OsStr::new("origin"),
+                    remote.path().as_os_str(),
+                ],
+            )
+            .status
+            .success()
+        );
+        assert!(
+            test_git_str(repository, &["push", "-u", "origin", "main"])
+                .status
+                .success()
+        );
 
         let bundles = bundle_value();
         let stored = execute(&request("store", repository, &commit, Some(&bundles)))
@@ -1467,17 +1468,12 @@ mod tests {
                 .unwrap()
                 .contains("\"status\":\"stored\"")
         );
-        assert!(command_succeeded(
-            Command::new("git")
-                .args(["push", "origin", RECEIPT_NOTES_REF])
-                .current_dir(repository)
-        ));
-        let note_ref_before = Command::new("git")
-            .args(["--git-dir"])
-            .arg(remote.path())
-            .args(["rev-parse", RECEIPT_NOTES_REF])
-            .output()
-            .unwrap();
+        assert!(
+            test_git_str(repository, &["push", "origin", RECEIPT_NOTES_REF])
+                .status
+                .success()
+        );
+        let note_ref_before = test_git_str(remote.path(), &["rev-parse", RECEIPT_NOTES_REF]);
         assert!(note_ref_before.status.success());
         let note_ref_before = String::from_utf8(note_ref_before.stdout)
             .unwrap()
@@ -1489,38 +1485,31 @@ mod tests {
             "second default-branch push\n",
         )
         .unwrap();
-        assert!(command_succeeded(
-            Command::new("git")
-                .args(["add", "second.txt"])
-                .current_dir(repository)
-        ));
-        assert!(command_succeeded(
-            Command::new("git")
-                .args(["commit", "-qm", "second push"])
-                .current_dir(repository)
-        ));
-        assert!(command_succeeded(
-            Command::new("git")
-                .args(["push", "origin", "main"])
-                .current_dir(repository)
-        ));
-        let note_ref_after = Command::new("git")
-            .args(["--git-dir"])
-            .arg(remote.path())
-            .args(["rev-parse", RECEIPT_NOTES_REF])
-            .output()
-            .unwrap();
+        assert!(
+            test_git_str(repository, &["add", "second.txt"])
+                .status
+                .success()
+        );
+        assert!(
+            test_git_str(repository, &["commit", "-qm", "second push"])
+                .status
+                .success()
+        );
+        assert!(
+            test_git_str(repository, &["push", "origin", "main"])
+                .status
+                .success()
+        );
+        let note_ref_after = test_git_str(remote.path(), &["rev-parse", RECEIPT_NOTES_REF]);
         assert!(note_ref_after.status.success());
         assert_eq!(
             String::from_utf8(note_ref_after.stdout).unwrap().trim(),
             note_ref_before
         );
-        let remote_note = Command::new("git")
-            .args(["--git-dir"])
-            .arg(remote.path())
-            .args(["notes", "--ref", RECEIPT_NOTES_REF, "show", &commit])
-            .output()
-            .unwrap();
+        let remote_note = test_git_str(
+            remote.path(),
+            &["notes", "--ref", RECEIPT_NOTES_REF, "show", &commit],
+        );
         assert!(remote_note.status.success());
         assert_eq!(
             remote_note
@@ -1543,13 +1532,12 @@ mod tests {
             .expect_err("oversized note is rejected");
         assert_eq!(error.code(), "receipt_note_too_large");
         assert!(
-            Command::new("git")
-                .args(["notes", "--ref", RECEIPT_NOTES_REF, "list"])
-                .current_dir(directory.path())
-                .output()
-                .unwrap()
-                .stdout
-                .is_empty()
+            test_git_str(
+                directory.path(),
+                &["notes", "--ref", RECEIPT_NOTES_REF, "list"],
+            )
+            .stdout
+            .is_empty()
         );
     }
 
@@ -1614,8 +1602,9 @@ mod tests {
         assert_eq!(absent["reason"], "note_absent");
 
         assert!(
-            Command::new("git")
-                .args([
+            test_git_str(
+                directory.path(),
+                &[
                     "notes",
                     "--ref",
                     RECEIPT_NOTES_REF,
@@ -1623,11 +1612,10 @@ mod tests {
                     "-m",
                     "not-json",
                     &commit,
-                ])
-                .current_dir(directory.path())
-                .status()
-                .unwrap()
-                .success()
+                ],
+            )
+            .status
+            .success()
         );
         let unreadable = execute_verify(&verification_request(directory.path(), &commit))
             .expect("unparsable note produces a protocol result");
@@ -1645,52 +1633,38 @@ mod tests {
         fs::create_dir_all(policy_path.parent().unwrap()).unwrap();
         fs::write(&policy_path, "protected policy\n").unwrap();
         assert!(
-            Command::new("git")
-                .args(["add", ".engineering-assurance/approval-policy.json"])
-                .current_dir(repository)
-                .status()
-                .unwrap()
-                .success()
+            test_git_str(
+                repository,
+                &["add", ".engineering-assurance/approval-policy.json"]
+            )
+            .status
+            .success()
         );
         assert!(
-            Command::new("git")
-                .args(["commit", "-qm", "protected policy"])
-                .current_dir(repository)
-                .status()
-                .unwrap()
+            test_git_str(repository, &["commit", "-qm", "protected policy"])
+                .status
                 .success()
         );
-        let base_output = Command::new("git")
-            .args(["rev-parse", "HEAD"])
-            .current_dir(repository)
-            .output()
-            .unwrap();
+        let base_output = test_git_str(repository, &["rev-parse", "HEAD"]);
         let base_commit = String::from_utf8(base_output.stdout)
             .unwrap()
             .trim()
             .to_owned();
         fs::write(&policy_path, "branch policy\n").unwrap();
         assert!(
-            Command::new("git")
-                .args(["add", ".engineering-assurance/approval-policy.json"])
-                .current_dir(repository)
-                .status()
-                .unwrap()
-                .success()
+            test_git_str(
+                repository,
+                &["add", ".engineering-assurance/approval-policy.json"]
+            )
+            .status
+            .success()
         );
         assert!(
-            Command::new("git")
-                .args(["commit", "-qm", "branch policy"])
-                .current_dir(repository)
-                .status()
-                .unwrap()
+            test_git_str(repository, &["commit", "-qm", "branch policy"])
+                .status
                 .success()
         );
-        let branch_output = Command::new("git")
-            .args(["rev-parse", "HEAD"])
-            .current_dir(repository)
-            .output()
-            .unwrap();
+        let branch_output = test_git_str(repository, &["rev-parse", "HEAD"]);
         let branch_commit = String::from_utf8(branch_output.stdout)
             .unwrap()
             .trim()
