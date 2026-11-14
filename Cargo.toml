@@ -359,9 +359,8 @@ producer-execution = [
 ]
 private-git-store = [
   "producer-execution",
-  "attestation-signing",
+  "attestation-verify",
   "record-sink",
-  "dep:tempfile",
 ]
 # `source_audit` (the syn-based "is this library half I/O-free" check) needs
 # no domain module full-only implies, so a consumer that wants only the

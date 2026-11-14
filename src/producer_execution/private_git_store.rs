@@ -13,6 +13,7 @@ use std::{
     io::{Read, Write},
     path::{Component, Path, PathBuf},
     process::{Command, Output, Stdio},
+    sync::atomic::{AtomicU64, Ordering},
     thread,
     time::{Duration, Instant},
 };
@@ -50,6 +51,50 @@ const MAX_GIT_OUTPUT: usize = 16 * 1024 * 1024;
 const MAX_FILE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PUSH_ATTEMPTS: usize = 5;
 const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(120);
+const TEMP_STORE_DIRECTORY_ATTEMPTS: usize = 32;
+static NEXT_TEMP_STORE_DIRECTORY: AtomicU64 = AtomicU64::new(0);
+
+/// One exclusively created, permission-restricted scratch directory per Git operation.
+/// This avoids adding a general-purpose temporary-file crate to the standalone
+/// private-store feature's runtime dependency graph.
+struct OwnedTempDirectory {
+    path: PathBuf,
+}
+
+impl OwnedTempDirectory {
+    fn create() -> Result<Self, StoreError> {
+        let root = std::env::temp_dir();
+        for _ in 0..TEMP_STORE_DIRECTORY_ATTEMPTS {
+            let sequence = NEXT_TEMP_STORE_DIRECTORY.fetch_add(1, Ordering::Relaxed);
+            let path = root.join(format!(
+                "ea-private-store-{}-{sequence}",
+                std::process::id()
+            ));
+            let mut builder = fs::DirBuilder::new();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::DirBuilderExt;
+                builder.mode(0o700);
+            }
+            match builder.create(&path) {
+                Ok(()) => return Ok(Self { path }),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(_) => return Err(StoreError),
+            }
+        }
+        Err(StoreError)
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for OwnedTempDirectory {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
 
 /// Resolves the configured `owner/name` to an authenticated Git remote URL.
 ///
@@ -210,10 +255,7 @@ impl<'a> GitPrivateStore<'a> {
         mut operation: impl FnMut(&Path) -> Result<T, StoreError>,
     ) -> Result<T, StoreError> {
         let remote = self.checked_remote(destination)?;
-        let temp = tempfile::Builder::new()
-            .prefix("ea-private-store-")
-            .tempdir()
-            .map_err(|_| StoreError)?;
+        let temp = OwnedTempDirectory::create()?;
         let repository = temp.path().join("store");
         let initialized = self.git(None, &["init", "--quiet", path_arg(&repository)?])?;
         require_success(&initialized)?;
