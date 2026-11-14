@@ -3,7 +3,7 @@ id: SR-20261113192939
 title: "Gap analysis of engineering-assurance for EA-115"
 type: SpecReview
 analysis: gap-analysis
-scope: "agent-ix/engineering-assurance; PR 240; head aec85f5c5feeadfe6def188912281412be41cb6d; base 4b4bc9f26841d8df4ef2ec5093c856f71a82526e; spec/, src/, tests/"
+scope: "agent-ix/engineering-assurance; PR 240; head 67566d3f6a16b2e52e8dff71158a8ae6db43d4b8; base 4b4bc9f26841d8df4ef2ec5093c856f71a82526e; spec/, src/, tests/; TC-651 refactor in tests/record_sink.rs"
 review_set: subset
 relationships:
   - { target: "ix://agent-ix/engineering-assurance/spec", type: references }
@@ -39,9 +39,15 @@ The initial gap audit was recorded at the prior PR head. Refreshed the repositor
 
 Recomputed `quoin matrix` at head `aec85f5c5feeadfe6def188912281412be41cb6d` against base `4b4bc9f26841d8df4ef2ec5093c856f71a82526e`. The current counts are tagged 446 · untagged 198 · tagged-by-ignored-test 9 · method-without-symbol 41; no run evidence is present for all 694 criteria. FR-019-AC-4 remains tagged, and the rebased implementation introduces no new gap finding. EA-118 remains the tracked disposition for the repository-wide untagged baseline.
 
+
+## Incremental review at 67566d3
+
+The only incremental change is a test-helper refactor in `tests/record_sink.rs`; its TC-651 trace tags and assertions are unchanged. It introduces no new traceability or source-to-spec gap. The repository-wide matrix finding remains deferred to EA-118.
+
 ## Dispositions
 
 | FND | outcome | reason |
 | --- | --- | --- |
 | FND-001 | deferred | Tracked by EA-118, “Resolve verified repository-wide untagged acceptance criteria,” which owns verification and disposition of the repository-wide matrix baseline. These pre-existing traceability gaps are outside EA-115's ESRCH fix; this disposition does not treat them as resolved or ignored. |
 | FND-001 | deferred | Reconfirmed at rebased head `aec85f5c5feeadfe6def188912281412be41cb6d`: the current matrix reports 198 repository-wide untagged criteria. EA-118 tracks their verification and disposition; they remain outside EA-115's ESRCH fix, not ignored or claimed resolved. |
+| FND-001 | deferred | At final head `67566d3f6a16b2e52e8dff71158a8ae6db43d4b8`, the TC-651 refactor preserves the existing trace tags, so the matrix baseline finding remains unchanged and tracked by EA-118. |
