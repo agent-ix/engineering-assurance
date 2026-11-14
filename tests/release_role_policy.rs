@@ -90,7 +90,7 @@ fn a_single_required_role_can_be_covered_by_one_person() {
 }
 
 #[test]
-#[trace("TC-952", "FR-061-AC-2")]
+#[trace("TC-948", "FR-061-AC-2")]
 fn one_individual_cannot_cover_two_roles_and_order_does_not_matter() {
     let mut policy = policy(&[("developer", &["one"]), ("engineer", &["one"])]);
     policy
@@ -119,16 +119,6 @@ fn one_individual_cannot_cover_two_roles_and_order_does_not_matter() {
 
 #[test]
 #[trace("TC-949", "FR-061-AC-5")]
-fn empty_required_roles_is_rejected_with_stable_code() {
-    let mut policy = policy(&[("developer", &["one"])]);
-    policy.required_roles.clear();
-    let result = evaluate(&policy, &[], &account_types(&policy));
-    assert_eq!(result.status, GateStatus::Unsatisfied);
-    assert_eq!(result.error, Some(GateErrorCode::ApprovalPolicyInvalid));
-}
-
-#[test]
-#[trace("TC-948", "FR-061-AC-5")]
 fn invalid_policy_is_rejected_with_stable_code() {
     let unknown = json!({
         "protocol": POLICY_PROTOCOL,
@@ -181,10 +171,20 @@ fn invalid_policy_is_rejected_with_stable_code() {
         evaluate(&agent_overlap, &[], &account_types(&agent_overlap)).error,
         Some(GateErrorCode::ApprovalPolicyInvalid)
     );
+
+    let mut empty_required_roles = policy(&[("dev", &["one"])]);
+    empty_required_roles.required_roles.clear();
+    let result = evaluate(
+        &empty_required_roles,
+        &[],
+        &account_types(&empty_required_roles),
+    );
+    assert_eq!(result.status, GateStatus::Unsatisfied);
+    assert_eq!(result.error, Some(GateErrorCode::ApprovalPolicyInvalid));
 }
 
 #[test]
-#[trace("TC-950", "FR-061-AC-6", "FR-061-AC-10")]
+#[trace("TC-950", "FR-061-AC-6")]
 fn generated_two_by_two_graphs_match_exhaustive_search() {
     let names = ["one", "two"];
     let role_names = ["a", "b"];
@@ -230,20 +230,6 @@ fn generated_two_by_two_graphs_match_exhaustive_search() {
             "mask={mask:04b}"
         );
     }
-
-    let reassignment_policy = policy(&[("a", &["one", "two"]), ("b", &["one"])]);
-    let reassignment = evaluate(
-        &reassignment_policy,
-        &[
-            approval("b", "101"),
-            approval("a", "101"),
-            approval("a", "202"),
-        ],
-        &account_types(&reassignment_policy),
-    );
-    assert_eq!(reassignment.status, GateStatus::Satisfied);
-    assert_eq!(reassignment.assignments[0].individual, "two");
-    assert_eq!(reassignment.assignments[1].individual, "one");
 }
 
 #[test]
@@ -285,6 +271,36 @@ fn account_identity_and_role_eligibility_are_respected() {
     assert_eq!(result.assignments[0].individual, "one");
     assert_eq!(result.assignments[1].individual, "two");
     assert_eq!(result.assignments[1].account.id, "202");
+}
+
+#[test]
+#[trace("TC-952", "FR-061-AC-10")]
+fn matching_reassigns_earlier_role_with_distinct_accounts_and_is_order_independent() {
+    let mut policy = policy(&[("a", &["x", "y"]), ("b", &["x"])]);
+    policy
+        .individuals
+        .get_mut("x")
+        .expect("individual x exists")
+        .push(account("303"));
+    let mut x_account_b = approval("b", "101");
+    x_account_b.account = account("303");
+    let approvals = [approval("a", "101"), x_account_b, approval("a", "202")];
+    let first = evaluate(&policy, &approvals, &account_types(&policy));
+    let reversed = [
+        approvals[2].clone(),
+        approvals[1].clone(),
+        approvals[0].clone(),
+    ];
+    let second = evaluate(&policy, &reversed, &account_types(&policy));
+    assert_eq!(first, second);
+    assert_eq!(first.status, GateStatus::Satisfied);
+    assert_eq!(first.assignments.len(), 2);
+    assert_eq!(first.assignments[0].role, "a");
+    assert_eq!(first.assignments[0].individual, "y");
+    assert_eq!(first.assignments[0].account.id, "202");
+    assert_eq!(first.assignments[1].role, "b");
+    assert_eq!(first.assignments[1].individual, "x");
+    assert_eq!(first.assignments[1].account.id, "303");
 }
 
 #[test]
