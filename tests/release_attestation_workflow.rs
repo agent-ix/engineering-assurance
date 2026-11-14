@@ -211,6 +211,12 @@ fn signing_jobs_use_the_github_workflow_identity() {
 #[test]
 fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_statement_source() {
     let workflow = reusable_workflow();
+    assert_workflow_inputs_and_permissions(&workflow);
+    assert_verify_job(&workflow);
+    assert_attest_job(&workflow);
+}
+
+fn assert_workflow_inputs_and_permissions(workflow: &Value) {
     let inputs = &workflow["on"]["workflow_call"]["inputs"];
     assert_eq!(
         inputs,
@@ -225,8 +231,7 @@ fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_
         })
     );
 
-    let jobs = &workflow["jobs"];
-    let verify = &jobs["verify"];
+    let verify = &workflow["jobs"]["verify"];
     assert_eq!(
         verify["permissions"],
         serde_json::json!({"contents": "read"})
@@ -235,6 +240,10 @@ fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_
         verify["outputs"]["attestation_inputs_artifact"],
         "${{ steps.attestation-artifact-name.outputs.name }}"
     );
+}
+
+fn assert_verify_job(workflow: &Value) {
+    let verify = &workflow["jobs"]["verify"];
     let verify_steps = verify["steps"].as_array().expect("verify steps");
     assert!(verify_steps.iter().any(|step| {
         step["uses"]
@@ -315,8 +324,10 @@ fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_
             assert!(!run.contains("${{"), "run values use env for expressions");
         }
     }
+}
 
-    let attest = &jobs["attest"];
+fn assert_attest_job(workflow: &Value) {
+    let attest = &workflow["jobs"]["attest"];
     assert_eq!(attest["needs"], "verify");
     assert_eq!(
         attest["permissions"],
