@@ -390,7 +390,7 @@ fn tc_254_unavailable_git_repository_or_revision_is_unverifiable() {
 }
 
 #[test]
-#[trace("TC-278", "FR-036-AC-13", "FR-036-AC-15")]
+#[trace("TC-429", "FR-036-AC-13", "FR-036-AC-15")]
 fn tc_278_commit_alias_and_id_return_one_identity_used_by_git_verifiers() {
     let fixture = fixture();
     let id = plain_commit(&fixture, "unsigned commit");
@@ -419,7 +419,7 @@ fn tc_278_commit_alias_and_id_return_one_identity_used_by_git_verifiers() {
 }
 
 #[test]
-#[trace("TC-279", "FR-036-AC-15")]
+#[trace("TC-430", "FR-036-AC-15")]
 fn tc_279_commit_id_survives_failure_after_resolution() {
     let fixture = fixture();
     let id = plain_commit(&fixture, "resolved before cat-file fails");
@@ -431,7 +431,7 @@ fn tc_279_commit_id_survives_failure_after_resolution() {
 }
 
 #[test]
-#[trace("TC-280", "FR-036-AC-14", "FR-036-AC-15")]
+#[trace("TC-431", "FR-036-AC-14", "FR-036-AC-15")]
 fn tc_280_tag_and_pre_resolution_verdicts_have_null_commit_identity() {
     let fixture = fixture();
     plain_commit(&fixture, "tag target");
@@ -452,7 +452,7 @@ fn tc_280_tag_and_pre_resolution_verdicts_have_null_commit_identity() {
 }
 
 #[test]
-#[trace("TC-281", "FR-036-AC-13", "FR-036-AC-15")]
+#[trace("TC-432", "FR-036-AC-13", "FR-036-AC-15")]
 fn tc_281_gitsign_receives_the_resolved_commit_id() {
     let fixture = fixture();
     let base = plain_commit(&fixture, "CMS commit");
