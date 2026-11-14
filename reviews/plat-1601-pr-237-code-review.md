@@ -35,13 +35,13 @@ The ignored live-scanner case was not run: this machine has no local Debian `all
 
 | Finding | Disposition | Evidence |
 | --- | --- | --- |
-| FND-001 | Addressed in `bea85e4`; TC-9001 through TC-9005 have rows in `spec/tests.md`. | `quire matrix --strict --scope . --format tsv` binds AC-3/4/6/7/9/12; AC-13/14 are ignored-only. |
+| FND-001 | Addressed in `bea85e4`; TC-900 through TC-910 have rows in `spec/tests.md`. | `quire matrix --strict --scope . --format tsv` binds AC-3/4/6/7/9/12; AC-13/14 are ignored-only. |
 | FND-002 | Addressed in `bea85e4`; the ignored Debian scan asserts `DEBIAN-CVE-2023-4863` or its CVE alias for the exact libwebp package. | No local Debian database is available, so the live advisory match remains unverified. |
 | FND-003 | Addressed in `bea85e4`; the producer request names a nonexistent executable path and asserts `unavailable` with no artifact. | Covered by the focused OSV producer test target. |
 | FND-004 | Open: authentic npm, Python and Go expected advisory matches cannot be established from current fixtures without local database results. | AC-1 and AC-2 remain untagged; no scanner output was fabricated or downloaded. |
 | FND-005 | Addressed by this change: the real OSV-Scanner empty-database test returned `failed` with no result artifact, while preserving stderr. The generic executor now exposes output artifacts only for completed results. | Explicitly ran with installed OSV-Scanner 2.7.1; a generic regression test writes an artifact then exits 7 and asserts the same fail-closed contract. |
 | FND-006 | Test added but runtime verification remains open: bubblewrap `--unshare-net` isolates the real scanner, but the local advisory database needed for a completed scan is unavailable. | AC-8 is tagged only by an ignored test; no database or scanner output was downloaded. |
-| FND-007 | Addressed by this change: the fixture replaces the upstream SBOM after staging and verifies the scanner received the original bytes at `in/sbom.cdx.json`. | TC-9008 passed in the focused test target. |
+| FND-007 | Addressed by this change: the fixture replaces the upstream SBOM after staging and verifies the scanner received the original bytes at `in/sbom.cdx.json`. | TC-907 passed in the focused test target. |
 
 The strict matrix is not complete: global summary is 186 untagged criteria and 14 ignored-only. FR-044 AC-1 and AC-2 remain untagged; AC-5 and AC-8 are ignored-only; AC-10 remains `method-without-symbol`; AC-13 and AC-14 are ignored-only. No QSL behavior or compliance claim is made.
 
@@ -51,10 +51,10 @@ The caller-supplied OSV archives stayed in a user-local database directory outsi
 
 | Finding | Updated disposition | Evidence |
 | --- | --- | --- |
-| FND-002 | Addressed: Debian matching accepts the report's actual `DSA-5497-2` id and the expected CVE/debian ids in the record's `upstream` field. | TC-9005 passed against the supplied Debian archive. |
-| FND-004 | Addressed for all three ecosystems with Syft-generated npm, PyPI, and Go SBOM fixtures and exact package purl/advisory assertions. | TC-9009, TC-9010, and TC-9011 passed against their caller-supplied local archives. No OSV records are stored in the repository. |
-| FND-005 | Addressed by the real scanner test and the shared executor output-artifact boundary. | TC-9006 passed: failed state, empty result artifacts, stderr retained. |
-| FND-006 | Addressed by a real scanner invocation inside bubblewrap's `--unshare-net` namespace. | TC-9007 passed with the supplied Debian archive. |
-| FND-007 | Addressed by the retained-input replacement test. | TC-9008 passed. |
+| FND-002 | Addressed: Debian matching accepts the report's actual `DSA-5497-2` id and the expected CVE/debian ids in the record's `upstream` field. | TC-904 passed against the supplied Debian archive. |
+| FND-004 | Addressed for all three ecosystems with Syft-generated npm, PyPI, and Go SBOM fixtures and exact package purl/advisory assertions. | TC-908, TC-909, and TC-910 passed against their caller-supplied local archives. No OSV records are stored in the repository. |
+| FND-005 | Addressed by the real scanner test and the shared executor output-artifact boundary. | TC-905 passed: failed state, empty result artifacts, stderr retained. |
+| FND-006 | Addressed by a real scanner invocation inside bubblewrap's `--unshare-net` namespace. | TC-906 passed with the supplied Debian archive. |
+| FND-007 | Addressed by the retained-input replacement test. | TC-907 passed. |
 
 The strict matrix now binds AC-1/2, but marks these and scanner/database tests as ignored-only because they run in the named opt-in lane. Global strict summary is 184 untagged and 16 ignored-only; AC-10 remains `method-without-symbol`, so matrix coverage is not complete. Fixture results remain test behavior only and make no compliance or QSL claim.

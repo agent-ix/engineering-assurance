@@ -377,7 +377,7 @@ fn fixture_request(root: &Path, script: &str) -> Value {
     osv_request(root, &executable, "fixture", &db)
 }
 
-#[trace("TC-9001", "FR-044-AC-6")]
+#[trace("TC-900", "FR-044-AC-6")]
 #[test]
 fn tc_9001_request_matches_the_published_osv_scanner_definition() {
     let root = workspace(br#"{"bomFormat":"CycloneDX","components":[]}"#);
@@ -456,7 +456,7 @@ fn tc_9001_request_matches_the_published_osv_scanner_definition() {
 }
 
 #[cfg(target_os = "linux")]
-#[trace("TC-9002", "FR-044-AC-3", "FR-044-AC-4", "FR-044-AC-7")]
+#[trace("TC-901", "FR-044-AC-3", "FR-044-AC-4", "FR-044-AC-7")]
 #[test]
 fn tc_9002_failed_or_incomplete_fixture_scan_never_retains_report() {
     let root = workspace(br#"{"bomFormat":"CycloneDX","components":[]}"#);
@@ -510,7 +510,7 @@ fn tc_9002_failed_or_incomplete_fixture_scan_never_retains_report() {
     assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
 }
 
-#[trace("TC-9003", "FR-044-AC-12")]
+#[trace("TC-902", "FR-044-AC-12")]
 #[test]
 fn tc_9003_database_validation_rejects_wolfi_and_missing_archives() {
     let root = tempfile::tempdir().expect("database root");
@@ -533,7 +533,7 @@ fn tc_9003_database_validation_rejects_wolfi_and_missing_archives() {
     );
 }
 
-#[trace("TC-9004", "FR-044-CON-1", "FR-044-AC-9")]
+#[trace("TC-903", "FR-044-CON-1", "FR-044-AC-9")]
 #[test]
 fn tc_9004_integration_lane_refuses_missing_scanner_or_database() {
     let non_executable = tempfile::NamedTempFile::new().expect("plain file");
@@ -574,7 +574,7 @@ fn tc_9004_integration_lane_refuses_missing_scanner_or_database() {
     }
 }
 
-#[trace("TC-9005", "FR-044-AC-13", "FR-044-AC-14")]
+#[trace("TC-904", "FR-044-AC-13", "FR-044-AC-14")]
 #[test]
 #[ignore = "needs EA_TEST_OSV_SCANNER and EA_TEST_OSV_DB; fixture outcomes are not compliance evidence"]
 fn tc_9005_scans_the_debian_sbom_fixture_for_its_expected_advisory() {
@@ -634,7 +634,7 @@ fn tc_9005_scans_the_debian_sbom_fixture_for_its_expected_advisory() {
     // test does not interpret an empty vulnerability list as clean evidence.
 }
 
-#[trace("TC-9006", "FR-044-AC-5")]
+#[trace("TC-905", "FR-044-AC-5")]
 #[test]
 #[ignore = "needs EA_TEST_OSV_SCANNER; intentionally uses an empty local database"]
 fn tc_9006_real_scanner_refuses_an_empty_database_without_a_report() {
@@ -663,7 +663,7 @@ fn tc_9006_real_scanner_refuses_an_empty_database_without_a_report() {
     );
 }
 
-#[trace("TC-9007", "FR-044-AC-8")]
+#[trace("TC-906", "FR-044-AC-8")]
 #[test]
 #[ignore = "needs EA_TEST_OSV_SCANNER and EA_TEST_OSV_DB; network namespace blocks scanner networking"]
 fn tc_9007_real_scanner_completes_with_network_disabled() {
@@ -700,7 +700,7 @@ fn tc_9007_real_scanner_completes_with_network_disabled() {
     // Completion is fixture behavior only and does not discharge an obligation.
 }
 
-#[trace("TC-9008", "FR-044-AC-11")]
+#[trace("TC-907", "FR-044-AC-11")]
 #[test]
 fn tc_9008_scanner_reads_the_retained_sbom_after_the_upstream_source_changes() {
     let original = b"{\"original\":true}\n";
@@ -756,7 +756,7 @@ fn tc_9008_scanner_reads_the_retained_sbom_after_the_upstream_source_changes() {
     assert_eq!(fs::read(observed).expect("scanner input bytes"), original);
 }
 
-#[trace("TC-9009", "FR-044-AC-1")]
+#[trace("TC-908", "FR-044-AC-1")]
 #[test]
 #[ignore = "needs EA_TEST_OSV_SCANNER and EA_TEST_OSV_DB; fixture matches are not compliance evidence"]
 fn tc_9009_scans_the_syft_generated_npm_sbom_for_its_expected_advisory() {
@@ -766,7 +766,7 @@ fn tc_9009_scans_the_syft_generated_npm_sbom_for_its_expected_advisory() {
     assert_local_fixture_match(&scanner, &supplied_database, "npm", &sbom, &expected);
 }
 
-#[trace("TC-9010", "FR-044-AC-2")]
+#[trace("TC-909", "FR-044-AC-2")]
 #[test]
 #[ignore = "needs EA_TEST_OSV_SCANNER and EA_TEST_OSV_DB; fixture matches are not compliance evidence"]
 fn tc_9010_scans_the_syft_generated_pypi_sbom_for_its_expected_advisory() {
@@ -776,7 +776,7 @@ fn tc_9010_scans_the_syft_generated_pypi_sbom_for_its_expected_advisory() {
     assert_local_fixture_match(&scanner, &supplied_database, "PyPI", &sbom, &expected);
 }
 
-#[trace("TC-9011", "FR-044-AC-2")]
+#[trace("TC-910", "FR-044-AC-2")]
 #[test]
 #[ignore = "needs EA_TEST_OSV_SCANNER and EA_TEST_OSV_DB; fixture matches are not compliance evidence"]
 fn tc_9011_scans_the_syft_generated_go_sbom_for_its_expected_advisory() {
