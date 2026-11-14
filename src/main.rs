@@ -24,6 +24,7 @@ mod package_host;
 mod package_install;
 mod process_host;
 mod producer_execute_host;
+mod receipt_host;
 mod release_decision_host;
 mod release_history_host;
 mod release_host;
@@ -67,6 +68,9 @@ const PRODUCER_EXECUTE_CAPABILITY: &str = "producer-execute";
 const RELEASE_HISTORY_CAPABILITY: &str = "release-history";
 const RELEASE_DECISION_CAPABILITY: &str = "release-decision";
 const RELEASE_VERIFY_CAPABILITY: &str = "release-verify";
+const RECEIPT_NOTE_CAPABILITY: &str = "receipt-note";
+const RECEIPT_MISSING_CAPABILITY: &str = "receipt-missing";
+const RECEIPT_VERIFY_CAPABILITY: &str = "receipt-verify";
 const SCOPE_FOOTPRINT_CAPABILITY: &str = "scope-footprint";
 const SIGNATURE_VERIFY_CAPABILITY: &str = "signature-verify";
 const WORKFLOW_INVARIANTS_CAPABILITY: &str = "workflow-invariants";
@@ -145,6 +149,9 @@ fn command() -> Command {
         .subcommand(approval_trail_command())
         .subcommand(approval_gate_command())
         .subcommand(release_verify_command())
+        .subcommand(receipt_note_command())
+        .subcommand(receipt_missing_command())
+        .subcommand(receipt_verify_command())
         .subcommand(release_history_command())
         .subcommand(release_decision_command())
         .subcommand(
@@ -239,6 +246,42 @@ fn approval_verify_command() -> Command {
                 .long("request")
                 .value_name("JSON")
                 .help("Approval-verify request document, or - to read it from stdin")
+                .required(true),
+        )
+}
+
+fn receipt_note_command() -> Command {
+    Command::new(RECEIPT_NOTE_CAPABILITY)
+        .about("Read or store a receipt bundle set in the fixed Git notes ref")
+        .arg(
+            Arg::new("request")
+                .long("request")
+                .value_name("JSON")
+                .help("Receipt-note request document, or - to read it from stdin")
+                .required(true),
+        )
+}
+
+fn receipt_missing_command() -> Command {
+    Command::new(RECEIPT_MISSING_CAPABILITY)
+        .about("List first-parent commits without a verified receipt")
+        .arg(
+            Arg::new("request")
+                .long("request")
+                .value_name("JSON")
+                .help("Receipt-missing request document, or - to read it from stdin")
+                .required(true),
+        )
+}
+
+fn receipt_verify_command() -> Command {
+    Command::new(RECEIPT_VERIFY_CAPABILITY)
+        .about("Verify the signed receipt note for one commit against protected-base policy")
+        .arg(
+            Arg::new("request")
+                .long("request")
+                .value_name("JSON")
+                .help("Receipt-verify request document, or - to read it from stdin")
                 .required(true),
         )
 }
@@ -420,6 +463,9 @@ fn main() -> ExitCode {
         Some((APPROVAL_GATE_CAPABILITY, arguments)) => run_approval_gate(arguments),
         Some((APPROVAL_TRAIL_CAPABILITY, arguments)) => run_approval_trail(arguments),
         Some((RELEASE_VERIFY_CAPABILITY, arguments)) => run_release_verify(arguments),
+        Some((RECEIPT_NOTE_CAPABILITY, arguments)) => run_receipt_note(arguments),
+        Some((RECEIPT_MISSING_CAPABILITY, arguments)) => run_receipt_missing(arguments),
+        Some((RECEIPT_VERIFY_CAPABILITY, arguments)) => run_receipt_verify(arguments),
         Some((RELEASE_HISTORY_CAPABILITY, arguments)) => run_release_history(arguments),
         Some((RELEASE_DECISION_CAPABILITY, arguments)) => run_release_decision(arguments),
         Some((WORKFLOW_INVARIANTS_CAPABILITY, _)) => run_workflow_invariants(),
@@ -922,6 +968,68 @@ fn run_attestation_verify(arguments: &ArgMatches) -> ExitCode {
         |bytes| {
             attestation_verify_host::execute(bytes)
                 .map_err(|error| (error.code(), error.to_string()))
+        },
+    )
+}
+
+fn run_receipt_note(arguments: &ArgMatches) -> ExitCode {
+    run_request_line(
+        arguments,
+        RECEIPT_NOTE_CAPABILITY,
+        "receipt_note_request_unreadable",
+        |bytes| receipt_host::execute(bytes).map_err(|error| (error.code(), error.to_string())),
+    )
+}
+
+fn run_receipt_missing(arguments: &ArgMatches) -> ExitCode {
+    let Some(request) = arguments.get_one::<String>("request") else {
+        return emit_error(
+            RECEIPT_MISSING_CAPABILITY,
+            "receipt_missing_request_unreadable",
+            "receipt-missing requires --request",
+        );
+    };
+    let bytes = if request == "-" {
+        match read_stdin(
+            RECEIPT_MISSING_CAPABILITY,
+            "receipt_missing_request_unreadable",
+        ) {
+            Ok(bytes) => bytes,
+            Err(exit_code) => return exit_code,
+        }
+    } else if request.len() > MAX_STDIN_BYTES {
+        return emit_error(
+            RECEIPT_MISSING_CAPABILITY,
+            "receipt_missing_request_unreadable",
+            "receipt-missing request exceeds the input limit",
+        );
+    } else {
+        request.clone().into_bytes()
+    };
+    let result = match receipt_host::execute_missing(&bytes) {
+        Ok(result) => result,
+        Err(error) => {
+            return emit_error(RECEIPT_MISSING_CAPABILITY, error.code(), &error.to_string());
+        }
+    };
+    if let Err(error) = ix_cli_kit::streams::write_primary_stdout(&result) {
+        eprintln!("failed to write receipt-missing output: {error}");
+        return ExitCode::from(2);
+    }
+    if receipt_host::missing_result_is_non_failing(&result) {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    }
+}
+
+fn run_receipt_verify(arguments: &ArgMatches) -> ExitCode {
+    run_request_line(
+        arguments,
+        RECEIPT_VERIFY_CAPABILITY,
+        "receipt_verify_request_unreadable",
+        |bytes| {
+            receipt_host::execute_verify(bytes).map_err(|error| (error.code(), error.to_string()))
         },
     )
 }

@@ -120,62 +120,62 @@ pub enum AttestationVerificationError {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct VerificationSummaryStatement {
+pub(crate) struct VerificationSummaryStatement {
     #[serde(rename = "_type")]
-    type_: String,
-    subject: Vec<SummarySubject>,
+    pub(crate) type_: String,
+    pub(crate) subject: Vec<SummarySubject>,
     #[serde(rename = "predicateType")]
-    predicate_type: String,
-    predicate: VerificationSummaryPredicate,
+    pub(crate) predicate_type: String,
+    pub(crate) predicate: VerificationSummaryPredicate,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct SummarySubject {
-    name: String,
-    digest: BTreeMap<String, String>,
+pub(crate) struct SummarySubject {
+    pub(crate) name: String,
+    pub(crate) digest: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct VerificationSummaryPredicate {
-    verifier: VerifierIdentity,
+pub(crate) struct VerificationSummaryPredicate {
+    pub(crate) verifier: VerifierIdentity,
     #[serde(rename = "timeVerified")]
-    time_verified: String,
+    pub(crate) time_verified: String,
     #[serde(rename = "resourceUri")]
-    resource_uri: String,
-    policy: PolicyIdentity,
+    pub(crate) resource_uri: String,
+    pub(crate) policy: PolicyIdentity,
     #[serde(rename = "inputAttestations")]
-    input_attestations: Vec<InputAttestation>,
+    pub(crate) input_attestations: Vec<InputAttestation>,
     #[serde(rename = "verificationResult")]
-    verification_result: String,
+    pub(crate) verification_result: String,
     #[serde(rename = "verifiedLevels")]
-    verified_levels: Vec<serde_json::Value>,
+    pub(crate) verified_levels: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct VerifierIdentity {
-    id: String,
+pub(crate) struct VerifierIdentity {
+    pub(crate) id: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct PolicyIdentity {
-    uri: String,
+pub(crate) struct PolicyIdentity {
+    pub(crate) uri: String,
 }
 
 #[derive(Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
 #[serde(deny_unknown_fields)]
-struct InputAttestation {
-    uri: String,
-    digest: InputDigest,
+pub(crate) struct InputAttestation {
+    pub(crate) uri: String,
+    pub(crate) digest: InputDigest,
 }
 
 #[derive(Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
 #[serde(deny_unknown_fields)]
-struct InputDigest {
-    sha256: String,
+pub(crate) struct InputDigest {
+    pub(crate) sha256: String,
 }
 
 /// Return `PASSED` only when all three required checks succeeded.

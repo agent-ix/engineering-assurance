@@ -23,7 +23,7 @@ use crate::{
     },
 };
 
-const APPROVAL_PREDICATE_TYPE: &str =
+pub(crate) const APPROVAL_PREDICATE_TYPE: &str =
     concat!("https:", "//schemas.agent-ix.ai/attestation/approval/v1");
 
 pub use crate::record_sink::sink::{
@@ -181,7 +181,7 @@ fn verify_one(
     }
 }
 
-fn approval_from_statement(
+pub(crate) fn approval_from_statement(
     statement_bytes: &[u8],
     lookup: ApprovalStatementLookup<'_>,
 ) -> Result<Approval, VerificationFailure> {
