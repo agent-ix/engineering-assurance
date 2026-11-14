@@ -677,7 +677,7 @@ mod tests {
         let untrusted = statement("2", "untrusted-bundle");
         let expected_verified = verified_statement.statement_bytes.clone();
         let expected_untrusted = untrusted.statement_bytes.clone();
-        let reader = reader_for(vec![
+        let mut reader = reader_for(vec![
             (LOOKUP.merged_pull_request, untrusted.clone()),
             (LOOKUP.merged_pull_request, verified_statement.clone()),
             ("fictional/project#13", statement("2", "decoy-pull-request")),
