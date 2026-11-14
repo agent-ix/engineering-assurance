@@ -9,6 +9,9 @@
 //! explicitly cooperative process-group confinement profile. Callers retain
 //! their response types and domain semantics through [`ProducerResponseAdapter`].
 
+#[cfg(feature = "private-git-store")]
+pub mod private_git_store;
+
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::File,

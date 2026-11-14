@@ -357,6 +357,11 @@ producer-execution = [
   "dep:serde_json_canonicalizer",
   "dep:thiserror",
 ]
+private-git-store = [
+  "producer-execution",
+  "attestation-verify",
+  "record-sink",
+]
 # `source_audit` (the syn-based "is this library half I/O-free" check) needs
 # no domain module full-only implies, so a consumer that wants only the
 # audit should not have to accept `serde_json/arbitrary_precision` -- a
@@ -566,6 +571,7 @@ full = [
   "manifest",
   "measurement",
   "onboarding",
+  "private-git-store",
   "package-audit",
   "package-lifecycle",
   "package-membership",

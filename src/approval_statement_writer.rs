@@ -889,7 +889,7 @@ mod tests {
             sink: SinkKind::PrivateStore,
             source: SelectionSource::Default,
             public_log_endpoint: Some(concat!("https:", "//transparency.invalid").into()),
-            private_store_destination: Some("private-store".into()),
+            private_store_destination: Some("agent-ix/approval-records".into()),
             public_linear_teams: Vec::new(),
         };
         let private_ports = Ports {
@@ -951,7 +951,7 @@ mod tests {
             sink: SinkKind::PublicLog,
             source: SelectionSource::Configured,
             public_log_endpoint: Some(concat!("https:", "//transparency.invalid").into()),
-            private_store_destination: Some("private-store".into()),
+            private_store_destination: Some("agent-ix/approval-records".into()),
             public_linear_teams: Vec::new(),
         };
         let public_ports = Ports {
