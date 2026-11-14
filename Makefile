@@ -167,8 +167,8 @@ integration-traceability:
 		--root . \
 		--quire "$(QUIRE)"
 
-integration-gate: lint content-rights-tree package-audit validate-docs rust-foundation-gate integration-traceability
+integration-gate: lint content-rights-tree package-audit validate-docs rust-foundation-gate
 # python_port runs once, inside rust-foundation-gate -> rust-tests; `test` is the
 # CI entry point that runs it standalone.
 
-release-gate: integration-gate
+release-gate: integration-gate integration-traceability

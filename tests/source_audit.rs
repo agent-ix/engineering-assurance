@@ -129,6 +129,301 @@ fn synthetic_source(template: &str) -> String {
     template.replace("TRACE", "trace")
 }
 
+fn direct_dependencies_for(features: &[&str]) -> BTreeSet<String> {
+    let mut command = Command::new(env!("CARGO"));
+    command.args([
+        "tree",
+        "--offline",
+        "--no-default-features",
+        "--edges",
+        "normal",
+        "--depth",
+        "1",
+        "--prefix",
+        "none",
+        "--target",
+        "all",
+    ]);
+    command
+        .arg("--manifest-path")
+        .arg(repository_root().join("Cargo.toml"));
+    for feature in features {
+        command.args(["--features", feature]);
+    }
+    let output = command.output().expect("Cargo dependency tree must launch");
+    assert!(
+        output.status.success(),
+        "Cargo dependency tree failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout)
+        .expect("Cargo dependency tree must be UTF-8")
+        .lines()
+        .skip(1)
+        .map(|line| {
+            line.split_whitespace()
+                .next()
+                .expect("dependency tree row must have a crate name")
+                .to_owned()
+        })
+        .collect()
+}
+
+/// Complete unified dependency and feature graph for the package's `full` feature
+/// on all targets. Update the fixture only after reviewing the complete graph diff
+/// and verifying that no added or changed dependency provides signature
+/// verification, cryptography or signature parsing. A package-name subset is not
+/// sufficient. Regenerate it with the exact command below, which is also the
+/// command this test compares with the checked-in fixture. Normalization removes
+/// checkout paths and repository URLs, while retaining package versions and source
+/// revisions.
+fn full_feature_dependency_graph() -> String {
+    let root = repository_root();
+    let output = Command::new(env!("CARGO"))
+        .args([
+            "tree",
+            "--offline",
+            "--locked",
+            "--no-default-features",
+            "--features",
+            "full",
+            "--edges",
+            "normal,features",
+            "--target",
+            "all",
+            "--manifest-path",
+        ])
+        .arg(root.join("Cargo.toml"))
+        .output()
+        .expect("Cargo full dependency graph must launch");
+    assert!(
+        output.status.success(),
+        "Cargo full dependency graph failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let graph = String::from_utf8(output.stdout)
+        .expect("Cargo full dependency graph must be UTF-8")
+        .replace(&root.to_string_lossy().to_string(), "<repo>");
+    let mut normalized = graph;
+    while let Some(start) = normalized.find("https://") {
+        let suffix = &normalized[start..];
+        let close_paren = suffix.find(')').unwrap_or(suffix.len());
+        let revision = suffix.find('#').unwrap_or(close_paren);
+        let end = start + revision.min(close_paren);
+        normalized.replace_range(start..end, "<external-source>");
+    }
+    normalized
+}
+
+#[derive(Default)]
+struct SignatureVerifierAudit {
+    functions: Vec<String>,
+    resolver_calls: Vec<(String, String)>,
+    tool_calls: Vec<(String, String)>,
+    process_host_calls: Vec<String>,
+    gitsign_verdict_calls: Vec<String>,
+    gitsign_run_calls: Vec<String>,
+    cms_branch_functions: BTreeSet<String>,
+    direct_process_api: bool,
+    dependency_roots: BTreeSet<String>,
+    imported_roots: BTreeSet<String>,
+    external_roots: BTreeSet<String>,
+}
+
+impl SignatureVerifierAudit {
+    fn function(&self) -> &str {
+        self.functions.last().map_or("<module>", String::as_str)
+    }
+}
+
+impl<'ast> Visit<'ast> for SignatureVerifierAudit {
+    fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
+        self.functions.push(item.sig.ident.to_string());
+        syn::visit::visit_item_fn(self, item);
+        self.functions.pop();
+    }
+
+    fn visit_impl_item_fn(&mut self, item: &'ast syn::ImplItemFn) {
+        self.functions.push(item.sig.ident.to_string());
+        syn::visit::visit_impl_item_fn(self, item);
+        self.functions.pop();
+    }
+
+    fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
+        if item.attrs.iter().any(|attribute| {
+            attribute.path().is_ident("cfg")
+                && matches!(
+                    &attribute.meta,
+                    syn::Meta::List(list) if list.tokens.to_string().contains("test")
+                )
+        }) {
+            return;
+        }
+        syn::visit::visit_item_mod(self, item);
+    }
+
+    fn visit_item_use(&mut self, item: &'ast syn::ItemUse) {
+        self.inspect_use_tree(&item.tree, &mut Vec::new());
+        syn::visit::visit_item_use(self, item);
+    }
+
+    fn visit_path(&mut self, path: &'ast syn::Path) {
+        let segments = path
+            .segments
+            .iter()
+            .map(|segment| segment.ident.to_string())
+            .collect::<Vec<_>>();
+        if segments.starts_with(&["std".to_owned(), "process".to_owned()]) {
+            self.direct_process_api = true;
+        }
+        if segments.ends_with(&["SignatureFormat".to_owned(), "Cms".to_owned()]) {
+            self.cms_branch_functions.insert(self.function().to_owned());
+        }
+        if let Some(root) = segments.first() {
+            self.add_external_root(root.clone());
+        }
+        syn::visit::visit_path(self, path);
+    }
+
+    fn visit_expr_call(&mut self, call: &'ast syn::ExprCall) {
+        if let syn::Expr::Path(function) = call.func.as_ref() {
+            let name = function
+                .path
+                .segments
+                .last()
+                .map(|segment| segment.ident.to_string());
+            if function
+                .path
+                .segments
+                .iter()
+                .any(|segment| segment.ident == "process_host")
+                && let Some(name) = name.as_ref()
+            {
+                self.process_host_calls.push(name.clone());
+            }
+            let argument = call.args.first().and_then(|argument| match argument {
+                syn::Expr::Lit(literal) => match &literal.lit {
+                    syn::Lit::Str(value) => Some(value.value()),
+                    _ => None,
+                },
+                syn::Expr::Path(path) => path.path.get_ident().map(ToString::to_string),
+                _ => None,
+            });
+            match (name.as_deref(), argument) {
+                (Some("resolve_program"), Some(program)) => {
+                    self.resolver_calls
+                        .push((self.function().to_owned(), program));
+                }
+                (Some("run_tool"), Some(program)) => {
+                    self.tool_calls.push((self.function().to_owned(), program));
+                }
+                _ => {}
+            }
+        }
+        syn::visit::visit_expr_call(self, call);
+    }
+
+    fn visit_expr_method_call(&mut self, call: &'ast syn::ExprMethodCall) {
+        match call.method.to_string().as_str() {
+            "gitsign_verdict" => self.gitsign_verdict_calls.push(self.function().to_owned()),
+            "gitsign_run" => self.gitsign_run_calls.push(self.function().to_owned()),
+            _ => {}
+        }
+        syn::visit::visit_expr_method_call(self, call);
+    }
+}
+
+impl SignatureVerifierAudit {
+    fn inspect_use_tree(&mut self, tree: &UseTree, prefix: &mut Vec<String>) {
+        match tree {
+            UseTree::Path(path) => {
+                if prefix.is_empty() {
+                    self.imported_roots.insert(path.ident.to_string());
+                    self.add_external_root(path.ident.to_string());
+                }
+                prefix.push(path.ident.to_string());
+                self.inspect_process_prefix(prefix);
+                self.inspect_use_tree(&path.tree, prefix);
+                prefix.pop();
+            }
+            UseTree::Name(name) => {
+                if prefix.is_empty() {
+                    self.imported_roots.insert(name.ident.to_string());
+                    self.add_external_root(name.ident.to_string());
+                }
+                prefix.push(name.ident.to_string());
+                self.inspect_process_prefix(prefix);
+                prefix.pop();
+            }
+            UseTree::Rename(rename) => {
+                if prefix.is_empty() {
+                    self.imported_roots.insert(rename.ident.to_string());
+                    self.add_external_root(rename.ident.to_string());
+                }
+                prefix.push(rename.ident.to_string());
+                self.inspect_process_prefix(prefix);
+                prefix.pop();
+            }
+            UseTree::Group(group) => {
+                for item in &group.items {
+                    self.inspect_use_tree(item, prefix);
+                }
+            }
+            UseTree::Glob(_) => self.inspect_process_prefix(prefix),
+        }
+    }
+
+    fn inspect_process_prefix(&mut self, prefix: &[String]) {
+        if prefix.starts_with(&["std".to_owned(), "process".to_owned()]) {
+            self.direct_process_api = true;
+        }
+    }
+
+    fn add_external_root(&mut self, root: String) {
+        if self.dependency_roots.contains(&root) || root == "engineering_assurance" {
+            self.external_roots.insert(root);
+        }
+    }
+}
+
+fn repository_source(relative_path: &str) -> String {
+    let path = repository_root().join(relative_path);
+    let source = fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("cannot read {}: {error}", path.display()));
+    syn::parse_file(&source)
+        .unwrap_or_else(|error| panic!("cannot parse {}: {error}", path.display()));
+    source
+}
+
+fn assert_import_roots_are_known(imported: &BTreeSet<String>, dependencies: &BTreeSet<String>) {
+    let standard_or_local = ["alloc", "core", "crate", "self", "std", "super"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+    let unknown = imported
+        .difference(&standard_or_local)
+        .filter(|root| *root != "engineering_assurance" && !dependencies.contains(*root))
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    assert!(
+        unknown.is_empty(),
+        "unrecognized imported crate roots must be reviewed explicitly: {unknown:?}"
+    );
+}
+
+fn gitsign_program_constant(source: &syn::File) -> Option<String> {
+    source.items.iter().find_map(|item| match item {
+        Item::Const(item) if item.ident == "GITSIGN_PROGRAM" => match &*item.expr {
+            syn::Expr::Lit(value) => match &value.lit {
+                syn::Lit::Str(value) => Some(value.value()),
+                _ => None,
+            },
+            _ => None,
+        },
+        _ => None,
+    })
+}
+
 fn use_tree_imports_child_program(tree: &UseTree, prefix: &mut Vec<String>) -> bool {
     match tree {
         UseTree::Path(path) => {
@@ -311,6 +606,139 @@ fn tc_127_producer_execution_owns_the_only_first_party_process_capability() {
     let mut process_use = ChildProgramUse::default();
     process_use.visit_file(&safe);
     assert!(!process_use.found, "process status is not child execution");
+}
+
+#[test]
+#[trace("TC-653", "FR-036-AC-12")]
+fn tc_653_signature_verification_delegates_to_system_verifiers() {
+    audit_signature_feature_dependencies();
+    audit_pure_signature_classifier();
+    audit_signature_adapter_delegation();
+}
+
+fn audit_signature_feature_dependencies() {
+    let signature_dependencies = direct_dependencies_for(&["signature-verify"]);
+    assert_eq!(
+        signature_dependencies,
+        BTreeSet::from(["serde".to_owned()]),
+        "the signature-verify feature must add only its data-serialization dependency"
+    );
+
+    let full_graph = full_feature_dependency_graph();
+    assert_eq!(
+        full_graph,
+        include_str!("fixtures/fr036-full-dependency-graph.txt"),
+        "review the complete full-feature dependency graph before updating its baseline"
+    );
+}
+
+fn audit_pure_signature_classifier() {
+    let signature_dependencies = direct_dependencies_for(&["signature-verify"]);
+    let pure_source = repository_source("src/signature_verify.rs");
+    let pure_syntax = syn::parse_file(&pure_source).expect("classifier parses");
+    let mut pure_audit = SignatureVerifierAudit {
+        dependency_roots: signature_dependencies
+            .iter()
+            .map(|name| name.replace('-', "_"))
+            .collect(),
+        ..SignatureVerifierAudit::default()
+    };
+    pure_audit.visit_file(&pure_syntax);
+    assert_import_roots_are_known(&pure_audit.imported_roots, &pure_audit.dependency_roots);
+    assert_eq!(
+        pure_audit.external_roots,
+        BTreeSet::from(["serde".to_owned()]),
+        "the classifier may depend only on its serialization crate"
+    );
+    assert!(
+        !pure_audit.direct_process_api,
+        "the signature classifier must not invoke child programs"
+    );
+}
+
+fn audit_signature_adapter_delegation() {
+    let full_dependency_roots = direct_dependencies_for(&["full"])
+        .into_iter()
+        .map(|name| name.replace('-', "_"))
+        .collect::<BTreeSet<_>>();
+    let adapter_source = repository_source("src/signature_verify_host.rs");
+    let adapter_syntax = syn::parse_file(&adapter_source).expect("adapter parses");
+    let mut adapter_audit = SignatureVerifierAudit {
+        dependency_roots: full_dependency_roots.clone(),
+        ..SignatureVerifierAudit::default()
+    };
+    adapter_audit.visit_file(&adapter_syntax);
+    assert_import_roots_are_known(&adapter_audit.imported_roots, &full_dependency_roots);
+    assert_eq!(
+        adapter_audit.external_roots,
+        BTreeSet::from([
+            "engineering_assurance".to_owned(),
+            "serde".to_owned(),
+            "serde_json".to_owned(),
+            "tempfile".to_owned(),
+            "thiserror".to_owned(),
+        ]),
+        "the signature adapter must not import a signature or cryptography crate"
+    );
+    assert!(
+        !adapter_audit.direct_process_api,
+        "signature checks must use the bounded process host"
+    );
+    assert_eq!(
+        adapter_audit
+            .process_host_calls
+            .iter()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(["run_configured", "run_configured_stdin"]),
+        "all adapter child processes must cross the bounded process host"
+    );
+    assert_eq!(
+        adapter_audit
+            .resolver_calls
+            .iter()
+            .filter(|(_, program)| program.as_str() != "program")
+            .map(|(_, program)| program.as_str())
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(["git", "ssh-keygen"]),
+        "the SSH path may resolve only git and ssh-keygen"
+    );
+    assert!(
+        adapter_audit
+            .resolver_calls
+            .iter()
+            .filter(|(_, program)| program == "program")
+            .all(|(function, _)| function == "run_tool"),
+        "only the fixed gitsign/git tool adapter may resolve a supplied program"
+    );
+    assert_eq!(
+        adapter_audit.tool_calls,
+        vec![
+            ("repository_sets_gitsign_key".to_owned(), "git".to_owned()),
+            ("gitsign_run".to_owned(), "GITSIGN_PROGRAM".to_owned()),
+        ],
+        "gitsign may run only in the CMS verification procedure"
+    );
+    assert_eq!(
+        adapter_audit.gitsign_run_calls,
+        vec!["gitsign_verdict".to_owned()],
+        "the gitsign process is reached only through its CMS classifier"
+    );
+    assert_eq!(
+        adapter_audit.gitsign_verdict_calls,
+        vec!["commit_verdict".to_owned(), "tag_verdict".to_owned()],
+        "only the commit and tag CMS branches may delegate to gitsign"
+    );
+    assert_eq!(
+        adapter_audit.cms_branch_functions,
+        BTreeSet::from(["commit_verdict".to_owned(), "tag_verdict".to_owned()]),
+        "the gitsign call sites must be restricted to explicit CMS branches"
+    );
+    assert_eq!(
+        gitsign_program_constant(&adapter_syntax).as_deref(),
+        Some("gitsign"),
+        "the CMS verifier executable must be fixed to gitsign"
+    );
 }
 
 #[test]

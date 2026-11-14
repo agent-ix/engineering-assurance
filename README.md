@@ -338,6 +338,11 @@ make rust-foundation-gate
 make integration-gate
 ```
 
+`integration-gate` checks the finished repository without requiring every
+release-record row to be complete. `release-gate` adds the strict
+`integration-traceability` check, so unfinished release-record rows remain
+blockers for a release.
+
 A bare `cargo test` runs only the tests that need no feature
 (`default_features`; default features are empty); use `cargo test --all-features`, which is what CI runs, for the full
 suite.
