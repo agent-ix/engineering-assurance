@@ -442,6 +442,44 @@ fn tc_280_tag_and_pre_resolution_verdicts_have_null_commit_identity() {
 }
 
 #[test]
+#[trace("TC-281", "FR-036-AC-13", "FR-036-AC-15")]
+fn tc_281_gitsign_receives_the_resolved_commit_id() {
+    let fixture = fixture();
+    let base = plain_commit(&fixture, "CMS commit");
+    let id = rewrite(&fixture, "commit", &base, |object| {
+        object.replacen(
+            "\n\n",
+            "\ngpgsig -----BEGIN SIGNED MESSAGE-----\n AAAA\n\n",
+            1,
+        )
+    });
+    git(&fixture.repo(), None, &["update-ref", "refs/heads/main", &id]);
+    let path = path_with(&fixture, "gitsign-bin", &["git"]);
+    let gitsign_log = fixture.root().join("gitsign-args");
+    let gitsign = path.join("gitsign");
+    fs::write(
+        &gitsign,
+        format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\nexit 1\n",
+            gitsign_log.display()
+        ),
+    )
+    .expect("gitsign recorder");
+    fs::set_permissions(&gitsign, fs::Permissions::from_mode(0o755)).expect("mode");
+
+    let mut body = request(&fixture, "HEAD", "commit");
+    body["gitsign"] = json!({
+        "certificate_identity": "builder@example.invalid",
+        "certificate_oidc_issuer": "fictional-issuer",
+        "principal": "builder",
+    });
+    let result = verdict_with(&body, Some(&path));
+    assert_eq!(result["verified_commit_id"], id);
+    let calls = fs::read_to_string(gitsign_log).expect("recorded gitsign calls");
+    assert!(calls.lines().next().is_some_and(|call| call.ends_with(&format!("-- {id}"))));
+}
+
+#[test]
 #[trace("TC-256", "FR-036-AC-7")]
 fn tc_256_invalid_revisions_are_refused_before_git_starts() {
     let fixture = fixture();
