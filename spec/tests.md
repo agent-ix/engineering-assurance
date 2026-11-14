@@ -232,7 +232,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-036 | FR-036-AC-10 | TC-258, TC-260, TC-261 | ✅ `tests/signature_verify_cli.rs` passing |
 | FR-036 | FR-036-AC-11 | TC-259 | ✅ `tests/signature_verify_cli.rs` passing |
 | FR-036 | FR-036-CON-1 | TC-248, TC-249, TC-250, TC-260, TC-261 | ✅ A valid status needs grade `G` with `git verify-commit` accepting, or `git verify-tag` exit 0 |
-| FR-036 | FR-036-AC-12 | TC-653 | ✅ `tests/source_audit.rs` passing; complete full-feature graph and verifier delegation audited |
+| FR-036 | FR-036-AC-12 | TC-653 | ✅ `tests/source_audit.rs` passing; direct signing dependency boundary and verifier delegation audited |
 | FR-036 | FR-036-CON-2 | TC-654 | 🚧 Source inspection not yet completed |
 | FR-033 | FR-033-AC-1 | TC-244 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
 | FR-034 | FR-034-AC-1 | TC-246 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
@@ -984,7 +984,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-650 | Signing for the private store or `none` makes no public-log call; the public path signs only after the check passed and never for a refused record | Unit | P0 | FR-057-AC-10, FR-057-AC-11, NFR-010-AC-1, NFR-010-M-2 | ✅ `tests/record_sink.rs` passing |
 | TC-651 | The sink module source implements no signature primitive | Static | P0 | NFR-010-AC-2, NFR-010-M-1 | ✅ `tests/record_sink.rs` passing |
 | TC-652 | A registered implementation cannot reach the public log: a public-log selection still runs the leak check, a leaking record sends and public-signs nothing, and the proof carries the checked bytes | Unit | P0 | FR-057-AC-8, NFR-009-AC-2 | ✅ `tests/record_sink.rs` passing |
-| TC-653 | The signature feature adds only `serde`; the complete unified `full` dependency and feature graph matches its reviewed all-target baseline; parsed source finds no unknown imported crate roots and confirms SSH verification delegates to git/ssh-keygen while gitsign runs only in CMS branches | Static | P0 | FR-036-AC-12 | ✅ `tests/source_audit.rs` passing |
+| TC-653 | The `signature-verify` feature adds only `serde`; the all-target `full` graph has only the specified Sigstore signing, verification and type crates as direct signature delegates and no direct signature/certificate/crypto primitive dependency; parsed source finds no unknown imported crate roots and confirms SSH verification delegates to git/ssh-keygen while gitsign runs only in CMS branches | Static | P0 | FR-036-AC-12 | ✅ `tests/source_audit.rs` passing |
 | TC-654 | Source inspection of the signature classifier and binary adapters finds no in-tree signature parsing or cryptographic implementation | Static | P0 | FR-036-CON-2 | 🚧 Inspection not yet completed |
 | TC-658 | `tests/attestation_signing_live.rs` verifies a generic in-toto statement with a matching `sha256` artifact digest as `verified` and a differing expected digest as `wrong_subject` using the public-good Sigstore verifier | Integration | P0 | FR-066-AC-8 | 🚧 Opt-in public-good test intentionally not run in this lane |
 | TC-659 | A stand-in verifier rejects every valid, policy-mismatched, byte-tampered, and wrong-subject fixture before subject comparison; every case remains `signature_invalid` | Unit | P0 | FR-064-AC-3, NFR-010-M-3 | ✅ `src/attestation_signing.rs` passing |

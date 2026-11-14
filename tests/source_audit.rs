@@ -169,15 +169,9 @@ fn direct_dependencies_for(features: &[&str]) -> BTreeSet<String> {
         .collect()
 }
 
-/// Complete unified dependency and feature graph for the package's `full` feature
-/// on all targets. Update the fixture only after reviewing the complete graph diff
-/// and verifying that no added or changed dependency provides signature
-/// verification, cryptography or signature parsing. A package-name subset is not
-/// sufficient. Regenerate it with the exact command below, which is also the
-/// command this test compares with the checked-in fixture. Normalization removes
-/// checkout paths and repository URLs, while retaining package versions and source
-/// revisions.
-fn full_feature_dependency_graph() -> String {
+/// The direct dependencies in the package's `full` graph, including feature edges
+/// and dependencies enabled for any target.
+fn full_feature_direct_dependencies() -> BTreeSet<String> {
     let root = repository_root();
     let output = Command::new(env!("CARGO"))
         .args([
@@ -195,24 +189,93 @@ fn full_feature_dependency_graph() -> String {
         ])
         .arg(root.join("Cargo.toml"))
         .output()
-        .expect("Cargo full dependency graph must launch");
+        .expect("Cargo full dependency tree must launch");
     assert!(
         output.status.success(),
-        "Cargo full dependency graph failed: {}",
+        "Cargo full dependency tree failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let graph = String::from_utf8(output.stdout)
-        .expect("Cargo full dependency graph must be UTF-8")
-        .replace(&root.to_string_lossy().to_string(), "<repo>");
-    let mut normalized = graph;
-    while let Some(start) = normalized.find("https://") {
-        let suffix = &normalized[start..];
-        let close_paren = suffix.find(')').unwrap_or(suffix.len());
-        let revision = suffix.find('#').unwrap_or(close_paren);
-        let end = start + revision.min(close_paren);
-        normalized.replace_range(start..end, "<external-source>");
-    }
-    normalized
+    let tree = String::from_utf8(output.stdout).expect("Cargo full dependency tree must be UTF-8");
+    direct_package_nodes(&tree)
+}
+
+fn direct_package_nodes(tree: &str) -> BTreeSet<String> {
+    let mut lines = tree.lines();
+    let root = lines.next().expect("Cargo dependency tree has a root");
+    assert!(
+        root.starts_with("engineering-assurance v"),
+        "Cargo dependency tree root must be engineering-assurance: {root}"
+    );
+
+    lines
+        .filter_map(|line| {
+            let edge = line
+                .strip_prefix("├── ")
+                .or_else(|| line.strip_prefix("└── "))?;
+            let mut fields = edge.split_whitespace();
+            let name = fields.next()?;
+            let kind = fields.next()?;
+            (kind.starts_with('v') || kind == "feature").then(|| name.to_owned())
+        })
+        .collect()
+}
+
+const NFR_010_ALLOWED_DIRECT_DELEGATES: [&str; 3] =
+    ["sigstore-sign", "sigstore-types", "sigstore-verify"];
+
+fn signature_or_crypto_dependency_violations(
+    direct_dependencies: &BTreeSet<String>,
+) -> BTreeSet<String> {
+    let allowed_delegates = NFR_010_ALLOWED_DIRECT_DELEGATES
+        .into_iter()
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+    direct_dependencies
+        .iter()
+        .filter(|name| {
+            let normalized = name.replace('_', "-").to_ascii_lowercase();
+            let is_delegate_namespace =
+                normalized.starts_with("sigstore-") || normalized.starts_with("in-toto");
+            let is_crypto_primitive = [
+                "crypto",
+                "signature",
+                "signing",
+                "signer",
+                "certificate",
+                "cert",
+                "x509",
+                "openssl",
+                "aws-lc",
+                "boring",
+                "ring",
+                "rsa",
+                "ed25519",
+                "curve25519",
+                "ecdsa",
+                "p256",
+                "k256",
+                "hmac",
+                "blake3",
+                "md5",
+                "md-5",
+                "sha1",
+                "sha2",
+                "sha3",
+                "digest",
+                "rustls",
+                "cms",
+                "spki",
+                "pkcs",
+                "der",
+                "pem",
+                "zeroize",
+            ]
+            .iter()
+            .any(|marker| normalized == *marker || normalized.starts_with(&format!("{marker}-")));
+            (is_delegate_namespace || is_crypto_primitive) && !allowed_delegates.contains(*name)
+        })
+        .cloned()
+        .collect()
 }
 
 #[derive(Default)]
@@ -612,8 +675,20 @@ fn tc_127_producer_execution_owns_the_only_first_party_process_capability() {
 #[trace("TC-653", "FR-036-AC-12")]
 fn tc_653_signature_verification_delegates_to_system_verifiers() {
     audit_signature_feature_dependencies();
+    audit_full_feature_direct_signature_dependencies();
     audit_pure_signature_classifier();
     audit_signature_adapter_delegation();
+}
+
+#[test]
+#[trace("TC-653", "FR-036-AC-12")]
+fn tc_653_rejects_a_direct_signature_primitive_dependency() {
+    let forbidden = BTreeSet::from(["ring".to_owned()]);
+    assert_eq!(
+        signature_or_crypto_dependency_violations(&forbidden),
+        forbidden,
+        "direct signature and cryptographic primitives must be rejected"
+    );
 }
 
 fn audit_signature_feature_dependencies() {
@@ -623,12 +698,27 @@ fn audit_signature_feature_dependencies() {
         BTreeSet::from(["serde".to_owned()]),
         "the signature-verify feature must add only its data-serialization dependency"
     );
+}
 
-    let full_graph = full_feature_dependency_graph();
+fn audit_full_feature_direct_signature_dependencies() {
+    let direct_dependencies = full_feature_direct_dependencies();
+    let signing_dependencies = direct_dependencies
+        .iter()
+        .filter(|name| name.starts_with("sigstore-") || name.starts_with("in-toto"))
+        .cloned()
+        .collect::<BTreeSet<_>>();
     assert_eq!(
-        full_graph,
-        include_str!("fixtures/fr036-full-dependency-graph.txt"),
-        "review the complete full-feature dependency graph before updating its baseline"
+        signing_dependencies,
+        NFR_010_ALLOWED_DIRECT_DELEGATES
+            .into_iter()
+            .map(str::to_owned)
+            .collect(),
+        "NFR-010 delegates signing, verification, and statement types to the specified Sigstore crates"
+    );
+    assert_eq!(
+        signature_or_crypto_dependency_violations(&direct_dependencies),
+        BTreeSet::new(),
+        "NFR-010 allows cryptographic implementation behind the direct Sigstore delegates; direct signature, certificate, or crypto primitives are forbidden"
     );
 }
 
