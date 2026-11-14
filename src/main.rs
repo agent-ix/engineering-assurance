@@ -11,6 +11,7 @@ mod approval_gate_host;
 mod approval_tag_host;
 mod approval_trail_host;
 mod approval_verify_host;
+mod attestation_verify_host;
 mod content_rights_host;
 mod evaluation_report_host;
 mod integration_evidence_host;
@@ -51,6 +52,7 @@ const APPROVAL_TAG_CAPABILITY: &str = "approval-tag";
 const APPROVAL_GATE_CAPABILITY: &str = "review-gate";
 const APPROVAL_VERIFY_CAPABILITY: &str = "approval-verify";
 const APPROVAL_TRAIL_CAPABILITY: &str = "approval-trail";
+const ATTESTATION_VERIFY_CAPABILITY: &str = "attestation-verify";
 const AGENT_EVALS_PROVIDER_CAPABILITY: &str = "agent-evals-provider";
 const AGENT_EVALS_CAPABILITY: &str = "agent-evals";
 const CONTENT_RIGHTS_TREE_CAPABILITY: &str = "content-rights-tree";
@@ -137,6 +139,7 @@ fn command() -> Command {
         .subcommand(producer_execute_command())
         .subcommand(scope_footprint_command())
         .subcommand(signature_verify_command())
+        .subcommand(attestation_verify_command())
         .subcommand(approval_verify_command())
         .subcommand(approval_tag_command())
         .subcommand(approval_trail_command())
@@ -212,6 +215,18 @@ fn signature_verify_command() -> Command {
                 .long("request")
                 .value_name("JSON")
                 .help("Signature-verify request document, or - to read it from stdin")
+                .required(true),
+        )
+}
+
+fn attestation_verify_command() -> Command {
+    Command::new(ATTESTATION_VERIFY_CAPABILITY)
+        .about("Verify a signed release-attestation set against the release and protected policies")
+        .arg(
+            Arg::new("request")
+                .long("request")
+                .value_name("JSON")
+                .help("Attestation-verify request document, or - to read it from stdin")
                 .required(true),
         )
 }
@@ -399,6 +414,7 @@ fn main() -> ExitCode {
         Some((PRODUCER_EXECUTE_CAPABILITY, arguments)) => run_producer_execute(arguments),
         Some((SCOPE_FOOTPRINT_CAPABILITY, arguments)) => run_scope_footprint(arguments),
         Some((SIGNATURE_VERIFY_CAPABILITY, arguments)) => run_signature_verify(arguments),
+        Some((ATTESTATION_VERIFY_CAPABILITY, arguments)) => run_attestation_verify(arguments),
         Some((APPROVAL_VERIFY_CAPABILITY, arguments)) => run_approval_verify(arguments),
         Some((APPROVAL_TAG_CAPABILITY, arguments)) => run_approval_tag(arguments),
         Some((APPROVAL_GATE_CAPABILITY, arguments)) => run_approval_gate(arguments),
@@ -894,6 +910,18 @@ fn run_signature_verify(arguments: &ArgMatches) -> ExitCode {
         "signature_verify_request_unreadable",
         |bytes| {
             signature_verify_host::execute(bytes).map_err(|error| (error.code(), error.to_string()))
+        },
+    )
+}
+
+fn run_attestation_verify(arguments: &ArgMatches) -> ExitCode {
+    run_request_line(
+        arguments,
+        ATTESTATION_VERIFY_CAPABILITY,
+        "attestation_verify_request_unreadable",
+        |bytes| {
+            attestation_verify_host::execute(bytes)
+                .map_err(|error| (error.code(), error.to_string()))
         },
     )
 }
