@@ -8,6 +8,8 @@ relationships:
     type: "constrains"
   - target: "ix://agent-ix/engineering-assurance/FR-064"
     type: "constrains"
+  - target: "ix://agent-ix/engineering-assurance/FR-054"
+    type: "constrains"
   - target: "ix://agent-ix/engineering-assurance/FR-056"
     type: "constrains"
   - target: "ix://agent-ix/engineering-assurance/FR-057"
@@ -24,7 +26,9 @@ verification libraries and in-toto statement types.
 ## Scope
 
 - Applies to: the approval statement of FR-058, its verification (FR-064), the signature member of the public
-  record form (FR-056), and the release attestations, receipts and their verification (FR-066 to FR-078). Engineering Assurance owns this code; Quoin runs no git and no network call, and receives results as data.
+  record form (FR-056), the private-store outcome statement and its verification (FR-054 and FR-064), and the release
+  attestations, receipts and their verification (FR-066 to FR-078). Engineering Assurance owns this code; Quoin runs no
+  git and no network call, and receives results as data.
 
 ## Rationale
 

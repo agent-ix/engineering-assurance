@@ -68,9 +68,11 @@ each exact source repository owner/name component defined by FR-054; the lookup 
 requested repository, validates each `record-private/v1` file, and selects approval statements only when the statement
 subject repository, pull-request reference and merged commit exactly match the requested tuple. It returns all matches
 in ascending `record-id` order, with the statement bytes and the associated DSSE bundle read from the private form and
-the final outcome read from `outcome.json`. A retained record with a missing or malformed outcome marker is a read
-failure; it is never assumed to be published. It never searches the publishing repository's refs or receipt notes for
-private forms.
+the final outcome read from the signed `outcome.json` defined in FR-054. Before trusting an outcome, the reader verifies
+the exact canonical outcome-statement bytes and signature bundle through the delegated Sigstore verifier, then matches
+the signer to a `record_publisher` identity in the protected-base-branch workflow-identity policy. A retained record
+with a missing, malformed, altered, invalidly signed or untrusted outcome is a read failure; it is never assumed to be
+published. It never searches the publishing repository's refs or receipt notes for private forms.
 
 Out of scope: the git-signature `approval-verify` command of
 [FR-041](./FR-041-signed-tag-approval-of-a-change-assurance-record.md), which this command does not replace.
@@ -104,6 +106,12 @@ Out of scope: the git-signature `approval-verify` command of
 - The Git private-store reader SHALL reject a malformed private-form file or unreadable ref as a read failure.
 - The Git private-store reader SHALL reject a missing or malformed outcome marker for a retained approval record as a
   read failure.
+- The Git private-store reader SHALL reject an outcome whose signature is invalid or whose signer does not match a
+  `record_publisher` entry in the protected-base-branch workflow-identity policy as a read failure.
+- The Git private-store reader SHALL verify the exact UTF-8 bytes of the canonical outcome statement carried in
+  `outcome.json`; it SHALL NOT parse and reserialize that statement before signature verification.
+- The outcome signer and verifier SHALL use the delegated Sigstore libraries.
+- The outcome signer and verifier SHALL NOT call a public transparency log.
 - The Git private-store reader SHALL map an exact `published` outcome marker to `Published` and an exact `refused`
   marker to `Refused`.
 - The Git private-store reader SHALL reject an outcome marker whose `sink` or `outcome` disagrees with the stored
@@ -143,8 +151,9 @@ Out of scope: the git-signature `approval-verify` command of
 | FR-064-AC-19 | A sole retained matching statement whose publish outcome was refused, including by the leak check, yields `unverifiable` with reason `publish_refused` and is not counted in the FR-061 role verdict. | Test |
 | FR-064-AC-20 | For a non-empty matching set, the aggregate status is `verified` only when every statement verifies; otherwise it is the first present status in the fixed order `unverifiable`, `signature_invalid`, `untrusted_signer`, `wrong_subject`, `predicate_invalid`. Thus, one `verified` and one `untrusted_signer` statement produce aggregate `untrusted_signer`, while the role verdict counts only the verified statement; when multiple results are `unverifiable`, the result reason is the first present in the fixed order `input_unreadable`, `publish_refused`, `statements_not_retained`. | Test |
 | FR-064-AC-21 | A Git private-store lookup reads the configured destination's fixed ref and returns every statement for the exact repository, merged pull request and merged commit, in ascending record-ID order; a statement with a different repository, pull request or commit is omitted. | Test |
-| FR-064-AC-22 | A malformed private-form file, missing or malformed outcome marker for a retained statement, or failed Git tree/blob read yields `unverifiable` with reason `input_unreadable` and returns no partial statement set; a readable store with no matching record yields `statements_not_retained`. | Test |
-| FR-064-AC-23 | After the Git private store round trip, the exact RFC 8785 statement bytes, signature-bundle string, and final publish outcome are returned unchanged; the verifier accepts a published fixture statement and rejects a one-byte change. | Test |
+| FR-064-AC-22 | A malformed private-form file, missing or malformed signed outcome, invalid outcome signature, untrusted outcome signer, or failed Git tree/blob read yields `unverifiable` with reason `input_unreadable` and returns no partial statement set; a readable store with no matching record yields `statements_not_retained`. | Test |
+| FR-064-AC-23 | After the Git private-store round trip, the exact RFC 8785 approval-statement bytes, signature-bundle string, and verified final publish outcome are returned unchanged; the verifier accepts a published fixture statement and rejects a one-byte change. | Test |
+| FR-064-AC-24 | Changing a well-formed stored outcome field or its bundle after signing makes the private-store read `unverifiable` with reason `input_unreadable`, even when the changed outcome remains structurally valid. | Test |
 
 ## Dependencies
 

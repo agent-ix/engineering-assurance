@@ -75,6 +75,8 @@ Out of scope: the sink behaviors ([FR-054](./FR-054-record-sink-interface-and-im
   reported as protected.
 - Engineering Assurance SHALL NOT infer a sink from any record content.
 - The Git private-store destination SHALL identify a separate private Git repository, not the publishing repository.
+- To determine whether a destination names the publishing repository, Engineering Assurance SHALL compare canonical
+  identities formed by ASCII-lowercasing both `owner/name` components; it SHALL NOT use case-sensitive string equality.
 - The Git private store SHALL use the fixed ref `refs/heads/engineering-assurance-private-records`; the ref is not
   supplied by sink configuration.
 - Engineering Assurance SHALL refuse a private-store destination that does not match the `owner/name` grammar in this
@@ -93,8 +95,9 @@ Out of scope: the sink behaviors ([FR-054](./FR-054-record-sink-interface-and-im
 | FR-055-AC-5 | A pull request branch that changes `.engineering-assurance/sinks.json`, the role policy or the workflow-identity policy does not change the document used for that pull request; the protected base branch's document is used. | Test |
 | FR-055-AC-6 | When the source reports the base branch as unprotected, or does not report protection, each of the three documents is refused with `policy_branch_unprotected` and the operation that needed it fails. | Test |
 | FR-055-AC-7 | An absent `sinks.json`, a document without `private_store.destination` for a public repository, and a document without it for a private repository whose default is `private_store`, are each refused with `sink_config_incomplete`, and the first publish is refused with nothing sent or stored. | Test |
-| FR-055-AC-8 | A `private_store.destination` that is not exactly `owner/name` or names the publishing repository is refused with `sink_config_invalid` before a private form is written. | Test |
+| FR-055-AC-8 | A `private_store.destination` that is not exactly `owner/name` or whose canonical ASCII-lowercase owner/name equals the publishing repository's canonical identity is refused with `sink_config_invalid` before a private form is written. | Test |
 | FR-055-AC-9 | A valid destination is read and written only at `refs/heads/engineering-assurance-private-records`; a sink configuration that attempts to supply a different ref is refused with `sink_config_invalid`. | Test |
+| FR-055-AC-10 | A destination that differs from the publishing repository only by ASCII letter case is refused with `sink_config_invalid` before any private form is written. | Test |
 
 ## Dependencies
 
