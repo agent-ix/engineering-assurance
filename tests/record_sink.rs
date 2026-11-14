@@ -50,6 +50,8 @@ struct Store {
     public: RefCell<Vec<(String, PublicRecord)>>,
     fail_private: bool,
     preparation: Option<StorePreparation>,
+    incomplete_record_ids: RefCell<Vec<RecordId>>,
+    prepared_record_ids: RefCell<Vec<RecordId>>,
     fail_outcome: bool,
     outcomes: RefCell<Vec<(String, RecordId, SinkKind, ApprovalStatementPublishOutcome)>>,
     events: Events,
@@ -77,6 +79,16 @@ impl PrivateStore for Store {
         _sink: SinkKind,
     ) -> Result<StorePreparation, StoreError> {
         self.events.borrow_mut().push("prepare");
+        self.prepared_record_ids
+            .borrow_mut()
+            .push(private.record_id.clone());
+        if self
+            .incomplete_record_ids
+            .borrow()
+            .contains(&private.record_id)
+        {
+            return Ok(StorePreparation::OutcomeIncomplete);
+        }
         if let Some(preparation) = self.preparation {
             return Ok(preparation);
         }
@@ -236,9 +248,13 @@ impl Signer for StandInSigner {
 // ---- fixtures --------------------------------------------------------------
 
 fn public_json(subject: &str, references: &[(&str, &str)]) -> Value {
+    public_json_with_id(ID, subject, references)
+}
+
+fn public_json_with_id(id: &str, subject: &str, references: &[(&str, &str)]) -> Value {
     json!({
         "protocol": "engineering-assurance.record-public/v1",
-        "record_id": ID,
+        "record_id": id,
         "kind": "change_record",
         "subject": {"kind": "repo", "id": subject},
         "references": references.iter().map(|(k, i)| json!({"kind": k, "id": i})).collect::<Vec<_>>(),
@@ -251,6 +267,20 @@ fn public_json(subject: &str, references: &[(&str, &str)]) -> Value {
 fn record_with(subject: &str, references: &[(&str, &str)]) -> Record {
     let public = PublicRecord::from_json(public_json(subject, references).to_string().as_bytes())
         .expect("public form");
+    let mut private = PrivateRecord::new(public.record_id.clone());
+    private.ticket_text = Some("Rotate the ledger keys".to_owned());
+    private.criteria_text = Some("Keys rotate within a day".to_owned());
+    private.model_names = Some(vec!["model-x-7".to_owned()]);
+    Record::new(public, private).expect("record")
+}
+
+fn record_with_id(id: &str) -> Record {
+    let public = PublicRecord::from_json(
+        public_json_with_id(id, PUBLISHER, &[])
+            .to_string()
+            .as_bytes(),
+    )
+    .expect("public form");
     let mut private = PrivateRecord::new(public.record_id.clone());
     private.ticket_text = Some("Rotate the ledger keys".to_owned());
     private.criteria_text = Some("Keys rotate within a day".to_owned());
@@ -575,14 +605,32 @@ fn tc_981_replay_returns_the_retained_outcome_without_reinvoking_the_sink() {
 #[trace("TC-982", "FR-054-AC-16")]
 #[test]
 fn tc_982_incomplete_prior_outcome_refuses_before_the_sink_runs() {
-    let mut world = World::new();
-    world.store.preparation = Some(StorePreparation::OutcomeIncomplete);
-    let result = world.publish(SinkKind::PublicLog, &record());
+    let world = World::new();
+    let incomplete = record();
+    world
+        .store
+        .incomplete_record_ids
+        .borrow_mut()
+        .push(incomplete.id().clone());
+    let result = world.publish(SinkKind::PublicLog, &incomplete);
     assert_eq!(result.status, Status::Refused);
     assert_eq!(result.error, Some(ErrorCode::PrivateStoreOutcomeIncomplete));
     assert!(world.log.entries.borrow().is_empty());
     assert_eq!(*world.signer.public_calls.borrow(), 0);
     assert!(world.store.outcomes.borrow().is_empty());
+
+    let fresh = record_with_id("11111111-1111-4111-8111-111111111111");
+    assert_ne!(incomplete.id(), fresh.id());
+    let retry = world.publish(SinkKind::PublicLog, &fresh);
+    assert_eq!(retry.status, Status::Published);
+    assert_eq!(retry.record_id, *fresh.id());
+    assert_eq!(world.log.entries.borrow().len(), 1);
+    assert_eq!(world.log.entries.borrow()[0].1.record_id, *fresh.id());
+    assert_eq!(
+        world.store.prepared_record_ids.borrow().as_slice(),
+        &[incomplete.id().clone(), fresh.id().clone()],
+        "the incomplete ID remains blocked while a distinct fresh ID proceeds"
+    );
 }
 
 // ---- FR-055 ------------------------------------------------------------------
