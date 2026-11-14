@@ -93,6 +93,16 @@ fn exit_with_output(arguments: &mut impl Iterator<Item = OsString>) -> ! {
     process::exit(code);
 }
 
+fn write_and_exit(arguments: &mut impl Iterator<Item = OsString>) -> ! {
+    let output = argument(arguments);
+    let code = text(argument(arguments))
+        .parse::<i32>()
+        .unwrap_or_else(|_| fail("invalid exit code"));
+    fs::write(output, b"unaccepted output")
+        .unwrap_or_else(|_| fail("cannot write unaccepted output"));
+    process::exit(code);
+}
+
 fn wait(arguments: &mut impl Iterator<Item = OsString>) {
     let millis = text(argument(arguments))
         .parse::<u64>()
@@ -193,6 +203,7 @@ fn main() {
         ),
         "touch" => fs::write(argument(&mut arguments), b"launched")
             .unwrap_or_else(|_| fail("cannot write launch marker")),
+        "write-exit" => write_and_exit(&mut arguments),
         "wait-read" => wait_read(&mut arguments),
         "exit" => exit_with_output(&mut arguments),
         "wait" => wait(&mut arguments),

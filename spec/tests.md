@@ -977,6 +977,9 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-9003 | A caller mirror without `all.zip`, or with a Wolfi archive, is rejected | Unit | P0 | FR-044-AC-12 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
 | TC-9004 | `make osv-scanner-integration` refuses missing, relative or invalid scanner/database paths and names the missing variable | Unit | P0 | FR-044-CON-1, FR-044-AC-9 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
 | TC-9005 | The offline scanner report associates the expected Debian advisory with the fixture's exact libwebp name, version and purl | Integration | P0 | FR-044-AC-13, FR-044-AC-14 | 🚧 Ignored; local Debian database and runtime advisory match unavailable |
+| TC-9006 | The actual OSV-Scanner executable fails without a database and returns no report artifact | Integration | P0 | FR-044-AC-5 | ✅ Explicitly run with OSV-Scanner 2.7.1: `failed`, no result artifact, stderr retained; ignored by default |
+| TC-9007 | OSV-Scanner completes over the Debian SBOM fixture and supplied local mirror inside a network namespace without networking | Integration | P0 | FR-044-AC-8 | 🚧 Ignored; requires scanner, local database and bubblewrap network isolation |
+| TC-9008 | The scanner receives `in/sbom.cdx.json` and reads the retained bytes after the upstream SBOM source changes | Integration | P0 | FR-044-AC-11 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
 
 ## Option Permutation Matrix
 

@@ -1024,6 +1024,14 @@ fn finish_outcome<A: ProducerResponseAdapter>(
             }
         }
     };
+    // Output artifacts are response inputs, not failure evidence. Keep the
+    // captured process evidence for diagnosis, but expose output only after
+    // the response adapter has accepted the producer result.
+    let artifacts = if matches!(&state, ProducerExecutionState::Completed { .. }) {
+        artifacts
+    } else {
+        Vec::new()
+    };
     (state, evidence, artifacts, cancellation_event)
 }
 

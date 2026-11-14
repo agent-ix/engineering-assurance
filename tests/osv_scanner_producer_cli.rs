@@ -215,6 +215,15 @@ fn run_request(request: &Value) -> Output {
         .expect("the Cargo-built CLI must start")
 }
 
+fn spawn_request(request: &Value) -> std::process::Child {
+    Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
+        .args(["producer-execute", "--request", &request.to_string()])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("the Cargo-built CLI must start")
+}
+
 fn result(request: &Value) -> Value {
     let output = run_request(request);
     assert_eq!(output.status.code(), Some(0), "stderr: {:?}", output.stderr);
@@ -232,6 +241,35 @@ fn assert_valid_request(request: &Value) {
 fn write_scanner(root: &Path, script: &str) -> PathBuf {
     let path = root.join("scanner-fixture");
     fs::write(&path, format!("#!/bin/sh\n{script}")).expect("scanner fixture");
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("executable bit");
+    path
+}
+
+fn debian_sbom() -> Vec<u8> {
+    json!({
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.5",
+        "version": 1,
+        "components": [{
+            "type": "library",
+            "name": OS_NAME,
+            "version": OS_VERSION,
+            "purl": OS_PURL
+        }]
+    })
+    .to_string()
+    .into_bytes()
+}
+
+fn write_network_isolated_scanner(root: &Path, scanner: &Path) -> PathBuf {
+    let path = root.join("network-isolated-scanner");
+    let script = format!(
+        "exec /usr/bin/bwrap --unshare-net --ro-bind / / --bind '{}' '{}' -- '{}' \"$@\"\n",
+        root.display(),
+        root.display(),
+        scanner.display()
+    );
+    fs::write(&path, format!("#!/bin/sh\n{script}")).expect("network-isolated scanner");
     fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("executable bit");
     path
 }
@@ -445,19 +483,7 @@ fn tc_9004_integration_lane_refuses_missing_scanner_or_database() {
 fn tc_9005_scans_the_debian_sbom_fixture_for_its_expected_advisory() {
     let scanner = scanner();
     let supplied_database = database();
-    let sbom = json!({
-        "bomFormat": "CycloneDX",
-        "specVersion": "1.5",
-        "version": 1,
-        "components": [{
-            "type": "library",
-            "name": OS_NAME,
-            "version": OS_VERSION,
-            "purl": OS_PURL
-        }]
-    })
-    .to_string()
-    .into_bytes();
+    let sbom = debian_sbom();
     let root = workspace(&sbom);
     copy_database(&supplied_database, &root.path().join("db"));
     let request = osv_request(
@@ -511,4 +537,126 @@ fn tc_9005_scans_the_debian_sbom_fixture_for_its_expected_advisory() {
     );
     // Runtime fixture behavior is not a compliance claim. In particular this
     // test does not interpret an empty vulnerability list as clean evidence.
+}
+
+#[trace("TC-9006", "FR-044-AC-5")]
+#[test]
+#[ignore = "needs EA_TEST_OSV_SCANNER; intentionally uses an empty local database"]
+fn tc_9006_real_scanner_refuses_an_empty_database_without_a_report() {
+    let scanner = scanner();
+    let root = workspace(&debian_sbom());
+    let request = osv_request(
+        root.path(),
+        &scanner.executable,
+        &scanner.version,
+        &root.path().join("db"),
+    );
+    assert_valid_request(&request);
+
+    let value = result(&request);
+    assert_eq!(value["state"]["kind"], "failed", "{value}");
+    assert!(
+        value["artifacts"].as_array().expect("artifacts").is_empty(),
+        "an empty local database must not produce a report: {value}"
+    );
+    assert!(
+        !value["process"]["stderr"]["bytes"]
+            .as_array()
+            .expect("retained stderr bytes")
+            .is_empty(),
+        "database failure diagnostics remain available: {value}"
+    );
+}
+
+#[trace("TC-9007", "FR-044-AC-8")]
+#[test]
+#[ignore = "needs EA_TEST_OSV_SCANNER and EA_TEST_OSV_DB; network namespace blocks scanner networking"]
+fn tc_9007_real_scanner_completes_with_network_disabled() {
+    let scanner = scanner();
+    let supplied_database = database();
+    let root = workspace(&debian_sbom());
+    copy_database(&supplied_database, &root.path().join("db"));
+    let isolated = write_network_isolated_scanner(root.path(), &scanner.executable);
+    let request = osv_request(
+        root.path(),
+        &isolated,
+        &scanner.version,
+        &root.path().join("db"),
+    );
+    assert_valid_request(&request);
+
+    let value = result(&request);
+    assert_eq!(value["state"]["kind"], "completed", "{value}");
+    assert!(
+        matches!(
+            value["state"]["observation"]["exitCode"].as_i64(),
+            Some(0 | 1)
+        ),
+        "{value}"
+    );
+    let artifacts = value["artifacts"].as_array().expect("artifacts");
+    assert_eq!(artifacts.len(), 1, "{value}");
+    assert_eq!(artifacts[0]["role"], "advisory-report");
+    let report: Value = serde_json::from_slice(
+        &fs::read(root.path().join(REPORT_PATH)).expect("retained offline report"),
+    )
+    .expect("OSV report JSON");
+    assert!(report["results"].is_array(), "{report}");
+    // Completion is fixture behavior only and does not discharge an obligation.
+}
+
+#[trace("TC-9008", "FR-044-AC-11")]
+#[test]
+fn tc_9008_scanner_reads_the_retained_sbom_after_the_upstream_source_changes() {
+    let original = b"{\"original\":true}\n";
+    let replacement = b"{\"replacement\":true}\n";
+    let root = workspace(original);
+    let upstream = tempfile::tempdir().expect("upstream source root");
+    let source = upstream.path().join("source-sbom.cdx.json");
+    fs::write(&source, original).expect("upstream SBOM");
+    fs::copy(&source, root.path().join(SBOM_PATH)).expect("retain SBOM at input path");
+
+    let ready = root.path().join("out/input-ready");
+    let release = root.path().join("out/input-release");
+    let observed = root.path().join("out/input-observed");
+    let request = fixture_request(
+        root.path(),
+        &format!(
+            "input=; for arg do input=\"$arg\"; done; test \"$input\" = 'in/sbom.cdx.json' || exit 42; : > '{}'; while [ ! -e '{}' ]; do sleep 0.01; done; cat \"$input\" > '{}'; printf '{{\"results\":[]}}\\n' > out/osv-scanner.json; exit 1",
+            ready.display(),
+            release.display(),
+            observed.display()
+        ),
+    );
+    assert_valid_request(&request);
+
+    let mut child = spawn_request(&request);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !ready.exists() {
+        if let Some(status) = child.try_wait().expect("check producer process") {
+            panic!("producer exited before scanner fixture started: {status}");
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "scanner fixture did not reach its input read"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+
+    fs::write(&source, replacement).expect("replace upstream SBOM after retention");
+    fs::write(&release, b"read retained input").expect("release scanner fixture");
+    let output = child.wait_with_output().expect("producer process result");
+    assert_eq!(output.status.code(), Some(0), "stderr: {:?}", output.stderr);
+    let value: Value = serde_json::from_slice(&output.stdout).expect("producer result JSON");
+    assert_eq!(value["state"]["kind"], "completed", "{value}");
+    assert_eq!(value["state"]["observation"]["exitCode"], 1, "{value}");
+    assert_eq!(
+        fs::read(source).expect("changed upstream SBOM"),
+        replacement
+    );
+    assert_eq!(
+        fs::read(root.path().join(SBOM_PATH)).expect("retained SBOM path"),
+        original
+    );
+    assert_eq!(fs::read(observed).expect("scanner input bytes"), original);
 }
