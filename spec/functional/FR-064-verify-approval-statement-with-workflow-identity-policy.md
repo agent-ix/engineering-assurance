@@ -50,13 +50,18 @@ The verification command reports one line of JSON, `engineering-assurance.approv
 `status` one of `verified`, `untrusted_signer`, `signature_invalid`, `wrong_subject`, `predicate_invalid` or
 `unverifiable`, and, only when `status` is `unverifiable`, `reason` (one of `statements_not_retained`,
 `publish_refused`, `input_unreadable`); the schema is closed and has no other member besides `protocol`, `status` and
-`reason`; for a set of statements it also reports the role verdict of FR-061. It adds no cryptography
+`reason`; for a set of statements it reports the aggregate status defined by FR-064-AC-20 and the role verdict of
+FR-061. It adds no cryptography
 ([NFR-010](../non-functional/NFR-010-no-cryptography-of-our-own.md)).
 
 The verifier reads the full statements from the private store ([FR-054](./FR-054-record-sink-interface-and-implementations.md)),
 where the full private form is always kept for the `public_log` and `private_store` sinks. For a repository whose sink is
 `none` nothing is retained, so post-merge verification returns `unverifiable` with the reason
 `statements_not_retained`; the pre-merge review gate is unaffected because it reads the platform reviews.
+
+For post-merge verification, the lookup target is the exact tuple of repository, merged pull-request reference and
+merged commit. The read contract is specific to approval verification; it does not add a general-purpose record-list
+operation to the sink interface.
 
 Out of scope: the git-signature `approval-verify` command of
 [FR-041](./FR-041-signed-tag-approval-of-a-change-assurance-record.md), which this command does not replace.
@@ -74,6 +79,19 @@ Out of scope: the git-signature `approval-verify` command of
 - The statement verifier SHALL return `unverifiable` with the reason `publish_refused` for a statement the leak check refused, which the private store retains.
 - The statement verifier SHALL read statements from the private store.
 - The statement verifier SHALL return `unverifiable` with the reason `statements_not_retained` for a repository whose sink is `none`.
+- The statement verifier SHALL retrieve the complete set of retained approval statements for the exact requested repository, merged pull-request reference and merged commit.
+- Each retrieved result SHALL include the exact statement bytes, its associated signature bundle and its publish outcome.
+- The statement verifier SHALL verify every matching statement with its associated signature bundle.
+- The statement verifier SHALL NOT select a statement by storage order.
+- Only statements whose status is `verified` SHALL contribute to the FR-061 evaluation.
+- For a non-empty set of matching statements, the aggregate status SHALL be `verified` only when every statement status is `verified`.
+- Otherwise, the aggregate status SHALL be the first present status in this fixed precedence order: `unverifiable`, `signature_invalid`, `untrusted_signer`, `wrong_subject`, `predicate_invalid`.
+- When the aggregate status is `unverifiable`, the result SHALL carry the reason from a matching statement with that status.
+- When matching statements have more than one `unverifiable` reason, the aggregate reason SHALL be the first present reason in this fixed precedence order: `input_unreadable`, `publish_refused`, `statements_not_retained`.
+- The statement verifier SHALL return `unverifiable` with the reason `statements_not_retained` when the private store returns no retained matching statement.
+- The statement verifier SHALL return `unverifiable` with the reason `input_unreadable` when the private-store read fails.
+- The statement verifier SHALL return `unverifiable` with the reason `publish_refused` for a retained matching statement whose publish outcome was refused, including a leak-check refusal.
+- A statement with publish outcome `refused` SHALL NOT contribute to the FR-061 evaluation.
 - The statement verifier SHALL evaluate the verified statements with the role evaluation function of FR-061.
 - The statement verifier SHALL read the workflow-identity policy and the role policy from the protected base branch.
 - The statement verifier SHALL NOT trust an identity named only inside the statement.
@@ -98,6 +116,11 @@ Out of scope: the git-signature `approval-verify` command of
 | FR-064-AC-13 | A release statement signed by the `release_attester` workflow called from a tag push `refs/tags/v1.2.0` of the listed source repository verifies against an entry with `source_ref_prefix` `refs/tags/v`; the same signature from a pull request ref, a branch ref, another source repository or an unlisted signer ref yields `untrusted_signer`. | Test |
 | FR-064-AC-14 | A receipt signed by the `receipt_writer` workflow called from the listed source repository's default branch ref verifies against an entry with `source_ref`; the same signature from a tag ref yields `untrusted_signer`; an entry for these roles without `source_repository` or with both `source_ref` and `source_ref_prefix` is refused as invalid. | Test |
 | FR-064-AC-15 | A release or receipt signed through the listed reusable workflow by a caller workflow at another path in the source repository, or from a run whose trigger event is `schedule`, `workflow_dispatch`, `issue_comment` or `pull_request_target`, yields `untrusted_signer`; an entry for these roles without `source_workflow_path` or `event`, or with an `event` other than `push`, is refused as invalid. | Test |
+| FR-064-AC-16 | For a request naming one repository, merged pull-request reference and merged commit, the verifier retrieves every retained matching approval statement, including its exact statement bytes, associated signature bundle and publish outcome; with multiple matches it verifies every statement and does not choose one by storage order, and only `verified` statements contribute to the FR-061 role verdict. | Test |
+| FR-064-AC-17 | A private-store lookup with no retained statement matching the exact repository, merged pull-request reference and merged commit yields `unverifiable` with reason `statements_not_retained`. | Test |
+| FR-064-AC-18 | A private-store read failure yields `unverifiable` with reason `input_unreadable`. | Test |
+| FR-064-AC-19 | A sole retained matching statement whose publish outcome was refused, including by the leak check, yields `unverifiable` with reason `publish_refused` and is not counted in the FR-061 role verdict. | Test |
+| FR-064-AC-20 | For a non-empty matching set, the aggregate status is `verified` only when every statement verifies; otherwise it is the first present status in the fixed order `unverifiable`, `signature_invalid`, `untrusted_signer`, `wrong_subject`, `predicate_invalid`. Thus, one `verified` and one `untrusted_signer` statement produce aggregate `untrusted_signer`, while the role verdict counts only the verified statement; when multiple results are `unverifiable`, the result reason is the first present in the fixed order `input_unreadable`, `publish_refused`, `statements_not_retained`. | Test |
 
 ## Dependencies
 
