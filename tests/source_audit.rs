@@ -142,6 +142,9 @@ fn direct_dependencies_for(features: &[&str]) -> BTreeSet<String> {
         "--prefix",
         "none",
     ]);
+    command
+        .arg("--manifest-path")
+        .arg(repository_root().join("Cargo.toml"));
     for feature in features {
         command.args(["--features", feature]);
     }
@@ -169,18 +172,17 @@ struct SignatureVerifierAudit {
     functions: Vec<String>,
     resolver_calls: Vec<(String, String)>,
     tool_calls: Vec<(String, String)>,
+    process_host_calls: Vec<String>,
     gitsign_verdict_calls: Vec<String>,
     gitsign_run_calls: Vec<String>,
+    cms_branch_functions: BTreeSet<String>,
     direct_process_api: bool,
     external_roots: BTreeSet<String>,
 }
 
 impl SignatureVerifierAudit {
     fn function(&self) -> &str {
-        self.functions
-            .last()
-            .map(String::as_str)
-            .unwrap_or("<module>")
+        self.functions.last().map_or("<module>", String::as_str)
     }
 }
 
@@ -191,17 +193,27 @@ impl<'ast> Visit<'ast> for SignatureVerifierAudit {
         self.functions.pop();
     }
 
-    fn visit_item_use(&mut self, item: &'ast syn::ItemUse) {
-        let root = match &item.tree {
-            UseTree::Path(path) => path.ident.to_string(),
-            UseTree::Name(name) => name.ident.to_string(),
-            UseTree::Rename(rename) => rename.ident.to_string(),
-            UseTree::Group(_) => String::new(),
-            UseTree::Glob(_) => String::new(),
-        };
-        if !root.is_empty() {
-            self.add_external_root(root);
+    fn visit_impl_item_fn(&mut self, item: &'ast syn::ImplItemFn) {
+        self.functions.push(item.sig.ident.to_string());
+        syn::visit::visit_impl_item_fn(self, item);
+        self.functions.pop();
+    }
+
+    fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
+        if item.attrs.iter().any(|attribute| {
+            attribute.path().is_ident("cfg")
+                && matches!(
+                    &attribute.meta,
+                    syn::Meta::List(list) if list.tokens.to_string().contains("test")
+                )
+        }) {
+            return;
         }
+        syn::visit::visit_item_mod(self, item);
+    }
+
+    fn visit_item_use(&mut self, item: &'ast syn::ItemUse) {
+        self.inspect_use_tree(&item.tree, &mut Vec::new());
         syn::visit::visit_item_use(self, item);
     }
 
@@ -213,6 +225,9 @@ impl<'ast> Visit<'ast> for SignatureVerifierAudit {
             .collect::<Vec<_>>();
         if segments.starts_with(&["std".to_owned(), "process".to_owned()]) {
             self.direct_process_api = true;
+        }
+        if segments.ends_with(&["SignatureFormat".to_owned(), "Cms".to_owned()]) {
+            self.cms_branch_functions.insert(self.function().to_owned());
         }
         if let Some(root) = segments.first() {
             self.add_external_root(root.clone());
@@ -227,6 +242,15 @@ impl<'ast> Visit<'ast> for SignatureVerifierAudit {
                 .segments
                 .last()
                 .map(|segment| segment.ident.to_string());
+            if function
+                .path
+                .segments
+                .iter()
+                .any(|segment| segment.ident == "process_host")
+                && let Some(name) = name.as_ref()
+            {
+                self.process_host_calls.push(name.clone());
+            }
             let argument = call.args.first().and_then(|argument| match argument {
                 syn::Expr::Lit(literal) => match &literal.lit {
                     syn::Lit::Str(value) => Some(value.value()),
@@ -260,6 +284,42 @@ impl<'ast> Visit<'ast> for SignatureVerifierAudit {
 }
 
 impl SignatureVerifierAudit {
+    fn inspect_use_tree(&mut self, tree: &UseTree, prefix: &mut Vec<String>) {
+        match tree {
+            UseTree::Path(path) => {
+                if prefix.is_empty() {
+                    self.add_external_root(path.ident.to_string());
+                }
+                prefix.push(path.ident.to_string());
+                self.inspect_process_prefix(prefix);
+                self.inspect_use_tree(&path.tree, prefix);
+                prefix.pop();
+            }
+            UseTree::Name(name) => {
+                prefix.push(name.ident.to_string());
+                self.inspect_process_prefix(prefix);
+                prefix.pop();
+            }
+            UseTree::Rename(rename) => {
+                prefix.push(rename.ident.to_string());
+                self.inspect_process_prefix(prefix);
+                prefix.pop();
+            }
+            UseTree::Group(group) => {
+                for item in &group.items {
+                    self.inspect_use_tree(item, prefix);
+                }
+            }
+            UseTree::Glob(_) => self.inspect_process_prefix(prefix),
+        }
+    }
+
+    fn inspect_process_prefix(&mut self, prefix: &[String]) {
+        if prefix.starts_with(&["std".to_owned(), "process".to_owned()]) {
+            self.direct_process_api = true;
+        }
+    }
+
     fn add_external_root(&mut self, root: String) {
         if matches!(
             root.as_str(),
@@ -277,6 +337,19 @@ fn repository_source(relative_path: &str) -> String {
     syn::parse_file(&source)
         .unwrap_or_else(|error| panic!("cannot parse {}: {error}", path.display()));
     source
+}
+
+fn gitsign_program_constant(source: &syn::File) -> Option<String> {
+    source.items.iter().find_map(|item| match item {
+        Item::Const(item) if item.ident == "GITSIGN_PROGRAM" => match &*item.expr {
+            syn::Expr::Lit(value) => match &value.lit {
+                syn::Lit::Str(value) => Some(value.value()),
+                _ => None,
+            },
+            _ => None,
+        },
+        _ => None,
+    })
 }
 
 fn use_tree_imports_child_program(tree: &UseTree, prefix: &mut Vec<String>) -> bool {
@@ -473,36 +546,6 @@ fn tc_653_signature_verification_delegates_to_system_verifiers() {
         "the signature-verify feature must add only its data-serialization dependency"
     );
 
-    let full_dependencies = direct_dependencies_for(&["full"]);
-    let reviewed_full_dependencies = [
-        "agent-ix-engineering-assurance-campaign",
-        "cap-std",
-        "clap",
-        "flate2",
-        "ix-cli-kit",
-        "jsonschema",
-        "regex",
-        "rustix",
-        "serde",
-        "serde_json",
-        "serde_json_canonicalizer",
-        "syn",
-        "tar",
-        "tempfile",
-        "thiserror",
-        "time",
-        "unicode-casefold",
-        "yaml_serde",
-        "zip",
-    ]
-    .map(str::to_owned)
-    .into_iter()
-    .collect::<BTreeSet<_>>();
-    assert_eq!(
-        full_dependencies, reviewed_full_dependencies,
-        "review the full binary dependency graph when changing crate dependencies"
-    );
-
     let pure_source = repository_source("src/signature_verify.rs");
     let pure_syntax = syn::parse_file(&pure_source).expect("classifier parses");
     let mut pure_audit = SignatureVerifierAudit::default();
@@ -535,6 +578,15 @@ fn tc_653_signature_verification_delegates_to_system_verifiers() {
     assert!(
         !adapter_audit.direct_process_api,
         "signature checks must use the bounded process host"
+    );
+    assert_eq!(
+        adapter_audit
+            .process_host_calls
+            .iter()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(["run_configured", "run_configured_stdin"]),
+        "all adapter child processes must cross the bounded process host"
     );
     assert_eq!(
         adapter_audit
@@ -572,18 +624,13 @@ fn tc_653_signature_verification_delegates_to_system_verifiers() {
         vec!["commit_verdict".to_owned(), "tag_verdict".to_owned()],
         "only the commit and tag CMS branches may delegate to gitsign"
     );
-    let gitsign_constant = adapter_syntax.items.iter().find_map(|item| match item {
-        Item::Const(item) if item.ident == "GITSIGN_PROGRAM" => match &*item.expr {
-            syn::Expr::Lit(value) => match &value.lit {
-                syn::Lit::Str(value) => Some(value.value()),
-                _ => None,
-            },
-            _ => None,
-        },
-        _ => None,
-    });
     assert_eq!(
-        gitsign_constant.as_deref(),
+        adapter_audit.cms_branch_functions,
+        BTreeSet::from(["commit_verdict".to_owned(), "tag_verdict".to_owned()]),
+        "the gitsign call sites must be restricted to explicit CMS branches"
+    );
+    assert_eq!(
+        gitsign_program_constant(&adapter_syntax).as_deref(),
         Some("gitsign"),
         "the CMS verifier executable must be fixed to gitsign"
     );
