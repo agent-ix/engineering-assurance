@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-//! Producer-reported CycloneDX 1.7 agent BOM construction (FR-073).
+//! Producer-reported `CycloneDX` 1.7 agent BOM construction (FR-073).
 
 use std::collections::BTreeMap;
 
@@ -17,7 +17,7 @@ use uuid::Uuid;
 /// Errors returned for invalid session descriptors or BOM documents.
 #[derive(Debug, Error)]
 pub enum BomError {
-    /// The descriptor or resulting BOM is not valid for CycloneDX 1.7.
+    /// The descriptor or resulting BOM is not valid for `CycloneDX` 1.7.
     #[error("agent BOM is invalid")]
     Invalid,
     /// The input document contains a forbidden formulation or declaration.
@@ -31,7 +31,7 @@ pub enum BomError {
 pub struct Plugin {
     /// Display name.
     pub name: String,
-    /// CycloneDX package URL.
+    /// `CycloneDX` package URL.
     pub purl: String,
 }
 
@@ -62,11 +62,11 @@ pub struct AgentSession {
     pub facts: BTreeMap<String, String>,
 }
 
-/// CycloneDX 1.7 BOM document produced for one agent session.
+/// `CycloneDX` 1.7 BOM document produced for one agent session.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct CycloneDxBom {
-    /// CycloneDX format marker.
+    /// `CycloneDX` format marker.
     pub bom_format: String,
     /// Specification version.
     pub spec_version: String,
@@ -94,11 +94,11 @@ pub enum ComponentType {
     Library,
 }
 
-/// CycloneDX component.
+/// `CycloneDX` component.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct Component {
-    /// CycloneDX component kind.
+    /// `CycloneDX` component kind.
     #[serde(rename = "type")]
     pub component_type: ComponentType,
     /// Component name.
@@ -110,7 +110,7 @@ pub struct Component {
     pub properties: Vec<Property>,
 }
 
-/// CycloneDX service.
+/// `CycloneDX` service.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct Service {
@@ -123,7 +123,7 @@ pub struct Service {
     pub properties: Vec<Property>,
 }
 
-/// A CycloneDX key/value property.
+/// A `CycloneDX` key/value property.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Property {
@@ -133,7 +133,12 @@ pub struct Property {
     pub value: String,
 }
 
-/// Builds and validates a CycloneDX 1.7 BOM with a random serial number.
+/// Builds and validates a `CycloneDX` 1.7 BOM with a random serial number.
+///
+/// # Errors
+///
+/// Returns [`BomError::Invalid`] when the producer session descriptor is
+/// malformed or the resulting document fails the `CycloneDX` validator.
 pub fn build_bom(session: &AgentSession) -> Result<CycloneDxBom, BomError> {
     if session.harness.is_empty()
         || session.model.is_empty()
@@ -213,13 +218,23 @@ fn reported_properties() -> Vec<Property> {
     }]
 }
 
-/// Validates that a BOM has no forbidden sections and passes CycloneDX 1.7 validation.
+/// Validates that a BOM has no forbidden sections and passes `CycloneDX` 1.7 validation.
+///
+/// # Errors
+///
+/// Returns [`BomError::Invalid`] when serialization or `CycloneDX` validation
+/// fails.
 pub fn validate_bom(bom: &CycloneDxBom) -> Result<(), BomError> {
     let value = serde_json::to_value(bom).map_err(|_| BomError::Invalid)?;
     validate_bom_value(&value)
 }
 
 /// Validates untrusted serialized BOM JSON and rejects formulation/declarations.
+///
+/// # Errors
+///
+/// Returns [`BomError::ForbiddenSection`] for formulation or declarations and
+/// [`BomError::Invalid`] for malformed JSON or a failed `CycloneDX` validation.
 pub fn validate_bom_value(value: &Value) -> Result<(), BomError> {
     let object = value.as_object().ok_or(BomError::Invalid)?;
     if object.contains_key("formulation") || object.contains_key("declarations") {
@@ -236,83 +251,5 @@ pub fn validate_bom_value(value: &Value) -> Result<(), BomError> {
         Ok(())
     } else {
         Err(BomError::Invalid)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn session() -> AgentSession {
-        AgentSession {
-            harness: "Fictional Harness".to_owned(),
-            model: "Private Model Name".to_owned(),
-            plugins: vec![Plugin {
-                name: "Fictional Plugin".to_owned(),
-                purl: "pkg:generic/fictional-plugin@1.0".to_owned(),
-            }],
-            mcp_servers: vec![McpServer {
-                name: "Fictional MCP".to_owned(),
-                endpoint: None,
-            }],
-            facts: BTreeMap::from([("session-kind".to_owned(), "coding".to_owned())]),
-        }
-    }
-
-    /// Trace: FR-073-AC-1, FR-073-AC-2
-    #[test]
-    fn builds_valid_reported_cyclonedx_17_document() {
-        let bom = build_bom(&session()).expect("BOM builds");
-        assert_eq!(bom.spec_version, "1.7");
-        assert!(
-            bom.components
-                .iter()
-                .any(|component| component.component_type == ComponentType::Application)
-        );
-        assert!(
-            bom.components
-                .iter()
-                .any(|component| component.component_type == ComponentType::MachineLearningModel)
-        );
-        assert!(
-            bom.components
-                .iter()
-                .any(|component| component.purl.is_some())
-        );
-        assert_eq!(bom.services.len(), 2);
-        let value = serde_json::to_value(&bom).expect("JSON");
-        let properties = value["properties"].as_array().expect("properties");
-        assert!(properties.iter().all(|property| {
-            property["name"]
-                .as_str()
-                .is_some_and(|name| name.starts_with("agent-ix:"))
-        }));
-        assert!(
-            properties
-                .iter()
-                .filter(|property| property["name"] == "agent-ix:reported-by")
-                .all(|property| property["value"] == "producer")
-        );
-        assert!(validate_bom_value(&value).is_ok());
-    }
-
-    /// Trace: FR-073-AC-3
-    #[test]
-    fn rejects_formulation_section() {
-        let mut value =
-            serde_json::to_value(build_bom(&session()).expect("BOM builds")).expect("JSON");
-        value["formulation"] = serde_json::json!([]);
-        assert!(matches!(
-            validate_bom_value(&value),
-            Err(BomError::ForbiddenSection)
-        ));
-    }
-
-    /// Trace: FR-073-AC-6
-    #[test]
-    fn identical_sessions_get_distinct_random_serials() {
-        let first = build_bom(&session()).expect("first BOM");
-        let second = build_bom(&session()).expect("second BOM");
-        assert_ne!(first.serial_number, second.serial_number);
     }
 }

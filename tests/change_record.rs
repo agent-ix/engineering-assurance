@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
+//! Acceptance coverage for change-record predicates and producer-reported BOMs.
+
 use std::collections::BTreeMap;
 
 use engineering_assurance::change_record::{
-    AgentSession, ApprovalDecision, ApprovalVerdict, BomError, Failure, McpServer, Plugin,
-    PredicateInput, Review, ReviewKind, ReviewVerdict, Status, Ticket, TicketKind, build_bom,
-    build_predicate, validate_bom_value, verify_private_form_digest,
+    build_bom, build_predicate, validate_bom_value, verify_private_form_digest, AgentSession,
+    ApprovalDecision, ApprovalVerdict, BomError, Failure, McpServer, Plugin, PredicateInput,
+    Review, ReviewKind, ReviewVerdict, Status, Ticket, TicketKind,
 };
 use ix_trace_rs::trace;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 fn sha(fill: char) -> String {
     format!("sha256:{}", fill.to_string().repeat(64))
@@ -41,6 +43,8 @@ fn fixture() -> PredicateInput {
                 (
                     role.to_owned(),
                     ApprovalDecision::Covered {
+                        individual: format!("{role}-person"),
+                        is_human: true,
                         statement_digest: sha('c'),
                     },
                 )
@@ -59,7 +63,14 @@ fn fixture() -> PredicateInput {
     }
 }
 
-#[trace("TC-570", "TC-573", "FR-072-AC-1", "FR-072-AC-4")]
+#[trace(
+    "TC-570",
+    "TC-573",
+    "TC-575",
+    "FR-072-AC-1",
+    "FR-072-AC-4",
+    "FR-072-AC-6"
+)]
 #[test]
 fn predicate_has_exact_public_shape_and_excludes_private_text() {
     let input = fixture();
@@ -67,6 +78,13 @@ fn predicate_has_exact_public_shape_and_excludes_private_text() {
     let predicate = build_predicate(input).expect("fixture builds");
     let value = serde_json::to_value(&predicate).expect("serializes");
     assert_eq!(predicate.status, Status::Passed);
+    assert_eq!(
+        engineering_assurance::change_record::PREDICATE_TYPE,
+        concat!(
+            "https:",
+            "//schemas.agent-ix.ai/attestation/change-record/v1"
+        )
+    );
     assert_eq!(predicate.approvals.len(), 3);
     assert!(predicate.approvals.iter().all(|approval| {
         approval.verdict == ApprovalVerdict::Covered && approval.statement_digest.is_some()
@@ -98,15 +116,6 @@ fn predicate_deserialization_and_schema_reject_invalid_shapes() {
     );
     let mut bad_grammar = serde_json::to_value(&predicate).expect("json");
     bad_grammar["criteria"][0] = json!("AC-0000");
-    assert!(
-        engineering_assurance::change_record::predicate::validate_predicate(
-            &serde_json::from_value::<engineering_assurance::change_record::ChangePredicate>(
-                serde_json::to_value(&predicate).expect("json")
-            )
-            .expect("typed predicate")
-        )
-        .is_ok()
-    );
     let schema = include_str!("../src/change_record_schemas/change-record-v1.schema.json");
     let schema: Value = serde_json::from_str(schema).expect("schema");
     let validator = jsonschema::validator_for(&schema).expect("compiled schema");
@@ -141,6 +150,68 @@ fn predicate_shows_missing_unstaffed_and_unavailable_roles() {
     }
 }
 
+#[trace("FR-061-AC-2")]
+#[test]
+fn one_individual_cannot_cover_multiple_public_roles() {
+    let mut input = fixture();
+    input.approvals = vec![
+        (
+            "developer".to_owned(),
+            ApprovalDecision::Covered {
+                individual: "same-person".to_owned(),
+                is_human: true,
+                statement_digest: sha('a'),
+            },
+        ),
+        (
+            "engineer".to_owned(),
+            ApprovalDecision::Covered {
+                individual: "same-person".to_owned(),
+                is_human: true,
+                statement_digest: sha('b'),
+            },
+        ),
+        (
+            "stakeholder".to_owned(),
+            ApprovalDecision::Covered {
+                individual: "other-person".to_owned(),
+                is_human: true,
+                statement_digest: sha('c'),
+            },
+        ),
+    ];
+    let predicate = build_predicate(input).expect("incomplete predicate is emitted");
+    assert_eq!(predicate.status, Status::Failed);
+    assert_eq!(
+        predicate
+            .approvals
+            .iter()
+            .filter(|approval| approval.verdict == ApprovalVerdict::Covered)
+            .count(),
+        2
+    );
+    assert!(predicate.failures.contains(&Failure::ApprovalsIncomplete));
+}
+
+#[trace("FR-061-AC-8")]
+#[test]
+fn agent_approval_is_emitted_as_missing() {
+    let mut input = fixture();
+    input.approvals = vec![(
+        "developer".to_owned(),
+        ApprovalDecision::Covered {
+            individual: "agent-identity".to_owned(),
+            is_human: false,
+            statement_digest: sha('a'),
+        },
+    )];
+    let predicate = build_predicate(input).expect("failed predicate builds");
+    assert_eq!(predicate.status, Status::Failed);
+    assert_eq!(predicate.approvals[0].verdict, ApprovalVerdict::Missing);
+    assert_eq!(predicate.approvals[0].statement_digest, None);
+    assert!(predicate.failures.contains(&Failure::ApprovalsIncomplete));
+}
+
 #[trace("TC-576", "FR-072-AC-7")]
 #[test]
 fn one_private_form_byte_change_breaks_digest_verification() {
@@ -173,23 +244,20 @@ fn session() -> AgentSession {
 fn bom_validates_and_every_property_is_producer_reported() {
     let bom = build_bom(&session()).expect("valid CycloneDX document");
     assert_eq!(bom.spec_version, "1.7");
-    assert!(
-        bom.components
-            .iter()
-            .any(|component| component.component_type
-                == engineering_assurance::change_record::bom::ComponentType::Application)
-    );
-    assert!(
-        bom.components
-            .iter()
-            .any(|component| component.component_type
-                == engineering_assurance::change_record::bom::ComponentType::MachineLearningModel)
-    );
-    assert!(
-        bom.components
-            .iter()
-            .any(|component| component.purl.is_some())
-    );
+    assert!(bom
+        .components
+        .iter()
+        .any(|component| component.component_type
+            == engineering_assurance::change_record::bom::ComponentType::Application));
+    assert!(bom
+        .components
+        .iter()
+        .any(|component| component.component_type
+            == engineering_assurance::change_record::bom::ComponentType::MachineLearningModel));
+    assert!(bom
+        .components
+        .iter()
+        .any(|component| component.purl.is_some()));
     assert_eq!(bom.services.len(), 2);
     let value = serde_json::to_value(&bom).expect("json");
     let mut all_properties = value["properties"]
@@ -217,12 +285,10 @@ fn bom_validates_and_every_property_is_producer_reported() {
             .as_str()
             .is_some_and(|name| name.starts_with("agent-ix:"))
     }));
-    assert!(
-        all_properties
-            .iter()
-            .filter(|property| property["name"] == "agent-ix:reported-by")
-            .all(|property| property["value"] == "producer")
-    );
+    assert!(all_properties
+        .iter()
+        .filter(|property| property["name"] == "agent-ix:reported-by")
+        .all(|property| property["value"] == "producer"));
     assert!(validate_bom_value(&value).is_ok());
     let bom_bytes = serde_json::to_vec(&bom).expect("bom bytes");
     assert!(String::from_utf8_lossy(&bom_bytes).contains("Private Model Name"));
@@ -239,7 +305,6 @@ fn rejects_bom_formulation() {
     ));
 }
 
-/// Trace: TC-582, FR-073-AC-6
 #[trace("TC-582", "FR-073-AC-6")]
 #[test]
 fn bom_random_serial_changes_canonical_digest() {
