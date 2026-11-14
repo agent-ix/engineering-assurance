@@ -1284,147 +1284,120 @@ fn tc_650_signing_uses_the_public_path_only_after_the_check_passed() {
     assert_eq!(*refused.signer.public_calls.borrow(), 0);
 }
 
-#[trace("TC-651", "NFR-010-AC-2", "NFR-010-M-1")]
-#[test]
-fn tc_651_signing_is_delegated_and_record_sink_has_only_its_declared_dependencies() {
-    use std::collections::BTreeSet;
+#[derive(Default)]
+struct Boundary {
+    methods: Vec<String>,
+    implementations: Vec<String>,
+    calls: Vec<(String, Option<String>)>,
+    port_is_trait_object: bool,
+}
 
-    use syn::{Expr, ExprMethodCall, ItemImpl, ItemTrait, Type, visit::Visit};
+fn field_path(expression: &syn::Expr) -> Option<String> {
+    match expression {
+        syn::Expr::Path(path) => Some(
+            path.path
+                .segments
+                .iter()
+                .map(|segment| segment.ident.to_string())
+                .collect::<Vec<_>>()
+                .join("."),
+        ),
+        syn::Expr::Field(field) => Some(format!(
+            "{}.{}",
+            field_path(&field.base)?,
+            match &field.member {
+                syn::Member::Named(ident) => ident.to_string(),
+                syn::Member::Unnamed(index) => index.index.to_string(),
+            }
+        )),
+        _ => None,
+    }
+}
 
-    #[derive(Default)]
-    struct Boundary {
-        signer_methods: Vec<String>,
-        signer_implementations: Vec<String>,
-        signer_calls: Vec<(String, Option<String>)>,
-        signer_port_is_trait_object: bool,
+impl<'ast> syn::visit::Visit<'ast> for Boundary {
+    fn visit_item_trait(&mut self, item: &'ast syn::ItemTrait) {
+        if item.ident == "Signer" {
+            self.methods.extend(item.items.iter().filter_map(|item| {
+                if let syn::TraitItem::Fn(method) = item {
+                    Some(method.sig.ident.to_string())
+                } else {
+                    None
+                }
+            }));
+        }
+        syn::visit::visit_item_trait(self, item);
     }
 
-    fn field_path(expression: &Expr) -> Option<String> {
-        match expression {
-            Expr::Path(path) => Some(
-                path.path
-                    .segments
+    fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
+        if item.trait_.as_ref().is_some_and(|(path, _)| {
+            path.segments
+                .last()
+                .is_some_and(|segment| segment.ident == "Signer")
+        }) {
+            self.implementations.push("impl Signer".to_owned());
+        }
+        syn::visit::visit_item_impl(self, item);
+    }
+
+    fn visit_expr_method_call(&mut self, call: &'ast syn::ExprMethodCall) {
+        if matches!(
+            call.method.to_string().as_str(),
+            "sign_for_public_log" | "sign_without_public_log" | "signed_payload"
+        ) {
+            self.calls
+                .push((call.method.to_string(), field_path(&call.receiver)));
+        }
+        syn::visit::visit_expr_method_call(self, call);
+    }
+}
+
+fn visit_rust_files(path: &std::path::Path, boundary: &mut Boundary) {
+    for entry in std::fs::read_dir(path).expect("read sink source directory") {
+        let path = entry.expect("read sink source entry").path();
+        if path.is_dir() {
+            visit_rust_files(&path, boundary);
+        } else if path.extension().is_some_and(|extension| extension == "rs") {
+            let source = std::fs::read_to_string(&path).expect("read sink source");
+            let syntax = syn::parse_file(&source).expect("parse sink Rust source");
+            syn::visit::Visit::visit_file(boundary, &syntax);
+            if path.file_name().is_some_and(|name| name == "sink.rs") {
+                let ports = syntax
+                    .items
                     .iter()
-                    .map(|segment| segment.ident.to_string())
-                    .collect::<Vec<_>>()
-                    .join("."),
-            ),
-            Expr::Field(field) => Some(format!(
-                "{}.{}",
-                field_path(&field.base)?,
-                match &field.member {
-                    syn::Member::Named(ident) => ident.to_string(),
-                    syn::Member::Unnamed(index) => index.index.to_string(),
-                }
-            )),
-            _ => None,
-        }
-    }
-
-    impl<'ast> Visit<'ast> for Boundary {
-        fn visit_item_trait(&mut self, item: &'ast ItemTrait) {
-            if item.ident == "Signer" {
-                self.signer_methods
-                    .extend(item.items.iter().filter_map(|item| {
-                        if let syn::TraitItem::Fn(method) = item {
-                            Some(method.sig.ident.to_string())
-                        } else {
-                            None
-                        }
-                    }));
-            }
-            syn::visit::visit_item_trait(self, item);
-        }
-
-        fn visit_item_impl(&mut self, item: &'ast ItemImpl) {
-            if item.trait_.as_ref().is_some_and(|(path, _)| {
-                path.segments
-                    .last()
-                    .is_some_and(|segment| segment.ident == "Signer")
-            }) {
-                self.signer_implementations.push("impl Signer".to_owned());
-            }
-            syn::visit::visit_item_impl(self, item);
-        }
-
-        fn visit_expr_method_call(&mut self, call: &'ast ExprMethodCall) {
-            if matches!(
-                call.method.to_string().as_str(),
-                "sign_for_public_log" | "sign_without_public_log" | "signed_payload"
-            ) {
-                self.signer_calls
-                    .push((call.method.to_string(), field_path(&call.receiver)));
-            }
-            syn::visit::visit_expr_method_call(self, call);
-        }
-    }
-
-    fn visit_rust_files(path: &std::path::Path, boundary: &mut Boundary) {
-        for entry in std::fs::read_dir(path).expect("read sink source directory") {
-            let path = entry.expect("read sink source entry").path();
-            if path.is_dir() {
-                visit_rust_files(&path, boundary);
-            } else if path.extension().is_some_and(|extension| extension == "rs") {
-                let source = std::fs::read_to_string(&path).expect("read sink source");
-                let syntax = syn::parse_file(&source).expect("parse sink Rust source");
-                boundary.visit_file(&syntax);
-                if path.file_name().is_some_and(|name| name == "sink.rs") {
-                    let ports = syntax
-                        .items
-                        .iter()
-                        .find_map(|item| match item {
-                            syn::Item::Struct(item) if item.ident == "Ports" => Some(item),
-                            _ => None,
-                        })
-                        .expect("the sink ports type exists");
-                    let signer = ports
-                        .fields
-                        .iter()
-                        .find(|field| field.ident.as_ref().is_some_and(|ident| ident == "signer"))
-                        .expect("the sink ports carry the injected signer");
-                    boundary.signer_port_is_trait_object = match &signer.ty {
-                        Type::Reference(reference) => match reference.elem.as_ref() {
-                            Type::TraitObject(object) => object.bounds.iter().any(|bound| {
-                                matches!(bound, syn::TypeParamBound::Trait(trait_bound)
-                                    if trait_bound.path.segments.last().is_some_and(|segment| segment.ident == "Signer"))
-                            }),
-                            _ => false,
-                        },
+                    .find_map(|item| match item {
+                        syn::Item::Struct(item) if item.ident == "Ports" => Some(item),
+                        _ => None,
+                    })
+                    .expect("the sink ports type exists");
+                let signer = ports
+                    .fields
+                    .iter()
+                    .find(|field| field.ident.as_ref().is_some_and(|ident| ident == "signer"))
+                    .expect("the sink ports carry the injected signer");
+                boundary.port_is_trait_object = match &signer.ty {
+                    syn::Type::Reference(reference) => match reference.elem.as_ref() {
+                        syn::Type::TraitObject(object) => object.bounds.iter().any(|bound| {
+                            matches!(bound, syn::TypeParamBound::Trait(trait_bound)
+                                if trait_bound.path.segments.last().is_some_and(|segment| segment.ident == "Signer"))
+                        }),
                         _ => false,
-                    };
-                }
+                    },
+                    _ => false,
+                };
             }
         }
     }
+}
 
+fn inspect_signer_boundary() -> Boundary {
     let source_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/record_sink");
     let mut boundary = Boundary::default();
     visit_rust_files(&source_dir, &mut boundary);
-    assert_eq!(
-        boundary.signer_methods,
-        [
-            "sign_for_public_log",
-            "sign_without_public_log",
-            "signed_payload"
-        ]
-    );
-    assert!(boundary.signer_implementations.is_empty());
-    assert!(boundary.signer_port_is_trait_object);
-    let signer_calls: BTreeSet<_> = boundary.signer_calls.into_iter().collect();
-    assert_eq!(
-        signer_calls,
-        BTreeSet::from([
-            (
-                "sign_for_public_log".to_owned(),
-                Some("self.ports.signer".to_owned())
-            ),
-            (
-                "sign_without_public_log".to_owned(),
-                Some("self.ports.signer".to_owned())
-            ),
-            ("signed_payload".to_owned(), Some("verifier".to_owned())),
-        ])
-    );
+    boundary
+}
+
+fn assert_record_sink_dependencies() {
+    use std::collections::{BTreeSet, HashMap};
 
     let metadata = std::process::Command::new("cargo")
         .args([
@@ -1450,7 +1423,7 @@ fn tc_651_signing_is_delegated_and_record_sink_has_only_its_declared_dependencie
         .iter()
         .find(|package| package["name"] == "engineering-assurance")
         .expect("engineering-assurance package metadata");
-    let dependencies: std::collections::HashMap<_, _> = package["dependencies"]
+    let dependencies: HashMap<_, _> = package["dependencies"]
         .as_array()
         .expect("package dependencies")
         .iter()
@@ -1493,6 +1466,41 @@ fn tc_651_signing_is_delegated_and_record_sink_has_only_its_declared_dependencie
             "thiserror"
         ])
     );
+}
+
+#[trace("TC-651", "NFR-010-AC-2", "NFR-010-M-1")]
+#[test]
+fn tc_651_signing_is_delegated_and_record_sink_has_only_its_declared_dependencies() {
+    use std::collections::BTreeSet;
+
+    let boundary = inspect_signer_boundary();
+    assert_eq!(
+        boundary.methods,
+        [
+            "sign_for_public_log",
+            "sign_without_public_log",
+            "signed_payload"
+        ]
+    );
+    assert!(boundary.implementations.is_empty());
+    assert!(boundary.port_is_trait_object);
+    let calls: BTreeSet<_> = boundary.calls.into_iter().collect();
+    assert_eq!(
+        calls,
+        BTreeSet::from([
+            (
+                "sign_for_public_log".to_owned(),
+                Some("self.ports.signer".to_owned())
+            ),
+            (
+                "sign_without_public_log".to_owned(),
+                Some("self.ports.signer".to_owned())
+            ),
+            ("signed_payload".to_owned(), Some("verifier".to_owned())),
+        ])
+    );
+
+    assert_record_sink_dependencies();
 }
 
 /// A sink that would reach any log if it could. It stands in for a pluggable
