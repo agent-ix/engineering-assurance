@@ -21,7 +21,8 @@ use engineering_assurance::{
         ApprovalStatementStatus, RetainedApprovalStatement, verify_approval_statements,
     },
     approval_statement_writer::{
-        ApprovalStatementSigner, MergedPullRequest, StatementSigningError,
+        ApprovalStatementSigner, ApprovalStatementWriteRequest, MergedPullRequest,
+        StatementSigningError,
         write_approval_statements,
     },
     attestation_signing::{
@@ -52,11 +53,19 @@ const ITEMS: [(&str, &str); 3] = [
 const APPROVAL_FIXTURE_REPOSITORY: &str = "agent-ix/approval-fixture";
 const WRITER_WORKFLOW: &str = ".github/workflows/statement-writer.yml";
 
+fn hex_encode(bytes: &[u8]) -> String {
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        write!(encoded, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    encoded
+}
+
 struct FixtureStatementSigner;
 
 impl ApprovalStatementSigner for FixtureStatementSigner {
     fn sign_statement(&self, bytes: &[u8]) -> Result<String, StatementSigningError> {
-        let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+        let hex = hex_encode(bytes);
         Ok(format!("{WRITER_WORKFLOW}|{hex}"))
     }
 }
@@ -93,7 +102,7 @@ impl BundleVerifier for FixtureStatementVerifier {
         let Some((identity, signed_hex)) = bundle.split_once('|') else {
             return Err(VerificationFailure::InvalidSignature);
         };
-        let expected_hex: String = payload.iter().map(|byte| format!("{byte:02x}")).collect();
+        let expected_hex = hex_encode(payload);
         if expected_hex != signed_hex {
             return Err(VerificationFailure::InvalidSignature);
         }
@@ -371,12 +380,14 @@ fn verified_approval_statement_fixture(head_commit: &str) -> String {
     let (_, written) = write_approval_statements(
         &FixtureRecordSink,
         &FixtureStatementSigner,
-        merged,
-        &policy,
-        &[approval],
-        &account_types,
-        &names,
-        &[RecordId::from_random_bytes([8; 16])],
+        ApprovalStatementWriteRequest {
+            merged,
+            policy: &policy,
+            approvals: &[approval],
+            account_types: &account_types,
+            approver_names: &names,
+            record_ids: &[RecordId::from_random_bytes([8; 16])],
+        },
     )
     .expect("fixture approval statement is written");
     let written = written.into_iter().next().expect("one selected approval");
