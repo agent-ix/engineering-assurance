@@ -271,6 +271,15 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-057 | FR-057-AC-11 | TC-650 | ✅ `tests/record_sink.rs` passing |
 | FR-058 | FR-058-AC-1 | TC-661 | ✅ `src/attestation_signing.rs` approval-statement fixture shape and canonicalization |
 | FR-058 | FR-058-AC-7 | TC-663 | ✅ `src/attestation_signing.rs` missing-OIDC refusal |
+| FR-061 | FR-061-AC-2 | TC-948 | 🚧 Specified; test implementation and trace tag await merge of the EA-110 code branch |
+| FR-061 | FR-061-AC-3 | TC-947 | 🚧 Specified; test implementation and trace tag await merge of the EA-110 code branch |
+| FR-061 | FR-061-AC-5 | TC-949 | 🚧 Specified; test implementation and trace tag await merge of the EA-110 code branch |
+| FR-061 | FR-061-AC-6 | TC-950 | 🚧 Specified; test implementation and trace tag await merge of the EA-110 code branch |
+| FR-061 | FR-061-AC-7 | TC-951 | 🚧 Specified; test implementation and trace tag await merge of the EA-110 code branch |
+| FR-061 | FR-061-AC-8 | TC-951 | 🚧 Specified; test implementation and trace tag await merge of the EA-110 code branch |
+| FR-061 | FR-061-AC-10 | TC-952 | 🚧 Specified; test implementation and trace tag await merge of the EA-110 code branch |
+| FR-061 | FR-061-AC-11 | TC-953 | 🚧 Specified; test implementation and trace tag await merge of the EA-110 code branch |
+| FR-061 | FR-061-AC-12 | TC-953 | 🚧 Specified; test implementation and trace tag await merge of the EA-110 code branch |
 | FR-064 | FR-064-AC-2 | TC-660, TC-662 | ✅ `src/attestation_signing.rs` policy mismatch and stable failure codes |
 | FR-064 | FR-064-AC-3 | TC-659, TC-660, TC-662 | ✅ `src/attestation_signing.rs` tampered payload is rejected by the delegated verifier |
 | FR-064 | FR-064-AC-4 | TC-660, TC-662 | ✅ `src/attestation_signing.rs` wrong git subject and stable failure codes |
@@ -1032,6 +1041,13 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-944 | An unavailable or absent account-type lookup produces `unavailable` with `approval_source_unavailable` and identifies the affected account | Unit | P0 | FR-061-AC-5, FR-063-AC-6 | 🚧 `src/approval_gate.rs::tests::refuses_invalid_policies_and_reports_unavailable_account_lookups`, `absent_account_type_lookup_is_unavailable_not_a_nonhuman_guess` are in merged #252; successful lookup recovery is not exercised |
 | TC-945 | The workflow listens for `pull_request` and does not condition the gate on pull-request author type; the CLI accepts distinct human approvals on an agent-authored pull request | Integration | P0 | FR-059-AC-1, FR-065-AC-10 | 🚧 `tests/approval_gate_cli.rs::agent_authored_pull_request_passes_with_distinct_human_role_approvals` is in merged #252; missing-role and agent/bot-review negative cases are not asserted here |
 | TC-946 | The embedded approval-gate request and result schemas each parse as JSON and compile with a Draft 2020-12 validator | Unit | P1 | FR-061-AC-13 | 🚧 `src/approval_gate.rs::tests::public_request_and_result_schemas_are_valid_draft_2020_12` is in merged #252; not rerun in this spec-only change |
+| TC-947 | `a_single_required_role_can_be_covered_by_one_person` | Unit | P0 | FR-061-AC-3 | 🚧 Specified; implementation and trace tag await merge of the EA-110 code branch |
+| TC-948 | `one_individual_cannot_cover_two_roles_and_order_does_not_matter` | Unit | P0 | FR-061-AC-2 | 🚧 Specified; implementation and trace tag await merge of the EA-110 code branch |
+| TC-949 | `invalid_policy_is_rejected_with_stable_code` | Unit | P0 | FR-061-AC-5 | 🚧 Specified; implementation and trace tag await merge of the EA-110 code branch |
+| TC-950 | `generated_two_by_two_graphs_match_exhaustive_search` | Property | P0 | FR-061-AC-6 | 🚧 Specified; implementation and trace tag await merge of the EA-110 code branch |
+| TC-951 | `account_identity_and_role_eligibility_are_respected` | Unit | P0 | FR-061-AC-7, FR-061-AC-8 | 🚧 Specified; implementation and trace tag await merge of the EA-110 code branch |
+| TC-952 | `matching_reassigns_earlier_role_to_find_full_coverage` | Unit | P0 | FR-061-AC-10 | 🚧 Specified; implementation and trace tag await merge of the EA-110 code branch |
+| TC-953 | `missing_role_is_the_smallest_maximum_matching_complement` | Unit | P0 | FR-061-AC-11, FR-061-AC-12 | 🚧 Specified; implementation and trace tag await merge of the EA-110 code branch |
 | TC-900 | The OSV-Scanner request validates and carries the defined arguments, environment, input, output, containment and exit policy | Unit | P0 | FR-044-AC-6 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
 | TC-901 | A nonexistent scanner is unavailable; fixture exits 127/128 fail, exit 1 completes, missing output and timeout withhold the report, and stale output is removed | Integration | P0 | FR-044-AC-3, FR-044-AC-4, FR-044-AC-7 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
 | TC-902 | A caller mirror without `all.zip`, or with a Wolfi archive, is rejected | Unit | P0 | FR-044-AC-12 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
