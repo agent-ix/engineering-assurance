@@ -447,6 +447,33 @@ fn declared_output_request(
 }
 
 #[test]
+#[trace("TC-124", "FR-019-AC-3")]
+fn tc_124_rejected_exit_does_not_expose_written_output_artifact() {
+    let root = tempfile::tempdir().expect("temporary root");
+    let request = declared_output_request(root.path(), &["write-exit", "report.json", "7"], true);
+    let result = execute(&request, &adapter());
+
+    assert!(matches!(
+        result.state,
+        ProducerExecutionState::Failed {
+            reason: ExecutionFailure::ExitCode(7)
+        }
+    ));
+    assert_eq!(
+        result
+            .process
+            .as_ref()
+            .and_then(|process| process.terminal_status),
+        Some(TerminalStatus::ExitCode(7))
+    );
+    assert!(result.artifacts.is_empty());
+    assert_eq!(
+        fs::read(root.path().join("report.json")).expect("diagnostic output remains on disk"),
+        b"unaccepted output"
+    );
+}
+
+#[test]
 #[trace("TC-122", "FR-019-AC-1")]
 fn tc_122_stale_declared_output_is_removed_and_not_observed() {
     let root = tempfile::tempdir().expect("temporary root");

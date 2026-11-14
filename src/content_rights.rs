@@ -16,8 +16,8 @@ use unicode_casefold::UnicodeCaseFold;
 const MAX_TEXT_BYTES: usize = 512_000;
 
 const TEXT_SUFFIXES: &[&str] = &[
-    "", ".cfg", ".css", ".html", ".js", ".json", ".lock", ".md", ".mjs", ".py", ".rs", ".sh",
-    ".toml", ".ts", ".txt", ".yaml", ".yml",
+    "", ".cfg", ".css", ".html", ".js", ".json", ".lock", ".md", ".mod", ".mjs", ".py", ".rs",
+    ".sh", ".toml", ".ts", ".txt", ".yaml", ".yml",
 ];
 
 const FORBIDDEN_SUFFIXES: &[&str] = &[
