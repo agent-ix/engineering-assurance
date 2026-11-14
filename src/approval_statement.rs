@@ -903,7 +903,49 @@ mod tests {
         );
     }
 
-    #[trace("TC-959", "FR-064-AC-5")]
+    #[trace("TC-963", "FR-064-AC-6")]
+    #[test]
+    fn an_untrusted_signer_is_rejected_even_when_approver_names_a_workflow() {
+        let mut payload: Value =
+            serde_json::from_slice(&statement("1", "workflow-approver").statement_bytes)
+                .expect("fixture parses");
+        payload["predicate"]["approver"] = json!(concat!(
+            "https:",
+            "//github.com/fictional/project/.github/workflows/statement-writer.yml@refs/heads/main"
+        ));
+        let bytes = serde_json::to_vec(&payload).expect("changed fixture serializes");
+        let retained = RetainedApprovalStatement {
+            statement_bytes: bytes.clone(),
+            signature_bundle: "untrusted-workflow-bundle".to_owned(),
+            publish_outcome: ApprovalStatementPublishOutcome::Published,
+        };
+        let verifier = FixtureVerifier {
+            expected: vec![(
+                bytes,
+                retained.signature_bundle.clone(),
+                Err(VerificationFailure::UntrustedSigner),
+            )],
+            ..FixtureVerifier::default()
+        };
+        let reader = reader_for(vec![(LOOKUP.merged_pull_request, retained)]);
+
+        let result = verify_approval_statements(
+            &reader,
+            "private-store-a",
+            LOOKUP,
+            &identity_policy(),
+            &role_policy(),
+            &verifier,
+        );
+
+        assert_eq!(result.status, ApprovalStatementStatus::UntrustedSigner);
+        assert_eq!(
+            result.role_verdict.status,
+            approval_gate::GateStatus::Unsatisfied
+        );
+    }
+
+    #[trace("TC-959", "FR-058-AC-2", "FR-064-AC-5")]
     #[test]
     fn a_signed_approval_with_an_open_or_wrong_predicate_is_rejected() {
         for predicate in [
