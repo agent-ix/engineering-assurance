@@ -9,15 +9,20 @@
 //! exact workflow identity from trusted policy, and compares string subjects.
 //!
 //! Sigstore 0.16 verifies the DSSE signature and in-toto payload bytes; it does
-//! not interpret Engineering Assurance's `gitCommit` or `gitTree` subject
-//! members. After Sigstore accepts the bundle and certificate chain, this
-//! module compares the requested subject member as an exact string. It does
-//! not hash a git object or infer one from the statement's repository name.
+//! not interpret Engineering Assurance's `gitCommit`, `gitTree`, or `sha256`
+//! subject members. After Sigstore accepts the bundle and certificate chain,
+//! this module compares the requested subject member as an exact string. It
+//! does not hash a git object or infer one from the statement's repository name.
 //! Transparency-log inclusion is required by default policy configuration;
 //! timestamp-only verification is selected only for a trusted instance policy
 //! whose signing service does not operate a transparency log.
 
-use std::collections::BTreeMap;
+use std::{
+    collections::{BTreeMap, btree_map::Entry},
+    future::Future,
+    sync::Mutex,
+    thread,
+};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -25,6 +30,7 @@ use sigstore_sign::{SigningContext, SigstoreInstance};
 use sigstore_verify::VerificationPolicy;
 
 use crate::record_sink::leak::PublicPathProof;
+use crate::record_sink::sink::{Signer, SigningFailed as SinkSigningFailed};
 
 /// The in-toto Statement v1 type URI.
 pub const STATEMENT_V1_TYPE: &str = concat!("https:", "//in-toto.io/Statement/v1");
@@ -66,13 +72,15 @@ pub struct SubjectV1 {
     pub digest: BTreeMap<String, String>,
 }
 
-/// A statement subject selected for comparison with a caller's git object.
+/// A statement subject digest selected for comparison with caller input.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum GitSubjectKind {
+pub enum SubjectKind {
     /// Compare the `gitCommit` string.
     Commit,
     /// Compare the `gitTree` string.
     Tree,
+    /// Compare the `sha256` digest string of an artifact.
+    Sha256,
 }
 
 /// The expected signer identity from protected workflow policy.
@@ -82,8 +90,8 @@ pub struct WorkflowIdentityPolicy {
     pub repository: String,
     /// The workflow file path, such as `.github/workflows/receipt.yml`.
     pub workflow_path: String,
-    /// The exact signer ref, such as `refs/heads/main`.
-    pub reference: String,
+    /// Exact signer refs allowed by protected workflow policy.
+    pub references: std::collections::BTreeSet<String>,
     /// The exact OIDC issuer.
     pub issuer: String,
     /// The log evidence this trusted workflow policy requires.
@@ -91,22 +99,21 @@ pub struct WorkflowIdentityPolicy {
 }
 
 impl WorkflowIdentityPolicy {
-    fn identity_uri(&self) -> String {
+    fn identity_uri(&self, reference: &str) -> String {
         format!(
             "{}{}github.com/{}/{}@{}",
-            "https:", "//", self.repository, self.workflow_path, self.reference
+            "https:", "//", self.repository, self.workflow_path, reference
         )
     }
 
-    fn sigstore_policy(&self) -> VerificationPolicy {
-        let policy = VerificationPolicy::any_identity();
-        let policy = match self.transparency {
-            TransparencyRequirement::PublicLog => policy,
-            TransparencyRequirement::TimestampOnly => policy.skip_tlog_unsafe(),
-        };
-        policy
-            .require_identity(self.identity_uri())
-            .require_issuer(self.issuer.clone())
+    fn matches_identity(&self, identity: &sigstore_verify::SubjectAltName) -> bool {
+        self.references.iter().any(|reference| {
+            let expected =
+                VerificationPolicy::any_identity().require_identity(self.identity_uri(reference));
+            expected
+                .identity()
+                .is_some_and(|matcher| matcher.matches(identity))
+        })
     }
 }
 
@@ -120,11 +127,11 @@ pub enum TransparencyRequirement {
     TimestampOnly,
 }
 
-/// The caller-provided expected git subject.
+/// The caller-provided expected statement subject digest.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct ExpectedGitSubject<'a> {
-    /// Which git digest member to compare.
-    pub kind: GitSubjectKind,
+pub struct ExpectedSubject<'a> {
+    /// Which digest member to compare.
+    pub kind: SubjectKind,
     /// The expected digest string.
     pub value: &'a str,
 }
@@ -190,11 +197,9 @@ impl BundleVerifier for SigstoreBundleVerifier {
             .verifier
             .verify(payload, &bundle, &cryptographic_policy)
             .map_err(|_| VerificationFailure::InvalidSignature)?;
-        let expected = policy.sigstore_policy();
-        let identity_matches = match (expected.identity(), result.identity()) {
-            (Some(matcher), Some(identity)) => matcher.matches(identity),
-            _ => false,
-        };
+        let identity_matches = result
+            .identity()
+            .is_some_and(|identity| policy.matches_identity(identity));
         if !identity_matches || result.issuer() != Some(policy.issuer.as_str()) {
             return Err(VerificationFailure::UntrustedSigner);
         }
@@ -202,19 +207,19 @@ impl BundleVerifier for SigstoreBundleVerifier {
     }
 }
 
-/// Verify a signed statement and then compare one string-valued git subject.
+/// Verify a signed statement and then compare one string-valued subject digest.
 ///
 /// # Errors
 ///
-/// Returns `SignatureInvalid` when delegated Sigstore verification rejects the
+/// Returns `signature_invalid` when delegated Sigstore verification rejects the
 /// bundle, `UntrustedSigner` when its authenticated workflow identity does not
-/// match policy, or `WrongSubject` when the requested string subject differs.
+/// match policy, or `wrong_subject` when the requested string subject differs.
 pub fn verify_statement(
     verifier: &dyn BundleVerifier,
     payload: &[u8],
     bundle_json: &str,
     policy: &WorkflowIdentityPolicy,
-    subject: ExpectedGitSubject<'_>,
+    subject: ExpectedSubject<'_>,
 ) -> Result<VerificationStatus, VerificationFailure> {
     verifier.verify(payload, bundle_json, policy)?;
     let statement: StatementV1 =
@@ -223,8 +228,9 @@ pub fn verify_statement(
         return Err(VerificationFailure::InvalidStatement);
     }
     let digest_name = match subject.kind {
-        GitSubjectKind::Commit => "gitCommit",
-        GitSubjectKind::Tree => "gitTree",
+        SubjectKind::Commit => "gitCommit",
+        SubjectKind::Tree => "gitTree",
+        SubjectKind::Sha256 => "sha256",
     };
     let matches = statement.subject.iter().any(|candidate| {
         candidate
@@ -238,17 +244,26 @@ pub fn verify_statement(
     Ok(VerificationStatus::Verified)
 }
 
-async fn ambient_identity_token() -> Result<sigstore_sign::oidc::IdentityToken, SigningFailure> {
-    let identity_token = sigstore_sign::oidc::IdentityToken::detect_ambient()
-        .await
-        .map_err(|_| SigningFailure::AmbientOidcUnavailable)?;
-    require_ambient_token(identity_token)
+async fn sign_after_ambient_oidc<T, Detect, Start, Sign>(
+    detect: Detect,
+    start_signing: Start,
+) -> Result<T, SigningFailure>
+where
+    Detect: Future<Output = Result<Option<sigstore_sign::oidc::IdentityToken>, SigningFailure>>,
+    Start: FnOnce(sigstore_sign::oidc::IdentityToken) -> Sign,
+    Sign: Future<Output = Result<T, SigningFailure>>,
+{
+    let token = detect
+        .await?
+        .ok_or(SigningFailure::AmbientOidcUnavailable)?;
+    start_signing(token).await
 }
 
-fn require_ambient_token(
-    token: Option<sigstore_sign::oidc::IdentityToken>,
-) -> Result<sigstore_sign::oidc::IdentityToken, SigningFailure> {
-    token.ok_or(SigningFailure::AmbientOidcUnavailable)
+async fn detect_ambient_oidc() -> Result<Option<sigstore_sign::oidc::IdentityToken>, SigningFailure>
+{
+    sigstore_sign::oidc::IdentityToken::detect_ambient()
+        .await
+        .map_err(|_| SigningFailure::AmbientOidcUnavailable)
 }
 
 /// Sign a statement in a Sigstore instance without a public transparency log.
@@ -264,16 +279,28 @@ fn require_ambient_token(
 pub async fn sign_statement_without_public_log(
     canonical_statement: &[u8],
 ) -> Result<String, SigningFailure> {
-    let identity_token = ambient_identity_token().await?;
-    let context = SigningContext::for_instance(SigstoreInstance::GitHub)
-        .await
-        .map_err(|_| SigningFailure::SigningFailed)?;
-    let bundle = context
-        .signer(identity_token)
-        .sign_raw_statement(canonical_statement)
-        .await
-        .map_err(|_| SigningFailure::SigningFailed)?;
-    bundle.to_json().map_err(|_| SigningFailure::SigningFailed)
+    sign_statement_without_public_log_with(canonical_statement, detect_ambient_oidc()).await
+}
+
+async fn sign_statement_without_public_log_with<Detect>(
+    canonical_statement: &[u8],
+    detect: Detect,
+) -> Result<String, SigningFailure>
+where
+    Detect: Future<Output = Result<Option<sigstore_sign::oidc::IdentityToken>, SigningFailure>>,
+{
+    sign_after_ambient_oidc(detect, |identity_token| async move {
+        let context = SigningContext::for_instance(SigstoreInstance::GitHub)
+            .await
+            .map_err(|_| SigningFailure::SigningFailed)?;
+        let bundle = context
+            .signer(identity_token)
+            .sign_raw_statement(canonical_statement)
+            .await
+            .map_err(|_| SigningFailure::SigningFailed)?;
+        bundle.to_json().map_err(|_| SigningFailure::SigningFailed)
+    })
+    .await
 }
 
 /// Sign the bytes protected by the public-path proof.
@@ -283,20 +310,158 @@ pub async fn sign_statement_without_public_log(
 ///
 /// # Errors
 ///
-/// Returns the same failures as [`sign_statement_with_ambient_oidc`].
-pub async fn sign_public_path_with_ambient_oidc(
-    proof: &PublicPathProof<'_>,
-) -> Result<String, SigningFailure> {
-    let identity_token = ambient_identity_token().await?;
-    let context = SigningContext::for_instance(SigstoreInstance::PublicGood)
-        .await
-        .map_err(|_| SigningFailure::SigningFailed)?;
-    let bundle = context
-        .signer(identity_token)
-        .sign(proof.signed_bytes())
-        .await
-        .map_err(|_| SigningFailure::SigningFailed)?;
-    bundle.to_json().map_err(|_| SigningFailure::SigningFailed)
+/// Returns `AmbientOidcUnavailable` if no ambient token is available, or
+/// `SigningFailed` when the delegated Sigstore signer fails.
+async fn sign_public_payload(payload: &[u8]) -> Result<String, SigningFailure> {
+    sign_public_payload_with(payload, detect_ambient_oidc()).await
+}
+
+async fn sign_public_payload_with<Detect>(
+    payload: &[u8],
+    detect: Detect,
+) -> Result<String, SigningFailure>
+where
+    Detect: Future<Output = Result<Option<sigstore_sign::oidc::IdentityToken>, SigningFailure>>,
+{
+    sign_after_ambient_oidc(detect, |identity_token| async move {
+        let context = SigningContext::for_instance(SigstoreInstance::PublicGood)
+            .await
+            .map_err(|_| SigningFailure::SigningFailed)?;
+        let bundle = context
+            .signer(identity_token)
+            .sign(payload)
+            .await
+            .map_err(|_| SigningFailure::SigningFailed)?;
+        bundle.to_json().map_err(|_| SigningFailure::SigningFailed)
+    })
+    .await
+}
+
+async fn sign_private_payload(payload: &[u8]) -> Result<String, SigningFailure> {
+    sign_private_payload_with(payload, detect_ambient_oidc()).await
+}
+
+async fn sign_private_payload_with<Detect>(
+    payload: &[u8],
+    detect: Detect,
+) -> Result<String, SigningFailure>
+where
+    Detect: Future<Output = Result<Option<sigstore_sign::oidc::IdentityToken>, SigningFailure>>,
+{
+    sign_after_ambient_oidc(detect, |identity_token| async move {
+        let context = SigningContext::for_instance(SigstoreInstance::GitHub)
+            .await
+            .map_err(|_| SigningFailure::SigningFailed)?;
+        let bundle = context
+            .signer(identity_token)
+            .sign(payload)
+            .await
+            .map_err(|_| SigningFailure::SigningFailed)?;
+        bundle.to_json().map_err(|_| SigningFailure::SigningFailed)
+    })
+    .await
+}
+
+/// The EA-105 Sigstore signer used by `PublicLogSink`.
+///
+/// `signed_payload` returns only payloads signed by this instance and keeps a
+/// bounded, one-shot cache so blob bundles need not duplicate artifact bytes.
+pub struct SigstoreSigner {
+    pending_payloads: Mutex<BTreeMap<String, Vec<u8>>>,
+}
+
+#[derive(Clone, Copy)]
+enum SigningPath {
+    PublicLog,
+    NoPublicLog,
+}
+
+impl SigstoreSigner {
+    /// Construct a signer whose operations use ambient keyless OIDC.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            pending_payloads: Mutex::new(BTreeMap::new()),
+        }
+    }
+
+    fn sign_and_remember(
+        &self,
+        payload: &[u8],
+        signing_path: SigningPath,
+    ) -> Result<String, SinkSigningFailed> {
+        const MAX_PENDING_BUNDLES: usize = 16;
+        let mut pending = self
+            .pending_payloads
+            .lock()
+            .map_err(|_| SinkSigningFailed)?;
+        if pending.len() >= MAX_PENDING_BUNDLES {
+            return Err(SinkSigningFailed);
+        }
+        let payload = payload.to_vec();
+        let payload_for_signing = payload.clone();
+        let bundle = run_signing_thread(move || async move {
+            match signing_path {
+                SigningPath::PublicLog => sign_public_payload(&payload_for_signing).await,
+                SigningPath::NoPublicLog => sign_private_payload(&payload_for_signing).await,
+            }
+        })
+        .map_err(|_| SinkSigningFailed)?;
+        match pending.entry(bundle.clone()) {
+            Entry::Vacant(entry) => {
+                entry.insert(payload);
+                Ok(bundle)
+            }
+            Entry::Occupied(_) => Err(SinkSigningFailed),
+        }
+    }
+}
+
+impl Default for SigstoreSigner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Signer for SigstoreSigner {
+    fn sign_for_public_log(
+        &self,
+        proof: &PublicPathProof<'_>,
+    ) -> Result<String, SinkSigningFailed> {
+        self.sign_and_remember(proof.signed_bytes(), SigningPath::PublicLog)
+    }
+
+    fn sign_without_public_log(&self, canonical: &[u8]) -> Result<String, SinkSigningFailed> {
+        self.sign_and_remember(canonical, SigningPath::NoPublicLog)
+    }
+
+    fn signed_payload(&self, bundle: &str) -> Result<Vec<u8>, SinkSigningFailed> {
+        self.pending_payloads
+            .lock()
+            .map_err(|_| SinkSigningFailed)?
+            .remove(bundle)
+            .ok_or(SinkSigningFailed)
+    }
+}
+
+fn run_signing_thread<T, Build, Work>(build: Build) -> Result<T, SigningFailure>
+where
+    T: Send + 'static,
+    Build: FnOnce() -> Work + Send + 'static,
+    Work: Future<Output = Result<T, SigningFailure>> + Send + 'static,
+{
+    thread::Builder::new()
+        .name("sigstore-signing".to_owned())
+        .spawn(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|_| SigningFailure::SigningFailed)?;
+            runtime.block_on(build())
+        })
+        .map_err(|_| SigningFailure::SigningFailed)?
+        .join()
+        .map_err(|_| SigningFailure::SigningFailed)?
 }
 
 /// A statement could not be represented as canonical JSON.
@@ -423,8 +588,14 @@ impl StatementEncodingError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ix_trace_rs::trace;
 
     const PAYLOAD: &[u8] = concat!(
+        r#"{"_type":"https:"#,
+        r#"//in-toto.io/Statement/v1","predicate":{},"predicateType":"urn:example:predicate:v1","subject":[{"digest":{"gitCommit":"abc123","gitTree":"def456","sha256":"0000000000000000000000000000000000000000000000000000000000000000"},"name":"source"}]}"#
+    )
+    .as_bytes();
+    const NO_SHA256_PAYLOAD: &[u8] = concat!(
         r#"{"_type":"https:"#,
         r#"//in-toto.io/Statement/v1","predicate":{},"predicateType":"urn:example:predicate:v1","subject":[{"digest":{"gitCommit":"abc123","gitTree":"def456"},"name":"source"}]}"#
     )
@@ -447,11 +618,13 @@ mod tests {
             if bundle_json != BUNDLE || payload != self.accepted_payload {
                 return Err(VerificationFailure::InvalidSignature);
             }
-            let identity = format!(
-                "{}{}github.com/{}/{}@{}",
-                "https:", "//", policy.repository, policy.workflow_path, policy.reference
-            );
-            if identity != self.accepted_identity || policy.issuer != self.accepted_issuer {
+            let accepted = policy.references.iter().any(|reference| {
+                format!(
+                    "{}{}github.com/{}/{}@{}",
+                    "https:", "//", policy.repository, policy.workflow_path, reference
+                ) == self.accepted_identity
+            });
+            if !accepted || policy.issuer != self.accepted_issuer {
                 return Err(VerificationFailure::UntrustedSigner);
             }
             Ok(())
@@ -462,7 +635,7 @@ mod tests {
         WorkflowIdentityPolicy {
             repository: "fictional/project".to_owned(),
             workflow_path: ".github/workflows/attest.yml".to_owned(),
-            reference: "refs/heads/main".to_owned(),
+            references: ["refs/heads/main".to_owned()].into(),
             issuer: concat!("https:", "//token.actions.githubusercontent.com").to_owned(),
             transparency: TransparencyRequirement::PublicLog,
         }
@@ -472,12 +645,21 @@ mod tests {
         let policy = policy();
         FixtureVerifier {
             accepted_payload: PAYLOAD.to_vec(),
-            accepted_identity: policy.identity_uri(),
+            accepted_identity: policy.identity_uri("refs/heads/main"),
             accepted_issuer: policy.issuer,
         }
     }
 
-    /// Trace: FR-064-AC-1, FR-064-AC-2, FR-064-AC-3, FR-064-AC-4
+    fn verifier_for(payload: &[u8], reference: &str) -> FixtureVerifier {
+        let policy = policy();
+        FixtureVerifier {
+            accepted_payload: payload.to_vec(),
+            accepted_identity: policy.identity_uri(reference),
+            accepted_issuer: policy.issuer,
+        }
+    }
+
+    #[trace("FR-064-AC-1", "FR-064-AC-2", "FR-064-AC-3", "FR-064-AC-4")]
     #[test]
     fn verifies_policy_and_git_subjects_and_rejects_mismatches() {
         let verifier = verifier();
@@ -487,8 +669,8 @@ mod tests {
                 PAYLOAD,
                 BUNDLE,
                 &policy(),
-                ExpectedGitSubject {
-                    kind: GitSubjectKind::Commit,
+                ExpectedSubject {
+                    kind: SubjectKind::Commit,
                     value: "abc123",
                 },
             ),
@@ -500,9 +682,45 @@ mod tests {
                 PAYLOAD,
                 BUNDLE,
                 &policy(),
-                ExpectedGitSubject {
-                    kind: GitSubjectKind::Tree,
+                ExpectedSubject {
+                    kind: SubjectKind::Tree,
                     value: "def456",
+                },
+            ),
+            Ok(VerificationStatus::Verified)
+        );
+        assert_eq!(
+            verify_statement(
+                &verifier,
+                PAYLOAD,
+                BUNDLE,
+                &policy(),
+                ExpectedSubject {
+                    kind: SubjectKind::Sha256,
+                    value: "0000000000000000000000000000000000000000000000000000000000000000",
+                },
+            ),
+            Ok(VerificationStatus::Verified)
+        );
+
+        let allowed_refs = WorkflowIdentityPolicy {
+            references: [
+                "refs/heads/main".to_owned(),
+                "refs/heads/release".to_owned(),
+            ]
+            .into(),
+            ..policy()
+        };
+        let release_verifier = verifier_for(PAYLOAD, "refs/heads/release");
+        assert_eq!(
+            verify_statement(
+                &release_verifier,
+                PAYLOAD,
+                BUNDLE,
+                &allowed_refs,
+                ExpectedSubject {
+                    kind: SubjectKind::Commit,
+                    value: "abc123",
                 },
             ),
             Ok(VerificationStatus::Verified)
@@ -514,7 +732,7 @@ mod tests {
                 ..policy()
             },
             WorkflowIdentityPolicy {
-                reference: "refs/heads/review".to_owned(),
+                references: ["refs/heads/review".to_owned()].into(),
                 ..policy()
             },
             WorkflowIdentityPolicy {
@@ -528,8 +746,8 @@ mod tests {
                     PAYLOAD,
                     BUNDLE,
                     &changed,
-                    ExpectedGitSubject {
-                        kind: GitSubjectKind::Commit,
+                    ExpectedSubject {
+                        kind: SubjectKind::Commit,
                         value: "abc123",
                     },
                 ),
@@ -549,8 +767,8 @@ mod tests {
                 &changed_payload,
                 BUNDLE,
                 &policy(),
-                ExpectedGitSubject {
-                    kind: GitSubjectKind::Commit,
+                ExpectedSubject {
+                    kind: SubjectKind::Commit,
                     value: "abc123",
                 },
             ),
@@ -562,9 +780,36 @@ mod tests {
                 PAYLOAD,
                 BUNDLE,
                 &policy(),
-                ExpectedGitSubject {
-                    kind: GitSubjectKind::Commit,
+                ExpectedSubject {
+                    kind: SubjectKind::Commit,
                     value: "different",
+                },
+            ),
+            Err(VerificationFailure::WrongSubject)
+        );
+        assert_eq!(
+            verify_statement(
+                &verifier,
+                PAYLOAD,
+                BUNDLE,
+                &policy(),
+                ExpectedSubject {
+                    kind: SubjectKind::Tree,
+                    value: "different-tree",
+                },
+            ),
+            Err(VerificationFailure::WrongSubject)
+        );
+        let no_sha_verifier = verifier_for(NO_SHA256_PAYLOAD, "refs/heads/main");
+        assert_eq!(
+            verify_statement(
+                &no_sha_verifier,
+                NO_SHA256_PAYLOAD,
+                BUNDLE,
+                &policy(),
+                ExpectedSubject {
+                    kind: SubjectKind::Sha256,
+                    value: "0000000000000000000000000000000000000000000000000000000000000000",
                 },
             ),
             Err(VerificationFailure::WrongSubject)
@@ -584,33 +829,54 @@ mod tests {
         }
     }
 
-    /// Trace: NFR-010-M-3
+    #[trace("NFR-010-M-3")]
     #[test]
-    fn rejecting_sigstore_verifier_rejects_all_statement_cases() {
+    fn rejecting_sigstore_verifier_rejects_policy_payload_and_subject_cases() {
         let verifier = RejectingVerifier;
-        for (bundle, subject, expected) in [
-            (BUNDLE, "abc123", VerificationFailure::InvalidSignature),
-            (BUNDLE, "abc123", VerificationFailure::InvalidSignature),
-            (BUNDLE, "abc123", VerificationFailure::InvalidSignature),
-            (BUNDLE, "different", VerificationFailure::InvalidSignature),
-        ] {
+        let mut tampered_payload = PAYLOAD.to_vec();
+        let commit_offset = PAYLOAD
+            .windows(b"abc123".len())
+            .position(|window| window == b"abc123")
+            .expect("fixture contains the git commit subject");
+        tampered_payload[commit_offset] = b'z';
+        let wrong_policy = WorkflowIdentityPolicy {
+            repository: "fictional/untrusted".to_owned(),
+            ..policy()
+        };
+        let trusted_policy = policy();
+        let cases = [
+            (PAYLOAD, &trusted_policy, SubjectKind::Commit, "abc123"),
+            (PAYLOAD, &wrong_policy, SubjectKind::Commit, "abc123"),
+            (
+                tampered_payload.as_slice(),
+                &trusted_policy,
+                SubjectKind::Commit,
+                "abc123",
+            ),
+            (
+                PAYLOAD,
+                &trusted_policy,
+                SubjectKind::Tree,
+                "different-tree",
+            ),
+        ];
+        for (payload, case_policy, kind, subject) in cases {
             assert_eq!(
                 verify_statement(
                     &verifier,
-                    PAYLOAD,
-                    bundle,
-                    &policy(),
-                    ExpectedGitSubject {
-                        kind: GitSubjectKind::Commit,
+                    payload,
+                    BUNDLE,
+                    case_policy,
+                    ExpectedSubject {
+                        kind,
                         value: subject,
                     },
                 ),
-                Err(expected)
+                Err(VerificationFailure::InvalidSignature)
             );
         }
     }
 
-    /// Trace: FR-058-AC-1
     #[test]
     fn statement_serializes_as_plain_in_toto_v1_and_canonicalizes() {
         let statement: StatementV1 = serde_json::from_slice(PAYLOAD).expect("fixture parses");
@@ -621,16 +887,32 @@ mod tests {
         );
     }
 
-    /// Trace: FR-058-AC-7
-    #[test]
-    fn signing_requires_an_ambient_oidc_token_before_service_setup() {
-        assert!(matches!(
-            require_ambient_token(None),
-            Err(SigningFailure::AmbientOidcUnavailable)
-        ));
+    #[tokio::test]
+    async fn signing_requires_an_ambient_oidc_token_before_service_setup() {
+        let missing_token = || async { Ok(None) };
+        for (signer_kind, result) in [
+            (
+                "public-good payload signer",
+                sign_public_payload_with(b"fictional payload", missing_token()).await,
+            ),
+            (
+                "private-instance payload signer",
+                sign_private_payload_with(b"fictional payload", missing_token()).await,
+            ),
+            (
+                "raw-statement signer",
+                sign_statement_without_public_log_with(b"fictional statement", missing_token())
+                    .await,
+            ),
+        ] {
+            assert_eq!(
+                result,
+                Err(SigningFailure::AmbientOidcUnavailable),
+                "{signer_kind} signer must fail with the named missing-token error"
+            );
+        }
     }
 
-    /// Trace: FR-064-AC-1, FR-064-AC-2, FR-064-AC-3, FR-064-AC-4
     #[test]
     fn verification_failure_codes_round_trip() {
         for code in VerificationFailure::all() {

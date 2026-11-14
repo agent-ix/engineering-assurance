@@ -232,6 +232,11 @@ path = "tests/record_sink.rs"
 required-features = ["record-sink"]
 
 [[test]]
+name = "attestation_signing_live"
+path = "tests/attestation_signing_live.rs"
+required-features = ["attestation-signing"]
+
+[[test]]
 name = "release"
 path = "tests/release.rs"
 required-features = ["release"]
@@ -482,6 +487,7 @@ attestation-signing = [
   "dep:sigstore-sign",
   "dep:sigstore-verify",
   "dep:sigstore-types",
+  "dep:tokio",
 ]
 # Opt-in, and never part of `default`: turns on `serde_json/arbitrary_precision`. Cargo unifies features
 # across the whole dependency graph, so enabling this in one crate changes
@@ -549,6 +555,7 @@ serde_json_canonicalizer = { version = "0.3", optional = true }
 sigstore-sign = { version = "0.16", default-features = false, features = ["aws-lc-rs", "rustls", "tuf"], optional = true }
 sigstore-types = { version = "0.16", default-features = false, optional = true }
 sigstore-verify = { version = "0.16", default-features = false, features = ["aws-lc-rs", "rustls"], optional = true }
+tokio = { version = "1", features = ["macros", "net", "rt", "time"], optional = true }
 syn = { version = "3.0", features = ["full", "visit"], optional = true }
 tar = { version = "0.4", default-features = false, optional = true }
 tempfile = { version = "3.27", optional = true }
