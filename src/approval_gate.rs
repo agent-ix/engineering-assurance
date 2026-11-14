@@ -930,7 +930,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-059-AC-1", "FR-059-AC-3")]
+    #[trace("TC-915", "FR-059-AC-1", "FR-059-AC-3")]
     fn parses_one_trimmed_marker_pair_and_crlf() {
         assert_eq!(
             parse_review_markers(
@@ -941,7 +941,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-059-AC-3", "FR-059-AC-4")]
+    #[trace("TC-915", "TC-916", "FR-059-AC-3", "FR-059-AC-4")]
     fn refuses_missing_repeated_malformed_and_controlled_marker_values() {
         for body in [
             "Role: developer",
@@ -968,7 +968,16 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-059-AC-2", "FR-059-AC-5", "FR-062-AC-1", "FR-062-AC-2")]
+    #[trace(
+        "TC-914",
+        "TC-917",
+        "TC-934",
+        "FR-059-AC-1",
+        "FR-059-AC-2",
+        "FR-059-AC-5",
+        "FR-062-AC-1",
+        "FR-062-AC-2"
+    )]
     fn only_latest_valid_same_head_human_review_counts_and_agents_do_not() {
         let policy = policy();
         let approvals = github_approvals(
@@ -1024,7 +1033,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-062-AC-2", "FR-059-AC-7")]
+    #[trace("TC-919", "TC-935", "FR-062-AC-2", "FR-059-AC-7")]
     fn policy_agent_and_ineligible_role_reviews_are_not_approvals() {
         let policy = policy();
         let mut listed_agent = review(
@@ -1055,7 +1064,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-062-AC-3")]
+    #[trace("TC-936", "FR-062-AC-3")]
     fn unknown_review_account_type_is_not_human() {
         let mut unknown = review(
             1,
@@ -1069,7 +1078,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-059-AC-5")]
+    #[trace("TC-914", "TC-917", "FR-059-AC-2", "FR-059-AC-5")]
     fn latest_decision_revokes_and_later_fresh_approval_restores() {
         let policy = policy();
         let approval = review(
@@ -1121,7 +1130,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-059-AC-6")]
+    #[trace("TC-918", "FR-059-AC-6")]
     fn edited_review_body_cannot_add_or_remove_an_approval_marker() {
         let policy = policy();
         let mut edited_to_add = review(
@@ -1158,7 +1167,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-059-AC-9")]
+    #[trace("TC-921", "FR-059-AC-9")]
     fn approval_contract_keeps_platform_details_out_of_member_names() {
         let approvals = github_approvals(
             &policy(),
@@ -1192,6 +1201,7 @@ mod tests {
     }
 
     #[test]
+    #[trace("TC-921", "FR-059-AC-9")]
     fn github_adapter_rejects_accounts_from_another_source() {
         let mut other_source = review(
             1,
@@ -1205,7 +1215,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-059-AC-9")]
+    #[trace("TC-921", "FR-059-AC-9")]
     fn test_identity_fixture_adapter_uses_the_source_neutral_approval_contract() {
         let fixture_account = AccountRef {
             source: "test-identity-fixture".to_owned(),
@@ -1241,7 +1251,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-061-AC-1", "FR-061-AC-2", "FR-063-AC-4")]
+    #[trace("TC-923", "FR-061-AC-1", "FR-061-AC-2", "FR-063-AC-4")]
     fn evaluates_every_role_and_rejects_shared_or_missing_approvals() {
         let policy = policy();
         let reviews = [
@@ -1310,7 +1320,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-061-AC-5", "FR-063-AC-6")]
+    #[trace("TC-926", "TC-944", "FR-061-AC-5", "FR-063-AC-6")]
     fn refuses_invalid_policies_and_reports_unavailable_account_lookups() {
         let mut invalid = policy();
         invalid.required_roles.clear();
@@ -1328,7 +1338,14 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-061-AC-10", "FR-061-AC-11", "FR-061-AC-12")]
+    #[trace(
+        "TC-931",
+        "TC-932",
+        "TC-933",
+        "FR-061-AC-10",
+        "FR-061-AC-11",
+        "FR-061-AC-12"
+    )]
     fn chooses_the_lexicographically_smallest_maximum_matching() {
         let policy = RolePolicy {
             protocol: POLICY_PROTOCOL.to_owned(),
@@ -1409,7 +1426,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-061-AC-5")]
+    #[trace("TC-926", "FR-061-AC-5")]
     fn policy_json_rejects_unknown_members() {
         let value = serde_json::json!({
             "protocol": POLICY_PROTOCOL,
@@ -1425,7 +1442,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-061-AC-8")]
+    #[trace("TC-926", "FR-061-AC-5")]
     fn published_example_role_policy_matches_the_closed_schema() {
         let parsed = parse_policy(include_bytes!("../examples/approval-policy.json"))
             .expect("example policy is valid");
@@ -1434,6 +1451,7 @@ mod tests {
     }
 
     #[test]
+    #[trace("TC-946", "FR-061-AC-13")]
     fn public_request_and_result_schemas_are_valid_draft_2020_12() {
         for schema in [REQUEST_SCHEMA, RESULT_SCHEMA] {
             let value: serde_json::Value = serde_json::from_str(schema).expect("schema JSON");
@@ -1445,7 +1463,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-061-AC-5", "FR-059-AC-8")]
+    #[trace("TC-926", "TC-920", "FR-061-AC-5", "FR-059-AC-8")]
     fn policy_schema_refuses_duplicate_accounts_and_github_logins() {
         let duplicate = serde_json::json!({
             "protocol": POLICY_PROTOCOL,
@@ -1475,7 +1493,14 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-062-AC-4", "FR-063-AC-2", "FR-063-AC-5")]
+    #[trace(
+        "TC-937",
+        "TC-940",
+        "TC-943",
+        "FR-062-AC-4",
+        "FR-063-AC-2",
+        "FR-063-AC-5"
+    )]
     fn reports_agent_only_and_unstaffed_roles_without_weakening_the_gate() {
         let policy = policy();
         let agent_approval = Approval {
@@ -1507,7 +1532,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-061-AC-6", "FR-061-AC-9")]
+    #[trace("TC-927", "FR-061-AC-6")]
     fn role_matching_is_order_independent_and_equivalent_to_exhaustive_search() {
         let roles = vec!["a".to_owned(), "b".to_owned()];
         let people = ["x", "y"];
@@ -1569,7 +1594,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-061-AC-3", "FR-061-AC-7", "FR-061-AC-8")]
+    #[trace("TC-924", "TC-929", "FR-061-AC-3", "FR-061-AC-7", "FR-061-AC-8")]
     fn one_role_and_multiple_accounts_resolve_to_one_policy_individual() {
         let policy = RolePolicy {
             protocol: POLICY_PROTOCOL.to_owned(),
@@ -1598,7 +1623,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-061-AC-5", "FR-063-AC-6")]
+    #[trace("TC-944", "FR-061-AC-5", "FR-063-AC-6")]
     fn absent_account_type_lookup_is_unavailable_not_a_nonhuman_guess() {
         let policy = policy();
         let result = evaluate(&policy, &[], &BTreeMap::new());

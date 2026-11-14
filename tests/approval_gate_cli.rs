@@ -181,7 +181,7 @@ fn collect_request_with_fake_github(
     (temp, request, graphql_marker)
 }
 
-#[trace("FR-059-AC-1", "FR-061-AC-1", "FR-065-AC-10")]
+#[trace("TC-913", "TC-945", "FR-059-AC-1", "FR-061-AC-1", "FR-065-AC-10")]
 #[test]
 fn agent_authored_pull_request_passes_with_distinct_human_role_approvals() {
     let result = run(&request(&[
@@ -205,7 +205,7 @@ fn agent_authored_pull_request_passes_with_distinct_human_role_approvals() {
     assert!(!workflow.contains("github.event.pull_request.user.type"));
 }
 
-#[trace("FR-059-AC-6", "FR-062-AC-1")]
+#[trace("TC-918", "TC-934", "FR-059-AC-6", "FR-062-AC-1")]
 #[test]
 fn edited_reviews_and_bot_reviews_cannot_satisfy_a_role() {
     let result = run(&request(&[
@@ -220,7 +220,7 @@ fn edited_reviews_and_bot_reviews_cannot_satisfy_a_role() {
     );
 }
 
-#[trace("FR-061-AC-4", "FR-070-AC-2", "FR-070-AC-3")]
+#[trace("TC-925", "FR-061-AC-4", "FR-070-AC-2", "FR-070-AC-3")]
 #[test]
 fn workflow_is_explicitly_opt_in_and_has_no_signing_identity() {
     let workflow = std::fs::read_to_string(concat!(
@@ -308,7 +308,7 @@ fn workflow_is_explicitly_opt_in_and_has_no_signing_identity() {
     assert_eq!(ruleset["bypass_actors"][0]["bypass_mode"], "pull_request");
 }
 
-#[trace("FR-059-AC-6", "FR-063-AC-6")]
+#[trace("TC-918", "FR-059-AC-6")]
 #[test]
 fn unavailable_source_metadata_never_yields_approval() {
     let mut request = request(&[review("101", "security", "APPROVED", false)]);
@@ -319,7 +319,7 @@ fn unavailable_source_metadata_never_yields_approval() {
     assert_eq!(result["error"], "approval_source_unavailable");
 }
 
-#[trace("FR-063-AC-4")]
+#[trace("TC-942", "FR-063-AC-4")]
 #[test]
 fn a_successful_empty_review_list_is_available_and_fails_as_missing_roles() {
     let (_temp, request, graphql_marker) = collect_request_with_fake_github("[[]]", "");
@@ -346,7 +346,7 @@ fn a_successful_empty_review_list_is_available_and_fails_as_missing_roles() {
     );
 }
 
-#[trace("FR-059-AC-6", "FR-063-AC-6")]
+#[trace("TC-918", "FR-059-AC-6")]
 #[test]
 fn malformed_review_edit_metadata_remains_source_unavailable() {
     let rest_response = concat!(
@@ -367,7 +367,7 @@ fn malformed_review_edit_metadata_remains_source_unavailable() {
     assert_eq!(result["error"], "approval_source_unavailable");
 }
 
-#[trace("FR-061-AC-1", "FR-065-AC-6", "TC-526")]
+#[trace("TC-526", "TC-922", "FR-061-AC-1", "FR-065-AC-6")]
 #[test]
 fn review_gate_requires_all_three_distinct_roles_before_merge() {
     let policy = json!({
@@ -420,7 +420,7 @@ fn review_gate_requires_all_three_distinct_roles_before_merge() {
     assert_eq!(missing_stakeholder["missing"][0]["role"], "stakeholder");
 }
 
-#[trace("FR-063-AC-1")]
+#[trace("TC-939", "FR-063-AC-1")]
 #[test]
 fn an_empty_required_role_fails_visibly() {
     let mut request = request(&[]);
