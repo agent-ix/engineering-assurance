@@ -18,7 +18,7 @@ use crate::attestation_signing::{
 
 /// SLSA Provenance v1 predicate type.
 pub const PROVENANCE_PREDICATE: &str = concat!("https:", "//slsa.dev/provenance/v1");
-/// CycloneDX BOM predicate type.
+/// `CycloneDX` BOM predicate type.
 pub const CYCLONEDX_PREDICATE: &str = concat!("https:", "//cyclonedx.org/bom");
 /// in-toto Test Result v0.1 predicate type.
 pub const TEST_RESULT_PREDICATE: &str =
@@ -50,7 +50,7 @@ pub struct ArtifactSubject {
 pub struct ReleaseInputs<'a> {
     /// The SLSA Provenance v1 statement.
     pub provenance: SignedStatement<'a>,
-    /// The CycloneDX statement.
+    /// The `CycloneDX` statement.
     pub sbom: SignedStatement<'a>,
     /// The Test Result v0.1 statement.
     pub test_result: SignedStatement<'a>,

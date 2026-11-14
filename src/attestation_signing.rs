@@ -611,6 +611,13 @@ pub fn verify_statement(
 }
 
 /// Verify a statement and, when supplied, require authenticated reusable-workflow caller claims.
+///
+/// # Errors
+///
+/// Returns the delegated verifier's failure, `untrusted_signer` when the
+/// authenticated caller claims do not match the source policy, or
+/// `invalid_statement` and `wrong_subject` for malformed or mismatched
+/// statement subjects.
 pub fn verify_statement_with_source(
     verifier: &dyn BundleVerifier,
     payload: &[u8],
@@ -620,10 +627,10 @@ pub fn verify_statement_with_source(
     subject: ExpectedSubject<'_>,
 ) -> Result<VerificationStatus, VerificationFailure> {
     let claims = verifier.verify_with_claims(payload, bundle_json, policy)?;
-    if let Some(source_policy) = source_policy {
-        if !claims.is_some_and(|claims| source_policy.matches(&claims)) {
-            return Err(VerificationFailure::UntrustedSigner);
-        }
+    if let Some(source_policy) = source_policy
+        && !claims.is_some_and(|claims| source_policy.matches(&claims))
+    {
+        return Err(VerificationFailure::UntrustedSigner);
     }
     let statement: StatementV1 =
         serde_json::from_slice(payload).map_err(|_| VerificationFailure::InvalidStatement)?;
