@@ -1382,14 +1382,73 @@ fn packages_are_private_and_have_no_release_configuration() {
     assert!(npm.get("publishConfig").is_none());
     assert!(npm["scripts"].get("prepublishOnly").is_some());
     assert!(read(&repo.join("setup.cfg")).contains("Private :: Do Not Upload"));
-    let workflow_text = glob_ext(&repo.join(".github").join("workflows"), "yml")
-        .iter()
-        .map(|p| read(p))
-        .collect::<Vec<_>>()
-        .join("\n")
-        .to_lowercase();
-    assert!(!workflow_text.contains("publish"));
-    assert!(!workflow_text.contains("upload-artifact"));
+    let workflows = glob_ext(&repo.join(".github").join("workflows"), "yml");
+    let mut artifact_transfer_workflows = Vec::new();
+    for path in workflows {
+        let text = read(&path);
+        assert!(
+            tc112_workflow_violations(&text).is_empty(),
+            "{} has package publication or release configuration: {:?}",
+            path.display(),
+            tc112_workflow_violations(&text)
+        );
+        if text.to_lowercase().contains("actions/upload-artifact") {
+            artifact_transfer_workflows.push(
+                path.file_name()
+                    .expect("workflow path has a filename")
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+        }
+    }
+    assert_eq!(artifact_transfer_workflows, ["ea-106-live.yml"]);
+}
+
+fn tc112_workflow_violations(text: &str) -> BTreeSet<&'static str> {
+    let mut violations = BTreeSet::new();
+    let workflow = yaml(text);
+    let manual_only = workflow["on"]
+        .as_object()
+        .is_some_and(|triggers| triggers.len() == 1 && triggers.contains_key("workflow_dispatch"));
+    if !manual_only {
+        violations.insert("non_manual_trigger");
+    }
+
+    let normalized = text.to_lowercase();
+    if normalized.contains("publish") {
+        violations.insert("package_publish");
+    }
+    let invokes_release_publisher = normalized
+        .lines()
+        .any(|line| line.trim_start().starts_with("uses:") && line.contains("release"))
+        || normalized.contains("gh release create");
+    if invokes_release_publisher {
+        violations.insert("release_publish");
+    }
+    violations
+}
+
+#[test]
+#[trace("TC-112", "FR-017-AC-4")]
+fn package_and_release_publication_or_automatic_workflow_triggers_are_refused() {
+    let package_publisher = "on:\n  workflow_dispatch:\njobs:\n  verify:\n    steps:\n      - uses: pypa/gh-action-pypi-publish@v1\n";
+    assert_eq!(
+        tc112_workflow_violations(package_publisher),
+        BTreeSet::from(["package_publish"])
+    );
+
+    let release_publisher = "on:\n  workflow_dispatch:\njobs:\n  verify:\n    steps:\n      - uses: softprops/action-gh-release@v2\n";
+    assert_eq!(
+        tc112_workflow_violations(release_publisher),
+        BTreeSet::from(["release_publish"])
+    );
+
+    let automatic_trigger =
+        "on:\n  push:\njobs:\n  verify:\n    steps:\n      - run: echo verify\n";
+    assert_eq!(
+        tc112_workflow_violations(automatic_trigger),
+        BTreeSet::from(["non_manual_trigger"])
+    );
 }
 
 fn ci_workflow() -> Value {
