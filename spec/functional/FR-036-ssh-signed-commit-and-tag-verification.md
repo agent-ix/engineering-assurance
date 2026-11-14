@@ -55,10 +55,17 @@ of "the signature" describe SSH signatures unless FR-040 is named.
 
 ## Outputs
 
-- A verdict with `status`, `kind`, `key_fingerprint` (for a commit only, read
+- A verdict with `status`, `kind`, `verified_commit_id`, `key_fingerprint` (for a commit only, read
   from git's `%GF` code when git reports one; a tag result carries none, because
   no delegated machine-readable fingerprint source exists for a tag) and
   `reason`. The `signer` member (principal and mapping) is defined by FR-037.
+- `verified_commit_id` is a required result member whose value is either the
+  canonical full commit object id (40 or 64 lowercase ASCII hexadecimal digits)
+  verified for a `kind: "commit"` request, or JSON `null`. For `kind: "tag"`,
+  it is always `null`: that result verifies a tag object, not a commit
+  revision. For a commit request whose revision resolves, the member carries
+  that id on every verdict, including `unsigned` and `unverifiable` results.
+  It is `null` when no commit object could be resolved.
 - `status` is one of:
   - `signed_valid`: git reports a good signature by a key the allowed-signers
     file names (commit: grade `G`; tag: `git verify-tag` exit 0).
@@ -86,12 +93,31 @@ of "the signature" describe SSH signatures unless FR-040 is named.
   `signature_verify_request_unreadable`, `signature_verify_request_invalid`,
   `signature_verify_revision_invalid`, `signature_verify_result_encoding_failed`
   and, from FR-037, `signature_verify_allowed_signers_invalid`.
+- Machine errors that carry no verdict SHALL NOT contain `verified_commit_id`.
+  The additive `verified_commit_id` member does not change the
+  `engineering-assurance.signature-verify-result/v1` protocol value.
 
 ## Behavior
 
 - The command SHALL run `git verify-commit` for kind `commit` and
   `git verify-tag` for kind `tag`, with `gpg.ssh.allowedSignersFile` set to the
   request's file.
+- For kind `commit`, the command SHALL resolve the caller's `revision` exactly
+  once to the canonical full id of its commit object before classifying its
+  signature.
+- For kind `commit`, the command SHALL use that resolved commit id for all
+  later reads and verification, including `git verify-commit`, delegated
+  `gitsign` verification, and the `%G?` grade lookup.
+- For kind `commit`, the command SHALL NOT re-resolve the caller's symbolic
+  revision after resolution.
+- For kind `commit`, the command SHALL emit the resolved commit id as
+  `verified_commit_id` on every verdict after resolution, including `unsigned`,
+  `signed_bad`, `signed_untrusted` and `unverifiable` verdicts caused by later
+  process or classification failures.
+- The command SHALL emit JSON `null` for `verified_commit_id` on every kind
+  `tag` result and on a kind `commit` result when no commit object could be
+  resolved, including an unresolved or wrong-kind revision, unavailable
+  repository or git, resolution timeout, or resolution output-bound failure.
 - The command SHALL grade a commit with `git log -1 --format=%G?`, read
   alongside `git verify-commit`. The `%G?` code is the commit mechanism only;
   it grades commits and not tag objects.
@@ -182,6 +208,9 @@ of "the signature" describe SSH signatures unless FR-040 is named.
 | FR-036-AC-10 | An OpenPGP-signed commit and an OpenPGP-signed annotated tag each yield `unverifiable` with reason `unsupported_signature_format`. An X.509 (CMS) signature never yields that reason; FR-040 handles it. | Test |
 | FR-036-AC-11 | When `git verify-tag` exits nonzero on a signed tag and `ssh-keygen` cannot start, the verdict is `unverifiable` with reason `ssh_keygen_not_started`; a tag with no signature block or with a non-SSH signature block does not need `ssh-keygen`. | Test |
 | FR-036-AC-12 | The `signature-verify` feature and the binary add no crate dependency that performs signature verification or cryptography; the only verifying programs invoked are git and `ssh-keygen`, plus `gitsign` for FR-040. | Inspection |
+| FR-036-AC-13 | A commit request using an object-id revision and a request using a symbolic alias for that same commit each return the same full commit object id in `verified_commit_id`; all later commit verifier calls and the `%G?` lookup use that id, not the caller's alias. | Test |
+| FR-036-AC-14 | Every tag verdict has `verified_commit_id: null`, including an annotated tag (whose verified object is a tag object) and a lightweight tag (`unsigned`/`lightweight_tag`); the existing FR-040 tag-name invocation remains unchanged. | Test |
+| FR-036-AC-15 | Every commit verdict after successful resolution, including `signed_valid`, `signed_untrusted`, `signed_bad`, `unsigned` and post-resolution `unverifiable`, carries the exact resolved commit id; an unresolved/wrong-kind revision, unavailable repository or git, or resolution timeout/output-bound failure carries `null`; machine errors carry no result member. | Test |
 
 ## Dependencies
 
