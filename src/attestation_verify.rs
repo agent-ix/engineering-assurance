@@ -110,6 +110,9 @@ pub enum AttestationVerificationError {
     /// The summary predicate does not match its expected release facts.
     #[error("verification summary does not match the release")]
     SummaryInvalid,
+    /// The configured SHA-256 provider could not digest canonical statement bytes.
+    #[error("canonical statement digest provider failed")]
+    DigestUnavailable,
     /// The release did not satisfy all conditions required for PASSED.
     #[error("release verification conditions are not all satisfied")]
     NotPassed,
@@ -266,6 +269,36 @@ fn parse_statement(payload: &[u8]) -> Result<StatementV1, AttestationVerificatio
         return Err(AttestationVerificationError::PredicateInvalid);
     }
     Ok(statement)
+}
+
+/// Return the SHA-256 digest of an in-toto statement's RFC 8785 canonical bytes.
+///
+/// `digest_canonical_bytes` is the caller's approved SHA-256 provider. It
+/// receives only the canonical statement bytes and must return a lowercase
+/// hexadecimal digest.
+///
+/// # Errors
+///
+/// Returns [`AttestationVerificationError::PredicateInvalid`] when the input
+/// is not a valid in-toto Statement v1 or cannot be canonically serialized.
+pub fn canonical_digest(
+    payload: &[u8],
+    digest_canonical_bytes: impl FnOnce(&[u8]) -> Result<String, ()>,
+) -> Result<String, AttestationVerificationError> {
+    let statement = parse_statement(payload)?;
+    let canonical = statement
+        .canonical_bytes()
+        .map_err(|_| AttestationVerificationError::PredicateInvalid)?;
+    let digest = digest_canonical_bytes(&canonical)
+        .map_err(|()| AttestationVerificationError::DigestUnavailable)?;
+    if digest.len() != 64
+        || !digest
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(AttestationVerificationError::DigestUnavailable);
+    }
+    Ok(digest)
 }
 
 fn check_artifact_subjects(
@@ -467,7 +500,10 @@ mod tests {
             )
             .as_bytes(),
         ];
-        let input_digests = input_payloads.map(canonical_statement_digest_for_test);
+        let input_digests = input_payloads.map(|payload| {
+            canonical_digest(payload, sha256_canonical_bytes_for_test)
+                .expect("input statement canonical digest")
+        });
         let expected = ExpectedRelease {
             input_digests: input_digests.clone(),
             ..expected()
@@ -482,7 +518,8 @@ mod tests {
             r#"//in-toto.io/Statement/v1"}"#
         )
         .as_bytes();
-        let changed_digest = canonical_statement_digest_for_test(changed_payload);
+        let changed_digest = canonical_digest(changed_payload, sha256_canonical_bytes_for_test)
+            .expect("changed statement canonical digest");
         assert_ne!(changed_digest, input_digests[0]);
         let changed_expected = ExpectedRelease {
             input_digests: [
@@ -540,26 +577,24 @@ mod tests {
         assert!(serde_json::from_value::<VerificationSummaryStatement>(extra).is_err());
     }
 
-    fn canonical_statement_digest_for_test(payload: &[u8]) -> String {
+    fn sha256_canonical_bytes_for_test(canonical: &[u8]) -> Result<String, ()> {
         use std::{io::Write as _, process::Command};
 
-        let statement: StatementV1 = serde_json::from_slice(payload).expect("input statement");
-        let canonical = statement
-            .canonical_bytes()
-            .expect("RFC 8785 canonical bytes");
-        let mut file = tempfile::NamedTempFile::new().expect("temporary digest input");
-        file.write_all(&canonical).expect("canonical bytes write");
+        let mut file = tempfile::NamedTempFile::new().map_err(|_| ())?;
+        file.write_all(canonical).map_err(|_| ())?;
         let output = Command::new("/usr/bin/sha256sum")
             .arg("--")
             .arg(file.path())
             .output()
-            .expect("SHA-256 provider launches");
-        assert!(output.status.success(), "SHA-256 provider succeeds");
+            .map_err(|_| ())?;
+        if !output.status.success() {
+            return Err(());
+        }
         String::from_utf8(output.stdout)
-            .expect("SHA-256 output is UTF-8")
+            .map_err(|_| ())?
             .split_ascii_whitespace()
             .next()
-            .expect("SHA-256 digest exists")
-            .to_owned()
+            .map(str::to_owned)
+            .ok_or(())
     }
 }

@@ -18,7 +18,7 @@ use engineering_assurance::{
     },
     attestation_verify::{
         ArtifactSubject, ExpectedRelease, ReleaseInputs, SignedStatement, VerificationConditions,
-        verify_release_attestation_set,
+        canonical_digest, verify_release_attestation_set,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -238,9 +238,12 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, AttestationVerifyError> {
     let test_result = read_signed_statement(&request.statements.test_result)?;
     let summary = read_signed_statement(&request.statements.summary)?;
     let input_digests = [
-        canonical_digest(&provenance.payload)?,
-        canonical_digest(&sbom.payload)?,
-        canonical_digest(&test_result.payload)?,
+        canonical_digest(&provenance.payload, sha256_canonical_bytes)
+            .map_err(|_| AttestationVerifyError::Statement)?,
+        canonical_digest(&sbom.payload, sha256_canonical_bytes)
+            .map_err(|_| AttestationVerifyError::Statement)?,
+        canonical_digest(&test_result.payload, sha256_canonical_bytes)
+            .map_err(|_| AttestationVerifyError::Statement)?,
     ];
     let repository = request.github_repository.clone();
     let verifier_id = format!(
@@ -369,19 +372,6 @@ fn read_signed_statement(
     Ok(ReadStatement { payload, bundle })
 }
 
-fn canonical_digest(bytes: &[u8]) -> Result<String, AttestationVerifyError> {
-    let statement: engineering_assurance::attestation_signing::StatementV1 =
-        serde_json::from_slice(bytes).map_err(|_| AttestationVerifyError::Statement)?;
-    let canonical = statement
-        .canonical_bytes()
-        .map_err(|_| AttestationVerifyError::Statement)?;
-    let mut file = tempfile::NamedTempFile::new().map_err(|_| AttestationVerifyError::Statement)?;
-    std::io::Write::write_all(&mut file, &canonical)
-        .map_err(|_| AttestationVerifyError::Statement)?;
-    let digest = sha256_file(file.path()).map_err(|_| AttestationVerifyError::Statement)?;
-    Ok(digest)
-}
-
 fn sha256_file(path: &Path) -> Result<String, ()> {
     let args: [&OsStr; 2] = [OsStr::new("--"), path.as_os_str()];
     let output = process_host::run(
@@ -406,6 +396,14 @@ fn sha256_file(path: &Path) -> Result<String, ()> {
         return Err(());
     }
     Ok(digest.to_owned())
+}
+
+fn sha256_canonical_bytes(canonical: &[u8]) -> Result<String, ()> {
+    use std::io::Write as _;
+
+    let mut file = tempfile::NamedTempFile::new().map_err(|_| ())?;
+    file.write_all(canonical).map_err(|_| ())?;
+    sha256_file(file.path())
 }
 
 fn absolute_file(path: &Path, max_bytes: u64) -> Result<PathBuf, ()> {
