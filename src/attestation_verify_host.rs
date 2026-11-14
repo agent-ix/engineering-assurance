@@ -57,7 +57,6 @@ struct Request {
     record_path: String,
     allowed_signers_path: String,
     base_branch: String,
-    trusted_root: PathBuf,
     signer_repository: String,
     signer_workflow_path: String,
     signer_ref: String,
@@ -261,7 +260,15 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, AttestationVerifyError> {
         artifacts,
         input_digests,
     };
-    let trusted_root = sigstore_verify::trust_root::TrustedRoot::from_file(&request.trusted_root)
+    let trusted_root_json = match transparency {
+        TransparencyRequirement::PublicLog => {
+            sigstore_verify::trust_root::SIGSTORE_PRODUCTION_TRUSTED_ROOT
+        }
+        TransparencyRequirement::TimestampOnly => {
+            sigstore_verify::trust_root::SIGSTORE_GITHUB_TRUSTED_ROOT
+        }
+    };
+    let trusted_root = sigstore_verify::trust_root::TrustedRoot::from_json(trusted_root_json)
         .map_err(|_| AttestationVerifyError::Policy)?;
     let verifier =
         SigstoreBundleVerifier::new(&trusted_root).map_err(|_| AttestationVerifyError::Policy)?;
@@ -316,7 +323,6 @@ fn validate_request(request: &Request) -> Result<(), AttestationVerifyError> {
     if request.protocol != REQUEST_PROTOCOL
         || !valid_repository(&request.github_repository)
         || !request.repository.is_absolute()
-        || !request.trusted_root.is_absolute()
         || !is_plain_ref_part(&request.tag)
         || !engineering_assurance::release::is_repository_path(&request.record_path)
         || !engineering_assurance::release::is_repository_path(&request.allowed_signers_path)
@@ -657,7 +663,6 @@ mod tests {
             "record_path": "records/release.md",
             "allowed_signers_path": ".engineering-assurance/allowed_signers",
             "base_branch": "main",
-            "trusted_root": "/tmp/trusted-root.json",
             "signer_repository": "agent-ix/engineering-assurance",
             "signer_workflow_path": ".github/workflows/release-attestation.yml",
             "signer_ref": "refs/tags/v0.9.0",
