@@ -270,6 +270,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-057 | FR-057-AC-10 | TC-650 | ✅ `tests/record_sink.rs` passing |
 | FR-057 | FR-057-AC-11 | TC-650 | ✅ `tests/record_sink.rs` passing |
 | FR-058 | FR-058-AC-1 | TC-661 | ✅ `src/attestation_signing.rs` approval-statement fixture shape and canonicalization |
+| FR-058 | FR-058-AC-1 | TC-964 | ✅ `src/approval_statement.rs` an approval statement with an additional subject is rejected |
 | FR-058 | FR-058-AC-7 | TC-663 | ✅ `src/attestation_signing.rs` missing-OIDC refusal |
 | FR-061 | FR-061-AC-2 | TC-948 | 🚧 Specified; test implementation and trace tag await merge of the EA-110 code branch |
 | FR-061 | FR-061-AC-3 | TC-947 | 🚧 Specified; test implementation and trace tag await merge of the EA-110 code branch |
@@ -283,6 +284,17 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-064 | FR-064-AC-2 | TC-660, TC-662 | ✅ `src/attestation_signing.rs` policy mismatch and stable failure codes |
 | FR-064 | FR-064-AC-3 | TC-659, TC-660, TC-662 | ✅ `src/attestation_signing.rs` tampered payload is rejected by the delegated verifier |
 | FR-064 | FR-064-AC-4 | TC-660, TC-662 | ✅ `src/attestation_signing.rs` wrong git subject and stable failure codes |
+| FR-058 | FR-058-AC-2 | TC-959 | ✅ `src/approval_statement.rs` rejects an open approval predicate |
+| FR-064 | FR-064-AC-5 | TC-959 | ✅ `src/approval_statement.rs` rejects an open approval predicate and wrong predicate type |
+| FR-064 | FR-064-AC-1, FR-064-AC-10 | TC-960 | ✅ `src/approval_statement.rs` verified statements satisfy three roles; an untrusted statement leaves its role missing |
+| FR-064 | FR-064-AC-6 | TC-963 | ✅ `src/approval_statement.rs` an untrusted signer is rejected even when the predicate names a workflow identity as approver |
+| FR-061 | FR-061-AC-9 | TC-962 | ✅ `src/approval_statement.rs` the review-gate and verified-statement paths return the same role verdict |
+| FR-062 | FR-062-AC-4 | TC-961 | ✅ `src/approval_statement.rs` a verified statement naming a listed agent does not count toward a role |
+| FR-064 | FR-064-AC-16 | TC-954 | ✅ `src/approval_statement.rs` exact tuple lookup verifies every retained match using its bytes and bundle |
+| FR-064 | FR-064-AC-17 | TC-955 | ✅ `src/approval_statement.rs` no exact match returns `statements_not_retained` |
+| FR-064 | FR-064-AC-18 | TC-956 | ✅ `src/approval_statement.rs` read failure returns `input_unreadable` |
+| FR-064 | FR-064-AC-19 | TC-957 | ✅ `src/approval_statement.rs` refused statement is not verified or counted |
+| FR-064 | FR-064-AC-20 | TC-954, TC-958 | ✅ `src/approval_statement.rs` aggregate status and reason use fixed precedence; only verified statements count toward roles |
 | FR-064 | FR-064-AC-13 | TC-518 | 🚧 Specified |
 | FR-064 | FR-064-AC-14 | TC-519 | 🚧 Specified |
 | FR-064 | FR-064-AC-15 | TC-520 | 🚧 Specified |
@@ -1023,6 +1035,17 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-681 | The branch-protection endpoint encodes a slash in the branch name as one path component | Unit | P0 | FR-055-AC-6, FR-068-AC-1 | 🚧 Endpoint helper only; complete verifier path remains unbacked |
 | TC-682 | The verifier accepts the configured repository only when it matches the checkout origin | Unit | P0 | FR-068-AC-1 | 🚧 Repository-identity helper only; summary verification remains unbacked |
 | TC-683 | A reusable-workflow source claim is accepted only for the declared repository, workflow path, push event, and tag ref; other values yield `untrusted_signer` | Unit | P0 | FR-064-AC-13, FR-064-AC-15, FR-068-AC-3 | 🚧 Source identity claims only; signed statement verification awaits the trusted statement reader |
+| TC-954 | An exact repository, merged pull-request and merged-commit lookup verifies every retained match with its exact bytes and bundle; a verified and an untrusted result aggregate to `untrusted_signer`, while only the verified approval satisfies the role | Unit | P0 | FR-064-AC-16, FR-064-AC-20 | ✅ `src/approval_statement.rs` passing |
+| TC-955 | A private-store query with no exact retained match returns `unverifiable` with `statements_not_retained` and leaves the role unsatisfied | Unit | P0 | FR-064-AC-17 | ✅ `src/approval_statement.rs` passing |
+| TC-956 | A failed private-store lookup returns `unverifiable` with `input_unreadable` and leaves the role unsatisfied | Unit | P0 | FR-064-AC-18 | ✅ `src/approval_statement.rs` passing |
+| TC-957 | A retained statement whose sink outcome was refused returns `unverifiable` with `publish_refused`, is not sent to the verifier, and does not satisfy the role | Unit | P0 | FR-064-AC-19 | ✅ `src/approval_statement.rs` passing |
+| TC-958 | A mixed verified/untrusted statement set uses status precedence; multiple unverifiable reasons use `input_unreadable`, then `publish_refused`, then `statements_not_retained` | Unit | P0 | FR-064-AC-20 | ✅ `src/approval_statement.rs` passing |
+| TC-959 | An authenticated approval statement with an extra predicate member or a different predicate type returns `predicate_invalid`; the open predicate is rejected | Unit | P0 | FR-058-AC-2, FR-064-AC-5 | ✅ `src/approval_statement.rs` passing |
+| TC-960 | Three verified statements from distinct individuals satisfy three roles; when one statement is untrusted, the aggregate is `untrusted_signer` and its role remains missing | Unit | P0 | FR-064-AC-1, FR-064-AC-10 | ✅ `src/approval_statement.rs` passing |
+| TC-961 | A verified statement naming an account listed as an agent leaves its role unsatisfied with `agent_only` | Unit | P0 | FR-062-AC-4 | ✅ `src/approval_statement.rs` passing |
+| TC-962 | A GitHub review approval and its verified statement produce identical FR-061 role verdicts under the same policy | Unit | P0 | FR-061-AC-9 | ✅ `src/approval_statement.rs` passing |
+| TC-963 | A statement naming the workflow identity as approver remains `untrusted_signer` when its signature bundle has an untrusted signer | Unit | P0 | FR-064-AC-6 | ✅ `src/approval_statement.rs` passing |
+| TC-964 | An authenticated approval statement with a second subject is rejected with `wrong_subject` and does not satisfy a role | Unit | P0 | FR-058-AC-1 | ✅ `src/approval_statement.rs` passing |
 | TC-912 | Source inspection finds zero public-log send paths that bypass the leak check | Static | P0 | NFR-009-AC-3, NFR-009-M-2 | 🚧 Unverified; source inspection not yet completed |
 | TC-913 | The CLI returns `satisfied` for an agent-authored pull request with distinct human approvals for the two required roles and reports both assigned account ids | Integration | P0 | FR-059-AC-1, FR-065-AC-10 | 🚧 `tests/approval_gate_cli.rs::agent_authored_pull_request_passes_with_distinct_human_role_approvals` is in merged #252; per-field source-approval assertions, the missing-role case, and agent/bot-review cases are not asserted here |
 | TC-914 | The latest review state controls an approval: a later change request or dismissal revokes it, a comment leaves it intact, and a fresh approval restores it; an old-head review and a bot review are excluded | Unit | P0 | FR-059-AC-2, FR-059-AC-5, FR-062-AC-1 | 🚧 `src/approval_gate.rs::tests::only_latest_valid_same_head_human_review_counts_and_agents_do_not` and `latest_decision_revokes_and_later_fresh_approval_restores` are in merged #252 |

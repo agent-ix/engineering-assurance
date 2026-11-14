@@ -70,6 +70,8 @@
 
 #[cfg(feature = "approval-gate")]
 pub mod approval_gate;
+#[cfg(all(feature = "approval-gate", feature = "attestation-signing"))]
+pub mod approval_statement;
 #[cfg(feature = "approval-tag")]
 pub mod approval_tag;
 #[cfg(feature = "approval-trail")]
