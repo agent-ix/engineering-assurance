@@ -1650,6 +1650,7 @@ fn supervise_child(
     let started = Instant::now();
     #[cfg(target_os = "linux")]
     let mut tracked_descendants = BTreeSet::new();
+    let mut escaped_descendant = false;
     #[cfg(not(target_os = "linux"))]
     let tracked_descendants = BTreeSet::new();
     loop {
@@ -1671,21 +1672,29 @@ fn supervise_child(
                     return (KernelConclusion::ContainmentFailure, status);
                 };
                 tracked_descendants.extend(observation.descendants);
-                if observation.escaped {
-                    let status = terminate_group(child, &tracked_descendants);
-                    return (KernelConclusion::ContainmentFailure, status);
-                }
+                escaped_descendant |= observation.escaped;
             }
         }
         match child.try_wait() {
             Ok(Some(status)) => {
+                if escaped_descendant {
+                    let status = terminate_group(child, &tracked_descendants);
+                    return (KernelConclusion::ContainmentFailure, status);
+                }
                 terminate_process_group(child.id());
                 return (KernelConclusion::Terminal(status), Some(status));
             }
             Ok(None) if started.elapsed() < timeout => thread::sleep(Duration::from_millis(1)),
             Ok(None) => {
                 let status = terminate_group(child, &tracked_descendants);
-                return (KernelConclusion::TimedOut, status);
+                return (
+                    if escaped_descendant {
+                        KernelConclusion::ContainmentFailure
+                    } else {
+                        KernelConclusion::TimedOut
+                    },
+                    status,
+                );
             }
             Err(error) => {
                 let status = terminate_group(child, &tracked_descendants);

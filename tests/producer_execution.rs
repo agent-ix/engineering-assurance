@@ -207,6 +207,16 @@ fn await_ready<T>(path: &Path, worker: &JoinHandle<T>, message: &str) {
     }
 }
 
+fn fixture_pid_is_live(pid: &str) -> bool {
+    let Ok(stat) = fs::read_to_string(format!("/proc/{pid}/stat")) else {
+        return false;
+    };
+    let Some((_, fields)) = stat.rsplit_once(')') else {
+        return false;
+    };
+    !matches!(fields.split_whitespace().next(), Some("Z" | "X"))
+}
+
 fn adapter() -> TextAdapter {
     TextAdapter {
         binding: binding(),
@@ -1008,6 +1018,95 @@ fn tc_125_cancellation_reaps_group_and_escape_mutant_fails_containment() {
         escaped.state,
         ProducerExecutionState::ContainmentFailure
     ));
+}
+
+#[test]
+#[trace("TC-125", "FR-019-AC-4", "FR-019-CON-4")]
+fn tc_125_timeout_kills_observed_nested_process_group_and_joins_both_readers() {
+    let root = tempfile::tempdir().expect("temporary root");
+    let controls = tempfile::tempdir().expect("control root");
+    let producer_pid_path = controls.path().join("producer.pid");
+    let descendant_pid_path = controls.path().join("descendant.pid");
+    let mut timed_request = request(
+        root.path(),
+        &[
+            "spawn-group-escape",
+            producer_pid_path.to_str().expect("UTF-8 path"),
+            descendant_pid_path.to_str().expect("UTF-8 path"),
+        ],
+    );
+    timed_request.budget.timeout_millis = 350;
+    timed_request.environment.insert(
+        "EA_FIXTURE_EXECUTABLE".to_owned(),
+        fixture_executable().display().to_string(),
+    );
+
+    let started = Instant::now();
+    let deadline = started + Duration::from_millis(timed_request.budget.timeout_millis);
+    let worker = thread::spawn(move || execute(&timed_request, &adapter()));
+    for marker in [&producer_pid_path, &descendant_pid_path] {
+        let marker_deadline = Instant::now() + Duration::from_secs(5);
+        while !marker.exists() {
+            assert!(
+                !worker.is_finished(),
+                "producer execution ended before nested fixture PID was recorded"
+            );
+            assert!(
+                Instant::now() < marker_deadline,
+                "fixture did not become ready"
+            );
+            thread::sleep(Duration::from_millis(1));
+        }
+    }
+    let producer_pid = fs::read_to_string(&producer_pid_path).expect("producer pid");
+    let descendant_pid = fs::read_to_string(&descendant_pid_path).expect("descendant pid");
+    assert!(
+        fixture_pid_is_live(&producer_pid),
+        "producer must still be alive"
+    );
+    assert!(
+        fixture_pid_is_live(&descendant_pid),
+        "nested escaped child must remain alive while holding inherited streams"
+    );
+
+    let cleanup_deadline = deadline + Duration::from_millis(1_000);
+    while !worker.is_finished() && Instant::now() < cleanup_deadline {
+        thread::sleep(Duration::from_millis(1));
+    }
+    assert!(
+        worker.is_finished(),
+        "execution and both stream readers must finish within 1,000 ms after deadline"
+    );
+    let elapsed = started.elapsed();
+    let result = worker.join().expect("executor worker must terminate");
+    assert!(
+        elapsed >= Duration::from_millis(350),
+        "fixture must remain alive through the request deadline: {elapsed:?}"
+    );
+    assert!(
+        elapsed <= Duration::from_millis(1_350),
+        "cleanup exceeded the 1,000 ms post-deadline bound: {elapsed:?}"
+    );
+    assert!(
+        matches!(result.state, ProducerExecutionState::ContainmentFailure),
+        "observed escaped group must retain its typed containment failure: {:?}",
+        result.state
+    );
+    let evidence = result.process.expect("launched process evidence");
+    assert!(
+        evidence.terminal_status.is_some(),
+        "direct child must have a reaped terminal status"
+    );
+    assert!(evidence.stdout.bytes.is_empty());
+    assert!(evidence.stderr.bytes.is_empty());
+    assert!(
+        !fixture_pid_is_live(&producer_pid),
+        "direct child must be reaped"
+    );
+    assert!(
+        !fixture_pid_is_live(&descendant_pid),
+        "observed escaped fixture descendant must be dead"
+    );
 }
 
 #[test]

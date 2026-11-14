@@ -147,6 +147,34 @@ fn escape_child(arguments: &mut impl Iterator<Item = OsString>) {
     thread::sleep(Duration::from_secs(10));
 }
 
+#[cfg(unix)]
+fn spawn_group_escape(arguments: &mut impl Iterator<Item = OsString>) {
+    let producer_pid = argument(arguments);
+    let descendant_pid = argument(arguments);
+    fs::write(producer_pid, process::id().to_string())
+        .unwrap_or_else(|_| fail("cannot write producer pid"));
+    let mut child = Command::new(fixture_executable())
+        .arg("group-escape-child")
+        .arg(descendant_pid)
+        .spawn()
+        .unwrap_or_else(|_| fail("cannot spawn nested fixture child"));
+    let _ = child.wait();
+}
+
+#[cfg(unix)]
+fn group_escape_child(arguments: &mut impl Iterator<Item = OsString>) {
+    let Some(pid) = rustix::process::Pid::from_raw(
+        i32::try_from(process::id()).unwrap_or_else(|_| fail("fixture pid is out of range")),
+    ) else {
+        fail("fixture pid is invalid");
+    };
+    rustix::process::setpgid(Some(pid), Some(pid))
+        .unwrap_or_else(|_| fail("cannot move nested child to its own process group"));
+    fs::write(argument(arguments), process::id().to_string())
+        .unwrap_or_else(|_| fail("cannot write nested child pid"));
+    thread::sleep(Duration::from_secs(60));
+}
+
 fn own_path() -> std::path::PathBuf {
     env::current_exe().unwrap_or_else(|_| fail("cannot resolve current executable"))
 }
@@ -210,6 +238,10 @@ fn main() {
         "spawn-child" => spawn_child(&mut arguments),
         "escape" => escape(&mut arguments),
         "escape-child" => escape_child(&mut arguments),
+        #[cfg(unix)]
+        "spawn-group-escape" => spawn_group_escape(&mut arguments),
+        #[cfg(unix)]
+        "group-escape-child" => group_escape_child(&mut arguments),
         "self-exe" => self_exe(),
         "argv0" => argv0(),
         "reexec" => reexec(),
