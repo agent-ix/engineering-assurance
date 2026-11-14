@@ -2001,7 +2001,7 @@ mod descendant_inspection_tests {
         assert_eq!(descendant_result.descendants, BTreeSet::from([child_pid]));
         assert!(!descendant_result.escaped);
 
-        let eacces = rustix::io::Errno::ACCES.raw_os_error();
+        let eacces = rustix::io::Errno::ACCESS.raw_os_error();
         let other_error =
             inspect_descendants_with(root, 64, |_| Err(io::Error::from_raw_os_error(eacces)));
         assert!(
