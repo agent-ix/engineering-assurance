@@ -170,6 +170,62 @@ jobs:
           fi
           npm install --ignore-scripts --registry="$NPMJS_REGISTRY" "@agent-ix/quoin@$QUOIN_TOOLING_TAG"
 
+      - name: Validate the retained evidence store with the Quoin exporter
+        shell: bash
+        env:
+          QUOIN_CLI: ${{ runner.temp }}/quoin-tooling/node_modules/.bin/quoin
+          RELEASE_ARTIFACTS_DIR: release-artifacts
+          EVIDENCE_DIR: release-evidence
+          TEST_RESULT_OUTPUT: ${{ runner.temp }}/test-result.json
+        run: |
+          set -euo pipefail
+          subject_path="$RUNNER_TEMP/release-artifact-subject.json"
+          python3 - "$subject_path" <<'PY'
+          import hashlib
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          root = Path(os.environ["RELEASE_ARTIFACTS_DIR"])
+          subjects = []
+          for path in sorted(root.rglob("*")):
+              if path.is_symlink():
+                  raise SystemExit("release_artifact_subject_invalid")
+              if not path.is_file():
+                  continue
+              digest = hashlib.sha256()
+              with path.open("rb") as artifact:
+                  for chunk in iter(lambda: artifact.read(1024 * 1024), b""):
+                      digest.update(chunk)
+              subjects.append({
+                  "name": path.relative_to(root).as_posix(),
+                  "digest": {"sha256": digest.hexdigest()},
+              })
+          if not subjects:
+              raise SystemExit("release_artifact_subject_invalid")
+          Path(sys.argv[1]).write_text(
+              json.dumps(subjects, separators=(",", ":")), encoding="utf-8"
+          )
+          PY
+
+          error_path="$RUNNER_TEMP/quoin-test-result.stderr"
+          if "$QUOIN_CLI" evidence export-test-result \
+            --subject "$subject_path" \
+            --output "$TEST_RESULT_OUTPUT" \
+            --evidence-dir "$EVIDENCE_DIR" \
+            > "$RUNNER_TEMP/quoin-test-result.stdout" 2> "$error_path"; then
+            :
+          else
+            quoin_status=$?
+            if grep -Fq 'evidence_store_invalid' "$error_path"; then
+              echo "::error::no_retained_evidence_store"
+              exit 1
+            fi
+            cat "$error_path" >&2
+            exit "$quoin_status"
+          fi
+
       - name: Refuse without a trusted approval-statement source
         shell: bash
         run: |

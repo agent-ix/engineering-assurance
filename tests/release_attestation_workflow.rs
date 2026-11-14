@@ -3,7 +3,7 @@
 
 //! Guard the Engineering Assurance reusable release workflow's contract.
 
-use std::{fs, path::Path};
+use std::{fs, path::Path, process::Command};
 
 use ix_trace_rs::trace;
 use serde_json::Value;
@@ -150,6 +150,151 @@ fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_
     assert_workflow_inputs_and_permissions(&workflow);
     assert_verify_job(&workflow);
     assert_attest_job(&workflow);
+}
+
+#[trace("TC-665", "FR-070-AC-8", "FR-070-AC-9")]
+#[test]
+fn reusable_workflow_downloads_named_release_and_evidence_artifacts_without_an_ea_caller() {
+    let workflow = reusable_workflow();
+    assert_workflow_inputs_and_permissions(&workflow);
+    let inputs = &workflow["on"]["workflow_call"]["inputs"];
+    assert_eq!(inputs["artifact_name"]["default"], "release-artifacts");
+    assert_eq!(inputs["evidence_artifact"]["default"], "release-evidence");
+
+    let verify_steps = workflow["jobs"]["verify"]["steps"]
+        .as_array()
+        .expect("verify steps");
+    for (step_name, input, path) in [
+        (
+            "Download the release artifact",
+            "artifact_name",
+            "release-artifacts",
+        ),
+        (
+            "Download retained evidence when present",
+            "evidence_artifact",
+            "release-evidence",
+        ),
+    ] {
+        let download = verify_steps
+            .iter()
+            .find(|step| step["name"] == step_name)
+            .expect("artifact download step exists");
+        assert!(
+            download["uses"]
+                .as_str()
+                .is_some_and(|reference| reference.starts_with("actions/download-artifact@"))
+        );
+        assert_eq!(
+            download["with"]["name"],
+            format!("${{{{ inputs.{input} }}}}")
+        );
+        assert_eq!(download["with"]["path"], path);
+    }
+    assert!(
+        !repository_root()
+            .join(".github/workflows/release.yml")
+            .exists(),
+        "the EA tag caller remains deferred until a retained store exists"
+    );
+}
+
+#[cfg(unix)]
+#[trace("TC-667", "FR-070-AC-11")]
+#[test]
+fn nonempty_invalid_evidence_is_refused_before_the_role_source_failure() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let workflow = reusable_workflow();
+    let verify_steps = workflow["jobs"]["verify"]["steps"]
+        .as_array()
+        .expect("verify steps");
+    let export_index = verify_steps
+        .iter()
+        .position(|step| {
+            step["name"] == "Validate the retained evidence store with the Quoin exporter"
+        })
+        .expect("Quoin evidence validation step exists");
+    let role_index = verify_steps
+        .iter()
+        .position(|step| step["name"] == "Refuse without a trusted approval-statement source")
+        .expect("role-source refusal exists");
+    assert!(
+        export_index < role_index,
+        "invalid evidence fails before role-source refusal"
+    );
+    let script = verify_steps[export_index]["run"]
+        .as_str()
+        .expect("Quoin evidence validation script");
+
+    let root = tempfile::tempdir().expect("temporary workflow root");
+    let runner_temp = root.path().join("runner-temp");
+    let artifacts = root.path().join("release-artifacts");
+    let evidence = root.path().join("release-evidence");
+    fs::create_dir_all(&runner_temp).expect("runner temp directory");
+    fs::create_dir_all(&artifacts).expect("release artifact directory");
+    fs::write(artifacts.join("release.tar.gz"), b"release artifact")
+        .expect("release artifact fixture");
+    fs::create_dir_all(evidence.join("runs/suite")).expect("non-empty invalid evidence directory");
+    fs::write(evidence.join("bindings.json"), b"{").expect("invalid non-empty evidence fixture");
+
+    let fake_quoin = root.path().join("quoin");
+    let args_capture = root.path().join("quoin-args.txt");
+    fs::write(
+        &fake_quoin,
+        "#!/bin/bash\nprintf '%s\\n' \"$@\" > \"$QUOIN_ARGS_CAPTURE\"\nprintf '%s\\n' 'evidence_store_invalid: release-evidence/bindings.json: invalid JSON' >&2\nexit 3\n",
+    )
+    .expect("fake Quoin exporter script");
+    let mut permissions = fs::metadata(&fake_quoin)
+        .expect("fake Quoin metadata")
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&fake_quoin, permissions).expect("fake Quoin executable");
+
+    let output = Command::new("bash")
+        .args(["-euo", "pipefail", "-c", script])
+        .env("RUNNER_TEMP", &runner_temp)
+        .env("QUOIN_CLI", &fake_quoin)
+        .env("QUOIN_ARGS_CAPTURE", &args_capture)
+        .env("RELEASE_ARTIFACTS_DIR", &artifacts)
+        .env("EVIDENCE_DIR", &evidence)
+        .env("TEST_RESULT_OUTPUT", runner_temp.join("test-result.json"))
+        .output()
+        .expect("run the production workflow step");
+    assert_eq!(output.status.code(), Some(1));
+    let rendered = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        rendered.contains("no_retained_evidence_store"),
+        "{rendered}"
+    );
+    assert!(
+        !rendered.contains("release_roles_source_unavailable"),
+        "{rendered}"
+    );
+    assert!(!runner_temp.join("test-result.json").exists());
+
+    let arguments = fs::read_to_string(args_capture).expect("Quoin invocation was captured");
+    assert!(
+        arguments.contains("evidence\nexport-test-result\n"),
+        "{arguments}"
+    );
+    assert!(arguments.contains("--evidence-dir\n"), "{arguments}");
+    assert!(arguments.contains("--subject\n"), "{arguments}");
+    assert!(arguments.contains("--output\n"), "{arguments}");
+    let subject_path = runner_temp.join("release-artifact-subject.json");
+    let subject: Value = serde_json::from_slice(
+        &fs::read(subject_path).expect("subject computed from downloaded artifact"),
+    )
+    .expect("computed subject is JSON");
+    assert_eq!(subject[0]["name"], "release.tar.gz");
+    assert_eq!(
+        subject[0]["digest"]["sha256"].as_str().map(str::len),
+        Some(64)
+    );
 }
 
 fn assert_workflow_inputs_and_permissions(workflow: &Value) {
