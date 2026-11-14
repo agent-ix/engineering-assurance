@@ -1409,7 +1409,10 @@ fn packages_are_private_and_have_no_release_configuration() {
             );
         }
     }
-    assert_eq!(artifact_transfer_workflows, ["ea-106-live.yml"]);
+    assert_eq!(
+        artifact_transfer_workflows,
+        ["ea-106-live.yml", "release-attestation.yml"]
+    );
 }
 
 fn tc112_workflow_violations(path: &str, text: &str) -> BTreeSet<&'static str> {
