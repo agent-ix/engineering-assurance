@@ -181,7 +181,7 @@ fn collect_request_with_fake_github(
     (temp, request, graphql_marker)
 }
 
-#[trace("TC-913", "TC-945", "FR-059-AC-1", "FR-061-AC-1", "FR-065-AC-10")]
+#[trace("TC-913", "TC-945", "FR-059-AC-1", "FR-065-AC-10")]
 #[test]
 fn agent_authored_pull_request_passes_with_distinct_human_role_approvals() {
     let result = run(&request(&[

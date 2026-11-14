@@ -972,7 +972,6 @@ mod tests {
         "TC-914",
         "TC-917",
         "TC-934",
-        "FR-059-AC-1",
         "FR-059-AC-2",
         "FR-059-AC-5",
         "FR-062-AC-1",
@@ -1251,7 +1250,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("TC-923", "FR-061-AC-1", "FR-061-AC-2", "FR-063-AC-4")]
+    #[trace("TC-923", "FR-061-AC-2", "FR-063-AC-4")]
     fn evaluates_every_role_and_rejects_shared_or_missing_approvals() {
         let policy = policy();
         let reviews = [
@@ -1493,14 +1492,7 @@ mod tests {
     }
 
     #[test]
-    #[trace(
-        "TC-937",
-        "TC-940",
-        "TC-943",
-        "FR-062-AC-4",
-        "FR-063-AC-2",
-        "FR-063-AC-5"
-    )]
+    #[trace("TC-940", "TC-943", "FR-063-AC-2", "FR-063-AC-5")]
     fn reports_agent_only_and_unstaffed_roles_without_weakening_the_gate() {
         let policy = policy();
         let agent_approval = Approval {
