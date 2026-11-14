@@ -53,12 +53,12 @@
 //! | `record-sink` | `record_sink` | | `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
 //! | `release` | `release` | `approval-verify` | `serde` |
 //! | `release-history` | `release_history` | | |
-//! | `receipt` | `receipt` | `attestation-signing`, `change-record` | `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
+//! | `receipt` | `receipt` | `attestation-verify`, `change-record` | `serde`, `serde_json`, `serde_json_canonicalizer`, `time`, `thiserror` |
 //! | `scope-footprint` | `scope_footprint` | `content-rights` | `serde`, `thiserror` |
 //! | `semantics` | `semantics` | `claim-strength`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
 //! | `signature-verify` | `signature_verify` | | `serde` |
 //! | `attestation-signing` | `attestation_signing`; with `approval-gate`, `approval_statement`, `approval_statement_writer` | `attestation-verify`, `record-sink` | `serde`, `serde_json`, `serde_json_canonicalizer`, `sigstore-sign`, `sigstore-types`, `sigstore-verify`, `thiserror`, `time`, `tokio` |
-//! | `attestation-verify` | `attestation_signing`, `attestation_verify` | | `serde`, `serde_json`, `serde_json_canonicalizer`, `sigstore-types`, `sigstore-verify`, `thiserror` |
+//! | `attestation-verify` | `attestation_signing`, `attestation_verify`; with `approval-gate`, `approval_statement` | | `serde`, `serde_json`, `serde_json_canonicalizer`, `sigstore-types`, `sigstore-verify`, `thiserror` |
 //! | `source-audit` | `source_audit` | | `serde`, `syn`, `thiserror` |
 //! | `structured-yaml` | `structured_yaml` | | `serde_json`, `yaml_serde` |
 //! | `workflow` | `workflow` | | `serde`, `serde_json`, `thiserror` |
@@ -71,7 +71,7 @@
 
 #[cfg(feature = "approval-gate")]
 pub mod approval_gate;
-#[cfg(all(feature = "approval-gate", feature = "attestation-signing"))]
+#[cfg(all(feature = "approval-gate", feature = "attestation-verify"))]
 pub mod approval_statement;
 #[cfg(all(feature = "approval-gate", feature = "attestation-signing"))]
 pub mod approval_statement_writer;

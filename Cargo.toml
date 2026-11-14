@@ -519,8 +519,9 @@ attestation-verify = [
 ]
 # Receipt bundle and bounded note contracts.
 receipt = [
-  "attestation-signing",
+  "attestation-verify",
   "change-record",
+  "dep:time",
   "dep:serde",
   "dep:serde_json",
   "dep:serde_json_canonicalizer",
