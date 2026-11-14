@@ -517,6 +517,15 @@ attestation-verify = [
   "dep:sigstore-types",
   "dep:thiserror",
 ]
+# Receipt bundle and bounded note contracts.
+receipt = [
+  "attestation-signing",
+  "change-record",
+  "dep:serde",
+  "dep:serde_json",
+  "dep:serde_json_canonicalizer",
+  "dep:thiserror",
+]
 # EA-106: signing additionally uses ambient OIDC and the Sigstore signing
 # client. It includes verification because signed statements use the same
 # representation and policy model.
@@ -564,6 +573,7 @@ full = [
   "change-record",
   "release",
   "release-history",
+  "receipt",
   "scope-footprint",
   "semantics",
   "signature-verify",

@@ -23,7 +23,7 @@ use crate::{
     },
 };
 
-const APPROVAL_PREDICATE_TYPE: &str =
+pub(crate) const APPROVAL_PREDICATE_TYPE: &str =
     concat!("https:", "//schemas.agent-ix.ai/attestation/approval/v1");
 
 pub use crate::record_sink::sink::{

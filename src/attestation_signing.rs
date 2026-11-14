@@ -462,34 +462,46 @@ impl SourceWorkflowPolicy {
     /// Whether all caller-workflow claims match this policy.
     #[must_use]
     pub fn matches(&self, claims: &AuthenticatedWorkflowClaims) -> bool {
-        if !self.is_valid() {
-            return false;
-        }
-        let expected_repository_uri = format!("{}{}github.com/{}", "https:", "//", self.repository);
-        if claims.source_repository_uri.as_deref() != Some(expected_repository_uri.as_str())
-            || claims.build_trigger.as_deref() != Some(self.event.as_str())
-        {
-            return false;
-        }
         let Some(source_ref) = claims.source_repository_ref.as_deref() else {
             return false;
         };
-        let ref_matches = self.source_ref.as_deref() == Some(source_ref)
-            || self
-                .source_ref_prefix
-                .as_deref()
-                .is_some_and(|prefix| source_ref.starts_with(prefix));
-        let expected_workflow_prefix = format!(
-            "{}{}github.com/{}/{}@",
-            "https:", "//", self.repository, self.workflow_path
-        );
-        let Some(build_config_uri) = claims.build_config_uri.as_deref() else {
-            return false;
-        };
-        ref_matches
-            && build_config_uri
-                .strip_prefix(&expected_workflow_prefix)
-                .is_some_and(|workflow_ref| workflow_ref == source_ref)
+        self.expected_claims(source_ref)
+            .is_some_and(|expected| expected == *claims)
+    }
+
+    fn expected_claims(&self, source_ref: &str) -> Option<AuthenticatedWorkflowClaims> {
+        if !self.is_valid()
+            || !(self.source_ref.as_deref() == Some(source_ref)
+                || self
+                    .source_ref_prefix
+                    .as_deref()
+                    .is_some_and(|prefix| source_ref.starts_with(prefix)))
+        {
+            return None;
+        }
+        Some(AuthenticatedWorkflowClaims {
+            source_repository_uri: Some(format!(
+                "{}{}github.com/{}",
+                "https:", "//", self.repository
+            )),
+            source_repository_ref: Some(source_ref.to_owned()),
+            build_config_uri: Some(format!(
+                "{}{}github.com/{}/{}@{}",
+                "https:", "//", self.repository, self.workflow_path, source_ref
+            )),
+            build_trigger: Some(self.event.clone()),
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn expected_claims_for_test(&self) -> AuthenticatedWorkflowClaims {
+        let source_ref = self
+            .source_ref
+            .as_deref()
+            .or(self.source_ref_prefix.as_deref())
+            .expect("test policy has a source ref");
+        self.expected_claims(source_ref)
+            .expect("test policy is valid")
     }
 
     fn is_valid(&self) -> bool {

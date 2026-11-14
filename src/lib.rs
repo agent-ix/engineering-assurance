@@ -53,6 +53,7 @@
 //! | `record-sink` | `record_sink` | | `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
 //! | `release` | `release` | `approval-verify` | `serde` |
 //! | `release-history` | `release_history` | | |
+//! | `receipt` | `receipt` | `attestation-signing`, `change-record` | `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
 //! | `scope-footprint` | `scope_footprint` | `content-rights` | `serde`, `thiserror` |
 //! | `semantics` | `semantics` | `claim-strength`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
 //! | `signature-verify` | `signature_verify` | | `serde` |
@@ -120,6 +121,8 @@ pub mod package_lifecycle;
 pub mod package_membership;
 #[cfg(feature = "producer-execution")]
 pub mod producer_execution;
+#[cfg(feature = "receipt")]
+pub mod receipt;
 #[cfg(feature = "record-sink")]
 pub mod record_sink;
 #[cfg(feature = "release")]
