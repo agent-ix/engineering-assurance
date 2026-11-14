@@ -46,7 +46,7 @@ fn review(id: &str, role: &str, state: &str, edited: bool) -> Value {
     })
 }
 
-fn run(request: Value) -> Value {
+fn run(request: &Value) -> Value {
     let mut child = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
         .args(["review-gate", "--request", "-"])
         .stdin(Stdio::piped())
@@ -65,7 +65,7 @@ fn run(request: Value) -> Value {
     serde_json::from_slice(&output.stdout).expect("result is JSON")
 }
 
-fn request(reviews: Vec<Value>) -> Value {
+fn request(reviews: &[Value]) -> Value {
     json!({
         "protocol": REQUEST_PROTOCOL,
         "current_head": "head-1",
@@ -184,7 +184,7 @@ fn collect_request_with_fake_github(
 #[trace("FR-059-AC-1", "FR-061-AC-1", "FR-065-AC-10")]
 #[test]
 fn agent_authored_pull_request_passes_with_distinct_human_role_approvals() {
-    let result = run(request(vec![
+    let result = run(&request(&[
         review("101", "security", "APPROVED", false),
         review("202", "technical", "APPROVED", false),
     ]));
@@ -208,7 +208,7 @@ fn agent_authored_pull_request_passes_with_distinct_human_role_approvals() {
 #[trace("FR-059-AC-6", "FR-062-AC-1")]
 #[test]
 fn edited_reviews_and_bot_reviews_cannot_satisfy_a_role() {
-    let result = run(request(vec![
+    let result = run(&request(&[
         review("101", "security", "APPROVED", true),
         review("303", "technical", "APPROVED", false),
     ]));
@@ -311,9 +311,9 @@ fn workflow_is_explicitly_opt_in_and_has_no_signing_identity() {
 #[trace("FR-059-AC-6", "FR-063-AC-6")]
 #[test]
 fn unavailable_source_metadata_never_yields_approval() {
-    let mut request = request(vec![review("101", "security", "APPROVED", false)]);
+    let mut request = request(&[review("101", "security", "APPROVED", false)]);
     request["source_unavailable"] = json!(true);
-    let result = run(request);
+    let result = run(&request);
     assert_eq!(result["status"], "unavailable");
     assert_eq!(result["assignments"], json!([]));
     assert_eq!(result["error"], "approval_source_unavailable");
@@ -330,7 +330,7 @@ fn a_successful_empty_review_list_is_available_and_fails_as_missing_roles() {
         "empty reviews need no edit metadata"
     );
 
-    let result = run(request);
+    let result = run(&request);
     assert_eq!(result["status"], "unsatisfied");
     assert_eq!(result["error"], Value::Null);
     assert_eq!(
@@ -362,7 +362,7 @@ fn malformed_review_edit_metadata_remains_source_unavailable() {
         "review items require edit metadata"
     );
 
-    let result = run(request);
+    let result = run(&request);
     assert_eq!(result["status"], "unavailable");
     assert_eq!(result["error"], "approval_source_unavailable");
 }
@@ -398,7 +398,7 @@ fn review_gate_requires_all_three_distinct_roles_before_merge() {
             ]
         })
     };
-    let all_roles = run(request_for_reviews(vec![
+    let all_roles = run(&request_for_reviews(vec![
         review("101", "security", "APPROVED", false),
         review("202", "technical", "APPROVED", false),
         review("404", "stakeholder", "APPROVED", false),
@@ -412,7 +412,7 @@ fn review_gate_requires_all_three_distinct_roles_before_merge() {
         3
     );
 
-    let missing_stakeholder = run(request_for_reviews(vec![
+    let missing_stakeholder = run(&request_for_reviews(vec![
         review("101", "security", "APPROVED", false),
         review("202", "technical", "APPROVED", false),
     ]));
@@ -423,14 +423,14 @@ fn review_gate_requires_all_three_distinct_roles_before_merge() {
 #[trace("FR-063-AC-1")]
 #[test]
 fn an_empty_required_role_fails_visibly() {
-    let mut request = request(Vec::new());
+    let mut request = request(&[]);
     request["policy"]["required_roles"]
         .as_array_mut()
         .expect("required roles")
         .push(json!("stakeholder"));
     request["policy"]["roles"]["stakeholder"] = json!([]);
 
-    let result = run(request);
+    let result = run(&request);
     assert_eq!(result["status"], "unsatisfied");
     assert_eq!(result["error"], "approval_role_unstaffed");
     assert_eq!(result["missing"][0]["role"], "stakeholder");

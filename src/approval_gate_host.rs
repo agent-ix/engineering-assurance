@@ -66,20 +66,17 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, RequestError> {
         return Err(RequestError::Invalid);
     }
     let policy_bytes = serde_json::to_vec(&request.policy).map_err(|_| RequestError::Invalid)?;
-    let policy = match parse_policy(&policy_bytes) {
-        Ok(policy) => policy,
-        Err(_) => {
-            let result = GateResult {
-                protocol: engineering_assurance::approval_gate::RESULT_PROTOCOL,
-                status: GateStatus::Unsatisfied,
-                required_roles: Vec::new(),
-                assignments: Vec::new(),
-                missing: Vec::new(),
-                error: Some(GateErrorCode::ApprovalPolicyInvalid),
-                unavailable_accounts: Vec::new(),
-            };
-            return encode(&result);
-        }
+    let Ok(policy) = parse_policy(&policy_bytes) else {
+        let result = GateResult {
+            protocol: engineering_assurance::approval_gate::RESULT_PROTOCOL,
+            status: GateStatus::Unsatisfied,
+            required_roles: Vec::new(),
+            assignments: Vec::new(),
+            missing: Vec::new(),
+            error: Some(GateErrorCode::ApprovalPolicyInvalid),
+            unavailable_accounts: Vec::new(),
+        };
+        return encode(&result);
     };
     if policy.protocol != POLICY_PROTOCOL {
         return Err(RequestError::Invalid);

@@ -285,6 +285,11 @@ impl ApprovalSource for GitHubReviewAdapter {
 }
 
 /// Parse, schema-check, and semantically validate a policy document.
+///
+/// # Errors
+///
+/// Returns a [`PolicyError`] when the input is not valid JSON, does not match
+/// the policy schema, or violates policy semantics.
 pub fn parse_policy(bytes: &[u8]) -> Result<RolePolicy, PolicyError> {
     let value: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| PolicyError::Json)?;
     let schema: serde_json::Value =
@@ -303,6 +308,11 @@ pub fn parse_policy(bytes: &[u8]) -> Result<RolePolicy, PolicyError> {
 }
 
 /// Validate policy semantics after closed JSON decoding.
+///
+/// # Errors
+///
+/// Returns a [`PolicyError`] when the protocol, names, role assignments, or
+/// account relationships violate the policy constraints.
 pub fn validate_policy(policy: &RolePolicy) -> Result<(), PolicyError> {
     if policy.protocol != POLICY_PROTOCOL {
         return Err(PolicyError::Protocol);
@@ -443,8 +453,8 @@ pub fn github_approvals(
 
 /// Evaluate a policy against source-neutral approvals and account lookups.
 ///
-/// \`account_types\` contains a classification for every policy account. An
-/// \`Unavailable\` entry makes the decision unavailable rather than guessing.
+/// `account_types` contains a classification for every policy account. An
+/// `Unavailable` entry makes the decision unavailable rather than guessing.
 #[must_use]
 pub fn evaluate(
     policy: &RolePolicy,
@@ -453,7 +463,7 @@ pub fn evaluate(
 ) -> GateResult {
     let mut roles = policy.required_roles.clone();
     roles.sort();
-    let Ok(()) = validate_policy(policy) else {
+    if validate_policy(policy).is_err() {
         return result(
             GateStatus::Unsatisfied,
             roles,
@@ -462,27 +472,23 @@ pub fn evaluate(
             Some(GateErrorCode::ApprovalPolicyInvalid),
             Vec::new(),
         );
-    };
+    }
+    evaluate_valid_policy(policy, approvals, account_types, roles)
+}
+
+fn evaluate_valid_policy(
+    policy: &RolePolicy,
+    approvals: &[Approval],
+    account_types: &BTreeMap<AccountRef, AccountType>,
+    roles: Vec<String>,
+) -> GateResult {
     let agents: BTreeSet<_> = policy.agents.iter().collect();
     let people: BTreeMap<_, _> = policy
         .individuals
         .iter()
         .flat_map(|(name, accounts)| accounts.iter().map(move |account| (account, name)))
         .collect();
-    let unavailable: Vec<_> = policy
-        .individuals
-        .values()
-        .flatten()
-        .filter(|account| {
-            matches!(
-                account_types.get(*account),
-                None | Some(AccountType::Unavailable)
-            )
-        })
-        .cloned()
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect();
+    let unavailable = unavailable_accounts(policy, account_types);
     if !unavailable.is_empty() {
         return result(
             GateStatus::Unavailable,
@@ -493,27 +499,7 @@ pub fn evaluate(
             unavailable,
         );
     }
-    let staffed: BTreeMap<_, _> = roles
-        .iter()
-        .map(|role| {
-            let eligible = policy
-                .roles
-                .get(role)
-                .into_iter()
-                .flatten()
-                .filter(|individual| {
-                    policy.individuals.get(*individual).is_some_and(|accounts| {
-                        accounts.iter().any(|account| {
-                            !agents.contains(account)
-                                && account_types.get(account) == Some(&AccountType::Human)
-                        })
-                    })
-                })
-                .cloned()
-                .collect::<BTreeSet<_>>();
-            (role.clone(), eligible)
-        })
-        .collect();
+    let staffed = staffed_roles(policy, &roles, &agents, account_types);
     let unstaffed: Vec<_> = roles
         .iter()
         .filter(|role| staffed.get(*role).is_none_or(BTreeSet::is_empty))
@@ -535,6 +521,76 @@ pub fn evaluate(
             Vec::new(),
         );
     }
+    let (candidates, nonhuman_roles) =
+        approval_candidates(&roles, approvals, &people, &staffed, &agents, account_types);
+    let (assigned, covered_roles) = lexicographic_maximum_matching(&roles, &candidates);
+    let missing = missing_roles(&roles, &candidates, &covered_roles, &nonhuman_roles);
+    let assignments = assignment_records(assigned, approvals, &people, account_types);
+    let status = if missing.is_empty() {
+        GateStatus::Satisfied
+    } else {
+        GateStatus::Unsatisfied
+    };
+    result(status, roles, assignments, missing, None, Vec::new())
+}
+
+fn unavailable_accounts(
+    policy: &RolePolicy,
+    account_types: &BTreeMap<AccountRef, AccountType>,
+) -> Vec<AccountRef> {
+    policy
+        .individuals
+        .values()
+        .flatten()
+        .filter(|account| {
+            matches!(
+                account_types.get(*account),
+                None | Some(AccountType::Unavailable)
+            )
+        })
+        .cloned()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn staffed_roles(
+    policy: &RolePolicy,
+    roles: &[String],
+    agents: &BTreeSet<&AccountRef>,
+    account_types: &BTreeMap<AccountRef, AccountType>,
+) -> BTreeMap<String, BTreeSet<String>> {
+    roles
+        .iter()
+        .map(|role| {
+            let eligible = policy
+                .roles
+                .get(role)
+                .into_iter()
+                .flatten()
+                .filter(|individual| {
+                    policy.individuals.get(*individual).is_some_and(|accounts| {
+                        accounts.iter().any(|account| {
+                            !agents.contains(account)
+                                && account_types.get(account) == Some(&AccountType::Human)
+                        })
+                    })
+                })
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            (role.clone(), eligible)
+        })
+        .collect()
+}
+
+fn approval_candidates(
+    roles: &[String],
+    approvals: &[Approval],
+    people: &BTreeMap<&AccountRef, &String>,
+    staffed: &BTreeMap<String, BTreeSet<String>>,
+    agents: &BTreeSet<&AccountRef>,
+    account_types: &BTreeMap<AccountRef, AccountType>,
+) -> (BTreeMap<String, BTreeSet<String>>, BTreeSet<String>) {
     let mut candidates: BTreeMap<String, BTreeSet<String>> = roles
         .iter()
         .map(|role| (role.clone(), BTreeSet::new()))
@@ -564,9 +620,17 @@ pub fn evaluate(
                 .insert((*individual).clone());
         }
     }
-    let (assigned, covered_roles) = lexicographic_maximum_matching(&roles, &candidates);
+    (candidates, nonhuman_roles)
+}
+
+fn missing_roles(
+    roles: &[String],
+    candidates: &BTreeMap<String, BTreeSet<String>>,
+    covered_roles: &BTreeSet<String>,
+    nonhuman_roles: &BTreeSet<String>,
+) -> Vec<MissingRole> {
     let mut missing = Vec::new();
-    for role in &roles {
+    for role in roles {
         if covered_roles.contains(role) {
             continue;
         }
@@ -587,7 +651,16 @@ pub fn evaluate(
             reason,
         });
     }
-    let assignments = assigned
+    missing
+}
+
+fn assignment_records(
+    assigned: Vec<(String, String)>,
+    approvals: &[Approval],
+    people: &BTreeMap<&AccountRef, &String>,
+    account_types: &BTreeMap<AccountRef, AccountType>,
+) -> Vec<Assignment> {
+    assigned
         .into_iter()
         .filter_map(|(role, individual)| {
             let approval = approvals.iter().find(|approval| {
@@ -602,13 +675,7 @@ pub fn evaluate(
                 account: approval.account.clone(),
             })
         })
-        .collect::<Vec<_>>();
-    let status = if missing.is_empty() {
-        GateStatus::Satisfied
-    } else {
-        GateStatus::Unsatisfied
-    };
-    result(status, roles, assignments, missing, None, Vec::new())
+        .collect()
 }
 
 /// Parse the exact review marker lines required by FR-059.
