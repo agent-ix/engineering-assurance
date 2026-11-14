@@ -386,8 +386,10 @@ mod tests {
                 .find(|(expected_payload, expected_bundle, _)| {
                     expected_payload == payload && expected_bundle == bundle_json
                 })
-                .map(|(_, _, result)| *result)
-                .unwrap_or(Err(VerificationFailure::InvalidSignature))
+                .map_or(
+                    Err(VerificationFailure::InvalidSignature),
+                    |(_, _, result)| *result,
+                )
         }
     }
 
@@ -660,13 +662,13 @@ mod tests {
     #[trace("TC-954", "FR-064-AC-16", "FR-064-AC-20")]
     #[test]
     fn exact_lookup_verifies_every_match_and_counts_only_verified_approvals() {
-        let verified = statement("1", "verified-bundle");
+        let verified_statement = statement("1", "verified-bundle");
         let untrusted = statement("2", "untrusted-bundle");
-        let expected_verified = verified.statement_bytes.clone();
+        let expected_verified = verified_statement.statement_bytes.clone();
         let expected_untrusted = untrusted.statement_bytes.clone();
         let reader = reader_for(vec![
             (LOOKUP.merged_pull_request, untrusted.clone()),
-            (LOOKUP.merged_pull_request, verified.clone()),
+            (LOOKUP.merged_pull_request, verified_statement.clone()),
             ("fictional/project#13", statement("2", "decoy-bundle")),
         ]);
         let verifier = FixtureVerifier {
