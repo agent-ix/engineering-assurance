@@ -608,6 +608,7 @@ impl StatementEncodingError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeSet;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     use crate::record_sink::{
@@ -619,12 +620,14 @@ mod tests {
 
     const PAYLOAD: &[u8] = concat!(
         r#"{"_type":"https:"#,
-        r#"//in-toto.io/Statement/v1","predicate":{},"predicateType":"urn:example:predicate:v1","subject":[{"digest":{"gitCommit":"abc123","gitTree":"def456","sha256":"0000000000000000000000000000000000000000000000000000000000000000"},"name":"source"}]}"#
+        r#"//in-toto.io/Statement/v1","predicate":{"approver":"github:12345","approver_name":"fixture-reviewer","head_commit":"fedcba","meaning":"approved","merged_commit":"abc123","pull_request":"fictional/project#12","role":"reviewer","signed_at":"2026-11-13T10:00:00Z","source":"github"},"predicateType":"https:"#,
+        r#"//schemas.agent-ix.ai/attestation/approval/v1","subject":[{"digest":{"gitCommit":"abc123","gitTree":"def456","sha256":"0000000000000000000000000000000000000000000000000000000000000000"},"name":"fictional/project"}]}"#
     )
     .as_bytes();
     const NO_SHA256_PAYLOAD: &[u8] = concat!(
         r#"{"_type":"https:"#,
-        r#"//in-toto.io/Statement/v1","predicate":{},"predicateType":"urn:example:predicate:v1","subject":[{"digest":{"gitCommit":"abc123","gitTree":"def456"},"name":"source"}]}"#
+        r#"//in-toto.io/Statement/v1","predicate":{"approver":"github:12345","approver_name":"fixture-reviewer","head_commit":"fedcba","meaning":"approved","merged_commit":"abc123","pull_request":"fictional/project#12","role":"reviewer","signed_at":"2026-11-13T10:00:00Z","source":"github"},"predicateType":"https:"#,
+        r#"//schemas.agent-ix.ai/attestation/approval/v1","subject":[{"digest":{"gitCommit":"abc123","gitTree":"def456"},"name":"fictional/project"}]}"#
     )
     .as_bytes();
     const BUNDLE: &str = "fixture-bundle";
@@ -686,7 +689,7 @@ mod tests {
         }
     }
 
-    #[trace("FR-064-AC-1", "FR-064-AC-2", "FR-064-AC-3", "FR-064-AC-4")]
+    #[trace("TC-660", "FR-064-AC-2", "FR-064-AC-3", "FR-064-AC-4")]
     #[test]
     fn verifies_policy_and_git_subjects_and_rejects_mismatches() {
         let verifier = verifier();
@@ -907,7 +910,7 @@ mod tests {
             .expect("fictional public repositories pass the leak check")
     }
 
-    #[trace("NFR-010-M-3")]
+    #[trace("TC-659", "FR-064-AC-3", "NFR-010-M-3")]
     #[test]
     fn rejecting_sigstore_verifier_rejects_policy_payload_and_subject_cases() {
         let verifier = RejectingVerifier;
@@ -955,16 +958,50 @@ mod tests {
         }
     }
 
+    #[trace("TC-661", "FR-058-AC-1")]
     #[test]
     fn statement_serializes_as_plain_in_toto_v1_and_canonicalizes() {
         let statement: StatementV1 = serde_json::from_slice(PAYLOAD).expect("fixture parses");
         assert_eq!(statement.type_, STATEMENT_V1_TYPE);
+        assert_eq!(
+            statement.predicate_type,
+            concat!("https:", "//schemas.agent-ix.ai/attestation/approval/v1")
+        );
+        assert_eq!(
+            statement
+                .predicate
+                .keys()
+                .map(String::as_str)
+                .collect::<BTreeSet<_>>(),
+            [
+                "approver",
+                "approver_name",
+                "head_commit",
+                "merged_commit",
+                "meaning",
+                "pull_request",
+                "role",
+                "signed_at",
+                "source",
+            ]
+            .into()
+        );
+        assert_eq!(statement.subject.len(), 1);
+        assert_eq!(statement.subject[0].name, "fictional/project");
+        assert_eq!(
+            statement.subject[0]
+                .digest
+                .get("gitCommit")
+                .map(String::as_str),
+            Some("abc123")
+        );
         assert_eq!(
             statement.canonical_bytes().expect("canonical bytes"),
             PAYLOAD
         );
     }
 
+    #[trace("TC-663", "FR-058-AC-7")]
     #[test]
     fn ea105_signer_methods_fail_without_oidc_before_service_start() {
         let public_record = PublicRecord::from_json(
@@ -1007,13 +1044,19 @@ mod tests {
         );
     }
 
+    #[trace("TC-662", "FR-064-AC-2", "FR-064-AC-3", "FR-064-AC-4")]
     #[test]
     fn verification_failure_codes_round_trip() {
-        for code in VerificationFailure::all() {
-            assert_eq!(VerificationFailure::from_code(code.as_str()), Some(*code));
+        for (failure, expected_code) in [
+            (VerificationFailure::InvalidSignature, "signature_invalid"),
+            (VerificationFailure::UntrustedSigner, "untrusted_signer"),
+            (VerificationFailure::WrongSubject, "wrong_subject"),
+        ] {
+            assert_eq!(failure.as_str(), expected_code);
+            assert_eq!(VerificationFailure::from_code(expected_code), Some(failure));
         }
-        for code in SigningFailure::all() {
-            assert_eq!(SigningFailure::from_code(code.as_str()), Some(*code));
+        for failure in SigningFailure::all() {
+            assert_eq!(SigningFailure::from_code(failure.as_str()), Some(*failure));
         }
         assert_eq!(VerificationFailure::from_code("unknown"), None);
         assert_eq!(SigningFailure::from_code("unknown"), None);

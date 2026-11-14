@@ -9,10 +9,12 @@ use engineering_assurance::attestation_signing::{
     ExpectedSubject, SigstoreBundleVerifier, SubjectKind, TransparencyRequirement,
     VerificationStatus, WorkflowIdentityPolicy, verify_statement,
 };
+use ix_trace_rs::trace;
 
 /// This live test is run only by `.github/workflows/ea-106-live.yml` after a
 /// separate OIDC-enabled job signs the fixture through the public-good service.
 #[tokio::test]
+#[trace("TC-658", "FR-066-AC-8")]
 #[ignore = "manual workflow_dispatch public-good Sigstore integration"]
 async fn verifies_public_good_sigstore_bundle_and_artifact_digest() {
     let payload_path = env::var("EA_LIVE_PAYLOAD_PATH").expect("payload path is configured");
@@ -46,5 +48,18 @@ async fn verifies_public_good_sigstore_bundle_and_artifact_digest() {
             },
         ),
         Ok(VerificationStatus::Verified)
+    );
+    assert_eq!(
+        verify_statement(
+            &verifier,
+            &payload,
+            &bundle,
+            &policy,
+            ExpectedSubject {
+                kind: SubjectKind::Sha256,
+                value: "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            },
+        ),
+        Err(engineering_assurance::attestation_signing::VerificationFailure::WrongSubject)
     );
 }
