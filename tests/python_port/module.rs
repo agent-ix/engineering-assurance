@@ -1462,6 +1462,9 @@ fn tc112_workflow_violations(path: &str, text: &str) -> BTreeSet<&'static str> {
     if package_publish {
         violations.insert("package_publish");
     }
+    if reusable_attestation {
+        violations.extend(tc112_attestation_handoff_violations(&workflow));
+    }
     let invokes_release_publisher = normalized
         .lines()
         .any(|line| line.trim_start().contains("uses:") && line.contains("release"))
@@ -1474,12 +1477,85 @@ fn tc112_workflow_violations(path: &str, text: &str) -> BTreeSet<&'static str> {
     violations
 }
 
+fn tc112_attestation_handoff_violations(workflow: &Value) -> BTreeSet<&'static str> {
+    let Some(jobs) = workflow["jobs"].as_object() else {
+        return BTreeSet::from(["artifact_handoff"]);
+    };
+    let verify = &workflow["jobs"]["verify"];
+    let attest = &workflow["jobs"]["attest"];
+    let verify_uploads = verify["steps"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|step| {
+            step["uses"]
+                .as_str()
+                .is_some_and(|uses| uses.starts_with("actions/upload-artifact@"))
+        })
+        .collect::<Vec<_>>();
+    let attest_handoff_downloads = attest["steps"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|step| {
+            step["uses"]
+                .as_str()
+                .is_some_and(|uses| uses.starts_with("actions/download-artifact@"))
+                && step["with"]["name"] == "${{ needs.verify.outputs.attestation_inputs_artifact }}"
+        })
+        .collect::<Vec<_>>();
+    let verify_handoff_name = verify_uploads.first().map(|step| &step["with"]["name"]);
+    let mut violations = BTreeSet::new();
+    if verify_uploads.len() != 1
+        || verify_handoff_name
+            != Some(&json!(
+                "${{ steps.attestation-artifact-name.outputs.name }}"
+            ))
+        || verify["outputs"]["attestation_inputs_artifact"]
+            != "${{ steps.attestation-artifact-name.outputs.name }}"
+        || attest["needs"] != "verify"
+        || attest_handoff_downloads.len() != 1
+    {
+        violations.insert("artifact_handoff");
+    }
+    for (job_name, job) in jobs {
+        let steps = job["steps"].as_array().into_iter().flatten();
+        for step in steps {
+            let Some(uses) = step["uses"].as_str() else {
+                continue;
+            };
+            if uses.starts_with("actions/upload-artifact@") && job_name != "verify" {
+                violations.insert("artifact_handoff");
+            }
+            if uses.starts_with("actions/download-artifact@")
+                && job_name != "verify"
+                && job_name != "attest"
+            {
+                violations.insert("artifact_handoff");
+            }
+            if uses.starts_with("actions/download-artifact@")
+                && step["with"]["name"] == "${{ needs.verify.outputs.attestation_inputs_artifact }}"
+                && job_name != "attest"
+            {
+                violations.insert("artifact_handoff");
+            }
+        }
+    }
+    violations
+}
+
 #[test]
 #[trace("TC-112", "FR-017-AC-4")]
 fn package_and_release_publication_or_automatic_workflow_triggers_are_refused() {
     let reusable_attestation = concat!(
         "on:\n  workflow_call:\n    inputs:\n      tag: {type: string}\n",
-        "jobs:\n  verify:\n    steps:\n      - run: echo verify\n"
+        "jobs:\n  verify:\n    outputs:\n",
+        "      attestation_inputs_artifact: ${{ steps.attestation-artifact-name.outputs.name }}\n",
+        "    steps:\n      - uses: actions/upload-artifact@v4\n",
+        "        with:\n          name: ${{ steps.attestation-artifact-name.outputs.name }}\n",
+        "  attest:\n    needs: verify\n    steps:\n",
+        "      - uses: actions/download-artifact@v4\n",
+        "        with:\n          name: ${{ needs.verify.outputs.attestation_inputs_artifact }}\n"
     );
     assert!(
         tc112_workflow_violations(
@@ -1487,6 +1563,27 @@ fn package_and_release_publication_or_automatic_workflow_triggers_are_refused() 
             reusable_attestation
         )
         .is_empty()
+    );
+
+    let handoff_through_third_job = concat!(
+        "on:\n  workflow_call:\njobs:\n",
+        "  verify:\n    outputs:\n      attestation_inputs_artifact: ${{ steps.name.outputs.name }}\n",
+        "    steps:\n      - uses: actions/upload-artifact@v4\n",
+        "        with:\n          name: ${{ steps.name.outputs.name }}\n",
+        "  relay:\n    needs: verify\n    steps:\n",
+        "      - uses: actions/download-artifact@v4\n",
+        "        with:\n          name: ${{ needs.verify.outputs.attestation_inputs_artifact }}\n",
+        "      - uses: actions/upload-artifact@v4\n        with:\n          name: relayed\n",
+        "  attest:\n    needs: relay\n    steps:\n",
+        "      - uses: actions/download-artifact@v4\n",
+        "        with:\n          name: ${{ needs.verify.outputs.attestation_inputs_artifact }}\n"
+    );
+    assert_eq!(
+        tc112_workflow_violations(
+            ".github/workflows/release-attestation.yml",
+            handoff_through_third_job
+        ),
+        BTreeSet::from(["artifact_handoff"])
     );
 
     let reusable_with_package_publish = concat!(
@@ -1498,7 +1595,7 @@ fn package_and_release_publication_or_automatic_workflow_triggers_are_refused() 
             ".github/workflows/release-attestation.yml",
             reusable_with_package_publish
         ),
-        BTreeSet::from(["package_publish"])
+        BTreeSet::from(["artifact_handoff", "package_publish"])
     );
 
     let unrelated_workflow_call = "on:\n  workflow_call:\njobs: {}\n";

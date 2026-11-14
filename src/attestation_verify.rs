@@ -397,7 +397,7 @@ mod tests {
         }
     }
 
-    fn summary_json() -> serde_json::Value {
+    fn summary_json(input_digests: &[String; 3]) -> serde_json::Value {
         json!({
             "_type": crate::attestation_signing::STATEMENT_V1_TYPE,
             "subject": [
@@ -414,9 +414,9 @@ mod tests {
                 "resourceUri":concat!("https:", "//github.com/fictional/release/tree/v1.2.3"),
                 "policy":{"uri":"fictional-policy"},
                 "inputAttestations":[
-                    {"uri":PROVENANCE_PREDICATE, "digest":{"sha256":"b".repeat(64)}},
-                    {"uri":CYCLONEDX_PREDICATE, "digest":{"sha256":"c".repeat(64)}},
-                    {"uri":TEST_RESULT_PREDICATE, "digest":{"sha256":"d".repeat(64)}}
+                    {"uri":PROVENANCE_PREDICATE, "digest":{"sha256":input_digests[0]}},
+                    {"uri":CYCLONEDX_PREDICATE, "digest":{"sha256":input_digests[1]}},
+                    {"uri":TEST_RESULT_PREDICATE, "digest":{"sha256":input_digests[2]}}
                 ],
                 "verificationResult":"PASSED",
                 "verifiedLevels":[]
@@ -447,17 +447,59 @@ mod tests {
     #[test]
     #[trace("TC-674", "FR-068-AC-4")]
     fn tc_674_summary_binds_three_input_statements_by_canonical_digest() {
-        let expected = expected();
+        let input_payloads = [
+            concat!(
+                r#"{"predicateType":"https:"#,
+                r#"//slsa.dev/provenance/v1","subject":[],"predicate":{"build":1},"_type":"https:"#,
+                r#"//in-toto.io/Statement/v1"}"#
+            )
+            .as_bytes(),
+            concat!(
+                r#"{ "_type":"https:"#,
+                r#"//in-toto.io/Statement/v1", "subject":[], "predicateType":"https:"#,
+                r#"//cyclonedx.org/bom", "predicate":{"serial":"bom-1"} }"#
+            )
+            .as_bytes(),
+            concat!(
+                r#"{"predicate":{"passedTests":3,"result":"PASSED"},"predicateType":"https:"#,
+                r#"//in-toto.io/attestation/test-result/v0.1","subject":[],"_type":"https:"#,
+                r#"//in-toto.io/Statement/v1"}"#
+            )
+            .as_bytes(),
+        ];
+        let input_digests = input_payloads.map(canonical_statement_digest_for_test);
+        let expected = ExpectedRelease {
+            input_digests: input_digests.clone(),
+            ..expected()
+        };
         let statement: VerificationSummaryStatement =
-            serde_json::from_value(summary_json()).expect("closed summary fixture");
+            serde_json::from_value(summary_json(&input_digests)).expect("closed summary fixture");
         assert_eq!(validate_summary(&statement.predicate, &expected), Ok(()));
 
-        let mut changed = summary_json();
-        changed["predicate"]["inputAttestations"][0]["digest"]["sha256"] = json!("e".repeat(64));
-        let statement: VerificationSummaryStatement =
-            serde_json::from_value(changed).expect("schema remains valid");
+        let changed_payload = concat!(
+            r#"{"predicate":{"build":2},"predicateType":"https:"#,
+            r#"//slsa.dev/provenance/v1","subject":[],"_type":"https:"#,
+            r#"//in-toto.io/Statement/v1"}"#
+        )
+        .as_bytes();
+        let changed_digest = canonical_statement_digest_for_test(changed_payload);
+        assert_ne!(changed_digest, input_digests[0]);
+        let changed_expected = ExpectedRelease {
+            input_digests: [
+                changed_digest,
+                input_digests[1].clone(),
+                input_digests[2].clone(),
+            ],
+            ..expected
+        };
+        let statement: VerificationSummaryStatement = serde_json::from_value(summary_json(&[
+            input_digests[0].clone(),
+            input_digests[1].clone(),
+            input_digests[2].clone(),
+        ]))
+        .expect("schema remains valid");
         assert_eq!(
-            validate_summary(&statement.predicate, &expected),
+            validate_summary(&statement.predicate, &changed_expected),
             Err(AttestationVerificationError::SummaryInvalid)
         );
     }
@@ -467,11 +509,12 @@ mod tests {
     fn tc_675_summary_binds_tag_commit_and_closed_empty_levels() {
         let expected = expected();
         let statement: VerificationSummaryStatement =
-            serde_json::from_value(summary_json()).expect("closed summary fixture");
+            serde_json::from_value(summary_json(&expected.input_digests))
+                .expect("closed summary fixture");
         check_summary_subjects(&statement.subject, &expected).expect("release commit subject");
         assert!(statement.predicate.verified_levels.is_empty());
 
-        let mut changed_commit = summary_json();
+        let mut changed_commit = summary_json(&expected.input_digests);
         changed_commit["subject"][1]["digest"]["gitCommit"] = json!("other-commit");
         let statement: VerificationSummaryStatement =
             serde_json::from_value(changed_commit).expect("schema remains valid");
@@ -480,8 +523,43 @@ mod tests {
             Err(AttestationVerificationError::WrongSubject)
         );
 
-        let mut extra = summary_json();
+        let mut changed_resource = summary_json(&expected.input_digests);
+        changed_resource["predicate"]["resourceUri"] = json!(concat!(
+            "https:",
+            "//github.com/fictional/release/tree/v9.9.9"
+        ));
+        let statement: VerificationSummaryStatement =
+            serde_json::from_value(changed_resource).expect("schema remains valid");
+        assert_eq!(
+            validate_summary(&statement.predicate, &expected),
+            Err(AttestationVerificationError::SummaryInvalid)
+        );
+
+        let mut extra = summary_json(&expected.input_digests);
         extra["predicate"]["unexpected"] = json!(true);
         assert!(serde_json::from_value::<VerificationSummaryStatement>(extra).is_err());
+    }
+
+    fn canonical_statement_digest_for_test(payload: &[u8]) -> String {
+        use std::{io::Write as _, process::Command};
+
+        let statement: StatementV1 = serde_json::from_slice(payload).expect("input statement");
+        let canonical = statement
+            .canonical_bytes()
+            .expect("RFC 8785 canonical bytes");
+        let mut file = tempfile::NamedTempFile::new().expect("temporary digest input");
+        file.write_all(&canonical).expect("canonical bytes write");
+        let output = Command::new("/usr/bin/sha256sum")
+            .arg("--")
+            .arg(file.path())
+            .output()
+            .expect("SHA-256 provider launches");
+        assert!(output.status.success(), "SHA-256 provider succeeds");
+        String::from_utf8(output.stdout)
+            .expect("SHA-256 output is UTF-8")
+            .split_ascii_whitespace()
+            .next()
+            .expect("SHA-256 digest exists")
+            .to_owned()
     }
 }
