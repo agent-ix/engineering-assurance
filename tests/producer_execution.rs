@@ -1035,16 +1035,17 @@ fn tc_125_timeout_kills_observed_nested_process_group_and_joins_both_readers() {
             descendant_pid_path.to_str().expect("UTF-8 path"),
         ],
     );
-    timed_request.budget.timeout_millis = 350;
+    timed_request.budget.timeout_millis = 2_000;
     timed_request.environment.insert(
         "EA_FIXTURE_EXECUTABLE".to_owned(),
         fixture_executable().display().to_string(),
     );
 
     let started = Instant::now();
-    let deadline = started + Duration::from_millis(timed_request.budget.timeout_millis);
+    let timeout = Duration::from_millis(timed_request.budget.timeout_millis);
+    let deadline = started + timeout;
     let worker = thread::spawn(move || execute(&timed_request, &adapter()));
-    for marker in [&producer_pid_path, &descendant_pid_path] {
+    for marker in [&descendant_pid_path, &producer_pid_path] {
         let marker_deadline = Instant::now() + Duration::from_secs(5);
         while !marker.exists() {
             assert!(
@@ -1080,11 +1081,11 @@ fn tc_125_timeout_kills_observed_nested_process_group_and_joins_both_readers() {
     let elapsed = started.elapsed();
     let result = worker.join().expect("executor worker must terminate");
     assert!(
-        elapsed >= Duration::from_millis(350),
+        elapsed >= timeout,
         "fixture must remain alive through the request deadline: {elapsed:?}"
     );
     assert!(
-        elapsed <= Duration::from_millis(1_350),
+        elapsed <= timeout + Duration::from_millis(1_000),
         "cleanup exceeded the 1,000 ms post-deadline bound: {elapsed:?}"
     );
     assert!(

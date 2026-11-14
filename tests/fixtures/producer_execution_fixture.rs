@@ -151,13 +151,20 @@ fn escape_child(arguments: &mut impl Iterator<Item = OsString>) {
 fn spawn_group_escape(arguments: &mut impl Iterator<Item = OsString>) {
     let producer_pid = argument(arguments);
     let descendant_pid = argument(arguments);
-    fs::write(producer_pid, process::id().to_string())
-        .unwrap_or_else(|_| fail("cannot write producer pid"));
     let mut child = Command::new(fixture_executable())
         .arg("group-escape-child")
-        .arg(descendant_pid)
+        .arg(&descendant_pid)
         .spawn()
         .unwrap_or_else(|_| fail("cannot spawn nested fixture child"));
+    let ready_deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while !Path::new(&descendant_pid).exists() {
+        if std::time::Instant::now() >= ready_deadline {
+            fail("nested fixture child did not become ready");
+        }
+        thread::sleep(Duration::from_millis(1));
+    }
+    fs::write(producer_pid, process::id().to_string())
+        .unwrap_or_else(|_| fail("cannot write producer pid"));
     let _ = child.wait();
 }
 
