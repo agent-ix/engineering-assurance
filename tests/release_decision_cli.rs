@@ -486,7 +486,7 @@ fn tc_454_a_reject_retains_the_rejection_and_writes_no_document_and_no_tag() {
 }
 
 #[test]
-#[trace("TC-455", "FR-048-AC-6")]
+#[trace("TC-455", "FR-048-AC-6", "FR-051-AC-7")]
 fn tc_455_a_release_emits_one_terminal_event_and_runs_no_git_write() {
     let fixture = fixture();
     present_all(&fixture, "run-event", r#"{"anomalies":[]}"#);
