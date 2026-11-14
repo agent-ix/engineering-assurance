@@ -1286,21 +1286,213 @@ fn tc_650_signing_uses_the_public_path_only_after_the_check_passed() {
 
 #[trace("TC-651", "NFR-010-AC-2", "NFR-010-M-1")]
 #[test]
-fn tc_651_the_sink_module_implements_no_signature_primitive() {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/record_sink");
-    for entry in std::fs::read_dir(dir).unwrap() {
-        let path = entry.unwrap().path();
-        let source = std::fs::read_to_string(&path).unwrap();
-        for forbidden in [
-            "sha2::", "ring::", "ed25519", "p256", "rsa::", "hmac", "openssl", "sigstore",
-        ] {
-            assert!(
-                !source.contains(forbidden),
-                "{} uses {forbidden}",
-                path.display()
-            );
+fn tc_651_signing_is_delegated_and_record_sink_has_only_its_declared_dependencies() {
+    use std::collections::BTreeSet;
+
+    use syn::{Expr, ExprMethodCall, ItemImpl, ItemTrait, Type, visit::Visit};
+
+    #[derive(Default)]
+    struct Boundary {
+        signer_methods: Vec<String>,
+        signer_implementations: Vec<String>,
+        signer_calls: Vec<(String, Option<String>)>,
+        signer_port_is_trait_object: bool,
+    }
+
+    fn field_path(expression: &Expr) -> Option<String> {
+        match expression {
+            Expr::Path(path) => Some(
+                path.path
+                    .segments
+                    .iter()
+                    .map(|segment| segment.ident.to_string())
+                    .collect::<Vec<_>>()
+                    .join("."),
+            ),
+            Expr::Field(field) => Some(format!(
+                "{}.{}",
+                field_path(&field.base)?,
+                match &field.member {
+                    syn::Member::Named(ident) => ident.to_string(),
+                    syn::Member::Unnamed(index) => index.index.to_string(),
+                }
+            )),
+            _ => None,
         }
     }
+
+    impl<'ast> Visit<'ast> for Boundary {
+        fn visit_item_trait(&mut self, item: &'ast ItemTrait) {
+            if item.ident == "Signer" {
+                self.signer_methods
+                    .extend(item.items.iter().filter_map(|item| {
+                        if let syn::TraitItem::Fn(method) = item {
+                            Some(method.sig.ident.to_string())
+                        } else {
+                            None
+                        }
+                    }));
+            }
+            syn::visit::visit_item_trait(self, item);
+        }
+
+        fn visit_item_impl(&mut self, item: &'ast ItemImpl) {
+            if item.trait_.as_ref().is_some_and(|(path, _)| {
+                path.segments
+                    .last()
+                    .is_some_and(|segment| segment.ident == "Signer")
+            }) {
+                self.signer_implementations.push("impl Signer".to_owned());
+            }
+            syn::visit::visit_item_impl(self, item);
+        }
+
+        fn visit_expr_method_call(&mut self, call: &'ast ExprMethodCall) {
+            if matches!(
+                call.method.to_string().as_str(),
+                "sign_for_public_log" | "sign_without_public_log" | "signed_payload"
+            ) {
+                self.signer_calls
+                    .push((call.method.to_string(), field_path(&call.receiver)));
+            }
+            syn::visit::visit_expr_method_call(self, call);
+        }
+    }
+
+    fn visit_rust_files(path: &std::path::Path, boundary: &mut Boundary) {
+        for entry in std::fs::read_dir(path).expect("read sink source directory") {
+            let path = entry.expect("read sink source entry").path();
+            if path.is_dir() {
+                visit_rust_files(&path, boundary);
+            } else if path.extension().is_some_and(|extension| extension == "rs") {
+                let source = std::fs::read_to_string(&path).expect("read sink source");
+                let syntax = syn::parse_file(&source).expect("parse sink Rust source");
+                boundary.visit_file(&syntax);
+                if path.file_name().is_some_and(|name| name == "sink.rs") {
+                    let ports = syntax
+                        .items
+                        .iter()
+                        .find_map(|item| match item {
+                            syn::Item::Struct(item) if item.ident == "Ports" => Some(item),
+                            _ => None,
+                        })
+                        .expect("the sink ports type exists");
+                    let signer = ports
+                        .fields
+                        .iter()
+                        .find(|field| field.ident.as_ref().is_some_and(|ident| ident == "signer"))
+                        .expect("the sink ports carry the injected signer");
+                    boundary.signer_port_is_trait_object = match &signer.ty {
+                        Type::Reference(reference) => match reference.elem.as_ref() {
+                            Type::TraitObject(object) => object.bounds.iter().any(|bound| {
+                                matches!(bound, syn::TypeParamBound::Trait(trait_bound)
+                                    if trait_bound.path.segments.last().is_some_and(|segment| segment.ident == "Signer"))
+                            }),
+                            _ => false,
+                        },
+                        _ => false,
+                    };
+                }
+            }
+        }
+    }
+
+    let source_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/record_sink");
+    let mut boundary = Boundary::default();
+    visit_rust_files(&source_dir, &mut boundary);
+    assert_eq!(
+        boundary.signer_methods,
+        [
+            "sign_for_public_log",
+            "sign_without_public_log",
+            "signed_payload"
+        ]
+    );
+    assert!(boundary.signer_implementations.is_empty());
+    assert!(boundary.signer_port_is_trait_object);
+    let signer_calls: BTreeSet<_> = boundary.signer_calls.into_iter().collect();
+    assert_eq!(
+        signer_calls,
+        BTreeSet::from([
+            (
+                "sign_for_public_log".to_owned(),
+                Some("self.ports.signer".to_owned())
+            ),
+            (
+                "sign_without_public_log".to_owned(),
+                Some("self.ports.signer".to_owned())
+            ),
+            ("signed_payload".to_owned(), Some("verifier".to_owned())),
+        ])
+    );
+
+    let metadata = std::process::Command::new("cargo")
+        .args([
+            "metadata",
+            "--format-version",
+            "1",
+            "--locked",
+            "--offline",
+            "--no-deps",
+        ])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .expect("cargo metadata runs without building or network access");
+    assert!(
+        metadata.status.success(),
+        "cargo metadata failed: {}",
+        String::from_utf8_lossy(&metadata.stderr)
+    );
+    let metadata: Value = serde_json::from_slice(&metadata.stdout).expect("cargo metadata JSON");
+    let package = metadata["packages"]
+        .as_array()
+        .expect("cargo metadata packages")
+        .iter()
+        .find(|package| package["name"] == "engineering-assurance")
+        .expect("engineering-assurance package metadata");
+    let dependencies: std::collections::HashMap<_, _> = package["dependencies"]
+        .as_array()
+        .expect("package dependencies")
+        .iter()
+        .map(|dependency| {
+            let package_name = dependency["name"]
+                .as_str()
+                .expect("dependency package name");
+            let alias = dependency["rename"].as_str().unwrap_or(package_name);
+            (alias, package_name)
+        })
+        .collect();
+    assert!(
+        package["dependencies"]
+            .as_array()
+            .expect("package dependencies")
+            .iter()
+            .filter(|dependency| dependency["kind"].is_null())
+            .all(|dependency| dependency["optional"] == true)
+    );
+    let sink_dependencies: BTreeSet<_> = package["features"]["record-sink"]
+        .as_array()
+        .expect("record-sink feature")
+        .iter()
+        .map(|dependency| {
+            let alias = dependency
+                .as_str()
+                .and_then(|value| value.strip_prefix("dep:"))
+                .expect("record-sink enables only direct dependencies");
+            *dependencies
+                .get(alias)
+                .expect("record-sink dependency alias resolves")
+        })
+        .collect();
+    assert_eq!(
+        sink_dependencies,
+        BTreeSet::from([
+            "serde",
+            "serde_json",
+            "serde_json_canonicalizer",
+            "thiserror"
+        ])
+    );
 }
 
 /// A sink that would reach any log if it could. It stands in for a pluggable
