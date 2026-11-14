@@ -629,9 +629,9 @@ mod tests {
         let mut policy = role_policy();
         policy.agents.push(AccountRef {
             source: "github".to_owned(),
-            id: "agent".to_owned(),
+            id: "9".to_owned(),
         });
-        let retained = statement("agent", "agent-bundle");
+        let retained = statement("9", "agent-bundle");
         let verifier = FixtureVerifier {
             expected: vec![(
                 retained.statement_bytes.clone(),
