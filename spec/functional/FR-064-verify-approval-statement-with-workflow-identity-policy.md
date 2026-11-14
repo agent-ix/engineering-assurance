@@ -50,7 +50,8 @@ The verification command reports one line of JSON, `engineering-assurance.approv
 `status` one of `verified`, `untrusted_signer`, `signature_invalid`, `wrong_subject`, `predicate_invalid` or
 `unverifiable`, and, only when `status` is `unverifiable`, `reason` (one of `statements_not_retained`,
 `publish_refused`, `input_unreadable`); the schema is closed and has no other member besides `protocol`, `status` and
-`reason`; for a set of statements it also reports the role verdict of FR-061. It adds no cryptography
+`reason`; for a set of statements it reports the aggregate status defined by FR-064-AC-20 and the role verdict of
+FR-061. It adds no cryptography
 ([NFR-010](../non-functional/NFR-010-no-cryptography-of-our-own.md)).
 
 The verifier reads the full statements from the private store ([FR-054](./FR-054-record-sink-interface-and-implementations.md)),
@@ -83,6 +84,10 @@ Out of scope: the git-signature `approval-verify` command of
 - The statement verifier SHALL verify every matching statement with its associated signature bundle.
 - The statement verifier SHALL NOT select a statement by storage order.
 - Only statements whose status is `verified` SHALL contribute to the FR-061 evaluation.
+- For a non-empty set of matching statements, the aggregate status SHALL be `verified` only when every statement status is `verified`.
+- Otherwise, the aggregate status SHALL be the first present status in this fixed precedence order: `unverifiable`, `signature_invalid`, `untrusted_signer`, `wrong_subject`, `predicate_invalid`.
+- When the aggregate status is `unverifiable`, the result SHALL carry the reason from a matching statement with that status.
+- When matching statements have more than one `unverifiable` reason, the aggregate reason SHALL be the first present reason in this fixed precedence order: `input_unreadable`, `publish_refused`, `statements_not_retained`.
 - The statement verifier SHALL return `unverifiable` with the reason `statements_not_retained` when the private store returns no retained matching statement.
 - The statement verifier SHALL return `unverifiable` with the reason `input_unreadable` when the private-store read fails.
 - The statement verifier SHALL return `unverifiable` with the reason `publish_refused` for a retained matching statement whose publish outcome was refused, including a leak-check refusal.
@@ -114,7 +119,8 @@ Out of scope: the git-signature `approval-verify` command of
 | FR-064-AC-16 | For a request naming one repository, merged pull-request reference and merged commit, the verifier retrieves every retained matching approval statement, including its exact statement bytes, associated signature bundle and publish outcome; with multiple matches it verifies every statement and does not choose one by storage order, and only `verified` statements contribute to the FR-061 role verdict. | Test |
 | FR-064-AC-17 | A private-store lookup with no retained statement matching the exact repository, merged pull-request reference and merged commit yields `unverifiable` with reason `statements_not_retained`. | Test |
 | FR-064-AC-18 | A private-store read failure yields `unverifiable` with reason `input_unreadable`. | Test |
-| FR-064-AC-19 | A retained matching statement whose publish outcome was refused, including by the leak check, yields `unverifiable` with reason `publish_refused` and is not counted in the FR-061 role verdict. | Test |
+| FR-064-AC-19 | A sole retained matching statement whose publish outcome was refused, including by the leak check, yields `unverifiable` with reason `publish_refused` and is not counted in the FR-061 role verdict. | Test |
+| FR-064-AC-20 | For a non-empty matching set, the aggregate status is `verified` only when every statement verifies; otherwise it is the first present status in the fixed order `unverifiable`, `signature_invalid`, `untrusted_signer`, `wrong_subject`, `predicate_invalid`. Thus, one `verified` and one `untrusted_signer` statement produce aggregate `untrusted_signer`, while the role verdict counts only the verified statement; when multiple results are `unverifiable`, the result reason is the first present in the fixed order `input_unreadable`, `publish_refused`, `statements_not_retained`. | Test |
 
 ## Dependencies
 
