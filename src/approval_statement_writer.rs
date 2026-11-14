@@ -105,6 +105,23 @@ pub enum StatementWriteError {
     Record,
 }
 
+/// Inputs that determine the approval statements written for one merged pull request.
+#[derive(Clone, Copy)]
+pub struct ApprovalStatementWriteRequest<'a> {
+    /// Merge metadata shared by every selected approval.
+    pub merged: MergedPullRequest<'a>,
+    /// Required roles and eligible people used by the review gate.
+    pub policy: &'a RolePolicy,
+    /// Reviews to evaluate, including reviews that may not match the current head.
+    pub approvals: &'a [Approval],
+    /// Account types used to exclude agents and bots from matching.
+    pub account_types: &'a BTreeMap<AccountRef, AccountType>,
+    /// Display names keyed by stable account identity.
+    pub approver_names: &'a BTreeMap<AccountRef, String>,
+    /// Random record IDs, one per selected approval.
+    pub record_ids: &'a [RecordId],
+}
+
 /// Evaluate source approvals with the shared FR-061 matcher, write one signed
 /// statement for each counted approval, and hand each record to `sink`.
 ///
@@ -122,13 +139,16 @@ pub enum StatementWriteError {
 pub fn write_approval_statements(
     sink: &dyn RecordSink,
     signer: &dyn ApprovalStatementSigner,
-    merged: MergedPullRequest<'_>,
-    policy: &RolePolicy,
-    approvals: &[Approval],
-    account_types: &BTreeMap<AccountRef, AccountType>,
-    approver_names: &BTreeMap<AccountRef, String>,
-    record_ids: &[RecordId],
+    request: ApprovalStatementWriteRequest<'_>,
 ) -> Result<(GateResult, Vec<WrittenApprovalStatement>), StatementWriteError> {
+    let ApprovalStatementWriteRequest {
+        merged,
+        policy,
+        approvals,
+        account_types,
+        approver_names,
+        record_ids,
+    } = request;
     validate_merge(merged)?;
     let merged_approvals: Vec<_> = approvals
         .iter()
@@ -151,7 +171,7 @@ pub fn write_approval_statements(
         return Err(StatementWriteError::Record);
     }
 
-    let mut signed = Vec::with_capacity(selected.len());
+    let mut prepared_records = Vec::with_capacity(selected.len());
     for ((approval, name), record_id) in selected.into_iter().zip(record_ids) {
         validate_approval(approval, name, merged)?;
         let statement = build_statement(approval, name, merged);
@@ -171,11 +191,11 @@ pub fn write_approval_statements(
             &signature_bundle,
         )
         .map_err(|_| StatementWriteError::Record)?;
-        signed.push((approval, statement_bytes, signature_bundle, record));
+        prepared_records.push((approval, statement_bytes, signature_bundle, record));
     }
 
-    let mut written = Vec::with_capacity(signed.len());
-    for (approval, statement_bytes, signature_bundle, record) in signed {
+    let mut written = Vec::with_capacity(prepared_records.len());
+    for (approval, statement_bytes, signature_bundle, record) in prepared_records {
         let sink_result = sink.publish(&record);
         written.push(WrittenApprovalStatement {
             account: approval.account.clone(),
@@ -381,6 +401,7 @@ mod tests {
     use std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet},
+        fmt::Write as _,
     };
 
     use ix_trace_rs::trace;
@@ -410,6 +431,14 @@ mod tests {
     const HEAD: &str = "1111111111111111111111111111111111111111";
     const MERGED: &str = "2222222222222222222222222222222222222222";
 
+    fn hex_encode(bytes: &[u8]) -> String {
+        let mut encoded = String::with_capacity(bytes.len() * 2);
+        for byte in bytes {
+            write!(encoded, "{byte:02x}").expect("writing to a String cannot fail");
+        }
+        encoded
+    }
+
     #[derive(Default)]
     struct CaptureSink(RefCell<Vec<Record>>);
 
@@ -427,10 +456,7 @@ mod tests {
             &self,
             canonical_statement: &[u8],
         ) -> Result<String, StatementSigningError> {
-            let hex: String = canonical_statement
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect();
+            let hex = hex_encode(canonical_statement);
             Ok(format!(".github/workflows/statement-writer.yml|{hex}"))
         }
     }
@@ -447,7 +473,7 @@ mod tests {
             let Some((identity, hex)) = bundle_json.split_once('|') else {
                 return Err(VerificationFailure::InvalidSignature);
             };
-            let expected: String = payload.iter().map(|byte| format!("{byte:02x}")).collect();
+            let expected = hex_encode(payload);
             if hex != expected {
                 return Err(VerificationFailure::InvalidSignature);
             }
@@ -648,17 +674,19 @@ mod tests {
         let (writer_verdict, written) = write_approval_statements(
             &sink,
             &FixtureSigner,
-            MergedPullRequest {
-                repository: REPOSITORY,
-                pull_request: PULL_REQUEST,
-                head_commit: HEAD,
-                merged_commit: MERGED,
+            ApprovalStatementWriteRequest {
+                merged: MergedPullRequest {
+                    repository: REPOSITORY,
+                    pull_request: PULL_REQUEST,
+                    head_commit: HEAD,
+                    merged_commit: MERGED,
+                },
+                policy: &policy,
+                approvals: &approvals,
+                account_types: &types,
+                approver_names: &display_names(),
+                record_ids: &ids,
             },
-            &policy,
-            &approvals,
-            &types,
-            &display_names(),
-            &ids,
         )
         .unwrap();
 
@@ -726,55 +754,76 @@ mod tests {
         assert_eq!(result.status, ApprovalStatementStatus::Verified);
         assert_eq!(result.role_verdict, before_merge);
 
-        let mut review_set_with_stale_head = approvals.clone();
-        review_set_with_stale_head[0].commit = "3333333333333333333333333333333333333333".into();
-        let current_head_reviews: Vec<_> = review_set_with_stale_head
+    }
+
+    #[trace("TC-969", "FR-065-AC-7")]
+    #[test]
+    fn stale_head_approval_is_omitted_from_post_merge_statements() {
+        let policy = role_policy();
+        let mut review_set = approvals();
+        review_set[0].commit = "3333333333333333333333333333333333333333".into();
+        let current_head_reviews: Vec<_> = review_set
             .iter()
             .filter(|approval| approval.commit == HEAD)
             .cloned()
             .collect();
+        let types = account_types();
         let expected_partial = approval_gate::evaluate(&policy, &current_head_reviews, &types);
-        let stale_sink = CaptureSink::default();
+        let sink = CaptureSink::default();
+        let names = display_names();
+        let ids = [1_u8, 2].map(|byte| RecordId::from_random_bytes([byte; 16]));
         let (partial, statements) = write_approval_statements(
-            &stale_sink,
+            &sink,
             &FixtureSigner,
-            MergedPullRequest {
-                repository: REPOSITORY,
-                pull_request: PULL_REQUEST,
-                head_commit: HEAD,
-                merged_commit: MERGED,
+            ApprovalStatementWriteRequest {
+                merged: MergedPullRequest {
+                    repository: REPOSITORY,
+                    pull_request: PULL_REQUEST,
+                    head_commit: HEAD,
+                    merged_commit: MERGED,
+                },
+                policy: &policy,
+                approvals: &review_set,
+                account_types: &types,
+                approver_names: &names,
+                record_ids: &ids,
             },
-            &policy,
-            &review_set_with_stale_head,
-            &types,
-            &display_names(),
-            &ids[..2],
         )
         .unwrap();
         assert_eq!(partial, expected_partial);
         assert_eq!(statements.len(), 2);
         assert!(statements.iter().all(|item| item.account.id != "101"));
+    }
 
-        let mut subsecond_review = approvals;
-        subsecond_review[0].timestamp = "2026-11-14T10:00:00.500Z".into();
-        let refused_sink = CaptureSink::default();
+    #[trace("TC-969", "FR-060-AC-3")]
+    #[test]
+    fn subsecond_approval_timestamp_is_refused_before_sink_handoff() {
+        let policy = role_policy();
+        let mut review_set = approvals();
+        review_set[0].timestamp = "2026-11-14T10:00:00.500Z".into();
+        let types = account_types();
+        let names = display_names();
+        let ids = [1_u8, 2, 3].map(|byte| RecordId::from_random_bytes([byte; 16]));
+        let sink = CaptureSink::default();
         let error = write_approval_statements(
-            &refused_sink,
+            &sink,
             &FixtureSigner,
-            MergedPullRequest {
-                repository: REPOSITORY,
-                pull_request: PULL_REQUEST,
-                head_commit: HEAD,
-                merged_commit: MERGED,
+            ApprovalStatementWriteRequest {
+                merged: MergedPullRequest {
+                    repository: REPOSITORY,
+                    pull_request: PULL_REQUEST,
+                    head_commit: HEAD,
+                    merged_commit: MERGED,
+                },
+                policy: &policy,
+                approvals: &review_set,
+                account_types: &types,
+                approver_names: &names,
+                record_ids: &ids,
             },
-            &policy,
-            &subsecond_review,
-            &types,
-            &display_names(),
-            &ids,
         );
         assert_eq!(error, Err(StatementWriteError::Metadata));
-        assert!(refused_sink.0.borrow().is_empty());
+        assert!(sink.0.borrow().is_empty());
     }
 
     #[trace("TC-968", "FR-065-AC-3")]
@@ -783,10 +832,7 @@ mod tests {
         let payload = b"statement payload";
         let writer_bundle = format!(
             ".github/workflows/statement-writer.yml|{}",
-            payload
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>()
+            hex_encode(payload)
         );
         assert_eq!(
             FixtureVerifier.verify(
@@ -825,7 +871,7 @@ mod tests {
 
     #[trace("TC-971", "FR-065-AC-9")]
     #[test]
-    fn private_approval_records_stay_off_public_log_and_leak_refusals_are_not_sent() {
+    fn private_repository_approval_records_stay_off_public_log() {
         let policy = role_policy();
         let approvals = approvals();
         let types = account_types();
@@ -855,17 +901,19 @@ mod tests {
         let (_, private_written) = write_approval_statements(
             &private_sink,
             &signer,
-            MergedPullRequest {
-                repository: REPOSITORY,
-                pull_request: PULL_REQUEST,
-                head_commit: HEAD,
-                merged_commit: MERGED,
+            ApprovalStatementWriteRequest {
+                merged: MergedPullRequest {
+                    repository: REPOSITORY,
+                    pull_request: PULL_REQUEST,
+                    head_commit: HEAD,
+                    merged_commit: MERGED,
+                },
+                policy: &policy,
+                approvals: &approvals,
+                account_types: &types,
+                approver_names: &names,
+                record_ids: &ids,
             },
-            &policy,
-            &approvals,
-            &types,
-            &names,
-            &ids,
         )
         .unwrap();
         assert!(
@@ -877,7 +925,16 @@ mod tests {
         assert_eq!(private_store.public.borrow().len(), 3);
         assert_eq!(private_log.0.get(), 0);
         assert_eq!(private_record_signer.public_calls.get(), 0);
+    }
 
+    #[trace("TC-971", "FR-065-AC-9")]
+    #[test]
+    fn leak_refusal_retains_private_form_without_public_calls() {
+        let policy = role_policy();
+        let approvals = approvals();
+        let types = account_types();
+        let names = display_names();
+        let signer = FixtureSigner;
         let mut private_repository_approval = approvals[0].clone();
         private_repository_approval.pull_request = "acme/secret#41".into();
         let mut private_repo_names = names.clone();
@@ -907,17 +964,19 @@ mod tests {
         let (_, refused) = write_approval_statements(
             &public_sink,
             &signer,
-            MergedPullRequest {
-                repository: public_repo,
-                pull_request: "acme/secret#41",
-                head_commit: HEAD,
-                merged_commit: MERGED,
+            ApprovalStatementWriteRequest {
+                merged: MergedPullRequest {
+                    repository: public_repo,
+                    pull_request: "acme/secret#41",
+                    head_commit: HEAD,
+                    merged_commit: MERGED,
+                },
+                policy: &policy,
+                approvals: &[private_repository_approval],
+                account_types: &types,
+                approver_names: &private_repo_names,
+                record_ids: &[RecordId::from_random_bytes([7; 16])],
             },
-            &policy,
-            &[private_repository_approval],
-            &types,
-            &private_repo_names,
-            &[RecordId::from_random_bytes([7; 16])],
         )
         .unwrap();
         assert_eq!(refused.len(), 1);
