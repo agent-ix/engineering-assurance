@@ -22,8 +22,7 @@ use engineering_assurance::{
     },
     approval_statement_writer::{
         ApprovalStatementSigner, ApprovalStatementWriteRequest, MergedPullRequest,
-        StatementSigningError,
-        write_approval_statements,
+        StatementSigningError, write_approval_statements,
     },
     attestation_signing::{
         BundleVerifier, TransparencyRequirement, VerificationFailure, WorkflowIdentityPolicy,
