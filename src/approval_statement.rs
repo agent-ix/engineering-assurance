@@ -181,7 +181,7 @@ fn verify_one(
     }
 }
 
-fn approval_from_statement(
+pub(crate) fn approval_from_statement(
     statement_bytes: &[u8],
     lookup: ApprovalStatementLookup<'_>,
 ) -> Result<Approval, VerificationFailure> {

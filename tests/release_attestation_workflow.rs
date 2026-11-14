@@ -152,7 +152,7 @@ fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_
     assert_attest_job(&workflow);
 }
 
-#[trace("TC-665", "FR-070-AC-8", "FR-070-AC-9")]
+#[trace("TC-665", "FR-070-AC-9")]
 #[test]
 fn reusable_workflow_downloads_named_release_and_evidence_artifacts_without_an_ea_caller() {
     let workflow = reusable_workflow();

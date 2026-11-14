@@ -15,13 +15,14 @@ use crate::attestation_signing::{
     BundleVerifier, ExpectedSubject, SourceWorkflowPolicy, StatementV1, SubjectKind,
     VerificationFailure, VerificationStatus, WorkflowIdentityPolicy, verify_statement_with_source,
 };
+use crate::attestation_verify::VerificationSummaryStatement;
 use crate::change_record::predicate::validate_predicate;
 use crate::change_record::{ChangeStatement, PREDICATE_TYPE, Status};
 use crate::{
     approval_gate::{GateStatus, RolePolicy},
     approval_statement::{
         ApprovalStatementLookup, ApprovalStatementStatus, RetainedApprovalStatement,
-        verify_approval_statements,
+        approval_from_statement, verify_approval_statements,
     },
     record_sink::sink::{ApprovalStatementReadError, ApprovalStatementReader},
 };
@@ -69,6 +70,15 @@ pub enum ReceiptStatus {
     Unverifiable,
 }
 
+/// Whether a verified receipt makes a repeated note write idempotent.
+#[must_use]
+pub const fn receipt_status_allows_idempotent_skip(status: ReceiptStatus) -> bool {
+    matches!(
+        status,
+        ReceiptStatus::Verified | ReceiptStatus::VerifiedFailed
+    )
+}
+
 /// A closed reason accompanying an `unverifiable` result (FR-078).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -81,6 +91,8 @@ pub enum UnverifiableReason {
     TrustRootUnreadable,
     /// Protected approval policy could not be read.
     PolicyUnreadable,
+    /// The retained private approval-statement backend is unavailable.
+    StatementsNotRetained,
 }
 
 /// One machine-readable receipt verification result.
@@ -201,17 +213,21 @@ pub fn find_missing_receipts(
             .filter(|pushed_at| *pushed_at <= now_unix);
         let age = pushed_at.map(|pushed_at| now_unix - pushed_at);
         let within_grace = age.is_some_and(|seconds| seconds < grace_seconds);
-        if within_grace {
+        let reason = match (pushed_at, entry.state) {
+            (_, ReceiptCheckState::VerifiedFailed) => Some(MissingReceiptReason::FailedReceipt),
+            (None, _) => Some(MissingReceiptReason::StatusUnknown),
+            (Some(_), ReceiptCheckState::NoNote) => Some(MissingReceiptReason::NoNote),
+            (Some(_), ReceiptCheckState::InvalidReceipt) => {
+                Some(MissingReceiptReason::InvalidReceipt)
+            }
+            (Some(_), ReceiptCheckState::StatusUnknown) => {
+                Some(MissingReceiptReason::StatusUnknown)
+            }
+            (Some(_), ReceiptCheckState::Verified) => None,
+        };
+        if within_grace && reason != Some(MissingReceiptReason::FailedReceipt) {
             continue;
         }
-        let reason = match (pushed_at, entry.state) {
-            (None, _) => Some(MissingReceiptReason::StatusUnknown),
-            (_, ReceiptCheckState::NoNote) => Some(MissingReceiptReason::NoNote),
-            (_, ReceiptCheckState::InvalidReceipt) => Some(MissingReceiptReason::InvalidReceipt),
-            (_, ReceiptCheckState::StatusUnknown) => Some(MissingReceiptReason::StatusUnknown),
-            (_, ReceiptCheckState::VerifiedFailed) => Some(MissingReceiptReason::FailedReceipt),
-            (_, ReceiptCheckState::Verified) => None,
-        };
         if let Some(reason) = reason {
             findings.push(MissingReceipt {
                 commit: entry.commit.clone(),
@@ -497,17 +513,17 @@ fn verify_receipt_inner(
     }
     let test_statement: StatementV1 = serde_json::from_slice(&test.payload)
         .map_err(|_| ReceiptVerificationError::PredicateInvalid)?;
+    let test_result = validate_test_result(
+        &serde_json::to_value(&test_statement.predicate)
+            .map_err(|_| ReceiptVerificationError::PredicateInvalid)?,
+    )?;
     if test_statement.predicate_type != crate::attestation_verify::TEST_RESULT_PREDICATE
         || !statement_has_subject(
             &test_statement.subject,
             &context.subject.repository,
             &context.subject.tree,
         )
-        || validate_test_result(
-            &serde_json::to_value(&test_statement.predicate)
-                .map_err(|_| ReceiptVerificationError::PredicateInvalid)?,
-        )
-        .is_err()
+        || (test_result.result == "FAILED" && change_statement.predicate.status != Status::Failed)
     {
         return Err(ReceiptVerificationError::PredicateInvalid);
     }
@@ -516,11 +532,13 @@ fn verify_receipt_inner(
     if summary_statement.type_ != crate::attestation_signing::STATEMENT_V1_TYPE
         || summary_statement.predicate_type
             != crate::attestation_verify::VERIFICATION_SUMMARY_PREDICATE
-        || !statement_has_subject(
-            &summary_statement.subject,
-            &context.subject.repository,
-            &context.subject.tree,
-        )
+        || !summary_statement.subject.iter().any(|subject| {
+            subject.name == context.subject.repository
+                && subject
+                    .digest
+                    .get("gitTree")
+                    .is_some_and(|actual| actual == &context.subject.tree)
+        })
         || summary_statement.predicate.input_attestations.len() != 2
         || summary_statement
             .predicate
@@ -569,17 +587,42 @@ fn verify_receipt_inner(
         Ok(retained) => retained,
         Err(ApprovalStatementReadError) => return Ok(ReceiptStatus::Unverifiable),
     };
-    let retained_digests = retained
-        .iter()
-        .map(|statement| canonical_statement_digest(&statement.statement_bytes))
-        .collect::<Result<std::collections::BTreeSet<_>, _>>()?;
-    let claimed_digests = change_statement
-        .predicate
-        .approvals
-        .iter()
-        .filter_map(|entry| entry.statement_digest.as_deref())
-        .map(str::to_owned)
-        .collect::<std::collections::BTreeSet<_>>();
+    let mut retained_digests = std::collections::BTreeSet::new();
+    let mut retained_roles = std::collections::BTreeSet::new();
+    let mut retained_pairs = std::collections::BTreeSet::new();
+    for statement in &retained {
+        let digest = canonical_statement_digest(&statement.statement_bytes)?;
+        if !retained_digests.insert(digest.clone()) {
+            return Ok(ReceiptStatus::ApprovalsMismatch);
+        }
+        let approval = match approval_from_statement(&statement.statement_bytes, lookup) {
+            Ok(approval) => approval,
+            Err(_) => return Ok(ReceiptStatus::ApprovalsMismatch),
+        };
+        if !retained_roles.insert(approval.role.clone())
+            || !retained_pairs.insert((approval.role, digest))
+        {
+            return Ok(ReceiptStatus::ApprovalsMismatch);
+        }
+    }
+    let mut claimed_digests = std::collections::BTreeSet::new();
+    let mut claimed_roles = std::collections::BTreeSet::new();
+    let mut claimed_pairs = std::collections::BTreeSet::new();
+    for entry in &change_statement.predicate.approvals {
+        if !claimed_roles.insert(entry.role.as_str()) {
+            return Ok(ReceiptStatus::ApprovalsMismatch);
+        }
+        if entry.verdict == crate::change_record::predicate::ApprovalVerdict::Covered {
+            let Some(digest) = entry.statement_digest.as_deref() else {
+                return Ok(ReceiptStatus::ApprovalsMismatch);
+            };
+            if !claimed_digests.insert(digest.to_owned())
+                || !claimed_pairs.insert((entry.role.clone(), digest.to_owned()))
+            {
+                return Ok(ReceiptStatus::ApprovalsMismatch);
+            }
+        }
+    }
     if retained_digests != claimed_digests {
         return Ok(ReceiptStatus::ApprovalsMismatch);
     }
@@ -602,17 +645,14 @@ fn verify_receipt_inner(
         ApprovalStatementStatus::PredicateInvalid => return Ok(ReceiptStatus::PredicateInvalid),
         ApprovalStatementStatus::Unverifiable => return Ok(ReceiptStatus::Unverifiable),
     }
+    if retained_pairs != claimed_pairs {
+        return Ok(ReceiptStatus::ApprovalsMismatch);
+    }
     let policy_roles = context
         .role_policy
         .required_roles
         .iter()
         .map(String::as_str)
-        .collect::<std::collections::BTreeSet<_>>();
-    let claimed_roles = change_statement
-        .predicate
-        .approvals
-        .iter()
-        .map(|entry| entry.role.as_str())
         .collect::<std::collections::BTreeSet<_>>();
     if policy_roles != claimed_roles {
         return Ok(ReceiptStatus::ApprovalsMismatch);
@@ -688,64 +728,11 @@ fn status_from_verification_error(error: ReceiptVerificationError) -> ReceiptSta
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct VerificationSummaryStatement {
-    #[serde(rename = "_type")]
-    type_: String,
-    subject: Vec<crate::attestation_signing::SubjectV1>,
-    #[serde(rename = "predicateType")]
-    predicate_type: String,
-    predicate: VerificationSummaryPredicate,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct VerificationSummaryPredicate {
-    verifier: SummaryVerifier,
-    #[serde(rename = "timeVerified")]
-    time_verified: String,
-    #[serde(rename = "resourceUri")]
-    resource_uri: String,
-    policy: SummaryPolicy,
-    #[serde(rename = "inputAttestations")]
-    input_attestations: Vec<SummaryInputAttestation>,
-    #[serde(rename = "verificationResult")]
-    verification_result: String,
-    #[serde(rename = "verifiedLevels")]
-    _verified_levels: Vec<Value>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct SummaryVerifier {
-    id: String,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct SummaryPolicy {
-    uri: String,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct SummaryInputAttestation {
-    uri: String,
-    digest: SummaryDigest,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct SummaryDigest {
-    sha256: String,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct TestResultPredicate {
     result: String,
     configuration: Value,
     #[serde(rename = "passedTests")]
-    passed_tests: Vec<String>,
+    _passed_tests: Vec<String>,
     #[serde(rename = "warnedTests")]
     warned_tests: Vec<String>,
     #[serde(rename = "failedTests")]
@@ -803,7 +790,9 @@ fn change_statement_has_subject(
     })
 }
 
-fn validate_test_result(predicate: &Value) -> Result<(), ReceiptVerificationError> {
+fn validate_test_result(
+    predicate: &Value,
+) -> Result<TestResultPredicate, ReceiptVerificationError> {
     let predicate: TestResultPredicate = serde_json::from_value(predicate.clone())
         .map_err(|_| ReceiptVerificationError::PredicateInvalid)?;
     let expected_result = if !predicate.failed_tests.is_empty() {
@@ -816,8 +805,7 @@ fn validate_test_result(predicate: &Value) -> Result<(), ReceiptVerificationErro
     if predicate.result != expected_result || predicate.configuration.is_null() {
         return Err(ReceiptVerificationError::PredicateInvalid);
     }
-    let _ = predicate.passed_tests;
-    Ok(())
+    Ok(predicate)
 }
 
 fn canonical_statement_digest(bytes: &[u8]) -> Result<String, ReceiptVerificationError> {
@@ -1033,6 +1021,18 @@ mod tests {
         }
     }
 
+    struct ManyApprovalReader(Vec<RetainedApprovalStatement>);
+
+    impl ApprovalStatementReader for ManyApprovalReader {
+        fn lookup_approval_statements(
+            &self,
+            _destination: &str,
+            _lookup: ApprovalStatementLookup<'_>,
+        ) -> Result<Vec<RetainedApprovalStatement>, ApprovalStatementReadError> {
+            Ok(self.0.clone())
+        }
+    }
+
     fn valid_receipt_fixture(status: Status) -> (ReceiptBundleSet, OneApprovalReader, RolePolicy) {
         let repository = FIXTURE_REPOSITORY;
         let commit = "a".repeat(40);
@@ -1145,6 +1145,73 @@ mod tests {
         (bundles, reader, policy)
     }
 
+    fn valid_two_role_fixture() -> (ReceiptBundleSet, ManyApprovalReader, RolePolicy) {
+        let (mut bundles, first_reader, mut policy) = valid_receipt_fixture(Status::Passed);
+        let first = first_reader.0;
+        let mut second_statement: Value = serde_json::from_slice(&first.statement_bytes).unwrap();
+        second_statement["predicate"]["approver"] = json!("github:456");
+        second_statement["predicate"]["approver_name"] = json!("Fixture Manager");
+        second_statement["predicate"]["role"] = json!("manager");
+        let second_statement = serde_json::to_vec(&second_statement).unwrap();
+        let first_digest = canonical_statement_digest(&first.statement_bytes).unwrap();
+        let second_digest = canonical_statement_digest(&second_statement).unwrap();
+
+        let change_payload = extract_statement(&bundles.change_record).unwrap().payload;
+        let mut change: Value = serde_json::from_slice(&change_payload).unwrap();
+        change["predicate"]["approvals"] = json!([
+            {"role": "engineer", "verdict": "covered", "statement_digest": first_digest},
+            {"role": "manager", "verdict": "covered", "statement_digest": second_digest}
+        ]);
+        let change_payload = serde_json::to_vec(&change).unwrap();
+        let change_digest = canonical_statement_digest(&change_payload).unwrap();
+        bundles.change_record = signed_bundle_payload(change_payload);
+        let summary_payload = extract_statement(&bundles.summary).unwrap().payload;
+        let mut summary: Value = serde_json::from_slice(&summary_payload).unwrap();
+        let input = summary["predicate"]["inputAttestations"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|input| input["uri"] == "change")
+            .unwrap();
+        input["digest"]["sha256"] = json!(change_digest);
+        bundles.summary = signed_bundle_payload(serde_json::to_vec(&summary).unwrap());
+
+        let mut second = first.clone();
+        second.statement_bytes = second_statement;
+        second.signature_bundle = "fixture-manager-bundle".to_owned();
+        policy.required_roles.push("manager".to_owned());
+        policy.individuals.insert(
+            "bob".to_owned(),
+            vec![crate::approval_gate::AccountRef {
+                source: "github".to_owned(),
+                id: "456".to_owned(),
+            }],
+        );
+        policy
+            .roles
+            .insert("manager".to_owned(), vec!["bob".to_owned()]);
+        (bundles, ManyApprovalReader(vec![first, second]), policy)
+    }
+
+    fn replace_approval_rows(bundles: &mut ReceiptBundleSet, rows: Value) {
+        let change_payload = extract_statement(&bundles.change_record).unwrap().payload;
+        let mut change: Value = serde_json::from_slice(&change_payload).unwrap();
+        change["predicate"]["approvals"] = rows;
+        let change_payload = serde_json::to_vec(&change).unwrap();
+        let change_digest = canonical_statement_digest(&change_payload).unwrap();
+        bundles.change_record = signed_bundle_payload(change_payload);
+        let summary_payload = extract_statement(&bundles.summary).unwrap().payload;
+        let mut summary: Value = serde_json::from_slice(&summary_payload).unwrap();
+        let input = summary["predicate"]["inputAttestations"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|input| input["uri"] == "change")
+            .unwrap();
+        input["digest"]["sha256"] = json!(change_digest);
+        bundles.summary = signed_bundle_payload(serde_json::to_vec(&summary).unwrap());
+    }
+
     fn verification_context<'a>(
         verifier: &'a dyn BundleVerifier,
         reader: &'a dyn ApprovalStatementReader,
@@ -1165,7 +1232,6 @@ mod tests {
         }
     }
 
-    #[trace("TC-597", "TC-602", "FR-076-AC-1", "FR-076-AC-6")]
     #[test]
     fn receipt_note_round_trips_three_json_lines_without_private_text() {
         let encoded = bundle_set().encode_note().expect("bounded note encoding");
@@ -1321,6 +1387,7 @@ mod tests {
             let context =
                 verification_context(&verifier, &reader, &subject, &signer, &source, &role_policy);
             assert_eq!(verify_receipt(&bundles, &context), Ok(expected_status));
+            assert!(receipt_status_allows_idempotent_skip(expected_status));
         }
 
         let (bundles, reader, role_policy) = valid_receipt_fixture(Status::Passed);
@@ -1340,6 +1407,105 @@ mod tests {
         assert_eq!(
             verify_receipt(&bundles, &context),
             Ok(ReceiptStatus::UntrustedSigner)
+        );
+        assert!(!receipt_status_allows_idempotent_skip(
+            ReceiptStatus::UntrustedSigner
+        ));
+    }
+
+    #[trace("TC-586", "FR-074-AC-4")]
+    #[test]
+    fn changing_a_test_result_without_updating_the_summary_digest_is_rejected() {
+        let (mut bundles, reader, role_policy) = valid_receipt_fixture(Status::Passed);
+        let verifier = FixtureVerifier {
+            rejected_bundles: BTreeSet::new(),
+            invalid_bundles: BTreeSet::new(),
+            mismatched_claims: false,
+        };
+        let subject = ExpectedReceiptSubject {
+            repository: FIXTURE_REPOSITORY.to_owned(),
+            commit: "a".repeat(40),
+            tree: "b".repeat(40),
+            merged_pull_request: format!("{FIXTURE_REPOSITORY}#1"),
+        };
+        let signer = WorkflowIdentityPolicy {
+            repository: FIXTURE_REPOSITORY.to_owned(),
+            workflow_path: ".github/workflows/change-receipt.yml".to_owned(),
+            references: BTreeSet::from(["refs/heads/main".to_owned()]),
+            issuer: FIXTURE_RECEIPT_ISSUER.to_owned(),
+            transparency: TransparencyRequirement::PublicLog,
+        };
+        let source = fixture_source_policy();
+        let context =
+            verification_context(&verifier, &reader, &subject, &signer, &source, &role_policy);
+        let test_payload = extract_statement(&bundles.test_result).unwrap().payload;
+        let mut test: Value = serde_json::from_slice(&test_payload).unwrap();
+        test["predicate"]["passedTests"] = json!(["changed case"]);
+        bundles.test_result = signed_bundle_payload(serde_json::to_vec(&test).unwrap());
+        assert_eq!(
+            verify_receipt(&bundles, &context),
+            Err(ReceiptVerificationError::PredicateInvalid)
+        );
+    }
+
+    #[trace("TC-613", "FR-078-AC-3")]
+    #[test]
+    fn a_failed_test_result_cannot_be_certified_by_a_passing_change_and_summary() {
+        let (mut bundles, reader, role_policy) = valid_receipt_fixture(Status::Passed);
+        let test_payload = extract_statement(&bundles.test_result).unwrap().payload;
+        let mut test: Value = serde_json::from_slice(&test_payload).unwrap();
+        test["predicate"]["result"] = json!("FAILED");
+        test["predicate"]["passedTests"] = json!([]);
+        test["predicate"]["failedTests"] = json!(["fixture"]);
+        let test_payload = serde_json::to_vec(&test).unwrap();
+        let test_digest = canonical_statement_digest(&test_payload).unwrap();
+        bundles.test_result = signed_bundle_payload(test_payload);
+
+        let change_payload = extract_statement(&bundles.change_record).unwrap().payload;
+        let mut change: Value = serde_json::from_slice(&change_payload).unwrap();
+        change["predicate"]["test_results"] = json!(test_digest);
+        let change_payload = serde_json::to_vec(&change).unwrap();
+        let change_digest = canonical_statement_digest(&change_payload).unwrap();
+        bundles.change_record = signed_bundle_payload(change_payload);
+
+        let summary_payload = extract_statement(&bundles.summary).unwrap().payload;
+        let mut summary: Value = serde_json::from_slice(&summary_payload).unwrap();
+        for input in summary["predicate"]["inputAttestations"]
+            .as_array_mut()
+            .unwrap()
+        {
+            match input["uri"].as_str() {
+                Some("change") => input["digest"]["sha256"] = json!(change_digest),
+                Some("test") => input["digest"]["sha256"] = json!(test_digest),
+                _ => {}
+            }
+        }
+        bundles.summary = signed_bundle_payload(serde_json::to_vec(&summary).unwrap());
+
+        let verifier = FixtureVerifier {
+            rejected_bundles: BTreeSet::new(),
+            invalid_bundles: BTreeSet::new(),
+            mismatched_claims: false,
+        };
+        let subject = ExpectedReceiptSubject {
+            repository: FIXTURE_REPOSITORY.to_owned(),
+            commit: "a".repeat(40),
+            tree: "b".repeat(40),
+            merged_pull_request: format!("{FIXTURE_REPOSITORY}#1"),
+        };
+        let signer = WorkflowIdentityPolicy {
+            repository: FIXTURE_REPOSITORY.to_owned(),
+            workflow_path: ".github/workflows/change-receipt.yml".to_owned(),
+            references: BTreeSet::from(["refs/heads/main".to_owned()]),
+            issuer: FIXTURE_RECEIPT_ISSUER.to_owned(),
+            transparency: TransparencyRequirement::PublicLog,
+        };
+        let source = fixture_source_policy();
+        let context =
+            verification_context(&verifier, &reader, &subject, &signer, &source, &role_policy);
+        assert_eq!(
+            verify_receipt(&bundles, &context),
+            Err(ReceiptVerificationError::PredicateInvalid)
         );
     }
 
@@ -1474,6 +1640,67 @@ mod tests {
 
     #[trace("TC-614", "FR-078-AC-4")]
     #[test]
+    fn approval_rows_bind_each_required_role_to_one_verified_statement_digest() {
+        let (valid, reader, role_policy) = valid_two_role_fixture();
+        let verifier = FixtureVerifier {
+            rejected_bundles: BTreeSet::new(),
+            invalid_bundles: BTreeSet::new(),
+            mismatched_claims: false,
+        };
+        let subject = ExpectedReceiptSubject {
+            repository: FIXTURE_REPOSITORY.to_owned(),
+            commit: "a".repeat(40),
+            tree: "b".repeat(40),
+            merged_pull_request: format!("{FIXTURE_REPOSITORY}#1"),
+        };
+        let signer = WorkflowIdentityPolicy {
+            repository: FIXTURE_REPOSITORY.to_owned(),
+            workflow_path: ".github/workflows/change-receipt.yml".to_owned(),
+            references: BTreeSet::from(["refs/heads/main".to_owned()]),
+            issuer: FIXTURE_RECEIPT_ISSUER.to_owned(),
+            transparency: TransparencyRequirement::PublicLog,
+        };
+        let source = fixture_source_policy();
+        let context =
+            verification_context(&verifier, &reader, &subject, &signer, &source, &role_policy);
+        assert_eq!(
+            verify_receipt(&valid, &context),
+            Ok(ReceiptStatus::Verified)
+        );
+
+        let engineer_digest = canonical_statement_digest(&reader.0[0].statement_bytes).unwrap();
+        let manager_digest = canonical_statement_digest(&reader.0[1].statement_bytes).unwrap();
+        let mut swapped = valid.clone();
+        replace_approval_rows(
+            &mut swapped,
+            json!([
+                {"role": "engineer", "verdict": "covered", "statement_digest": manager_digest},
+                {"role": "manager", "verdict": "covered", "statement_digest": engineer_digest}
+            ]),
+        );
+        assert_eq!(
+            verify_receipt(&swapped, &context),
+            Ok(ReceiptStatus::ApprovalsMismatch),
+            "a valid digest assigned to the wrong role must fail closed"
+        );
+
+        let mut duplicated = valid;
+        replace_approval_rows(
+            &mut duplicated,
+            json!([
+                {"role": "engineer", "verdict": "covered", "statement_digest": engineer_digest},
+                {"role": "engineer", "verdict": "covered", "statement_digest": engineer_digest}
+            ]),
+        );
+        assert_eq!(
+            verify_receipt(&duplicated, &context),
+            Ok(ReceiptStatus::ApprovalsMismatch),
+            "duplicate role and digest rows must fail closed"
+        );
+    }
+
+    #[trace("TC-614", "FR-078-AC-4")]
+    #[test]
     fn empty_private_store_fails_closed_as_unverifiable() {
         let (mut bundles, _retained_reader, role_policy) = valid_receipt_fixture(Status::Passed);
         let change_payload = extract_statement(&bundles.change_record).unwrap().payload;
@@ -1545,6 +1772,15 @@ mod tests {
             ..missing_reason
         };
         assert!(is_valid_verify_result(&valid));
+        let missing_store = ReceiptVerifyResult {
+            reason: Some(UnverifiableReason::StatementsNotRetained),
+            ..valid.clone()
+        };
+        assert!(is_valid_verify_result(&missing_store));
+        assert_eq!(
+            serde_json::to_value(missing_store).unwrap()["reason"],
+            "statements_not_retained"
+        );
         let misplaced = ReceiptVerifyResult {
             status: ReceiptStatus::Verified,
             ..valid
@@ -1657,6 +1893,44 @@ mod tests {
                 },
                 MissingReceipt {
                     commit: "e".repeat(40),
+                    reason: MissingReceiptReason::FailedReceipt,
+                },
+            ]
+        );
+    }
+
+    #[trace("TC-605", "FR-077-AC-2")]
+    #[test]
+    fn verified_failed_receipt_is_reported_even_within_the_grace_window() {
+        let history = [
+            ReceiptHistoryEntry {
+                commit: "a".repeat(40),
+                pushed_at_unix: Some(1_999),
+                receipt_run_in_progress: true,
+                state: ReceiptCheckState::VerifiedFailed,
+            },
+            ReceiptHistoryEntry {
+                commit: "b".repeat(40),
+                pushed_at_unix: Some(1_999),
+                receipt_run_in_progress: true,
+                state: ReceiptCheckState::NoNote,
+            },
+            ReceiptHistoryEntry {
+                commit: "c".repeat(40),
+                pushed_at_unix: None,
+                receipt_run_in_progress: false,
+                state: ReceiptCheckState::VerifiedFailed,
+            },
+        ];
+        assert_eq!(
+            find_missing_receipts(&history, &"c".repeat(40), 30, 2_000).unwrap(),
+            vec![
+                MissingReceipt {
+                    commit: "a".repeat(40),
+                    reason: MissingReceiptReason::FailedReceipt,
+                },
+                MissingReceipt {
+                    commit: "c".repeat(40),
                     reason: MissingReceiptReason::FailedReceipt,
                 },
             ]

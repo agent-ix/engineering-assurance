@@ -20,13 +20,13 @@ use engineering_assurance::{
         ExpectedReceiptSubject, MissingReceipt, RECEIPT_NOTES_REF, ReceiptBundleSet,
         ReceiptHistoryEntry, ReceiptNoteError, ReceiptStatus, ReceiptVerificationContext,
         ReceiptVerifyResult, UnverifiableReason, VERIFY_RESULT_PROTOCOL, find_missing_receipts,
-        is_valid_verify_result, verify_receipt_groups,
+        is_valid_verify_result, receipt_status_allows_idempotent_skip, verify_receipt_groups,
     },
     record_sink::{
         config::{SinkConfig, Visibility, resolve_sink},
         sink::{
-            ApprovalStatementLookup, ApprovalStatementPublishOutcome, ApprovalStatementReadError,
-            ApprovalStatementReader, RetainedApprovalStatement,
+            ApprovalStatementLookup, ApprovalStatementReadError, ApprovalStatementReader,
+            RetainedApprovalStatement,
         },
     },
 };
@@ -67,6 +67,22 @@ struct Request {
     commit: String,
     #[serde(default)]
     bundles: Option<ReceiptBundleSet>,
+    #[serde(default)]
+    verification: Option<ExistingVerificationRequest>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExistingVerificationRequest {
+    github_repository: String,
+    base_branch: String,
+    merged_pull_request: String,
+    receipt_signer_repository: String,
+    receipt_signer_workflow_path: String,
+    receipt_signer_ref: String,
+    approval_signer_repository: String,
+    approval_signer_workflow_path: String,
+    approval_signer_ref: String,
 }
 
 #[derive(Clone, Copy, Deserialize)]
@@ -101,7 +117,6 @@ struct MissingRequest {
     approval_signer_workflow_path: String,
     approval_signer_ref: String,
     merged_pull_requests: BTreeMap<String, String>,
-    approval_statements: BTreeMap<String, Vec<ApprovalStatementRequest>>,
 }
 
 #[derive(Deserialize)]
@@ -151,25 +166,6 @@ struct VerifyRequest {
     approval_signer_repository: String,
     approval_signer_workflow_path: String,
     approval_signer_ref: String,
-    approval_statements: Vec<ApprovalStatementRequest>,
-}
-
-#[derive(Clone, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ApprovalStatementRequest {
-    repository: String,
-    merged_pull_request: String,
-    merged_commit: String,
-    statement: String,
-    signature_bundle: String,
-    publish_outcome: ApprovalPublishOutcome,
-}
-
-#[derive(Clone, Copy, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum ApprovalPublishOutcome {
-    Published,
-    Refused,
 }
 
 #[derive(Debug, Error)]
@@ -339,7 +335,6 @@ fn missing_receipt_findings(
         approval_signer_repository: request.approval_signer_repository.clone(),
         approval_signer_workflow_path: request.approval_signer_workflow_path.clone(),
         approval_signer_ref: request.approval_signer_ref.clone(),
-        approval_statements: Vec::new(),
     };
     let verification_setup = load_verification_setup(&verify_template).ok();
     let now_unix = u64::try_from(time::OffsetDateTime::now_utc().unix_timestamp())
@@ -408,11 +403,6 @@ fn receipt_state_for_commit(
         approval_signer_repository: request.approval_signer_repository.clone(),
         approval_signer_workflow_path: request.approval_signer_workflow_path.clone(),
         approval_signer_ref: request.approval_signer_ref.clone(),
-        approval_statements: request
-            .approval_statements
-            .get(commit)
-            .cloned()
-            .unwrap_or_default(),
     };
     let groups = ReceiptBundleSet::parse_note_groups(&note)
         .map_err(|_| UnverifiableReason::NoteUnreadable)?;
@@ -608,7 +598,6 @@ pub(crate) fn execute_verify(bytes: &[u8]) -> Result<Vec<u8>, ReceiptHostError> 
         || !is_full_object_id(&request.commit)
         || !valid_workflow_ref(&request.receipt_signer_ref)
         || !valid_workflow_ref(&request.approval_signer_ref)
-        || request.approval_statements.len() > 10_000
     {
         return Err(ReceiptHostError::VerifyInvalid);
     }
@@ -795,9 +784,7 @@ fn verify_groups_for_commit(
     if !is_full_object_id(tree) {
         return Err(UnverifiableReason::NoteUnreadable);
     }
-    let reader = RequestApprovalReader {
-        statements: request.approval_statements.clone(),
-    };
+    let reader = StatementsNotRetainedReader;
     let subject = ExpectedReceiptSubject {
         repository: request.github_repository.clone(),
         commit: commit.to_owned(),
@@ -815,7 +802,7 @@ fn verify_groups_for_commit(
         verifier: &setup.verifier,
     };
     match verify_receipt_groups(groups, &context) {
-        Ok(ReceiptStatus::Unverifiable) => Err(UnverifiableReason::PolicyUnreadable),
+        Ok(ReceiptStatus::Unverifiable) => Err(UnverifiableReason::StatementsNotRetained),
         Ok(status) => Ok(status),
         Err(engineering_assurance::receipt::ReceiptVerificationError::BundleInvalid) => {
             Ok(ReceiptStatus::SignatureInvalid)
@@ -827,9 +814,7 @@ fn verify_groups_for_commit(
     }
 }
 
-struct RequestApprovalReader {
-    statements: Vec<ApprovalStatementRequest>,
-}
+struct StatementsNotRetainedReader;
 
 fn gh_api_json(endpoint: &str) -> Result<Value, ()> {
     let output = run_host_tool(
@@ -934,7 +919,7 @@ fn encode_path_segment(value: &str) -> String {
     value.replace('%', "%25").replace('/', "%2F")
 }
 
-impl ApprovalStatementReader for RequestApprovalReader {
+impl ApprovalStatementReader for StatementsNotRetainedReader {
     fn lookup_approval_statements(
         &self,
         destination: &str,
@@ -943,23 +928,8 @@ impl ApprovalStatementReader for RequestApprovalReader {
         if destination.is_empty() {
             return Err(ApprovalStatementReadError);
         }
-        Ok(self
-            .statements
-            .iter()
-            .filter(|statement| {
-                statement.repository == lookup.repository
-                    && statement.merged_pull_request == lookup.merged_pull_request
-                    && statement.merged_commit == lookup.merged_commit
-            })
-            .map(|statement| RetainedApprovalStatement {
-                statement_bytes: statement.statement.as_bytes().to_vec(),
-                signature_bundle: statement.signature_bundle.clone(),
-                publish_outcome: match statement.publish_outcome {
-                    ApprovalPublishOutcome::Published => ApprovalStatementPublishOutcome::Published,
-                    ApprovalPublishOutcome::Refused => ApprovalStatementPublishOutcome::Refused,
-                },
-            })
-            .collect())
+        let _ = lookup;
+        Ok(Vec::new())
     }
 }
 
@@ -987,29 +957,43 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ReceiptHostError> {
         Operation::Store => {
             let bundle_set = request.bundles.ok_or(ReceiptHostError::Invalid)?;
             let note = bundle_set.encode_note().map_err(map_note_error)?;
-            match git_output(
-                &request.repository,
-                &["notes", "--ref", RECEIPT_NOTES_REF, "show", &commit],
-            ) {
-                Ok(_) => return Err(ReceiptHostError::NoteConflict),
-                Err(GitError::NotFound) => {}
-                Err(GitError::Failed) => return Err(ReceiptHostError::Git),
-            }
-            git_with_input(
-                &request.repository,
-                &[
-                    "notes",
-                    "--ref",
-                    RECEIPT_NOTES_REF,
-                    "add",
-                    "-F",
-                    "-",
-                    &commit,
-                ],
-                &note,
+            let skipped =
+                store_note_bytes(&request.repository, &commit, &note, |existing_groups| {
+                    let verification = request.verification.as_ref().ok_or(())?;
+                    if !valid_github_repository(&verification.github_repository)
+                        || !valid_branch(&verification.base_branch)
+                        || !valid_workflow_ref(&verification.receipt_signer_ref)
+                        || !valid_workflow_ref(&verification.approval_signer_ref)
+                    {
+                        return Err(());
+                    }
+                    let verify_request = VerifyRequest {
+                        protocol: VERIFY_REQUEST_PROTOCOL.to_owned(),
+                        repository: request.repository.clone(),
+                        github_repository: verification.github_repository.clone(),
+                        base_branch: verification.base_branch.clone(),
+                        commit: commit.clone(),
+                        merged_pull_request: verification.merged_pull_request.clone(),
+                        receipt_signer_repository: verification.receipt_signer_repository.clone(),
+                        receipt_signer_workflow_path: verification
+                            .receipt_signer_workflow_path
+                            .clone(),
+                        receipt_signer_ref: verification.receipt_signer_ref.clone(),
+                        approval_signer_repository: verification.approval_signer_repository.clone(),
+                        approval_signer_workflow_path: verification
+                            .approval_signer_workflow_path
+                            .clone(),
+                        approval_signer_ref: verification.approval_signer_ref.clone(),
+                    };
+                    let setup = load_verification_setup(&verify_request).map_err(|_| ())?;
+                    verify_groups_for_commit(&verify_request, &commit, existing_groups, &setup)
+                        .map_err(|_| ())
+                })?;
+            (
+                "store",
+                None,
+                Some(if skipped { "skipped" } else { "stored" }),
             )
-            .map_err(|_| ReceiptHostError::Git)?;
-            ("store", None, Some("stored"))
         }
         Operation::Read => {
             if request.bundles.is_some() {
@@ -1039,6 +1023,47 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ReceiptHostError> {
     .map_err(|_| ReceiptHostError::Encoding)?;
     encoded.push(b'\n');
     Ok(encoded)
+}
+
+fn store_note_bytes<F>(
+    repository: &Path,
+    commit: &str,
+    note: &[u8],
+    mut verify_existing: F,
+) -> Result<bool, ReceiptHostError>
+where
+    F: FnMut(&[ReceiptBundleSet]) -> Result<ReceiptStatus, ()>,
+{
+    match git_output(
+        repository,
+        &["notes", "--ref", RECEIPT_NOTES_REF, "show", commit],
+    ) {
+        Ok(existing_note) => {
+            let existing_groups =
+                ReceiptBundleSet::parse_note_groups(&existing_note).map_err(map_note_error)?;
+            if verify_existing(&existing_groups).is_ok_and(receipt_status_allows_idempotent_skip) {
+                return Ok(true);
+            }
+            return Err(ReceiptHostError::NoteConflict);
+        }
+        Err(GitError::NotFound) => {}
+        Err(GitError::Failed) => return Err(ReceiptHostError::Git),
+    }
+    git_with_input(
+        repository,
+        &[
+            "notes",
+            "--ref",
+            RECEIPT_NOTES_REF,
+            "add",
+            "-F",
+            "-",
+            commit,
+        ],
+        note,
+    )
+    .map_err(|_| ReceiptHostError::Git)?;
+    Ok(false)
 }
 
 fn map_note_error(error: ReceiptNoteError) -> ReceiptHostError {
@@ -1240,8 +1265,7 @@ mod tests {
             "receipt_signer_ref": "refs/heads/main",
             "approval_signer_repository": "fictional/assurance",
             "approval_signer_workflow_path": ".github/workflows/approval-statement.yml",
-            "approval_signer_ref": "refs/heads/main",
-            "approval_statements": []
+            "approval_signer_ref": "refs/heads/main"
         }))
         .unwrap()
     }
@@ -1350,6 +1374,130 @@ mod tests {
         );
     }
 
+    #[trace("TC-597", "FR-076-AC-1")]
+    #[test]
+    fn receipt_note_ref_survives_a_second_default_branch_push() {
+        let (directory, commit) = fixture_repo();
+        let repository = directory.path();
+        let remote = TempDir::new().expect("local bare remote");
+        assert!(
+            Command::new("git")
+                .args(["init", "-q", "--bare"])
+                .current_dir(remote.path())
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert!(
+            Command::new("git")
+                .args(["branch", "-M", "main"])
+                .current_dir(repository)
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert!(
+            Command::new("git")
+                .args(["remote", "add", "origin"])
+                .arg(remote.path())
+                .current_dir(repository)
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert!(
+            Command::new("git")
+                .args(["push", "-u", "origin", "main"])
+                .current_dir(repository)
+                .status()
+                .unwrap()
+                .success()
+        );
+
+        let stored = execute(&request("store", repository, &commit, Some(bundle_value())))
+            .expect("fixture receipt is stored locally");
+        assert!(
+            String::from_utf8(stored)
+                .unwrap()
+                .contains("\"status\":\"stored\"")
+        );
+        assert!(
+            Command::new("git")
+                .args(["push", "origin", RECEIPT_NOTES_REF])
+                .current_dir(repository)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let note_ref_before = Command::new("git")
+            .args(["--git-dir"])
+            .arg(remote.path())
+            .args(["rev-parse", RECEIPT_NOTES_REF])
+            .output()
+            .unwrap();
+        assert!(note_ref_before.status.success());
+        let note_ref_before = String::from_utf8(note_ref_before.stdout)
+            .unwrap()
+            .trim()
+            .to_owned();
+
+        fs::write(
+            repository.join("second.txt"),
+            "second default-branch push\n",
+        )
+        .unwrap();
+        assert!(
+            Command::new("git")
+                .args(["add", "second.txt"])
+                .current_dir(repository)
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert!(
+            Command::new("git")
+                .args(["commit", "-qm", "second push"])
+                .current_dir(repository)
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert!(
+            Command::new("git")
+                .args(["push", "origin", "main"])
+                .current_dir(repository)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let note_ref_after = Command::new("git")
+            .args(["--git-dir"])
+            .arg(remote.path())
+            .args(["rev-parse", RECEIPT_NOTES_REF])
+            .output()
+            .unwrap();
+        assert!(note_ref_after.status.success());
+        assert_eq!(
+            String::from_utf8(note_ref_after.stdout).unwrap().trim(),
+            note_ref_before
+        );
+        let remote_note = Command::new("git")
+            .args(["--git-dir"])
+            .arg(remote.path())
+            .args(["notes", "--ref", RECEIPT_NOTES_REF, "show", &commit])
+            .output()
+            .unwrap();
+        assert!(remote_note.status.success());
+        assert_eq!(
+            remote_note
+                .stdout
+                .iter()
+                .filter(|byte| **byte == b'\n')
+                .count(),
+            3
+        );
+    }
+
     #[trace("TC-598", "FR-076-AC-2")]
     #[test]
     fn refuses_oversized_note_without_writing_anything() {
@@ -1390,35 +1538,36 @@ mod tests {
 
     #[trace("TC-614", "FR-078-AC-4")]
     #[test]
-    fn retained_approval_proofs_are_filtered_by_the_exact_lookup_tuple() {
-        let proof = |repository: &str, pull_request: &str, commit: &str| ApprovalStatementRequest {
-            repository: repository.to_owned(),
-            merged_pull_request: pull_request.to_owned(),
-            merged_commit: commit.to_owned(),
-            statement: "raw signed statement".to_owned(),
-            signature_bundle: "raw signature bundle".to_owned(),
-            publish_outcome: ApprovalPublishOutcome::Published,
-        };
-        let reader = RequestApprovalReader {
-            statements: vec![
-                proof("fictional/project", "fictional/project#1", &"a".repeat(40)),
-                proof("fictional/project", "fictional/project#2", &"a".repeat(40)),
-                proof("fictional/project", "fictional/project#1", &"b".repeat(40)),
-                proof("fictional/other", "fictional/project#1", &"a".repeat(40)),
-            ],
-        };
-        let retained = reader
-            .lookup_approval_statements(
-                "private-store",
-                ApprovalStatementLookup {
-                    repository: "fictional/project",
-                    merged_pull_request: "fictional/project#1",
-                    merged_commit: &"a".repeat(40),
-                },
-            )
-            .expect("exact proof lookup returns its matching rows");
-        assert_eq!(retained.len(), 1);
-        assert_eq!(retained[0].statement_bytes, b"raw signed statement");
+    fn receipt_verify_rejects_caller_supplied_approval_proofs() {
+        let (directory, commit) = fixture_repo();
+        let mut request: Value =
+            serde_json::from_slice(&verification_request(directory.path(), &commit)).unwrap();
+        request["approval_statements"] = json!([{
+            "repository": "fictional/project",
+            "merged_pull_request": "fictional/project#1",
+            "merged_commit": commit,
+            "statement": "caller-supplied statement",
+            "signature_bundle": "caller-supplied bundle",
+            "publish_outcome": "published"
+        }]);
+        let error = execute_verify(&serde_json::to_vec(&request).unwrap())
+            .expect_err("caller-provided proof rows are rejected at the wire boundary");
+        assert_eq!(error.code(), "receipt_verify_request_unreadable");
+
+        let reader = StatementsNotRetainedReader;
+        assert!(
+            reader
+                .lookup_approval_statements(
+                    "private-store",
+                    ApprovalStatementLookup {
+                        repository: "fictional/project",
+                        merged_pull_request: "fictional/project#1",
+                        merged_commit: &"a".repeat(40),
+                    },
+                )
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[trace("TC-615", "FR-078-AC-5")]
