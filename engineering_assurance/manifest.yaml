@@ -193,7 +193,7 @@ object_types:
       shape: enumeration
       members: {variants: required, fields: forbidden, relationships: forbidden, operations: forbidden}
       rules: []
-      meaning: quire.meaning.model.variant-type/v1
+      meaning: filament.meaning.model.variant-type/v1
     data_schema:
       schema: schemas/campaign-enum.schema.json
     body_extraction:
