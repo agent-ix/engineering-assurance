@@ -169,6 +169,18 @@ fn workflow_is_explicitly_opt_in_and_has_no_signing_identity() {
         pull_request["parameters"]["require_last_push_approval"],
         true
     );
+    assert_eq!(
+        pull_request["parameters"]["require_code_owner_review"],
+        false
+    );
+    assert_eq!(
+        pull_request["parameters"]["required_review_thread_resolution"],
+        false
+    );
+    assert_eq!(
+        pull_request["parameters"]["required_approving_review_count"],
+        1
+    );
     let status_checks = rules
         .iter()
         .find(|rule| rule["type"] == "required_status_checks")
