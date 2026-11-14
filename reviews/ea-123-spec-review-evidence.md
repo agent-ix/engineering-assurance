@@ -26,3 +26,9 @@ Not clean: the computed matrix reports every newly added AC as untagged.
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | New acceptance criteria are not mapped to Test Case rows | spec/functional/FR-054-record-sink-interface-and-implementations.md:143 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | after_excerpt: `TC-973 | A Git private-store publish writes the full private form under the fixed destination ref and encoded record path, with no private bytes or notes in the source repository | Integration | P0 | FR-054-AC-7 | 🚧 Specified; implementation and assertions pending`. Concrete pending cases TC-974..TC-993 map the remaining criteria. |

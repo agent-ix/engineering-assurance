@@ -25,3 +25,9 @@ Not clean: the new retry contract does not define single-winner behavior for con
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | high | Concurrent preparation of one record ID may invoke the selected sink more than once | spec/functional/FR-054-record-sink-interface-and-implementations.md:151 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | after_excerpt: `When two same-ID preparations race, at most one returns NewRecord; the other observes the winner and returns its valid terminal outcome or fails closed if the marker is incomplete, and the selected sink is invoked at most once.` |

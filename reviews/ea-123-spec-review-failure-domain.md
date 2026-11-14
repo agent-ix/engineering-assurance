@@ -25,3 +25,9 @@ Not clean: missing and malformed markers fail closed, but a well-formed substitu
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | high | A changed but well-formed outcome marker is not distinguishable from the original sink result | spec/functional/FR-054-record-sink-interface-and-implementations.md:147 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | after_excerpt: `A retained record with a missing, malformed, altered, invalidly signed or untrusted outcome is a read failure; it is never assumed to be published.` |
