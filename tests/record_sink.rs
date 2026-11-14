@@ -26,8 +26,8 @@ use engineering_assurance::record_sink::{
         CheckRefusal, LookupFailed, OffenseReason, PublicPathProof, VisibilityLookup, leak_check,
     },
     sink::{
-        CheckedEntry, LogRejected, Ports, PrivateStore, PublicLogClient, RecordSink, Signer,
-        SigningFailed, SinkLayer, SinkResult, Status, StoreError,
+        ApprovalStatementReader, CheckedEntry, LogRejected, Ports, PrivateStore, PublicLogClient,
+        RecordSink, Signer, SigningFailed, SinkLayer, SinkResult, Status, StoreError,
     },
 };
 use ix_trace_rs::trace;
@@ -49,6 +49,8 @@ struct Store {
     fail_private: bool,
     events: Events,
 }
+
+impl ApprovalStatementReader for Store {}
 
 impl PrivateStore for Store {
     fn write_private(&self, destination: &str, private: &PrivateRecord) -> Result<(), StoreError> {
