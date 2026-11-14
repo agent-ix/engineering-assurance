@@ -244,21 +244,35 @@ fn session() -> AgentSession {
 fn bom_validates_and_every_property_is_producer_reported() {
     let bom = build_bom(&session()).expect("valid CycloneDX document");
     assert_eq!(bom.spec_version, "1.7");
-    assert!(bom
-        .components
-        .iter()
-        .any(|component| component.component_type
-            == engineering_assurance::change_record::bom::ComponentType::Application));
-    assert!(bom
-        .components
-        .iter()
-        .any(|component| component.component_type
-            == engineering_assurance::change_record::bom::ComponentType::MachineLearningModel));
+    assert_eq!(bom.bom_format, "CycloneDX");
+    assert_eq!(
+        bom.components
+            .iter()
+            .filter(|component| component.component_type
+                == engineering_assurance::change_record::bom::ComponentType::Application)
+            .count(),
+        1
+    );
+    assert_eq!(
+        bom.components
+            .iter()
+            .filter(|component| component.component_type
+                == engineering_assurance::change_record::bom::ComponentType::MachineLearningModel)
+            .count(),
+        1
+    );
     assert!(bom
         .components
         .iter()
         .any(|component| component.purl.is_some()));
     assert_eq!(bom.services.len(), 2);
+    let service_names = bom
+        .services
+        .iter()
+        .map(|service| service.name.as_str())
+        .collect::<Vec<_>>();
+    assert!(service_names.contains(&"Private Model Name"));
+    assert!(service_names.contains(&"Fictional MCP"));
     let value = serde_json::to_value(&bom).expect("json");
     let mut all_properties = value["properties"]
         .as_array()
@@ -313,6 +327,17 @@ fn bom_random_serial_changes_canonical_digest() {
     let second =
         serde_json::to_value(build_bom(&session()).expect("second BOM")).expect("second JSON");
     assert_ne!(first["serialNumber"], second["serialNumber"]);
+    let first_uuid = first["serialNumber"]
+        .as_str()
+        .expect("serial number")
+        .strip_prefix("urn:uuid:")
+        .expect("UUID URN");
+    assert_eq!(
+        uuid::Uuid::parse_str(first_uuid)
+            .expect("valid UUID")
+            .get_version_num(),
+        4
+    );
     assert_ne!(
         engineering_assurance::change_record::canonical_digest(&first).expect("first digest"),
         engineering_assurance::change_record::canonical_digest(&second).expect("second digest"),
