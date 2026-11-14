@@ -45,6 +45,7 @@ fn verdict(status: Status, meaning: Option<Presence>) -> Verdict {
     Verdict {
         status,
         kind: TargetKind::Tag,
+        verified_commit_id: None,
         signature_kind: Some(SignatureKind::Ssh),
         key_fingerprint: None,
         reason: (status == Status::Unverifiable).then_some(Reason::Timeout),
