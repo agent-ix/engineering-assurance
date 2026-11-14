@@ -501,7 +501,7 @@ mod tests {
             .as_bytes(),
         ];
         let input_digests = input_payloads.map(|payload| {
-            canonical_digest(payload, sha256_canonical_bytes_for_test)
+            canonical_digest(payload, |bytes| Ok(sha256_canonical_bytes_for_test(bytes)))
                 .expect("input statement canonical digest")
         });
         let expected = ExpectedRelease {
@@ -518,8 +518,10 @@ mod tests {
             r#"//in-toto.io/Statement/v1"}"#
         )
         .as_bytes();
-        let changed_digest = canonical_digest(changed_payload, sha256_canonical_bytes_for_test)
-            .expect("changed statement canonical digest");
+        let changed_digest = canonical_digest(changed_payload, |bytes| {
+            Ok(sha256_canonical_bytes_for_test(bytes))
+        })
+        .expect("changed statement canonical digest");
         assert_ne!(changed_digest, input_digests[0]);
         let changed_expected = ExpectedRelease {
             input_digests: [
@@ -577,7 +579,7 @@ mod tests {
         assert!(serde_json::from_value::<VerificationSummaryStatement>(extra).is_err());
     }
 
-    fn sha256_canonical_bytes_for_test(canonical: &[u8]) -> Result<String, ()> {
-        Ok(sigstore_verify::crypto::sha256(canonical).to_hex())
+    fn sha256_canonical_bytes_for_test(canonical: &[u8]) -> String {
+        sigstore_verify::crypto::sha256(canonical).to_hex()
     }
 }
