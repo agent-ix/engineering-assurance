@@ -110,8 +110,18 @@ unique within their respective request collections.
   daemonization and untracked descendants. The executor SHALL establish an
   invocation-owned process group, terminate and reap that group before return,
   and return `containment_failure` if the host cannot establish the profile or
-  if it observes a descendant leaving the group. This profile SHALL NOT claim
-  adversarial full-tree containment; a consumer requiring that stronger
+  if it observes a descendant leaving the group. When the executor observes a
+  descendant outside the invocation-owned process group, the executor SHALL
+  keep that process tracked for cleanup. When cleanup runs, the executor SHALL
+  terminate each observed descendant as well as the invocation-owned group.
+  When the request deadline is reached, the executor SHALL complete process
+  cleanup, reap the direct child, and finish both invocation stream-reader
+  workers within 1,000 milliseconds of that deadline. While cleanup remains
+  pending, the executor SHALL NOT return with an observed fixture descendant
+  alive or an invocation stream-reader worker still running. This profile SHALL
+  NOT claim
+  adversarial full-tree containment: it does not guarantee cleanup of a
+  descendant that was never observed, and a consumer requiring that stronger
   property must use a separately accepted provider mechanism.
 - The executor SHALL enforce non-zero finite wall-clock, stdout, stderr, input-
   byte, output-artifact-count, output-artifact-byte, and executor-wide
@@ -178,7 +188,7 @@ unique within their respective request collections.
 | FR-019-AC-1 | A valid Rust synthetic producer request executes once through the public Rust library, and the typed completed result carries producer provenance, bounded raw evidence, monotonic timing, immutable retained output artifacts, and adapter-produced observation, and serializes to canonical RFC 8785 bytes. | Test (TC-122) |
 | FR-019-AC-2 | Every request field is significant, ordered and set collections have their declared semantics, structurally invalid input produces no result, a capability, input, adapter, or cancellation mismatch refuses before producer launch, and a declared input changed after preflight is still read as the preflight snapshot through its descriptor argument. | Test (TC-123) |
 | FR-019-AC-3 | Unavailable, refused, failed, timed-out, malformed-response, containment-failure, cancelled, and completed remain distinguishable and canonically serializable; launched failures retain bounded raw evidence where observable; and only completed carries `T`. | Test (TC-124) |
-| FR-019-AC-4 | Exact wall-clock, stream, input-byte, output-count/byte and concurrency boundaries are admitted while the next value is structurally invalid or terminated; an admitted non-zero exit reaches the adapter; ordinary descendants are reaped and an escaping-descendant mutant produces `containment_failure`. | Test (TC-125) |
+| FR-019-AC-4 | Exact wall-clock, stream, input-byte, output-count/byte and concurrency boundaries are admitted while the next value is structurally invalid or terminated; an admitted non-zero exit reaches the adapter; ordinary descendants are reaped; an escaping-descendant mutant produces `containment_failure`; and when an observed nested descendant leaves the invocation process group, keeps an invocation stream open, and remains alive past the request deadline, the executor terminates it, completes both stream-reader workers, and returns within 1,000 milliseconds after the deadline with no surviving fixture descendant or reader worker. | Test (TC-125) |
 | FR-019-AC-5 | A caller-owned typed response adapter receives the exact bound terminal evidence without requiring the consumer to parse CLI stdout, and Engineering Assurance contains no domain oracle, qualification verdict, evidence store, or Quoin record clone. | Test (TC-127) |
 | FR-019-AC-7 | A minimal consumer compiles the existing crate with default features disabled, only `producer-execution` enabled, and an exact semver-compatible shared-dependency version older than Engineering Assurance's locked version; every normal Engineering Assurance dependency declares a compatible range rather than an exact `=` requirement; Engineering Assurance activates no direct dependency used solely for package/archive, onboarding, CLI, YAML, regex, or source-audit behavior, while dependencies shared with the producer API remain admissible and the `full` feature preserves the existing package library and CLI gates. | Test (TC-128) |
 | FR-019-AC-8 | For a launched Linux invocation, the executor samples a complete, bounded host context before launch and carries it in the result; heterogeneous or missing selected ARM CPU-ID tuples withhold context, and unavailable host context is explicit and cannot substantiate comparability. | Test (TC-175) |
