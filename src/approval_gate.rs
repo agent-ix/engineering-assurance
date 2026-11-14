@@ -930,7 +930,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("TC-915", "FR-059-AC-1", "FR-059-AC-3")]
+    #[trace("TC-915", "FR-059-AC-3")]
     fn parses_one_trimmed_marker_pair_and_crlf() {
         assert_eq!(
             parse_review_markers(
@@ -974,8 +974,7 @@ mod tests {
         "TC-934",
         "FR-059-AC-2",
         "FR-059-AC-5",
-        "FR-062-AC-1",
-        "FR-062-AC-2"
+        "FR-062-AC-1"
     )]
     fn only_latest_valid_same_head_human_review_counts_and_agents_do_not() {
         let policy = policy();
@@ -1337,14 +1336,7 @@ mod tests {
     }
 
     #[test]
-    #[trace(
-        "TC-931",
-        "TC-932",
-        "TC-933",
-        "FR-061-AC-10",
-        "FR-061-AC-11",
-        "FR-061-AC-12"
-    )]
+    #[trace("TC-933", "FR-061-AC-12")]
     fn chooses_the_lexicographically_smallest_maximum_matching() {
         let policy = RolePolicy {
             protocol: POLICY_PROTOCOL.to_owned(),
