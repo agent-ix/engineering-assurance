@@ -23,7 +23,7 @@ Tracked by Linear EA-97. This requirement describes the workflow files the featu
 
 | File | Trigger | Job | Permissions | Runs |
 | --- | --- | --- | --- | --- |
-| `.github/workflows/release-attestation.yml` | `workflow_call`, inputs `tag`, `artifact_name`, `evidence_artifact` (strings) | `verify` | `contents: read` | Engineering Assurance tooling and the Quoin test-result export only: `release-verify`, role step ([FR-067](./FR-067-release-attestations-bind-to-the-signed-release-tag.md)), the digests of the artifact files, and the export of [FR-069](./FR-069-test-result-export-is-consumed-as-data.md) from the evidence store in `evidence_artifact` |
+| `.github/workflows/release-attestation.yml` | `workflow_call`, inputs `tag`, `artifact_name` (default `release-artifacts`), `evidence_artifact` (default `release-evidence`) | `verify` | `contents: read` | Engineering Assurance tooling and the Quoin test-result export only: `release-verify`, role step ([FR-067](./FR-067-release-attestations-bind-to-the-signed-release-tag.md)), the digests of the artifact files, and the export of [FR-069](./FR-069-test-result-export-is-consumed-as-data.md) from the evidence store in `evidence_artifact` |
 | same | same | `attest` | `contents: read`, `id-token: write`, `attestations: write` | Engineering Assurance tooling and the attestation actions; no repository code |
 | `.github/workflows/change-receipt.yml` | `workflow_call`, input `commit` (string) | `gates` | `contents: read` | The repository's gates from the receipt policy ([FR-075](./FR-075-push-to-main-receipt-workflow.md)); nothing else |
 | same | same | `record` | `contents: read`, `id-token: write` | Engineering Assurance tooling only; no repository code |
@@ -32,7 +32,19 @@ Tracked by Linear EA-97. This requirement describes the workflow files the featu
 | `.github/workflows/release.yml` | `push` of tags matching `v*` | `build`, `attest` | `build`: `contents: read`; `attest` calls `release-attestation.yml` with `contents: read`, `id-token: write`, `attestations: write` | the caller's build, then the reusable workflow |
 | `.github/workflows/receipt.yml` | `push` to the default branch | `receipt` | calls `change-receipt.yml` with `contents: write`, `id-token: write` | the reusable workflow |
 
-A repository that adopts the features adds its own two callers. `ci.yml` is unchanged. The approval review gate workflow and the main-branch ruleset belong to [FR-065](./FR-065-workflow-roles-and-relation-to-signed-release-tags.md) and the EA-109 work; this specification does not define them.
+A repository that adopts the features adds its own callers. `ci.yml` is unchanged. The approval review gate workflow and the main-branch ruleset belong to [FR-065](./FR-065-workflow-roles-and-relation-to-signed-release-tags.md) and the EA-109 work; this specification does not define them.
+
+Each caller uploads the release files produced by its `build` job with `actions/upload-artifact`; the common `artifact_name` input default is `release-artifacts`. The caller also uploads the retained evidence store as a workflow artifact; the common `evidence_artifact` input default is `release-evidence`. The reusable workflow downloads these artifacts in its `verify` job. The `attest` job invokes no caller or repository code.
+
+For quoin, quire-cli and quire-rs, attestation is added beside the existing release paths:
+
+| Repository | Existing release path preserved | Additional attestation caller |
+| --- | --- | --- |
+| quoin | Manually dispatched `.github/workflows/release.yml` npm repack/publish flow and `.github/workflows/native-release.yml` release flow | `.github/workflows/tag-attestation.yml`, triggered by a push of a `v*` tag, with separate `build` and `attest` jobs |
+| quire-cli | Manually dispatched `.github/workflows/release.yml` flow | `.github/workflows/tag-attestation.yml`, triggered by a push of a `v*` tag, with separate `build` and `attest` jobs |
+| quire-rs | Manually dispatched `.github/workflows/wheels.yml` release flow | `.github/workflows/tag-attestation.yml`, triggered by a push of a `v*` tag, with separate `build` and `attest` jobs |
+
+Each additive caller runs independently of its preserved release path: its result does not gate an existing publish job or workflow. In particular, the npm Trusted Publisher contract remains in quoin's existing `release.yml`.
 
 The repository's gates, builds and any other code from the repository under change run only in jobs that hold `contents: read` and nothing else; they hand results to the signing jobs as workflow artifacts, and a signing job executes no code from the repository ([NFR-011](../non-functional/NFR-011-signing-jobs-run-no-agent.md)). `contents: write` is a repository-wide permission and cannot be limited to the notes ref; it is confined to the `notes` job, which runs only Engineering Assurance tooling that pushes `refs/notes/assurance-receipts`, and the default branch stays protected by its ruleset.
 
@@ -54,6 +66,9 @@ Values that an outside party can influence (tag and branch names, commit message
 - The `gates` job SHALL NOT receive any secret.
 - The `gates` job SHALL run on a GitHub-hosted or ephemeral runner.
 - Each workflow file SHALL NOT run an agent step.
+- Each adopter SHALL upload its release files from the caller's `build` job using the shared `artifact_name` default.
+- Each adopter SHALL upload its retained evidence store using the shared `evidence_artifact` default.
+- An additive adopter attestation caller SHALL NOT gate an existing release or publish workflow.
 
 ## Acceptance Criteria
 
@@ -66,6 +81,8 @@ Values that an outside party can influence (tag and branch names, commit message
 | FR-070-AC-5 | No step in any of the five files invokes an agent harness or model client. | Inspection |
 | FR-070-AC-6 | A `change-receipt.yml` run with a `commit` input that is not the pushed commit fails with `receipt_input_commit_mismatch`, and a `release-attestation.yml` run with a `tag` input that is not the triggering tag fails with `release_input_tag_mismatch`, in both cases before any signing step. | Test |
 | FR-070-AC-7 | The `gates` job declares no `secrets` and no `environment`, and its `runs-on` is a GitHub-hosted label or an ephemeral runner label. | Test |
+| FR-070-AC-8 | Quoin, quire-cli and quire-rs preserve their existing manually dispatched release workflows and each adds a separate `tag-attestation.yml` workflow triggered by a push of a `v*` tag, with separate `build` and `attest` jobs; failure of an additive workflow does not gate an existing publish workflow. | Inspection |
+| FR-070-AC-9 | Every caller uploads the release files from its `build` job under the shared `artifact_name` default `release-artifacts` and uploads the evidence store under the shared `evidence_artifact` default `release-evidence`; the reusable workflow consumes both through workflow-artifact download in `verify`. | Test |
 
 ## Dependencies
 

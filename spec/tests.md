@@ -321,6 +321,8 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-070 | FR-070-AC-5 | TC-561 | 🚧 Specified |
 | FR-070 | FR-070-AC-6 | TC-562 | 🚧 Specified |
 | FR-070 | FR-070-AC-7 | TC-563 | 🚧 Specified |
+| FR-070 | FR-070-AC-8 | TC-664 | 🚧 Specified |
+| FR-070 | FR-070-AC-9 | TC-665 | 🚧 Specified |
 | FR-071 | FR-071-AC-1 | TC-564 | 🚧 Specified |
 | FR-071 | FR-071-AC-2 | TC-565 | 🚧 Specified |
 | FR-071 | FR-071-AC-3 | TC-566 | 🚧 Specified |
@@ -895,6 +897,8 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-561 | No step in any of the five files invokes an agent harness or model client | Static | P0 | FR-070-AC-5 | 🚧 |
 | TC-562 | A `change-receipt.yml` run with a `commit` input that is not the pushed commit fails with `receipt_input_commit_mismatch`, and a `release-attestation.yml` run with a `tag` input that is not the triggering tag fails with ... | Integration | P0 | FR-070-AC-6 | 🚧 |
 | TC-563 | The `gates` job declares no `secrets` and no `environment`, and its `runs-on` is a GitHub-hosted label or an ephemeral runner label | Integration | P0 | FR-070-AC-7 | 🚧 |
+| TC-664 | Quoin, quire-cli and quire-rs preserve their existing manually dispatched release workflows and each adds a separate `tag-attestation.yml` workflow triggered by a push of a `v*` tag, with separate `build` and `attest` jobs; failure of an additive workflow does not gate an existing publish workflow | Static | P0 | FR-070-AC-8 | 🚧 |
+| TC-665 | Every caller uploads the release files from its `build` job under the shared `artifact_name` default `release-artifacts` and uploads the evidence store under the shared `evidence_artifact` default `release-evidence`; the reusable workflow consumes both through workflow-artifact download in `verify` | Integration | P0 | FR-070-AC-9 | 🚧 |
 | TC-564 | A public repository on the public sink with a clean leak check publishes a trimmed record of kind `release_attestation` whose bytes hold the summary digest, the release commit, the verdict `released` and timestamps only | Integration | P0 | FR-071-AC-1 | 🚧 |
 | TC-565 | A public repository referencing a private Linear team in the release record is refused by the leak check, and the stand-in attestation action is not called | Integration | P0 | FR-071-AC-2 | 🚧 |
 | TC-566 | A public repository configured `private_store` fails with `release_attestation_public_log_required` and the stand-in log receives no call | Integration | P0 | FR-071-AC-3 | 🚧 |
