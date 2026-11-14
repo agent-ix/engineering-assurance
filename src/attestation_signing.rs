@@ -1285,7 +1285,7 @@ mod tests {
         }
     }
 
-    #[trace("TC-672", "FR-064-AC-13", "FR-064-AC-15", "FR-068-AC-3")]
+    #[trace("TC-683", "FR-064-AC-13", "FR-064-AC-15", "FR-068-AC-3")]
     #[test]
     fn reusable_workflow_claims_bind_source_repository_workflow_event_and_tag_ref() {
         let verifier = ClaimsFixtureVerifier(release_source_claims());
@@ -1361,7 +1361,7 @@ mod tests {
         }
     }
 
-    #[trace("TC-660", "FR-064-AC-2", "FR-064-AC-3", "FR-064-AC-4")]
+    #[trace("TC-660", "FR-064-AC-2", "FR-064-AC-3", "FR-064-AC-4", "FR-068-AC-3")]
     #[test]
     fn verifies_policy_and_git_subjects_and_rejects_mismatches() {
         let verifier = verifier();

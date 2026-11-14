@@ -101,6 +101,83 @@ fn engineering_assurance_tag_caller_builds_then_calls_the_matching_release_tag()
     );
 }
 
+#[trace("TC-622", "NFR-011-AC-1", "NFR-011-AC-2")]
+#[test]
+fn signing_jobs_run_no_agent_or_repository_code() {
+    let caller = workflow();
+    let reusable = reusable_workflow();
+    let signing_jobs = [
+        (&caller["jobs"]["attest"], "release caller"),
+        (&reusable["jobs"]["attest"], "reusable workflow"),
+    ];
+
+    for (job, name) in signing_jobs {
+        let permissions = &job["permissions"];
+        assert_eq!(permissions["id-token"], "write", "{name} OIDC permission");
+        assert_eq!(permissions["attestations"], "write", "{name} signing permission");
+        if let Some(reference) = job["uses"].as_str() {
+            assert!(
+                reference.starts_with("agent-ix/engineering-assurance/.github/workflows/"),
+                "{name} calls the trusted reusable workflow"
+            );
+            assert!(!reference.starts_with("./"), "{name} must not load local workflow code");
+            assert!(job.get("steps").is_none(), "{name} invokes only the reusable workflow");
+        } else {
+            assert!(
+                job["steps"].as_array().is_some_and(|steps| !steps.is_empty()),
+                "{name} has explicit audited action steps"
+            );
+        }
+    }
+
+    let reusable_steps = reusable["jobs"]["attest"]["steps"]
+        .as_array()
+        .expect("reusable signing steps");
+    assert!(!reusable_steps.is_empty(), "the reusable signing job is exercised");
+    for step in reusable_steps {
+        assert!(step.get("run").is_none(), "signing steps do not run repository commands");
+        let reference = step["uses"].as_str().expect("signing step action");
+        assert!(!reference.starts_with("./"), "signing steps do not load repository actions");
+        assert!(
+            !reference.starts_with("actions/checkout@"),
+            "signing steps do not check out repository code"
+        );
+        let (_, revision) = reference.split_once('@').expect("pinned signing action");
+        assert_eq!(revision.len(), 40, "signing actions use full commit pins");
+        assert!(revision.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    }
+}
+
+#[trace("TC-623", "NFR-011-AC-3")]
+#[test]
+fn signing_jobs_use_the_github_workflow_identity() {
+    let workflow = reusable_workflow();
+    let job = &workflow["jobs"]["attest"];
+    assert_eq!(job["permissions"]["id-token"], "write");
+    let steps = job["steps"].as_array().expect("attestation steps");
+    let attest_steps = steps
+        .iter()
+        .filter(|step| {
+            step["uses"]
+                .as_str()
+                .is_some_and(|reference| reference.starts_with("actions/attest@"))
+        })
+        .collect::<Vec<_>>();
+    assert!(!attest_steps.is_empty(), "the workflow identity signs attestations");
+
+    for step in attest_steps {
+        let inputs = step["with"].as_object().expect("attestation action inputs");
+        for alternate_identity in ["identity", "issuer", "signer", "token"] {
+            assert!(
+                !inputs.contains_key(alternate_identity),
+                "the action does not override workflow identity with {alternate_identity}"
+            );
+        }
+        assert!(step.get("env").is_none(), "no alternate signing credential is injected");
+    }
+    assert!(job.get("env").is_none(), "the signing job has no custom identity environment");
+}
+
 #[trace("TC-562", "TC-667", "FR-070-AC-6", "FR-070-AC-11", "FR-067-AC-7")]
 #[test]
 fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_statement_source() {

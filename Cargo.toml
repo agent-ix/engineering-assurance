@@ -262,6 +262,11 @@ path = "tests/release_decision_cli.rs"
 required-features = ["full"]
 
 [[test]]
+name = "release_attestation_workflow"
+path = "tests/release_attestation_workflow.rs"
+required-features = ["full"]
+
+[[test]]
 name = "release_verify_cli"
 path = "tests/release_verify_cli.rs"
 required-features = ["full"]
