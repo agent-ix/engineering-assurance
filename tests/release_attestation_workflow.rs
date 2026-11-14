@@ -167,6 +167,14 @@ fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_
         assert!(revision.bytes().all(|byte| byte.is_ascii_hexdigit()));
     }
     assert!(attest_steps.iter().all(|step| step.get("run").is_none()));
+    assert!(
+        attest_steps
+            .iter()
+            .filter(|step| step["uses"]
+                .as_str()
+                .is_some_and(|name| name.starts_with("actions/attest@")))
+            .all(|step| step["with"]["create-storage-record"] == false)
+    );
     assert!(attest_steps.iter().any(|step| {
         step["with"]["predicate-type"] == concat!("https:", "//slsa.dev/verification_summary/v1")
     }));
