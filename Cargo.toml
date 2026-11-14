@@ -262,6 +262,11 @@ path = "tests/release_decision_cli.rs"
 required-features = ["full"]
 
 [[test]]
+name = "release_attestation_workflow"
+path = "tests/release_attestation_workflow.rs"
+required-features = ["full"]
+
+[[test]]
 name = "release_verify_cli"
 path = "tests/release_verify_cli.rs"
 required-features = ["full"]
@@ -485,14 +490,22 @@ workflow-invariants = [
   "dep:thiserror",
   "dep:time",
 ]
-# EA-106: shared in-toto Statement v1 handling and Sigstore DSSE signing and
-# verification. This capability is opt-in because signing may use ambient OIDC
-# and Sigstore network services.
-attestation-signing = [
-  "record-sink",
-  "dep:sigstore-sign",
+# Shared in-toto Statement v1 handling and Sigstore DSSE verification.
+attestation-verify = [
+  "dep:serde",
+  "dep:serde_json",
+  "dep:serde_json_canonicalizer",
   "dep:sigstore-verify",
   "dep:sigstore-types",
+  "dep:thiserror",
+]
+# EA-106: signing additionally uses ambient OIDC and the Sigstore signing
+# client. It includes verification because signed statements use the same
+# representation and policy model.
+attestation-signing = [
+  "attestation-verify",
+  "record-sink",
+  "dep:sigstore-sign",
   "dep:sha2",
   "dep:time",
   "dep:tokio",
@@ -513,6 +526,7 @@ full = [
   "approval-trail",
   "approval-verify",
   "attestation-signing",
+  "attestation-verify",
   "atomic-publish",
   "campaign",
   "claim-strength",

@@ -17,8 +17,11 @@
 //! timestamp-only verification is selected only for a trusted instance policy
 //! whose signing service does not operate a transparency log.
 
+use std::collections::{BTreeMap, BTreeSet};
+
+#[cfg(feature = "attestation-signing")]
 use std::{
-    collections::{BTreeMap, btree_map::Entry},
+    collections::btree_map::Entry,
     future::Future,
     sync::{Arc, Mutex},
     thread,
@@ -26,11 +29,14 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sigstore_sign::{SigningContext, SigstoreInstance};
 use sigstore_verify::VerificationPolicy;
 
+#[cfg(feature = "attestation-signing")]
 use crate::record_sink::leak::PublicPathProof;
+#[cfg(feature = "attestation-signing")]
 use crate::record_sink::sink::{Signer, SigningFailed as SinkSigningFailed};
+#[cfg(feature = "attestation-signing")]
+use sigstore_sign::{SigningContext, SigstoreInstance};
 
 /// The in-toto Statement v1 type URI.
 pub const STATEMENT_V1_TYPE: &str = concat!("https:", "//in-toto.io/Statement/v1");
@@ -127,6 +133,258 @@ pub enum TransparencyRequirement {
     TimestampOnly,
 }
 
+/// A trusted workflow role from FR-064's protected policy document.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowRole {
+    /// Workflow that writes approval statements in the source repository.
+    StatementWriter,
+    /// Workflow that publishes records in the source repository.
+    RecordPublisher,
+    /// Engineering Assurance reusable release workflow.
+    ReleaseAttester,
+    /// Engineering Assurance reusable receipt workflow.
+    ReceiptWriter,
+}
+
+/// A validated, closed FR-064 workflow identity policy.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkflowIdentityDocument {
+    identities: Vec<WorkflowIdentityEntry>,
+}
+
+/// One exact workflow identity and, for reusable workflows, its caller.
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkflowIdentityEntry {
+    role: WorkflowRole,
+    issuer: String,
+    repository: String,
+    workflow_path: String,
+    #[serde(rename = "ref")]
+    reference: String,
+    #[serde(default, deserialize_with = "deserialize_non_null_option")]
+    source_repository: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_non_null_option")]
+    source_workflow_path: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_non_null_option")]
+    event: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_non_null_option")]
+    source_ref: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_non_null_option")]
+    source_ref_prefix: Option<String>,
+}
+
+fn deserialize_non_null_option<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorkflowIdentityDocumentWire {
+    protocol: String,
+    identities: Vec<WorkflowIdentityEntry>,
+}
+
+/// Failure to parse or validate a protected workflow-identity document.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum WorkflowIdentityPolicyError {
+    /// The document is not valid JSON or has an unknown or missing member.
+    #[error("workflow-identity policy is not a valid closed document")]
+    InvalidDocument,
+    /// The protocol identifier does not match FR-064.
+    #[error("workflow-identity policy protocol is invalid")]
+    InvalidProtocol,
+    /// The document has no identities or exceeds the supported bound.
+    #[error("workflow-identity policy identity count is invalid")]
+    InvalidCount,
+    /// An identity does not satisfy the exact FR-064 role schema.
+    #[error("workflow-identity policy entry is invalid")]
+    InvalidEntry,
+}
+
+impl WorkflowIdentityDocument {
+    /// Parse and validate one `engineering-assurance.workflow-identities/v1`
+    /// document. Callers must obtain the bytes from the protected base branch.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error for malformed JSON, an invalid protocol, an
+    /// invalid identity count, or an entry that violates the closed schema.
+    pub fn parse(bytes: &[u8]) -> Result<Self, WorkflowIdentityPolicyError> {
+        let wire: WorkflowIdentityDocumentWire = serde_json::from_slice(bytes)
+            .map_err(|_| WorkflowIdentityPolicyError::InvalidDocument)?;
+        if wire.protocol != "engineering-assurance.workflow-identities/v1" {
+            return Err(WorkflowIdentityPolicyError::InvalidProtocol);
+        }
+        if wire.identities.is_empty() || wire.identities.len() > 256 {
+            return Err(WorkflowIdentityPolicyError::InvalidCount);
+        }
+        let mut unique = BTreeSet::new();
+        if wire.identities.iter().any(|entry| {
+            !entry.is_valid()
+                || !unique.insert((
+                    entry.role,
+                    entry.repository.as_str(),
+                    entry.workflow_path.as_str(),
+                    entry.reference.as_str(),
+                ))
+        }) {
+            return Err(WorkflowIdentityPolicyError::InvalidEntry);
+        }
+        Ok(Self {
+            identities: wire.identities,
+        })
+    }
+
+    /// Find the entry for `role` that exactly matches a signer workflow ref.
+    #[must_use]
+    pub fn signer_policy(
+        &self,
+        role: WorkflowRole,
+        repository: &str,
+        workflow_path: &str,
+        reference: &str,
+        transparency: TransparencyRequirement,
+    ) -> Option<WorkflowIdentityPolicy> {
+        let entry = self.identities.iter().find(|entry| {
+            entry.role == role
+                && entry.repository == repository
+                && entry.workflow_path == workflow_path
+                && entry.reference == reference
+        })?;
+        Some(WorkflowIdentityPolicy {
+            repository: entry.repository.clone(),
+            workflow_path: entry.workflow_path.clone(),
+            references: BTreeSet::from([entry.reference.clone()]),
+            issuer: entry.issuer.clone(),
+            transparency,
+        })
+    }
+
+    /// Find the source workflow policy associated with an exact reusable
+    /// release or receipt signer entry.
+    #[must_use]
+    pub fn source_policy(
+        &self,
+        role: WorkflowRole,
+        repository: &str,
+        workflow_path: &str,
+        reference: &str,
+    ) -> Option<SourceWorkflowPolicy> {
+        let entry = self.identities.iter().find(|entry| {
+            entry.role == role
+                && entry.repository == repository
+                && entry.workflow_path == workflow_path
+                && entry.reference == reference
+        })?;
+        Some(SourceWorkflowPolicy {
+            repository: entry.source_repository.clone()?,
+            workflow_path: entry.source_workflow_path.clone()?,
+            event: entry.event.clone()?,
+            source_ref: entry.source_ref.clone(),
+            source_ref_prefix: entry.source_ref_prefix.clone(),
+        })
+    }
+}
+
+impl WorkflowIdentityEntry {
+    fn is_valid(&self) -> bool {
+        if self.issuer.is_empty()
+            || !valid_repository(&self.repository)
+            || !valid_workflow_path(&self.workflow_path)
+        {
+            return false;
+        }
+        match self.role {
+            WorkflowRole::StatementWriter | WorkflowRole::RecordPublisher => {
+                self.reference.starts_with("refs/heads/")
+                    && valid_ref(&self.reference)
+                    && self.source_repository.is_none()
+                    && self.source_workflow_path.is_none()
+                    && self.event.is_none()
+                    && self.source_ref.is_none()
+                    && self.source_ref_prefix.is_none()
+            }
+            WorkflowRole::ReleaseAttester => {
+                self.reference.starts_with("refs/tags/")
+                    && valid_ref(&self.reference)
+                    && self
+                        .source_repository
+                        .as_deref()
+                        .is_some_and(valid_repository)
+                    && self
+                        .source_workflow_path
+                        .as_deref()
+                        .is_some_and(valid_workflow_path)
+                    && self.event.as_deref() == Some("push")
+                    && self.source_ref.is_none()
+                    && self
+                        .source_ref_prefix
+                        .as_deref()
+                        .is_some_and(|prefix| prefix.starts_with("refs/tags/") && valid_ref(prefix))
+            }
+            WorkflowRole::ReceiptWriter => {
+                (self.reference.starts_with("refs/heads/")
+                    || self.reference.starts_with("refs/tags/"))
+                    && valid_ref(&self.reference)
+                    && self
+                        .source_repository
+                        .as_deref()
+                        .is_some_and(valid_repository)
+                    && self
+                        .source_workflow_path
+                        .as_deref()
+                        .is_some_and(valid_workflow_path)
+                    && self.event.as_deref() == Some("push")
+                    && self
+                        .source_ref
+                        .as_deref()
+                        .is_some_and(|value| value.starts_with("refs/heads/") && valid_ref(value))
+                    && self.source_ref_prefix.is_none()
+            }
+        }
+    }
+}
+
+fn valid_repository(value: &str) -> bool {
+    let mut parts = value.split('/');
+    parts.next().is_some_and(valid_ref_component)
+        && parts.next().is_some_and(valid_ref_component)
+        && parts.next().is_none()
+}
+
+fn valid_ref_component(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+        && value != "."
+        && value != ".."
+}
+
+fn valid_ref(value: &str) -> bool {
+    let mut parts = value.split('/');
+    matches!(parts.next(), Some("refs"))
+        && parts
+            .next()
+            .is_some_and(|kind| matches!(kind, "heads" | "tags"))
+        && parts.all(valid_ref_component)
+        && value.matches('/').count() >= 2
+}
+
+fn valid_workflow_path(value: &str) -> bool {
+    value.starts_with(".github/workflows/")
+        && value.len() > ".github/workflows/".len()
+        && !value.contains("..")
+        && !value.ends_with('/')
+        && !value.bytes().any(|byte| byte.is_ascii_control())
+}
+
 /// The caller-provided expected statement subject digest.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ExpectedSubject<'a> {
@@ -152,6 +410,109 @@ pub trait BundleVerifier {
         bundle_json: &str,
         policy: &WorkflowIdentityPolicy,
     ) -> Result<(), VerificationFailure>;
+
+    /// Verify a bundle and return the authenticated Fulcio CI claims.
+    ///
+    /// Implementations that cannot expose certificate claims return `None`;
+    /// callers that require source-workflow binding must refuse that result.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same signature or signer failure as [`Self::verify`].
+    fn verify_with_claims(
+        &self,
+        payload: &[u8],
+        bundle_json: &str,
+        policy: &WorkflowIdentityPolicy,
+    ) -> Result<Option<AuthenticatedWorkflowClaims>, VerificationFailure> {
+        self.verify(payload, bundle_json, policy)?;
+        Ok(None)
+    }
+}
+
+/// Fulcio CI claims authenticated with the certificate chain and signature.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct AuthenticatedWorkflowClaims {
+    /// Source repository URI from the signing certificate.
+    pub source_repository_uri: Option<String>,
+    /// Source repository ref from the signing certificate.
+    pub source_repository_ref: Option<String>,
+    /// Workflow configuration URI from the signing certificate.
+    pub build_config_uri: Option<String>,
+    /// Trigger event from the signing certificate.
+    pub build_trigger: Option<String>,
+}
+
+/// Policy for the caller of a trusted reusable release workflow.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SourceWorkflowPolicy {
+    /// Exact source repository in `owner/name` form.
+    pub repository: String,
+    /// Exact caller workflow path.
+    pub workflow_path: String,
+    /// Exact expected trigger event.
+    pub event: String,
+    /// Exact source ref, when the source ref is pinned exactly.
+    pub source_ref: Option<String>,
+    /// Literal source-ref prefix, used for release tags.
+    pub source_ref_prefix: Option<String>,
+}
+
+impl SourceWorkflowPolicy {
+    /// Whether all caller-workflow claims match this policy.
+    #[must_use]
+    pub fn matches(&self, claims: &AuthenticatedWorkflowClaims) -> bool {
+        if !self.is_valid() {
+            return false;
+        }
+        let expected_repository_uri = format!("{}{}github.com/{}", "https:", "//", self.repository);
+        if claims.source_repository_uri.as_deref() != Some(expected_repository_uri.as_str())
+            || claims.build_trigger.as_deref() != Some(self.event.as_str())
+        {
+            return false;
+        }
+        let Some(source_ref) = claims.source_repository_ref.as_deref() else {
+            return false;
+        };
+        let ref_matches = self.source_ref.as_deref() == Some(source_ref)
+            || self
+                .source_ref_prefix
+                .as_deref()
+                .is_some_and(|prefix| source_ref.starts_with(prefix));
+        let expected_workflow_prefix = format!(
+            "{}{}github.com/{}/{}@",
+            "https:", "//", self.repository, self.workflow_path
+        );
+        let Some(build_config_uri) = claims.build_config_uri.as_deref() else {
+            return false;
+        };
+        ref_matches
+            && build_config_uri
+                .strip_prefix(&expected_workflow_prefix)
+                .is_some_and(|workflow_ref| workflow_ref == source_ref)
+    }
+
+    fn is_valid(&self) -> bool {
+        let mut repository_parts = self.repository.split('/');
+        let repository_valid = repository_parts
+            .next()
+            .is_some_and(|owner| !owner.is_empty())
+            && repository_parts.next().is_some_and(|name| !name.is_empty())
+            && repository_parts.next().is_none();
+        let workflow_path_valid = self.workflow_path.starts_with(".github/workflows/")
+            && !self.workflow_path.contains("..")
+            && !self.workflow_path.ends_with('/');
+        let ref_policy_valid = match (&self.source_ref, &self.source_ref_prefix) {
+            (Some(exact), None) => {
+                exact.starts_with("refs/heads/") && exact.len() > "refs/heads/".len()
+            }
+            (None, Some(prefix)) => {
+                prefix.starts_with("refs/tags/") && prefix.len() > "refs/tags/".len()
+            }
+            _ => false,
+        };
+        repository_valid && workflow_path_valid && self.event == "push" && ref_policy_valid
+    }
 }
 
 /// The production verifier backed by sigstore-rust and a caller-selected root.
@@ -181,6 +542,37 @@ impl BundleVerifier for SigstoreBundleVerifier {
         bundle_json: &str,
         policy: &WorkflowIdentityPolicy,
     ) -> Result<(), VerificationFailure> {
+        self.verify_authenticated(payload, bundle_json, policy)
+            .map(|_| ())
+    }
+
+    fn verify_with_claims(
+        &self,
+        payload: &[u8],
+        bundle_json: &str,
+        policy: &WorkflowIdentityPolicy,
+    ) -> Result<Option<AuthenticatedWorkflowClaims>, VerificationFailure> {
+        let result = self.verify_authenticated(payload, bundle_json, policy)?;
+        let claims = result.certificate().map(|certificate| {
+            let claims = &certificate.ci_claims;
+            AuthenticatedWorkflowClaims {
+                source_repository_uri: claims.source_repository_uri.clone(),
+                source_repository_ref: claims.source_repository_ref.clone(),
+                build_config_uri: claims.build_config_uri.clone(),
+                build_trigger: claims.build_trigger.clone(),
+            }
+        });
+        Ok(claims)
+    }
+}
+
+impl SigstoreBundleVerifier {
+    fn verify_authenticated(
+        &self,
+        payload: &[u8],
+        bundle_json: &str,
+        policy: &WorkflowIdentityPolicy,
+    ) -> Result<sigstore_verify::VerificationResult, VerificationFailure> {
         let bundle = sigstore_types::Bundle::from_json(bundle_json)
             .map_err(|_| VerificationFailure::InvalidSignature)?;
 
@@ -203,7 +595,7 @@ impl BundleVerifier for SigstoreBundleVerifier {
         if !identity_matches || result.issuer() != Some(policy.issuer.as_str()) {
             return Err(VerificationFailure::UntrustedSigner);
         }
-        Ok(())
+        Ok(result)
     }
 }
 
@@ -221,7 +613,31 @@ pub fn verify_statement(
     policy: &WorkflowIdentityPolicy,
     subject: ExpectedSubject<'_>,
 ) -> Result<VerificationStatus, VerificationFailure> {
-    verifier.verify(payload, bundle_json, policy)?;
+    verify_statement_with_source(verifier, payload, bundle_json, policy, None, subject)
+}
+
+/// Verify a statement and, when supplied, require authenticated reusable-workflow caller claims.
+///
+/// # Errors
+///
+/// Returns the delegated verifier's failure, `untrusted_signer` when the
+/// authenticated caller claims do not match the source policy, or
+/// `invalid_statement` and `wrong_subject` for malformed or mismatched
+/// statement subjects.
+pub fn verify_statement_with_source(
+    verifier: &dyn BundleVerifier,
+    payload: &[u8],
+    bundle_json: &str,
+    policy: &WorkflowIdentityPolicy,
+    source_policy: Option<&SourceWorkflowPolicy>,
+    subject: ExpectedSubject<'_>,
+) -> Result<VerificationStatus, VerificationFailure> {
+    let claims = verifier.verify_with_claims(payload, bundle_json, policy)?;
+    if let Some(source_policy) = source_policy
+        && !claims.is_some_and(|claims| source_policy.matches(&claims))
+    {
+        return Err(VerificationFailure::UntrustedSigner);
+    }
     let statement: StatementV1 =
         serde_json::from_slice(payload).map_err(|_| VerificationFailure::InvalidStatement)?;
     if statement.type_ != STATEMENT_V1_TYPE {
@@ -244,6 +660,7 @@ pub fn verify_statement(
     Ok(VerificationStatus::Verified)
 }
 
+#[cfg(feature = "attestation-signing")]
 async fn sign_after_ambient_oidc<T, Detect, Start, Sign>(
     detect: Detect,
     start_signing: Start,
@@ -259,6 +676,7 @@ where
     start_signing(token).await
 }
 
+#[cfg(feature = "attestation-signing")]
 async fn detect_ambient_oidc() -> Result<Option<sigstore_sign::oidc::IdentityToken>, SigningFailure>
 {
     sigstore_sign::oidc::IdentityToken::detect_ambient()
@@ -276,6 +694,7 @@ async fn detect_ambient_oidc() -> Result<Option<sigstore_sign::oidc::IdentityTok
 ///
 /// Returns `AmbientOidcUnavailable` if no ambient token is available, or
 /// `SigningFailed` when the delegated Sigstore signer fails.
+#[cfg(feature = "attestation-signing")]
 pub async fn sign_statement_without_public_log(
     canonical_statement: &[u8],
 ) -> Result<String, SigningFailure> {
@@ -291,11 +710,11 @@ pub async fn sign_statement_without_public_log(
 ///
 /// Returns [`SigningFailure::AmbientOidcUnavailable`] when the workflow has no
 /// ambient identity, or [`SigningFailure::SigningFailed`] when Sigstore fails.
+#[cfg(feature = "attestation-signing")]
 pub fn sign_statement_bytes(canonical_statement: &[u8]) -> Result<String, SigningFailure> {
     let payload = canonical_statement.to_vec();
     run_signing_thread(move || async move { sign_statement_without_public_log(&payload).await })
 }
-
 async fn sign_statement_without_public_log_with<Detect>(
     canonical_statement: &[u8],
     detect: Detect,
@@ -326,10 +745,12 @@ where
 ///
 /// Returns `AmbientOidcUnavailable` if no ambient token is available, or
 /// `SigningFailed` when the delegated Sigstore signer fails.
+#[cfg(feature = "attestation-signing")]
 async fn sign_public_payload(payload: &[u8]) -> Result<String, SigningFailure> {
     sign_public_payload_with(payload, detect_ambient_oidc()).await
 }
 
+#[cfg(feature = "attestation-signing")]
 async fn sign_public_payload_with<Detect>(
     payload: &[u8],
     detect: Detect,
@@ -351,10 +772,12 @@ where
     .await
 }
 
+#[cfg(feature = "attestation-signing")]
 async fn sign_private_payload(payload: &[u8]) -> Result<String, SigningFailure> {
     sign_private_payload_with(payload, detect_ambient_oidc()).await
 }
 
+#[cfg(feature = "attestation-signing")]
 async fn sign_private_payload_with<Detect>(
     payload: &[u8],
     detect: Detect,
@@ -380,23 +803,28 @@ where
 ///
 /// `signed_payload` returns only payloads signed by this instance and keeps a
 /// bounded, one-shot cache so blob bundles need not duplicate artifact bytes.
+#[cfg(feature = "attestation-signing")]
 pub struct SigstoreSigner {
     pending_payloads: Mutex<BTreeMap<String, Vec<u8>>>,
     backend: Arc<dyn SigningBackend>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg(feature = "attestation-signing")]
 enum SigningPath {
     PublicLog,
     NoPublicLog,
 }
 
+#[cfg(feature = "attestation-signing")]
 trait SigningBackend: Send + Sync {
     fn sign(&self, payload: &[u8], signing_path: SigningPath) -> Result<String, SigningFailure>;
 }
 
+#[cfg(feature = "attestation-signing")]
 struct SigstoreSigningBackend;
 
+#[cfg(feature = "attestation-signing")]
 impl SigningBackend for SigstoreSigningBackend {
     fn sign(&self, payload: &[u8], signing_path: SigningPath) -> Result<String, SigningFailure> {
         let payload = payload.to_vec();
@@ -409,6 +837,7 @@ impl SigningBackend for SigstoreSigningBackend {
     }
 }
 
+#[cfg(feature = "attestation-signing")]
 impl SigstoreSigner {
     /// Construct a signer whose operations use ambient keyless OIDC.
     #[must_use]
@@ -451,12 +880,14 @@ impl SigstoreSigner {
     }
 }
 
+#[cfg(feature = "attestation-signing")]
 impl Default for SigstoreSigner {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(feature = "attestation-signing")]
 impl Signer for SigstoreSigner {
     fn sign_for_public_log(
         &self,
@@ -478,6 +909,7 @@ impl Signer for SigstoreSigner {
     }
 }
 
+#[cfg(feature = "attestation-signing")]
 fn run_signing_thread<T, Build, Work>(build: Build) -> Result<T, SigningFailure>
 where
     T: Send + 'static,
@@ -529,6 +961,7 @@ pub enum VerificationFailure {
 
 /// Signing failed with a stable reason.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+#[cfg(feature = "attestation-signing")]
 pub enum SigningFailure {
     /// No ambient OIDC identity token is available.
     #[error("ambient_oidc_unavailable")]
@@ -574,6 +1007,7 @@ impl VerificationFailure {
     }
 }
 
+#[cfg(feature = "attestation-signing")]
 impl SigningFailure {
     /// The stable machine-readable code for this failure.
     #[must_use]
@@ -619,7 +1053,7 @@ impl StatementEncodingError {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "attestation-signing"))]
 mod tests {
     use super::*;
     use std::collections::BTreeSet;
@@ -645,6 +1079,150 @@ mod tests {
     )
     .as_bytes();
     const BUNDLE: &str = "fixture-bundle";
+
+    const TEST_OIDC_ISSUER: &str = concat!("https:", "//", "token.actions.githubusercontent.com");
+
+    fn release_identity_document() -> String {
+        serde_json::json!({
+            "protocol": "engineering-assurance.workflow-identities/v1",
+            "identities": [{
+                "role": "release_attester",
+                "issuer": TEST_OIDC_ISSUER,
+                "repository": "agent-ix/engineering-assurance",
+                "workflow_path": ".github/workflows/release-attestation.yml",
+                "ref": "refs/tags/v1.2.3",
+                "source_repository": "fictional/product",
+                "source_workflow_path": ".github/workflows/release.yml",
+                "event": "push",
+                "source_ref_prefix": "refs/tags/v"
+            }]
+        })
+        .to_string()
+    }
+
+    #[trace("TC-676", "FR-064-AC-13", "FR-064-AC-15", "FR-068-AC-3")]
+    #[test]
+    fn workflow_identity_document_produces_exact_release_and_caller_policies() {
+        let policy = release_identity_document();
+        let document =
+            WorkflowIdentityDocument::parse(policy.as_bytes()).expect("fixture policy is valid");
+        let signer = document
+            .signer_policy(
+                WorkflowRole::ReleaseAttester,
+                "agent-ix/engineering-assurance",
+                ".github/workflows/release-attestation.yml",
+                "refs/tags/v1.2.3",
+                TransparencyRequirement::PublicLog,
+            )
+            .expect("exact signer entry exists");
+        assert_eq!(
+            signer.references,
+            BTreeSet::from(["refs/tags/v1.2.3".to_owned()])
+        );
+        assert_eq!(signer.issuer, TEST_OIDC_ISSUER);
+        let caller = document
+            .source_policy(
+                WorkflowRole::ReleaseAttester,
+                "agent-ix/engineering-assurance",
+                ".github/workflows/release-attestation.yml",
+                "refs/tags/v1.2.3",
+            )
+            .expect("matching caller policy exists");
+        let source_repository_uri = format!("{}{}github.com/fictional/product", "https:", "//");
+        let build_config = format!(
+            "{}{}github.com/fictional/product/.github/workflows/release.yml@refs/tags/v2.0.0",
+            "https:", "//"
+        );
+        assert!(caller.matches(&AuthenticatedWorkflowClaims {
+            source_repository_uri: Some(source_repository_uri.clone()),
+            source_repository_ref: Some("refs/tags/v2.0.0".into()),
+            build_config_uri: Some(build_config.clone()),
+            build_trigger: Some("push".into()),
+        }));
+        assert!(!caller.matches(&AuthenticatedWorkflowClaims {
+            source_repository_uri: Some(source_repository_uri),
+            source_repository_ref: Some("refs/pull/9/merge".into()),
+            build_config_uri: Some(build_config.replace("refs/tags/v2.0.0", "refs/pull/9/merge")),
+            build_trigger: Some("push".into()),
+        }));
+    }
+
+    #[trace("TC-677", "FR-064-AC-9", "FR-064-AC-14", "FR-064-AC-15")]
+    #[test]
+    fn workflow_identity_document_rejects_open_or_malformed_entries() {
+        let valid = release_identity_document();
+        for invalid in [
+            valid.replace(
+                "\"source_ref_prefix\":\"refs/tags/v\"",
+                "\"source_ref_prefix\":\"refs/pull/\"",
+            ),
+            valid.replace(
+                "\"source_ref_prefix\":\"refs/tags/v\"",
+                "\"source_ref_prefix\":\"refs/tags/v*\"",
+            ),
+            valid.replace(
+                "\"ref\":\"refs/tags/v1.2.3\"",
+                "\"ref\":\"refs/heads/main\"",
+            ),
+            valid.replace(
+                "\"source_ref_prefix\":\"refs/tags/v\"",
+                "\"source_ref_prefix\":null",
+            ),
+            valid.replace(
+                "\"source_ref_prefix\":\"refs/tags/v\"",
+                "\"source_ref_prefix\":\"refs/tags/v\",\"unexpected\":true",
+            ),
+            valid.replace(
+                "\"source_ref_prefix\":\"refs/tags/v\"",
+                "\"source_ref_prefix\":\"refs/tags/v\",\"source_ref\":\"refs/heads/main\"",
+            ),
+        ] {
+            assert!(
+                WorkflowIdentityDocument::parse(invalid.as_bytes()).is_err(),
+                "invalid policy unexpectedly accepted: {invalid}"
+            );
+        }
+    }
+
+    #[trace("TC-678", "FR-064-AC-1", "FR-064-AC-9")]
+    #[test]
+    fn local_workflow_identity_requires_one_exact_protected_branch_ref() {
+        let bytes = serde_json::json!({
+            "protocol": "engineering-assurance.workflow-identities/v1",
+            "identities": [{
+                "role": "statement_writer",
+                "issuer": TEST_OIDC_ISSUER,
+                "repository": "fictional/product",
+                "workflow_path": ".github/workflows/approval.yml",
+                "ref": "refs/heads/main"
+            }]
+        })
+        .to_string();
+        let document =
+            WorkflowIdentityDocument::parse(bytes.as_bytes()).expect("valid local identity");
+        assert!(
+            document
+                .signer_policy(
+                    WorkflowRole::StatementWriter,
+                    "fictional/product",
+                    ".github/workflows/approval.yml",
+                    "refs/heads/main",
+                    TransparencyRequirement::PublicLog,
+                )
+                .is_some()
+        );
+        assert!(
+            document
+                .signer_policy(
+                    WorkflowRole::StatementWriter,
+                    "fictional/product",
+                    ".github/workflows/approval.yml",
+                    "refs/pull/7/merge",
+                    TransparencyRequirement::PublicLog,
+                )
+                .is_none()
+        );
+    }
 
     struct FixtureVerifier {
         payload: Vec<u8>,
@@ -703,7 +1281,132 @@ mod tests {
         }
     }
 
-    #[trace("TC-660", "FR-064-AC-2", "FR-064-AC-3", "FR-064-AC-4")]
+    struct ClaimsFixtureVerifier(AuthenticatedWorkflowClaims);
+
+    impl BundleVerifier for ClaimsFixtureVerifier {
+        fn verify(
+            &self,
+            _payload: &[u8],
+            _bundle_json: &str,
+            _policy: &WorkflowIdentityPolicy,
+        ) -> Result<(), VerificationFailure> {
+            Ok(())
+        }
+
+        fn verify_with_claims(
+            &self,
+            _payload: &[u8],
+            _bundle_json: &str,
+            _policy: &WorkflowIdentityPolicy,
+        ) -> Result<Option<AuthenticatedWorkflowClaims>, VerificationFailure> {
+            Ok(Some(self.0.clone()))
+        }
+    }
+
+    fn release_source_claims() -> AuthenticatedWorkflowClaims {
+        AuthenticatedWorkflowClaims {
+            source_repository_uri: Some(
+                concat!("https:", "//github.com/agent-ix/quoin").to_owned(),
+            ),
+            source_repository_ref: Some("refs/tags/v1.2.3".to_owned()),
+            build_config_uri: Some(
+                concat!(
+                    "https:",
+                    "//github.com/agent-ix/quoin/.github/workflows/release.yml@refs/tags/v1.2.3"
+                )
+                .to_owned(),
+            ),
+            build_trigger: Some("push".to_owned()),
+        }
+    }
+
+    fn release_source_policy() -> SourceWorkflowPolicy {
+        SourceWorkflowPolicy {
+            repository: "agent-ix/quoin".to_owned(),
+            workflow_path: ".github/workflows/release.yml".to_owned(),
+            event: "push".to_owned(),
+            source_ref: None,
+            source_ref_prefix: Some("refs/tags/v".to_owned()),
+        }
+    }
+
+    #[trace("TC-683", "FR-064-AC-13", "FR-064-AC-15", "FR-068-AC-3")]
+    #[test]
+    fn reusable_workflow_claims_bind_source_repository_workflow_event_and_tag_ref() {
+        let verifier = ClaimsFixtureVerifier(release_source_claims());
+        let source_policy = release_source_policy();
+        let subject = ExpectedSubject {
+            kind: SubjectKind::Commit,
+            value: "abc123",
+        };
+        assert_eq!(
+            verify_statement_with_source(
+                &verifier,
+                PAYLOAD,
+                BUNDLE,
+                &policy(),
+                Some(&source_policy),
+                subject,
+            ),
+            Ok(VerificationStatus::Verified)
+        );
+
+        let mut other_source = release_source_claims();
+        other_source.source_repository_uri =
+            Some(concat!("https:", "//github.com/other/quoin").to_owned());
+        let verifier = ClaimsFixtureVerifier(other_source);
+        assert_eq!(
+            verify_statement_with_source(
+                &verifier,
+                PAYLOAD,
+                BUNDLE,
+                &policy(),
+                Some(&source_policy),
+                subject,
+            ),
+            Err(VerificationFailure::UntrustedSigner)
+        );
+
+        for (field, value) in [
+            (
+                "caller workflow",
+                concat!(
+                    "https:",
+                    "//github.com/agent-ix/quoin/.github/workflows/other.yml@refs/tags/v1.2.3"
+                ),
+            ),
+            ("event", "schedule"),
+            ("branch", "refs/heads/main"),
+        ] {
+            let mut claims = release_source_claims();
+            match field {
+                "caller workflow" => claims.build_config_uri = Some(value.to_owned()),
+                "event" => claims.build_trigger = Some(value.to_owned()),
+                _ => {
+                    claims.source_repository_ref = Some(value.to_owned());
+                    claims.build_config_uri = Some(format!(
+                        "{}{}github.com/agent-ix/quoin/.github/workflows/release.yml@{value}",
+                        "https:", "//"
+                    ));
+                }
+            }
+            let verifier = ClaimsFixtureVerifier(claims);
+            assert_eq!(
+                verify_statement_with_source(
+                    &verifier,
+                    PAYLOAD,
+                    BUNDLE,
+                    &policy(),
+                    Some(&source_policy),
+                    subject,
+                ),
+                Err(VerificationFailure::UntrustedSigner),
+                "{field} must be rejected"
+            );
+        }
+    }
+
+    #[trace("TC-660", "FR-064-AC-2", "FR-064-AC-3", "FR-064-AC-4", "FR-068-AC-3")]
     #[test]
     fn verifies_policy_and_git_subjects_and_rejects_mismatches() {
         let verifier = verifier();

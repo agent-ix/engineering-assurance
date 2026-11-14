@@ -1409,7 +1409,10 @@ fn packages_are_private_and_have_no_release_configuration() {
             );
         }
     }
-    assert_eq!(artifact_transfer_workflows, ["ea-106-live.yml"]);
+    assert_eq!(
+        artifact_transfer_workflows,
+        ["ea-106-live.yml", "release-attestation.yml"]
+    );
 }
 
 fn tc112_workflow_violations(path: &str, text: &str) -> BTreeSet<&'static str> {
@@ -1418,16 +1421,49 @@ fn tc112_workflow_violations(path: &str, text: &str) -> BTreeSet<&'static str> {
     let manual_only = workflow["on"]
         .as_object()
         .is_some_and(|triggers| triggers.len() == 1 && triggers.contains_key("workflow_dispatch"));
+    let reusable_attestation = path == ".github/workflows/release-attestation.yml"
+        && workflow["on"]
+            .as_object()
+            .is_some_and(|triggers| triggers.len() == 1 && triggers.contains_key("workflow_call"));
     let guarded_review_gate = path == ".github/workflows/review-gate.yml"
         && workflow["jobs"]["review-gate"]["if"].as_str()
             == Some("${{ vars.EA_REVIEW_GATE_ENABLED == 'true' }}");
-    if !manual_only && !guarded_review_gate {
+    if !manual_only && !guarded_review_gate && !reusable_attestation {
         violations.insert("non_manual_trigger");
     }
 
     let normalized = text.to_lowercase();
-    if normalized.contains("publish") {
+    let package_publish = if reusable_attestation {
+        let package_publish_action = normalized
+            .lines()
+            .any(|line| line.trim_start().starts_with("uses:") && line.contains("publish"));
+        let package_publish_command = [
+            "npm publish",
+            "npm run publish",
+            "pnpm publish",
+            "yarn publish",
+            "cargo publish",
+            "twine upload",
+            "python -m twine upload",
+            "poetry publish",
+            "flit publish",
+            "uv publish",
+            "gem push",
+            "mvn deploy",
+            "gradle publish",
+            "dotnet nuget push",
+        ]
+        .iter()
+        .any(|command| normalized.contains(command));
+        package_publish_action || package_publish_command
+    } else {
+        normalized.contains("publish")
+    };
+    if package_publish {
         violations.insert("package_publish");
+    }
+    if reusable_attestation {
+        violations.extend(tc112_attestation_handoff_violations(&workflow));
     }
     let invokes_release_publisher = normalized
         .lines()
@@ -1441,9 +1477,133 @@ fn tc112_workflow_violations(path: &str, text: &str) -> BTreeSet<&'static str> {
     violations
 }
 
+fn tc112_attestation_handoff_violations(workflow: &Value) -> BTreeSet<&'static str> {
+    let Some(jobs) = workflow["jobs"].as_object() else {
+        return BTreeSet::from(["artifact_handoff"]);
+    };
+    let verify = &workflow["jobs"]["verify"];
+    let attest = &workflow["jobs"]["attest"];
+    let verify_uploads = verify["steps"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|step| {
+            step["uses"]
+                .as_str()
+                .is_some_and(|uses| uses.starts_with("actions/upload-artifact@"))
+        })
+        .collect::<Vec<_>>();
+    let attest_handoff_downloads = attest["steps"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|step| {
+            step["uses"]
+                .as_str()
+                .is_some_and(|uses| uses.starts_with("actions/download-artifact@"))
+                && step["with"]["name"] == "${{ needs.verify.outputs.attestation_inputs_artifact }}"
+        })
+        .collect::<Vec<_>>();
+    let verify_handoff_name = verify_uploads.first().map(|step| &step["with"]["name"]);
+    let mut violations = BTreeSet::new();
+    if verify_uploads.len() != 1
+        || verify_handoff_name
+            != Some(&json!(
+                "${{ steps.attestation-artifact-name.outputs.name }}"
+            ))
+        || verify["outputs"]["attestation_inputs_artifact"]
+            != "${{ steps.attestation-artifact-name.outputs.name }}"
+        || attest["needs"] != "verify"
+        || attest_handoff_downloads.len() != 1
+    {
+        violations.insert("artifact_handoff");
+    }
+    for (job_name, job) in jobs {
+        let steps = job["steps"].as_array().into_iter().flatten();
+        for step in steps {
+            let Some(uses) = step["uses"].as_str() else {
+                continue;
+            };
+            if uses.starts_with("actions/upload-artifact@") && job_name != "verify" {
+                violations.insert("artifact_handoff");
+            }
+            if uses.starts_with("actions/download-artifact@")
+                && job_name != "verify"
+                && job_name != "attest"
+            {
+                violations.insert("artifact_handoff");
+            }
+            if uses.starts_with("actions/download-artifact@")
+                && step["with"]["name"] == "${{ needs.verify.outputs.attestation_inputs_artifact }}"
+                && job_name != "attest"
+            {
+                violations.insert("artifact_handoff");
+            }
+        }
+    }
+    violations
+}
+
 #[test]
 #[trace("TC-112", "FR-017-AC-4")]
 fn package_and_release_publication_or_automatic_workflow_triggers_are_refused() {
+    let reusable_attestation = concat!(
+        "on:\n  workflow_call:\n    inputs:\n      tag: {type: string}\n",
+        "jobs:\n  verify:\n    outputs:\n",
+        "      attestation_inputs_artifact: ${{ steps.attestation-artifact-name.outputs.name }}\n",
+        "    steps:\n      - uses: actions/upload-artifact@v4\n",
+        "        with:\n          name: ${{ steps.attestation-artifact-name.outputs.name }}\n",
+        "  attest:\n    needs: verify\n    steps:\n",
+        "      - uses: actions/download-artifact@v4\n",
+        "        with:\n          name: ${{ needs.verify.outputs.attestation_inputs_artifact }}\n"
+    );
+    assert!(
+        tc112_workflow_violations(
+            ".github/workflows/release-attestation.yml",
+            reusable_attestation
+        )
+        .is_empty()
+    );
+
+    let handoff_through_third_job = concat!(
+        "on:\n  workflow_call:\njobs:\n",
+        "  verify:\n    outputs:\n      attestation_inputs_artifact: ${{ steps.name.outputs.name }}\n",
+        "    steps:\n      - uses: actions/upload-artifact@v4\n",
+        "        with:\n          name: ${{ steps.name.outputs.name }}\n",
+        "  relay:\n    needs: verify\n    steps:\n",
+        "      - uses: actions/download-artifact@v4\n",
+        "        with:\n          name: ${{ needs.verify.outputs.attestation_inputs_artifact }}\n",
+        "      - uses: actions/upload-artifact@v4\n        with:\n          name: relayed\n",
+        "  attest:\n    needs: relay\n    steps:\n",
+        "      - uses: actions/download-artifact@v4\n",
+        "        with:\n          name: ${{ needs.verify.outputs.attestation_inputs_artifact }}\n"
+    );
+    assert_eq!(
+        tc112_workflow_violations(
+            ".github/workflows/release-attestation.yml",
+            handoff_through_third_job
+        ),
+        BTreeSet::from(["artifact_handoff"])
+    );
+
+    let reusable_with_package_publish = concat!(
+        "on:\n  workflow_call:\njobs:\n  publish:\n    steps:\n",
+        "      - run: npm publish\n"
+    );
+    assert_eq!(
+        tc112_workflow_violations(
+            ".github/workflows/release-attestation.yml",
+            reusable_with_package_publish
+        ),
+        BTreeSet::from(["artifact_handoff", "package_publish"])
+    );
+
+    let unrelated_workflow_call = "on:\n  workflow_call:\njobs: {}\n";
+    assert_eq!(
+        tc112_workflow_violations(".github/workflows/other.yml", unrelated_workflow_call),
+        BTreeSet::from(["non_manual_trigger"])
+    );
+
     let package_publisher = "on:\n  workflow_dispatch:\njobs:\n  verify:\n    steps:\n      - uses: pypa/gh-action-pypi-publish@v1\n";
     assert_eq!(
         tc112_workflow_violations("fixture.yml", package_publisher),
@@ -1475,6 +1635,15 @@ fn package_and_release_publication_or_automatic_workflow_triggers_are_refused() 
     assert_eq!(
         tc112_workflow_violations("fixture.yml", automatic_trigger),
         BTreeSet::from(["non_manual_trigger"])
+    );
+
+    let unrelated_release_publisher = concat!(
+        "on:\n  push:\n    tags: ['v*']\njobs:\n  release:\n    steps:\n",
+        "      - uses: softprops/action-gh-release@v2\n"
+    );
+    assert_eq!(
+        tc112_workflow_violations(".github/workflows/other.yml", unrelated_release_publisher),
+        BTreeSet::from(["non_manual_trigger", "release_publish"])
     );
 }
 

@@ -1,3 +1,9 @@
+---
+id: EA-110
+title: "EA-110 PR #257 round 1 finding dispositions"
+type: Review
+---
+
 # EA-110 PR #257 round 1 finding dispositions
 
 Review findings recorded on EA-110 for PR #257, addressed in this spec-only
