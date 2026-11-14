@@ -20,14 +20,16 @@ use engineering_assurance::record_sink::{
     config::{
         ErrorCode, PolicySource, SINK_CONFIG_PATH, SelectionSource, SinkConfig, SinkKind,
         SinkSelection, Visibility, read_policy_document, resolve_from_source, resolve_sink,
+        resolve_sink_for_repository,
     },
     form::{FormError, PrivateRecord, PublicRecord, Record, RecordId, Reference, Signature},
     leak::{
         CheckRefusal, LookupFailed, OffenseReason, PublicPathProof, VisibilityLookup, leak_check,
     },
     sink::{
-        ApprovalStatementReader, CheckedEntry, LogRejected, Ports, PrivateStore, PublicLogClient,
-        RecordSink, Signer, SigningFailed, SinkLayer, SinkResult, Status, StoreError,
+        ApprovalStatementPublishOutcome, ApprovalStatementReader, CheckedEntry, LogRejected, Ports,
+        PrivateStore, PublicLogClient, RecordSink, Signer, SigningFailed, SinkLayer, SinkResult,
+        Status, StoreError, StorePreparation,
     },
 };
 use ix_trace_rs::trace;
@@ -38,7 +40,7 @@ const DIGEST: &str = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef012
 const COMMIT: &str = "0123456789abcdef0123456789abcdef01234567";
 const PUBLISHER: &str = "acme/ledger";
 const ENDPOINT: &str = concat!("https", "://log.example.test/api/v1");
-const DESTINATION: &str = "store-a";
+const DESTINATION: &str = "agent-ix/private-records";
 
 // ---- stand-ins -----------------------------------------------------------
 
@@ -47,6 +49,9 @@ struct Store {
     private: RefCell<Vec<(String, PrivateRecord)>>,
     public: RefCell<Vec<(String, PublicRecord)>>,
     fail_private: bool,
+    preparation: Option<StorePreparation>,
+    fail_outcome: bool,
+    outcomes: RefCell<Vec<(String, RecordId, SinkKind, ApprovalStatementPublishOutcome)>>,
     events: Events,
 }
 
@@ -64,10 +69,42 @@ impl PrivateStore for Store {
         Ok(())
     }
 
+    fn prepare_record(
+        &self,
+        destination: &str,
+        private: &PrivateRecord,
+        _public: &PublicRecord,
+        _sink: SinkKind,
+    ) -> Result<StorePreparation, StoreError> {
+        self.events.borrow_mut().push("prepare");
+        if let Some(preparation) = self.preparation {
+            return Ok(preparation);
+        }
+        self.write_private(destination, private)?;
+        Ok(StorePreparation::NewRecord)
+    }
+
     fn write_public(&self, destination: &str, public: &PublicRecord) -> Result<(), StoreError> {
         self.public
             .borrow_mut()
             .push((destination.to_owned(), public.clone()));
+        Ok(())
+    }
+
+    fn write_publish_outcome(
+        &self,
+        destination: &str,
+        record_id: &RecordId,
+        sink: SinkKind,
+        outcome: ApprovalStatementPublishOutcome,
+    ) -> Result<(), StoreError> {
+        self.events.borrow_mut().push("outcome_write");
+        if self.fail_outcome {
+            return Err(StoreError);
+        }
+        self.outcomes
+            .borrow_mut()
+            .push((destination.to_owned(), record_id.clone(), sink, outcome));
         Ok(())
     }
 }
@@ -469,9 +506,83 @@ fn tc_629_the_private_form_is_written_first_and_survives_a_refusal() {
     let ordered = World::new();
     ordered.publish(SinkKind::PublicLog, &record());
     let events = ordered.events.borrow();
-    assert_eq!(events.first(), Some(&"private_write"));
+    assert_eq!(events.first(), Some(&"prepare"));
+    assert_eq!(events.get(1), Some(&"private_write"));
     assert_eq!(events.iter().filter(|e| **e == "private_write").count(), 1);
     assert!(events.contains(&"lookup") && events.contains(&"sign") && events.contains(&"send"));
+}
+
+#[trace("TC-979", "FR-054-AC-13")]
+#[test]
+fn tc_979_the_sink_layer_persists_the_final_sink_outcome_and_fails_closed() {
+    let world = World::new();
+    let published = world.publish(SinkKind::PublicLog, &record());
+    assert_eq!(published.status, Status::Published);
+    assert_eq!(world.store.outcomes.borrow().len(), 1);
+    assert_eq!(
+        world.store.outcomes.borrow()[0].3,
+        ApprovalStatementPublishOutcome::Published
+    );
+
+    let mut refused_world = World::new();
+    refused_world.log.reject = true;
+    let refused = refused_world.publish(SinkKind::PublicLog, &record());
+    assert_eq!(refused.error, Some(ErrorCode::PublicLogRejected));
+    assert_eq!(
+        refused_world.store.outcomes.borrow()[0].3,
+        ApprovalStatementPublishOutcome::Refused
+    );
+
+    let mut outcome_failure = World::new();
+    outcome_failure.store.fail_outcome = true;
+    let failed = outcome_failure.publish(SinkKind::PublicLog, &record());
+    assert_eq!(failed.status, Status::Refused);
+    assert_eq!(
+        failed.error,
+        Some(ErrorCode::PrivateStoreOutcomeWriteFailed)
+    );
+    assert_eq!(outcome_failure.log.entries.borrow().len(), 1);
+
+    let none_world = World::new();
+    let discarded = none_world.publish(SinkKind::None, &record());
+    assert_eq!(discarded.status, Status::Discarded);
+    assert!(none_world.store.outcomes.borrow().is_empty());
+}
+
+#[trace("TC-981", "FR-054-AC-15")]
+#[test]
+fn tc_981_replay_returns_the_retained_outcome_without_reinvoking_the_sink() {
+    let mut published_world = World::new();
+    published_world.store.preparation = Some(StorePreparation::AlreadyPublished);
+    let published = published_world.publish(SinkKind::PublicLog, &record());
+    assert_eq!(published.status, Status::Published);
+    assert!(published_world.log.entries.borrow().is_empty());
+    assert_eq!(*published_world.signer.public_calls.borrow(), 0);
+    assert!(published_world.store.outcomes.borrow().is_empty());
+
+    let mut refused_world = World::new();
+    refused_world.store.preparation = Some(StorePreparation::AlreadyRefused);
+    let refused = refused_world.publish(SinkKind::PrivateStore, &record());
+    assert_eq!(refused.status, Status::Refused);
+    assert_eq!(
+        refused.error,
+        Some(ErrorCode::PrivateStoreRecordPreviouslyRefused)
+    );
+    assert!(refused_world.store.public.borrow().is_empty());
+    assert_eq!(*refused_world.signer.non_public_calls.borrow(), 0);
+}
+
+#[trace("TC-982", "FR-054-AC-16")]
+#[test]
+fn tc_982_incomplete_prior_outcome_refuses_before_the_sink_runs() {
+    let mut world = World::new();
+    world.store.preparation = Some(StorePreparation::OutcomeIncomplete);
+    let result = world.publish(SinkKind::PublicLog, &record());
+    assert_eq!(result.status, Status::Refused);
+    assert_eq!(result.error, Some(ErrorCode::PrivateStoreOutcomeIncomplete));
+    assert!(world.log.entries.borrow().is_empty());
+    assert_eq!(*world.signer.public_calls.borrow(), 0);
+    assert!(world.store.outcomes.borrow().is_empty());
 }
 
 // ---- FR-055 ------------------------------------------------------------------
@@ -559,6 +670,7 @@ fn tc_632_invalid_and_incomplete_configurations_are_refused() {
         json!({"public_log": {"endpoint": "https://"}}),
         json!({"public_log": {"endpoint": ENDPOINT, "extra": true}}),
         json!({"private_store": {"destination": ""}}),
+        json!({"private_store": {"destination": "bad/path/extra"}}),
         json!({"public_linear_teams": ["pub"]}),
         json!({"protocol": "engineering-assurance.sink-config/v2"}),
     ] {
@@ -585,6 +697,37 @@ fn tc_632_invalid_and_incomplete_configurations_are_refused() {
         resolve_sink(Some(&no_destination), Visibility::Private),
         Err(ErrorCode::SinkConfigIncomplete)
     );
+}
+
+#[trace("TC-985", "FR-055-AC-8")]
+#[test]
+fn tc_985_malformed_or_self_private_destination_is_refused_before_storage() {
+    let malformed = json!({
+        "protocol": "engineering-assurance.sink-config/v1",
+        "private_store": {"destination": "bad"}
+    });
+    assert_eq!(
+        SinkConfig::parse(malformed.to_string().as_bytes()),
+        Err(ErrorCode::SinkConfigInvalid)
+    );
+    let self_destination = config(json!({"private_store": {"destination": PUBLISHER}}));
+    assert_eq!(
+        resolve_sink_for_repository(Some(&self_destination), Visibility::Private, PUBLISHER),
+        Err(ErrorCode::SinkConfigInvalid)
+    );
+}
+
+#[trace("TC-986", "FR-055-AC-10")]
+#[test]
+fn tc_986_ascii_case_variant_of_publisher_is_refused_before_private_write() {
+    let world = World::new();
+    let mut selection = selection(SinkKind::PrivateStore, &world.teams);
+    selection.private_store_destination = Some("ACME/LEDGER".to_owned());
+    let result = world.publish_with(&selection, &record());
+    assert_eq!(result.status, Status::Refused);
+    assert_eq!(result.error, Some(ErrorCode::SinkConfigInvalid));
+    assert!(world.store.private.borrow().is_empty());
+    assert!(world.store.public.borrow().is_empty());
 }
 
 struct Branches {

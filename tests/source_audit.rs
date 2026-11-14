@@ -571,10 +571,11 @@ fn tc_101_every_library_module_is_capability_confined() {
     // FR-014-AC-4 admits the FR-019 module wholesale (it has its own check
     // below); the FR-027 module is admitted for filesystem access only.
     let producer_execution = repository_root().join("src/producer_execution.rs");
+    let producer_host_modules = repository_root().join("src/producer_execution");
     let filesystem_only = ["src/atomic_publish.rs", "src/integrator_package_store.rs"]
         .map(|module| repository_root().join(module));
     for path in library_module_files() {
-        if path == producer_execution {
+        if path == producer_execution || path.starts_with(&producer_host_modules) {
             continue;
         }
         let bytes = fs::read(&path)
@@ -601,9 +602,13 @@ fn tc_101_every_library_module_is_capability_confined() {
 fn tc_127_producer_execution_owns_the_only_first_party_process_capability() {
     let root = repository_root();
     let producer_path = root.join("src/producer_execution.rs");
+    let producer_host_modules = root.join("src/producer_execution");
     let mut sources = Vec::new();
     rust_files(&root.join("src"), &mut sources);
-    for path in sources.iter().filter(|path| **path != producer_path) {
+    for path in sources
+        .iter()
+        .filter(|path| **path != producer_path && !path.starts_with(&producer_host_modules))
+    {
         let source = fs::read_to_string(path)
             .unwrap_or_else(|error| panic!("cannot read {}: {error}", path.display()));
         let syntax = syn::parse_file(&source)
@@ -629,6 +634,17 @@ fn tc_127_producer_execution_owns_the_only_first_party_process_capability() {
     let mut compatibility_ownership = ChildProgramUse::default();
     compatibility_ownership.visit_file(&compatibility_syntax);
     assert_eq!(producer_ownership.capture_calls, 2);
+    let private_store_path = producer_host_modules.join("private_git_store.rs");
+    let private_store = fs::read_to_string(&private_store_path)
+        .expect("the private Git adapter belongs to the producer-execution host boundary");
+    let private_store_syntax =
+        syn::parse_file(&private_store).expect("private Git adapter source must be valid Rust");
+    let mut private_store_ownership = ChildProgramUse::default();
+    private_store_ownership.visit_file(&private_store_syntax);
+    assert!(
+        private_store_ownership.found,
+        "the Git adapter's child-process use must remain inside producer execution"
+    );
     assert!(compatibility_ownership.paths.iter().any(|path| {
         path.windows(2)
             .any(|pair| pair == ["producer_execution", "__private"])

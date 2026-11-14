@@ -23,7 +23,7 @@ use engineering_assurance::{
         is_valid_verify_result, receipt_status_allows_idempotent_skip, verify_receipt_groups,
     },
     record_sink::{
-        config::{SinkConfig, Visibility, resolve_sink},
+        config::{SinkConfig, Visibility, resolve_sink_for_repository},
         sink::{
             ApprovalStatementLookup, ApprovalStatementReadError, ApprovalStatementReader,
             RetainedApprovalStatement,
@@ -688,8 +688,9 @@ fn load_verification_setup(
     } else {
         Visibility::Public
     };
-    let sink = resolve_sink(Some(&sink_config), visibility)
-        .map_err(|_| UnverifiableReason::PolicyUnreadable)?;
+    let sink =
+        resolve_sink_for_repository(Some(&sink_config), visibility, &request.github_repository)
+            .map_err(|_| UnverifiableReason::PolicyUnreadable)?;
     let private_destination = sink
         .private_store_destination
         .filter(|destination| !destination.is_empty())

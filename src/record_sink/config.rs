@@ -38,6 +38,12 @@ pub enum ErrorCode {
     PublicLogRejected,
     /// The private store could not store the public form.
     PrivateStorePublicFormFailed,
+    /// A retained record has no complete, trusted final outcome.
+    PrivateStoreOutcomeIncomplete,
+    /// The final publish outcome could not be retained.
+    PrivateStoreOutcomeWriteFailed,
+    /// A prior publish of this record was refused.
+    PrivateStoreRecordPreviouslyRefused,
     /// The signing step failed.
     SigningFailed,
     /// The signature is not padded base64 of at most 16384 characters.
@@ -61,6 +67,9 @@ impl ErrorCode {
             Self::PrivateStoreWriteFailed => "private_store_write_failed",
             Self::PublicLogRejected => "public_log_rejected",
             Self::PrivateStorePublicFormFailed => "private_store_public_form_failed",
+            Self::PrivateStoreOutcomeIncomplete => "private_store_outcome_incomplete",
+            Self::PrivateStoreOutcomeWriteFailed => "private_store_outcome_write_failed",
+            Self::PrivateStoreRecordPreviouslyRefused => "private_store_record_previously_refused",
             Self::SigningFailed => "signing_failed",
             Self::SignatureInvalid => "signature_invalid",
             Self::SignaturePayloadMismatch => "signature_payload_mismatch",
@@ -154,6 +163,19 @@ fn is_https_url(text: &str) -> bool {
     })
 }
 
+fn valid_repository(value: &str) -> bool {
+    let Some((owner, name)) = value.split_once('/') else {
+        return false;
+    };
+    let valid_component = |part: &str| {
+        (1..=100).contains(&part.len())
+            && part
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    };
+    valid_component(owner) && valid_component(name)
+}
+
 fn is_team_key(text: &str) -> bool {
     split_linear_issue(&format!("{text}-1")).is_some()
 }
@@ -173,7 +195,7 @@ impl SinkConfig {
         let destination = raw.private_store.and_then(|p| p.destination);
         let valid = raw.protocol == SINK_CONFIG_PROTOCOL
             && endpoint.as_deref().is_none_or(is_https_url)
-            && destination.as_deref().is_none_or(|d| !d.is_empty())
+            && destination.as_deref().is_none_or(valid_repository)
             && raw.public_linear_teams.iter().all(|t| is_team_key(t));
         if !valid {
             return Err(ErrorCode::SinkConfigInvalid);
@@ -239,6 +261,32 @@ pub fn resolve_sink(
     })
 }
 
+/// Resolves a sink and rejects a private-store destination that is the
+/// publishing repository itself (owner and repository compared by ASCII case).
+///
+/// # Errors
+///
+/// Returns [`ErrorCode::SinkConfigInvalid`] for a self destination, or the
+/// same errors as [`resolve_sink`].
+pub fn resolve_sink_for_repository(
+    config: Option<&SinkConfig>,
+    visibility: Visibility,
+    publishing_repository: &str,
+) -> Result<SinkSelection, ErrorCode> {
+    if !valid_repository(publishing_repository) {
+        return Err(ErrorCode::SinkConfigInvalid);
+    }
+    let selection = resolve_sink(config, visibility)?;
+    if selection
+        .private_store_destination
+        .as_deref()
+        .is_some_and(|destination| destination.eq_ignore_ascii_case(publishing_repository))
+    {
+        return Err(ErrorCode::SinkConfigInvalid);
+    }
+    Ok(selection)
+}
+
 /// A source of policy documents. It can read only from the protected base
 /// branch: the branch or pull request under change is not reachable through it.
 pub trait PolicySource {
@@ -283,4 +331,23 @@ pub fn resolve_from_source(
         .map(|bytes| SinkConfig::parse(&bytes))
         .transpose()?;
     resolve_sink(config.as_ref(), visibility)
+}
+
+/// Reads and resolves a repository sink while rejecting its own identity as
+/// the private-store destination.
+///
+/// # Errors
+///
+/// Returns [`ErrorCode::SinkConfigInvalid`] for a malformed publishing
+/// repository or self destination, and the same errors as
+/// [`resolve_from_source`].
+pub fn resolve_from_source_for_repository(
+    source: &dyn PolicySource,
+    visibility: Visibility,
+    publishing_repository: &str,
+) -> Result<SinkSelection, ErrorCode> {
+    let config = read_policy_document(source, SINK_CONFIG_PATH)?
+        .map(|bytes| SinkConfig::parse(&bytes))
+        .transpose()?;
+    resolve_sink_for_repository(config.as_ref(), visibility, publishing_repository)
 }

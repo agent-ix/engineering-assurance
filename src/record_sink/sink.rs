@@ -138,6 +138,19 @@ pub trait RecordSink {
 #[error("private store write failed")]
 pub struct StoreError;
 
+/// Result of atomically preparing a record in a retained private store.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StorePreparation {
+    /// The record was created and one sink invocation is permitted.
+    NewRecord,
+    /// An identical record has a valid, signed `published` outcome.
+    AlreadyPublished,
+    /// An identical record has a valid, signed `refused` outcome.
+    AlreadyRefused,
+    /// The record exists, but does not have a complete trusted final outcome.
+    OutcomeIncomplete,
+}
+
 /// One exact post-merge query to the private approval-statement store.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ApprovalStatementLookup<'a> {
@@ -203,12 +216,50 @@ pub trait PrivateStore: ApprovalStatementReader {
     /// [`StoreError`] when the write fails.
     fn write_private(&self, destination: &str, private: &PrivateRecord) -> Result<(), StoreError>;
 
+    /// Atomically prepares a record before its selected sink runs.
+    ///
+    /// Implementations with retained state override this method to enforce
+    /// create-if-absent and replay semantics. The default preserves the
+    /// original write-only adapter behavior.
+    ///
+    /// # Errors
+    ///
+    /// [`StoreError`] when the store cannot prepare the record.
+    fn prepare_record(
+        &self,
+        destination: &str,
+        private: &PrivateRecord,
+        _public: &PublicRecord,
+        _sink: SinkKind,
+    ) -> Result<StorePreparation, StoreError> {
+        self.write_private(destination, private)?;
+        Ok(StorePreparation::NewRecord)
+    }
+
     /// Stores the trimmed public form linked to a private form.
     ///
     /// # Errors
     ///
     /// [`StoreError`] when the write fails.
     fn write_public(&self, destination: &str, public: &PublicRecord) -> Result<(), StoreError>;
+
+    /// Persists the final result after the selected sink returns.
+    ///
+    /// Concrete retained stores override this operation and sign the outcome
+    /// with the delegated record-publisher identity.
+    ///
+    /// # Errors
+    ///
+    /// [`StoreError`] when the final result cannot be retained.
+    fn write_publish_outcome(
+        &self,
+        _destination: &str,
+        _record_id: &RecordId,
+        _sink: SinkKind,
+        _outcome: ApprovalStatementPublishOutcome,
+    ) -> Result<(), StoreError> {
+        Ok(())
+    }
 }
 
 /// The public log rejected the entry or could not be reached.
@@ -425,6 +476,7 @@ impl RecordSink for NoneSink {
 /// [`SinkLayer::register_private_store`].
 pub struct SinkLayer<'a> {
     selection: &'a SinkSelection,
+    publishing_repository: &'a str,
     store: &'a dyn PrivateStore,
     public_log: PublicLogSink<'a>,
     private_store: PrivateStoreSink<'a>,
@@ -441,6 +493,7 @@ impl<'a> SinkLayer<'a> {
     ) -> Self {
         Self {
             selection,
+            publishing_repository: publishing_repo,
             store: ports.store,
             public_log: PublicLogSink::new(selection, publishing_repo, ports),
             private_store: PrivateStoreSink::new(selection, ports),
@@ -469,14 +522,77 @@ impl RecordSink for SinkLayer<'_> {
             let Some(destination) = self.selection.private_store_destination.as_deref() else {
                 return SinkResult::refused(kind, record.id(), ErrorCode::SinkConfigIncomplete);
             };
-            if self
-                .store
-                .write_private(destination, record.private())
-                .is_err()
+            if !valid_repository_destination(destination)
+                || destination.eq_ignore_ascii_case(self.publishing_repository)
             {
-                return SinkResult::refused(kind, record.id(), ErrorCode::PrivateStoreWriteFailed);
+                return SinkResult::refused(kind, record.id(), ErrorCode::SinkConfigInvalid);
+            }
+            match self
+                .store
+                .prepare_record(destination, record.private(), record.public(), kind)
+            {
+                Ok(StorePreparation::NewRecord) => {}
+                Ok(StorePreparation::AlreadyPublished) => {
+                    return SinkResult::published(kind, record.id());
+                }
+                Ok(StorePreparation::AlreadyRefused) => {
+                    return SinkResult::refused(
+                        kind,
+                        record.id(),
+                        ErrorCode::PrivateStoreRecordPreviouslyRefused,
+                    );
+                }
+                Ok(StorePreparation::OutcomeIncomplete) => {
+                    return SinkResult::refused(
+                        kind,
+                        record.id(),
+                        ErrorCode::PrivateStoreOutcomeIncomplete,
+                    );
+                }
+                Err(StoreError) => {
+                    return SinkResult::refused(
+                        kind,
+                        record.id(),
+                        ErrorCode::PrivateStoreWriteFailed,
+                    );
+                }
             }
         }
-        sink.publish(record)
+        let result = sink.publish(record);
+        if kind != SinkKind::None {
+            let Some(destination) = self.selection.private_store_destination.as_deref() else {
+                return SinkResult::refused(kind, record.id(), ErrorCode::SinkConfigIncomplete);
+            };
+            let outcome = if result.status == Status::Published {
+                ApprovalStatementPublishOutcome::Published
+            } else {
+                ApprovalStatementPublishOutcome::Refused
+            };
+            if self
+                .store
+                .write_publish_outcome(destination, record.id(), kind, outcome)
+                .is_err()
+            {
+                return SinkResult::refused(
+                    kind,
+                    record.id(),
+                    ErrorCode::PrivateStoreOutcomeWriteFailed,
+                );
+            }
+        }
+        result
     }
+}
+
+fn valid_repository_destination(value: &str) -> bool {
+    let Some((owner, repository)) = value.split_once('/') else {
+        return false;
+    };
+    let valid_component = |part: &str| {
+        (1..=100).contains(&part.len())
+            && part
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+    };
+    valid_component(owner) && valid_component(repository)
 }
