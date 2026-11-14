@@ -37,3 +37,13 @@ Ran the computed matrix and reverse-gap review for the EA-107 change-record delt
 - Plan completion: not assessed.
 - Semantic review: skipped; no opt-in was requested.
 
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | The builder now creates an in-toto statement subject with repository, merged commit and merged tree; the tagged test asserts each value. |
+| FND-002 | fixed | The builder stores its generated BOM in `PrivateRecord.agent_bom`, hashes that value into the predicate, and the test checks the digest and absence of the model name from public bytes. |
+| FND-003 | fixed | `PredicateInput.session` is optional; the new test verifies absent session emits no BOM, failed status, and `contract_missing`. |
+| FND-004 | fixed | The tagged test now recomputes statement, test-result, BOM and private-form canonical digests, checks raw review-byte SHA-256, and confirms the private change record omits `private_form`. |
+| FND-005 | fixed | The test now runs the JSON Schema validator against all three malformed values: unknown member, out-of-grammar criterion, and `repo` ticket kind. |
+

@@ -37,3 +37,9 @@ Reviewed the EA-107 delta against its Rust APIs, tests, schema, and FR-072/FR-07
 
 No applicable `AssuranceProfile` was found for the changed change-record implementation.
 
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | `build_change_record` derives the BOM from `session`, writes it into the private form, and computes the predicate digest from that same value; the new test verifies the binding and public model-name privacy. |
+| FND-002 | fixed | The test now locates the `engineer` approval by role and asserts `missing` with no `statement_digest`. |
