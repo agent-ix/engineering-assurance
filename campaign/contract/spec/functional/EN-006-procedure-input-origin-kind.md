@@ -2,7 +2,7 @@
 id: EN-006
 title: Procedure Input Origin Kind
 object: campaign_enum
-type: FR
+type: campaign_enum
 name: ProcedureInputOriginKind
 ---
 

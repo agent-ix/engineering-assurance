@@ -2,7 +2,7 @@
 id: EN-002
 title: Campaign Completion Rule
 object: campaign_enum
-type: FR
+type: campaign_enum
 name: CampaignCompletionRule
 ---
 

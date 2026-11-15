@@ -2,7 +2,7 @@
 id: VO-010
 title: Procedure Environment
 object: campaign_value
-type: FR
+type: campaign_value
 name: ProcedureEnvironment
 ---
 

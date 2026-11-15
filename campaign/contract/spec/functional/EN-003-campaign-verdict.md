@@ -2,7 +2,7 @@
 id: EN-003
 title: Campaign Verdict
 object: campaign_enum
-type: FR
+type: campaign_enum
 name: CampaignVerdict
 ---
 

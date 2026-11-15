@@ -2,7 +2,7 @@
 id: VO-002
 title: Procedure Argument
 object: campaign_value
-type: FR
+type: campaign_value
 name: ProcedureArgument
 ---
 

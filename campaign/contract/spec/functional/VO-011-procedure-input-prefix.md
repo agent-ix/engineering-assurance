@@ -2,7 +2,7 @@
 id: VO-011
 title: Procedure Input Prefix
 object: campaign_value
-type: FR
+type: campaign_value
 name: ProcedureInputPrefix
 ---
 

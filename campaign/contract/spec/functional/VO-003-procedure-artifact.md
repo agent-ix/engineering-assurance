@@ -2,7 +2,7 @@
 id: VO-003
 title: Procedure Artifact
 object: campaign_value
-type: FR
+type: campaign_value
 name: ProcedureArtifact
 ---
 

@@ -2,7 +2,7 @@
 id: VO-006
 title: Campaign Member
 object: campaign_value
-type: FR
+type: campaign_value
 name: CampaignMember
 ---
 

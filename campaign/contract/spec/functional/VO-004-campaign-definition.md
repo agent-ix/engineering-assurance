@@ -2,7 +2,7 @@
 id: VO-004
 title: Campaign Definition
 object: campaign_value
-type: FR
+type: campaign_value
 name: CampaignDefinition
 ---
 

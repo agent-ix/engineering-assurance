@@ -2,7 +2,7 @@
 id: VO-007
 title: Campaign Run
 object: campaign_value
-type: FR
+type: campaign_value
 name: CampaignRun
 ---
 

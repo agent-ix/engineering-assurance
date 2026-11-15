@@ -2,7 +2,7 @@
 id: EN-001
 title: Procedure Argument Kind
 object: campaign_enum
-type: FR
+type: campaign_enum
 name: ProcedureArgumentKind
 ---
 

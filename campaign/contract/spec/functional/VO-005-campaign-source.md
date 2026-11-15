@@ -2,7 +2,7 @@
 id: VO-005
 title: Campaign Source
 object: campaign_value
-type: FR
+type: campaign_value
 name: CampaignSource
 ---
 
