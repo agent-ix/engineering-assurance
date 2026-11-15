@@ -367,6 +367,32 @@ fn eur_lex_legal_notice_is_limited_to_gdpr_and_ai_act_paths() {
 
 #[test]
 #[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
+fn query_bearing_clause_sources_refuse_missing_or_altered_queries() {
+    let tokens: Vec<String> = Vec::new();
+    for row in clause_source_rows_from_spec()
+        .into_iter()
+        .filter(|row| row.query.is_some())
+    {
+        let query = row
+            .query
+            .as_deref()
+            .expect("filtered query must be present");
+        let url_without_query = format!("{}://{}{}", row.scheme, row.host, row.url_path);
+        let url_with_altered_query = format!("{url_without_query}?{query}-changed");
+
+        for path in [&row.wheel_member, &row.npm_member] {
+            for rejected in [&url_without_query, &url_with_altered_query] {
+                assert!(
+                    !findings(path, rejected.as_bytes(), &tokens).is_empty(),
+                    "query mismatch must be refused at {path}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+#[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
 fn whole_file_boundaries_are_typed_and_short_circuit_content() {
     let cases = [
         (
