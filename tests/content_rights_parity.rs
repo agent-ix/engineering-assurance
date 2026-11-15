@@ -55,7 +55,7 @@ fn clause_source_rows_from_spec() -> Vec<ClauseSourceRow> {
             npm_member: cells[5].to_owned(),
         });
     }
-    assert!(!rows.is_empty(), "FR-017 must declare clause-source URLs");
+    assert_eq!(rows.len(), 16, "FR-017 clause-source tuple count");
     rows
 }
 
@@ -303,6 +303,10 @@ fn official_clause_source_urls_match_spec_at_archive_paths() {
                 "{path}"
             );
         }
+        assert!(
+            !findings("candidate.json", source_url.as_bytes(), &tokens).is_empty(),
+            "an unrelated path must refuse {source_url}"
+        );
     }
 }
 
@@ -333,6 +337,31 @@ fn clause_source_paths_refuse_unrelated_lookalike_and_standards_urls() {
                 "{path}"
             );
         }
+    }
+}
+
+#[test]
+#[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
+fn eur_lex_legal_notice_is_limited_to_gdpr_and_ai_act_paths() {
+    let tokens: Vec<String> = Vec::new();
+    let rows = clause_source_rows_from_spec();
+    let legal_notice_row = rows
+        .iter()
+        .find(|row| row.url_path == "/content/legal-notice/legal-notice.html")
+        .expect("FR-017 must scope the EUR-Lex legal notice");
+    let legal_notice = clause_source_url(legal_notice_row);
+
+    for path in rows
+        .iter()
+        .flat_map(|row| [&row.wheel_member, &row.npm_member])
+        .collect::<std::collections::BTreeSet<_>>()
+    {
+        let explicitly_attributed = rows.iter().any(|row| {
+            row.url_path == "/content/legal-notice/legal-notice.html"
+                && (row.wheel_member == *path || row.npm_member == *path)
+        });
+        let observed = findings(path, legal_notice.as_bytes(), &tokens).is_empty();
+        assert_eq!(observed, explicitly_attributed, "{path}");
     }
 }
 
