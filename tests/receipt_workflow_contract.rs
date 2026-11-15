@@ -19,7 +19,7 @@ fn workflow(name: &str) -> Value {
 }
 
 fn assert_permission(job: &Value, expected: &Value, name: &str) {
-    assert_eq!(job["permissions"], expected, "{name} permissions");
+    assert_eq!(&job["permissions"], expected, "{name} permissions");
 }
 
 fn assert_actions_are_structural(steps: &[Value]) {
