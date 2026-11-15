@@ -1671,8 +1671,11 @@ fn tc_651_signing_is_delegated_and_record_sink_has_only_its_declared_dependencie
         boundary.methods,
         [
             "sign_for_public_log",
+            "sign_statement_for_public_log",
             "sign_without_public_log",
-            "signed_payload"
+            "sign_record_without_public_log",
+            "signed_payload",
+            "verification_bundle"
         ]
     );
     assert!(boundary.implementations.is_empty());
@@ -1687,7 +1690,15 @@ fn tc_651_signing_is_delegated_and_record_sink_has_only_its_declared_dependencie
             ),
             (
                 "sign_without_public_log".to_owned(),
-                Some("self.ports.signer".to_owned())
+                Some("self".to_owned())
+            ),
+            (
+                "sign_without_public_log".to_owned(),
+                Some("self.public_log.ports.signer".to_owned())
+            ),
+            (
+                "signed_payload".to_owned(),
+                Some("self.public_log.ports.signer".to_owned())
             ),
             ("signed_payload".to_owned(), Some("verifier".to_owned())),
         ])

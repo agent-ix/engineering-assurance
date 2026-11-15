@@ -532,12 +532,19 @@ receipt = [
   "dep:serde_json_canonicalizer",
   "dep:thiserror",
 ]
+receipt-record = [
+  "receipt",
+  "attestation-signing",
+  "private-git-store",
+  "approval-gate",
+]
 # EA-106: signing additionally uses ambient OIDC and the Sigstore signing
 # client. It includes verification because signed statements use the same
 # representation and policy model.
 attestation-signing = [
   "attestation-verify",
   "record-sink",
+  "dep:base64",
   "dep:sigstore-sign",
   "dep:time",
   "dep:tokio",
@@ -581,6 +588,7 @@ full = [
   "release",
   "release-history",
   "receipt",
+  "receipt-record",
   "scope-footprint",
   "semantics",
   "signature-verify",
@@ -599,6 +607,7 @@ full = [
 ]
 
 [dependencies]
+base64 = { version = "0.22", optional = true }
 ix-cli-kit = { git = "https://github.com/agent-ix/ix-cli-kit", branch = "main", version = "0.1.0", optional = true }
 agent-ix-engineering-assurance-campaign = { path = "campaign/generated/rust", version = "0.0.0", optional = true }
 cap-std = { version = "4", optional = true }

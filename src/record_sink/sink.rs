@@ -9,8 +9,15 @@
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "attestation-verify")]
+use crate::attestation_signing::{BundleVerifier, SourceWorkflowPolicy, WorkflowIdentityPolicy};
+
 use super::config::{ErrorCode, SinkKind, SinkSelection, valid_repository};
+#[cfg(feature = "receipt-record")]
+use super::form::Sha256Digest;
 use super::form::{PrivateRecord, PublicRecord, Record, RecordId, Signature};
+#[cfg(feature = "attestation-verify")]
+use super::leak::PublicStatementProof;
 use super::leak::{CheckRefusal, Offending, PublicPathProof, VisibilityLookup, leak_check};
 
 /// The only protocol literal of a publish result.
@@ -311,6 +318,19 @@ pub trait Signer {
     /// [`SigningFailed`] when the stack fails.
     fn sign_for_public_log(&self, proof: &PublicPathProof<'_>) -> Result<String, SigningFailed>;
 
+    /// Signs one canonical statement after its digest-bearing public record
+    /// passed the fail-closed visibility check.
+    ///
+    /// Implementations that do not support statement signing for the public
+    /// log fail closed by returning [`SigningFailed`].
+    #[cfg(feature = "attestation-verify")]
+    fn sign_statement_for_public_log(
+        &self,
+        _proof: &PublicStatementProof<'_>,
+    ) -> Result<String, SigningFailed> {
+        Err(SigningFailed)
+    }
+
     /// Signs `canonical` with a configuration that writes to no public log.
     ///
     /// # Errors
@@ -318,12 +338,28 @@ pub trait Signer {
     /// [`SigningFailed`] when the stack fails.
     fn sign_without_public_log(&self, canonical: &[u8]) -> Result<String, SigningFailed>;
 
+    /// Signs the public-form payload for a private-store record. The result is
+    /// serialized in the public form's padded-base64 signature field.
+    ///
+    /// Implementations with a distinct bundle representation may override
+    /// this boundary. The default preserves existing signer test doubles.
+    fn sign_record_without_public_log(&self, canonical: &[u8]) -> Result<String, SigningFailed> {
+        self.sign_without_public_log(canonical)
+    }
+
     /// The payload a base64 bundle signs.
     ///
     /// # Errors
     ///
     /// [`SigningFailed`] when the bundle cannot be decoded.
     fn signed_payload(&self, bundle: &str) -> Result<Vec<u8>, SigningFailed>;
+
+    /// Returns the Sigstore bundle JSON used for identity verification.
+    /// Implementations with an encoded public-form signature override this
+    /// boundary; ordinary statement bundle implementations return themselves.
+    fn verification_bundle(&self, bundle: &str) -> Result<String, SigningFailed> {
+        Ok(bundle.to_owned())
+    }
 }
 
 /// Attaches `bundle` to a copy of `public` after checking it signs exactly the
@@ -408,12 +444,77 @@ impl RecordSink for PublicLogSink<'_> {
             }
             Err(CheckRefusal::Unencodable) => return refuse(ErrorCode::SigningFailed),
         };
-        let bundle = self.ports.signer.sign_for_public_log(&proof);
-        let entry = match attach_signature(self.ports.signer, public, proof.signed_bytes(), bundle)
-        {
+        let entry = match attach_signature(
+            self.ports.signer,
+            public,
+            proof.signed_bytes(),
+            self.ports.signer.sign_for_public_log(&proof),
+        ) {
             Ok(record) => CheckedEntry { record },
             Err(code) => return refuse(code),
         };
+        match self.ports.client.send(endpoint, &entry) {
+            Ok(()) => SinkResult::published(kind, record.id()),
+            Err(LogRejected) => refuse(ErrorCode::PublicLogRejected),
+        }
+    }
+}
+
+impl PublicLogSink<'_> {
+    #[cfg(feature = "attestation-verify")]
+    fn publish_with_identity(
+        &self,
+        record: &Record,
+        identity: Option<(
+            &dyn BundleVerifier,
+            &WorkflowIdentityPolicy,
+            &SourceWorkflowPolicy,
+        )>,
+    ) -> SinkResult {
+        let kind = SinkKind::PublicLog;
+        let refuse = |code| SinkResult::refused(kind, record.id(), code);
+        let Some(endpoint) = self.selection.public_log_endpoint.as_deref() else {
+            return refuse(ErrorCode::SinkConfigIncomplete);
+        };
+        let public = record.public();
+        let proof = match leak_check(
+            self.publishing_repo,
+            public,
+            &self.selection.public_linear_teams,
+            self.ports.lookup,
+        ) {
+            Ok(proof) => proof,
+            Err(CheckRefusal::Offending(offending)) => {
+                return SinkResult {
+                    offending: Some(offending),
+                    ..refuse(ErrorCode::PublicSinkPrivateReference)
+                };
+            }
+            Err(CheckRefusal::Unencodable) => return refuse(ErrorCode::SigningFailed),
+        };
+        let bundle = match self.ports.signer.sign_for_public_log(&proof) {
+            Ok(bundle) => bundle,
+            Err(_) => return refuse(ErrorCode::SigningFailed),
+        };
+        if let Some((verifier, policy, source_policy)) = identity {
+            let Ok(raw_bundle) = self.ports.signer.verification_bundle(&bundle) else {
+                return refuse(ErrorCode::SigningFailed);
+            };
+            if !verified_receipt_identity(
+                verifier,
+                proof.signed_bytes(),
+                &raw_bundle,
+                policy,
+                source_policy,
+            ) {
+                return refuse(ErrorCode::SigningFailed);
+            }
+        }
+        let entry =
+            match attach_signature(self.ports.signer, public, proof.signed_bytes(), Ok(bundle)) {
+                Ok(record) => CheckedEntry { record },
+                Err(code) => return refuse(code),
+            };
         match self.ports.client.send(endpoint, &entry) {
             Ok(()) => SinkResult::published(kind, record.id()),
             Err(LogRejected) => refuse(ErrorCode::PublicLogRejected),
@@ -448,8 +549,12 @@ impl RecordSink for PrivateStoreSink<'_> {
         let Ok(canonical) = public.signed_bytes() else {
             return refuse(ErrorCode::SigningFailed);
         };
-        let bundle = self.ports.signer.sign_without_public_log(&canonical);
-        match attach_signature(self.ports.signer, public, &canonical, bundle) {
+        match attach_signature(
+            self.ports.signer,
+            public,
+            &canonical,
+            self.ports.signer.sign_record_without_public_log(&canonical),
+        ) {
             Err(code) => refuse(code),
             Ok(signed) => match self.ports.store.write_public(destination, &signed) {
                 Ok(()) => SinkResult::published(kind, record.id()),
@@ -457,6 +562,64 @@ impl RecordSink for PrivateStoreSink<'_> {
             },
         }
     }
+}
+
+impl PrivateStoreSink<'_> {
+    #[cfg(feature = "attestation-verify")]
+    fn publish_with_identity(
+        &self,
+        record: &Record,
+        identity: Option<(
+            &dyn BundleVerifier,
+            &WorkflowIdentityPolicy,
+            &SourceWorkflowPolicy,
+        )>,
+    ) -> SinkResult {
+        let kind = SinkKind::PrivateStore;
+        let refuse = |code| SinkResult::refused(kind, record.id(), code);
+        let Some(destination) = self.selection.private_store_destination.as_deref() else {
+            return refuse(ErrorCode::SinkConfigIncomplete);
+        };
+        let public = record.public();
+        let Ok(canonical) = public.signed_bytes() else {
+            return refuse(ErrorCode::SigningFailed);
+        };
+        let bundle = match self.ports.signer.sign_record_without_public_log(&canonical) {
+            Ok(bundle) => bundle,
+            Err(_) => return refuse(ErrorCode::SigningFailed),
+        };
+        if let Some((verifier, policy, source_policy)) = identity {
+            let Ok(raw_bundle) = self.ports.signer.verification_bundle(&bundle) else {
+                return refuse(ErrorCode::SigningFailed);
+            };
+            if !verified_receipt_identity(verifier, &canonical, &raw_bundle, policy, source_policy)
+            {
+                return refuse(ErrorCode::SigningFailed);
+            }
+        }
+        match attach_signature(self.ports.signer, public, &canonical, Ok(bundle)) {
+            Err(code) => refuse(code),
+            Ok(signed) => match self.ports.store.write_public(destination, &signed) {
+                Ok(()) => SinkResult::published(kind, record.id()),
+                Err(StoreError) => refuse(ErrorCode::PrivateStorePublicFormFailed),
+            },
+        }
+    }
+}
+
+#[cfg(feature = "attestation-verify")]
+fn verified_receipt_identity(
+    verifier: &dyn BundleVerifier,
+    payload: &[u8],
+    bundle_json: &str,
+    signer_policy: &WorkflowIdentityPolicy,
+    source_policy: &SourceWorkflowPolicy,
+) -> bool {
+    verifier
+        .verify_with_claims(payload, bundle_json, signer_policy)
+        .ok()
+        .flatten()
+        .is_some_and(|claims| source_policy.matches(&claims))
 }
 
 /// The `none` sink: sends and stores nothing.
@@ -505,16 +668,229 @@ impl<'a> SinkLayer<'a> {
     pub const fn register_private_store(&mut self, sink: &'a dyn RecordSink) {
         self.registered_private_store = Some(sink);
     }
-}
 
-impl RecordSink for SinkLayer<'_> {
-    fn publish(&self, record: &Record) -> SinkResult {
+    /// The sink selected by protected repository configuration.
+    #[must_use]
+    pub const fn sink_kind(&self) -> SinkKind {
+        self.selection.sink
+    }
+
+    /// Publishes a record and signs its associated canonical statements using
+    /// the same resolved sink. The private form is retained before any
+    /// statement or public-record signing occurs.
+    ///
+    /// For `public_log`, every statement digest is placed in the associated
+    /// public record and checked by FR-057 before the statement reaches the
+    /// public Sigstore instance. `none` refuses because a receipt requires
+    /// retention.
+    ///
+    /// # Errors
+    ///
+    /// Returns a refused [`SinkResult`] if retention, statement signing, or
+    /// publication fails. No statement bundles are returned on refusal.
+    #[cfg(feature = "receipt-record")]
+    pub fn publish_receipt(
+        &self,
+        record: &Record,
+        canonical_statements: &[Vec<u8>],
+        verifier: &dyn BundleVerifier,
+        signer_policy: &WorkflowIdentityPolicy,
+        source_policy: &SourceWorkflowPolicy,
+    ) -> Result<Vec<String>, SinkResult> {
+        let kind = self.selection.sink;
+        let refuse = |code| SinkResult::refused(kind, record.id(), code);
+        let Some(destination) = self.selection.private_store_destination.as_deref() else {
+            return Err(refuse(ErrorCode::SinkConfigIncomplete));
+        };
+        if canonical_statements.is_empty() || kind == SinkKind::None {
+            return Err(refuse(ErrorCode::PrivateStoreWriteFailed));
+        }
+        if kind == SinkKind::PublicLog && self.selection.public_log_endpoint.is_none() {
+            return Err(refuse(ErrorCode::SinkConfigIncomplete));
+        }
+        if !valid_repository(destination)
+            || destination.eq_ignore_ascii_case(self.publishing_repository)
+        {
+            return Err(refuse(ErrorCode::SinkConfigInvalid));
+        }
+        match self
+            .store
+            .prepare_record(destination, record.private(), record.public(), kind)
+        {
+            Ok(StorePreparation::NewRecord) => {}
+            Ok(StorePreparation::AlreadyPublished) => {
+                return Err(refuse(ErrorCode::PrivateStoreOutcomeIncomplete));
+            }
+            Ok(StorePreparation::AlreadyRefused) => {
+                return Err(refuse(ErrorCode::PrivateStoreRecordPreviouslyRefused));
+            }
+            Ok(StorePreparation::OutcomeIncomplete) => {
+                return Err(refuse(ErrorCode::PrivateStoreOutcomeIncomplete));
+            }
+            Err(StoreError) => return Err(refuse(ErrorCode::PrivateStoreWriteFailed)),
+        }
+
+        let mut bundles = Vec::with_capacity(canonical_statements.len());
+        for statement in canonical_statements {
+            let result = if kind == SinkKind::PublicLog {
+                let mut public = record.public().clone();
+                public.hashes.statement = match Sha256Digest::try_from(format!(
+                    "sha256:{}",
+                    sigstore_verify::crypto::sha256(statement).to_hex()
+                )) {
+                    Ok(digest) => Some(digest),
+                    Err(_) => return Err(refuse(ErrorCode::SigningFailed)),
+                };
+                match super::leak::leak_check_statement(
+                    self.publishing_repository,
+                    &public,
+                    statement,
+                    &self.selection.public_linear_teams,
+                    self.public_log.ports.lookup,
+                ) {
+                    Ok(proof) => self
+                        .public_log
+                        .ports
+                        .signer
+                        .sign_statement_for_public_log(&proof),
+                    Err(super::leak::CheckRefusal::Offending(offending)) => {
+                        let _ = self.store.write_publish_outcome(
+                            destination,
+                            record.id(),
+                            kind,
+                            ApprovalStatementPublishOutcome::Refused,
+                        );
+                        return Err(SinkResult {
+                            offending: Some(offending),
+                            ..refuse(ErrorCode::PublicSinkPrivateReference)
+                        });
+                    }
+                    Err(super::leak::CheckRefusal::Unencodable) => Err(SigningFailed),
+                }
+            } else {
+                self.public_log
+                    .ports
+                    .signer
+                    .sign_without_public_log(statement)
+            };
+            match result {
+                Err(_) => {
+                    let _ = self.store.write_publish_outcome(
+                        destination,
+                        record.id(),
+                        kind,
+                        ApprovalStatementPublishOutcome::Refused,
+                    );
+                    return Err(refuse(ErrorCode::SigningFailed));
+                }
+                Ok(bundle) => {
+                    if !self
+                        .public_log
+                        .ports
+                        .signer
+                        .signed_payload(&bundle)
+                        .is_ok_and(|payload| payload == *statement)
+                    {
+                        let _ = self.store.write_publish_outcome(
+                            destination,
+                            record.id(),
+                            kind,
+                            ApprovalStatementPublishOutcome::Refused,
+                        );
+                        return Err(refuse(ErrorCode::SignaturePayloadMismatch));
+                    }
+                    if !verified_receipt_identity(
+                        verifier,
+                        statement,
+                        &bundle,
+                        signer_policy,
+                        source_policy,
+                    ) {
+                        let _ = self.store.write_publish_outcome(
+                            destination,
+                            record.id(),
+                            kind,
+                            ApprovalStatementPublishOutcome::Refused,
+                        );
+                        return Err(refuse(ErrorCode::SigningFailed));
+                    }
+                    bundles.push(bundle);
+                }
+            }
+        }
+
+        let result =
+            self.publish_prepared_with_identity(record, verifier, signer_policy, source_policy);
+        if result.status != Status::Published {
+            return Err(result);
+        }
+        Ok(bundles)
+    }
+
+    fn publish_prepared(&self, record: &Record) -> SinkResult {
         let kind = self.selection.sink;
         let sink: &dyn RecordSink = match kind {
             SinkKind::None => &NoneSink,
             SinkKind::PublicLog => &self.public_log,
             SinkKind::PrivateStore => self.registered_private_store.unwrap_or(&self.private_store),
         };
+        let result = sink.publish(record);
+        self.write_outcome(record, kind, result)
+    }
+
+    #[cfg(feature = "receipt-record")]
+    fn publish_prepared_with_identity(
+        &self,
+        record: &Record,
+        verifier: &dyn BundleVerifier,
+        signer_policy: &WorkflowIdentityPolicy,
+        source_policy: &SourceWorkflowPolicy,
+    ) -> SinkResult {
+        let kind = self.selection.sink;
+        let result = match kind {
+            SinkKind::None => NoneSink.publish(record),
+            SinkKind::PublicLog => self
+                .public_log
+                .publish_with_identity(record, Some((verifier, signer_policy, source_policy))),
+            SinkKind::PrivateStore => match self.registered_private_store {
+                Some(_) => SinkResult::refused(kind, record.id(), ErrorCode::SigningFailed),
+                None => self
+                    .private_store
+                    .publish_with_identity(record, Some((verifier, signer_policy, source_policy))),
+            },
+        };
+        self.write_outcome(record, kind, result)
+    }
+
+    fn write_outcome(&self, record: &Record, kind: SinkKind, result: SinkResult) -> SinkResult {
+        if kind != SinkKind::None {
+            let Some(destination) = self.selection.private_store_destination.as_deref() else {
+                return SinkResult::refused(kind, record.id(), ErrorCode::SinkConfigIncomplete);
+            };
+            let outcome = if result.status == Status::Published {
+                ApprovalStatementPublishOutcome::Published
+            } else {
+                ApprovalStatementPublishOutcome::Refused
+            };
+            if self
+                .store
+                .write_publish_outcome(destination, record.id(), kind, outcome)
+                .is_err()
+            {
+                return SinkResult::refused(
+                    kind,
+                    record.id(),
+                    ErrorCode::PrivateStoreOutcomeWriteFailed,
+                );
+            }
+        }
+        result
+    }
+}
+
+impl RecordSink for SinkLayer<'_> {
+    fn publish(&self, record: &Record) -> SinkResult {
+        let kind = self.selection.sink;
         if kind == SinkKind::PublicLog && self.selection.public_log_endpoint.is_none() {
             return SinkResult::refused(kind, record.id(), ErrorCode::SinkConfigIncomplete);
         }
@@ -558,28 +934,6 @@ impl RecordSink for SinkLayer<'_> {
                 }
             }
         }
-        let result = sink.publish(record);
-        if kind != SinkKind::None {
-            let Some(destination) = self.selection.private_store_destination.as_deref() else {
-                return SinkResult::refused(kind, record.id(), ErrorCode::SinkConfigIncomplete);
-            };
-            let outcome = if result.status == Status::Published {
-                ApprovalStatementPublishOutcome::Published
-            } else {
-                ApprovalStatementPublishOutcome::Refused
-            };
-            if self
-                .store
-                .write_publish_outcome(destination, record.id(), kind, outcome)
-                .is_err()
-            {
-                return SinkResult::refused(
-                    kind,
-                    record.id(),
-                    ErrorCode::PrivateStoreOutcomeWriteFailed,
-                );
-            }
-        }
-        result
+        self.publish_prepared(record)
     }
 }

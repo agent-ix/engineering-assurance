@@ -124,6 +124,8 @@ pub mod package_membership;
 pub mod producer_execution;
 #[cfg(feature = "receipt")]
 pub mod receipt;
+#[cfg(feature = "receipt-record")]
+pub mod receipt_record;
 #[cfg(feature = "record-sink")]
 pub mod record_sink;
 #[cfg(feature = "release")]

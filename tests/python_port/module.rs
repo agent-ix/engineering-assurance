@@ -1771,11 +1771,11 @@ fn every_matrix_test_reference_has_a_test_case_row() {
     // The check can fail: a coverage row naming an absent test case is caught,
     // and a padded test-case row still counts as present.
     let probe = format!(
-        "{matrix}\n| FR-999 | FR-999-AC-1 | TC-998, TC-999 | x |\n| TC-998  | padded | Unit | P1 | FR-999-AC-1 | x |\n"
+        "{matrix}\n| FR-999 | FR-999-AC-1 | TC-998, TC-1001 | x |\n| TC-998  | padded | Unit | P1 | FR-999-AC-1 | x |\n"
     );
     assert_eq!(
         dangling_test_case_references(&probe),
-        BTreeSet::from(["TC-999".to_owned()])
+        BTreeSet::from(["TC-1001".to_owned()])
     );
 }
 

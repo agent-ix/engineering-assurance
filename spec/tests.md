@@ -254,6 +254,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-056 | FR-056-AC-2 | TC-636 | ✅ `tests/record_sink.rs` passing |
 | FR-056 | FR-056-AC-3 | TC-637 | ✅ `tests/record_sink.rs` passing |
 | FR-056 | FR-056-AC-4 | TC-638 | ✅ `tests/record_sink.rs` passing |
+| FR-056 | FR-056-AC-4 | TC-994 | ✅ Passing |
 | FR-056 | FR-056-AC-5 | TC-639 | ✅ `tests/record_sink.rs` passing |
 | FR-056 | FR-056-AC-6 | TC-640 | ✅ `tests/record_sink.rs` passing |
 | FR-056 | FR-056-AC-7 | TC-641 | ✅ `tests/record_sink.rs` passing |
@@ -296,7 +297,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-064 | FR-064-AC-19 | TC-957 | ✅ `src/approval_statement.rs` refused statement is not verified or counted |
 | FR-064 | FR-064-AC-20 | TC-954, TC-958 | ✅ `src/approval_statement.rs` aggregate status and reason use fixed precedence; only verified statements count toward roles |
 | FR-064 | FR-064-AC-13 | TC-518 | 🚧 Specified |
-| FR-064 | FR-064-AC-14 | TC-519 | 🚧 Specified |
+| FR-064 | FR-064-AC-14 | TC-519, TC-998 | 🚧 `TC-998` checks the receipt sink rejects a valid bundle whose authenticated workflow identity differs from the protected `ReceiptWriter` policy; default-branch/tag invocation cases remain open |
 | FR-064 | FR-064-AC-15 | TC-520 | 🚧 Specified |
 | FR-065 | FR-065-AC-1 | TC-521 | 🚧 Specified |
 | FR-065 | FR-065-AC-2 | TC-522 | 🚧 Specified |
@@ -366,14 +367,14 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-073 | FR-073-AC-4 | TC-580 | 🚧 Specified |
 | FR-073 | FR-073-AC-5 | TC-581 | 🚧 Specified |
 | FR-073 | FR-073-AC-6 | TC-582 | 🚧 Specified |
-| FR-074 | FR-074-AC-1 | TC-583 | 🚧 Specified |
-| FR-074 | FR-074-AC-2 | TC-584 | 🚧 Specified |
-| FR-074 | FR-074-AC-3 | TC-585 | 🚧 Specified |
+| FR-074 | FR-074-AC-1 | TC-583 | ✅ Passing |
+| FR-074 | FR-074-AC-2 | TC-584 | ✅ Passing |
+| FR-074 | FR-074-AC-3 | TC-585 | ✅ Passing |
 | FR-074 | FR-074-AC-4 | TC-586 | 🚧 Specified |
 | FR-074 | FR-074-AC-5 | TC-587 | 🚧 Specified |
 | FR-074 | FR-074-AC-6 | TC-588 | 🚧 Specified |
 | FR-074 | FR-074-AC-7 | TC-589 | 🚧 Specified |
-| FR-075 | FR-075-AC-1 | TC-590 | 🚧 Specified |
+| FR-075 | FR-075-AC-1 | TC-590, TC-999 | 🚧 `TC-999` verifies immutable PR-keyed private-store input retention; full workflow production remains open |
 | FR-075 | FR-075-AC-2 | TC-591 | 🚧 Specified |
 | FR-075 | FR-075-AC-3 | TC-592 | 🚧 Specified |
 | FR-075 | FR-075-AC-4 | TC-593 | 🚧 Specified |
@@ -945,9 +946,9 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-580 | The public record bytes and the git note content for the fixture change contain no model name; the private store holds the BOM under the record's id | Integration | P0 | FR-073-AC-4 | 🚧 |
 | TC-581 | A missing session descriptor yields no BOM and a failed receipt with the failure `contract_missing` | Integration | P0 | FR-073-AC-5 | 🚧 |
 | TC-582 | Two BOMs built from identical session descriptors have different `serialNumber` values and different digests | Integration | P0 | FR-073-AC-6 | 🚧 |
-| TC-583 | A passing fixture change yields three signed statements, a `passed` change record and a `PASSED` summary whose input digests equal the other two statements | Integration | P0 | FR-074-AC-1 | 🚧 |
-| TC-584 | A change whose gate command exits non-zero yields a receipt with status `failed`, failure `gate_failed` and a `FAILED` summary | Integration | P0 | FR-074-AC-2 | 🚧 |
-| TC-585 | A change with an incomplete role set yields status `failed` with `approvals_incomplete`, and the same receipt is produced for a commit that landed with no pull request | Integration | P0 | FR-074-AC-3 | 🚧 |
+| TC-583 | A passing fixture change yields three signed statements, a `passed` change record and a `PASSED` summary whose input digests equal the other two statements | Integration | P0 | FR-074-AC-1 | ✅ |
+| TC-584 | A change whose gate command exits non-zero yields a receipt with status `failed`, failure `gate_failed` and a `FAILED` summary | Integration | P0 | FR-074-AC-2 | ✅ |
+| TC-585 | A change with an incomplete role set yields status `failed` with `approvals_incomplete`, and the same receipt is produced for a commit that landed with no pull request | Integration | P0 | FR-074-AC-3 | ✅ |
 | TC-586 | Altering one statement of the fixture receipt makes the summary's input digest check fail | Integration | P0 | FR-074-AC-4 | 🚧 |
 | TC-587 | The private store holds the full private form for the fixture change before the statements are signed, and holds it also for the failed receipt | Integration | P0 | FR-074-AC-5 | 🚧 |
 | TC-588 | A private repository's receipt, including a run with the private signing stand-in unavailable, makes zero calls to the stand-in public transparency log, and the unavailable run fails with `receipt_private_signing_unavailable` | Integration | P0 | FR-074-AC-6 | 🚧 |
@@ -1001,6 +1002,9 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-636 | The public form holds none of the ticket text, criteria text or model names, the private form holds them, and both carry one record id and no other shared member | Unit | P0 | FR-056-AC-1, FR-056-AC-2, FR-056-AC-10 | ✅ `tests/record_sink.rs` passing |
 | TC-637 | A public or private form with an extra member fails schema validation | Unit | P0 | FR-056-AC-3, NFR-008-M-1, NFR-008-AC-2 | ✅ `tests/record_sink.rs` passing |
 | TC-638 | A public form value outside its member's grammar is rejected before any sink is called | Unit | P0 | FR-056-AC-4 | ✅ `tests/record_sink.rs` passing |
+| TC-994 | The delegated signer encodes Sigstore JSON bundles into the public form's base64 signature field while preserving raw bundles for statement and private-store callers | Unit | P0 | FR-056-AC-4 | ✅ |
+| TC-998 | A correctly payload-bound receipt signature from another workflow identity is refused before the public record or log is written | Unit | P0 | FR-064-AC-14 | ✅ |
+| TC-999 | Receipt input is immutable and round-trips only under the exact repository and pull request key | Integration | P0 | FR-075-AC-1 | ✅ |
 | TC-639 | Changing only the private form leaves the public form's signed bytes and signature unchanged | Unit | P0 | FR-056-AC-5 | ✅ `tests/record_sink.rs` passing |
 | TC-640 | Over generated strings a public member accepts a string only when it matches its grammar | Property | P0 | FR-056-AC-6 | ✅ `tests/record_sink.rs` passing |
 | TC-641 | An approval statement published as a record has the statement digest in the public form and its meaning, approver and pull request only in the private form | Unit | P0 | FR-056-AC-7 | ✅ `tests/record_sink.rs` passing |

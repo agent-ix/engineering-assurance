@@ -61,6 +61,32 @@ pub struct PublicPathProof<'a> {
     signed_bytes: Vec<u8>,
 }
 
+/// Proof that one exact in-toto statement passed the public-path check.
+///
+/// The associated public record carries the statement digest. The public
+/// visibility check is therefore bound to the payload the signer receives.
+#[derive(Debug)]
+#[cfg(feature = "attestation-verify")]
+pub struct PublicStatementProof<'a> {
+    record: &'a PublicRecord,
+    statement_bytes: &'a [u8],
+}
+
+#[cfg(feature = "attestation-verify")]
+impl PublicStatementProof<'_> {
+    /// The public record whose references were checked.
+    #[must_use]
+    pub const fn record(&self) -> &PublicRecord {
+        self.record
+    }
+
+    /// The exact canonical statement bytes authorized by the proof.
+    #[must_use]
+    pub const fn statement_bytes(&self) -> &[u8] {
+        self.statement_bytes
+    }
+}
+
 impl<'a> PublicPathProof<'a> {
     /// The public form the check passed for.
     #[must_use]
@@ -141,6 +167,39 @@ pub fn leak_check<'a>(
     Ok(PublicPathProof {
         record,
         signed_bytes,
+    })
+}
+
+/// Checks that the public record covers `statement_bytes`, then checks every
+/// repository and Linear reference before authorizing public-log signing.
+///
+/// `record.hashes.statement` must equal the SHA-256 digest of the exact
+/// canonical statement bytes. The proof cannot be constructed for a different
+/// payload, and the ordinary fail-closed visibility rules still apply.
+#[cfg(feature = "attestation-verify")]
+pub fn leak_check_statement<'a>(
+    publishing_repo: &str,
+    record: &'a PublicRecord,
+    statement_bytes: &'a [u8],
+    public_linear_teams: &[String],
+    lookup: &dyn VisibilityLookup,
+) -> Result<PublicStatementProof<'a>, CheckRefusal> {
+    let expected = format!(
+        "sha256:{}",
+        sigstore_verify::crypto::sha256(statement_bytes).to_hex()
+    );
+    if record
+        .hashes
+        .statement
+        .as_ref()
+        .is_none_or(|digest| digest.as_str() != expected)
+    {
+        return Err(CheckRefusal::Unencodable);
+    }
+    leak_check(publishing_repo, record, public_linear_teams, lookup)?;
+    Ok(PublicStatementProof {
+        record,
+        statement_bytes,
     })
 }
 
