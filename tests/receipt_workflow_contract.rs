@@ -175,4 +175,16 @@ fn push_caller_and_missing_check_have_the_declared_triggers_and_permissions() {
         .as_array()
         .expect("check steps");
     assert_actions_are_structural(steps);
+    let receipt_missing = steps
+        .iter()
+        .find(|step| {
+            step["run"]
+                .as_str()
+                .is_some_and(|run| run.contains("receipt-missing"))
+        })
+        .expect("receipt-missing invocation");
+    let run = receipt_missing["run"].as_str().expect("shell script");
+    assert!(run.contains("record_publisher_repository"));
+    assert!(run.contains("record_publisher_workflow_path"));
+    assert!(run.contains("record_publisher_ref"));
 }

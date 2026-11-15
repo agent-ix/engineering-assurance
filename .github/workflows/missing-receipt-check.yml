@@ -32,8 +32,10 @@ jobs:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           RECEIPT_WORKFLOW_REF: refs/heads/main
           APPROVAL_WORKFLOW_REF: refs/heads/main
+          RECORD_PUBLISHER_WORKFLOW_REF: refs/heads/main
         run: |
           set -euo pipefail
+          gh auth setup-git
           cargo build --locked --bin engineering-assurance
           request="$(jq -n \
             --arg repository "$PWD" \
@@ -45,5 +47,8 @@ jobs:
             --arg approval_signer_repository "agent-ix/engineering-assurance" \
             --arg approval_signer_workflow_path ".github/workflows/review-gate.yml" \
             --arg approval_signer_ref "$APPROVAL_WORKFLOW_REF" \
-            '{protocol:"engineering-assurance.receipt-missing-request/v1",repository:$repository,github_repository:$github_repository,base_branch:$base_branch,receipt_signer_repository:$receipt_signer_repository,receipt_signer_workflow_path:$receipt_signer_workflow_path,receipt_signer_ref:$receipt_signer_ref,approval_signer_repository:$approval_signer_repository,approval_signer_workflow_path:$approval_signer_workflow_path,approval_signer_ref:$approval_signer_ref,merged_pull_requests:{}}')"
+            --arg record_publisher_repository "agent-ix/engineering-assurance" \
+            --arg record_publisher_workflow_path ".github/workflows/change-receipt.yml" \
+            --arg record_publisher_ref "$RECORD_PUBLISHER_WORKFLOW_REF" \
+            '{protocol:"engineering-assurance.receipt-missing-request/v1",repository:$repository,github_repository:$github_repository,base_branch:$base_branch,receipt_signer_repository:$receipt_signer_repository,receipt_signer_workflow_path:$receipt_signer_workflow_path,receipt_signer_ref:$receipt_signer_ref,approval_signer_repository:$approval_signer_repository,approval_signer_workflow_path:$approval_signer_workflow_path,approval_signer_ref:$approval_signer_ref,record_publisher_repository:$record_publisher_repository,record_publisher_workflow_path:$record_publisher_workflow_path,record_publisher_ref:$record_publisher_ref,merged_pull_requests:{}}')"
           target/debug/engineering-assurance receipt-missing --request "$request"
