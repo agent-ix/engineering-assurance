@@ -25,6 +25,11 @@ signature, is a claim that needs its own evidence.
   documents for `gpg.ssh.allowedSignersFile`. It is required: git refuses to
   verify an SSH signature without it.
 - For kind `commit`, the commit message; for kind `tag`, the tag message.
+- An optional request member `trailer_keys`: an array of at most 16 trailer
+  keys, for example `["Formal-rule"]`, whose values the caller wants read from
+  the same message. Each key is 1 to 64 bytes of ASCII letters, digits and `-`,
+  begins with a letter, and is matched case-insensitively as git matches
+  trailer keys. Omitted, it is the empty array. Origin: VER-98.
 
 ## Outputs
 
@@ -42,6 +47,15 @@ signature, is a claim that needs its own evidence.
   `unrecognized_output`: a commit graded `G` whose `%GS` is empty, and a tag
   git accepted for which `ssh-keygen -Y find-principals` fails or prints
   nothing.
+- `trailers`, present only when the request carried a non-empty `trailer_keys`
+  and a message was read: an object with one member per requested key, spelled
+  as the request spelled it, whose value is the array of that key's trailer
+  values in message order. A key with no trailer in the message yields an empty
+  array, never a missing member and never a default value.
+- A `trailer_keys` member that is not an array of valid keys, holds more than
+  16 keys, or repeats a key (compared case-insensitively) writes the machine
+  error `signature_verify_trailer_keys_invalid` and exits with status 2,
+  without starting git.
 - `signed_off_meaning` is omitted when no message was read (a lightweight tag,
   an unresolved revision, or a trailer read that failed); a message that holds a
   NUL byte, or trailer output that is not valid UTF-8, is a trailer read that
@@ -77,6 +91,17 @@ signature, is a claim that needs its own evidence.
 - The command SHALL expose the meaning as recorded text.
 - The command SHALL NOT interpret the meaning, validate it against a
   vocabulary, or decide that it is sufficient for any purpose.
+- The command SHALL read every `trailer_keys` key with the same git trailer
+  parsing as `Signed-off-meaning:`: `git interpret-trailers --parse` with
+  `--no-divider`, the same tag signature-block removal, the same value trimming
+  and the same UTF-8 and NUL handling, so one parse serves all keys.
+- The command SHALL ignore the repository's `trailer.*` configuration for
+  `trailer_keys` as it does for `Signed-off-meaning:`, so repository
+  configuration cannot add, alter or fabricate a value.
+- The command SHALL NOT interpret, validate or rank a `trailers` value, and the
+  `trailers` members SHALL NOT change a status or a `signer`.
+- The command SHALL report `trailers` for every status that has a readable
+  message, including `signed_bad` and `unsigned`.
 - The command SHALL report the trailer for every status that has a readable
   message, including `signed_bad`, and the trailer SHALL NOT change a status.
 - The trailer collection SHALL perform no I/O; the file read and git calls live
@@ -102,6 +127,13 @@ signature, is a claim that needs its own evidence.
 | FR-037-AC-6 | A message with no such trailer yields `missing` with no values, and a trailer with an empty value yields `present` with an empty value. | Test |
 | FR-037-AC-7 | A `signed_bad` and an `unsigned` commit that carry the trailer report its values and keep their status. | Test |
 | FR-037-AC-8 | A signed annotated tag whose message carries the trailer yields `present` with that value read from the tag message, not from the tagged commit's message, despite the appended signature block. | Test |
+| FR-037-AC-10 | A commit whose message carries two `Formal-rule:` trailers and a request with `trailer_keys` `["Formal-rule"]` yield `trailers` `{"Formal-rule": [both values in order]}`, and the same message read with `["formal-rule"]` yields the values under the key spelled `formal-rule`. | Test |
+| FR-037-AC-11 | A repository whose local config sets `trailer.formal-rule.key` or `trailer.formal-rule.command` to produce a value yields no such value in `trailers` for a message without the trailer, and the same for `Signed-off-meaning:`. | Test |
+| FR-037-AC-12 | A message with a `---` line between the subject and a real `Formal-rule:` trailer block yields that trailer's value in `trailers`. | Test |
+| FR-037-AC-13 | A requested key absent from the message yields an empty array under that key, and a request without `trailer_keys` yields a result with no `trailers` member. | Test |
+| FR-037-AC-14 | A `trailer_keys` value that is not an array, holds a key with a space or colon, an empty key, 17 keys, or the same key twice with different case yields `signature_verify_trailer_keys_invalid` and exit status 2, and does not start git. | Test |
+| FR-037-AC-15 | A `signed_bad` commit, an `unsigned` commit and a signed annotated tag whose message carry `Formal-rule:` trailers report them in `trailers`, with the tag value read from the tag message and not the tagged commit, and each keeps its status. | Test |
+| FR-037-AC-16 | A `Formal-rule:` line in the message body outside the trailer block is not returned in `trailers`. | Test |
 
 ## Dependencies
 
