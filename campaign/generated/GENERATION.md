@@ -6,8 +6,8 @@ The source of these wire types is the authored Filament bundle at
 
 Regenerate by lifting that bundle with the FCD extraction frontend and running
 the FCD target generator over the result. The output is generated, never
-hand-edited. It was last generated with filament-core-data at commit d7a9b7b6
-(`<ea>` is this repository, run from the fcd checkout):
+hand-edited. Run these from a filament-core-data checkout (`<ea>` is this
+repository):
 
 ```
 cargo run --locked -p agent-ix-extraction-frontend --bin extraction-frontend -- lift --bundle <ea>/campaign/contract --module <ea>/engineering_assurance --out <ea>/campaign/generated/semantic-ir.json
