@@ -1,58 +1,31 @@
 ---
-id: SR-20261113192971
-title: "Gap analysis — engineering-assurance receipt implementation"
+id: SR-20261115040602
+title: "Gap analysis — EA-108 receipt workflow structural test"
 type: SpecReview
 analysis: gap-analysis
-scope: "agent-ix/engineering-assurance; receipt implementation and FR-070, FR-074–078, NFR-011 traceability"
+scope: "agent-ix/engineering-assurance#280; FR-070-AC-3; changed receipt-workflow test evidence"
 review_set: subset
 relationships:
-  - target: "ix://agent-ix/engineering-assurance"
-    type: references
+  - target: "ix://agent-ix/engineering-assurance/FR-070"
+    type: reviews
 ---
 
 ## Summary
 
-Quire 0.45.0 / engine 0.60.0 computed the full 724-criterion matrix on PR #272: 87 criteria are untagged and 16 are tagged only by ignored tests. The reviewed receipt scope has 25 untagged obligations; compared with `origin/main` the PR improves the total untagged count from 104 to 87 and adds no new untagged status. The changed source is linked to existing FR-070/074–078 requirements, and no unfinished markers or source stubs were found.
+Checked the computed FR-070 matrix row and the PR's new workflow test tags against their actual assertions. The matrix's FR-070-AC-3 row is tagged by an older approval-gate test that does not verify action-reference structure; the new receipt tests are not represented by a matching Test Case row, while TC-559 still describes SHA-pin behavior that Peter has removed.
 
 ## Verdict
 
-**FAIL** — the strict matrix exits 1 for the repository’s 87 untagged and 16 ignored-only criteria; 25 untagged obligations remain in the receipt scope. The PR adds no workflow files, so the end-to-end push receipt and missing-receipt integration remains unverified.
+**CONDITIONAL** — the matrix record and Test Case text do not faithfully describe the changed criterion or the added evidence.
 
 ## Findings
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
-| FND-001 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-070-AC-4 |
-| FND-002 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-070-AC-7 |
-| FND-003 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-070-AC-8 |
-| FND-004 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-070-AC-10 |
-| FND-005 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-074-AC-1 |
-| FND-006 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-074-AC-2 |
-| FND-007 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-074-AC-3 |
-| FND-008 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-074-AC-4 |
-| FND-009 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-074-AC-5 |
-| FND-010 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-074-AC-6 |
-| FND-011 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-074-AC-7 |
-| FND-012 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-075-AC-1 |
-| FND-013 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-075-AC-2 |
-| FND-014 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-075-AC-3 |
-| FND-015 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-075-AC-4 |
-| FND-016 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-075-AC-5 |
-| FND-017 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-075-AC-6 |
-| FND-018 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-075-AC-7 |
-| FND-019 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-076-AC-3 |
-| FND-020 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-076-AC-4 |
-| FND-021 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-076-AC-5 |
-| FND-022 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-076-AC-7 |
-| FND-023 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | NFR-011-M-1 |
-| FND-024 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | NFR-011-M-2 |
-| FND-025 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | NFR-011-M-3 |
-| FND-026 | high | No non-ignored test binds this criterion; the required workflow/receipt behavior remains unverified in this review set. | FR-076-AC-1 |
+| FND-001 | medium | The computed matrix reports FR-070-AC-3 as tagged through `tests/approval_gate_cli.rs::workflow_is_explicitly_opt_in_and_has_no_signing_identity`, but that test checks the review-gate's opt-in permissions and triggers, not action-reference structure or checkout credentials. The new receipt tests tag the AC directly but lack a matching Test Case ID; `spec/tests.md` TC-559 still asserts 40-character SHA pins. Correct the TC mapping and stale wording so the matrix identifies the new assertion as evidence. | spec/tests.md:340,919; tests/approval_gate_cli.rs:223-229; tests/receipt_workflow_contract.rs:52-58,105-110 |
 
 ## Coverage
 
-- Matrix: `quire matrix --scope . --format json --pretty` on quire 0.45.0 (engine 0.60.0); `quire matrix --scope . --strict` exited 1 with 87 untagged criteria and 16 criteria tagged only by ignored tests.
-- Receipt scope: 56 obligations inspected; 27 tagged, 25 untagged, 4 `method-without-symbol` inspection obligations.
-- The PR adds no untagged statuses relative to origin/main. It does not cover the missing workflow behaviors in FR-074/075 or the notes/publish behaviors FR-076-AC-3/4/5/7.
-- Reverse-gap scan found no TODO/FIXME/stub markers in changed production code. Optional intent↔test↔code semantic review was not requested and was skipped.
+- `quire matrix --scope . --format tsv` — FR-070-AC-3 is `tagged` only through the unrelated TC-925 binder above; it does not list the new receipt-workflow test as its binder. The matrix also has unrelated repository-wide untagged criteria, not attributed to this PR.
+- Read the new test bodies and the criterion-to-Test-Case rows directly; no hand-written matrix was used.
 - Plan completion: not assessed.

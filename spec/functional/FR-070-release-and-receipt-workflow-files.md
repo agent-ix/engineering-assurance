@@ -59,7 +59,7 @@ Values that an outside party can influence (tag and branch names, commit message
 - Each workflow file SHALL NOT declare the `pull_request_target` or `workflow_run` trigger.
 - Each job SHALL pass an untrusted context value to a script only through `env:`.
 - Each job SHALL NOT interpolate an untrusted context value into a `run:` script.
-- Each action reference SHALL be structurally valid; a full commit SHA is not required unless a concrete reason calls for one.
+- Each external action reference SHALL match `owner/repository[/action/path...]@ref`, with non-empty owner, repository, optional action-path, and ref segments that contain no whitespace; the action and ref are separated by exactly one `@`.
 - Each checkout step SHALL set `persist-credentials: false`.
 - The `gates` job SHALL NOT hold `id-token: write`, `attestations: write` or `contents: write`.
 - Each signing job SHALL NOT run code from the repository under change.
@@ -99,7 +99,7 @@ Values that an outside party can influence (tag and branch names, commit message
 | --- | --- | --- |
 | FR-070-AC-1 | Engineering Assurance's test parses only its checked-in `.github/workflows/release-attestation.yml` reusable workflow and confirms its `workflow_call` trigger, jobs and per-job permissions match the table; each adopter's tests parse only its own checked-in caller workflows. No parsed workflow declares `pull_request_target` or `workflow_run`. | Test |
 | FR-070-AC-2 | No `run:` value in any file contains an expression over `github.ref_name`, `github.head_ref`, an event title or body, a commit message or `inputs.`; each such value appears only under `env:`. | Test |
-| FR-070-AC-3 | Workflow parsing confirms action references are structurally valid and every checkout step has `persist-credentials: false`; it does not require or test SHA pins. | Test |
+| FR-070-AC-3 | Workflow parsing confirms every external action reference uses `owner/repository[/action/path...]@ref`, with non-empty slash-separated segments and no whitespace or additional `@`, and every checkout step has `persist-credentials: false`; it does not require or test SHA pins. | Test |
 | FR-070-AC-4 | The `gates` job holds only `contents: read`, the `record` job runs no step that executes a repository file or a command from the receipt policy, and the `notes` job holds no `id-token`. | Test |
 | FR-070-AC-5 | No step in any workflow file listed in this requirement invokes an agent harness or model client. Engineering Assurance inspects only its reusable workflow; each adopter inspects only its own checked-in workflow files. | Inspection |
 | FR-070-AC-6 | A `change-receipt.yml` run with a `commit` input that is not the pushed commit fails with `receipt_input_commit_mismatch`, and a `release-attestation.yml` run with a `tag` input that is not the triggering tag fails with `release_input_tag_mismatch`, in both cases before any signing step. | Test |

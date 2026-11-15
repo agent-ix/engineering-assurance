@@ -8,6 +8,10 @@ use std::{fs, path::Path};
 use ix_trace_rs::trace;
 use serde_json::Value;
 
+mod common;
+
+use common::is_structural_external_action_reference;
+
 fn repository_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
 }
@@ -24,13 +28,13 @@ fn assert_permission(job: &Value, expected: &Value, name: &str) {
 
 fn assert_actions_are_structural(steps: &[Value]) {
     for step in steps {
-        if let Some(reference) = step["uses"].as_str() {
+        if let Some(reference) = step["uses"].as_str()
+            && !reference.starts_with("./")
+        {
             assert!(
-                !reference.starts_with("./"),
-                "actions are external references"
+                is_structural_external_action_reference(reference),
+                "external action reference has a valid owner/repository/path@ref shape: {reference}"
             );
-            let (_, version) = reference.split_once('@').expect("action has a version ref");
-            assert!(!version.trim().is_empty(), "action ref is non-empty");
         }
         if let Some(run) = step["run"].as_str() {
             assert!(
@@ -51,6 +55,7 @@ fn assert_actions_are_structural(steps: &[Value]) {
 }
 
 #[trace(
+    "TC-559",
     "FR-070-AC-1",
     "FR-070-AC-3",
     "FR-070-AC-4",
@@ -105,6 +110,37 @@ fn receipt_workflow_jobs_have_exact_permissions_and_keep_code_out_of_record_job(
             .as_str()
             .is_some_and(|run| run.contains("statements_not_retained"))
     }));
+}
+
+#[trace("TC-559", "FR-070-AC-3")]
+#[test]
+fn action_reference_structure_rejects_missing_or_malformed_components() {
+    for valid in [
+        "actions/checkout@v7",
+        "owner/repository/path/to/action@v1.2.3",
+        "owner/repository@refs/tags/v2",
+    ] {
+        assert!(
+            is_structural_external_action_reference(valid),
+            "valid action reference rejected: {valid}"
+        );
+    }
+
+    for invalid in [
+        "@v4",
+        "owner/@v4",
+        "/repository@v4",
+        "owner/repository@",
+        "owner//repository@v4",
+        "owner/repository@v4@extra",
+        "owner/repository@v4 extra",
+        "owner/repository@refs//heads/main",
+    ] {
+        assert!(
+            !is_structural_external_action_reference(invalid),
+            "malformed action reference accepted: {invalid}"
+        );
+    }
 }
 
 #[trace("FR-070-AC-1", "FR-070-AC-3", "FR-075-AC-1", "FR-076-AC-1")]
