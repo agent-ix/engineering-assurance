@@ -57,8 +57,7 @@ fn assert_actions_are_structural(steps: &[Value]) {
     "FR-070-AC-1",
     "FR-070-AC-3",
     "FR-070-AC-4",
-    "FR-070-AC-5",
-    "FR-075-AC-6"
+    "FR-070-AC-5"
 )]
 #[test]
 fn receipt_workflow_jobs_have_exact_permissions_and_keep_code_out_of_record_job() {

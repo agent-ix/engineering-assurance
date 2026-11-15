@@ -385,7 +385,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-075 | FR-075-AC-3 | TC-592 | 🚧 Specified |
 | FR-075 | FR-075-AC-4 | TC-593 | 🚧 Specified |
 | FR-075 | FR-075-AC-5 | TC-594 | 🚧 Specified |
-| FR-075 | FR-075-AC-6 | TC-595 | 🚧 Specified |
+| FR-075 | FR-075-AC-6 | TC-595 | 🚧 Specified; no test implementation exists yet for the adversarial signing-token/tool fixture |
 | FR-075 | FR-075-AC-7 | TC-596 | 🚧 Specified |
 | FR-076 | FR-076-AC-1 | TC-597 | 🚧 Specified |
 | FR-076 | FR-076-AC-2 | TC-598 | 🚧 Specified |
@@ -965,7 +965,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-592 | A gate that exits non-zero yields a failed receipt, and the default branch ref is unchanged by the failed run | Integration | P0 | FR-075-AC-3 | 🚧 |
 | TC-593 | A receipt policy on the pushed branch that differs from the protected base branch's does not change the gates that run | Integration | P0 | FR-075-AC-4 | 🚧 |
 | TC-594 | A commit before `adopted_at` gets no receipt and is not reported by the missing-receipt check | Integration | P0 | FR-075-AC-5 | 🚧 |
-| TC-595 | A gate command in the fixture receipt policy that tries to read the signing token or run the signing tooling runs only in the `gates` job, which has neither, receives no secrets and runs on a GitHub-hosted or ephemeral runner | Integration | P0 | FR-075-AC-6 | 🚧 |
+| TC-595 | A gate command in the fixture receipt policy that tries to read the signing token or run the signing tooling runs only in the `gates` job, which has neither, receives no secrets and runs on a GitHub-hosted or ephemeral runner | Integration | P0 | FR-075-AC-6 | 🚧 No test implementation exists yet; static permission inspection is not this adversarial fixture |
 | TC-596 | A repository on sink `none` fails with `receipt_private_store_required` and no receipt is written | Integration | P0 | FR-075-AC-7 | 🚧 |
 | TC-597 | A fixture receipt appears as a note of three JSON lines on the pushed commit under the notes ref, and the note survives a second push to the default branch | Integration | P0 | FR-076-AC-1 | 🚧 |
 | TC-598 | A note whose content would exceed 1 MiB is refused with `receipt_note_too_large` and no note is written | Integration | P0 | FR-076-AC-2 | 🚧 |
