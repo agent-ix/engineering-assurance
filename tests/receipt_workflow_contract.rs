@@ -18,7 +18,7 @@ fn workflow(name: &str) -> Value {
     yaml_serde::from_slice(&bytes).expect("receipt workflow parses as YAML")
 }
 
-fn assert_permission(job: &Value, expected: Value, name: &str) {
+fn assert_permission(job: &Value, expected: &Value, name: &str) {
     assert_eq!(job["permissions"], expected, "{name} permissions");
 }
 
@@ -73,17 +73,17 @@ fn receipt_workflow_jobs_have_exact_permissions_and_keep_code_out_of_record_job(
     let jobs = &workflow["jobs"];
     assert_permission(
         &jobs["gates"],
-        serde_json::json!({"contents":"read"}),
+        &serde_json::json!({"contents":"read"}),
         "gates",
     );
     assert_permission(
         &jobs["record"],
-        serde_json::json!({"contents":"read", "id-token":"write"}),
+        &serde_json::json!({"contents":"read", "id-token":"write"}),
         "record",
     );
     assert_permission(
         &jobs["notes"],
-        serde_json::json!({"contents":"write"}),
+        &serde_json::json!({"contents":"write"}),
         "notes",
     );
 
@@ -118,7 +118,7 @@ fn push_caller_and_missing_check_have_the_declared_triggers_and_permissions() {
     assert_eq!(receipt["with"]["commit"], "${{ github.sha }}");
     assert_permission(
         receipt,
-        serde_json::json!({"contents":"write", "id-token":"write"}),
+        &serde_json::json!({"contents":"write", "id-token":"write"}),
         "receipt caller",
     );
 
