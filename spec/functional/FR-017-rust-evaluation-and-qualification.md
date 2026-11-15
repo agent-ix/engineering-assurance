@@ -212,7 +212,20 @@ checking, manifest validation, and qualification assertions to Rust.
   prohibited semantic-content, unapproved-URL, long encoded-payload, and
   protected-token findings; the exact Cargo registry URL exceptions for
   `Cargo.lock` and `deny.toml`; the JSON Schema draft-07 URL-prefix exception;
-  and the `LICENSE` URL exception.
+  and the `LICENSE` URL exception. The project-metadata URL context SHALL
+  include the exact `package.json` root path and the exact `package/package.json`
+  npm archive path, using only the existing project-metadata URL values and
+  GitHub organization boundary. These path exceptions SHALL NOT admit other
+  URLs, other JSON paths, or package content as project metadata. The content
+  policy SHALL also admit only these official clause-source URLs at their
+  matching clause JSON paths, with an optional single `package/` archive-root
+  prefix: scheme `https`, host `www.ecfr.gov`, path
+  `/on/2026-11-12/title-45/subtitle-A/subchapter-C/part-164/subpart-C` at
+  `clauses/us-hhs-45-cfr-164-subpart-c-2026-11-12.json`; and scheme `https`,
+  host `eur-lex.europa.eu`, path `/eli/reg/2017/745/2026-07-19/eng` at
+  `clauses/eu-mdr-2017-745-2026-07-19.json`. These are exact URL-component and
+  path matches; other authorities, versions, URL suffixes, lookalike hosts,
+  and the same URLs at other paths SHALL remain unapproved.
 - Exempt semantic-policy phrases only in `AGENTS.md`, `CONTENT_RIGHTS.md`,
   `content-rights.yaml`, `src/content_rights.rs`, and
   `tests/content_rights_parity.rs`. During additive parity, apply the same
@@ -411,7 +424,9 @@ checking, manifest validation, and qualification assertions to Rust.
   observation.
 - Every regular archive member SHALL pass the pure Rust content-rights policy.
 - A member whose final path component is `LICENSE` SHALL use the license policy
-  identity.
+  identity, including npm `package/LICENSE` and wheel
+  `*.dist-info/licenses/LICENSE` members. The archive adapter SHALL preserve
+  the member bytes while selecting that policy identity.
 - Every other archive member SHALL use its validated normalized package path
   as the content-rights policy identity.
 - Package-audit protected-token input SHALL use the same bounded environment
@@ -547,7 +562,7 @@ byte mismatch refuses the package audit without a success result.
 | FR-017-AC-2 | The pure Rust boundary preserves the retained evaluation contract over the declared qualification population and deterministically withholds aggregation for every missing, duplicate, malformed, unsupported, unavailable, failed, changed-governing-identity, changed-workflow, unsupported-addition, invalid-transcript-reference, invalid-count, outcome-mismatch, and terminal-pair case; input permutation cannot change the result. | Test (TC-110) |
 | FR-017-AC-3 | Rust package, rights, manifest, integration, and publication-refusal checks match the retained pass/fail corpus; the package-audit adapter builds, bounds, decodes, audits, installs, and compares the retained wheel and npm distributions offline and rejects extra, missing, duplicate, unsafe, linked, special, oversized, rights-denied, escaping, or byte-divergent members. | Test (TC-111) |
 | FR-017-AC-4 | Static inspection finds only declarative dispatch in package-manager and host configuration; qualification is performed locally and real-agent evaluation, publication, and release operations remain explicit manual actions. The only additional workflow permitted is `.github/workflows/release-attestation.yml` with `workflow_call` as its sole trigger, artifact handoff only between verification and signing jobs, and no package-publish step; every other workflow remains subject to the existing manual-trigger, opt-in review-gate, package-publish, and release-publish checks. | Test (TC-112) |
-| FR-017-AC-5 | The pure Rust content-rights classifier matches every retained finding class and exception, rejects unsafe paths without echoing them, preserves Unicode protected-token matching, emits no matched content, and returns deterministic typed findings without filesystem, environment, child-program, network, or clock access. | Test (TC-119) |
+| FR-017-AC-5 | The pure Rust content-rights classifier matches every retained finding class and exception, including existing project-metadata URL values only at `package.json` and `package/package.json`; the exact eCFR and EUR-Lex host/path combinations only at their specified clause JSON paths (with an optional single npm `package/` prefix); and the license policy identity for `package/LICENSE` and wheel `*.dist-info/licenses/LICENSE`. It rejects unsafe paths, unrelated or lookalike URLs, and those URL components at other paths without echoing them; preserves Unicode protected-token matching; emits no matched content; and returns deterministic typed findings without filesystem, environment, child-program, network, or clock access. | Test (TC-119) |
 | FR-017-AC-6 | For every caller-supplied expected allowlist and observed file-member sequence within the declared ceilings, the pure Rust membership classifier matches retained extra/missing behavior on the shared safe unique domain, additionally rejects unsafe or duplicate membership without disclosing unsafe paths, remains permutation-invariant, and performs no filesystem, environment, child-program, network, clock, archive-decoding, or package-format selection. | Test (TC-120) |
 | FR-017-AC-7 | For the retained valid module and every declared malformed-manifest, schema, registry, resource, frontmatter, and heading case within the declared ceilings, the pure Rust manifest classifier accepts or fails closed through typed deterministic findings, consumes rather than copies authoritative schemas, and performs no filesystem, environment, child-program, network, or clock access. | Test (TC-121) |
 | FR-017-AC-8 | The native manifest host adapter validates the retained module through explicit repository, authoritative-schema, and authoritative-registry roots, emits one versioned result, and refuses invalid roots or unsafe/missing/linked/special/escaping/over-limit resources before the pure qualifier runs. | Test (TC-131) |
