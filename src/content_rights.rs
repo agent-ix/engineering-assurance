@@ -51,6 +51,65 @@ const SEMANTIC_POLICY_FILES: &[&str] = &[
     "tests/content_rights_parity.rs",
 ];
 
+const OFFICIAL_CLAUSE_SOURCE_URLS: &[(&str, &str)] = &[
+    (
+        "spec_clauses_us_health/clauses/us-hhs-45-cfr-164-subpart-c-2026-11-12.json",
+        concat!(
+            "https:",
+            "//www.ecfr.gov/on/2026-11-12/title-45/subtitle-A/subchapter-C/part-164/subpart-C"
+        ),
+    ),
+    (
+        "package/clauses/us-hhs-45-cfr-164-subpart-c-2026-11-12.json",
+        concat!(
+            "https:",
+            "//www.ecfr.gov/on/2026-11-12/title-45/subtitle-A/subchapter-C/part-164/subpart-C"
+        ),
+    ),
+    (
+        "spec_clauses_eu_law/clauses/eu-mdr-2017-745-2026-07-19.json",
+        concat!(
+            "https:",
+            "//eur-lex.europa.eu/eli/reg/2017/745/2026-07-19/eng"
+        ),
+    ),
+    (
+        "package/clauses/eu-mdr-2017-745-2026-07-19.json",
+        concat!(
+            "https:",
+            "//eur-lex.europa.eu/eli/reg/2017/745/2026-07-19/eng"
+        ),
+    ),
+    (
+        "spec_clauses_eu_law/clauses/eu-mdcg-mdcg-2019-16-rev1.json",
+        concat!(
+            "https:",
+            "//health.ec.europa.eu/document/download/b23b362f-8a56-434c-922a-5b3ca4d0a7a1_en?filename=md_cybersecurity_en.pdf"
+        ),
+    ),
+    (
+        "package/clauses/eu-mdcg-mdcg-2019-16-rev1.json",
+        concat!(
+            "https:",
+            "//health.ec.europa.eu/document/download/b23b362f-8a56-434c-922a-5b3ca4d0a7a1_en?filename=md_cybersecurity_en.pdf"
+        ),
+    ),
+    (
+        "spec_clauses_eu_law/clauses/eu-mdcg-mdcg-2019-16-rev1.json",
+        concat!(
+            "https:",
+            "//health.ec.europa.eu/medical-devices-sector/new-regulations/guidance-mdcg-endorsed-documents-and-other-guidance_en"
+        ),
+    ),
+    (
+        "package/clauses/eu-mdcg-mdcg-2019-16-rev1.json",
+        concat!(
+            "https:",
+            "//health.ec.europa.eu/medical-devices-sector/new-regulations/guidance-mdcg-endorsed-documents-and-other-guidance_en"
+        ),
+    ),
+];
+
 /// Whether a candidate tree entry is a regular file or symbolic link.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ContentEntryKind {
@@ -375,7 +434,7 @@ fn whole_file_finding(
     if !TEXT_SUFFIXES.contains(&suffix.as_str()) {
         return Some(ContentRightsCategory::UnreviewedFileType);
     }
-    if bytes.len() > MAX_TEXT_BYTES && path != "LICENSE" {
+    if bytes.len() > MAX_TEXT_BYTES && !is_license_path(path) {
         return Some(ContentRightsCategory::OversizedTextFile);
     }
     bytes
@@ -475,7 +534,7 @@ fn append_policy_findings(
             }
         }
     }
-    if path != "LICENSE"
+    if !is_license_path(path)
         && patterns
             .url
             .find_iter(line)
@@ -602,7 +661,8 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         || path.ends_with(".claude-plugin/plugin.json")
         || path.ends_with(".codex-plugin/plugin.json")
         || path.ends_with(".github/plugin/plugin.json")
-        || path.ends_with(".dist-info/METADATA");
+        || path.ends_with(".dist-info/METADATA")
+        || matches!(path, "package.json" | "package/package.json");
     let plugin_help_doc = matches!(
         path,
         "setup.md" | "engineering_assurance/skills/assurance-onboarding/SKILL.md"
@@ -655,8 +715,15 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         || cargo_manifest && is_approved_dependency_url
         || project_metadata && (url == discord_badge || url == discord_invite)
         || project_metadata && (url == agent_ix_bare || url.starts_with(agent_ix_org_prefix))
+        || OFFICIAL_CLAUSE_SOURCE_URLS
+            .iter()
+            .any(|(member_path, source_url)| path == *member_path && url == *source_url)
         || plugin_help_doc
             && (url == plugin_setup_url || url == marketplace_url || url == discord_invite)
+}
+
+fn is_license_path(path: &str) -> bool {
+    path.rsplit('/').next() == Some("LICENSE")
 }
 
 fn contains_encoded_payload(line: &str) -> bool {

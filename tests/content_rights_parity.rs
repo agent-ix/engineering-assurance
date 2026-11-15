@@ -73,6 +73,11 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
         ("deny.toml", git_dependency_url.as_str()),
         ("candidate.json", schema_url.as_str()),
         ("LICENSE", license_url.as_str()),
+        ("package/LICENSE", license_url.as_str()),
+        (
+            "engineering_assurance-0.8.2.dist-info/licenses/LICENSE",
+            license_url.as_str(),
+        ),
         ("src/content_rights.rs", "clause inventory"),
         ("tests/content_rights_parity.rs", "legal advice"),
         ("AGENTS.md", "applicability matrix"),
@@ -168,7 +173,12 @@ fn project_metadata_agent_ix_exemption_refuses_look_alike_orgs() {
     let bare_org_url = ["https:", "//github.com/agent-ix"].concat();
     let org_prefixed_url = ["https:", "//github.com/agent-ix/quoin"].concat();
     let look_alike_org_url = ["https:", "//github.com/agent-ix-evil/x"].concat();
-    for path in ["README.md", ".claude-plugin/plugin.json"] {
+    for path in [
+        "README.md",
+        ".claude-plugin/plugin.json",
+        "package.json",
+        "package/package.json",
+    ] {
         assert!(
             findings(path, bare_org_url.as_bytes(), &tokens).is_empty(),
             "{path} must admit the bare agent-ix org URL"
@@ -186,6 +196,126 @@ fn project_metadata_agent_ix_exemption_refuses_look_alike_orgs() {
         !findings("candidate.md", bare_org_url.as_bytes(), &tokens).is_empty(),
         "a non-project-metadata file must not inherit this exemption"
     );
+    for path in [
+        "nested/package.json",
+        "package/child/package.json",
+        "other/package/package.json",
+    ] {
+        assert!(
+            !findings(path, org_prefixed_url.as_bytes(), &tokens).is_empty(),
+            "{path} must not inherit package metadata context by suffix"
+        );
+    }
+}
+
+#[test]
+#[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
+fn official_clause_source_urls_match_exact_archive_paths() {
+    let sources = [
+        (
+            "spec_clauses_us_health/clauses/us-hhs-45-cfr-164-subpart-c-2026-11-12.json",
+            concat!(
+                "https:",
+                "//www.ecfr.gov/on/2026-11-12/title-45/subtitle-A/subchapter-C/part-164/subpart-C"
+            ),
+        ),
+        (
+            "package/clauses/us-hhs-45-cfr-164-subpart-c-2026-11-12.json",
+            concat!(
+                "https:",
+                "//www.ecfr.gov/on/2026-11-12/title-45/subtitle-A/subchapter-C/part-164/subpart-C"
+            ),
+        ),
+        (
+            "spec_clauses_eu_law/clauses/eu-mdr-2017-745-2026-07-19.json",
+            concat!(
+                "https:",
+                "//eur-lex.europa.eu/eli/reg/2017/745/2026-07-19/eng"
+            ),
+        ),
+        (
+            "package/clauses/eu-mdr-2017-745-2026-07-19.json",
+            concat!(
+                "https:",
+                "//eur-lex.europa.eu/eli/reg/2017/745/2026-07-19/eng"
+            ),
+        ),
+        (
+            "spec_clauses_eu_law/clauses/eu-mdcg-mdcg-2019-16-rev1.json",
+            concat!(
+                "https:",
+                "//health.ec.europa.eu/document/download/b23b362f-8a56-434c-922a-5b3ca4d0a7a1_en?filename=md_cybersecurity_en.pdf"
+            ),
+        ),
+        (
+            "package/clauses/eu-mdcg-mdcg-2019-16-rev1.json",
+            concat!(
+                "https:",
+                "//health.ec.europa.eu/document/download/b23b362f-8a56-434c-922a-5b3ca4d0a7a1_en?filename=md_cybersecurity_en.pdf"
+            ),
+        ),
+        (
+            "spec_clauses_eu_law/clauses/eu-mdcg-mdcg-2019-16-rev1.json",
+            concat!(
+                "https:",
+                "//health.ec.europa.eu/medical-devices-sector/new-regulations/guidance-mdcg-endorsed-documents-and-other-guidance_en"
+            ),
+        ),
+        (
+            "package/clauses/eu-mdcg-mdcg-2019-16-rev1.json",
+            concat!(
+                "https:",
+                "//health.ec.europa.eu/medical-devices-sector/new-regulations/guidance-mdcg-endorsed-documents-and-other-guidance_en"
+            ),
+        ),
+    ];
+    let tokens: Vec<String> = Vec::new();
+
+    for (path, source_url) in sources {
+        assert!(
+            findings(path, source_url.as_bytes(), &tokens).is_empty(),
+            "the declared official source must pass at {path}"
+        );
+        assert!(
+            !findings("candidate.json", source_url.as_bytes(), &tokens).is_empty(),
+            "the source URL must not pass at an unrelated path"
+        );
+    }
+
+    let unrelated_clause_urls = [
+        (
+            "spec_clauses_us_health/clauses/us-hhs-45-cfr-164-subpart-c-2026-11-12.json",
+            concat!(
+                "https:",
+                "//www.ecfr.gov.example.invalid/on/2026-11-12/title-45/subtitle-A/subchapter-C/part-164/subpart-C"
+            ),
+        ),
+        (
+            "package/clauses/eu-mdr-2017-745-2026-07-19.json",
+            concat!(
+                "https:",
+                "//eur-lex.europa.eu.example.invalid/eli/reg/2017/745/2026-07-19/eng"
+            ),
+        ),
+        (
+            "package/clauses/eu-mdcg-mdcg-2019-16-rev1.json",
+            concat!(
+                "https:",
+                "//health.ec.europa.eu/document/download/b23b362f-8a56-434c-922a-5b3ca4d0a7a1_en?filename=altered.pdf"
+            ),
+        ),
+        (
+            "package/clauses/eu-mdcg-mdcg-2019-16-rev1.json",
+            concat!("https:", "//standards.example.invalid/catalog/1234"),
+        ),
+    ];
+
+    for (path, source_url) in unrelated_clause_urls {
+        assert!(
+            !findings(path, source_url.as_bytes(), &tokens).is_empty(),
+            "unlisted source URL must be refused at {path}"
+        );
+    }
 }
 
 #[test]
@@ -258,7 +388,16 @@ fn whole_file_boundaries_are_typed_and_short_circuit_content() {
         ContentRightsCategory::OversizedTextFile
     );
     let large_license = "x\n".repeat(256_001);
-    assert!(findings("LICENSE", large_license.as_bytes(), &[]).is_empty());
+    for path in [
+        "LICENSE",
+        "package/LICENSE",
+        "engineering_assurance-0.8.2.dist-info/licenses/LICENSE",
+    ] {
+        assert!(
+            findings(path, large_license.as_bytes(), &[]).is_empty(),
+            "{path}"
+        );
+    }
 
     let lfs = ["version ", "https:", "//git-lfs.github.com/spec/v1\n"].concat();
     let lfs_finding = findings("candidate.txt", lfs.as_bytes(), &[]);
