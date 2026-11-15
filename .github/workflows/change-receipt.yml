@@ -1,0 +1,172 @@
+name: Change receipt
+
+on:
+  workflow_call:
+    inputs:
+      commit:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check the pushed commit input
+        shell: bash
+        env:
+          INPUT_COMMIT: ${{ inputs.commit }}
+          PUSHED_COMMIT: ${{ github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != "push" || "$INPUT_COMMIT" != "$PUSHED_COMMIT" ]]; then
+            echo "::error::receipt_input_commit_mismatch"
+            exit 1
+          fi
+
+      - name: Check out the pushed commit as gate input
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          path: source
+          persist-credentials: false
+
+      - name: Check out the protected branch policy as data
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: protected-base
+          persist-credentials: false
+
+      - name: Run the protected receipt gate policy
+        shell: bash
+        env:
+          INPUT_COMMIT: ${{ inputs.commit }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          policy_path = Path("protected-base/.engineering-assurance/receipt-policy.json")
+          policy = json.loads(policy_path.read_text(encoding="utf-8"))
+          if set(policy) != {"protocol", "gates", "adopted_at", "grace_minutes"}:
+              raise SystemExit("receipt_policy_invalid")
+          if policy["protocol"] != "engineering-assurance.receipt-policy/v1":
+              raise SystemExit("receipt_policy_invalid")
+          gates = policy["gates"]
+          if not isinstance(gates, list) or len(gates) > 256:
+              raise SystemExit("receipt_policy_invalid")
+
+          results = []
+          source = Path("source").resolve()
+          for gate in gates:
+              if not isinstance(gate, dict) or set(gate) != {"name", "argv"}:
+                  raise SystemExit("receipt_policy_invalid")
+              name, argv = gate["name"], gate["argv"]
+              if not isinstance(name, str) or not name or not isinstance(argv, list) or not argv:
+                  raise SystemExit("receipt_policy_invalid")
+              if any(not isinstance(arg, str) or not arg for arg in argv):
+                  raise SystemExit("receipt_policy_invalid")
+              result = subprocess.run(argv, cwd=source, check=False)
+              results.append({"name": name, "exit_code": result.returncode})
+
+          Path(os.environ["RUNNER_TEMP"], "receipt-gates.json").write_text(
+              json.dumps({"commit": os.environ["INPUT_COMMIT"], "results": results},
+                         separators=(",", ":")),
+              encoding="utf-8",
+          )
+          if any(result["exit_code"] != 0 for result in results):
+              raise SystemExit("gate_failed")
+          PY
+
+      - name: Upload receipt gate results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: receipt-gate-results
+          path: ${{ runner.temp }}/receipt-gates.json
+          if-no-files-found: error
+
+  record:
+    needs: gates
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download receipt gate results
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          name: receipt-gate-results
+          path: ${{ runner.temp }}/receipt-gate-results
+
+      - name: Refuse until approval statements are retained
+        shell: bash
+        env:
+          INPUT_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          if [[ ! -s "$RUNNER_TEMP/receipt-gate-results/receipt-gates.json" ]]; then
+            echo "::error::receipt_gate_results_missing"
+            exit 1
+          fi
+          if ! jq -e --arg commit "$INPUT_COMMIT" '.commit == $commit' \
+            "$RUNNER_TEMP/receipt-gate-results/receipt-gates.json" >/dev/null; then
+            echo "::error::receipt_gate_results_commit_mismatch"
+            exit 1
+          fi
+          echo "::error::statements_not_retained"
+          exit 1
+
+  notes:
+    needs: record
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the pushed commit for note storage
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Store receipt note
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+          note_file="$RUNNER_TEMP/receipt-note.jsonl"
+          if [[ ! -s "$note_file" ]]; then
+            echo "::error::receipt_note_missing"
+            exit 1
+          fi
+          if [[ $(wc -c < "$note_file") -gt 1048576 ]]; then
+            echo "::error::receipt_note_too_large"
+            exit 1
+          fi
+          for attempt in 1 2 3 4 5; do
+            git fetch origin refs/notes/assurance-receipts:refs/notes/assurance-receipts || true
+            git notes --ref=refs/notes/assurance-receipts merge -s cat_sort_uniq || true
+            git notes --ref=refs/notes/assurance-receipts add -f -F "$note_file" "$INPUT_COMMIT"
+            if git push origin refs/notes/assurance-receipts; then
+              exit 0
+            fi
+          done
+          echo "::error::receipt_note_conflict"
+          exit 1
