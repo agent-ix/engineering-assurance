@@ -106,8 +106,57 @@ fn receipt_workflow_jobs_have_exact_permissions_and_keep_code_out_of_record_job(
     assert!(record_steps.iter().any(|step| {
         step["run"]
             .as_str()
-            .is_some_and(|run| run.contains("statements_not_retained"))
-    }));
+            .is_some_and(|run| run.contains("receipt-record --request"))
+    }), "record job invokes the published receipt-record command");
+    assert!(record_steps.iter().any(|step| {
+        step["uses"]
+            .as_str()
+            .is_some_and(|reference| reference.starts_with("actions/download-artifact@"))
+    }), "record job receives gate outputs and Test Result as data");
+    assert!(record_steps.iter().all(|step| {
+        !step["run"].as_str().is_some_and(|run| {
+            run.contains("cargo test") || run.contains("python3 -")
+        })
+    }), "record job does not execute repository gates or inline repository scripts");
+    assert!(!format!("{workflow}").contains("statements_not_retained"));
+
+    let gate_steps = jobs["gates"]["steps"].as_array().expect("gate steps");
+    let gate_text = gate_steps
+        .iter()
+        .filter_map(|step| step["run"].as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(gate_text.contains("producer-execute"));
+    assert!(gate_text.contains("evidence record --suite SUITE-001"));
+    assert!(gate_text.contains("evidence export-test-result"));
+    assert!(gate_text.contains("receipt-gate-results/v1"));
+    assert!(gate_text.contains("exitCode"), "gate outcomes use the published receipt camelCase contract");
+    assert!(gate_text.contains(" archive \"$INPUT_COMMIT\""));
+    assert!(gate_text.contains("sha256sum"));
+    let export_at = gate_text
+        .find("evidence export-test-result")
+        .expect("the gates job exports Quoin Test Result data");
+    let fail_after_export_at = gate_text
+        .find("if [[ -e \"$RUNNER_TEMP/receipt-gate-failed\" ]]")
+        .expect("the gate failure is reported after the export");
+    assert!(export_at < fail_after_export_at);
+    assert!(jobs["gates"]["permissions"].get("id-token").is_none());
+    assert!(jobs["record"]["if"].as_str().is_some_and(|value| value == "always()"));
+    assert!(jobs["gates"]["steps"].as_array().is_some_and(|steps| steps.iter().any(|step| {
+        step["uses"].as_str().is_some_and(|value| value.starts_with("actions/upload-artifact@"))
+            && step["if"] == "always()"
+    })));
+    let policy_path = repository_root().join(".engineering-assurance/receipt-policy.json");
+    let policy: Value = serde_json::from_slice(&fs::read(policy_path).expect("receipt policy exists"))
+        .expect("receipt policy parses as JSON");
+    assert_eq!(policy["protocol"], "engineering-assurance.receipt-policy/v1");
+    assert_eq!(policy["gates"].as_array().map(Vec::len), Some(1));
+    assert_eq!(policy["gates"][0]["name"], "receipt-workflow-contract");
+    assert_eq!(policy["gates"][0]["argv"][0], "cargo");
+    let suites = fs::read_to_string(repository_root().join("spec/evidence/suites.md"))
+        .expect("suite registry exists");
+    assert!(suites.contains("| SUITE-001 | Receipt workflow contract gate |"));
+    assert!(suites.contains("| Integration |"));
 }
 
 #[trace("TC-559", "FR-070-AC-3")]
