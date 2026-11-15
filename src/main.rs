@@ -71,6 +71,7 @@ const RELEASE_VERIFY_CAPABILITY: &str = "release-verify";
 const RECEIPT_NOTE_CAPABILITY: &str = "receipt-note";
 const RECEIPT_MISSING_CAPABILITY: &str = "receipt-missing";
 const RECEIPT_VERIFY_CAPABILITY: &str = "receipt-verify";
+const RECEIPT_RECORD_CAPABILITY: &str = "receipt-record";
 const SCOPE_FOOTPRINT_CAPABILITY: &str = "scope-footprint";
 const SIGNATURE_VERIFY_CAPABILITY: &str = "signature-verify";
 const WORKFLOW_INVARIANTS_CAPABILITY: &str = "workflow-invariants";
@@ -152,6 +153,7 @@ fn command() -> Command {
         .subcommand(receipt_note_command())
         .subcommand(receipt_missing_command())
         .subcommand(receipt_verify_command())
+        .subcommand(receipt_record_command())
         .subcommand(release_history_command())
         .subcommand(release_decision_command())
         .subcommand(
@@ -282,6 +284,18 @@ fn receipt_verify_command() -> Command {
                 .long("request")
                 .value_name("JSON")
                 .help("Receipt-verify request document, or - to read it from stdin")
+                .required(true),
+        )
+}
+
+fn receipt_record_command() -> Command {
+    Command::new(RECEIPT_RECORD_CAPABILITY)
+        .about("Build, sign and publish one receipt from retained inputs and gate evidence")
+        .arg(
+            Arg::new("request")
+                .long("request")
+                .value_name("JSON")
+                .help("Receipt-record request document, or - to read it from stdin")
                 .required(true),
         )
 }
@@ -466,6 +480,7 @@ fn main() -> ExitCode {
         Some((RECEIPT_NOTE_CAPABILITY, arguments)) => run_receipt_note(arguments),
         Some((RECEIPT_MISSING_CAPABILITY, arguments)) => run_receipt_missing(arguments),
         Some((RECEIPT_VERIFY_CAPABILITY, arguments)) => run_receipt_verify(arguments),
+        Some((RECEIPT_RECORD_CAPABILITY, arguments)) => run_receipt_record(arguments),
         Some((RELEASE_HISTORY_CAPABILITY, arguments)) => run_release_history(arguments),
         Some((RELEASE_DECISION_CAPABILITY, arguments)) => run_release_decision(arguments),
         Some((WORKFLOW_INVARIANTS_CAPABILITY, _)) => run_workflow_invariants(),
@@ -1030,6 +1045,17 @@ fn run_receipt_verify(arguments: &ArgMatches) -> ExitCode {
         "receipt_verify_request_unreadable",
         |bytes| {
             receipt_host::execute_verify(bytes).map_err(|error| (error.code(), error.to_string()))
+        },
+    )
+}
+
+fn run_receipt_record(arguments: &ArgMatches) -> ExitCode {
+    run_request_line(
+        arguments,
+        RECEIPT_RECORD_CAPABILITY,
+        "receipt_record_request_unreadable",
+        |bytes| {
+            receipt_host::execute_record(bytes).map_err(|error| (error.code(), error.to_string()))
         },
     )
 }

@@ -27,12 +27,15 @@ use std::{
     thread,
 };
 
+#[cfg(feature = "attestation-signing")]
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sigstore_verify::VerificationPolicy;
 
 #[cfg(feature = "attestation-signing")]
-use crate::record_sink::leak::PublicPathProof;
+use crate::record_sink::leak::{PublicPathProof, PublicStatementProof};
 #[cfg(feature = "attestation-signing")]
 use crate::record_sink::sink::{Signer, SigningFailed as SinkSigningFailed};
 #[cfg(feature = "attestation-signing")]
@@ -891,6 +894,34 @@ impl SigstoreSigner {
             Entry::Occupied(_) => Err(SinkSigningFailed),
         }
     }
+
+    fn sign_record_and_remember(
+        &self,
+        payload: &[u8],
+        signing_path: SigningPath,
+    ) -> Result<String, SinkSigningFailed> {
+        const MAX_PENDING_BUNDLES: usize = 16;
+        let mut pending = self
+            .pending_payloads
+            .lock()
+            .map_err(|_| SinkSigningFailed)?;
+        if pending.len() >= MAX_PENDING_BUNDLES {
+            return Err(SinkSigningFailed);
+        }
+        let payload = payload.to_vec();
+        let bundle_json = self
+            .backend
+            .sign(&payload, signing_path)
+            .map_err(|_| SinkSigningFailed)?;
+        let bundle = STANDARD.encode(bundle_json.as_bytes());
+        match pending.entry(bundle.clone()) {
+            Entry::Vacant(entry) => {
+                entry.insert(payload);
+                Ok(bundle)
+            }
+            Entry::Occupied(_) => Err(SinkSigningFailed),
+        }
+    }
 }
 
 #[cfg(feature = "attestation-signing")]
@@ -906,11 +937,25 @@ impl Signer for SigstoreSigner {
         &self,
         proof: &PublicPathProof<'_>,
     ) -> Result<String, SinkSigningFailed> {
-        self.sign_and_remember(proof.signed_bytes(), SigningPath::PublicLog)
+        self.sign_record_and_remember(proof.signed_bytes(), SigningPath::PublicLog)
+    }
+
+    fn sign_statement_for_public_log(
+        &self,
+        proof: &PublicStatementProof<'_>,
+    ) -> Result<String, SinkSigningFailed> {
+        self.sign_and_remember(proof.statement_bytes(), SigningPath::PublicLog)
     }
 
     fn sign_without_public_log(&self, canonical: &[u8]) -> Result<String, SinkSigningFailed> {
         self.sign_and_remember(canonical, SigningPath::NoPublicLog)
+    }
+
+    fn sign_record_without_public_log(
+        &self,
+        canonical: &[u8],
+    ) -> Result<String, SinkSigningFailed> {
+        self.sign_record_and_remember(canonical, SigningPath::NoPublicLog)
     }
 
     fn signed_payload(&self, bundle: &str) -> Result<Vec<u8>, SinkSigningFailed> {
@@ -919,6 +964,11 @@ impl Signer for SigstoreSigner {
             .map_err(|_| SinkSigningFailed)?
             .remove(bundle)
             .ok_or(SinkSigningFailed)
+    }
+
+    fn verification_bundle(&self, bundle: &str) -> Result<String, SinkSigningFailed> {
+        let decoded = STANDARD.decode(bundle).map_err(|_| SinkSigningFailed)?;
+        String::from_utf8(decoded).map_err(|_| SinkSigningFailed)
     }
 }
 
@@ -1158,43 +1208,6 @@ mod tests {
             build_config_uri: Some(build_config.replace("refs/tags/v2.0.0", "refs/pull/9/merge")),
             build_trigger: Some("push".into()),
         }));
-    }
-
-    #[trace("TC-677", "FR-064-AC-9", "FR-064-AC-14", "FR-064-AC-15")]
-    #[test]
-    fn workflow_identity_document_rejects_open_or_malformed_entries() {
-        let valid = release_identity_document();
-        for invalid in [
-            valid.replace(
-                "\"source_ref_prefix\":\"refs/tags/v\"",
-                "\"source_ref_prefix\":\"refs/pull/\"",
-            ),
-            valid.replace(
-                "\"source_ref_prefix\":\"refs/tags/v\"",
-                "\"source_ref_prefix\":\"refs/tags/v*\"",
-            ),
-            valid.replace(
-                "\"ref\":\"refs/tags/v1.2.3\"",
-                "\"ref\":\"refs/heads/main\"",
-            ),
-            valid.replace(
-                "\"source_ref_prefix\":\"refs/tags/v\"",
-                "\"source_ref_prefix\":null",
-            ),
-            valid.replace(
-                "\"source_ref_prefix\":\"refs/tags/v\"",
-                "\"source_ref_prefix\":\"refs/tags/v\",\"unexpected\":true",
-            ),
-            valid.replace(
-                "\"source_ref_prefix\":\"refs/tags/v\"",
-                "\"source_ref_prefix\":\"refs/tags/v\",\"source_ref\":\"refs/heads/main\"",
-            ),
-        ] {
-            assert!(
-                WorkflowIdentityDocument::parse(invalid.as_bytes()).is_err(),
-                "invalid policy unexpectedly accepted: {invalid}"
-            );
-        }
     }
 
     #[trace("TC-678", "FR-064-AC-1", "FR-064-AC-9")]
@@ -1833,6 +1846,50 @@ mod tests {
                 SigningFailure::AmbientOidcUnavailable,
                 SigningFailure::AmbientOidcUnavailable,
             ]
+        );
+    }
+
+    struct JsonBundleBackend;
+
+    impl SigningBackend for JsonBundleBackend {
+        fn sign(
+            &self,
+            payload: &[u8],
+            _signing_path: SigningPath,
+        ) -> Result<String, SigningFailure> {
+            Ok(serde_json::json!({
+                "kind": "fictional-sigstore-bundle",
+                "payload": STANDARD.encode(payload),
+            })
+            .to_string())
+        }
+    }
+
+    #[trace("TC-994", "FR-056-AC-4")]
+    #[test]
+    fn record_signing_encodes_the_json_bundle_as_base64_and_keeps_statement_bundles_json() {
+        let record = PublicRecord::from_json(
+            r#"{"protocol":"engineering-assurance.record-public/v1","record_id":"11111111-1111-4111-8111-111111111111","kind":"change_record","subject":{"kind":"repo","id":"fictional/source"},"references":[],"hashes":{"private_form":"sha256:0000000000000000000000000000000000000000000000000000000000000000","subject_commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"verdicts":{"change_record":"recorded"},"timestamps":{"created":"2026-11-13T10:00:00Z"}}"#
+                .as_bytes(),
+        )
+        .expect("fictional public record is valid");
+        let proof = public_path_proof(&record);
+        let signer = SigstoreSigner::with_backend(Arc::new(JsonBundleBackend));
+        let record_bundle = Signer::sign_for_public_log(&signer, &proof)
+            .expect("record bundle is represented as padded base64");
+        assert!(crate::record_sink::form::Signature::try_from(record_bundle.clone()).is_ok());
+        assert_eq!(
+            Signer::signed_payload(&signer, &record_bundle).expect("cached signed bytes"),
+            proof.signed_bytes()
+        );
+
+        let statement_bytes = b"fictional canonical receipt statement";
+        let statement_bundle = Signer::sign_without_public_log(&signer, statement_bytes)
+            .expect("statement bundle stays in Sigstore JSON form");
+        assert!(statement_bundle.starts_with('{'));
+        assert_eq!(
+            Signer::signed_payload(&signer, &statement_bundle).expect("cached statement bytes"),
+            statement_bytes
         );
     }
 

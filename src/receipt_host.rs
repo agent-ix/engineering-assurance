@@ -14,7 +14,11 @@ use std::{
 use engineering_assurance::{
     approval_gate::parse_policy,
     attestation_signing::{
-        SigstoreBundleVerifier, TransparencyRequirement, WorkflowIdentityDocument, WorkflowRole,
+        SigstoreBundleVerifier, SigstoreSigner, TransparencyRequirement, WorkflowIdentityDocument,
+        WorkflowRole,
+    },
+    producer_execution::private_git_store::{
+        GitPrivateStore, HttpsGitDestinationResolver, RecordPublisherIdentity,
     },
     receipt::{
         ExpectedReceiptSubject, MissingReceipt, RECEIPT_NOTES_REF, ReceiptBundleSet,
@@ -22,11 +26,17 @@ use engineering_assurance::{
         ReceiptVerifyResult, UnverifiableReason, VERIFY_RESULT_PROTOCOL, find_missing_receipts,
         is_valid_verify_result, receipt_status_allows_idempotent_skip, verify_receipt_groups,
     },
+    receipt_record::{
+        RECEIPT_GATE_RESULTS_PROTOCOL, ReceiptGateResults, ReceiptInput, ReceiptInputReader,
+        ReceiptPublishContext, ReceiptRecordInput, build_receipt_statements, publish_receipt,
+        verified_receipt_approvals,
+    },
     record_sink::{
-        config::{SinkConfig, Visibility, resolve_sink_for_repository},
+        config::{PolicySource, SinkConfig, SinkKind, Visibility, resolve_sink_for_repository},
+        form::RecordId,
         sink::{
             ApprovalStatementLookup, ApprovalStatementReadError, ApprovalStatementReader,
-            RetainedApprovalStatement,
+            LogRejected, Ports, PublicLogClient, RetainedApprovalStatement, SinkLayer,
         },
     },
 };
@@ -40,6 +50,7 @@ const MAX_REQUEST_BYTES: usize = 2 * 1024 * 1024;
 const MISSING_REQUEST_PROTOCOL: &str = "engineering-assurance.receipt-missing-request/v1";
 const MISSING_RESULT_PROTOCOL: &str = "engineering-assurance.receipt-missing-result/v1";
 const VERIFY_REQUEST_PROTOCOL: &str = "engineering-assurance.receipt-verify-request/v1";
+const RECORD_REQUEST_PROTOCOL: &str = "engineering-assurance.receipt-record-request/v1";
 const MAX_POLICY_BYTES: usize = 1024 * 1024;
 const PROCESS_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -168,6 +179,29 @@ struct VerifyRequest {
     approval_signer_ref: String,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RecordRequest {
+    protocol: String,
+    repository: PathBuf,
+    github_repository: String,
+    base_branch: String,
+    commit: String,
+    merged_pull_request: Option<String>,
+    gate_results: PathBuf,
+    test_result: PathBuf,
+    record_id: String,
+    receipt_signer_repository: String,
+    receipt_signer_workflow_path: String,
+    receipt_signer_ref: String,
+    record_publisher_repository: String,
+    record_publisher_workflow_path: String,
+    record_publisher_ref: String,
+    approval_signer_repository: String,
+    approval_signer_workflow_path: String,
+    approval_signer_ref: String,
+}
+
 #[derive(Debug, Error)]
 pub(crate) enum ReceiptHostError {
     #[error("receipt-note request is unreadable")]
@@ -192,6 +226,10 @@ pub(crate) enum ReceiptHostError {
     VerifyInvalid,
     #[error("receipt policy adopted_at is not on the protected base first-parent history")]
     AdoptedAtInvalid,
+    #[error("receipt-record request or protected policy is invalid")]
+    RecordRequest,
+    #[error("receipt-record input, evidence, or publication failed: {0}")]
+    Record(#[from] engineering_assurance::receipt_record::ReceiptRecordError),
 }
 
 impl ReceiptHostError {
@@ -208,8 +246,531 @@ impl ReceiptHostError {
             Self::VerifyUnreadable => "receipt_verify_request_unreadable",
             Self::VerifyInvalid => "receipt_verify_request_invalid",
             Self::AdoptedAtInvalid => "receipt_policy_adopted_at_invalid",
+            Self::RecordRequest => "receipt_record_request_invalid",
+            Self::Record(_) => "receipt_record_failed",
         }
     }
+}
+
+/// Produce and sign one receipt from protected policy, retained PR inputs,
+/// verified approvals, gate outputs, and Quoin's Test Result export.
+pub(crate) fn execute_record(bytes: &[u8]) -> Result<Vec<u8>, ReceiptHostError> {
+    if bytes.len() > MAX_REQUEST_BYTES {
+        return Err(ReceiptHostError::RecordRequest);
+    }
+    let request: RecordRequest =
+        serde_json::from_slice(bytes).map_err(|_| ReceiptHostError::RecordRequest)?;
+    if request.protocol != RECORD_REQUEST_PROTOCOL
+        || !request.repository.is_absolute()
+        || !request.repository.is_dir()
+        || !valid_github_repository(&request.github_repository)
+        || !valid_branch(&request.base_branch)
+        || !is_full_object_id(&request.commit)
+        || !valid_workflow_ref(&request.receipt_signer_ref)
+        || !valid_workflow_ref(&request.record_publisher_ref)
+        || !valid_workflow_ref(&request.approval_signer_ref)
+    {
+        return Err(ReceiptHostError::RecordRequest);
+    }
+    let record_id = RecordId::try_from(request.record_id.clone())
+        .map_err(|_| ReceiptHostError::RecordRequest)?;
+    let protected = load_protected_record_policy(&request)?;
+    let trusted_root_json = match protected.transparency {
+        TransparencyRequirement::PublicLog => {
+            sigstore_verify::trust_root::SIGSTORE_PRODUCTION_TRUSTED_ROOT
+        }
+        TransparencyRequirement::TimestampOnly => {
+            sigstore_verify::trust_root::SIGSTORE_GITHUB_TRUSTED_ROOT
+        }
+    };
+    let trusted_root = sigstore_verify::trust_root::TrustedRoot::from_json(trusted_root_json)
+        .map_err(|_| ReceiptHostError::RecordRequest)?;
+    let verifier =
+        SigstoreBundleVerifier::new(&trusted_root).map_err(|_| ReceiptHostError::RecordRequest)?;
+    let signer = SigstoreSigner::new();
+    let resolver = HttpsGitDestinationResolver::new(concat!("https:", "//github.com"))
+        .map_err(|_| ReceiptHostError::RecordRequest)?;
+    let publisher = RecordPublisherIdentity {
+        repository: request.record_publisher_repository.clone(),
+        workflow_path: request.record_publisher_workflow_path.clone(),
+        reference: request.record_publisher_ref.clone(),
+    };
+    let store = GitPrivateStore::new(
+        &resolver,
+        &signer,
+        &verifier,
+        &protected.source,
+        &publisher,
+        &request.github_repository,
+        "git",
+    )
+    .map_err(|_| ReceiptHostError::RecordRequest)?;
+    let evidence = load_record_evidence(&request, &protected, &store, &verifier)?;
+    publish_record_evidence(
+        &request, &record_id, &protected, &signer, &verifier, &store, evidence,
+    )
+}
+
+struct ReceiptRecordEvidence {
+    gate_results: ReceiptGateResults,
+    test_result: Value,
+    subject: ExpectedReceiptSubject,
+    receipt_input: Option<ReceiptInput>,
+    approvals: Vec<(
+        String,
+        engineering_assurance::change_record::ApprovalDecision,
+    )>,
+}
+
+fn load_record_evidence(
+    request: &RecordRequest,
+    protected: &ProtectedReceiptPolicy,
+    store: &GitPrivateStore<'_>,
+    verifier: &SigstoreBundleVerifier,
+) -> Result<ReceiptRecordEvidence, ReceiptHostError> {
+    let gate_results: ReceiptGateResults =
+        serde_json::from_slice(&read_bounded(&request.gate_results, 1024 * 1024)?)
+            .map_err(|_| ReceiptHostError::RecordRequest)?;
+    if gate_results.protocol != RECEIPT_GATE_RESULTS_PROTOCOL
+        || gate_results.commit != request.commit
+        || gate_results.results.is_empty()
+    {
+        return Err(ReceiptHostError::RecordRequest);
+    }
+    let test_result: Value =
+        serde_json::from_slice(&read_bounded(&request.test_result, 4 * 1024 * 1024)?)
+            .map_err(|_| ReceiptHostError::RecordRequest)?;
+    let pull_request = request.merged_pull_request.clone().unwrap_or_default();
+    if !pull_request.is_empty() && !valid_pull_request(&pull_request, &request.github_repository) {
+        return Err(ReceiptHostError::RecordRequest);
+    }
+    let tree_output = git_output(
+        &request.repository,
+        &[
+            "rev-parse",
+            "--verify",
+            "--end-of-options",
+            &format!("{}^{{tree}}", request.commit),
+        ],
+    )
+    .map_err(|_| ReceiptHostError::RecordRequest)?;
+    let tree = String::from_utf8(tree_output)
+        .map_err(|_| ReceiptHostError::RecordRequest)?
+        .trim()
+        .to_owned();
+    if !is_full_object_id(&tree) {
+        return Err(ReceiptHostError::RecordRequest);
+    }
+    let subject = ExpectedReceiptSubject {
+        repository: request.github_repository.clone(),
+        commit: request.commit.clone(),
+        tree,
+        merged_pull_request: pull_request.clone(),
+    };
+    let private_destination = protected
+        .selection
+        .private_store_destination
+        .as_deref()
+        .ok_or(ReceiptHostError::RecordRequest)?;
+    let receipt_input = if pull_request.is_empty() {
+        None
+    } else {
+        store
+            .read_receipt_input(private_destination, &subject.repository, &pull_request)
+            .ok()
+            .flatten()
+            .and_then(|bytes| ReceiptInput::parse(&bytes, &pull_request).ok())
+    };
+    let approvals = verified_receipt_approvals(
+        store,
+        private_destination,
+        &subject,
+        &protected.approval_signer,
+        &protected.role_policy,
+        verifier,
+    );
+    Ok(ReceiptRecordEvidence {
+        gate_results,
+        test_result,
+        subject,
+        receipt_input,
+        approvals,
+    })
+}
+
+fn publish_record_evidence(
+    request: &RecordRequest,
+    record_id: &RecordId,
+    protected: &ProtectedReceiptPolicy,
+    signer: &SigstoreSigner,
+    verifier: &SigstoreBundleVerifier,
+    store: &GitPrivateStore<'_>,
+    evidence: ReceiptRecordEvidence,
+) -> Result<Vec<u8>, ReceiptHostError> {
+    let created_at = current_seconds_timestamp();
+    let workflow_id = format!(
+        concat!("https:", "//github.com/{}/{}@{}"),
+        request.receipt_signer_repository,
+        request.receipt_signer_workflow_path,
+        request.receipt_signer_ref
+    );
+    let policy_uri = format!(
+        concat!(
+            "https:",
+            "//github.com/{}/blob/{}/.engineering-assurance/approval-policy.json"
+        ),
+        request.github_repository, protected.source.base_commit
+    );
+    let expected_gate_names = protected
+        .expected_gate_names
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let statements = build_receipt_statements(ReceiptRecordInput {
+        subject: &evidence.subject,
+        gate_results: &evidence.gate_results,
+        expected_gate_names: &expected_gate_names,
+        test_result: &evidence.test_result,
+        receipt_input: evidence.receipt_input.as_ref(),
+        role_policy: &protected.role_policy,
+        approvals: evidence.approvals,
+        record_id: record_id.clone(),
+        created_at: &created_at,
+        verifier_id: &workflow_id,
+        policy_uri: &policy_uri,
+    })?;
+    let log = HttpReceiptLog;
+    let ports = Ports {
+        store,
+        lookup: &GitHubVisibility,
+        signer,
+        client: &log,
+    };
+    let layer = SinkLayer::new(&protected.selection, &request.github_repository, ports);
+    let result = publish_receipt(
+        &layer,
+        &ReceiptPublishContext {
+            verifier,
+            signer_policy: &protected.receipt_signer,
+            source_policy: &protected.receipt_source,
+            subject: &evidence.subject,
+            record_id,
+            created_at: &created_at,
+        },
+        statements,
+    )?;
+    let mut output = serde_json::to_vec(&result).map_err(|_| ReceiptHostError::RecordRequest)?;
+    output.push(b'\n');
+    Ok(output)
+}
+
+struct ProtectedReceiptPolicy {
+    source: ReceiptPolicySource,
+    expected_gate_names: Vec<String>,
+    role_policy: engineering_assurance::approval_gate::RolePolicy,
+    selection: engineering_assurance::record_sink::config::SinkSelection,
+    transparency: TransparencyRequirement,
+    receipt_signer: engineering_assurance::attestation_signing::WorkflowIdentityPolicy,
+    receipt_source: engineering_assurance::attestation_signing::SourceWorkflowPolicy,
+    approval_signer: engineering_assurance::attestation_signing::WorkflowIdentityPolicy,
+}
+
+fn load_protected_record_policy(
+    request: &RecordRequest,
+) -> Result<ProtectedReceiptPolicy, ReceiptHostError> {
+    let (private, source) = protected_repository_source(request)?;
+    let receipt_policy_bytes = git_show_base_file(
+        &request.repository,
+        &source.base_commit,
+        ".engineering-assurance/receipt-policy.json",
+    )
+    .map_err(|()| ReceiptHostError::RecordRequest)?;
+    let receipt_policy: ReceiptPolicy = serde_json::from_slice(&receipt_policy_bytes)
+        .map_err(|_| ReceiptHostError::RecordRequest)?;
+    if !valid_receipt_policy(&receipt_policy) {
+        return Err(ReceiptHostError::RecordRequest);
+    }
+    let expected_gate_names = receipt_policy
+        .gates
+        .into_iter()
+        .map(|gate| gate.name)
+        .collect();
+    let identity_bytes = git_show_base_file(
+        &request.repository,
+        &source.base_commit,
+        ".engineering-assurance/workflow-identities.json",
+    )
+    .map_err(|()| ReceiptHostError::RecordRequest)?;
+    let identities = WorkflowIdentityDocument::parse(&identity_bytes)
+        .map_err(|_| ReceiptHostError::RecordRequest)?;
+    let role_bytes = git_show_base_file(
+        &request.repository,
+        &source.base_commit,
+        ".engineering-assurance/approval-policy.json",
+    )
+    .map_err(|()| ReceiptHostError::RecordRequest)?;
+    let role_policy = parse_policy(&role_bytes).map_err(|_| ReceiptHostError::RecordRequest)?;
+    let sink_bytes = git_show_base_file(
+        &request.repository,
+        &source.base_commit,
+        ".engineering-assurance/sinks.json",
+    )
+    .map_err(|()| ReceiptHostError::RecordRequest)?;
+    let sink_config =
+        SinkConfig::parse(&sink_bytes).map_err(|_| ReceiptHostError::RecordRequest)?;
+    let visibility = if private {
+        Visibility::Private
+    } else {
+        Visibility::Public
+    };
+    let selection =
+        resolve_sink_for_repository(Some(&sink_config), visibility, &request.github_repository)
+            .map_err(|_| ReceiptHostError::RecordRequest)?;
+    validate_receipt_sink(selection.sink, private)?;
+    let transparency = if private {
+        TransparencyRequirement::TimestampOnly
+    } else {
+        TransparencyRequirement::PublicLog
+    };
+    let receipt_signer = identities
+        .signer_policy(
+            WorkflowRole::ReceiptWriter,
+            &request.receipt_signer_repository,
+            &request.receipt_signer_workflow_path,
+            &request.receipt_signer_ref,
+            transparency,
+        )
+        .ok_or(ReceiptHostError::RecordRequest)?;
+    let receipt_source = identities
+        .source_policy(
+            WorkflowRole::ReceiptWriter,
+            &request.receipt_signer_repository,
+            &request.receipt_signer_workflow_path,
+            &request.receipt_signer_ref,
+        )
+        .ok_or(ReceiptHostError::RecordRequest)?;
+    let approval_signer = identities
+        .signer_policy(
+            WorkflowRole::StatementWriter,
+            &request.approval_signer_repository,
+            &request.approval_signer_workflow_path,
+            &request.approval_signer_ref,
+            transparency,
+        )
+        .ok_or(ReceiptHostError::RecordRequest)?;
+    Ok(ProtectedReceiptPolicy {
+        source,
+        expected_gate_names,
+        role_policy,
+        selection,
+        transparency,
+        receipt_signer,
+        receipt_source,
+        approval_signer,
+    })
+}
+
+fn protected_repository_source(
+    request: &RecordRequest,
+) -> Result<(bool, ReceiptPolicySource), ReceiptHostError> {
+    let repository_info = gh_api_json(&format!("repos/{}", request.github_repository))
+        .map_err(|()| ReceiptHostError::RecordRequest)?;
+    if repository_info
+        .get("default_branch")
+        .and_then(Value::as_str)
+        != Some(request.base_branch.as_str())
+    {
+        return Err(ReceiptHostError::RecordRequest);
+    }
+    let private = repository_info
+        .get("private")
+        .and_then(Value::as_bool)
+        .ok_or(ReceiptHostError::RecordRequest)?;
+    let branch_info = gh_api_json(&format!(
+        "repos/{}/branches/{}",
+        request.github_repository,
+        encode_path_segment(&request.base_branch)
+    ))
+    .map_err(|()| ReceiptHostError::RecordRequest)?;
+    if branch_info.get("protected").and_then(Value::as_bool) != Some(true) {
+        return Err(ReceiptHostError::RecordRequest);
+    }
+    let base_commit = branch_info
+        .pointer("/commit/sha")
+        .and_then(Value::as_str)
+        .filter(|commit| is_full_object_id(commit))
+        .ok_or(ReceiptHostError::RecordRequest)?
+        .to_owned();
+    Ok((
+        private,
+        ReceiptPolicySource {
+            repository: request.repository.clone(),
+            base_commit,
+        },
+    ))
+}
+
+fn validate_receipt_sink(sink: SinkKind, private_repository: bool) -> Result<(), ReceiptHostError> {
+    use engineering_assurance::receipt_record::ReceiptRecordError;
+
+    if sink == SinkKind::None {
+        return Err(ReceiptHostError::Record(
+            ReceiptRecordError::PrivateStoreRequired,
+        ));
+    }
+    if !private_repository && sink != SinkKind::PublicLog {
+        return Err(ReceiptHostError::Record(
+            ReceiptRecordError::PublicLogRequired,
+        ));
+    }
+    Ok(())
+}
+
+struct ReceiptPolicySource {
+    repository: PathBuf,
+    base_commit: String,
+}
+
+impl PolicySource for ReceiptPolicySource {
+    fn base_branch_protected(&self) -> Option<bool> {
+        Some(true)
+    }
+
+    fn read_from_base_branch(&self, path: &str) -> Option<Vec<u8>> {
+        git_show_base_file(&self.repository, &self.base_commit, path).ok()
+    }
+}
+
+struct GitHubVisibility;
+
+impl engineering_assurance::record_sink::leak::VisibilityLookup for GitHubVisibility {
+    fn repo_visibility(
+        &self,
+        repository: &str,
+    ) -> Result<Visibility, engineering_assurance::record_sink::leak::LookupFailed> {
+        let value = gh_api_json(&format!("repos/{repository}"))
+            .map_err(|()| engineering_assurance::record_sink::leak::LookupFailed)?;
+        match value.get("private").and_then(Value::as_bool) {
+            Some(true) => Ok(Visibility::Private),
+            Some(false) => Ok(Visibility::Public),
+            None => Err(engineering_assurance::record_sink::leak::LookupFailed),
+        }
+    }
+}
+
+struct HttpReceiptLog;
+
+impl PublicLogClient for HttpReceiptLog {
+    fn send(
+        &self,
+        endpoint: &str,
+        entry: &engineering_assurance::record_sink::sink::CheckedEntry,
+    ) -> Result<(), LogRejected> {
+        if !endpoint.starts_with(concat!("https:", "//")) {
+            return Err(LogRejected);
+        }
+        let bytes = entry.record().entry_bytes().map_err(|_| LogRejected)?;
+        if bytes.len() > 1024 * 1024 {
+            return Err(LogRejected);
+        }
+        let mut child = std::process::Command::new("curl")
+            .args([
+                "--silent",
+                "--show-error",
+                "--fail",
+                "--max-time",
+                "30",
+                "--output",
+                "/dev/null",
+                "--header",
+                "content-type: application/json",
+                "--data-binary",
+                "@-",
+                endpoint,
+            ])
+            .env_clear()
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|_| LogRejected)?;
+        child
+            .stdin
+            .take()
+            .ok_or(LogRejected)?
+            .write_all(&bytes)
+            .map_err(|_| LogRejected)?;
+        let status = child.wait().map_err(|_| LogRejected)?;
+        status.success().then_some(()).ok_or(LogRejected)
+    }
+}
+
+fn read_bounded(path: &Path, limit: usize) -> Result<Vec<u8>, ReceiptHostError> {
+    let metadata = std::fs::symlink_metadata(path).map_err(|_| ReceiptHostError::RecordRequest)?;
+    if !metadata.file_type().is_file() || metadata.len() > limit as u64 {
+        return Err(ReceiptHostError::RecordRequest);
+    }
+    std::fs::read(path).map_err(|_| ReceiptHostError::RecordRequest)
+}
+
+fn valid_receipt_policy(policy: &ReceiptPolicy) -> bool {
+    policy.protocol == "engineering-assurance.receipt-policy/v1"
+        && policy.grace_minutes <= 1440
+        && !policy.gates.is_empty()
+        && policy.gates.len() <= 256
+        && policy.gates.iter().all(|gate| {
+            !gate.name.is_empty()
+                && gate.name.len() <= 256
+                && !gate.argv.is_empty()
+                && gate.argv.len() <= 256
+                && gate
+                    .argv
+                    .iter()
+                    .all(|argument| !argument.is_empty() && argument.len() <= 16_384)
+        })
+        && policy
+            .gates
+            .iter()
+            .map(|gate| gate.name.as_str())
+            .collect::<BTreeSet<_>>()
+            .len()
+            == policy.gates.len()
+}
+
+fn valid_pull_request(value: &str, repository: &str) -> bool {
+    let Some((actual_repository, number)) = value.split_once('#') else {
+        return false;
+    };
+    actual_repository == repository
+        && !number.is_empty()
+        && number.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn current_seconds_timestamp() -> String {
+    let now = time::OffsetDateTime::now_utc();
+    let month = match now.month() {
+        time::Month::January => 1,
+        time::Month::February => 2,
+        time::Month::March => 3,
+        time::Month::April => 4,
+        time::Month::May => 5,
+        time::Month::June => 6,
+        time::Month::July => 7,
+        time::Month::August => 8,
+        time::Month::September => 9,
+        time::Month::October => 10,
+        time::Month::November => 11,
+        time::Month::December => 12,
+    };
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        now.year(),
+        month,
+        now.day(),
+        now.hour(),
+        now.minute(),
+        now.second()
+    )
 }
 
 /// Evaluate a first-parent receipt inventory using platform reachability times.
@@ -343,13 +904,7 @@ fn load_missing_history_context(
     .map_err(|()| ReceiptHostError::Git)?;
     let policy: ReceiptPolicy =
         serde_json::from_slice(&policy_bytes).map_err(|_| ReceiptHostError::MissingRequest)?;
-    if policy.protocol != "engineering-assurance.receipt-policy/v1"
-        || policy.grace_minutes > 1440
-        || policy.gates.len() > 256
-        || policy.gates.iter().any(|gate| {
-            gate.name.is_empty() || gate.argv.is_empty() || gate.argv.iter().any(String::is_empty)
-        })
-    {
+    if !valid_receipt_policy(&policy) {
         return Err(ReceiptHostError::MissingRequest);
     }
     let history_bytes = git_output(

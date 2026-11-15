@@ -755,7 +755,7 @@ fn status_from_verification_error(error: ReceiptVerificationError) -> ReceiptSta
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct TestResultPredicate {
+pub(crate) struct TestResultPredicate {
     result: String,
     configuration: Value,
     #[serde(rename = "passedTests")]
@@ -817,7 +817,7 @@ fn change_statement_has_subject(
     })
 }
 
-fn validate_test_result(
+pub(crate) fn validate_test_result(
     predicate: &Value,
 ) -> Result<TestResultPredicate, ReceiptVerificationError> {
     let predicate: TestResultPredicate = serde_json::from_value(predicate.clone())

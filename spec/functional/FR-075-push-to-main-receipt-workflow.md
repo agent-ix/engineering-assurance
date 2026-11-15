@@ -50,6 +50,8 @@ A direct push with no pull request, or a pull request with no receipt input, sti
 | FR-075-AC-5 | A commit before `adopted_at` gets no receipt and is not reported by the missing-receipt check. | Test |
 | FR-075-AC-6 | A gate command in the fixture receipt policy that tries to read the signing token or run the signing tooling runs only in the `gates` job, which has neither, receives no secrets and runs on a GitHub-hosted or ephemeral runner. | Test |
 | FR-075-AC-7 | A repository on sink `none` fails with `receipt_private_store_required` and no receipt is written. | Test |
+| FR-075-AC-8 | The private store retains a receipt input immutably under its exact repository and pull-request key, and a lookup using another key returns no input. | Test |
+| FR-075-AC-9 | With valid protected policies and gate evidence, the receipt producer reads receipt input and approvals from the configured private store and retains the private failed record before refusing an unavailable signer. | Test |
 
 ## Dependencies
 

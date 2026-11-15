@@ -37,6 +37,11 @@ use crate::{
     },
 };
 
+#[cfg(feature = "receipt-record")]
+use crate::receipt_record::{
+    ReceiptInput, ReceiptInputReadError, ReceiptInputReader, ReceiptInputWriter,
+};
+
 /// The sole private-store ref required by FR-054.
 pub const PRIVATE_RECORDS_REF: &str = "refs/heads/engineering-assurance-private-records";
 /// Protected-base workflow-identity policy path.
@@ -769,6 +774,27 @@ impl ApprovalStatementReader for GitPrivateStore<'_> {
 }
 
 impl GitPrivateStore<'_> {
+    #[cfg(feature = "receipt-record")]
+    /// Retain one pre-merge receipt input keyed by its exact pull request.
+    ///
+    /// # Errors
+    ///
+    /// Returns a receipt-input error for invalid input or a failed private
+    /// store write.
+    pub fn write_receipt_input(
+        &self,
+        destination: &str,
+        repository: &str,
+        merged_pull_request: &str,
+        input: &ReceiptInput,
+    ) -> Result<(), ReceiptInputReadError> {
+        let bytes = serde_json_canonicalizer::to_vec(input).map_err(|_| ReceiptInputReadError)?;
+        ReceiptInput::parse(&bytes, merged_pull_request).map_err(|_| ReceiptInputReadError)?;
+        let path = receipt_input_path(repository, merged_pull_request)?;
+        self.commit_new_file(destination, &path, &bytes, true)
+            .map_err(|_| ReceiptInputReadError)
+    }
+
     fn record_path_for_repository(repository: &str) -> Result<String, StoreError> {
         let (owner, name) = repository.split_once('/').ok_or(StoreError)?;
         Ok(format!(
@@ -777,6 +803,61 @@ impl GitPrivateStore<'_> {
             hex_component(name)
         ))
     }
+}
+
+#[cfg(feature = "receipt-record")]
+impl ReceiptInputReader for GitPrivateStore<'_> {
+    fn read_receipt_input(
+        &self,
+        destination: &str,
+        repository: &str,
+        merged_pull_request: &str,
+    ) -> Result<Option<Vec<u8>>, ReceiptInputReadError> {
+        let path = receipt_input_path(repository, merged_pull_request)?;
+        self.with_repository(destination, |store| self.read_file(store, &path))
+            .map_err(|_| ReceiptInputReadError)
+    }
+}
+
+#[cfg(feature = "receipt-record")]
+impl ReceiptInputWriter for GitPrivateStore<'_> {
+    fn write_receipt_input(
+        &self,
+        destination: &str,
+        repository: &str,
+        merged_pull_request: &str,
+        input: &ReceiptInput,
+    ) -> Result<(), ReceiptInputReadError> {
+        GitPrivateStore::write_receipt_input(
+            self,
+            destination,
+            repository,
+            merged_pull_request,
+            input,
+        )
+    }
+}
+
+#[cfg(feature = "receipt-record")]
+fn receipt_input_path(
+    repository: &str,
+    merged_pull_request: &str,
+) -> Result<String, ReceiptInputReadError> {
+    let Some((pr_repository, number)) = merged_pull_request.split_once('#') else {
+        return Err(ReceiptInputReadError);
+    };
+    if !valid_repository(repository)
+        || pr_repository != repository
+        || number.is_empty()
+        || !number.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return Err(ReceiptInputReadError);
+    }
+    Ok(format!(
+        "receipt-inputs/{}/{}.json",
+        hex_component(repository),
+        hex_component(merged_pull_request)
+    ))
 }
 
 #[derive(Deserialize)]
@@ -2609,6 +2690,67 @@ mod tests {
         );
         assert_public_log_and_refused_replay(&store, &signatures);
         assert!(private_path.ends_with("/private.json"));
+    }
+
+    #[cfg(feature = "receipt-record")]
+    #[trace("TC-999", "FR-075-AC-8")]
+    #[test]
+    fn receipt_input_round_trips_by_exact_pr_and_cannot_be_replaced() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let git_executable = fixture_git();
+        let bare = initialized_remote(temp.path(), &git_executable);
+        let resolver = LocalResolver(format!("file://{}", bare.display()));
+        let signatures = FixtureSignatures::default();
+        let store = store(&resolver, &signatures, &git_executable);
+        let input = ReceiptInput {
+            protocol: crate::receipt_record::RECEIPT_INPUT_PROTOCOL.to_owned(),
+            pull_request: PULL_REQUEST.to_owned(),
+            ticket: None,
+            ticket_text: Some("fictional retained ticket text".to_owned()),
+            criteria: vec!["AC-1".to_owned()],
+            spec_criteria: vec!["FR-074-AC-1".to_owned()],
+            reviews: vec![],
+            session: None,
+        };
+        let destination = "agent-ix/private-records";
+        store
+            .write_receipt_input(destination, REPOSITORY, PULL_REQUEST, &input)
+            .expect("valid receipt input is retained");
+        store
+            .write_receipt_input(destination, REPOSITORY, PULL_REQUEST, &input)
+            .expect("identical receipt input replay is idempotent");
+        let bytes = store
+            .read_receipt_input(destination, REPOSITORY, PULL_REQUEST)
+            .expect("receipt input read succeeds")
+            .expect("receipt input exists for exact PR");
+        assert_eq!(
+            ReceiptInput::parse(&bytes, PULL_REQUEST).expect("stored input parses"),
+            input
+        );
+        assert!(
+            store
+                .read_receipt_input(destination, REPOSITORY, "acme/ledger#43")
+                .expect("other PR lookup succeeds")
+                .is_none()
+        );
+        let mut replacement = input.clone();
+        replacement.ticket_text = Some("replacement must not overwrite".to_owned());
+        assert!(
+            store
+                .write_receipt_input(destination, REPOSITORY, PULL_REQUEST, &replacement)
+                .is_err()
+        );
+        assert_eq!(
+            ReceiptInput::parse(
+                &store
+                    .read_receipt_input(destination, REPOSITORY, PULL_REQUEST)
+                    .expect("receipt input read succeeds")
+                    .expect("original receipt input remains"),
+                PULL_REQUEST,
+            )
+            .expect("original input parses"),
+            input
+        );
     }
 
     #[trace("TC-977", "FR-054-AC-11")]
