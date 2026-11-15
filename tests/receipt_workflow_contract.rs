@@ -282,7 +282,7 @@ fn adversarial_receipt_gate_cannot_read_signing_tokens_or_use_signer() {
     );
 }
 
-#[trace("TC-560", "FR-070-AC-4")]
+#[trace("TC-560", "TC-563", "FR-070-AC-4", "FR-070-AC-7")]
 #[test]
 fn receipt_workflow_jobs_have_exact_permissions_and_keep_code_out_of_record_job() {
     let workflow = workflow("change-receipt.yml");
