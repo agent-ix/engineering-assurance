@@ -12,8 +12,9 @@ use std::{
 use engineering_assurance::{
     approval_gate::{AccountRef, RolePolicy},
     attestation_signing::{
-        AuthenticatedWorkflowClaims, BundleVerifier, STATEMENT_V1_TYPE, SourceWorkflowPolicy,
-        TransparencyRequirement, VerificationFailure, WorkflowIdentityPolicy,
+        AuthenticatedWorkflowClaims, BundleVerifier, ExpectedSubject, STATEMENT_V1_TYPE,
+        SourceWorkflowPolicy, SubjectKind, TransparencyRequirement, VerificationFailure,
+        VerificationStatus, WorkflowIdentityPolicy, verify_statement_with_source,
     },
     attestation_verify::TEST_RESULT_PREDICATE,
     change_record::{
@@ -23,8 +24,8 @@ use engineering_assurance::{
     receipt::ExpectedReceiptSubject,
     receipt_record::{
         RECEIPT_GATE_RESULTS_PROTOCOL, RECEIPT_INPUT_PROTOCOL, ReceiptGateResult,
-        ReceiptGateResults, ReceiptInput, ReceiptRecordError, ReceiptRecordInput, ReceiptReview,
-        build_receipt_statements, publish_receipt,
+        ReceiptGateResults, ReceiptInput, ReceiptPublishContext, ReceiptRecordError,
+        ReceiptRecordInput, ReceiptReview, build_receipt_statements, publish_receipt,
     },
     record_sink::{
         config::{ErrorCode, SelectionSource, SinkKind, SinkSelection, Visibility},
@@ -116,7 +117,10 @@ struct TestSigner {
     identities: IdentityRegistry,
 }
 
-struct TestVerifier(IdentityRegistry);
+struct TestVerifier {
+    identities: IdentityRegistry,
+    source_ref: String,
+}
 
 fn workflow_identity(repository: &str) -> String {
     format!(
@@ -160,7 +164,10 @@ impl TestSigner {
                 identity: identity.to_owned(),
                 identities: Rc::clone(&identities),
             },
-            TestVerifier(identities),
+            TestVerifier {
+                identities,
+                source_ref: "refs/heads/main".to_owned(),
+            },
         )
     }
 
@@ -207,7 +214,7 @@ impl BundleVerifier for TestVerifier {
         policy: &WorkflowIdentityPolicy,
     ) -> Result<(), VerificationFailure> {
         let identity = self
-            .0
+            .identities
             .borrow()
             .get(bundle_json)
             .cloned()
@@ -242,8 +249,11 @@ impl BundleVerifier for TestVerifier {
         self.verify(payload, bundle_json, policy)?;
         Ok(Some(AuthenticatedWorkflowClaims {
             source_repository_uri: Some(format!(concat!("https:", "//github.com/{}"), REPO)),
-            source_repository_ref: Some("refs/heads/main".to_owned()),
-            build_config_uri: Some(workflow_identity(REPO)),
+            source_repository_ref: Some(self.source_ref.clone()),
+            build_config_uri: Some(format!(
+                "https:{}github.com/{}/.github/workflows/change-receipt.yml@{}",
+                "//", REPO, self.source_ref
+            )),
             build_trigger: Some("push".to_owned()),
         }))
     }
@@ -414,12 +424,14 @@ fn publish_private_receipt(
     let source_policy = receipt_source_policy();
     let result = publish_receipt(
         &layer,
-        &verifier,
-        &signer_policy,
-        &source_policy,
-        subject,
-        record_id(),
-        "2026-11-14T12:00:00Z",
+        &ReceiptPublishContext {
+            verifier: &verifier,
+            signer_policy: &signer_policy,
+            source_policy: &source_policy,
+            subject,
+            record_id: &record_id(),
+            created_at: "2026-11-14T12:00:00Z",
+        },
         statements,
     )
     .expect("private signed receipt");
@@ -495,6 +507,40 @@ fn passing_input_produces_three_public_log_signed_statements_with_linked_summary
         Some(test_digest.as_str())
     );
 
+    let (result, events, private_record_count) = publish_public_receipt(&subject, statements);
+    assert_eq!(result.status, Status::Passed);
+    assert!(result.bundles.change_record.is_object());
+    assert!(result.bundles.test_result.is_object());
+    assert!(result.bundles.summary.is_object());
+    assert_receipt_summary_links(&result);
+    assert_eq!(
+        events,
+        [
+            "public-statement-sign",
+            "public-statement-sign",
+            "public-statement-sign",
+            "public-record-sign",
+            "log-send",
+        ]
+    );
+    assert_eq!(private_record_count, 1);
+    assert!(
+        result
+            .bundles
+            .encode_note()
+            .expect("three receipt bundles encode as a note")
+            .ends_with(b"\n")
+    );
+}
+
+fn publish_public_receipt(
+    subject: &ExpectedReceiptSubject,
+    statements: engineering_assurance::receipt_record::ReceiptStatements,
+) -> (
+    engineering_assurance::receipt_record::ReceiptRecordResult,
+    Vec<&'static str>,
+    usize,
+) {
     let events = Rc::new(RefCell::new(Vec::new()));
     let store = Store::default();
     let selection = SinkSelection {
@@ -516,21 +562,29 @@ fn passing_input_produces_three_public_log_signed_statements_with_linked_summary
     let layer = SinkLayer::new(&selection, REPO, ports);
     let signer_policy = receipt_signer_policy(REPO, TransparencyRequirement::PublicLog);
     let source_policy = receipt_source_policy();
+    let publication_record_id = statements.private_form.record_id.clone();
     let result = publish_receipt(
         &layer,
-        &verifier,
-        &signer_policy,
-        &source_policy,
-        &subject,
-        record_id(),
-        "2026-11-14T12:00:00Z",
+        &ReceiptPublishContext {
+            verifier: &verifier,
+            signer_policy: &signer_policy,
+            source_policy: &source_policy,
+            subject,
+            record_id: &publication_record_id,
+            created_at: "2026-11-14T12:00:00Z",
+        },
         statements,
     )
     .expect("signed receipt");
-    assert_eq!(result.status, Status::Passed);
-    assert!(result.bundles.change_record.is_object());
-    assert!(result.bundles.test_result.is_object());
-    assert!(result.bundles.summary.is_object());
+    assert_eq!(store.events.borrow()[0], "private-prepare");
+    let events = events.borrow().clone();
+    let private_record_count = store.private.borrow().len();
+    (result, events, private_record_count)
+}
+
+fn assert_receipt_summary_links(
+    result: &engineering_assurance::receipt_record::ReceiptRecordResult,
+) {
     let change_bytes = statement_payload(&result.bundles.change_record);
     let test_bytes = statement_payload(&result.bundles.test_result);
     let summary_bytes = statement_payload(&result.bundles.summary);
@@ -559,28 +613,9 @@ fn passing_input_produces_three_public_log_signed_statements_with_linked_summary
             .into_iter()
             .collect()
     );
-    assert_eq!(
-        &*events.borrow(),
-        &[
-            "public-statement-sign",
-            "public-statement-sign",
-            "public-statement-sign",
-            "public-record-sign",
-            "log-send",
-        ]
-    );
-    assert_eq!(store.events.borrow()[0], "private-prepare");
-    assert_eq!(store.private.borrow().len(), 1);
-    assert!(
-        result
-            .bundles
-            .encode_note()
-            .expect("three receipt bundles encode as a note")
-            .ends_with(b"\n")
-    );
 }
 
-#[trace("TC-998", "FR-064-AC-14")]
+#[trace("TC-998", "FR-064-AC-25")]
 #[test]
 fn receipt_publication_refuses_a_valid_signature_from_the_wrong_workflow_identity() {
     let subject = subject();
@@ -639,12 +674,14 @@ fn receipt_publication_refuses_a_valid_signature_from_the_wrong_workflow_identit
     let layer = SinkLayer::new(&selection, REPO, ports);
     let result = publish_receipt(
         &layer,
-        &verifier,
-        &signer_policy,
-        &source_policy,
-        &subject,
-        record_id(),
-        "2026-11-14T12:00:00Z",
+        &ReceiptPublishContext {
+            verifier: &verifier,
+            signer_policy: &signer_policy,
+            source_policy: &source_policy,
+            subject: &subject,
+            record_id: &record_id(),
+            created_at: "2026-11-14T12:00:00Z",
+        },
         statements,
     );
 
@@ -658,10 +695,61 @@ fn receipt_publication_refuses_a_valid_signature_from_the_wrong_workflow_identit
     assert!(!events.borrow().contains(&"log-send"));
 }
 
+#[trace("TC-1002", "FR-064-AC-14")]
+#[test]
+fn receipt_source_policy_accepts_default_branch_and_rejects_tag_for_same_signer() {
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let (signer, mut verifier) = TestSigner::new(events, &workflow_identity(REPO));
+    let policy = receipt_signer_policy(REPO, TransparencyRequirement::PublicLog);
+    let source_policy = receipt_source_policy();
+    let payload = serde_json::to_vec(&json!({
+        "_type": STATEMENT_V1_TYPE,
+        "subject": [{"name": REPO, "digest": {"gitCommit": COMMIT}}],
+        "predicateType": concat!("https:", "//example.invalid/receipt/v1"),
+        "predicate": {}
+    }))
+    .expect("statement bytes");
+    let bundle = signer
+        .bundle(&payload, "source-policy-test")
+        .expect("signed bundle");
+    let subject = ExpectedSubject {
+        kind: SubjectKind::Commit,
+        value: COMMIT,
+    };
+
+    assert_eq!(
+        verify_statement_with_source(
+            &verifier,
+            &payload,
+            &bundle,
+            &policy,
+            Some(&source_policy),
+            subject,
+        ),
+        Ok(VerificationStatus::Verified),
+        "the protected default-branch source ref is accepted"
+    );
+
+    verifier.source_ref = "refs/tags/v0.10.0".to_owned();
+    assert_eq!(
+        verify_statement_with_source(
+            &verifier,
+            &payload,
+            &bundle,
+            &policy,
+            Some(&source_policy),
+            subject,
+        ),
+        Err(VerificationFailure::UntrustedSigner),
+        "the same signer from a tag source ref is rejected"
+    );
+}
+
 #[trace("TC-584", "FR-074-AC-2")]
 #[test]
 fn failed_gate_is_recorded_with_failed_summary() {
     let subject = subject();
+    let exported_test_result = test_result(false);
     let gate_results = ReceiptGateResults {
         protocol: RECEIPT_GATE_RESULTS_PROTOCOL.to_owned(),
         commit: COMMIT.to_owned(),
@@ -674,7 +762,7 @@ fn failed_gate_is_recorded_with_failed_summary() {
         subject: &subject,
         gate_results: &gate_results,
         expected_gate_names: &["focused"],
-        test_result: &test_result(true),
+        test_result: &exported_test_result,
         receipt_input: Some(&input()),
         role_policy: &role_policy(),
         approvals: approvals(),
@@ -711,6 +799,11 @@ fn failed_gate_is_recorded_with_failed_summary() {
     });
     assert!(matches!(omitted_gate, Err(ReceiptRecordError::GateResults)));
     assert_eq!(statements.status, Status::Failed);
+    assert_eq!(
+        statements.test_result,
+        serde_json_canonicalizer::to_vec(&exported_test_result)
+            .expect("canonical Quoin Test Result bytes")
+    );
     let change: Value = serde_json::from_slice(&statements.change_record).expect("change record");
     assert_eq!(
         change.pointer("/predicate/failures/0"),

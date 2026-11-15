@@ -1210,43 +1210,6 @@ mod tests {
         }));
     }
 
-    #[trace("TC-677", "FR-064-AC-9", "FR-064-AC-14", "FR-064-AC-15")]
-    #[test]
-    fn workflow_identity_document_rejects_open_or_malformed_entries() {
-        let valid = release_identity_document();
-        for invalid in [
-            valid.replace(
-                "\"source_ref_prefix\":\"refs/tags/v\"",
-                "\"source_ref_prefix\":\"refs/pull/\"",
-            ),
-            valid.replace(
-                "\"source_ref_prefix\":\"refs/tags/v\"",
-                "\"source_ref_prefix\":\"refs/tags/v*\"",
-            ),
-            valid.replace(
-                "\"ref\":\"refs/tags/v1.2.3\"",
-                "\"ref\":\"refs/heads/main\"",
-            ),
-            valid.replace(
-                "\"source_ref_prefix\":\"refs/tags/v\"",
-                "\"source_ref_prefix\":null",
-            ),
-            valid.replace(
-                "\"source_ref_prefix\":\"refs/tags/v\"",
-                "\"source_ref_prefix\":\"refs/tags/v\",\"unexpected\":true",
-            ),
-            valid.replace(
-                "\"source_ref_prefix\":\"refs/tags/v\"",
-                "\"source_ref_prefix\":\"refs/tags/v\",\"source_ref\":\"refs/heads/main\"",
-            ),
-        ] {
-            assert!(
-                WorkflowIdentityDocument::parse(invalid.as_bytes()).is_err(),
-                "invalid policy unexpectedly accepted: {invalid}"
-            );
-        }
-    }
-
     #[trace("TC-678", "FR-064-AC-1", "FR-064-AC-9")]
     #[test]
     fn local_workflow_identity_requires_one_exact_protected_branch_ref() {

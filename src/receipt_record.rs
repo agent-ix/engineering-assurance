@@ -74,7 +74,7 @@ impl ReceiptInput {
     ///
     /// # Errors
     ///
-    /// Returns ReceiptRecordError::ReceiptInput for malformed or mismatched
+    /// Returns `ReceiptRecordError::ReceiptInput` for malformed or mismatched
     /// data.
     pub fn parse(bytes: &[u8], expected_pull_request: &str) -> Result<Self, ReceiptRecordError> {
         if bytes.len() > MAX_RECEIPT_INPUT_BYTES {
@@ -116,7 +116,7 @@ pub trait ReceiptInputReader {
     ///
     /// # Errors
     ///
-    /// Returns ReceiptInputReadError when the private store cannot complete
+    /// Returns `ReceiptInputReadError` when the private store cannot complete
     /// the lookup.
     fn read_receipt_input(
         &self,
@@ -233,7 +233,7 @@ pub struct ReceiptRecordInput<'a> {
 }
 
 /// Three statements before signing; callers pass the canonical bytes to the
-/// shared SinkLayer so private storage and signer selection remain common.
+/// shared `SinkLayer` so private storage and signer selection remain common.
 pub struct ReceiptStatements {
     /// Canonical change-record statement.
     pub change_record: Vec<u8>,
@@ -262,26 +262,45 @@ pub struct ReceiptRecordResult {
 }
 
 /// Retain the private form first, sign all three statements through the
-/// resolved SinkLayer, and return the resulting bundle set.
+/// resolved `SinkLayer`, and return the resulting bundle set.
 ///
 /// # Errors
 ///
 /// Returns a typed refusal for a missing private store, invalid record data,
 /// signing failure, leak-check refusal, or sink publication failure.
+/// Protected identity, subject and timing inputs for receipt publication.
+pub struct ReceiptPublishContext<'a> {
+    /// Bundle verifier for the selected Sigstore trust root.
+    pub verifier: &'a dyn crate::attestation_signing::BundleVerifier,
+    /// Protected workflow-identity policy for the receipt writer.
+    pub signer_policy: &'a crate::attestation_signing::WorkflowIdentityPolicy,
+    /// Protected policy for the caller workflow identity.
+    pub source_policy: &'a crate::attestation_signing::SourceWorkflowPolicy,
+    /// Receipt subject and merged pull-request identity.
+    pub subject: &'a ExpectedReceiptSubject,
+    /// Unique receipt record identifier.
+    pub record_id: &'a RecordId,
+    /// Receipt creation timestamp.
+    pub created_at: &'a str,
+}
+
+/// Retain the private record, publish all three signed statements, and return
+/// the bundles for the receipt note.
+///
+/// # Errors
+///
+/// Returns a typed error when retention, signing, identity verification, or
+/// sink publication fails.
 pub fn publish_receipt(
     layer: &SinkLayer<'_>,
-    verifier: &dyn crate::attestation_signing::BundleVerifier,
-    signer_policy: &crate::attestation_signing::WorkflowIdentityPolicy,
-    source_policy: &crate::attestation_signing::SourceWorkflowPolicy,
-    subject: &ExpectedReceiptSubject,
-    record_id: RecordId,
-    created_at: &str,
+    context: &ReceiptPublishContext<'_>,
     statements: ReceiptStatements,
 ) -> Result<ReceiptRecordResult, ReceiptRecordError> {
     if layer.sink_kind() == SinkKind::None {
         return Err(ReceiptRecordError::PrivateStoreRequired);
     }
-    let created = Timestamp::try_from(created_at).map_err(|_| ReceiptRecordError::Construction)?;
+    let created =
+        Timestamp::try_from(context.created_at).map_err(|_| ReceiptRecordError::Construction)?;
     let statement: crate::change_record::ChangeStatement =
         serde_json::from_slice(&statements.change_record)
             .map_err(|_| ReceiptRecordError::Construction)?;
@@ -298,9 +317,9 @@ pub fn publish_receipt(
         .map_err(|_| ReceiptRecordError::Construction)?;
     let public = PublicRecord {
         protocol: PublicProtocol::V1,
-        record_id: record_id.clone(),
+        record_id: context.record_id.clone(),
         kind: RecordKind::ChangeRecord,
-        subject: Subject::repo(&subject.repository)
+        subject: Subject::repo(&context.subject.repository)
             .map_err(|_| ReceiptRecordError::Construction)?,
         references: References::new(ticket_ref.into_iter().collect())
             .map_err(|_| ReceiptRecordError::Construction)?,
@@ -310,7 +329,7 @@ pub fn publish_receipt(
                     .map_err(|_| ReceiptRecordError::Construction)?,
             ),
             subject_commit: Some(
-                GitObjectId::try_from(subject.commit.as_str())
+                GitObjectId::try_from(context.subject.commit.as_str())
                     .map_err(|_| ReceiptRecordError::Construction)?,
             ),
             ..Hashes::default()
@@ -338,9 +357,9 @@ pub fn publish_receipt(
                 statements.test_result,
                 statements.summary,
             ],
-            verifier,
-            signer_policy,
-            source_policy,
+            context.verifier,
+            context.signer_policy,
+            context.source_policy,
         )
         .map_err(|result| {
             let code = result.error.unwrap_or(ErrorCode::SigningFailed);
@@ -361,7 +380,7 @@ pub fn publish_receipt(
     let summary = parsed.next().ok_or(ReceiptRecordError::Construction)??;
     Ok(ReceiptRecordResult {
         protocol: RECEIPT_RECORD_RESULT_PROTOCOL,
-        commit: subject.commit.clone(),
+        commit: context.subject.commit.clone(),
         status: statements.status,
         bundles: crate::receipt::ReceiptBundleSet {
             change_record,
@@ -381,99 +400,145 @@ pub fn publish_receipt(
 /// Returns a typed refusal for invalid gate/Test Result data or failed
 /// canonical statement construction.
 pub fn build_receipt_statements(
-    input: ReceiptRecordInput<'_>,
+    mut input: ReceiptRecordInput<'_>,
 ) -> Result<ReceiptStatements, ReceiptRecordError> {
-    use crate::change_record::{Failure, PredicateInput, ReviewInput, Status, build_change_record};
+    validate_gate_results(&input)?;
+    let test_statement = validated_test_statement(&input)?;
+    validate_retained_receipt_input(&input)?;
+    let failures = receipt_failures(&input);
+    let reviews = receipt_reviews(&input);
+    let private_form = private_receipt_form(&input);
+    let approvals =
+        normalize_role_decisions(input.role_policy, std::mem::take(&mut input.approvals));
+    let built = build_receipt_change_record(&input, reviews, approvals, failures, private_form)?;
+    let change_json =
+        serde_json::to_value(&built.statement).map_err(|_| ReceiptRecordError::Construction)?;
+    let change_record = serde_json_canonicalizer::to_vec(&change_json)
+        .map_err(|_| ReceiptRecordError::Construction)?;
+    let test_result = serde_json_canonicalizer::to_vec(&test_statement)
+        .map_err(|_| ReceiptRecordError::Construction)?;
+    let summary = build_receipt_summary(
+        &input,
+        built.statement.predicate.status,
+        &change_record,
+        &test_result,
+    )?;
+    Ok(ReceiptStatements {
+        change_record,
+        test_result,
+        summary,
+        status: built.statement.predicate.status,
+        private_form: built.private_form,
+    })
+}
 
+fn validate_gate_results(input: &ReceiptRecordInput<'_>) -> Result<(), ReceiptRecordError> {
+    let results = &input.gate_results.results;
+    let result_names = results
+        .iter()
+        .map(|result| result.name.as_str())
+        .collect::<BTreeSet<_>>();
+    let expected_names = input
+        .expected_gate_names
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let names = results
+        .iter()
+        .map(|result| result.name.clone())
+        .collect::<Vec<_>>();
     if input.gate_results.protocol != RECEIPT_GATE_RESULTS_PROTOCOL
         || input.gate_results.commit != input.subject.commit
-        || input.gate_results.results.is_empty()
-        || input.gate_results.results.len() > 256
+        || results.is_empty()
+        || results.len() > 256
         || input.expected_gate_names.is_empty()
         || input.expected_gate_names.len() > 256
-        || input
-            .gate_results
-            .results
+        || results
             .iter()
             .any(|result| result.name.is_empty() || result.name.len() > 256)
-        || has_duplicates(
-            &input
-                .gate_results
-                .results
-                .iter()
-                .map(|result| result.name.as_str().to_owned())
-                .collect::<Vec<_>>(),
-        )
+        || has_duplicates(&names)
         || has_duplicates(input.expected_gate_names)
-        || input
-            .gate_results
-            .results
-            .iter()
-            .map(|result| result.name.as_str())
-            .collect::<BTreeSet<_>>()
-            != input
-                .expected_gate_names
-                .iter()
-                .copied()
-                .collect::<BTreeSet<_>>()
+        || result_names != expected_names
     {
         return Err(ReceiptRecordError::GateResults);
     }
-    let test_result: StatementV1 = serde_json::from_value(input.test_result.clone())
+    Ok(())
+}
+
+fn validated_test_statement(
+    input: &ReceiptRecordInput<'_>,
+) -> Result<StatementV1, ReceiptRecordError> {
+    let statement: StatementV1 = serde_json::from_value(input.test_result.clone())
         .map_err(|_| ReceiptRecordError::TestResult)?;
-    let test_predicate =
-        serde_json::to_value(&test_result.predicate).map_err(|_| ReceiptRecordError::TestResult)?;
-    crate::receipt::validate_test_result(&test_predicate)
-        .map_err(|_| ReceiptRecordError::TestResult)?;
-    let gate_failed = input
-        .gate_results
-        .results
-        .iter()
-        .any(|gate| gate.exit_code != 0);
-    let test_failed = test_predicate.get("result").and_then(Value::as_str) == Some("FAILED");
-    if gate_failed != test_failed {
-        return Err(ReceiptRecordError::TestResult);
-    }
-    if test_result.type_ != STATEMENT_V1_TYPE
-        || test_result.predicate_type != TEST_RESULT_PREDICATE
-        || test_result.subject.len() != 1
-        || test_result.subject.iter().any(|subject| {
-            subject.name != input.subject.repository
-                || subject.digest.get("gitCommit") != Some(&input.subject.commit)
-                || subject.digest.get("gitTree") != Some(&input.subject.tree)
-        })
+    let predicate =
+        serde_json::to_value(&statement.predicate).map_err(|_| ReceiptRecordError::TestResult)?;
+    crate::receipt::validate_test_result(&predicate).map_err(|_| ReceiptRecordError::TestResult)?;
+    let valid_subject = statement.subject.len() == 1
+        && statement.subject.iter().all(|subject| {
+            subject.name == input.subject.repository
+                && subject.digest.get("gitCommit") == Some(&input.subject.commit)
+                && subject.digest.get("gitTree") == Some(&input.subject.tree)
+        });
+    if statement.type_ != STATEMENT_V1_TYPE
+        || statement.predicate_type != TEST_RESULT_PREDICATE
+        || !valid_subject
     {
         return Err(ReceiptRecordError::TestResult);
     }
+    Ok(statement)
+}
+
+fn validate_retained_receipt_input(
+    input: &ReceiptRecordInput<'_>,
+) -> Result<(), ReceiptRecordError> {
     if input.receipt_input.is_some_and(|retained| {
         retained.protocol != RECEIPT_INPUT_PROTOCOL
             || retained.pull_request != input.subject.merged_pull_request
     }) {
         return Err(ReceiptRecordError::ReceiptInput);
     }
+    Ok(())
+}
+
+fn receipt_failures(input: &ReceiptRecordInput<'_>) -> Vec<crate::change_record::Failure> {
     let mut failures = Vec::new();
-    if gate_failed {
-        failures.push(Failure::GateFailed);
+    if input
+        .gate_results
+        .results
+        .iter()
+        .any(|gate| gate.exit_code != 0)
+    {
+        failures.push(crate::change_record::Failure::GateFailed);
     }
     if input.receipt_input.is_none() {
-        failures.push(Failure::ContractMissing);
+        failures.push(crate::change_record::Failure::ContractMissing);
     }
-    let reviews: Vec<ReviewInput> = input.receipt_input.map_or_else(Vec::new, |retained| {
+    if input
+        .receipt_input
+        .is_none_or(|retained| retained.reviews.is_empty())
+    {
+        failures.push(crate::change_record::Failure::ReviewsMissing);
+    }
+    failures
+}
+
+fn receipt_reviews(input: &ReceiptRecordInput<'_>) -> Vec<crate::change_record::ReviewInput> {
+    input.receipt_input.map_or_else(Vec::new, |retained| {
         retained
             .reviews
             .iter()
-            .map(|review| ReviewInput {
+            .map(|review| crate::change_record::ReviewInput {
                 kind: review.kind,
                 verdict: review.verdict,
                 artifact_bytes: review.artifact.as_bytes().to_vec(),
             })
             .collect()
-    });
-    if reviews.is_empty() {
-        failures.push(Failure::ReviewsMissing);
-    }
+    })
+}
+
+fn private_receipt_form(input: &ReceiptRecordInput<'_>) -> crate::record_sink::form::PrivateRecord {
     let mut private_form = crate::record_sink::form::PrivateRecord::new(input.record_id.clone());
-    let private_change_data = input.receipt_input.map_or_else(
+    private_form.change_record = Some(input.receipt_input.map_or_else(
         || json!({"protocol": RECEIPT_INPUT_PROTOCOL, "pullRequest": input.subject.merged_pull_request}),
         |retained| json!({
             "protocol": retained.protocol,
@@ -483,8 +548,7 @@ pub fn build_receipt_statements(
             "specCriteria": retained.spec_criteria,
             "reviews": retained.reviews,
         }),
-    );
-    private_form.change_record = Some(private_change_data);
+    ));
     private_form.ticket_text = input
         .receipt_input
         .and_then(|retained| retained.ticket_text.clone());
@@ -494,18 +558,22 @@ pub fn build_receipt_statements(
         )
         .unwrap_or_default()
     });
-    let approvals = normalize_role_decisions(input.role_policy, input.approvals);
-    let built = build_change_record(PredicateInput {
+    private_form
+}
+
+fn build_receipt_change_record(
+    input: &ReceiptRecordInput<'_>,
+    reviews: Vec<crate::change_record::ReviewInput>,
+    approvals: Vec<(String, crate::change_record::ApprovalDecision)>,
+    failures: Vec<crate::change_record::Failure>,
+    private_form: crate::record_sink::form::PrivateRecord,
+) -> Result<crate::change_record::BuiltChangeRecord, ReceiptRecordError> {
+    let retained = input.receipt_input;
+    crate::change_record::build_change_record(crate::change_record::PredicateInput {
         record_id: input.record_id.as_str().to_owned(),
-        ticket: input
-            .receipt_input
-            .and_then(|retained| retained.ticket.clone()),
-        criteria: input
-            .receipt_input
-            .map_or_else(Vec::new, |retained| retained.criteria.clone()),
-        spec_criteria: input
-            .receipt_input
-            .map_or_else(Vec::new, |retained| retained.spec_criteria.clone()),
+        ticket: retained.and_then(|value| value.ticket.clone()),
+        criteria: retained.map_or_else(Vec::new, |value| value.criteria.clone()),
+        spec_criteria: retained.map_or_else(Vec::new, |value| value.spec_criteria.clone()),
         reviews,
         approvals,
         test_results: input.test_result.clone(),
@@ -514,31 +582,26 @@ pub fn build_receipt_statements(
             merged_commit: input.subject.commit.clone(),
             merged_tree: input.subject.tree.clone(),
         },
-        session: input
-            .receipt_input
-            .and_then(|retained| retained.session.clone()),
+        session: retained.and_then(|value| value.session.clone()),
         private_form,
         failures,
     })
-    .map_err(|_| ReceiptRecordError::Construction)?;
-    let change_json =
-        serde_json::to_value(&built.statement).map_err(|_| ReceiptRecordError::Construction)?;
-    let change_record = serde_json_canonicalizer::to_vec(&change_json)
-        .map_err(|_| ReceiptRecordError::Construction)?;
-    let test_result = serde_json_canonicalizer::to_vec(&test_result)
-        .map_err(|_| ReceiptRecordError::Construction)?;
-    let change_digest = format!(
-        "sha256:{}",
-        sigstore_verify::crypto::sha256(&change_record).to_hex()
-    );
-    let test_digest = format!(
-        "sha256:{}",
-        sigstore_verify::crypto::sha256(&test_result).to_hex()
-    );
+    .map_err(|_| ReceiptRecordError::Construction)
+}
+
+fn build_receipt_summary(
+    input: &ReceiptRecordInput<'_>,
+    status: crate::change_record::Status,
+    change_record: &[u8],
+    test_result: &[u8],
+) -> Result<Vec<u8>, ReceiptRecordError> {
+    use crate::change_record::Status;
+
+    let digest =
+        |bytes: &[u8]| format!("sha256:{}", sigstore_verify::crypto::sha256(bytes).to_hex());
     let time_verified = OffsetDateTime::now_utc()
         .format(&Rfc3339)
         .map_err(|_| ReceiptRecordError::Construction)?;
-    let status = built.statement.predicate.status;
     let summary = StatementV1 {
         type_: STATEMENT_V1_TYPE.to_owned(),
         subject: vec![SubjectV1 {
@@ -563,8 +626,8 @@ pub fn build_receipt_statements(
             (
                 "inputAttestations".to_owned(),
                 json!([
-                    {"uri":"urn:engineering-assurance:receipt:change-record","digest":{"sha256":change_digest}},
-                    {"uri":"urn:engineering-assurance:receipt:test-result","digest":{"sha256":test_digest}}
+                    {"uri":"urn:engineering-assurance:receipt:change-record","digest":{"sha256":digest(change_record)}},
+                    {"uri":"urn:engineering-assurance:receipt:test-result","digest":{"sha256":digest(test_result)}}
                 ]),
             ),
             (
@@ -577,15 +640,7 @@ pub fn build_receipt_statements(
             ("verifiedLevels".to_owned(), json!([])),
         ]),
     };
-    let summary =
-        serde_json_canonicalizer::to_vec(&summary).map_err(|_| ReceiptRecordError::Construction)?;
-    Ok(ReceiptStatements {
-        change_record,
-        test_result,
-        summary,
-        status,
-        private_form: built.private_form,
-    })
+    serde_json_canonicalizer::to_vec(&summary).map_err(|_| ReceiptRecordError::Construction)
 }
 
 fn normalize_role_decisions(
@@ -652,52 +707,21 @@ pub fn verified_receipt_approvals(
     identity: &crate::attestation_signing::WorkflowIdentityPolicy,
     policy: &RolePolicy,
     verifier: &dyn crate::attestation_signing::BundleVerifier,
-) -> Result<Vec<(String, crate::change_record::ApprovalDecision)>, ReceiptRecordError> {
+) -> Vec<(String, crate::change_record::ApprovalDecision)> {
     use crate::change_record::ApprovalDecision;
-    let missing = |role: &String| {
-        let eligible = policy
-            .roles
-            .get(role)
-            .is_some_and(|people| !people.is_empty());
-        if eligible {
-            ApprovalDecision::Missing
-        } else {
-            ApprovalDecision::Unstaffed
-        }
-    };
     if subject.merged_pull_request.is_empty() {
-        return Ok(policy
-            .required_roles
-            .iter()
-            .map(|role| (role.clone(), missing(role)))
-            .collect());
+        return missing_role_decisions(policy);
     }
     let lookup = ApprovalStatementLookup {
         repository: &subject.repository,
         merged_pull_request: &subject.merged_pull_request,
         merged_commit: &subject.commit,
     };
-    let retained = match reader.lookup_approval_statements(destination, lookup) {
-        Ok(retained) => retained,
-        Err(_) => {
-            return Ok(policy
-                .required_roles
-                .iter()
-                .map(|role| {
-                    (
-                        role.clone(),
-                        crate::change_record::ApprovalDecision::Unavailable,
-                    )
-                })
-                .collect());
-        }
+    let Ok(retained) = reader.lookup_approval_statements(destination, lookup) else {
+        return unavailable_role_decisions(policy);
     };
     if retained.is_empty() {
-        return Ok(policy
-            .required_roles
-            .iter()
-            .map(|role| (role.clone(), missing(role)))
-            .collect());
+        return missing_role_decisions(policy);
     }
     let snapshot = RetainedApprovalSnapshot {
         statements: retained.clone(),
@@ -711,16 +735,7 @@ pub fn verified_receipt_approvals(
         verifier,
     );
     if result.status != crate::approval_statement::ApprovalStatementStatus::Verified {
-        return Ok(policy
-            .required_roles
-            .iter()
-            .map(|role| {
-                (
-                    role.clone(),
-                    crate::change_record::ApprovalDecision::Unavailable,
-                )
-            })
-            .collect());
+        return unavailable_role_decisions(policy);
     }
     let mut decisions = Vec::with_capacity(policy.required_roles.len());
     for role in &policy.required_roles {
@@ -730,7 +745,7 @@ pub fn verified_receipt_approvals(
             .iter()
             .find(|item| &item.role == role)
         else {
-            decisions.push((role.clone(), missing(role)));
+            decisions.push((role.clone(), missing_role_decision(policy, role)));
             continue;
         };
         let Some((approval, statement)) = retained.iter().find_map(|retained| {
@@ -745,7 +760,8 @@ pub fn verified_receipt_approvals(
             let statement = serde_json::from_slice::<Value>(&retained.statement_bytes).ok()?;
             Some((approval, statement))
         }) else {
-            return Err(ReceiptRecordError::ApprovalEvidence);
+            decisions.push((role.clone(), ApprovalDecision::Unavailable));
+            continue;
         };
         decisions.push((
             role.clone(),
@@ -756,7 +772,47 @@ pub fn verified_receipt_approvals(
             },
         ));
     }
-    Ok(decisions)
+    decisions
+}
+
+fn missing_role_decisions(
+    policy: &RolePolicy,
+) -> Vec<(String, crate::change_record::ApprovalDecision)> {
+    policy
+        .required_roles
+        .iter()
+        .map(|role| (role.clone(), missing_role_decision(policy, role)))
+        .collect()
+}
+
+fn missing_role_decision(
+    policy: &RolePolicy,
+    role: &str,
+) -> crate::change_record::ApprovalDecision {
+    if policy
+        .roles
+        .get(role)
+        .is_some_and(|people| !people.is_empty())
+    {
+        crate::change_record::ApprovalDecision::Missing
+    } else {
+        crate::change_record::ApprovalDecision::Unstaffed
+    }
+}
+
+fn unavailable_role_decisions(
+    policy: &RolePolicy,
+) -> Vec<(String, crate::change_record::ApprovalDecision)> {
+    policy
+        .required_roles
+        .iter()
+        .map(|role| {
+            (
+                role.clone(),
+                crate::change_record::ApprovalDecision::Unavailable,
+            )
+        })
+        .collect()
 }
 
 struct RetainedApprovalSnapshot {

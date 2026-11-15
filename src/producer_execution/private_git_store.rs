@@ -2693,7 +2693,7 @@ mod tests {
     }
 
     #[cfg(feature = "receipt-record")]
-    #[trace("TC-999", "FR-075-AC-1")]
+    #[trace("TC-999", "FR-075-AC-8")]
     #[test]
     fn receipt_input_round_trips_by_exact_pr_and_cannot_be_replaced() {
         let temp = tempfile::tempdir().expect("temp dir");

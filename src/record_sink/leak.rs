@@ -176,6 +176,11 @@ pub fn leak_check<'a>(
 /// `record.hashes.statement` must equal the SHA-256 digest of the exact
 /// canonical statement bytes. The proof cannot be constructed for a different
 /// payload, and the ordinary fail-closed visibility rules still apply.
+///
+/// # Errors
+///
+/// Returns `CheckRefusal::Unencodable` when the digest does not match, or the
+/// refusal returned by the ordinary visibility check.
 #[cfg(feature = "attestation-verify")]
 pub fn leak_check_statement<'a>(
     publishing_repo: &str,
