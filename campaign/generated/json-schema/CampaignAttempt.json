@@ -19,6 +19,7 @@
 		"index": {
 			"type": "integer",
 			"minimum": 1,
+			"maximum": 9007199254740991,
 			"x-agent-ix-semantic-id": "ix://agent-ix/engineering-assurance-campaign/VO-008/index",
 			"x-agent-ix-origin": {
 				"source": {
@@ -35,7 +36,7 @@
 					"identity": "ix://agent-ix/engineering-assurance-campaign/constraint/VO-008-index-min",
 					"keyword": "min",
 					"operands": {
-						"value": 1
+						"value": "1"
 					},
 					"origin": {
 						"source": {

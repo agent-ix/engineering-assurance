@@ -10,7 +10,7 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
         identity: "ix://agent-ix/engineering-assurance-campaign/VO-011/prefix",
         name: "prefix",
         rust_name: "prefix",
-        type_ref: "ix://quire/native/String",
+        type_ref: "ix://filament/native/String",
         rust_type: "String",
         row: "field:single/non-null/required",
         presence: "required",
@@ -40,7 +40,7 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
         identity: "ix://agent-ix/engineering-assurance-campaign/VO-011/required",
         name: "required",
         rust_name: "required",
-        type_ref: "ix://quire/native/Boolean",
+        type_ref: "ix://filament/native/Boolean",
         rust_type: "bool",
         row: "field:single/non-null/required",
         presence: "required",
@@ -105,6 +105,14 @@ impl ProcedureInputPrefix {
         prefix: String,
         required: bool,
     ) -> Result<Self, crate::support::ValidationError> {
+        if prefix.is_empty() {
+            return Err(crate::support::ValidationError::new(
+                "ix://agent-ix/engineering-assurance-campaign/constraint/VO-011-prefix-nonEmpty",
+                "nonEmpty",
+                "",
+                "a non-empty value",
+            ));
+        }
         Ok(Self { prefix, required })
     }
 

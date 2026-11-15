@@ -40,7 +40,7 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
         identity: "ix://agent-ix/engineering-assurance-campaign/VO-002/value",
         name: "value",
         rust_name: "value",
-        type_ref: "ix://quire/native/String",
+        type_ref: "ix://filament/native/String",
         rust_type: "String",
         row: "field:single/non-null/required",
         presence: "required",
@@ -105,6 +105,14 @@ impl ProcedureArgument {
         kind: crate::ProcedureArgumentKind,
         value: String,
     ) -> Result<Self, crate::support::ValidationError> {
+        if value.is_empty() {
+            return Err(crate::support::ValidationError::new(
+                "ix://agent-ix/engineering-assurance-campaign/constraint/VO-002-value-nonEmpty",
+                "nonEmpty",
+                "",
+                "a non-empty value",
+            ));
+        }
         Ok(Self { kind, value })
     }
 
