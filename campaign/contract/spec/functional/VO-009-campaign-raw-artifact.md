@@ -2,7 +2,7 @@
 id: VO-009
 title: Campaign Raw Artifact
 object: campaign_value
-type: FR
+type: campaign_value
 name: CampaignRawArtifact
 ---
 

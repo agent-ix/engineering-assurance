@@ -2,7 +2,7 @@
 id: VO-012
 title: Procedure Input Origin
 object: campaign_value
-type: FR
+type: campaign_value
 name: ProcedureInputOrigin
 ---
 

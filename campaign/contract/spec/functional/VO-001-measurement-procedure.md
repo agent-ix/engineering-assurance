@@ -2,7 +2,7 @@
 id: VO-001
 title: Measurement Procedure
 object: campaign_value
-type: FR
+type: campaign_value
 name: MeasurementProcedure
 ---
 

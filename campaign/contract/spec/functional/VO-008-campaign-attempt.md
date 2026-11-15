@@ -2,7 +2,7 @@
 id: VO-008
 title: Campaign Attempt
 object: campaign_value
-type: FR
+type: campaign_value
 name: CampaignAttempt
 ---
 

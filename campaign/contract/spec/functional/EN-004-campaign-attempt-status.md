@@ -2,7 +2,7 @@
 id: EN-004
 title: Campaign Attempt Status
 object: campaign_enum
-type: FR
+type: campaign_enum
 name: CampaignAttemptStatus
 ---
 

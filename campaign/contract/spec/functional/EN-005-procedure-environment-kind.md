@@ -2,7 +2,7 @@
 id: EN-005
 title: Procedure Environment Kind
 object: campaign_enum
-type: FR
+type: campaign_enum
 name: ProcedureEnvironmentKind
 ---
 
