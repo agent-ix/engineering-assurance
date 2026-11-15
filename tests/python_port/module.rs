@@ -1453,10 +1453,14 @@ fn tc112_workflow_violations(path: &str, text: &str) -> BTreeSet<&'static str> {
     }
 
     let normalized = text.to_lowercase();
-    let package_publish = if reusable_attestation {
+    let package_publish = if reusable_attestation || receipt_workflow {
         let package_publish_action = normalized
             .lines()
-            .any(|line| line.trim_start().starts_with("uses:") && line.contains("publish"));
+            .any(|line| {
+                let line = line.trim_start();
+                let action = line.strip_prefix("- ").unwrap_or(line);
+                action.starts_with("uses:") && action.contains("publish")
+            });
         let package_publish_command = [
             "npm publish",
             "npm run publish",
@@ -1584,6 +1588,34 @@ fn package_and_release_publication_or_automatic_workflow_triggers_are_refused() 
         )
         .is_empty()
     );
+
+    let receipt_tool_download = concat!(
+        "on:\n  workflow_call:\njobs:\n  record:\n    steps:\n",
+        "      - name: Download published tooling\n",
+        "        run: gh release download v0.10.0\n"
+    );
+    assert!(tc112_workflow_violations(
+        ".github/workflows/change-receipt.yml",
+        receipt_tool_download
+    )
+    .is_empty());
+
+    for publisher in [
+        "      - run: npm publish\n",
+        "      - uses: pypa/gh-action-pypi-publish@v1\n",
+    ] {
+        let receipt_publisher = format!(
+            "on:\n  workflow_call:\njobs:\n  record:\n    steps:\n{publisher}"
+        );
+        assert_eq!(
+            tc112_workflow_violations(
+                ".github/workflows/change-receipt.yml",
+                &receipt_publisher
+            ),
+            BTreeSet::from(["package_publish"]),
+            "receipt workflows must still reject package publishers: {publisher:?}"
+        );
+    }
 
     let handoff_through_third_job = concat!(
         "on:\n  workflow_call:\njobs:\n",
