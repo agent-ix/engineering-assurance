@@ -51,7 +51,7 @@ of "the signature" describe SSH signatures unless FR-040 is named.
   `engineering-assurance.signature-verify-request/v1` with the members
   `protocol`, `repository` (absolute directory path), `revision`, `kind`
   (`commit` or `tag`) and `allowed_signers` (absolute file path, required;
-  see FR-037).
+  see FR-037) and the optional `trailer_keys` (see FR-037).
 
 ## Outputs
 
@@ -92,7 +92,8 @@ of "the signature" describe SSH signatures unless FR-040 is named.
   stderr, and exits with status 2. The codes are
   `signature_verify_request_unreadable`, `signature_verify_request_invalid`,
   `signature_verify_revision_invalid`, `signature_verify_result_encoding_failed`
-  and, from FR-037, `signature_verify_allowed_signers_invalid`.
+  and, from FR-037, `signature_verify_allowed_signers_invalid` and
+  `signature_verify_trailer_keys_invalid`.
 - Machine errors that carry no verdict SHALL NOT contain `verified_commit_id`.
   The additive `verified_commit_id` member does not change the
   `engineering-assurance.signature-verify-result/v1` protocol value.
