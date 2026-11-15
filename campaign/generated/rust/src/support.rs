@@ -2,7 +2,7 @@
 //!
 //! Every named type the mapping table refers to lives here: the nullability
 //! wrapper, the dynamic value the unknown-member policies retain, the validated
-//! identity and locus-path newtypes, the four validated scalar newtypes, the
+//! identity and locus-path newtypes, the validated scalar newtypes and Bytes, the
 //! generated pattern matcher, and the validation error every fallible
 //! constructor returns.
 //!
@@ -15,12 +15,497 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fmt;
 
-use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
+use serde::de::{self, Deserializer, IntoDeserializer, MapAccess, SeqAccess, Visitor};
 use serde::ser::{SerializeMap, SerializeSeq, Serializer};
 use serde::{Deserialize, Serialize};
 
+/// Parse one canonical decimal integer carried on the JSON string wire.
+pub fn parse_canonical_integer<T>(wire: &str) -> Result<T, String>
+where
+    T: std::str::FromStr + ToString,
+    T::Err: fmt::Display,
+{
+    let value = wire.parse::<T>().map_err(|error| error.to_string())?;
+    if value.to_string() != wire {
+        return Err("integer is not canonical".to_owned());
+    }
+    Ok(value)
+}
+
+// Native integer members whose effective range exceeds the JSON safe-number
+// interval use the canonical string wire form even when they are not minted
+// aliases.  These adapters are kept in the fixed support module so records,
+// optional fields, and collections all share the same parser and reject JSON
+// numbers instead of silently rounding them.
+macro_rules! wide_integer_scalar {
+    ($module:ident, $ty:ty) => {
+        /// Canonical string adapter for one wide integer.
+        pub mod $module {
+            use serde::{Deserialize, Deserializer, Serializer};
+
+            /// Serialize the integer as its canonical decimal string.
+            pub fn serialize<S>(value: &$ty, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+            {
+                serializer.serialize_str(&value.to_string())
+            }
+
+            /// Deserialize and validate one canonical decimal integer.
+            pub fn deserialize<'de, D>(deserializer: D) -> Result<$ty, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                let wire = <String as Deserialize>::deserialize(deserializer)?;
+                super::parse_canonical_integer::<$ty>(&wire).map_err(serde::de::Error::custom)
+            }
+        }
+    };
+}
+
+wide_integer_scalar!(wide_i64, i64);
+wide_integer_scalar!(wide_u64, u64);
+wide_integer_scalar!(wide_i128, i128);
+
+macro_rules! wide_integer_vec {
+    ($module:ident, $ty:ty) => {
+        /// Canonical string adapter for a vector of wide integers.
+        pub mod $module {
+            use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+            /// Serialize all members as canonical decimal strings.
+            pub fn serialize<S>(values: &[$ty], serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+            {
+                values
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .serialize(serializer)
+            }
+
+            /// Deserialize a vector of canonical decimal integers.
+            pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<$ty>, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                let wires = <Vec<String> as Deserialize>::deserialize(deserializer)?;
+                wires
+                    .into_iter()
+                    .map(|wire| {
+                        super::parse_canonical_integer::<$ty>(&wire)
+                            .map_err(serde::de::Error::custom)
+                    })
+                    .collect()
+            }
+        }
+    };
+}
+
+wide_integer_vec!(wide_vec_i64, i64);
+wide_integer_vec!(wide_vec_u64, u64);
+wide_integer_vec!(wide_vec_i128, i128);
+
+/// Generic adapters for the remaining member-axis compositions.  The
+/// `serde(with = ...)` contract monomorphizes these functions for the field's
+/// concrete integer type, so one implementation covers every width.
+/// Canonical integer adapter for wide option values.
+pub mod wide_option {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::fmt::Display;
+    use std::str::FromStr;
+
+    /// Serialize canonical integer wire values.
+    pub fn serialize<S, T>(value: &Option<T>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: ToString,
+    {
+        value
+            .as_ref()
+            .map(ToString::to_string)
+            .serialize(serializer)
+    }
+
+    /// Deserialize canonical integer wire values.
+    pub fn deserialize<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: FromStr + ToString,
+        T::Err: Display,
+    {
+        <Option<String> as Deserialize>::deserialize(deserializer)?
+            .map(|wire| {
+                super::parse_canonical_integer::<T>(&wire).map_err(serde::de::Error::custom)
+            })
+            .transpose()
+    }
+}
+
+/// Canonical integer adapter for wide option vec values.
+pub mod wide_option_vec {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::fmt::Display;
+    use std::str::FromStr;
+
+    /// Serialize canonical integer wire values.
+    pub fn serialize<S, T>(value: &Option<Vec<T>>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: ToString,
+    {
+        value
+            .as_ref()
+            .map(|values| values.iter().map(ToString::to_string).collect::<Vec<_>>())
+            .serialize(serializer)
+    }
+
+    /// Deserialize canonical integer wire values.
+    pub fn deserialize<'de, D, T>(deserializer: D) -> Result<Option<Vec<T>>, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: FromStr + ToString,
+        T::Err: Display,
+    {
+        <Option<Vec<String>> as Deserialize>::deserialize(deserializer)?
+            .map(|wires| {
+                wires
+                    .into_iter()
+                    .map(|wire| {
+                        super::parse_canonical_integer::<T>(&wire).map_err(serde::de::Error::custom)
+                    })
+                    .collect()
+            })
+            .transpose()
+    }
+}
+
+/// Canonical integer adapter for wide nullable values.
+pub mod wide_nullable {
+    use super::Nullable;
+    use serde::{Deserialize, Deserializer, Serializer};
+    use std::fmt::Display;
+    use std::str::FromStr;
+
+    /// Serialize canonical integer wire values.
+    pub fn serialize<S, T>(value: &Nullable<T>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: ToString,
+    {
+        match value {
+            Nullable::Null => serializer.serialize_none(),
+            Nullable::Value(inner) => serializer.serialize_str(&inner.to_string()),
+        }
+    }
+
+    /// Deserialize canonical integer wire values.
+    pub fn deserialize<'de, D, T>(deserializer: D) -> Result<Nullable<T>, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: FromStr + ToString,
+        T::Err: Display,
+    {
+        match <Option<String> as Deserialize>::deserialize(deserializer)? {
+            None => Ok(Nullable::Null),
+            Some(wire) => super::parse_canonical_integer::<T>(&wire)
+                .map(Nullable::Value)
+                .map_err(serde::de::Error::custom),
+        }
+    }
+}
+
+/// Canonical integer adapter for wide nullable vec values.
+pub mod wide_nullable_vec {
+    use super::Nullable;
+    use serde::{Deserialize, Deserializer, Serializer};
+    use std::fmt::Display;
+    use std::str::FromStr;
+
+    /// Serialize canonical integer wire values.
+    pub fn serialize<S, T>(value: &Nullable<Vec<T>>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: ToString,
+    {
+        match value {
+            Nullable::Null => serializer.serialize_none(),
+            Nullable::Value(values) => serializer
+                .serialize_some(&values.iter().map(ToString::to_string).collect::<Vec<_>>()),
+        }
+    }
+
+    /// Deserialize canonical integer wire values.
+    pub fn deserialize<'de, D, T>(deserializer: D) -> Result<Nullable<Vec<T>>, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: FromStr + ToString,
+        T::Err: Display,
+    {
+        match <Option<Vec<String>> as Deserialize>::deserialize(deserializer)? {
+            None => Ok(Nullable::Null),
+            Some(wires) => wires
+                .into_iter()
+                .map(|wire| {
+                    super::parse_canonical_integer::<T>(&wire).map_err(serde::de::Error::custom)
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .map(Nullable::Value),
+        }
+    }
+}
+
+/// Canonical integer adapter for wide vec nullable values.
+pub mod wide_vec_nullable {
+    use super::Nullable;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::fmt::Display;
+    use std::str::FromStr;
+
+    /// Serialize canonical integer wire values.
+    pub fn serialize<S, T>(value: &[Nullable<T>], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: ToString,
+    {
+        value
+            .iter()
+            .map(|item| match item {
+                Nullable::Null => None,
+                Nullable::Value(inner) => Some(inner.to_string()),
+            })
+            .collect::<Vec<_>>()
+            .serialize(serializer)
+    }
+
+    /// Deserialize canonical integer wire values.
+    pub fn deserialize<'de, D, T>(deserializer: D) -> Result<Vec<Nullable<T>>, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: FromStr + ToString,
+        T::Err: Display,
+    {
+        <Vec<Option<String>> as Deserialize>::deserialize(deserializer)?
+            .into_iter()
+            .map(|wire| match wire {
+                None => Ok(Nullable::Null),
+                Some(wire) => super::parse_canonical_integer::<T>(&wire)
+                    .map(Nullable::Value)
+                    .map_err(serde::de::Error::custom),
+            })
+            .collect()
+    }
+}
+
+/// Canonical integer adapter for wide option nullable values.
+pub mod wide_option_nullable {
+    use super::Nullable;
+    use serde::{Deserialize, Deserializer, Serializer};
+    use std::fmt::Display;
+    use std::str::FromStr;
+
+    /// Serialize canonical integer wire values.
+    pub fn serialize<S, T>(value: &Option<Nullable<T>>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: ToString,
+    {
+        match value {
+            None => serializer.serialize_none(),
+            Some(Nullable::Null) => serializer.serialize_none(),
+            Some(Nullable::Value(inner)) => serializer.serialize_str(&inner.to_string()),
+        }
+    }
+
+    /// Deserialize canonical integer wire values.
+    pub fn deserialize<'de, D, T>(deserializer: D) -> Result<Option<Nullable<T>>, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: FromStr + ToString,
+        T::Err: Display,
+    {
+        match <Option<String> as Deserialize>::deserialize(deserializer)? {
+            None => Ok(Some(Nullable::Null)),
+            Some(wire) => super::parse_canonical_integer::<T>(&wire)
+                .map(Nullable::Value)
+                .map(Some)
+                .map_err(serde::de::Error::custom),
+        }
+    }
+}
+
+/// Canonical integer adapter for wide option nullable vec values.
+pub mod wide_option_nullable_vec {
+    use super::Nullable;
+    use serde::{Deserialize, Deserializer, Serializer};
+    use std::fmt::Display;
+    use std::str::FromStr;
+
+    /// Serialize canonical integer wire values.
+    pub fn serialize<S, T>(
+        value: &Option<Nullable<Vec<T>>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: ToString,
+    {
+        match value {
+            None | Some(Nullable::Null) => serializer.serialize_none(),
+            Some(Nullable::Value(values)) => serializer
+                .serialize_some(&values.iter().map(ToString::to_string).collect::<Vec<_>>()),
+        }
+    }
+
+    /// Deserialize canonical integer wire values.
+    pub fn deserialize<'de, D, T>(deserializer: D) -> Result<Option<Nullable<Vec<T>>>, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: FromStr + ToString,
+        T::Err: Display,
+    {
+        match <Option<Vec<String>> as Deserialize>::deserialize(deserializer)? {
+            None => Ok(Some(Nullable::Null)),
+            Some(wires) => wires
+                .into_iter()
+                .map(|wire| {
+                    super::parse_canonical_integer::<T>(&wire).map_err(serde::de::Error::custom)
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .map(|values| Some(Nullable::Value(values))),
+        }
+    }
+}
+
+/// Canonical integer adapter for wide option vec nullable values.
+pub mod wide_option_vec_nullable {
+    use super::Nullable;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::fmt::Display;
+    use std::str::FromStr;
+
+    /// Serialize canonical integer wire values.
+    pub fn serialize<S, T>(
+        value: &Option<Vec<Nullable<T>>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: ToString,
+    {
+        value
+            .as_ref()
+            .map(|values| {
+                values
+                    .iter()
+                    .map(|item| match item {
+                        Nullable::Null => None,
+                        Nullable::Value(inner) => Some(inner.to_string()),
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .serialize(serializer)
+    }
+
+    /// Deserialize canonical integer wire values.
+    pub fn deserialize<'de, D, T>(deserializer: D) -> Result<Option<Vec<Nullable<T>>>, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: FromStr + ToString,
+        T::Err: Display,
+    {
+        <Option<Vec<Option<String>>> as Deserialize>::deserialize(deserializer)?
+            .map(|wires| {
+                wires
+                    .into_iter()
+                    .map(|wire| match wire {
+                        None => Ok(Nullable::Null),
+                        Some(wire) => super::parse_canonical_integer::<T>(&wire)
+                            .map(Nullable::Value)
+                            .map_err(serde::de::Error::custom),
+                    })
+                    .collect()
+            })
+            .transpose()
+    }
+}
+
 /// The longest input-derived fragment a validation message echoes.
 pub const MAX_ECHOED_CODE_POINTS: usize = 120;
+
+/// Exact decimal strings carried by the decimal scalar.
+pub type Decimal = String;
+
+/// Validates and renders one decimal instance at its declared scale.
+pub fn decimal_normalize(value: &str, precision: usize, scale: usize) -> Option<String> {
+    let (negative, unsigned) = match value.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, value),
+    };
+    if unsigned.is_empty() || unsigned.starts_with('+') {
+        return None;
+    }
+    let (whole, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+    if whole.is_empty()
+        || !whole.chars().all(|ch| ch.is_ascii_digit())
+        || !fraction.chars().all(|ch| ch.is_ascii_digit())
+        || (whole.len() > 1 && whole.starts_with('0'))
+        || value.contains('.') && fraction.is_empty()
+        || fraction.len() > scale
+    {
+        return None;
+    }
+    if negative && whole == "0" && (fraction.is_empty() || fraction.chars().all(|ch| ch == '0')) {
+        return None;
+    }
+    let integer_digits = if whole == "0" { 0 } else { whole.len() };
+    if integer_digits > precision.saturating_sub(scale) {
+        return None;
+    }
+    let mut out = String::new();
+    if negative {
+        out.push('-');
+    }
+    out.push_str(whole);
+    if scale > 0 {
+        out.push('.');
+        out.push_str(fraction);
+        for _ in fraction.len()..scale {
+            out.push('0');
+        }
+    }
+    Some(out)
+}
+
+/// Compares canonical decimal strings without converting through a float.
+pub fn decimal_cmp(left: &str, right: &str) -> Option<Ordering> {
+    fn parts(value: &str) -> Option<(bool, i128, u32)> {
+        if value.is_empty() || value == "-0" || value.starts_with('+') {
+            return None;
+        }
+        let negative = value.starts_with('-');
+        let unsigned = if negative { &value[1..] } else { value };
+        let (whole, fraction) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+        if whole.is_empty()
+            || !whole.chars().all(|ch| ch.is_ascii_digit())
+            || !fraction.chars().all(|ch| ch.is_ascii_digit())
+            || (whole.len() > 1 && whole.starts_with('0'))
+        {
+            return None;
+        }
+        let coefficient = format!("{whole}{fraction}").parse::<i128>().ok()?;
+        Some((negative, coefficient, fraction.len() as u32))
+    }
+    let (left_negative, left_coefficient, left_scale) = parts(left)?;
+    let (right_negative, right_coefficient, right_scale) = parts(right)?;
+    let scale = left_scale.max(right_scale);
+    let left = left_coefficient.checked_mul(10i128.checked_pow(scale - left_scale)?)?;
+    let right = right_coefficient.checked_mul(10i128.checked_pow(scale - right_scale)?)?;
+    let left = if left_negative { -left } else { left };
+    let right = if right_negative { -right } else { right };
+    Some(left.cmp(&right))
+}
 
 /// Truncates input-derived text at the declared code-point bound.
 ///
@@ -417,6 +902,85 @@ impl<'de> Deserialize<'de> for SemanticValue {
     }
 }
 
+/// Replays a buffered JSON value to a declared payload type when `value`
+/// precedes `kind` in an adjacent union object.
+pub fn deserialize_semantic<'de, T: Deserialize<'de>>(
+    value: SemanticValue,
+) -> Result<T, serde::de::value::Error> {
+    T::deserialize(value)
+}
+
+impl<'de> IntoDeserializer<'de, de::value::Error> for SemanticValue {
+    type Deserializer = Self;
+
+    fn into_deserializer(self) -> Self::Deserializer {
+        self
+    }
+}
+
+impl<'de> Deserializer<'de> for SemanticValue {
+    type Error = serde::de::value::Error;
+
+    fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+        match self {
+            SemanticValue::Null => visitor.visit_unit(),
+            SemanticValue::Bool(value) => visitor.visit_bool(value),
+            SemanticValue::Number(value) => {
+                if let Ok(number) = value.text().parse::<i64>() {
+                    visitor.visit_i64(number)
+                } else if let Ok(number) = value.text().parse::<u64>() {
+                    visitor.visit_u64(number)
+                } else {
+                    let number = value.text().parse::<f64>().map_err(de::Error::custom)?;
+                    visitor.visit_f64(number)
+                }
+            }
+            SemanticValue::String(value) => visitor.visit_string(value),
+            SemanticValue::Array(values) => {
+                visitor.visit_seq(de::value::SeqDeserializer::new(values.into_iter()))
+            }
+            SemanticValue::Object(members) => {
+                visitor.visit_map(de::value::MapDeserializer::new(members.into_iter()))
+            }
+        }
+    }
+
+    fn deserialize_option<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
+        match self {
+            SemanticValue::Null => visitor.visit_none(),
+            value => visitor.visit_some(value),
+        }
+    }
+
+    fn deserialize_newtype_struct<V: Visitor<'de>>(
+        self,
+        _name: &'static str,
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
+        visitor.visit_newtype_struct(self)
+    }
+
+    fn deserialize_enum<V: Visitor<'de>>(
+        self,
+        name: &'static str,
+        _variants: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Self::Error> {
+        match self {
+            SemanticValue::String(value) => visitor.visit_enum(value.into_deserializer()),
+            _ => Err(de::Error::invalid_type(
+                de::Unexpected::Other("non-string enum"),
+                &name,
+            )),
+        }
+    }
+
+    serde::forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 char str string bytes byte_buf
+        unit unit_struct seq tuple tuple_struct map struct identifier ignored_any
+    }
+}
+
 /// Renders an `f64` the way ECMAScript's `Number::toString` does for the values
 /// a JSON document can carry.
 ///
@@ -472,16 +1036,14 @@ impl UnknownMembers {
 /// `surface` an unrecognised tag is kept here instead of failing
 /// deserialization.
 ///
-/// The two wire forms are kept apart because the round trip has to be
-/// unchanged. An externally tagged variant reaches the wire either as a bare
-/// tag string, which is how a variant with no payload is written, or as a
-/// one-member object. Collapsing them onto one constructor would re-serialize
-/// a value in the form it did not arrive in.
+/// The two adjacent wire forms are kept apart because the round trip has to be
+/// unchanged. A unit variant has only `kind`; a variant with a payload also
+/// has `value`, even when that value is JSON `null`.
 #[derive(Clone, Debug, PartialEq)]
 pub enum UnknownVariant {
-    /// The wire form was a bare tag string.
+    /// The wire form had a `kind` and no `value`.
     Tag(String),
-    /// The wire form was a one-member object: a tag and its payload.
+    /// The wire form had both `kind` and `value`.
     Tagged(String, SemanticValue),
 }
 
@@ -506,14 +1068,44 @@ impl UnknownVariant {
 impl Serialize for UnknownVariant {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         match self {
-            UnknownVariant::Tag(tag) => serializer.serialize_str(tag),
+            UnknownVariant::Tag(tag) => serialize_adjacent_unit(serializer, tag),
             UnknownVariant::Tagged(tag, payload) => {
-                let mut map = serializer.serialize_map(Some(1))?;
-                map.serialize_entry(tag, payload)?;
-                map.end()
+                serialize_adjacent_payload(serializer, tag, payload)
             }
         }
     }
+}
+
+/// Serializes a payload-free variant as an adjacent `kind` object.
+pub fn serialize_adjacent_unit<S: Serializer>(serializer: S, tag: &str) -> Result<S::Ok, S::Error> {
+    let mut map = serializer.serialize_map(Some(1))?;
+    map.serialize_entry("kind", tag)?;
+    map.end()
+}
+
+/// Serializes a payload-carrying variant as an adjacent `kind` and `value` object.
+pub fn serialize_adjacent_payload<S: Serializer, T: Serialize>(
+    serializer: S,
+    tag: &str,
+    payload: &T,
+) -> Result<S::Ok, S::Error> {
+    let mut map = serializer.serialize_map(Some(2))?;
+    map.serialize_entry("kind", tag)?;
+    map.serialize_entry("value", payload)?;
+    map.end()
+}
+
+/// Reads a declared variant's required adjacent `value` member.
+pub fn read_adjacent_payload<'de, A: MapAccess<'de>, T: Deserialize<'de>>(
+    access: &mut A,
+) -> Result<T, A::Error> {
+    let Some(member) = access.next_key::<String>()? else {
+        return Err(de::Error::missing_field("value"));
+    };
+    if member != "value" {
+        return Err(de::Error::unknown_field(&member, &["value"]));
+    }
+    access.next_value()
 }
 
 /// A declared extension carried beside a contract node.
@@ -974,6 +1566,137 @@ validated_scalar!(
     is_iso8601_duration
 );
 validated_scalar!(Uuid, "format", "an 8-4-4-4-12 UUID", is_uuid);
+
+/// An octet sequence whose JSON form is canonical padded standard base64.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Bytes(Vec<u8>);
+
+impl Bytes {
+    /// Builds a value from its octets.
+    pub fn new(octets: Vec<u8>) -> Self {
+        Self(octets)
+    }
+
+    /// The octets of this value.
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+
+    /// True when the octet sequence has no members.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Renders the canonical padded standard base64 wire value.
+    pub fn to_base64(&self) -> String {
+        encode_bytes_wire(&self.0)
+    }
+
+    /// Consumes the wrapper and returns its octets.
+    pub fn into_inner(self) -> Vec<u8> {
+        self.0
+    }
+}
+
+const BASE64_ALPHABET: &[u8; 64] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+fn base64_digit(byte: u8) -> Option<u8> {
+    match byte {
+        b'A'..=b'Z' => Some(byte - b'A'),
+        b'a'..=b'z' => Some(byte - b'a' + 26),
+        b'0'..=b'9' => Some(byte - b'0' + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
+    }
+}
+
+fn decode_bytes_wire(text: &str) -> Option<Vec<u8>> {
+    let bytes = text.as_bytes();
+    if bytes.len() % 4 != 0 {
+        return None;
+    }
+    let mut octets = Vec::new();
+    for (index, group) in bytes.chunks_exact(4).enumerate() {
+        let last = index + 1 == bytes.len() / 4;
+        let first = base64_digit(group[0])?;
+        let second = base64_digit(group[1])?;
+        octets.push((first << 2) | (second >> 4));
+        if group[2] == b'=' {
+            if !last || group[3] != b'=' || second & 0x0f != 0 {
+                return None;
+            }
+            continue;
+        }
+        let third = base64_digit(group[2])?;
+        octets.push((second << 4) | (third >> 2));
+        if group[3] == b'=' {
+            if !last || third & 0x03 != 0 {
+                return None;
+            }
+            continue;
+        }
+        let fourth = base64_digit(group[3])?;
+        octets.push((third << 6) | fourth);
+    }
+    Some(octets)
+}
+
+fn encode_bytes_wire(octets: &[u8]) -> String {
+    let mut text = String::new();
+    for group in octets.chunks(3) {
+        text.push(BASE64_ALPHABET[(group[0] >> 2) as usize] as char);
+        text.push(
+            BASE64_ALPHABET
+                [(((group[0] & 0x03) << 4) | (group.get(1).copied().unwrap_or(0) >> 4)) as usize]
+                as char,
+        );
+        if let Some(second) = group.get(1) {
+            text.push(
+                BASE64_ALPHABET
+                    [(((second & 0x0f) << 2) | (group.get(2).copied().unwrap_or(0) >> 6)) as usize]
+                    as char,
+            );
+        } else {
+            text.push('=');
+        }
+        if let Some(third) = group.get(2) {
+            text.push(BASE64_ALPHABET[(third & 0x3f) as usize] as char);
+        } else {
+            text.push('=');
+        }
+    }
+    text
+}
+
+impl Serialize for Bytes {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_base64())
+    }
+}
+
+impl<'de> Deserialize<'de> for Bytes {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        decode_bytes_wire(&text)
+            .map(Self)
+            .ok_or_else(|| de::Error::custom("not canonical padded standard base64"))
+    }
+}
+
+/// Refuses a `value` member on a payload-free adjacent union variant.
+///
+/// Serde otherwise accepts `{"kind":"b","value":null}` for a unit variant.
+/// The variant attribute calls this helper only when the member is present;
+/// omitting `value` still deserializes to the unit variant.
+pub fn reject_unit_variant_value<'de, D: Deserializer<'de>>(
+    _deserializer: D,
+) -> Result<(), D::Error> {
+    Err(de::Error::custom(
+        "a payload-free variant must omit its value member",
+    ))
+}
 
 /// True where the civil date exists in the proleptic Gregorian calendar.
 fn is_valid_civil(year: i64, month: i64, day: i64) -> bool {

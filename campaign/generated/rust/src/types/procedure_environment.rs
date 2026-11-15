@@ -7,6 +7,36 @@ use serde::{Deserialize, Serialize};
 /// The fields of `ProcedureEnvironment`, in the order the contract declares them.
 pub const FIELDS: &[crate::identity::FieldMeta] = &[
     crate::identity::FieldMeta {
+        identity: "ix://agent-ix/engineering-assurance-campaign/VO-010/name",
+        name: "name",
+        rust_name: "name",
+        type_ref: "ix://filament/native/String",
+        rust_type: "String",
+        row: "field:single/non-null/required",
+        presence: "required",
+        nullable: false,
+        multiplicity: crate::identity::MultiplicityMeta {
+            lower: 1,
+            upper: Some(1),
+            ordered: Some(false),
+            unique: Some(false),
+        },
+        unit: None,
+        default_kind: "none",
+        default_value: None,
+        origin: crate::identity::OriginMeta {
+            source: Some(crate::identity::SourceLocusMeta {
+                source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
+                path: "spec/functional/VO-010-procedure-environment.md",
+                start_line: 15,
+                start_column: 3,
+                end_line: None,
+                end_column: None,
+            }),
+            generated: None,
+        },
+    },
+    crate::identity::FieldMeta {
         identity: "ix://agent-ix/engineering-assurance-campaign/VO-010/kind",
         name: "kind",
         rust_name: "kind",
@@ -37,40 +67,10 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
         },
     },
     crate::identity::FieldMeta {
-        identity: "ix://agent-ix/engineering-assurance-campaign/VO-010/name",
-        name: "name",
-        rust_name: "name",
-        type_ref: "ix://quire/native/String",
-        rust_type: "String",
-        row: "field:single/non-null/required",
-        presence: "required",
-        nullable: false,
-        multiplicity: crate::identity::MultiplicityMeta {
-            lower: 1,
-            upper: Some(1),
-            ordered: Some(false),
-            unique: Some(false),
-        },
-        unit: None,
-        default_kind: "none",
-        default_value: None,
-        origin: crate::identity::OriginMeta {
-            source: Some(crate::identity::SourceLocusMeta {
-                source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
-                path: "spec/functional/VO-010-procedure-environment.md",
-                start_line: 15,
-                start_column: 3,
-                end_line: None,
-                end_column: None,
-            }),
-            generated: None,
-        },
-    },
-    crate::identity::FieldMeta {
         identity: "ix://agent-ix/engineering-assurance-campaign/VO-010/value",
         name: "value",
         rust_name: "value",
-        type_ref: "ix://quire/native/String",
+        type_ref: "ix://filament/native/String",
         rust_type: "String",
         row: "field:single/non-null/required",
         presence: "required",
@@ -105,14 +105,14 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
 /// Roles: engineering-assurance:campaign_value.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ProcedureEnvironment {
-    /// kind
-    ///
-    /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-010/kind.
-    pub kind: crate::ProcedureEnvironmentKind,
     /// name
     ///
     /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-010/name.
     pub name: String,
+    /// kind
+    ///
+    /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-010/kind.
+    pub kind: crate::ProcedureEnvironmentKind,
     /// value
     ///
     /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-010/value.
@@ -127,8 +127,8 @@ pub struct ProcedureEnvironment {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ProcedureEnvironmentWire {
-    kind: crate::ProcedureEnvironmentKind,
     name: String,
+    kind: crate::ProcedureEnvironmentKind,
     value: String,
 }
 
@@ -137,11 +137,27 @@ impl ProcedureEnvironment {
     /// contract declares on its members. Deserialization routes through
     /// this constructor.
     pub fn try_new(
-        kind: crate::ProcedureEnvironmentKind,
         name: String,
+        kind: crate::ProcedureEnvironmentKind,
         value: String,
     ) -> Result<Self, crate::support::ValidationError> {
-        Ok(Self { kind, name, value })
+        if name.is_empty() {
+            return Err(crate::support::ValidationError::new(
+                "ix://agent-ix/engineering-assurance-campaign/constraint/VO-010-name-nonEmpty",
+                "nonEmpty",
+                "",
+                "a non-empty value",
+            ));
+        }
+        if value.is_empty() {
+            return Err(crate::support::ValidationError::new(
+                "ix://agent-ix/engineering-assurance-campaign/constraint/VO-010-value-nonEmpty",
+                "nonEmpty",
+                "",
+                "a non-empty value",
+            ));
+        }
+        Ok(Self { name, kind, value })
     }
 
     /// The non-blocking diagnostics this value carries.
@@ -156,6 +172,6 @@ impl<'de> Deserialize<'de> for ProcedureEnvironment {
         D: serde::Deserializer<'de>,
     {
         let wire = ProcedureEnvironmentWire::deserialize(deserializer)?;
-        Self::try_new(wire.kind, wire.name, wire.value).map_err(serde::de::Error::custom)
+        Self::try_new(wire.name, wire.kind, wire.value).map_err(serde::de::Error::custom)
     }
 }

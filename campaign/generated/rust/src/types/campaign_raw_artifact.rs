@@ -5,38 +5,36 @@
 use serde::{Deserialize, Serialize};
 
 /// The fields of `CampaignRawArtifact`, in the order the contract declares them.
-pub const FIELDS: &[crate::identity::FieldMeta] = &[
-    crate::identity::FieldMeta {
-        identity: "ix://agent-ix/engineering-assurance-campaign/VO-009/role",
-        name: "role",
-        rust_name: "role",
-        type_ref: "ix://quire/native/String",
-        rust_type: "String",
-        row: "field:single/non-null/required",
-        presence: "required",
-        nullable: false,
-        multiplicity: crate::identity::MultiplicityMeta {
-            lower: 1,
-            upper: Some(1),
-            ordered: Some(false),
-            unique: Some(false),
-        },
-        unit: None,
-        default_kind: "none",
-        default_value: None,
-        origin: crate::identity::OriginMeta {
-            source: Some(crate::identity::SourceLocusMeta {
-                source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
-                path: "spec/functional/VO-009-campaign-raw-artifact.md",
-                start_line: 15,
-                start_column: 3,
-                end_line: None,
-                end_column: None,
-            }),
-            generated: None,
-        },
+pub const FIELDS: &[crate::identity::FieldMeta] = &[crate::identity::FieldMeta {
+    identity: "ix://agent-ix/engineering-assurance-campaign/VO-009/role",
+    name: "role",
+    rust_name: "role",
+    type_ref: "ix://filament/native/String",
+    rust_type: "String",
+    row: "field:single/non-null/required",
+    presence: "required",
+    nullable: false,
+    multiplicity: crate::identity::MultiplicityMeta {
+        lower: 1,
+        upper: Some(1),
+        ordered: Some(false),
+        unique: Some(false),
     },
-];
+    unit: None,
+    default_kind: "none",
+    default_value: None,
+    origin: crate::identity::OriginMeta {
+        source: Some(crate::identity::SourceLocusMeta {
+            source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
+            path: "spec/functional/VO-009-campaign-raw-artifact.md",
+            start_line: 15,
+            start_column: 3,
+            end_line: None,
+            end_column: None,
+        }),
+        generated: None,
+    },
+}];
 
 /// CampaignRawArtifact
 ///
@@ -67,6 +65,14 @@ impl CampaignRawArtifact {
     /// contract declares on its members. Deserialization routes through
     /// this constructor.
     pub fn try_new(role: String) -> Result<Self, crate::support::ValidationError> {
+        if role.is_empty() {
+            return Err(crate::support::ValidationError::new(
+                "ix://agent-ix/engineering-assurance-campaign/constraint/VO-009-role-nonEmpty",
+                "nonEmpty",
+                "",
+                "a non-empty value",
+            ));
+        }
         Ok(Self { role })
     }
 

@@ -7,17 +7,17 @@ use serde::{Deserialize, Serialize};
 /// The fields of `CampaignRun`, in the order the contract declares them.
 pub const FIELDS: &[crate::identity::FieldMeta] = &[
     crate::identity::FieldMeta {
-        identity: "ix://agent-ix/engineering-assurance-campaign/VO-007/attempts",
-        name: "attempts",
-        rust_name: "attempts",
-        type_ref: "ix://agent-ix/engineering-assurance-campaign/VO-008",
-        rust_type: "Option<Vec<crate::CampaignAttempt>>",
-        row: "field:collection/non-null/optional",
-        presence: "optional",
+        identity: "ix://agent-ix/engineering-assurance-campaign/VO-007/schemaVersion",
+        name: "schemaVersion",
+        rust_name: "schema_version",
+        type_ref: "ix://filament/native/String",
+        rust_type: "String",
+        row: "field:single/non-null/required",
+        presence: "required",
         nullable: false,
         multiplicity: crate::identity::MultiplicityMeta {
-            lower: 0,
-            upper: None,
+            lower: 1,
+            upper: Some(1),
             ordered: Some(false),
             unique: Some(false),
         },
@@ -28,7 +28,7 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
             source: Some(crate::identity::SourceLocusMeta {
                 source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
                 path: "spec/functional/VO-007-campaign-run.md",
-                start_line: 17,
+                start_line: 15,
                 start_column: 3,
                 end_line: None,
                 end_column: None,
@@ -40,7 +40,7 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
         identity: "ix://agent-ix/engineering-assurance-campaign/VO-007/id",
         name: "id",
         rust_name: "id",
-        type_ref: "ix://quire/native/String",
+        type_ref: "ix://filament/native/String",
         rust_type: "String",
         row: "field:single/non-null/required",
         presence: "required",
@@ -67,17 +67,17 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
         },
     },
     crate::identity::FieldMeta {
-        identity: "ix://agent-ix/engineering-assurance-campaign/VO-007/schemaVersion",
-        name: "schemaVersion",
-        rust_name: "schema_version",
-        type_ref: "ix://quire/native/String",
-        rust_type: "String",
-        row: "field:single/non-null/required",
-        presence: "required",
+        identity: "ix://agent-ix/engineering-assurance-campaign/VO-007/attempts",
+        name: "attempts",
+        rust_name: "attempts",
+        type_ref: "ix://agent-ix/engineering-assurance-campaign/VO-008",
+        rust_type: "Option<Vec<crate::CampaignAttempt>>",
+        row: "field:collection/non-null/optional",
+        presence: "optional",
         nullable: false,
         multiplicity: crate::identity::MultiplicityMeta {
-            lower: 1,
-            upper: Some(1),
+            lower: 0,
+            upper: None,
             ordered: Some(false),
             unique: Some(false),
         },
@@ -88,7 +88,7 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
             source: Some(crate::identity::SourceLocusMeta {
                 source_identity: "ix://agent-ix/engineering-assurance-campaign/spec",
                 path: "spec/functional/VO-007-campaign-run.md",
-                start_line: 15,
+                start_line: 17,
                 start_column: 3,
                 end_line: None,
                 end_column: None,
@@ -135,20 +135,20 @@ pub const FIELDS: &[crate::identity::FieldMeta] = &[
 /// Roles: engineering-assurance:campaign_value.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CampaignRun {
-    /// attempts
-    ///
-    /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-007/attempts.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub attempts: Option<Vec<crate::CampaignAttempt>>,
-    /// id
-    ///
-    /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-007/id.
-    pub id: String,
     /// schemaVersion
     ///
     /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-007/schemaVersion.
     #[serde(rename = "schemaVersion")]
     pub schema_version: String,
+    /// id
+    ///
+    /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-007/id.
+    pub id: String,
+    /// attempts
+    ///
+    /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-007/attempts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attempts: Option<Vec<crate::CampaignAttempt>>,
     /// verdict
     ///
     /// Semantic identity: ix://agent-ix/engineering-assurance-campaign/VO-007/verdict.
@@ -163,11 +163,11 @@ pub struct CampaignRun {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CampaignRunWire {
-    #[serde(default)]
-    attempts: Option<Vec<crate::CampaignAttempt>>,
-    id: String,
     #[serde(rename = "schemaVersion")]
     schema_version: String,
+    id: String,
+    #[serde(default)]
+    attempts: Option<Vec<crate::CampaignAttempt>>,
     verdict: crate::CampaignVerdict,
 }
 
@@ -176,15 +176,31 @@ impl CampaignRun {
     /// contract declares on its members. Deserialization routes through
     /// this constructor.
     pub fn try_new(
-        attempts: Option<Vec<crate::CampaignAttempt>>,
-        id: String,
         schema_version: String,
+        id: String,
+        attempts: Option<Vec<crate::CampaignAttempt>>,
         verdict: crate::CampaignVerdict,
     ) -> Result<Self, crate::support::ValidationError> {
+        if schema_version.is_empty() {
+            return Err(crate::support::ValidationError::new(
+                "ix://agent-ix/engineering-assurance-campaign/constraint/VO-007-schemaVersion-nonEmpty",
+                "nonEmpty",
+                "",
+                "a non-empty value",
+            ));
+        }
+        if id.is_empty() {
+            return Err(crate::support::ValidationError::new(
+                "ix://agent-ix/engineering-assurance-campaign/constraint/VO-007-id-nonEmpty",
+                "nonEmpty",
+                "",
+                "a non-empty value",
+            ));
+        }
         Ok(Self {
-            attempts,
-            id,
             schema_version,
+            id,
+            attempts,
             verdict,
         })
     }
@@ -201,12 +217,7 @@ impl<'de> Deserialize<'de> for CampaignRun {
         D: serde::Deserializer<'de>,
     {
         let wire = CampaignRunWire::deserialize(deserializer)?;
-        Self::try_new(
-            wire.attempts,
-            wire.id,
-            wire.schema_version,
-            wire.verdict,
-        )
-        .map_err(serde::de::Error::custom)
+        Self::try_new(wire.schema_version, wire.id, wire.attempts, wire.verdict)
+            .map_err(serde::de::Error::custom)
     }
 }

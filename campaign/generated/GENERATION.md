@@ -1,12 +1,23 @@
 # Campaign contract generation
 
-The source of these wire types is the authored Quire bundle at
+The source of these wire types is the authored Filament bundle at
 `campaign/contract`, interpreted with the
 `engineering_assurance` module.
 
 Regenerate by lifting that bundle with the FCD extraction frontend and running
-the FCD target generator over the result. Python cache directories produced by
-compile checks are excluded from the retained output.
+the FCD target generator over the result. The output is generated, never
+hand-edited. Run these from a filament-core-data checkout (`<ea>` is this
+repository):
+
+```
+cargo run --locked -p agent-ix-extraction-frontend --bin extraction-frontend -- lift --bundle <ea>/campaign/contract --module <ea>/engineering_assurance --out <ea>/campaign/generated/semantic-ir.json
+node src/compiler/cli.mjs generate --ir <ea>/campaign/generated/semantic-ir.json --target rust --out-root <ea>/campaign/generated/rust
+node src/compiler/cli.mjs generate --ir <ea>/campaign/generated/semantic-ir.json --target json-schema --out-root <ea>/campaign/generated/json-schema
+```
+
+The lift writes a `semantic-ir.json.diagnostics.json` beside the IR; it is not
+retained. Python cache directories produced by compile checks are excluded from
+the retained output.
 
 `MeasurementProcedure.inputOrigins` is an optional migration field for exact
 producer-input provenance. When present, EA requires one declaration for every
@@ -19,9 +30,3 @@ For an opted-in procedure, every caller-selected input must match an authored
 exact role and origin. A dynamic prefix cannot add an undeclared selected
 input. Source-tree projection is separate: EA derives those implicit inputs
 from the Git tree manifest, and Quoin rechecks them at replay.
-
-## Generator-owned digests in `semantic-ir.json`
-
-BLOCKED-BY PLAT-1205 (owner: planner titan:QSL:plan): source.digest, package.lockDigest, package.manifestDigest, constructs[].manifestDigest required by FCD semantic-IR schema
-
-The FCD 2.0.0 semantic-IR schema (agent-ix/filament-core-data, `crates/semantic-ir/src/schema.rs`: `SOURCE_MEMBERS`, the package members and `CONSTRUCT_ENTRY_MEMBERS`) requires those members in every lifted document, so regenerating this bundle with the FCD extraction frontend reproduces them. They are generator-owned, not authored in this repository, and no FCD generator CLI is available here. Removing them by hand would make the document invalid under that schema and the next regeneration would restore them. They are removed when the FCD schema stops requiring them and this bundle is regenerated.
