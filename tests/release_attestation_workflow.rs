@@ -12,7 +12,7 @@ mod common;
 #[path = "common/release_workflow.rs"]
 mod release_workflow;
 
-use common::is_structural_external_action_reference;
+use common::is_structural_action_reference;
 use release_workflow::assert_action_references_and_checkouts;
 
 fn repository_root() -> &'static Path {
@@ -83,7 +83,7 @@ fn signing_jobs_run_no_agent_or_repository_code() {
             "signing steps do not check out repository code"
         );
         assert!(
-            is_structural_external_action_reference(reference),
+            is_structural_action_reference(reference),
             "signing action reference has a valid owner/repository/path@ref shape: {reference}"
         );
     }
@@ -434,7 +434,7 @@ fn assert_attest_job(workflow: &Value) {
     for step in attest_steps {
         let reference = step["uses"].as_str().expect("action reference");
         assert!(
-            is_structural_external_action_reference(reference),
+            is_structural_action_reference(reference),
             "attestation action reference has a valid owner/repository/path@ref shape: {reference}"
         );
     }

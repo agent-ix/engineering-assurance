@@ -10,7 +10,7 @@ use serde_json::Value;
 
 mod common;
 
-use common::is_structural_external_action_reference;
+use common::is_structural_action_reference;
 
 fn repository_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -28,12 +28,10 @@ fn assert_permission(job: &Value, expected: &Value, name: &str) {
 
 fn assert_actions_are_structural(steps: &[Value]) {
     for step in steps {
-        if let Some(reference) = step["uses"].as_str()
-            && !reference.starts_with("./")
-        {
+        if let Some(reference) = step["uses"].as_str() {
             assert!(
-                is_structural_external_action_reference(reference),
-                "external action reference has a valid owner/repository/path@ref shape: {reference}"
+                is_structural_action_reference(reference),
+                "action reference has a valid local or external structure: {reference}"
             );
         }
         if let Some(run) = step["run"].as_str() {
@@ -116,17 +114,24 @@ fn receipt_workflow_jobs_have_exact_permissions_and_keep_code_out_of_record_job(
 #[test]
 fn action_reference_structure_rejects_missing_or_malformed_components() {
     for valid in [
+        "./.github/workflows/change-receipt.yml",
+        "./actions/local/action.yml",
         "actions/checkout@v7",
         "owner/repository/path/to/action@v1.2.3",
         "owner/repository@refs/tags/v2",
     ] {
         assert!(
-            is_structural_external_action_reference(valid),
+            is_structural_action_reference(valid),
             "valid action reference rejected: {valid}"
         );
     }
 
     for invalid in [
+        "./",
+        ".//action.yml",
+        "./../action.yml",
+        "./actions//action.yml",
+        "./actions/action@v1",
         "@v4",
         "owner/@v4",
         "/repository@v4",
@@ -137,13 +142,13 @@ fn action_reference_structure_rejects_missing_or_malformed_components() {
         "owner/repository@refs//heads/main",
     ] {
         assert!(
-            !is_structural_external_action_reference(invalid),
+            !is_structural_action_reference(invalid),
             "malformed action reference accepted: {invalid}"
         );
     }
 }
 
-#[trace("FR-070-AC-1", "FR-070-AC-3", "FR-075-AC-1", "FR-076-AC-1")]
+#[trace("TC-991", "FR-070-AC-1", "FR-070-AC-3")]
 #[test]
 fn push_caller_and_missing_check_have_the_declared_triggers_and_permissions() {
     let caller = workflow("receipt.yml");

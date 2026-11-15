@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-pub(super) fn is_structural_external_action_reference(reference: &str) -> bool {
+pub(super) fn is_structural_action_reference(reference: &str) -> bool {
+    if let Some(path) = reference.strip_prefix("./") {
+        return non_empty_slash_segments(path) && !path.contains('@');
+    }
+
     let Some((action, revision)) = reference.split_once('@') else {
         return false;
     };
