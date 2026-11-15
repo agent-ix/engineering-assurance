@@ -343,7 +343,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-070 | FR-070-AC-1 | TC-991 | 🚧 Specified |
 | FR-070 | FR-070-AC-2 | TC-558 | 🚧 Specified |
 | FR-070 | FR-070-AC-3 | TC-559 | ✅ `cargo test --locked --features full --test receipt_workflow_contract --test release_attestation_workflow` |
-| FR-070 | FR-070-AC-4 | TC-560 | 🚧 Specified |
+| FR-070 | FR-070-AC-4 | TC-560 | ✅ `cargo test --locked --features full --test receipt_workflow_contract receipt_workflow_jobs_have_exact_permissions_and_keep_code_out_of_record_job -- --exact` |
 | FR-070 | FR-070-AC-5 | TC-561 | 🚧 Specified |
 | FR-070 | FR-070-AC-6 | TC-562 | 🚧 Specified |
 | FR-070 | FR-070-AC-7 | TC-563 | 🚧 Specified |
@@ -385,7 +385,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-075 | FR-075-AC-3 | TC-592 | 🚧 Specified |
 | FR-075 | FR-075-AC-4 | TC-593 | 🚧 Specified |
 | FR-075 | FR-075-AC-5 | TC-594 | 🚧 Specified |
-| FR-075 | FR-075-AC-6 | TC-595 | 🚧 Specified; no test implementation exists yet for the adversarial signing-token/tool fixture |
+| FR-075 | FR-075-AC-6 | TC-595 | ✅ `cargo test --locked --features full --test receipt_workflow_contract adversarial_receipt_gate_cannot_read_signing_tokens_or_use_signer -- --exact` |
 | FR-075 | FR-075-AC-7 | TC-596 | 🚧 Specified |
 | FR-076 | FR-076-AC-1 | TC-597 | 🚧 Specified |
 | FR-076 | FR-076-AC-2 | TC-598 | 🚧 Specified |
@@ -924,8 +924,8 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-557 | Parsing Engineering Assurance's `.github/workflows/release-attestation.yml` confirms its `workflow_call`-only trigger, declared jobs and per-job permissions; adopter repositories parse only their own checked-in caller workflows; no parsed workflow declares `pull_request_target` or `workflow_run` | Integration | P0 | FR-070-AC-1 | 🚧 |
 | TC-558 | No `run:` value in any file contains an expression over `github.ref_name`, `github.head_ref`, an event title or body, a commit message or `inputs.`; each such value appears only under `env:` | Integration | P0 | FR-070-AC-2 | 🚧 |
 | TC-559 | Workflow tests reject malformed local and external action references, accept valid `./path/to/action` and `owner/repository[/action/path...]@ref` references, and confirm every checkout step has `persist-credentials: false`; no full commit SHA is required or tested | Integration | P0 | FR-070-AC-3 | ✅ `cargo test --locked --features full --test receipt_workflow_contract --test release_attestation_workflow` |
-| TC-991 | The receipt workflow caller runs on the default-branch push, calls the reusable workflow with the pushed commit and exact permissions, and the missing-receipt caller is scheduled/on-demand with read-only permissions | Integration | P0 | FR-070-AC-1 | 🚧 |
-| TC-560 | The `gates` job holds only `contents: read`, the `record` job runs no step that executes a repository file or a command from the receipt policy, and the `notes` job holds no `id-token` | Integration | P0 | FR-070-AC-4 | 🚧 |
+| TC-991 | The receipt workflow caller runs on the default-branch push, calls the reusable workflow with the pushed commit and exact permissions, and the missing-receipt caller is scheduled/on-demand with read-only permissions | Integration | P0 | FR-070-AC-1 | ✅ `cargo test --locked --features full --test receipt_workflow_contract push_caller_and_missing_check_have_the_declared_triggers_and_permissions -- --exact` |
+| TC-560 | The `gates` job holds only `contents: read`, the `record` job runs no step that executes a repository file or a command from the receipt policy, and the `notes` job holds no `id-token` | Integration | P0 | FR-070-AC-4 | ✅ `cargo test --locked --features full --test receipt_workflow_contract receipt_workflow_jobs_have_exact_permissions_and_keep_code_out_of_record_job -- --exact` |
 | TC-561 | No step in a workflow file listed in FR-070 invokes an agent harness or model client; Engineering Assurance inspects only its reusable workflow and each adopter inspects only its own checked-in workflows | Static | P0 | FR-070-AC-5 | 🚧 |
 | TC-562 | A `change-receipt.yml` run with a `commit` input that is not the pushed commit fails with `receipt_input_commit_mismatch`, and a `release-attestation.yml` run with a `tag` input that is not the triggering tag fails with ... | Integration | P0 | FR-070-AC-6 | 🚧 |
 | TC-563 | The `gates` job declares no `secrets` and no `environment`, and its `runs-on` is a GitHub-hosted label or an ephemeral runner label | Integration | P0 | FR-070-AC-7 | 🚧 |
@@ -965,7 +965,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-592 | A gate that exits non-zero yields a failed receipt, and the default branch ref is unchanged by the failed run | Integration | P0 | FR-075-AC-3 | 🚧 |
 | TC-593 | A receipt policy on the pushed branch that differs from the protected base branch's does not change the gates that run | Integration | P0 | FR-075-AC-4 | 🚧 |
 | TC-594 | A commit before `adopted_at` gets no receipt and is not reported by the missing-receipt check | Integration | P0 | FR-075-AC-5 | 🚧 |
-| TC-595 | A gate command in the fixture receipt policy that tries to read the signing token or run the signing tooling runs only in the `gates` job, which has neither, receives no secrets and runs on a GitHub-hosted or ephemeral runner | Integration | P0 | FR-075-AC-6 | 🚧 No test implementation exists yet; static permission inspection is not this adversarial fixture |
+| TC-595 | A gate command in the fixture receipt policy that tries to read the signing token or run the signing tooling runs only in the `gates` job, which has neither, receives no secrets and runs on a GitHub-hosted or ephemeral runner | Integration | P0 | FR-075-AC-6 | ✅ `cargo test --locked --features full --test receipt_workflow_contract adversarial_receipt_gate_cannot_read_signing_tokens_or_use_signer -- --exact` |
 | TC-596 | A repository on sink `none` fails with `receipt_private_store_required` and no receipt is written | Integration | P0 | FR-075-AC-7 | 🚧 |
 | TC-597 | A fixture receipt appears as a note of three JSON lines on the pushed commit under the notes ref, and the note survives a second push to the default branch | Integration | P0 | FR-076-AC-1 | 🚧 |
 | TC-598 | A note whose content would exceed 1 MiB is refused with `receipt_note_too_large` and no note is written | Integration | P0 | FR-076-AC-2 | 🚧 |

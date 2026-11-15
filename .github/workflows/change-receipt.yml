@@ -124,7 +124,7 @@ jobs:
           if index < 0 or trace_start < 0 or trace_end < 0:
               raise SystemExit("receipt_gate_trace_missing")
           trace_ids = re.findall(r'"((?:FR|NFR)-[A-Za-z0-9.-]+)"', content[trace_start:trace_end])
-          if not trace_ids or "TC-559" not in content[trace_start:trace_end]:
+          if not trace_ids or "TC-560" not in content[trace_start:trace_end]:
               raise SystemExit("receipt_gate_trace_invalid")
 
           def append_junit_case(passed):
