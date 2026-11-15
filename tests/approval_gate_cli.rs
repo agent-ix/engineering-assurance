@@ -220,7 +220,7 @@ fn edited_reviews_and_bot_reviews_cannot_satisfy_a_role() {
     );
 }
 
-#[trace("TC-925", "FR-061-AC-4", "FR-070-AC-2", "FR-070-AC-3")]
+#[trace("TC-925", "FR-061-AC-4", "FR-070-AC-2")]
 #[test]
 fn workflow_is_explicitly_opt_in_and_has_no_signing_identity() {
     let workflow = std::fs::read_to_string(concat!(

@@ -1,0 +1,54 @@
+name: Missing receipt check
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the protected default branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Run receipt-missing against the protected branch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RECEIPT_WORKFLOW_REF: refs/heads/main
+          APPROVAL_WORKFLOW_REF: refs/heads/main
+          RECORD_PUBLISHER_WORKFLOW_REF: refs/heads/main
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+          cargo build --locked --bin engineering-assurance
+          request="$(jq -n \
+            --arg repository "$PWD" \
+            --arg github_repository "$GH_REPOSITORY" \
+            --arg base_branch "$DEFAULT_BRANCH" \
+            --arg receipt_signer_repository "agent-ix/engineering-assurance" \
+            --arg receipt_signer_workflow_path ".github/workflows/change-receipt.yml" \
+            --arg receipt_signer_ref "$RECEIPT_WORKFLOW_REF" \
+            --arg approval_signer_repository "agent-ix/engineering-assurance" \
+            --arg approval_signer_workflow_path ".github/workflows/review-gate.yml" \
+            --arg approval_signer_ref "$APPROVAL_WORKFLOW_REF" \
+            --arg record_publisher_repository "agent-ix/engineering-assurance" \
+            --arg record_publisher_workflow_path ".github/workflows/change-receipt.yml" \
+            --arg record_publisher_ref "$RECORD_PUBLISHER_WORKFLOW_REF" \
+            '{protocol:"engineering-assurance.receipt-missing-request/v1",repository:$repository,github_repository:$github_repository,base_branch:$base_branch,receipt_signer_repository:$receipt_signer_repository,receipt_signer_workflow_path:$receipt_signer_workflow_path,receipt_signer_ref:$receipt_signer_ref,approval_signer_repository:$approval_signer_repository,approval_signer_workflow_path:$approval_signer_workflow_path,approval_signer_ref:$approval_signer_ref,record_publisher_repository:$record_publisher_repository,record_publisher_workflow_path:$record_publisher_workflow_path,record_publisher_ref:$record_publisher_ref,merged_pull_requests:{}}')"
+          target/debug/engineering-assurance receipt-missing --request "$request"

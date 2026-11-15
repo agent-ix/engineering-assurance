@@ -1,0 +1,413 @@
+name: Change receipt
+
+on:
+  workflow_call:
+    inputs:
+      commit:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check the pushed commit input
+        shell: bash
+        env:
+          INPUT_COMMIT: ${{ inputs.commit }}
+          PUSHED_COMMIT: ${{ github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != "push" || "$INPUT_COMMIT" != "$PUSHED_COMMIT" ]]; then
+            echo "::error::receipt_input_commit_mismatch"
+            exit 1
+          fi
+
+      - name: Check out the pushed commit as gate input
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out the protected branch policy as data
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: protected-base
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain-file: source/rust-toolchain.toml
+
+      - name: Download published Engineering Assurance tooling
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ea-tooling"
+          gh release download v0.10.0 \
+            --repo agent-ix/engineering-assurance \
+            --pattern engineering-assurance \
+            --dir "$RUNNER_TEMP/ea-tooling"
+          chmod 0755 "$RUNNER_TEMP/ea-tooling/engineering-assurance"
+          "$RUNNER_TEMP/ea-tooling/engineering-assurance" --version
+
+      - name: Install published Quoin 0.32.0
+        working-directory: ${{ runner.temp }}
+        shell: bash
+        env:
+          NPMJS_REGISTRY: "\u0068ttps:\u002f\u002fregistry.npmjs.org"
+          NPM_CONFIG_USERCONFIG: /dev/null
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/quoin-tooling"
+          cd "$RUNNER_TEMP/quoin-tooling"
+          npm install --ignore-scripts --registry="$NPMJS_REGISTRY" "@agent-ix/quoin@0.32.0"
+          node_modules/.bin/quoin --version
+          node_modules/.bin/quoin module ensure-defaults
+
+      - name: Run protected gates through producer-execute and retain Quoin evidence
+        id: receipt-gates
+        shell: bash
+        env:
+          EA_CLI: ${{ runner.temp }}/ea-tooling/engineering-assurance
+          QUOIN_CLI: ${{ runner.temp }}/quoin-tooling/node_modules/.bin/quoin
+          INPUT_COMMIT: ${{ inputs.commit }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          SOURCE_DIR: ${{ github.workspace }}/source
+          PROTECTED_BASE_DIR: ${{ github.workspace }}/protected-base
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/receipt-evidence/spec/evidence"
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          from pathlib import Path
+          from xml.sax.saxutils import escape
+
+          temp = Path(os.environ["RUNNER_TEMP"])
+          source = Path(os.environ["SOURCE_DIR"])
+          protected = Path(os.environ["PROTECTED_BASE_DIR"])
+          policy = json.loads((protected / ".engineering-assurance/receipt-policy.json").read_text())
+          if set(policy) != {"protocol", "gates", "adopted_at", "grace_minutes"}:
+              raise SystemExit("receipt_policy_invalid")
+          if policy["protocol"] != "engineering-assurance.receipt-policy/v1":
+              raise SystemExit("receipt_policy_invalid")
+          gates = policy["gates"]
+          if not isinstance(gates, list) or not gates or len(gates) > 256:
+              raise SystemExit("receipt_policy_invalid")
+
+          outcomes = []
+          junit_cases = []
+          failed = False
+          test_file = protected / "tests/receipt_workflow_contract.rs"
+          content = test_file.read_text()
+          marker = "fn receipt_workflow_jobs_have_exact_permissions_and_keep_code_out_of_record_job()"
+          index = content.find(marker)
+          trace_start = content.rfind("#[trace(", 0, index)
+          trace_end = content.find(")]", trace_start)
+          if index < 0 or trace_start < 0 or trace_end < 0:
+              raise SystemExit("receipt_gate_trace_missing")
+          trace_ids = re.findall(r'"((?:FR|NFR)-[A-Za-z0-9.-]+)"', content[trace_start:trace_end])
+          if not trace_ids or "TC-560" not in content[trace_start:trace_end]:
+              raise SystemExit("receipt_gate_trace_invalid")
+
+          def append_junit_case(passed):
+              failure_xml = "" if passed else '<failure message="gate_failed" />'
+              traces_xml = "".join(f'<property name="trace" value="{escape(trace)}" />' for trace in trace_ids)
+              junit_cases.append(f'<testcase classname="receipt_workflow_contract" name="receipt_workflow_jobs_have_exact_permissions_and_keep_code_out_of_record_job">{failure_xml}<properties>{traces_xml}</properties></testcase>')
+
+          for gate in gates:
+              if not isinstance(gate, dict) or set(gate) != {"name", "argv"}:
+                  raise SystemExit("receipt_policy_invalid")
+              name, argv = gate["name"], gate["argv"]
+              if not isinstance(name, str) or not name or not isinstance(argv, list) or not argv:
+                  raise SystemExit("receipt_policy_invalid")
+              if any(not isinstance(arg, str) or not arg for arg in argv):
+                  raise SystemExit("receipt_policy_invalid")
+              executable = shutil.which(argv[0])
+              if executable is None:
+                  outcomes.append({"name": name, "exitCode": 127})
+                  failed = True
+                  append_junit_case(False)
+                  continue
+              version = subprocess.run([executable, "--version"], check=False,
+                                       capture_output=True, text=True).stdout.strip()
+              request = {
+                  "protocol": "engineering-assurance.producer-execution-request/v1",
+                  "producer": {"name": Path(argv[0]).name, "version": version,
+                               "executable": str(Path(executable).resolve())},
+                  "caller": {"kind": "engineering-assurance.receipt-gate", "version": "1"},
+                  "procedure": "direct",
+                  "capabilityRoot": str(source.resolve()),
+                  "arguments": [{"kind": "literal", "value": arg} for arg in argv[1:]],
+                  "environment": {key: os.environ[key] for key in ("PATH", "HOME", "CARGO_HOME", "RUSTUP_HOME")
+                                  if key in os.environ},
+                  "inputs": [], "stdin": {"kind": "null"}, "outputs": [],
+                  "containment": {"profile": "process-group-v1", "contract":
+                                  {"kind": "engineering-assurance.receipt-gate-containment", "version": "1"}},
+                  "cancellation": {"kind": "disabled"},
+                  "budget": {"timeoutMillis": 1200000, "maxStdoutBytes": 8388608,
+                             "maxStderrBytes": 8388608, "maxInputBytes": 1,
+                             "maxOutputArtifacts": 0, "maxOutputBytes": 0,
+                             "maxDescendants": 64, "maxConcurrency": 1},
+                  "response": {"protocol": {"kind": "engineering-assurance.process-evidence", "version": "1"},
+                               "adapter": {"kind": "engineering-assurance.cli-process-evidence-adapter", "version": "1"},
+                               "exitCodes": {"kind": "exact", "codes": [0]}}
+              }
+              req_path = temp / "producer-request.json"
+              req_path.write_text(json.dumps(request, separators=(",", ":")))
+              completed = subprocess.run([os.environ["EA_CLI"], "producer-execute", "--request", str(req_path)],
+                                         cwd=source, check=False, capture_output=True, text=True)
+              if completed.returncode != 0:
+                  outcomes.append({"name": name, "exitCode": 125})
+                  failed = True
+                  append_junit_case(False)
+                  continue
+              try:
+                  result = json.loads(completed.stdout)
+              except json.JSONDecodeError:
+                  outcomes.append({"name": name, "exitCode": 125})
+                  failed = True
+                  append_junit_case(False)
+                  continue
+              status = result.get("process", {}).get("terminalStatus") if result.get("process") else None
+              state = result.get("state", {}).get("kind")
+              stdout_bytes = result.get("process", {}).get("stdout", {}).get("bytes", []) if result.get("process") else []
+              stdout = bytes(stdout_bytes).decode("utf-8", errors="replace")
+              expected_line = "test receipt_workflow_jobs_have_exact_permissions_and_keep_code_out_of_record_job ... ok"
+              if status and status.get("kind") == "exit_code":
+                  exit_code = status["value"]
+              elif status and status.get("kind") == "signal":
+                  exit_code = 128 + abs(status["value"])
+              else:
+                  exit_code = 125
+              if state != "completed" or exit_code != 0 or expected_line not in stdout:
+                  if exit_code == 0:
+                      exit_code = 125
+                  failed = True
+              outcomes.append({"name": name, "exitCode": exit_code})
+
+              append_junit_case(exit_code == 0 and state == "completed" and expected_line in stdout)
+
+          (temp / "receipt-gates.json").write_text(json.dumps({
+              "protocol": "engineering-assurance.receipt-gate-results/v1",
+              "commit": os.environ["INPUT_COMMIT"], "results": outcomes
+          }, separators=(",", ":")))
+          junit = '<testsuite name="SUITE-001" tests="%d">%s</testsuite>' % (len(junit_cases), "".join(junit_cases))
+          junit_path = temp / "receipt-gate-junit.xml"
+          junit_path.write_text(junit)
+          if failed:
+              (temp / "receipt-gate-failed").touch()
+          PY
+
+          if [[ ! -s "$RUNNER_TEMP/receipt-gates.json" || ! -s "$RUNNER_TEMP/receipt-gate-junit.xml" ]]; then
+            echo "::error::receipt_gate_evidence_missing"
+            exit 1
+          fi
+          cp -R "$SOURCE_DIR/spec/evidence" "$RUNNER_TEMP/receipt-evidence/spec/"
+          cp "$RUNNER_TEMP/receipt-gate-junit.xml" "$RUNNER_TEMP/receipt-evidence/"
+          cp "$RUNNER_TEMP/receipt-gates.json" "$RUNNER_TEMP/receipt-evidence/"
+          git -C source update-ref refs/receipt/commit "$INPUT_COMMIT"
+          git -C source fetch "$GITHUB_WORKSPACE/protected-base/.git" HEAD:refs/receipt/protected-base
+          git -C source bundle create "$RUNNER_TEMP/receipt-source.bundle" --all
+
+          mkdir -p "$RUNNER_TEMP/receipt-evidence-run"
+          if "$QUOIN_CLI" evidence record --suite SUITE-001 \
+            --tool "Cargo via engineering-assurance 0.10.0" --adapter junit \
+            --kind Integration --results "$RUNNER_TEMP/receipt-gate-junit.xml" \
+            --repo "$SOURCE_DIR" --json > "$RUNNER_TEMP/quoin-record.json"; then
+            :
+          else
+            echo "::error::quoin_evidence_record_failed"
+            exit 1
+          fi
+
+          commit_tree="$(git -C source rev-parse "${INPUT_COMMIT}^{tree}")"
+          source_sha256="$(git -C source archive "$INPUT_COMMIT" | sha256sum | cut -d' ' -f1)"
+          python3 - "$RUNNER_TEMP/receipt-subject.json" "$GITHUB_REPOSITORY" "$INPUT_COMMIT" "$commit_tree" "$source_sha256" <<'PY'
+          import json, sys
+          from pathlib import Path
+          subject = [{"name":sys.argv[2], "digest":{"sha256":sys.argv[5], "gitCommit":sys.argv[3], "gitTree":sys.argv[4]}}]
+          Path(sys.argv[1]).write_text(json.dumps(subject, separators=(",", ":")))
+          PY
+          "$QUOIN_CLI" evidence export-test-result \
+            --subject "$RUNNER_TEMP/receipt-subject.json" \
+            --output "$RUNNER_TEMP/receipt-evidence/test-result.json" \
+            --evidence-dir "$SOURCE_DIR/spec/evidence"
+          cp -R "$SOURCE_DIR/spec/evidence/." "$RUNNER_TEMP/receipt-evidence/spec/evidence/"
+
+          if [[ -e "$RUNNER_TEMP/receipt-gate-failed" ]]; then
+            echo "::error::receipt_gate_failed"
+            exit 1
+          fi
+
+      - name: Upload receipt gate data and retained evidence store
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: receipt-gate-data
+          path: |
+            ${{ runner.temp }}/receipt-evidence/
+            ${{ runner.temp }}/receipt-source.bundle
+          if-no-files-found: error
+
+  record:
+    needs: gates
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download gate data as inert inputs
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          name: receipt-gate-data
+          path: ${{ runner.temp }}/receipt-gate-data
+
+      - name: Download published Engineering Assurance tooling
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ea-tooling"
+          gh release download v0.10.0 \
+            --repo agent-ix/engineering-assurance \
+            --pattern engineering-assurance \
+            --dir "$RUNNER_TEMP/ea-tooling"
+          chmod 0755 "$RUNNER_TEMP/ea-tooling/engineering-assurance"
+          "$RUNNER_TEMP/ea-tooling/engineering-assurance" --version
+
+      - name: Build and sign the receipt from published tooling and data
+        id: receipt-record
+        shell: bash
+        env:
+          EA_CLI: ${{ runner.temp }}/ea-tooling/engineering-assurance
+          INPUT_COMMIT: ${{ inputs.commit }}
+          REPOSITORY: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          input_dir="$RUNNER_TEMP/receipt-gate-data/receipt-evidence"
+          if [[ ! -s "$input_dir/receipt-gates.json" || ! -s "$input_dir/test-result.json" || ! -s "$RUNNER_TEMP/receipt-gate-data/receipt-source.bundle" ]]; then
+            echo "::error::receipt_gate_inputs_missing"
+            exit 1
+          fi
+          gh auth setup-git
+          git clone --bare "$RUNNER_TEMP/receipt-gate-data/receipt-source.bundle" "$RUNNER_TEMP/receipt-repository.git"
+          merged_pr="$(gh api "repos/$REPOSITORY/commits/$INPUT_COMMIT/pulls" --jq '[.[] | select(.merged_at != null) | .number][0] // empty' || true)"
+          merged_ref=""
+          if [[ -n "$merged_pr" ]]; then merged_ref="$REPOSITORY#$merged_pr"; fi
+          jq -n --arg merged_pull_request "$merged_ref" \
+            '{protocol:"engineering-assurance.receipt-note-context/v1",merged_pull_request:$merged_pull_request}' \
+            > "$RUNNER_TEMP/receipt-context.json"
+          request="$RUNNER_TEMP/receipt-record-request.json"
+          jq -n \
+            --arg repository "$RUNNER_TEMP/receipt-repository.git" \
+            --arg github_repository "$REPOSITORY" \
+            --arg base_branch "$DEFAULT_BRANCH" \
+            --arg commit "$INPUT_COMMIT" \
+            --arg merged_pull_request "$merged_ref" \
+            --arg gate_results "$input_dir/receipt-gates.json" \
+            --arg test_result "$input_dir/test-result.json" \
+            --arg record_id "$(cat /proc/sys/kernel/random/uuid)" \
+            '{protocol:"engineering-assurance.receipt-record-request/v1",repository:$repository,github_repository:$github_repository,base_branch:$base_branch,commit:$commit,merged_pull_request:(if $merged_pull_request == "" then null else $merged_pull_request end),gate_results:$gate_results,test_result:$test_result,record_id:$record_id,receipt_signer_repository:"agent-ix/engineering-assurance",receipt_signer_workflow_path:".github/workflows/change-receipt.yml",receipt_signer_ref:"refs/heads/main",record_publisher_repository:"agent-ix/engineering-assurance",record_publisher_workflow_path:".github/workflows/change-receipt.yml",record_publisher_ref:"refs/heads/main",approval_signer_repository:"agent-ix/engineering-assurance",approval_signer_workflow_path:".github/workflows/review-gate.yml",approval_signer_ref:"refs/heads/main"}' > "$request"
+          "$EA_CLI" receipt-record --request "$request" > "$RUNNER_TEMP/receipt-result.json"
+
+      - name: Upload signed receipt bundles
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: receipt-signed-data
+          path: |
+            ${{ runner.temp }}/receipt-result.json
+            ${{ runner.temp }}/receipt-context.json
+          if-no-files-found: error
+
+  notes:
+    needs: record
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download signed receipt bundle data
+        if: always()
+        uses: actions/download-artifact@v4
+        with:
+          name: receipt-signed-data
+          path: ${{ runner.temp }}/receipt-signed-data
+
+      - name: Check out the pushed commit for note storage
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download published Engineering Assurance tooling
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ea-tooling"
+          gh release download v0.10.0 \
+            --repo agent-ix/engineering-assurance \
+            --pattern engineering-assurance \
+            --dir "$RUNNER_TEMP/ea-tooling"
+          chmod 0755 "$RUNNER_TEMP/ea-tooling/engineering-assurance"
+
+      - name: Store the signed receipt in Git notes
+        shell: bash
+        env:
+          EA_CLI: ${{ runner.temp }}/ea-tooling/engineering-assurance
+          GH_TOKEN: ${{ github.token }}
+          INPUT_COMMIT: ${{ inputs.commit }}
+          REPOSITORY: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          result="$RUNNER_TEMP/receipt-signed-data/receipt-result.json"
+          context="$RUNNER_TEMP/receipt-signed-data/receipt-context.json"
+          if [[ ! -s "$result" || ! -s "$context" ]]; then
+            echo "::error::receipt_result_missing"
+            exit 1
+          fi
+          gh auth setup-git
+          merged_pull_request="$(jq -r '.merged_pull_request' "$context")"
+          request="$(jq -c \
+            --arg repository "$PWD" \
+            --arg commit "$INPUT_COMMIT" \
+            --arg github_repository "$REPOSITORY" \
+            --arg base_branch "$DEFAULT_BRANCH" \
+            --arg merged_pull_request "$merged_pull_request" \
+            --argjson bundles "$(jq -c '.bundles' "$result")" \
+            '{protocol:"engineering-assurance.receipt-note-request/v1",operation:"store",repository:$repository,commit:$commit,bundles:$bundles,verification:{github_repository:$github_repository,base_branch:$base_branch,merged_pull_request:$merged_pull_request,receipt_signer_repository:"agent-ix/engineering-assurance",receipt_signer_workflow_path:".github/workflows/change-receipt.yml",receipt_signer_ref:"refs/heads/main",approval_signer_repository:"agent-ix/engineering-assurance",approval_signer_workflow_path:".github/workflows/review-gate.yml",approval_signer_ref:"refs/heads/main"}}')"
+          "$EA_CLI" receipt-note --request "$request"
+          for attempt in 1 2 3 4 5; do
+            git fetch origin refs/notes/assurance-receipts:refs/notes/assurance-receipts || true
+            git notes --ref=refs/notes/assurance-receipts merge -s cat_sort_uniq || true
+            if git push origin refs/notes/assurance-receipts; then exit 0; fi
+          done
+          echo "::error::receipt_note_conflict"
+          exit 1

@@ -8,6 +8,13 @@ use std::{fs, path::Path, process::Command};
 use ix_trace_rs::trace;
 use serde_json::Value;
 
+mod common;
+#[path = "common/release_workflow.rs"]
+mod release_workflow;
+
+use common::is_structural_action_reference;
+use release_workflow::assert_action_references_and_checkouts;
+
 fn repository_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
 }
@@ -18,7 +25,7 @@ fn reusable_workflow() -> Value {
     yaml_serde::from_slice(&bytes).expect("release-attestation reusable workflow parses as YAML")
 }
 
-#[trace("TC-622", "NFR-011-AC-1", "NFR-011-AC-2")]
+#[trace("TC-559", "TC-622", "FR-070-AC-3", "NFR-011-AC-1", "NFR-011-AC-2")]
 #[test]
 fn signing_jobs_run_no_agent_or_repository_code() {
     let reusable = reusable_workflow();
@@ -75,9 +82,10 @@ fn signing_jobs_run_no_agent_or_repository_code() {
             !reference.starts_with("actions/checkout@"),
             "signing steps do not check out repository code"
         );
-        let (_, revision) = reference.split_once('@').expect("pinned signing action");
-        assert_eq!(revision.len(), 40, "signing actions use full commit pins");
-        assert!(revision.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        assert!(
+            is_structural_action_reference(reference),
+            "signing action reference has a valid owner/repository/path@ref shape: {reference}"
+        );
     }
 }
 
@@ -125,7 +133,9 @@ fn signing_jobs_use_the_github_workflow_identity() {
     "TC-562",
     "TC-667",
     "TC-668",
+    "TC-559",
     "FR-070-AC-1",
+    "FR-070-AC-3",
     "FR-070-AC-6",
     "FR-070-AC-11",
     "FR-070-AC-12",
@@ -134,6 +144,7 @@ fn signing_jobs_use_the_github_workflow_identity() {
 #[test]
 fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_statement_source() {
     let workflow = reusable_workflow();
+    assert_action_references_and_checkouts(&workflow);
     assert_eq!(
         workflow["on"].as_object().map(serde_json::Map::len),
         Some(1),
@@ -421,10 +432,11 @@ fn assert_attest_job(workflow: &Value) {
     let attest_steps = attest["steps"].as_array().expect("attest steps");
     assert_eq!(attest_steps.len(), 6);
     for step in attest_steps {
-        let reference = step["uses"].as_str().expect("pinned action reference");
-        let (_, revision) = reference.split_once('@').expect("action has ref");
-        assert_eq!(revision.len(), 40, "action is pinned by full commit SHA");
-        assert!(revision.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        let reference = step["uses"].as_str().expect("action reference");
+        assert!(
+            is_structural_action_reference(reference),
+            "attestation action reference has a valid owner/repository/path@ref shape: {reference}"
+        );
     }
     assert!(attest_steps.iter().all(|step| step.get("run").is_none()));
     assert!(

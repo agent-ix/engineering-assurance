@@ -1,0 +1,17 @@
+name: Main branch receipt
+
+on:
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  receipt:
+    uses: ./.github/workflows/change-receipt.yml
+    with:
+      commit: ${{ github.sha }}
+    permissions:
+      contents: write
+      id-token: write
