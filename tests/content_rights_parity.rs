@@ -13,6 +13,77 @@ fn findings(path: &str, bytes: &[u8], tokens: &[String]) -> Vec<ContentRightsFin
         .expect("repository-owned policy patterns must compile")
 }
 
+const FR_017_SPEC: &str =
+    include_str!("../spec/functional/FR-017-rust-evaluation-and-qualification.md");
+
+#[derive(Debug)]
+struct ClauseSourceRow {
+    scheme: String,
+    host: String,
+    url_path: String,
+    query: Option<String>,
+    wheel_member: String,
+    npm_member: String,
+}
+
+fn clause_source_rows_from_spec() -> Vec<ClauseSourceRow> {
+    const TABLE_HEADER: &str =
+        "| Scheme | Host | URL path | Query | Wheel member path | npm member path |";
+
+    let mut in_table = false;
+    let mut rows = Vec::new();
+    for line in FR_017_SPEC.lines().map(str::trim) {
+        if !in_table {
+            in_table = line == TABLE_HEADER;
+            continue;
+        }
+        if !line.starts_with('|') {
+            break;
+        }
+        if line.contains("---") {
+            continue;
+        }
+
+        let cells = markdown_table_cells(line).expect("FR-017 clause-source row must be valid");
+        assert_eq!(cells.len(), 6, "FR-017 clause-source row column count");
+        rows.push(ClauseSourceRow {
+            scheme: cells[0].to_owned(),
+            host: cells[1].to_owned(),
+            url_path: cells[2].to_owned(),
+            query: (cells[3] != "none").then(|| cells[3].to_owned()),
+            wheel_member: cells[4].to_owned(),
+            npm_member: cells[5].to_owned(),
+        });
+    }
+    assert!(!rows.is_empty(), "FR-017 must declare clause-source URLs");
+    rows
+}
+
+fn markdown_table_cells(line: &str) -> Option<Vec<&str>> {
+    let mut cells = line.split('|').collect::<Vec<_>>();
+    if cells.first()?.trim().is_empty() && cells.last()?.trim().is_empty() {
+        cells.remove(0);
+        cells.pop();
+    } else {
+        return None;
+    }
+    Some(
+        cells
+            .into_iter()
+            .map(|cell| cell.trim().trim_matches(char::from(96)))
+            .collect(),
+    )
+}
+
+fn clause_source_url(row: &ClauseSourceRow) -> String {
+    let query = row
+        .query
+        .as_deref()
+        .map(|query| format!("?{query}"))
+        .unwrap_or_default();
+    format!("{}://{}{}{}", row.scheme, row.host, row.url_path, query)
+}
+
 #[test]
 #[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
 fn retained_text_finding_and_exception_correspondence_is_fixed() {
@@ -22,10 +93,6 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
     let private_tilde = format!("{}private/file.txt", "~/");
     let identifier = ["IS", "O 1234"].concat();
     let external_url = ["https:", "//example.invalid/source"].concat();
-    let registry_url = ["https:", "//github.com/rust-lang/crates.io-index"].concat();
-    let git_dependency_url = ["https:", "//github.com/agent-ix/ix-trace-rs"].concat();
-    let schema_url = ["http:", "//json-schema.org/draft-07/schema#"].concat();
-    let license_url = ["https:", "//example.invalid/license"].concat();
     let protected = "Straße".to_owned();
     let ordinary = [
         private_unix,
@@ -37,7 +104,7 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
         "applicability matrix".to_owned(),
         "standard crosswalk".to_owned(),
         "legal advice".to_owned(),
-        external_url.clone(),
+        external_url,
         "A".repeat(240),
         "STRASSE".to_owned(),
     ]
@@ -64,7 +131,16 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
             (12, ContentRightsCategory::ProtectedLocalToken),
         ]
     );
+}
 
+#[test]
+#[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
+fn retained_path_exceptions_are_exact() {
+    let tokens: Vec<String> = Vec::new();
+    let registry_url = ["https:", "//github.com/rust-lang/crates.io-index"].concat();
+    let git_dependency_url = ["https:", "//github.com/agent-ix/ix-trace-rs"].concat();
+    let schema_url = ["http:", "//json-schema.org/draft-07/schema#"].concat();
+    let license_url = ["https:", "//example.invalid/license"].concat();
     for (path, text) in [
         ("Cargo.lock", registry_url.as_str()),
         ("deny.toml", registry_url.as_str()),
@@ -112,6 +188,13 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
         !findings("Cargo.toml", look_alike_org_url.as_bytes(), &tokens).is_empty(),
         "a look-alike agent-ix org URL must not be admitted by the manifest exemption"
     );
+}
+
+#[test]
+#[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
+fn unapproved_url_findings_keep_line_numbers() {
+    let tokens: Vec<String> = Vec::new();
+    let external_url = ["https:", "//example.invalid/source"].concat();
     assert_eq!(
         findings(
             "candidate.md",
@@ -210,111 +293,46 @@ fn project_metadata_agent_ix_exemption_refuses_look_alike_orgs() {
 
 #[test]
 #[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
-fn official_clause_source_urls_match_exact_archive_paths() {
-    let sources = [
-        (
-            "spec_clauses_us_health/clauses/us-hhs-45-cfr-164-subpart-c-2026-11-12.json",
-            concat!(
-                "https:",
-                "//www.ecfr.gov/on/2026-11-12/title-45/subtitle-A/subchapter-C/part-164/subpart-C"
-            ),
-        ),
-        (
-            "package/clauses/us-hhs-45-cfr-164-subpart-c-2026-11-12.json",
-            concat!(
-                "https:",
-                "//www.ecfr.gov/on/2026-11-12/title-45/subtitle-A/subchapter-C/part-164/subpart-C"
-            ),
-        ),
-        (
-            "spec_clauses_eu_law/clauses/eu-mdr-2017-745-2026-07-19.json",
-            concat!(
-                "https:",
-                "//eur-lex.europa.eu/eli/reg/2017/745/2026-07-19/eng"
-            ),
-        ),
-        (
-            "package/clauses/eu-mdr-2017-745-2026-07-19.json",
-            concat!(
-                "https:",
-                "//eur-lex.europa.eu/eli/reg/2017/745/2026-07-19/eng"
-            ),
-        ),
-        (
-            "spec_clauses_eu_law/clauses/eu-mdcg-mdcg-2019-16-rev1.json",
-            concat!(
-                "https:",
-                "//health.ec.europa.eu/document/download/b23b362f-8a56-434c-922a-5b3ca4d0a7a1_en?filename=md_cybersecurity_en.pdf"
-            ),
-        ),
-        (
-            "package/clauses/eu-mdcg-mdcg-2019-16-rev1.json",
-            concat!(
-                "https:",
-                "//health.ec.europa.eu/document/download/b23b362f-8a56-434c-922a-5b3ca4d0a7a1_en?filename=md_cybersecurity_en.pdf"
-            ),
-        ),
-        (
-            "spec_clauses_eu_law/clauses/eu-mdcg-mdcg-2019-16-rev1.json",
-            concat!(
-                "https:",
-                "//health.ec.europa.eu/medical-devices-sector/new-regulations/guidance-mdcg-endorsed-documents-and-other-guidance_en"
-            ),
-        ),
-        (
-            "package/clauses/eu-mdcg-mdcg-2019-16-rev1.json",
-            concat!(
-                "https:",
-                "//health.ec.europa.eu/medical-devices-sector/new-regulations/guidance-mdcg-endorsed-documents-and-other-guidance_en"
-            ),
-        ),
-    ];
+fn official_clause_source_urls_match_spec_at_archive_paths() {
     let tokens: Vec<String> = Vec::new();
-
-    for (path, source_url) in sources {
-        assert!(
-            findings(path, source_url.as_bytes(), &tokens).is_empty(),
-            "the declared official source must pass at {path}"
-        );
-        assert!(
-            !findings("candidate.json", source_url.as_bytes(), &tokens).is_empty(),
-            "the source URL must not pass at an unrelated path"
-        );
+    for row in clause_source_rows_from_spec() {
+        let source_url = clause_source_url(&row);
+        for path in [&row.wheel_member, &row.npm_member] {
+            assert!(
+                findings(path, source_url.as_bytes(), &tokens).is_empty(),
+                "{path}"
+            );
+        }
     }
+}
 
-    let unrelated_clause_urls = [
-        (
-            "spec_clauses_us_health/clauses/us-hhs-45-cfr-164-subpart-c-2026-11-12.json",
-            concat!(
-                "https:",
-                "//www.ecfr.gov.example.invalid/on/2026-11-12/title-45/subtitle-A/subchapter-C/part-164/subpart-C"
-            ),
-        ),
-        (
-            "package/clauses/eu-mdr-2017-745-2026-07-19.json",
-            concat!(
-                "https:",
-                "//eur-lex.europa.eu.example.invalid/eli/reg/2017/745/2026-07-19/eng"
-            ),
-        ),
-        (
-            "package/clauses/eu-mdcg-mdcg-2019-16-rev1.json",
-            concat!(
-                "https:",
-                "//health.ec.europa.eu/document/download/b23b362f-8a56-434c-922a-5b3ca4d0a7a1_en?filename=altered.pdf"
-            ),
-        ),
-        (
-            "package/clauses/eu-mdcg-mdcg-2019-16-rev1.json",
-            concat!("https:", "//standards.example.invalid/catalog/1234"),
-        ),
-    ];
+#[test]
+#[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
+fn clause_source_paths_refuse_unrelated_lookalike_and_standards_urls() {
+    let tokens: Vec<String> = Vec::new();
+    let rows = clause_source_rows_from_spec();
+    let paths = rows
+        .iter()
+        .flat_map(|row| [&row.wheel_member, &row.npm_member])
+        .collect::<std::collections::BTreeSet<_>>();
+    let unrelated = ["https:", "//example.invalid/unrelated"].concat();
+    let standards = ["https:", "//standards.example.invalid/catalog/1234"].concat();
 
-    for (path, source_url) in unrelated_clause_urls {
-        assert!(
-            !findings(path, source_url.as_bytes(), &tokens).is_empty(),
-            "unlisted source URL must be refused at {path}"
+    for path in paths {
+        let source = rows
+            .iter()
+            .find(|row| row.wheel_member == *path || row.npm_member == *path)
+            .expect("each table path must have a source row");
+        let lookalike = format!(
+            "{}://{}.example.invalid{}",
+            source.scheme, source.host, source.url_path
         );
+        for rejected in [&unrelated, &lookalike, &standards] {
+            assert!(
+                !findings(path, rejected.as_bytes(), &tokens).is_empty(),
+                "{path}"
+            );
+        }
     }
 }
 
