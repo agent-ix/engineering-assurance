@@ -234,7 +234,6 @@ checking, manifest validation, and qualification assertions to Rust.
   | `https` | `www.fda.gov` | `/regulatory-information/search-fda-guidance-documents/content-premarket-submissions-device-software-functions` | none | `spec_clauses_us_health/clauses/us-fda-premarket-device-software-2023-06-14.json` | `package/clauses/us-fda-premarket-device-software-2023-06-14.json` |
   | `https` | `www.ecfr.gov` | `/on/2026-11-12/title-45/subtitle-A/subchapter-C/part-164/subpart-C` | none | `spec_clauses_us_health/clauses/us-hhs-45-cfr-164-subpart-c-2026-11-12.json` | `package/clauses/us-hhs-45-cfr-164-subpart-c-2026-11-12.json` |
   | `https` | `eur-lex.europa.eu` | `/eli/reg/2017/745/2026-07-19/eng` | none | `spec_clauses_eu_law/clauses/eu-mdr-2017-745-2026-07-19.json` | `package/clauses/eu-mdr-2017-745-2026-07-19.json` |
-  | `https` | `eur-lex.europa.eu` | `/content/legal-notice/legal-notice.html` | `locale=en` | `spec_clauses_eu_law/clauses/eu-mdr-2017-745-2026-07-19.json` | `package/clauses/eu-mdr-2017-745-2026-07-19.json` |
   | `https` | `health.ec.europa.eu` | `/document/download/b23b362f-8a56-434c-922a-5b3ca4d0a7a1_en` | `filename=md_cybersecurity_en.pdf` | `spec_clauses_eu_law/clauses/eu-mdcg-mdcg-2019-16-rev1.json` | `package/clauses/eu-mdcg-mdcg-2019-16-rev1.json` |
   | `https` | `health.ec.europa.eu` | `/medical-devices-sector/new-regulations/guidance-mdcg-endorsed-documents-and-other-guidance_en` | none | `spec_clauses_eu_law/clauses/eu-mdcg-mdcg-2019-16-rev1.json` | `package/clauses/eu-mdcg-mdcg-2019-16-rev1.json` |
   | `https` | `eur-lex.europa.eu` | `/eli/reg/2016/679/2016-05-04/eng` | none | `spec_clauses_eu_law/clauses/eu-gdpr-2016-679-2016-05-04.json` | `package/clauses/eu-gdpr-2016-679-2016-05-04.json` |
@@ -247,7 +246,7 @@ checking, manifest validation, and qualification assertions to Rust.
   The content-rights classifier SHALL refuse a source URL unless its scheme,
   host, path, query, and archive member path exactly match one row of this table.
   The EUR-Lex legal-notice URL SHALL appear as a rights-attribution reference in
-  the MDR, GDPR, and both AI Act clause sets. The FDA guidance links in this
+  the GDPR and both AI Act clause sets. The FDA guidance links in this
   table are exact source references; the pack specs declare no separate FDA
   legal-notice URL.
   For the MDCG clause set, `source.officialUrl` SHALL contain the PDF source
