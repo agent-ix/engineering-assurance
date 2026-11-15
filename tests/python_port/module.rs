@@ -1411,7 +1411,11 @@ fn packages_are_private_and_have_no_release_configuration() {
     }
     assert_eq!(
         artifact_transfer_workflows,
-        ["ea-106-live.yml", "release-attestation.yml"]
+        [
+            "change-receipt.yml",
+            "ea-106-live.yml",
+            "release-attestation.yml"
+        ]
     );
 }
 
@@ -1428,7 +1432,23 @@ fn tc112_workflow_violations(path: &str, text: &str) -> BTreeSet<&'static str> {
     let guarded_review_gate = path == ".github/workflows/review-gate.yml"
         && workflow["jobs"]["review-gate"]["if"].as_str()
             == Some("${{ vars.EA_REVIEW_GATE_ENABLED == 'true' }}");
-    if !manual_only && !guarded_review_gate && !reusable_attestation {
+    let receipt_workflow = match path {
+        ".github/workflows/change-receipt.yml" => workflow["on"]
+            .as_object()
+            .is_some_and(|triggers| triggers.len() == 1 && triggers.contains_key("workflow_call")),
+        ".github/workflows/receipt.yml" => workflow["on"]
+            .as_object()
+            .is_some_and(|triggers| triggers.len() == 1 && triggers.contains_key("push")),
+        ".github/workflows/missing-receipt-check.yml" => {
+            workflow["on"].as_object().is_some_and(|triggers| {
+                triggers.len() == 2
+                    && triggers.contains_key("schedule")
+                    && triggers.contains_key("workflow_dispatch")
+            })
+        }
+        _ => false,
+    };
+    if !manual_only && !guarded_review_gate && !reusable_attestation && !receipt_workflow {
         violations.insert("non_manual_trigger");
     }
 
