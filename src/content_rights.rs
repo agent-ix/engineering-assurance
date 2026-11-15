@@ -51,6 +51,19 @@ const SEMANTIC_POLICY_FILES: &[&str] = &[
     "tests/content_rights_parity.rs",
 ];
 
+const FR_017_SPEC: &str =
+    include_str!("../spec/functional/FR-017-rust-evaluation-and-qualification.md");
+
+#[derive(Debug)]
+struct OfficialClauseSourceRule {
+    wheel_member: String,
+    npm_member: String,
+    url: String,
+}
+
+static OFFICIAL_CLAUSE_SOURCE_RULES: LazyLock<Option<Vec<OfficialClauseSourceRule>>> =
+    LazyLock::new(|| parse_official_clause_source_rules(FR_017_SPEC));
+
 /// Whether a candidate tree entry is a regular file or symbolic link.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ContentEntryKind {
@@ -375,7 +388,7 @@ fn whole_file_finding(
     if !TEXT_SUFFIXES.contains(&suffix.as_str()) {
         return Some(ContentRightsCategory::UnreviewedFileType);
     }
-    if bytes.len() > MAX_TEXT_BYTES && path != "LICENSE" {
+    if bytes.len() > MAX_TEXT_BYTES && !is_license_path(path) {
         return Some(ContentRightsCategory::OversizedTextFile);
     }
     bytes
@@ -475,7 +488,7 @@ fn append_policy_findings(
             }
         }
     }
-    if path != "LICENSE"
+    if !is_license_path(path)
         && patterns
             .url
             .find_iter(line)
@@ -573,6 +586,62 @@ fn contains_tilde_workstation_path(line: &str) -> bool {
     })
 }
 
+fn parse_official_clause_source_rules(
+    specification: &str,
+) -> Option<Vec<OfficialClauseSourceRule>> {
+    const TABLE_HEADER: &str =
+        "| Scheme | Host | URL path | Query | Wheel member path | npm member path |";
+
+    let mut table_started = false;
+    let mut rules = Vec::new();
+    for line in specification.lines().map(str::trim) {
+        if !table_started {
+            table_started = line == TABLE_HEADER;
+            continue;
+        }
+        if !line.starts_with('|') {
+            break;
+        }
+        if line.contains("---") {
+            continue;
+        }
+
+        let mut columns = line.split('|').collect::<Vec<_>>();
+        if columns.first()?.trim().is_empty() && columns.last()?.trim().is_empty() {
+            columns.remove(0);
+            columns.pop();
+        } else {
+            return None;
+        }
+        if columns.len() != 6 {
+            return None;
+        }
+        let columns = columns
+            .into_iter()
+            .map(|column| column.trim().trim_matches('`'))
+            .collect::<Vec<_>>();
+        if columns.iter().any(|column| column.is_empty()) {
+            return None;
+        }
+
+        let scheme = columns[0];
+        let host = columns[1];
+        let url_path = columns[2];
+        let query = if columns[3] == "none" {
+            String::new()
+        } else {
+            format!("?{}", columns[3])
+        };
+        rules.push(OfficialClauseSourceRule {
+            wheel_member: columns[4].to_owned(),
+            npm_member: columns[5].to_owned(),
+            url: format!("{scheme}://{host}{url_path}{query}"),
+        });
+    }
+
+    (!rules.is_empty()).then_some(rules)
+}
+
 fn url_is_allowed(path: &str, url: &str) -> bool {
     let schema_prefix = concat!("http:", "//json-schema.org/draft-07/schema#");
     let cargo_registry = concat!("https:", "//github.com/rust-lang/crates.io-index");
@@ -602,7 +671,8 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         || path.ends_with(".claude-plugin/plugin.json")
         || path.ends_with(".codex-plugin/plugin.json")
         || path.ends_with(".github/plugin/plugin.json")
-        || path.ends_with(".dist-info/METADATA");
+        || path.ends_with(".dist-info/METADATA")
+        || matches!(path, "package.json" | "package/package.json");
     let plugin_help_doc = matches!(
         path,
         "setup.md" | "engineering_assurance/skills/assurance-onboarding/SKILL.md"
@@ -655,8 +725,17 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         || cargo_manifest && is_approved_dependency_url
         || project_metadata && (url == discord_badge || url == discord_invite)
         || project_metadata && (url == agent_ix_bare || url.starts_with(agent_ix_org_prefix))
+        || OFFICIAL_CLAUSE_SOURCE_RULES.as_ref().is_some_and(|rules| {
+            rules.iter().any(|rule| {
+                (path == rule.wheel_member || path == rule.npm_member) && url == rule.url
+            })
+        })
         || plugin_help_doc
             && (url == plugin_setup_url || url == marketplace_url || url == discord_invite)
+}
+
+fn is_license_path(path: &str) -> bool {
+    path.rsplit('/').next() == Some("LICENSE")
 }
 
 fn contains_encoded_payload(line: &str) -> bool {

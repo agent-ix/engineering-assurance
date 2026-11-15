@@ -13,6 +13,77 @@ fn findings(path: &str, bytes: &[u8], tokens: &[String]) -> Vec<ContentRightsFin
         .expect("repository-owned policy patterns must compile")
 }
 
+const FR_017_SPEC: &str =
+    include_str!("../spec/functional/FR-017-rust-evaluation-and-qualification.md");
+
+#[derive(Debug)]
+struct ClauseSourceRow {
+    scheme: String,
+    host: String,
+    url_path: String,
+    query: Option<String>,
+    wheel_member: String,
+    npm_member: String,
+}
+
+fn clause_source_rows_from_spec() -> Vec<ClauseSourceRow> {
+    const TABLE_HEADER: &str =
+        "| Scheme | Host | URL path | Query | Wheel member path | npm member path |";
+
+    let mut in_table = false;
+    let mut rows = Vec::new();
+    for line in FR_017_SPEC.lines().map(str::trim) {
+        if !in_table {
+            in_table = line == TABLE_HEADER;
+            continue;
+        }
+        if !line.starts_with('|') {
+            break;
+        }
+        if line.contains("---") {
+            continue;
+        }
+
+        let cells = markdown_table_cells(line).expect("FR-017 clause-source row must be valid");
+        assert_eq!(cells.len(), 6, "FR-017 clause-source row column count");
+        rows.push(ClauseSourceRow {
+            scheme: cells[0].to_owned(),
+            host: cells[1].to_owned(),
+            url_path: cells[2].to_owned(),
+            query: (cells[3] != "none").then(|| cells[3].to_owned()),
+            wheel_member: cells[4].to_owned(),
+            npm_member: cells[5].to_owned(),
+        });
+    }
+    assert_eq!(rows.len(), 16, "FR-017 clause-source tuple count");
+    rows
+}
+
+fn markdown_table_cells(line: &str) -> Option<Vec<&str>> {
+    let mut cells = line.split('|').collect::<Vec<_>>();
+    if cells.first()?.trim().is_empty() && cells.last()?.trim().is_empty() {
+        cells.remove(0);
+        cells.pop();
+    } else {
+        return None;
+    }
+    Some(
+        cells
+            .into_iter()
+            .map(|cell| cell.trim().trim_matches(char::from(96)))
+            .collect(),
+    )
+}
+
+fn clause_source_url(row: &ClauseSourceRow) -> String {
+    let query = row
+        .query
+        .as_deref()
+        .map(|query| format!("?{query}"))
+        .unwrap_or_default();
+    format!("{}://{}{}{}", row.scheme, row.host, row.url_path, query)
+}
+
 #[test]
 #[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
 fn retained_text_finding_and_exception_correspondence_is_fixed() {
@@ -22,10 +93,6 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
     let private_tilde = format!("{}private/file.txt", "~/");
     let identifier = ["IS", "O 1234"].concat();
     let external_url = ["https:", "//example.invalid/source"].concat();
-    let registry_url = ["https:", "//github.com/rust-lang/crates.io-index"].concat();
-    let git_dependency_url = ["https:", "//github.com/agent-ix/ix-trace-rs"].concat();
-    let schema_url = ["http:", "//json-schema.org/draft-07/schema#"].concat();
-    let license_url = ["https:", "//example.invalid/license"].concat();
     let protected = "Straße".to_owned();
     let ordinary = [
         private_unix,
@@ -37,7 +104,7 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
         "applicability matrix".to_owned(),
         "standard crosswalk".to_owned(),
         "legal advice".to_owned(),
-        external_url.clone(),
+        external_url,
         "A".repeat(240),
         "STRASSE".to_owned(),
     ]
@@ -64,7 +131,16 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
             (12, ContentRightsCategory::ProtectedLocalToken),
         ]
     );
+}
 
+#[test]
+#[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
+fn retained_path_exceptions_are_exact() {
+    let tokens: Vec<String> = Vec::new();
+    let registry_url = ["https:", "//github.com/rust-lang/crates.io-index"].concat();
+    let git_dependency_url = ["https:", "//github.com/agent-ix/ix-trace-rs"].concat();
+    let schema_url = ["http:", "//json-schema.org/draft-07/schema#"].concat();
+    let license_url = ["https:", "//example.invalid/license"].concat();
     for (path, text) in [
         ("Cargo.lock", registry_url.as_str()),
         ("deny.toml", registry_url.as_str()),
@@ -73,6 +149,11 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
         ("deny.toml", git_dependency_url.as_str()),
         ("candidate.json", schema_url.as_str()),
         ("LICENSE", license_url.as_str()),
+        ("package/LICENSE", license_url.as_str()),
+        (
+            "engineering_assurance-0.8.2.dist-info/licenses/LICENSE",
+            license_url.as_str(),
+        ),
         ("src/content_rights.rs", "clause inventory"),
         ("tests/content_rights_parity.rs", "legal advice"),
         ("AGENTS.md", "applicability matrix"),
@@ -107,6 +188,13 @@ fn retained_text_finding_and_exception_correspondence_is_fixed() {
         !findings("Cargo.toml", look_alike_org_url.as_bytes(), &tokens).is_empty(),
         "a look-alike agent-ix org URL must not be admitted by the manifest exemption"
     );
+}
+
+#[test]
+#[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
+fn unapproved_url_findings_keep_line_numbers() {
+    let tokens: Vec<String> = Vec::new();
+    let external_url = ["https:", "//example.invalid/source"].concat();
     assert_eq!(
         findings(
             "candidate.md",
@@ -168,7 +256,12 @@ fn project_metadata_agent_ix_exemption_refuses_look_alike_orgs() {
     let bare_org_url = ["https:", "//github.com/agent-ix"].concat();
     let org_prefixed_url = ["https:", "//github.com/agent-ix/quoin"].concat();
     let look_alike_org_url = ["https:", "//github.com/agent-ix-evil/x"].concat();
-    for path in ["README.md", ".claude-plugin/plugin.json"] {
+    for path in [
+        "README.md",
+        ".claude-plugin/plugin.json",
+        "package.json",
+        "package/package.json",
+    ] {
         assert!(
             findings(path, bare_org_url.as_bytes(), &tokens).is_empty(),
             "{path} must admit the bare agent-ix org URL"
@@ -186,6 +279,116 @@ fn project_metadata_agent_ix_exemption_refuses_look_alike_orgs() {
         !findings("candidate.md", bare_org_url.as_bytes(), &tokens).is_empty(),
         "a non-project-metadata file must not inherit this exemption"
     );
+    for path in [
+        "nested/package.json",
+        "package/child/package.json",
+        "other/package/package.json",
+    ] {
+        assert!(
+            !findings(path, org_prefixed_url.as_bytes(), &tokens).is_empty(),
+            "{path} must not inherit package metadata context by suffix"
+        );
+    }
+}
+
+#[test]
+#[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
+fn official_clause_source_urls_match_spec_at_archive_paths() {
+    let tokens: Vec<String> = Vec::new();
+    for row in clause_source_rows_from_spec() {
+        let source_url = clause_source_url(&row);
+        for path in [&row.wheel_member, &row.npm_member] {
+            assert!(
+                findings(path, source_url.as_bytes(), &tokens).is_empty(),
+                "{path}"
+            );
+        }
+        assert!(
+            !findings("candidate.json", source_url.as_bytes(), &tokens).is_empty(),
+            "an unrelated path must refuse {source_url}"
+        );
+    }
+}
+
+#[test]
+#[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
+fn clause_source_paths_refuse_unrelated_lookalike_and_standards_urls() {
+    let tokens: Vec<String> = Vec::new();
+    let rows = clause_source_rows_from_spec();
+    let paths = rows
+        .iter()
+        .flat_map(|row| [&row.wheel_member, &row.npm_member])
+        .collect::<std::collections::BTreeSet<_>>();
+    let unrelated = ["https:", "//example.invalid/unrelated"].concat();
+    let standards = ["https:", "//standards.example.invalid/catalog/1234"].concat();
+
+    for path in paths {
+        let source = rows
+            .iter()
+            .find(|row| row.wheel_member == *path || row.npm_member == *path)
+            .expect("each table path must have a source row");
+        let lookalike = format!(
+            "{}://{}.example.invalid{}",
+            source.scheme, source.host, source.url_path
+        );
+        for rejected in [&unrelated, &lookalike, &standards] {
+            assert!(
+                !findings(path, rejected.as_bytes(), &tokens).is_empty(),
+                "{path}"
+            );
+        }
+    }
+}
+
+#[test]
+#[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
+fn eur_lex_legal_notice_is_limited_to_gdpr_and_ai_act_paths() {
+    let tokens: Vec<String> = Vec::new();
+    let rows = clause_source_rows_from_spec();
+    let legal_notice_row = rows
+        .iter()
+        .find(|row| row.url_path == "/content/legal-notice/legal-notice.html")
+        .expect("FR-017 must scope the EUR-Lex legal notice");
+    let legal_notice = clause_source_url(legal_notice_row);
+
+    for path in rows
+        .iter()
+        .flat_map(|row| [&row.wheel_member, &row.npm_member])
+        .collect::<std::collections::BTreeSet<_>>()
+    {
+        let explicitly_attributed = rows.iter().any(|row| {
+            row.url_path == "/content/legal-notice/legal-notice.html"
+                && (row.wheel_member == *path || row.npm_member == *path)
+        });
+        let observed = findings(path, legal_notice.as_bytes(), &tokens).is_empty();
+        assert_eq!(observed, explicitly_attributed, "{path}");
+    }
+}
+
+#[test]
+#[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
+fn query_bearing_clause_sources_refuse_missing_or_altered_queries() {
+    let tokens: Vec<String> = Vec::new();
+    for row in clause_source_rows_from_spec()
+        .into_iter()
+        .filter(|row| row.query.is_some())
+    {
+        let query = row
+            .query
+            .as_deref()
+            .expect("filtered query must be present");
+        let url_without_query = format!("{}://{}{}", row.scheme, row.host, row.url_path);
+        let url_with_altered_query = format!("{url_without_query}?{query}-changed");
+
+        for path in [&row.wheel_member, &row.npm_member] {
+            for rejected in [&url_without_query, &url_with_altered_query] {
+                assert!(
+                    !findings(path, rejected.as_bytes(), &tokens).is_empty(),
+                    "query mismatch must be refused at {path}"
+                );
+            }
+        }
+    }
 }
 
 #[test]
@@ -258,7 +461,16 @@ fn whole_file_boundaries_are_typed_and_short_circuit_content() {
         ContentRightsCategory::OversizedTextFile
     );
     let large_license = "x\n".repeat(256_001);
-    assert!(findings("LICENSE", large_license.as_bytes(), &[]).is_empty());
+    for path in [
+        "LICENSE",
+        "package/LICENSE",
+        "engineering_assurance-0.8.2.dist-info/licenses/LICENSE",
+    ] {
+        assert!(
+            findings(path, large_license.as_bytes(), &[]).is_empty(),
+            "{path}"
+        );
+    }
 
     let lfs = ["version ", "https:", "//git-lfs.github.com/spec/v1\n"].concat();
     let lfs_finding = findings("candidate.txt", lfs.as_bytes(), &[]);
