@@ -242,6 +242,12 @@ fn status(fixture: &Fixture, revision: &str, kind: &str) -> Value {
     verdict(&request(fixture, revision, kind))
 }
 
+fn status_with_trailer_keys(fixture: &Fixture, revision: &str, kind: &str, keys: Value) -> Value {
+    let mut body = request(fixture, revision, kind);
+    body["trailer_keys"] = keys;
+    verdict(&body)
+}
+
 /// A directory holding only the named programs, found on the real `PATH`.
 fn path_with(fixture: &Fixture, name: &str, programs: &[&str]) -> PathBuf {
     let directory = fixture.root().join(name);
@@ -1077,4 +1083,210 @@ fn tc_277_a_temp_dir_inside_the_verified_repository_cannot_inject_the_trailer() 
     let verdict: Value = serde_json::from_slice(&output.stdout).expect("json");
     assert_eq!(verdict["status"], "signed_valid");
     assert_eq!(meaning(&verdict), ("missing", vec![]));
+}
+
+#[test]
+#[trace("FR-037-AC-10")]
+fn trailer_keys_return_every_value_in_order_and_preserve_request_spelling() {
+    let fixture = fixture();
+    let revision = signed_commit_with(
+        &fixture,
+        "a",
+        &["subject\n\nFormal-rule: qsl:a.native::P1\nFormal-rule: qsl:a.native::P2"],
+    );
+    let verdict = status_with_trailer_keys(&fixture, &revision, "commit", json!(["Formal-rule"]));
+    assert_eq!(verdict["status"], "signed_valid");
+    assert_eq!(
+        verdict["trailers"],
+        json!({"Formal-rule": ["qsl:a.native::P1", "qsl:a.native::P2"]})
+    );
+    let lowercase = status_with_trailer_keys(&fixture, &revision, "commit", json!(["formal-rule"]));
+    assert_eq!(
+        lowercase["trailers"],
+        json!({"formal-rule": ["qsl:a.native::P1", "qsl:a.native::P2"]})
+    );
+}
+
+#[test]
+#[trace("FR-037-AC-11", "FR-037-AC-12", "FR-037-AC-16")]
+fn requested_trailers_ignore_repository_aliases_and_parse_only_the_trailer_block() {
+    let fixture = fixture();
+    let repo = fixture.repo();
+    let alias = signed_commit_with(&fixture, "a", &["subject", "fr: injected", "sm: injected"]);
+    git(&repo, None, &["config", "trailer.fr.key", "Formal-rule"]);
+    git(
+        &repo,
+        None,
+        &["config", "trailer.sm.key", "Signed-off-meaning"],
+    );
+    git(
+        &repo,
+        None,
+        &["config", "trailer.fr.command", "printf injected"],
+    );
+    git(
+        &repo,
+        None,
+        &["config", "trailer.formal-rule.command", "printf injected"],
+    );
+    let alias_result = status_with_trailer_keys(&fixture, &alias, "commit", json!(["Formal-rule"]));
+    assert_eq!(alias_result["trailers"], json!({"Formal-rule": []}));
+    assert_eq!(meaning(&alias_result), ("missing", vec![]));
+
+    let separated = signed_commit_with(
+        &fixture,
+        "a",
+        &[
+            "subject",
+            "body text",
+            "---",
+            "Formal-rule: qsl:a.native::P1",
+        ],
+    );
+    let separated_result =
+        status_with_trailer_keys(&fixture, &separated, "commit", json!(["Formal-rule"]));
+    assert_eq!(
+        separated_result["trailers"],
+        json!({"Formal-rule": ["qsl:a.native::P1"]})
+    );
+
+    let body_only = signed_commit_with(
+        &fixture,
+        "a",
+        &["subject", "Formal-rule: body-only", "more body text"],
+    );
+    let body_result =
+        status_with_trailer_keys(&fixture, &body_only, "commit", json!(["Formal-rule"]));
+    assert_eq!(body_result["trailers"], json!({"Formal-rule": []}));
+}
+
+#[test]
+#[trace("FR-037-AC-13", "FR-037-AC-15")]
+fn trailer_results_are_omitted_without_a_readable_message_and_do_not_change_status() {
+    let fixture = fixture();
+    let unsigned = plain_commit_with(&fixture, &["subject", "Formal-rule: qsl:a.native::P1"]);
+    let unsigned_result =
+        status_with_trailer_keys(&fixture, &unsigned, "commit", json!(["Formal-rule"]));
+    assert_eq!(unsigned_result["status"], "unsigned");
+    assert_eq!(
+        unsigned_result["trailers"],
+        json!({"Formal-rule": ["qsl:a.native::P1"]})
+    );
+
+    let signed = signed_commit_with(&fixture, "a", &["subject", "Formal-rule: qsl:a.native::P2"]);
+    let bad = rewrite(&fixture, "commit", &signed, |object| {
+        object.replace("subject", "changed subject")
+    });
+    let bad_result = status_with_trailer_keys(&fixture, &bad, "commit", json!(["Formal-rule"]));
+    assert_eq!(bad_result["status"], "signed_bad");
+    assert_eq!(
+        bad_result["trailers"],
+        json!({"Formal-rule": ["qsl:a.native::P2"]})
+    );
+
+    let no_keys = status(&fixture, &unsigned, "commit");
+    assert!(no_keys.get("trailers").is_none());
+    let empty_keys = status_with_trailer_keys(&fixture, &unsigned, "commit", json!([]));
+    assert!(empty_keys.get("trailers").is_none());
+
+    signed_tag_with(
+        &fixture,
+        "a",
+        "v-rule",
+        "release\n\nFormal-rule: qsl:a.native::P3",
+    );
+    let tag = status_with_trailer_keys(&fixture, "v-rule", "tag", json!(["Formal-rule"]));
+    assert_eq!(tag["status"], "signed_valid");
+    assert_eq!(
+        tag["trailers"],
+        json!({"Formal-rule": ["qsl:a.native::P3"]})
+    );
+}
+
+#[test]
+#[trace("FR-037-AC-14", "FR-037-AC-17", "FR-037-AC-18")]
+fn trailer_key_requests_are_validated_before_git_and_before_allowed_signers() {
+    let fixture = fixture();
+    let marker = fixture.root().join("git-was-started");
+    let shim = fixture.root().join("shim-bin");
+    fs::create_dir(&shim).expect("shim dir");
+    let script = shim.join("git");
+    fs::write(
+        &script,
+        format!("#!/bin/sh\ntouch '{}'\nexit 1\n", marker.display()),
+    )
+    .expect("shim");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("mode");
+
+    let mut invalid = vec![
+        json!("Formal-rule"),
+        json!({"key":"Formal-rule"}),
+        json!([1]),
+        json!([""]),
+        json!(["A".repeat(65)]),
+        json!(["1Key"]),
+        json!(["-Key"]),
+        json!(["Key With Space"]),
+        json!(["Key:Colon"]),
+        json!(["Key_Underscore"]),
+        json!(["Étiquette"]),
+        json!(["Formal-rule", "formal-RULE"]),
+        json!([
+            "Formal-rule",
+            "Rule-1",
+            "Rule-2",
+            "Rule-3",
+            "Rule-4",
+            "Rule-5",
+            "Rule-6",
+            "Rule-7",
+            "Rule-8",
+            "Rule-9",
+            "Rule-10",
+            "Rule-11",
+            "Rule-12",
+            "Rule-13",
+            "Rule-14",
+            "Rule-15",
+            "Rule-16"
+        ]),
+    ];
+    invalid.push(Value::Null);
+    for keys in invalid {
+        let mut body = request(&fixture, "HEAD", "commit");
+        body["trailer_keys"] = keys;
+        let output = run_with(body.to_string().as_bytes(), Some(&shim));
+        assert_eq!(output.status.code(), Some(2), "{body}: {output:?}");
+        let error: Value = serde_json::from_slice(&output.stdout).expect("error json");
+        assert_eq!(error["code"], "signature_verify_trailer_keys_invalid");
+    }
+    assert!(!marker.exists(), "invalid trailer keys must not start git");
+
+    let revision = signed_commit(&fixture, "a", "valid keys");
+    let long = format!("A{}", "b".repeat(63));
+    let valid = status_with_trailer_keys(
+        &fixture,
+        &revision,
+        "commit",
+        json!([
+            long, "Key0", "Key1", "Key2", "Key3", "Key4", "Key5", "Key6", "Key7", "Key8", "Key9",
+            "Key10", "Key11", "Key12", "Key13", "Key14"
+        ]),
+    );
+    assert_eq!(valid["trailers"].as_object().expect("trailers").len(), 16);
+
+    let mut both_invalid = request(&fixture, "HEAD", "commit");
+    both_invalid["trailer_keys"] = json!(["1bad"]);
+    both_invalid["allowed_signers"] = json!(fixture.root().join("missing").display().to_string());
+    let output = run_with(both_invalid.to_string().as_bytes(), Some(&shim));
+    let error: Value = serde_json::from_slice(&output.stdout).expect("error json");
+    assert_eq!(error["code"], "signature_verify_trailer_keys_invalid");
+
+    let mut valid_missing_allowed = request(&fixture, "HEAD", "commit");
+    valid_missing_allowed["trailer_keys"] = json!(["Formal-rule"]);
+    valid_missing_allowed["allowed_signers"] =
+        json!(fixture.root().join("missing").display().to_string());
+    let output = run_with(valid_missing_allowed.to_string().as_bytes(), None);
+    let error: Value = serde_json::from_slice(&output.stdout).expect("error json");
+    assert_eq!(error["code"], "signature_verify_allowed_signers_invalid");
 }
