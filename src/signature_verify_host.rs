@@ -17,6 +17,7 @@
 //! to the repository.
 
 use std::{
+    collections::BTreeMap,
     ffi::{OsStr, OsString},
     fs::File,
     io::Read,
@@ -26,10 +27,10 @@ use std::{
 
 use engineering_assurance::signature_verify::{
     CommitObservation, GitGrade, GitsignIdentity, PrincipalLookup, Probe, Reason, Run,
-    SignatureFormat, SignedAt, SignedOffMeaning, SplitTag, SshCheck, TagObservation, TargetKind,
-    Verdict, classify_commit, classify_gitsign, classify_tag, commit_signature_format,
+    SignatureFormat, SignedAt, SplitTag, SshCheck, TagObservation, TargetKind, Verdict,
+    classify_commit, classify_gitsign, classify_tag, commit_signature_format,
     config_sets_gitsign_key, is_plain_revision, object_message, signed_off_meaning,
-    split_tag_object, tagger_signed_at,
+    split_tag_object, tagger_signed_at, trailer_values,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -68,6 +69,7 @@ struct Request {
     kind: TargetKind,
     allowed_signers: PathBuf,
     gitsign: Option<GitsignRequest>,
+    trailer_keys: Option<Vec<String>>,
 }
 
 /// The `gitsign` member of a request, as the request documents spell it.
@@ -84,6 +86,13 @@ struct ResultLine<'a> {
     protocol: &'static str,
     #[serde(flatten)]
     verdict: &'a Verdict,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    trailers: Option<BTreeMap<String, Vec<String>>>,
+}
+
+struct CheckedMessage {
+    verdict: Verdict,
+    trailers: Option<String>,
 }
 
 /// Typed refusal that produces no verdict.
@@ -103,6 +112,9 @@ pub(crate) enum SignatureVerifyError {
         "signature-verify allowed-signers file is not a readable UTF-8 regular file of at most 1 MiB"
     )]
     AllowedSigners,
+    /// The requested trailer keys are not a valid bounded set.
+    #[error("signature-verify trailer_keys is not a valid bounded set of trailer keys")]
+    TrailerKeys,
     /// The verdict cannot be encoded.
     #[error("signature-verify result cannot be encoded")]
     ResultEncoding,
@@ -116,6 +128,7 @@ impl SignatureVerifyError {
             Self::Invalid => "signature_verify_request_invalid",
             Self::Revision => "signature_verify_revision_invalid",
             Self::AllowedSigners => "signature_verify_allowed_signers_invalid",
+            Self::TrailerKeys => "signature_verify_trailer_keys_invalid",
             Self::ResultEncoding => "signature_verify_result_encoding_failed",
         }
     }
@@ -125,8 +138,10 @@ impl SignatureVerifyError {
 pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, SignatureVerifyError> {
     let value: serde_json::Value =
         serde_json::from_slice(bytes).map_err(|_| SignatureVerifyError::Unreadable)?;
+    validate_trailer_keys(value.get("trailer_keys"))?;
     let request: Request =
         serde_json::from_value(value).map_err(|_| SignatureVerifyError::Invalid)?;
+    let trailer_keys = request.trailer_keys.as_deref();
     if request.protocol != REQUEST_PROTOCOL
         || !request.repository.is_absolute()
         || !request.allowed_signers.is_absolute()
@@ -153,17 +168,73 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, SignatureVerifyError> {
         allowed_signers: &request.allowed_signers,
         gitsign: gitsign.as_ref(),
     };
-    let verdict = match request.kind {
-        TargetKind::Commit => git.commit(&request.revision),
-        TargetKind::Tag => git.tag(&request.revision),
+    let checked = match request.kind {
+        TargetKind::Commit => git.commit_checked(&request.revision),
+        TargetKind::Tag => {
+            let checked = git.tag_checked(&request.revision);
+            CheckedMessage {
+                verdict: checked.verdict,
+                trailers: checked.trailers,
+            }
+        }
     };
+    let trailers = requested_trailers(checked.trailers.as_deref(), trailer_keys);
     let mut line = serde_json::to_vec(&ResultLine {
         protocol: RESULT_PROTOCOL,
-        verdict: &verdict,
+        verdict: &checked.verdict,
+        trailers,
     })
     .map_err(|_| SignatureVerifyError::ResultEncoding)?;
     line.push(b'\n');
     Ok(line)
+}
+
+fn validate_trailer_keys(
+    value: Option<&serde_json::Value>,
+) -> Result<Option<Vec<String>>, SignatureVerifyError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let Some(values) = value.as_array() else {
+        return Err(SignatureVerifyError::TrailerKeys);
+    };
+    if values.len() > 16 {
+        return Err(SignatureVerifyError::TrailerKeys);
+    }
+    let mut keys = Vec::with_capacity(values.len());
+    for value in values {
+        let Some(key) = value.as_str() else {
+            return Err(SignatureVerifyError::TrailerKeys);
+        };
+        let bytes = key.as_bytes();
+        if bytes.is_empty()
+            || bytes.len() > 64
+            || !bytes[0].is_ascii_alphabetic()
+            || !bytes
+                .iter()
+                .all(|byte| byte.is_ascii_alphabetic() || byte.is_ascii_digit() || *byte == b'-')
+            || keys
+                .iter()
+                .any(|existing: &String| existing.eq_ignore_ascii_case(key))
+        {
+            return Err(SignatureVerifyError::TrailerKeys);
+        }
+        keys.push(key.to_owned());
+    }
+    Ok(Some(keys))
+}
+
+fn requested_trailers(
+    parsed: Option<&str>,
+    keys: Option<&[String]>,
+) -> Option<BTreeMap<String, Vec<String>>> {
+    let parsed = parsed?;
+    let keys = keys.filter(|keys| !keys.is_empty())?;
+    Some(
+        keys.iter()
+            .map(|key| (key.clone(), trailer_values(parsed, key)))
+            .collect(),
+    )
 }
 
 /// Refuses an allowed-signers file git should not be given: one that is not a
@@ -456,30 +527,44 @@ fn observed(result: &Result<CompletedProcess, ProcessError>) -> Run {
 }
 
 impl Git<'_> {
-    fn commit(&self, revision: &str) -> Verdict {
+    fn commit_checked(&self, revision: &str) -> CheckedMessage {
         let kind = TargetKind::Commit;
         if let Err(reason) = self.require_repository() {
-            return Verdict::unverifiable(kind, reason);
+            return CheckedMessage {
+                verdict: Verdict::unverifiable(kind, reason),
+                trailers: None,
+            };
         }
         let id = match self.resolve(&format!("{revision}^{{commit}}")) {
             Ok(id) => id,
-            Err(reason) => return Verdict::unverifiable(kind, reason),
+            Err(reason) => {
+                return CheckedMessage {
+                    verdict: Verdict::unverifiable(kind, reason),
+                    trailers: None,
+                };
+            }
         };
         let object = match self.successful(&["cat-file", "commit", &id]) {
             Ok(object) => object,
             Err(reason) => {
-                return Verdict::unverifiable(kind, reason).with_verified_commit_id(Some(id));
+                return CheckedMessage {
+                    verdict: Verdict::unverifiable(kind, reason).with_verified_commit_id(Some(id)),
+                    trailers: None,
+                };
             }
         };
-        let meaning = self.meaning(object_message(&object));
+        let trailers = self.parsed_trailers(object_message(&object));
+        let meaning = trailers.as_deref().map(signed_off_meaning);
         let format = commit_signature_format(&object);
-        self.commit_verdict(&id, format)
+        let verdict = self
+            .commit_verdict(&id, format)
             .unwrap_or_else(|reason| {
                 Verdict::unverifiable(kind, reason)
                     .with_signature_kind(format.and_then(SignatureFormat::signature_kind))
             })
             .with_meaning(meaning)
-            .with_verified_commit_id(Some(id))
+            .with_verified_commit_id(Some(id));
+        CheckedMessage { verdict, trailers }
     }
 
     fn commit_verdict(&self, id: &str, format: Option<SignatureFormat>) -> Result<Verdict, Reason> {
@@ -589,10 +674,6 @@ impl Git<'_> {
             fingerprint: (!fingerprint.is_empty()).then(|| fingerprint.to_owned()),
             principal: (!principal.is_empty()).then(|| principal.to_owned()),
         })
-    }
-
-    fn tag(&self, revision: &str) -> Verdict {
-        self.tag_checked(revision).verdict
     }
 
     fn tag_checked(&self, revision: &str) -> CheckedTag {
@@ -771,16 +852,6 @@ impl Git<'_> {
             Err(ProcessError::Unavailable { .. }) => Ok(PrincipalLookup::NotStarted),
             Err(error) => Err(mechanics_reason(&error, Reason::UnrecognizedOutput)),
         }
-    }
-
-    /// The `Signed-off-meaning:` trailers of `message`, read by
-    /// `git interpret-trailers --parse --no-divider`; `None` when git could not
-    /// read them. Git runs in an empty directory it may not leave, so the
-    /// verified repository's configuration cannot change what is read.
-    fn meaning(&self, message: &[u8]) -> Option<SignedOffMeaning> {
-        self.parsed_trailers(message)
-            .as_deref()
-            .map(signed_off_meaning)
     }
 
     /// The output of `git interpret-trailers --parse --no-divider` for
