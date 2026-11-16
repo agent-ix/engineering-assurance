@@ -234,6 +234,15 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-036 | FR-036-CON-1 | TC-248, TC-249, TC-250, TC-260, TC-261 | ✅ A valid status needs grade `G` with `git verify-commit` accepting, or `git verify-tag` exit 0 |
 | FR-036 | FR-036-AC-12 | TC-653 | ✅ `tests/source_audit.rs` passing; direct signing dependency boundary and verifier delegation audited |
 | FR-036 | FR-036-CON-2 | TC-654 | 🚧 Source inspection not yet completed |
+| FR-037 | FR-037-AC-10 | TC-1004 | ✅ `tests/signature_verify_cli.rs` trailer order and request spelling passing |
+| FR-037 | FR-037-AC-11 | TC-1005 | ✅ Repository trailer aliases and commands cannot synthesize values |
+| FR-037 | FR-037-AC-12 | TC-1005 | ✅ Trailer parsing remains visible after a body divider |
+| FR-037 | FR-037-AC-13 | TC-1006 | ✅ Omitted, lightweight-tag, and NUL-message cases omit `trailers` |
+| FR-037 | FR-037-AC-14 | TC-1007 | ✅ Invalid keys are refused before git and allowed-signers checks |
+| FR-037 | FR-037-AC-15 | TC-1006 | ✅ `signed_bad`, `unsigned`, and tag-message values are returned |
+| FR-037 | FR-037-AC-16 | TC-1005 | ✅ Body-only text is not returned as a trailer |
+| FR-037 | FR-037-AC-17 | TC-1007 | ✅ Exact requested keys, including the 64-byte key, are returned |
+| FR-037 | FR-037-AC-18 | TC-1007 | ✅ Trailer-key validation precedes allowed-signers validation |
 | FR-033 | FR-033-AC-1 | TC-244 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
 | FR-034 | FR-034-AC-1 | TC-246 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
 | FR-035 | FR-035-AC-1 | TC-247 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
@@ -1015,6 +1024,10 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-1000 | The receipt-record CLI reads protected policy and gate evidence, then retains the private record in a real temporary Git store before refusing an unavailable signer | Integration | P0 | FR-075-AC-9 | ✅ |
 | TC-1002 | The receipt source-policy verifier accepts a protected default-branch ref and rejects a tag ref for the same receipt signer and statement | Unit | P0 | FR-064-AC-14 | ✅ |
 | TC-1003 | The receipt-writer workflow-identity policy parser rejects a missing source repository and simultaneous source_ref and source_ref_prefix constraints | Unit | P0 | FR-064-AC-28 | ✅ |
+| TC-1004 | Requested signature trailers preserve request spelling and return all values in order | Integration | P0 | FR-037-AC-10 | ✅ `tests/signature_verify_cli.rs` passing with generated ephemeral SSH keys |
+| TC-1005 | Trailer aliases and commands cannot synthesize values; parsing includes the trailer block after a divider and excludes body-only text | Integration | P0 | FR-037-AC-11, FR-037-AC-12, FR-037-AC-16 | ✅ `tests/signature_verify_cli.rs` passing with generated ephemeral SSH keys |
+| TC-1006 | Omitted/empty keys, lightweight tags, and NUL messages omit trailer output while readable unsigned, bad-signature, and annotated-tag messages retain trailer values and status | Integration | P0 | FR-037-AC-13, FR-037-AC-15 | ✅ `tests/signature_verify_cli.rs` passing with generated ephemeral SSH keys |
+| TC-1007 | Invalid trailer keys are refused before git/signers; the exact 64-byte key and all 16 requested key names are accepted | Integration | P0 | FR-037-AC-14, FR-037-AC-17, FR-037-AC-18 | ✅ `tests/signature_verify_cli.rs` passing with generated ephemeral SSH keys |
 | TC-639 | Changing only the private form leaves the public form's signed bytes and signature unchanged | Unit | P0 | FR-056-AC-5 | ✅ `tests/record_sink.rs` passing |
 | TC-640 | Over generated strings a public member accepts a string only when it matches its grammar | Property | P0 | FR-056-AC-6 | ✅ `tests/record_sink.rs` passing |
 | TC-641 | An approval statement published as a record has the statement digest in the public form and its meaning, approver and pull request only in the private form | Unit | P0 | FR-056-AC-7 | ✅ `tests/record_sink.rs` passing |
@@ -1188,6 +1201,7 @@ become reachable again the moment a second host is declared.
 | TC-111 | Qualification capability | package members; rights; manifest; npm stage/clean; integration; publication refusal | each gate has one retained passing case and every named refusal case; cleanup deletes nothing unless every present staged byte corresponds |
 | TC-120 | Package membership | exact match; empty expected/actual; extra; missing; duplicate expected/actual; absolute, backslash, trailing-slash, empty, dot, parent, control, non-normalized, and overlong path; 65,536 and 65,537 entries; permuted inputs | exact safe membership is accepted; invalid policy or resource limits refuse without a result; every observed mismatch withholds with deterministic typed findings and no unsafe-path disclosure |
 | TC-121 | Module manifest | retained valid bundle; malformed/duplicate/merge-key manifest; invalid or mismatching authoritative schema; identity drift; duplicate artifact; unregistered edge; missing/duplicate/extra resource; unsafe schema reference; malformed/invalid artifact schema; missing/malformed/duplicate/merge-key/schema-invalid skeleton frontmatter; optional or absent required locator heading; exact/over document, artifact-count, and combined-byte ceilings; permuted resources | valid input is accepted; ceiling violations refuse without a result; every semantic/input defect withholds through deterministic typed findings without source-byte or unsafe-reference disclosure |
+| TC-1004, TC-1005, TC-1006, TC-1007 | Signature trailer parsing | request key spelling and order; local alias/command config; `---` body divider; body-only text; absent and empty key requests; lightweight tag; NUL message; unsigned and bad signatures; annotated tag; invalid key shapes; valid 64-byte key; 16 distinct requested keys; missing allowed-signers file | hardened parsing returns exact requested names and values only for readable messages; status is unchanged; invalid requests refuse before git and signers validation |
 | TC-106 | Invariant request | eleven canonical names; ordered multi-name request; unknown name; malformed Rust request; expired/current exception at one explicit instant | exact ordered Rust/reference parity for the valid shared domain or a typed pre-outcome refusal |
 | TC-105 | Onboarding request | retained inventory/status cases; absent Quire; malformed, duplicate-key, or merge-key frontmatter; duplicate artifact; unsupported type; absolute, parent, symlink, and existing targets; valid/invalid staged artifact | exact Rust/reference inventory and decision parity on the supported domain, explicit fail-closed YAML identity handling, equivalent parsed frontmatter plus identical Markdown body for valid publication, or a typed refusal with no published bytes |
 

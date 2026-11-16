@@ -1086,7 +1086,7 @@ fn tc_277_a_temp_dir_inside_the_verified_repository_cannot_inject_the_trailer() 
 }
 
 #[test]
-#[trace("FR-037-AC-10")]
+#[trace("TC-1004", "FR-037-AC-10")]
 fn trailer_keys_return_every_value_in_order_and_preserve_request_spelling() {
     let fixture = fixture();
     let revision = signed_commit_with(
@@ -1108,7 +1108,7 @@ fn trailer_keys_return_every_value_in_order_and_preserve_request_spelling() {
 }
 
 #[test]
-#[trace("FR-037-AC-11", "FR-037-AC-12", "FR-037-AC-16")]
+#[trace("TC-1005", "FR-037-AC-11", "FR-037-AC-12", "FR-037-AC-16")]
 fn requested_trailers_ignore_repository_aliases_and_parse_only_the_trailer_block() {
     let fixture = fixture();
     let repo = fixture.repo();
@@ -1161,7 +1161,7 @@ fn requested_trailers_ignore_repository_aliases_and_parse_only_the_trailer_block
 }
 
 #[test]
-#[trace("FR-037-AC-13", "FR-037-AC-15")]
+#[trace("TC-1006", "FR-037-AC-13", "FR-037-AC-15")]
 fn trailer_results_are_omitted_without_a_readable_message_and_do_not_change_status() {
     let fixture = fixture();
     let unsigned = plain_commit_with(&fixture, &["subject", "Formal-rule: qsl:a.native::P1"]);
@@ -1189,6 +1189,20 @@ fn trailer_results_are_omitted_without_a_readable_message_and_do_not_change_stat
     let empty_keys = status_with_trailer_keys(&fixture, &unsigned, "commit", json!([]));
     assert!(empty_keys.get("trailers").is_none());
 
+    git(&fixture.repo(), None, &["tag", "v-light-rule"]);
+    let lightweight =
+        status_with_trailer_keys(&fixture, "v-light-rule", "tag", json!(["Formal-rule"]));
+    assert_eq!(lightweight["status"], "unsigned");
+    assert!(lightweight.get("trailers").is_none());
+
+    let nul_base = signed_commit_with(&fixture, "a", &["subject", "Formal-rule: hidden-by-nul"]);
+    let nul_message = rewrite(&fixture, "commit", &nul_base, |object| {
+        object.replace("subject", "subject\0with-nul")
+    });
+    let nul_result =
+        status_with_trailer_keys(&fixture, &nul_message, "commit", json!(["Formal-rule"]));
+    assert!(nul_result.get("trailers").is_none());
+
     signed_tag_with(
         &fixture,
         "a",
@@ -1204,7 +1218,7 @@ fn trailer_results_are_omitted_without_a_readable_message_and_do_not_change_stat
 }
 
 #[test]
-#[trace("FR-037-AC-14", "FR-037-AC-17", "FR-037-AC-18")]
+#[trace("TC-1007", "FR-037-AC-14", "FR-037-AC-17", "FR-037-AC-18")]
 fn trailer_key_requests_are_validated_before_git_and_before_allowed_signers() {
     let fixture = fixture();
     let marker = fixture.root().join("git-was-started");
@@ -1264,16 +1278,32 @@ fn trailer_key_requests_are_validated_before_git_and_before_allowed_signers() {
 
     let revision = signed_commit(&fixture, "a", "valid keys");
     let long = format!("A{}", "b".repeat(63));
-    let valid = status_with_trailer_keys(
-        &fixture,
-        &revision,
-        "commit",
-        json!([
-            long, "Key0", "Key1", "Key2", "Key3", "Key4", "Key5", "Key6", "Key7", "Key8", "Key9",
-            "Key10", "Key11", "Key12", "Key13", "Key14"
-        ]),
-    );
-    assert_eq!(valid["trailers"].as_object().expect("trailers").len(), 16);
+    let requested = vec![
+        long.clone(),
+        "Key0".to_owned(),
+        "Key1".to_owned(),
+        "Key2".to_owned(),
+        "Key3".to_owned(),
+        "Key4".to_owned(),
+        "Key5".to_owned(),
+        "Key6".to_owned(),
+        "Key7".to_owned(),
+        "Key8".to_owned(),
+        "Key9".to_owned(),
+        "Key10".to_owned(),
+        "Key11".to_owned(),
+        "Key12".to_owned(),
+        "Key13".to_owned(),
+        "Key14".to_owned(),
+    ];
+    let valid = status_with_trailer_keys(&fixture, &revision, "commit", json!(requested));
+    let actual = valid["trailers"].as_object().expect("trailers");
+    let mut expected_keys = requested;
+    let mut actual_keys: Vec<String> = actual.keys().cloned().collect();
+    expected_keys.sort();
+    actual_keys.sort();
+    assert_eq!(actual_keys, expected_keys);
+    assert_eq!(actual.get(&long), Some(&json!([])));
 
     let mut both_invalid = request(&fixture, "HEAD", "commit");
     both_invalid["trailer_keys"] = json!(["1bad"]);
