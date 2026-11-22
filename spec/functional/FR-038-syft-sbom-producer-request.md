@@ -33,7 +33,7 @@ The Syft producer definition fixes these fields of the request schema
 | Request field | Syft definition |
 | --- | --- |
 | `protocol` | `engineering-assurance.producer-execution-request/v1`. |
-| `producer` | `name` `syft`, `version` the exact Syft release being run, `executable` the absolute path of that Syft binary. |
+| `producer` | `name` `syft`, `version` the exact Syft release being run, `executable` the absolute path of that Syft binary. The only supported release for the package-population claims in FR-039 is Syft `1.57.1`. |
 | `caller` | `{"kind": "engineering-assurance.sbom-generation", "version": "1"}`. |
 | `procedure` | `direct`. |
 | `capabilityRoot` | An absolute directory holding exactly two subtrees: `scan/`, the only scanned content, and `out/`, the SBOM and every Syft cache and home directory. |
@@ -54,6 +54,13 @@ The Syft producer definition fixes these fields of the request schema
   document with `bomFormat` equal to `CycloneDX`.
 - No other SBOM format is produced. SPDX output selectors are not part of the
   Syft producer definition.
+
+The supported Syft release is `1.57.1`. This is the release used to generate
+the checked-in CycloneDX fixtures and the real-producer runs recorded for
+TC-300 through TC-304 and TC-377. These requirements make no package-population
+claim for another Syft release. A later release becomes supported only after
+its output has been checked against the declared populations and recorded by a
+specification change.
 
 ## Behavior
 
@@ -84,6 +91,7 @@ The Syft producer definition fixes these fields of the request schema
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
 | FR-038-CON-1 | If `EA_TEST_SYFT`, the absolute path of the Syft binary a test runs, is unset or does not name an executable file, then `make syft-integration` SHALL exit non-zero with a message naming `EA_TEST_SYFT`. A default `cargo test` does not run the Syft-dependent tests, and the repository holds no Syft binary. | Test integrity | Test |
+| FR-038-CON-2 | The `make syft-integration` lane SHALL treat `1.57.1` as its only supported Syft release; a different, missing, or unparsable `--version` token causes a non-zero preflight exit before any Syft-dependent test runs. | Compatibility | Test |
 
 ## Acceptance Criteria
 
@@ -97,6 +105,8 @@ The Syft producer definition fixes these fields of the request schema
 | FR-038-AC-6 | A stale file left at the SBOM output path before a run that fails is absent from the failed result. | Test |
 | FR-038-AC-7 | With a `.syft.yaml` and a `.syft/config.yaml` planted inside `scan/`, and an earlier SBOM and cache under `out/`, the produced SBOM still holds exactly the declared components, lists none originating from `out/`, and none configured by the planted files. | Test |
 | FR-038-AC-8 | `make syft-integration` with `EA_TEST_SYFT` unset, or naming a file that is not executable, exits non-zero with a message naming the variable and runs no test. | Test |
+| FR-038-AC-9 | The Syft integration lane checks the executable's actual `--version` output before running any Syft-dependent test; `1.57.1` is accepted, while another version, missing output, or an unparsable version exits non-zero and runs no producer test. | Test |
+| FR-038-AC-10 | For every completed real Syft run, `producer.version` equals the release token reported by the exact executable named in `producer.executable`; the supported integration run records `1.57.1` as the tool version. | Test |
 
 ## Dependencies
 
