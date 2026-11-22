@@ -1,4 +1,4 @@
-.PHONY: syft-integration osv-scanner-integration converter-integration rust-features rust-feature-list lint content-rights-tree test manifest-validate package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-gate release-gate
+.PHONY: syft-preflight syft-integration osv-scanner-integration converter-integration rust-features rust-feature-list lint content-rights-tree test manifest-validate package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-gate release-gate
 
 EVAL_AGENT ?= codex
 EVAL_RUN ?= canary
@@ -14,6 +14,7 @@ MANIFEST_REGISTRY_ROOT ?=
 PYTHON ?= python3
 QUIRE ?= quire
 CARGO ?= cargo
+LOCKED_BUILD ?= locked-build.sh
 
 lint:
 	$(PYTHON) -m ruff check .
@@ -24,12 +25,30 @@ content-rights-tree:
 test: content-rights-tree
 	CARGO_BUILD_JOBS=2 cargo test --locked --features full --test python_port -- --nocapture
 
-syft-integration:
-	@case "$$EA_TEST_SYFT" in /*) test -x "$$EA_TEST_SYFT" ;; *) false ;; esac || { \
+syft-preflight:
+	@set -eu; \
+	case "$$EA_TEST_SYFT" in /*) test -f "$$EA_TEST_SYFT" && test -x "$$EA_TEST_SYFT" ;; *) false ;; esac || { \
 		echo "EA_TEST_SYFT must name the absolute path of an executable Syft binary" >&2; \
 		exit 2; \
-	}
-	CARGO_BUILD_JOBS=2 cargo test --locked --features full --test syft_producer_cli -- --ignored
+	}; \
+	grep -Eq '"name"[[:space:]]*:[[:space:]]*"syft"' spec/fixtures/syft-supported-release.json || { \
+		echo "Syft support pin must name syft" >&2; exit 2; \
+	}; \
+	expected=$$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([0-9][0-9.]*\)".*/\1/p' spec/fixtures/syft-supported-release.json); \
+	test -n "$$expected" || { echo "Syft support pin has no numeric version" >&2; exit 2; }; \
+	output=$$(timeout 5 "$$EA_TEST_SYFT" --version) || { \
+		echo "EA_TEST_SYFT $$EA_TEST_SYFT --version failed or timed out" >&2; exit 2; \
+	}; \
+	version=$$(printf '%s\n' "$$output" | awk 'NR == 1 && $$0 ~ /^syft [0-9]+\.[0-9]+\.[0-9]+$$/ { print $$2; found = 1 } END { if (NR != 1 || !found) exit 1 }') || { \
+		echo "EA_TEST_SYFT $$EA_TEST_SYFT --version output is malformed" >&2; exit 2; \
+	}; \
+	test "$$version" = "$$expected" || { \
+		echo "EA_TEST_SYFT $$EA_TEST_SYFT reports $$version; supported Syft release is $$expected" >&2; exit 2; \
+	}; \
+	echo "Syft integration preflight accepted $$version"
+
+syft-integration: syft-preflight
+	$(LOCKED_BUILD) "$(CURDIR)/target/syft-integration" $(CARGO) test --locked --features full --test syft_producer_cli -- --ignored
 
 osv-scanner-integration:
 	@case "$$EA_TEST_OSV_SCANNER" in /*) test -f "$$EA_TEST_OSV_SCANNER" && test -x "$$EA_TEST_OSV_SCANNER" ;; *) false ;; esac || { \
