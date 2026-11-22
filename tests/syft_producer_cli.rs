@@ -246,10 +246,22 @@ fn assert_fixture(sbom: &Value, count: usize, purl_prefix: &str) {
     }
 }
 
-fn assert_syft_provenance(sbom: &Value, request_version: &str) {
+fn assert_syft_provenance(sbom: &Value, request: &Value, syft: &Syft) {
     let pin: Value = serde_json::from_str(SUPPORTED_RELEASE).expect("checked-in Syft pin is JSON");
     let expected = pin["version"].as_str().expect("Syft pin has version");
-    assert_eq!(request_version, expected, "request producer version");
+    assert_eq!(
+        syft.version, expected,
+        "release from the requested executable"
+    );
+    assert_eq!(
+        request["producer"]["executable"],
+        syft.executable.to_str().expect("Syft path is UTF-8"),
+        "request names the exact executable whose version was checked"
+    );
+    assert_eq!(
+        request["producer"]["version"], expected,
+        "request producer version"
+    );
     let tools = sbom["metadata"]["tools"]["components"]
         .as_array()
         .expect("CycloneDX metadata tool components");
@@ -266,7 +278,7 @@ fn sbom_for_source(files: &[(&str, &str)]) -> Value {
     let root = workspace(files);
     let request = syft_request(root.path(), &syft.executable, &syft.version, "dir:scan");
     let sbom = completed_sbom(root.path(), &request);
-    assert_syft_provenance(&sbom, &syft.version);
+    assert_syft_provenance(&sbom, &request, &syft);
     sbom
 }
 
@@ -500,7 +512,7 @@ fn tc_303_container_archive_yields_declared_component_count() {
         "oci-archive:scan/image.tar",
     );
     let sbom = completed_sbom(root.path(), &request);
-    assert_syft_provenance(&sbom, &syft.version);
+    assert_syft_provenance(&sbom, &request, &syft);
     let mut names: Vec<&str> = components(&sbom)
         .iter()
         .map(|component| component["name"].as_str().unwrap_or_default())
@@ -512,7 +524,7 @@ fn tc_303_container_archive_yields_declared_component_count() {
     }
 }
 
-#[trace("TC-304", "FR-038-AC-7")]
+#[trace("TC-304", "FR-038-AC-7", "FR-038-AC-10", "FR-039-AC-9")]
 #[test]
 #[ignore = "needs EA_TEST_SYFT"]
 fn tc_304_scan_ignores_planted_configuration_and_earlier_output() {
@@ -533,6 +545,7 @@ fn tc_304_scan_ignores_planted_configuration_and_earlier_output() {
     .expect("earlier SBOM");
     let request = syft_request(root.path(), &syft.executable, &syft.version, "dir:scan");
     let sbom = completed_sbom(root.path(), &request);
+    assert_syft_provenance(&sbom, &request, &syft);
     assert_fixture(&sbom, 3, "pkg:cargo/");
     assert!(
         !sbom.to_string().contains("fx-ghost"),
