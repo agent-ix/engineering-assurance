@@ -31,7 +31,7 @@ use thiserror::Error;
 use crate::approval_verify_host::{Assessment, Trust, assess};
 use crate::signature_verify_host::{
     AllowedSignersSnapshot, GitsignRequest, ListedRef, capture_allowed_signers, list_tags,
-    load_tag, verify_loaded_tag,
+    load_listed_tag, verify_loaded_tag,
 };
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.approval-trail-request/v1";
@@ -218,8 +218,7 @@ fn examine(parsed: &Parsed, listed: &ListedRef) -> Examined {
             UnreadableReason::Name(TagNameNotUtf8::TagNameNotUtf8),
         ));
     };
-    let revision = format!("refs/tags/{name}");
-    let loaded = match load_tag(&request.repository, &revision, &parsed.allowed_signers.path) {
+    let loaded = match load_listed_tag(&request.repository, name, &parsed.allowed_signers.path) {
         Ok(Some(loaded)) => loaded,
         // The ref was replaced by a lightweight tag after it was listed.
         Ok(None) => return Examined::Other,

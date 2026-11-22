@@ -409,11 +409,11 @@ impl LoadedTag {
     }
 }
 
-/// Resolves the ref `revision` and reads its tag object and trailer block,
-/// without verifying a signature; `Ok(None)` for a lightweight tag.
-pub(crate) fn load_tag(
+/// Loads a tag name returned by `for-each-ref`; its fully qualified ref is
+/// already known to be under `refs/tags`, so option-like names remain usable.
+pub(crate) fn load_listed_tag(
     repository: &Path,
-    revision: &str,
+    name: &str,
     allowed_signers: &Path,
 ) -> Result<Option<LoadedTag>, Reason> {
     Git {
@@ -421,7 +421,7 @@ pub(crate) fn load_tag(
         allowed_signers: allowed_signers.to_path_buf(),
         gitsign: None,
     }
-    .load(revision)
+    .load_listed(name)
 }
 
 /// Runs git in `repository` with the isolation the verification uses, for
@@ -435,7 +435,7 @@ pub(crate) fn run_git(repository: &Path, arguments: &[&str]) -> Result<Completed
     .run(arguments)
 }
 
-/// Verifies a tag read by [`load_tag`], exactly as [`check_tag`] verifies it.
+/// Verifies a tag read by [`load_listed_tag`], exactly as [`check_tag`] verifies it.
 pub(crate) fn verify_loaded_tag(
     repository: &Path,
     allowed_signers: &AllowedSignersSnapshot,
@@ -770,17 +770,29 @@ impl Git<'_> {
     /// Resolves the tag `revision` and reads its object and trailer block;
     /// `None` for a lightweight tag.
     fn load(&self, revision: &str) -> Result<Option<LoadedTag>, Reason> {
-        let Some((id, object)) = self.load_tag(revision)? else {
+        let Some((id, object)) = self.load_tag(revision, false)? else {
             return Ok(None);
         };
+        Ok(Some(self.loaded(id, object)))
+    }
+
+    fn load_listed(&self, name: &str) -> Result<Option<LoadedTag>, Reason> {
+        let revision = format!("refs/tags/{name}");
+        let Some((id, object)) = self.load_tag(&revision, true)? else {
+            return Ok(None);
+        };
+        Ok(Some(self.loaded(id, object)))
+    }
+
+    fn loaded(&self, id: String, object: Vec<u8>) -> LoadedTag {
         let split = split_tag_object(&object);
         let payload = split.as_ref().map_or(object.as_slice(), |s| s.payload);
         let trailers = self.parsed_trailers(object_message(payload));
-        Ok(Some(LoadedTag {
+        LoadedTag {
             id,
             object,
             trailers,
-        }))
+        }
     }
 
     /// Verifies a loaded tag exactly as `tag_checked` does.
@@ -811,9 +823,13 @@ impl Git<'_> {
     }
 
     /// The id and object of an annotated tag; `None` for a lightweight tag.
-    fn load_tag(&self, revision: &str) -> Result<Option<(String, Vec<u8>)>, Reason> {
+    fn load_tag(
+        &self,
+        revision: &str,
+        listed_ref: bool,
+    ) -> Result<Option<(String, Vec<u8>)>, Reason> {
         self.require_repository()?;
-        if !self.names_tag_ref(revision)? {
+        if !listed_ref && !self.names_tag_ref(revision)? {
             return Err(Reason::RevisionUnresolved);
         }
         let id = self.resolve(revision)?;
