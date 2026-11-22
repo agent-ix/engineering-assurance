@@ -56,10 +56,10 @@ The Syft producer definition fixes these fields of the request schema
   Syft producer definition.
 
 The supported Syft release is `1.57.1`. This is the release used to generate
-the checked-in CycloneDX fixtures and the real-producer runs recorded for
-TC-300 through TC-304 and TC-377. These requirements make no package-population
-claim for another Syft release. A later release becomes supported only after
-its output has been checked against the declared populations and recorded by a
+the checked-in CycloneDX fixtures; the repository's TC-377 integration record
+also identifies `1.57.1`. These requirements make no package-population claim
+for another Syft release. A later release becomes supported only after its
+output has been checked against the declared populations and recorded by a
 specification change.
 
 ## Behavior
