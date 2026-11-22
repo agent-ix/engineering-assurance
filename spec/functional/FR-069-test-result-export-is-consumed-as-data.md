@@ -13,7 +13,7 @@ relationships:
 
 ## Description
 
-Tracked by Linear EA-97. Quoin FR-186 is authoritative for the release-evidence producer contract, and Quoin FR-185 is authoritative for export behavior and Test Result semantics. Engineering Assurance owns the reusable workflow's producer-trust and attestation boundary. Its verifier authenticates the source workflow identity against the configured trust policy and binds accepted evidence to the signed tag and workflow-computed subject before handing it to Quoin. The verifier passes the source-signed provenance unchanged to the export defined by [FR-070](./FR-070-release-and-receipt-workflow-files.md).
+Tracked by Linear EA-97. [Quoin FR-186](ix://agent-ix/quoin/FR-186) is authoritative for the release-evidence producer contract, and [Quoin FR-185](ix://agent-ix/quoin/FR-185) is authoritative for export behavior and Test Result semantics. Engineering Assurance owns the reusable workflow's producer-trust and attestation boundary. Its verifier authenticates the source workflow identity against the configured trust policy and binds accepted evidence to the signed tag and workflow-computed subject before handing it to Quoin. The verifier passes the source-signed provenance unchanged to the export defined by [FR-070](./FR-070-release-and-receipt-workflow-files.md).
 
 For run evidence, Engineering Assurance applies the distinction defined by Quoin FR-185 and FR-186: a producer-declared absent run is incomplete evidence that may proceed to export, while unavailable bytes for a run committed by authenticated provenance are an integrity failure that stops attestation. Engineering Assurance does not define a separate evidence format or verdict policy.
 
@@ -26,7 +26,7 @@ The `verify` job has read-only repository permission and no signing permission. 
 - The release-evidence verifier SHALL authenticate the DSSE envelope's source workflow identity under the configured trust policy before passing the exact envelope to Quoin.
 - The release-evidence verifier SHALL bind authenticated producer evidence to the signed-tag revision and the subject computed by the workflow.
 - The release-evidence verifier SHALL pass the source-signed provenance unchanged to the Quoin exporter in accordance with FR-185.
-- The release-evidence verifier SHALL apply the run-evidence integrity and absence rules in Quoin FR-185 and FR-186.
+- The release-evidence verifier SHALL apply the run-evidence integrity and absence rules in [Quoin FR-185](ix://agent-ix/quoin/FR-185) and [Quoin FR-186](ix://agent-ix/quoin/FR-186).
 - The release-evidence verifier SHALL stop attestation when those Quoin requirements reject the artifact for an integrity failure.
 - The release attestation workflow SHALL check that the exported statement's subject equals the supplied subject.
 - The release attestation workflow SHALL fail with `test_result_export_invalid` when the export is missing, unreadable, invalid or has a different subject.
@@ -44,7 +44,7 @@ The `verify` job has read-only repository permission and no signing permission. 
 | FR-069-AC-2 | A missing or unreadable export, mismatched subject, or producer identity that is invalid, untrusted, or not authorized for the selected signed tag fails with `test_result_export_invalid` and produces no release attestation. | Test |
 | FR-069-AC-3 | Static inspection shows the workflow and the statement builder call no Quoin evidence command that reads git or the network. | Inspection |
 | FR-069-AC-4 | The export runs in the `verify` job, with the evidence store taken from the `evidence_artifact` input and the subject computed by the workflow; the `attest` job runs no Quoin command, and a caller-built export is not accepted. | Test |
-| FR-069-AC-5 | An integration test confirms the workflow follows Quoin FR-185 and FR-186 for run evidence: producer-declared absence reaches export as incomplete evidence, while an integrity failure for unavailable committed bytes stops before attestation. | Test |
+| FR-069-AC-5 | An integration test confirms the workflow follows [Quoin FR-185](ix://agent-ix/quoin/FR-185) and [Quoin FR-186](ix://agent-ix/quoin/FR-186) for run evidence: producer-declared absence reaches export as incomplete evidence, while an integrity failure for unavailable committed bytes stops before attestation. | Test |
 | FR-069-AC-6 | The verifier passes the source-workflow-signed provenance unchanged to Quoin; a change that invalidates producer authentication is rejected before attestation. | Test |
 
 ## Dependencies
