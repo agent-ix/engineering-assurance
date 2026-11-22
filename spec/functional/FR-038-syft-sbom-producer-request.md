@@ -33,7 +33,7 @@ The Syft producer definition fixes these fields of the request schema
 | Request field | Syft definition |
 | --- | --- |
 | `protocol` | `engineering-assurance.producer-execution-request/v1`. |
-| `producer` | `name` `syft`, `version` the exact Syft release being run, `executable` the absolute path of that Syft binary. |
+| `producer` | `name` `syft`, `version` the exact Syft release being run, `executable` the absolute path of that Syft binary. The only supported release for the package-population claims in FR-039 is the version in `spec/fixtures/syft-supported-release.json`. |
 | `caller` | `{"kind": "engineering-assurance.sbom-generation", "version": "1"}`. |
 | `procedure` | `direct`. |
 | `capabilityRoot` | An absolute directory holding exactly two subtrees: `scan/`, the only scanned content, and `out/`, the SBOM and every Syft cache and home directory. |
@@ -55,8 +55,20 @@ The Syft producer definition fixes these fields of the request schema
 - No other SBOM format is produced. SPDX output selectors are not part of the
   Syft producer definition.
 
+The version in `spec/fixtures/syft-supported-release.json` is the only
+supported Syft release. Its value is grounded in the Syft version recorded in
+the checked-in CycloneDX fixture metadata and the TC-377 integration evidence.
+These requirements make no package-population claim for another Syft release.
+A later release becomes supported only after its output has been checked
+against the declared populations and recorded by a specification change that
+updates that support pin.
+
 ## Behavior
 
+- When the integration lane invokes `syft --version`, it SHALL require that
+  the exact executable named by `EA_TEST_SYFT` exits with status zero before
+  parsing the output. A non-zero exit SHALL fail preflight even if stdout
+  contains a version token.
 - The request SHALL run through `producer-execute` or the FR-019 library
   boundary and through no other launch path.
 - The Syft producer request SHALL carry exactly one `-o` pair, of the form
@@ -84,6 +96,7 @@ The Syft producer definition fixes these fields of the request schema
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
 | FR-038-CON-1 | If `EA_TEST_SYFT`, the absolute path of the Syft binary a test runs, is unset or does not name an executable file, then `make syft-integration` SHALL exit non-zero with a message naming `EA_TEST_SYFT`. A default `cargo test` does not run the Syft-dependent tests, and the repository holds no Syft binary. | Test integrity | Test |
+| FR-038-CON-2 | The `make syft-integration` lane SHALL treat the version in `spec/fixtures/syft-supported-release.json` as its only supported Syft release; a different, missing, or unparsable `--version` token causes a non-zero preflight exit before any Syft-dependent test runs. | Compatibility | Test |
 
 ## Acceptance Criteria
 
@@ -97,6 +110,8 @@ The Syft producer definition fixes these fields of the request schema
 | FR-038-AC-6 | A stale file left at the SBOM output path before a run that fails is absent from the failed result. | Test |
 | FR-038-AC-7 | With a `.syft.yaml` and a `.syft/config.yaml` planted inside `scan/`, and an earlier SBOM and cache under `out/`, the produced SBOM still holds exactly the declared components, lists none originating from `out/`, and none configured by the planted files. | Test |
 | FR-038-AC-8 | `make syft-integration` with `EA_TEST_SYFT` unset, or naming a file that is not executable, exits non-zero with a message naming the variable and runs no test. | Test |
+| FR-038-AC-9 | The Syft integration lane checks the executable's actual `--version` output before running any Syft-dependent test; the pinned version is accepted, while another version, missing output, or an unparsable version exits non-zero and runs no producer test. | Test |
+| FR-038-AC-10 | For every completed real Syft run, `producer.version` equals the release token reported by the exact executable named in `producer.executable`; the supported integration run records the version from `spec/fixtures/syft-supported-release.json` as the tool version. | Test |
 
 ## Dependencies
 
