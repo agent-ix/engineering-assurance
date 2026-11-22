@@ -241,7 +241,6 @@ fn examine(parsed: &Parsed, listed: &ListedRef) -> Examined {
     let object = loaded.id().to_owned();
     let checked = verify_loaded_tag(
         &request.repository,
-        &revision,
         &request.allowed_signers,
         parsed.identity.as_ref(),
         loaded,

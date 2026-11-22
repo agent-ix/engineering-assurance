@@ -289,10 +289,10 @@ fn tc_278_an_accepted_commit_and_tag_are_signed_valid_with_the_request_identity(
 
 #[test]
 #[trace("TC-279", "FR-040-AC-2")]
-fn tc_279_gitsign_gets_the_resolved_commit_id_or_bare_tag_name_and_runs_in_the_repository() {
+fn tc_279_gitsign_gets_the_resolved_object_id_in_an_isolated_repository() {
     let fixture = fixture();
     let id = forged_commit(&fixture, "signed", CMS_BLOCK);
-    forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
+    let tag_id = forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
     // A branch name resolves to the id; the request text is never passed.
     verdict(&fixture, &request(&fixture, "signed", "commit", true));
     verdict(&fixture, &request(&fixture, "v-cms", "tag", true));
@@ -310,18 +310,61 @@ fn tc_279_gitsign_gets_the_resolved_commit_id_or_bare_tag_name_and_runs_in_the_r
         ]
     };
     assert_eq!(fixture.lines("args", 1), flags(&id, "verify"));
-    assert_eq!(fixture.lines("args", 2), flags("v-cms", "verify-tag"));
-    assert_eq!(fixture.lines("args", 3), flags("v-cms", "verify-tag"));
-    let repo = fs::canonicalize(fixture.repo()).expect("repo");
+    assert_eq!(fixture.lines("args", 2), flags(&tag_id, "verify-tag"));
+    assert_eq!(fixture.lines("args", 3), flags(&tag_id, "verify-tag"));
     for call in 1..=3 {
-        let cwd = fs::canonicalize(&fixture.lines("cwd", call)[0]).expect("cwd");
-        assert_eq!(cwd, repo);
+        let cwd = PathBuf::from(&fixture.lines("cwd", call)[0]);
+        if call == 1 {
+            assert_eq!(cwd, fixture.repo());
+        } else {
+            assert_ne!(cwd, fixture.repo());
+            assert!(cwd.starts_with(std::env::temp_dir()));
+        }
     }
     // Git is never asked to verify the CMS object.
     let log = fs::read_to_string(fixture.bin().join("gitlog")).expect("git log");
     assert!(
         !log.contains("verify-commit") && !log.contains("verify-tag"),
         "{log}"
+    );
+}
+
+#[test]
+#[trace("TC-1011", "FR-041-AC-25")]
+fn tc_293_gitsign_uses_an_isolated_config_snapshot_when_repository_config_changes() {
+    let fixture = fixture();
+    let tag_id = forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
+    let replacement_id = forged_tag(&fixture, "v-replacement", "replacement", CMS_BLOCK);
+    let repository = fixture.repo();
+    let real_git_path = which("git");
+    let real_git = real_git_path.display();
+    let stand_in = STAND_IN.replace(
+        "exit \"$status\"",
+        &format!(
+            "git config --get-regexp 'gitsign\\..*' > \"$d/snapshot-gitsign-config\" 2>&1 || true\n{real_git} -C '{}' update-ref refs/tags/v-cms '{replacement_id}'\n{real_git} -C '{}' config gitsign.program /changed/during/verification\nexit \"$status\"",
+            repository.display(),
+            repository.display(),
+        ),
+    );
+    fs::write(fixture.bin().join("gitsign"), stand_in).expect("gitsign stand-in");
+    let verified = verdict(&fixture, &request(&fixture, "v-cms", "tag", true));
+
+    assert_eq!(verified["status"], "signed_valid", "{verified}");
+    assert_eq!(fixture.lines("args", 1)[6], tag_id);
+    assert_eq!(
+        git(&repository, &["config", "--get", "gitsign.program"]),
+        "/changed/during/verification\n"
+    );
+    assert_eq!(
+        git(&repository, &["rev-parse", "refs/tags/v-cms"]).trim(),
+        replacement_id
+    );
+    let cwd = PathBuf::from(&fixture.lines("cwd", 1)[0]);
+    assert_ne!(cwd, repository);
+    assert!(
+        fs::read_to_string(fixture.bin().join("snapshot-gitsign-config"))
+            .expect("snapshot config")
+            .is_empty()
     );
 }
 

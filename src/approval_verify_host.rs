@@ -100,6 +100,7 @@ pub(crate) struct ResultLine<'a> {
     record_id: &'a str,
     record_digest: &'a str,
     trust: Trust<'a>,
+    tag_object_id: Option<String>,
     #[serde(flatten)]
     assessment: Assessment,
 }
@@ -125,6 +126,7 @@ impl<'a> ResultLine<'a> {
                 allowed_signers,
                 gitsign,
             },
+            tag_object_id: checked.tag_object_id.clone(),
             assessment: assess(checked, record_id, record_digest),
         }
     }

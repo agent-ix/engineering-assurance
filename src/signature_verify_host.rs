@@ -165,7 +165,7 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, SignatureVerifyError> {
     check_allowed_signers(&request.allowed_signers)?;
     let git = Git {
         repository: &request.repository,
-        allowed_signers: &request.allowed_signers,
+        allowed_signers: request.allowed_signers.clone(),
         gitsign: gitsign.as_ref(),
     };
     let checked = match request.kind {
@@ -241,6 +241,10 @@ fn requested_trailers(
 /// regular file, is over 1 MiB, cannot be read, or is not UTF-8. The grammar of
 /// the file is git's and `ssh-keygen`'s to read.
 pub(crate) fn check_allowed_signers(path: &Path) -> Result<(), SignatureVerifyError> {
+    read_allowed_signers(path).map(drop)
+}
+
+fn read_allowed_signers(path: &Path) -> Result<Vec<u8>, SignatureVerifyError> {
     let invalid = |_| SignatureVerifyError::AllowedSigners;
     // The type is checked before the open: opening a FIFO would block.
     let before = std::fs::metadata(path).map_err(invalid)?;
@@ -261,7 +265,7 @@ pub(crate) fn check_allowed_signers(path: &Path) -> Result<(), SignatureVerifyEr
     {
         return Err(SignatureVerifyError::AllowedSigners);
     }
-    Ok(())
+    Ok(bytes)
 }
 
 /// Maps a process-mechanics failure to the reason it makes the object
@@ -287,6 +291,8 @@ pub(crate) struct CheckedTag {
     /// The UTC instant the tag's tagger line claims; `None` when the tag has no
     /// readable tagger line.
     pub(crate) tagger_signed_at: Option<SignedAt>,
+    /// Immutable annotated tag object whose message and signature were checked.
+    pub(crate) tag_object_id: Option<String>,
 }
 
 /// Verifies the tag `revision` exactly as `signature-verify` does for kind
@@ -299,10 +305,26 @@ pub(crate) fn check_tag(
 ) -> CheckedTag {
     Git {
         repository,
-        allowed_signers,
+        allowed_signers: allowed_signers.to_path_buf(),
         gitsign,
     }
     .tag_checked(revision)
+}
+
+struct AllowedSignersSnapshot {
+    _directory: tempfile::TempDir,
+    path: PathBuf,
+}
+
+fn snapshot_allowed_signers(path: &Path) -> Result<AllowedSignersSnapshot, ()> {
+    let bytes = read_allowed_signers(path).map_err(|_| ())?;
+    let directory = tempfile::tempdir().map_err(|_| ())?;
+    let path = directory.path().join("allowed_signers");
+    std::fs::write(&path, bytes).map_err(|_| ())?;
+    Ok(AllowedSignersSnapshot {
+        _directory: directory,
+        path,
+    })
 }
 
 /// The refs under `refs/tags`, as `git for-each-ref` lists them.
@@ -331,7 +353,7 @@ pub(crate) fn list_tags(
 ) -> Option<TagListing> {
     let git = Git {
         repository,
-        allowed_signers,
+        allowed_signers: allowed_signers.to_path_buf(),
         gitsign: None,
     };
     git.require_repository().ok()?;
@@ -394,7 +416,7 @@ pub(crate) fn load_tag(
 ) -> Result<Option<LoadedTag>, Reason> {
     Git {
         repository,
-        allowed_signers,
+        allowed_signers: allowed_signers.to_path_buf(),
         gitsign: None,
     }
     .load(revision)
@@ -405,7 +427,7 @@ pub(crate) fn load_tag(
 pub(crate) fn run_git(repository: &Path, arguments: &[&str]) -> Result<CompletedProcess, Reason> {
     Git {
         repository,
-        allowed_signers: Path::new("/dev/null"),
+        allowed_signers: PathBuf::from("/dev/null"),
         gitsign: None,
     }
     .run(arguments)
@@ -414,22 +436,29 @@ pub(crate) fn run_git(repository: &Path, arguments: &[&str]) -> Result<Completed
 /// Verifies a tag read by [`load_tag`], exactly as [`check_tag`] verifies it.
 pub(crate) fn verify_loaded_tag(
     repository: &Path,
-    revision: &str,
     allowed_signers: &Path,
     gitsign: Option<&GitsignIdentity>,
     loaded: LoadedTag,
 ) -> CheckedTag {
+    let Ok(snapshot) = snapshot_allowed_signers(allowed_signers) else {
+        return CheckedTag {
+            verdict: Verdict::unverifiable(TargetKind::Tag, Reason::UnrecognizedOutput),
+            trailers: loaded.trailers,
+            tagger_signed_at: None,
+            tag_object_id: Some(loaded.id),
+        };
+    };
     Git {
         repository,
-        allowed_signers,
+        allowed_signers: snapshot.path.clone(),
         gitsign,
     }
-    .verify_loaded(revision, loaded)
+    .verify_loaded(loaded)
 }
 
 struct Git<'a> {
     repository: &'a Path,
-    allowed_signers: &'a Path,
+    allowed_signers: PathBuf,
     gitsign: Option<&'a GitsignIdentity>,
 }
 
@@ -579,15 +608,29 @@ impl Git<'_> {
     }
 
     /// Delegates a CMS-signed object to `gitsign`; `target` is the commit id or
-    /// the bare tag name. Without a supplied identity nothing is started.
+    /// immutable annotated-tag object id. Without a supplied identity nothing
+    /// is started.
     fn gitsign_verdict(&self, kind: TargetKind, target: &str) -> Result<Verdict, Reason> {
         let Some(identity) = self.gitsign else {
             // The classifier asks for no probe without an identity.
             return Ok(classify_gitsign(kind, None, false, |_| Run::Unobserved));
         };
         let sets_key = self.repository_sets_gitsign_key()?;
-        Ok(classify_gitsign(kind, Some(identity), sets_key, |probe| {
-            self.gitsign_run(identity, kind, target, probe)
+        if sets_key {
+            return Ok(classify_gitsign(kind, Some(identity), true, |_| {
+                Run::Unobserved
+            }));
+        }
+        let tag_snapshot = if kind == TargetKind::Tag {
+            Some(self.snapshot_tag_repository(target)?)
+        } else {
+            None
+        };
+        let repository = tag_snapshot
+            .as_ref()
+            .map_or(self.repository, |directory| directory.path());
+        Ok(classify_gitsign(kind, Some(identity), false, |probe| {
+            Self::gitsign_run(identity, kind, target, repository, probe)
         }))
     }
 
@@ -608,10 +651,10 @@ impl Git<'_> {
     /// One `gitsign` invocation of the procedure, as separate arguments and
     /// never through a shell.
     fn gitsign_run(
-        &self,
         identity: &GitsignIdentity,
         kind: TargetKind,
         target: &str,
+        repository: &Path,
         probe: Probe,
     ) -> Run {
         let (identity_flag, identity_value) = match probe {
@@ -645,7 +688,46 @@ impl Git<'_> {
             target,
         ]
         .map(OsStr::new);
-        observed(&run_tool(GITSIGN_PROGRAM, &arguments, self.repository))
+        observed(&run_tool(GITSIGN_PROGRAM, &arguments, repository))
+    }
+
+    /// Makes a read-only bare repository view whose sole tag ref names the
+    /// already-resolved object. Its object database is an alternate to the
+    /// source repository, so gitsign cannot resolve a moved source ref or read
+    /// source repository configuration during verification.
+    fn snapshot_tag_repository(&self, id: &str) -> Result<tempfile::TempDir, Reason> {
+        let object_directory = self.successful(&[
+            "rev-parse",
+            "--path-format=absolute",
+            "--git-path",
+            "objects",
+        ])?;
+        let object_directory = std::str::from_utf8(&object_directory)
+            .map_err(|_| Reason::UnrecognizedOutput)?
+            .trim_end_matches('\n');
+        if object_directory.is_empty() || !Path::new(object_directory).is_absolute() {
+            return Err(Reason::UnrecognizedOutput);
+        }
+        let directory = tempfile::tempdir().map_err(|_| Reason::UnrecognizedOutput)?;
+        let root = directory.path();
+        std::fs::create_dir_all(root.join("objects/info"))
+            .map_err(|_| Reason::UnrecognizedOutput)?;
+        std::fs::create_dir_all(root.join("refs/tags")).map_err(|_| Reason::UnrecognizedOutput)?;
+        std::fs::write(
+            root.join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = true\n",
+        )
+        .map_err(|_| Reason::UnrecognizedOutput)?;
+        std::fs::write(root.join("HEAD"), "ref: refs/tags/verified\n")
+            .map_err(|_| Reason::UnrecognizedOutput)?;
+        std::fs::write(root.join("refs/tags/verified"), format!("{id}\n"))
+            .map_err(|_| Reason::UnrecognizedOutput)?;
+        std::fs::write(
+            root.join("objects/info/alternates"),
+            format!("{object_directory}\n"),
+        )
+        .map_err(|_| Reason::UnrecognizedOutput)?;
+        Ok(directory)
     }
 
     fn grade(&self, id: &str) -> Result<GitGrade, Reason> {
@@ -682,9 +764,18 @@ impl Git<'_> {
             verdict,
             trailers: None,
             tagger_signed_at: None,
+            tag_object_id: None,
         };
-        match self.load(revision) {
-            Ok(Some(loaded)) => self.verify_loaded(revision, loaded),
+        let Ok(snapshot) = snapshot_allowed_signers(&self.allowed_signers) else {
+            return without_message(Verdict::unverifiable(kind, Reason::UnrecognizedOutput));
+        };
+        let verifier = Self {
+            repository: self.repository,
+            allowed_signers: snapshot.path.clone(),
+            gitsign: self.gitsign,
+        };
+        match verifier.load(revision) {
+            Ok(Some(loaded)) => verifier.verify_loaded(loaded),
             Ok(None) => without_message(classify_tag(&TagObservation::Lightweight)),
             Err(reason) => without_message(Verdict::unverifiable(kind, reason)),
         }
@@ -707,7 +798,7 @@ impl Git<'_> {
     }
 
     /// Verifies a loaded tag exactly as `tag_checked` does.
-    fn verify_loaded(&self, revision: &str, loaded: LoadedTag) -> CheckedTag {
+    fn verify_loaded(&self, loaded: LoadedTag) -> CheckedTag {
         let kind = TargetKind::Tag;
         let LoadedTag {
             id,
@@ -719,7 +810,7 @@ impl Git<'_> {
         let meaning = trailers.as_deref().map(signed_off_meaning);
         let format = split.as_ref().map(|s| s.format);
         let verdict = self
-            .tag_verdict(revision, &id, split.as_ref())
+            .tag_verdict(&id, split.as_ref())
             .unwrap_or_else(|reason| {
                 Verdict::unverifiable(kind, reason)
                     .with_signature_kind(format.and_then(SignatureFormat::signature_kind))
@@ -729,6 +820,7 @@ impl Git<'_> {
             verdict,
             trailers,
             tagger_signed_at: tagger_signed_at(payload),
+            tag_object_id: Some(id),
         }
     }
 
@@ -747,38 +839,15 @@ impl Git<'_> {
         }
     }
 
-    fn tag_verdict(
-        &self,
-        revision: &str,
-        id: &str,
-        split: Option<&SplitTag<'_>>,
-    ) -> Result<Verdict, Reason> {
+    fn tag_verdict(&self, id: &str, split: Option<&SplitTag<'_>>) -> Result<Verdict, Reason> {
         if split.is_some_and(|split| split.format == SignatureFormat::Cms) {
-            let name = self.tag_name(revision, id)?;
-            return self.gitsign_verdict(TargetKind::Tag, name);
+            return self.gitsign_verdict(TargetKind::Tag, id);
         }
         let observation = match split {
             Some(split) => self.annotated_tag(id, split)?,
             None => TagObservation::NoSignature,
         };
         Ok(classify_tag(&observation))
-    }
-
-    /// The bare name of the tag `revision` names: `refs/tags/<name>` must be a
-    /// valid ref that resolves to the tag object `id`.
-    fn tag_name<'r>(&self, revision: &'r str, id: &str) -> Result<&'r str, Reason> {
-        let name = revision.strip_prefix("refs/tags/").unwrap_or(revision);
-        // `gitsign` would read such a name as an option.
-        if name.starts_with('-') {
-            return Err(Reason::RevisionUnresolved);
-        }
-        let full = format!("refs/tags/{name}");
-        let valid = self.run(&["check-ref-format", &full])?.status.success();
-        if valid && self.resolve(&full).is_ok_and(|resolved| resolved == id) {
-            Ok(name)
-        } else {
-            Err(Reason::RevisionUnresolved)
-        }
     }
 
     /// Whether `revision` names a ref under `refs/tags/`.
@@ -933,7 +1002,7 @@ impl Git<'_> {
         isolated: Option<&Path>,
     ) -> Result<CompletedProcess, Reason> {
         let mut setting = OsString::from("gpg.ssh.allowedSignersFile=");
-        setting.push(self.allowed_signers);
+        setting.push(self.allowed_signers.as_os_str());
         let mut all: Vec<&OsStr> = vec![
             OsStr::new("-c"),
             &setting,

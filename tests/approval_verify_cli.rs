@@ -897,3 +897,136 @@ fn tc_335_a_status_other_than_approved_carries_no_signing_time() {
         }
     }
 }
+
+#[test]
+#[trace("TC-1008", "FR-041-AC-22")]
+fn tc_336_approval_reports_the_exact_annotated_tag_object() {
+    let fixture = fixture();
+    signed_tag(&fixture, "a", "v-bound", &good_message());
+    let expected = git(&fixture.repo(), None, &["rev-parse", "v-bound^{tag}"])
+        .trim()
+        .to_owned();
+
+    let verified = status(&fixture, "v-bound");
+
+    assert_eq!(verified["status"], "approved", "{verified}");
+    assert_eq!(verified["tag_object_id"], expected, "{verified}");
+}
+
+#[test]
+#[trace("TC-1009", "FR-041-AC-23", "FR-041-AC-24")]
+fn tc_337_moving_the_tag_ref_after_message_read_keeps_verification_on_the_loaded_object() {
+    let fixture = fixture();
+    signed_tag(&fixture, "a", "v-race", &good_message());
+    signed_tag(&fixture, "b", "v-replacement", &good_message());
+    let original = git(&fixture.repo(), None, &["rev-parse", "v-race^{tag}"])
+        .trim()
+        .to_owned();
+    let replacement = git(&fixture.repo(), None, &["rev-parse", "v-replacement^{tag}"])
+        .trim()
+        .to_owned();
+    let shim = fixture.root().join("race-bin");
+    fs::create_dir(&shim).expect("race bin");
+    let real_git_path = std::env::split_paths(&std::env::var_os("PATH").expect("PATH"))
+        .map(|dir| dir.join("git"))
+        .find(|candidate| candidate.is_file())
+        .expect("git");
+    let real_git = real_git_path.display();
+    let ssh_keygen = std::env::split_paths(&std::env::var_os("PATH").expect("PATH"))
+        .map(|dir| dir.join("ssh-keygen"))
+        .find(|candidate| candidate.is_file())
+        .expect("ssh-keygen");
+    let wrapper = format!(
+        "#!/bin/sh\nfor a in \"$@\"; do\n  if [ \"$a\" = verify-tag ]; then\n    {real_git} -C '{}' update-ref refs/tags/v-race '{replacement}'\n  fi\ndone\nexec {real_git} \"$@\"\n",
+        fixture.repo().display(),
+    );
+    fs::write(shim.join("git"), wrapper).expect("git wrapper");
+    fs::set_permissions(shim.join("git"), fs::Permissions::from_mode(0o755))
+        .expect("git wrapper mode");
+    std::os::unix::fs::symlink(&ssh_keygen, shim.join("ssh-keygen")).expect("ssh-keygen link");
+
+    let verified = result_on(&request(&fixture, "v-race"), Some(&shim));
+
+    assert_eq!(verified["status"], "approved", "{verified}");
+    assert_eq!(verified["tag_object_id"], original, "{verified}");
+    assert_eq!(
+        git(&fixture.repo(), None, &["rev-parse", "refs/tags/v-race"]).trim(),
+        replacement
+    );
+
+    signed_tag(&fixture, "a", "v-deleted", &good_message());
+    let deleted_object = git(&fixture.repo(), None, &["rev-parse", "v-deleted^{tag}"])
+        .trim()
+        .to_owned();
+    let delete_shim = fixture.root().join("delete-bin");
+    fs::create_dir(&delete_shim).expect("delete bin");
+    let delete_wrapper = format!(
+        "#!/bin/sh\nfor a in \"$@\"; do\n  if [ \"$a\" = verify-tag ]; then\n    {} -C '{}' update-ref -d refs/tags/v-deleted\n  fi\ndone\nexec {} \"$@\"\n",
+        real_git,
+        fixture.repo().display(),
+        real_git,
+    );
+    fs::write(delete_shim.join("git"), delete_wrapper).expect("delete git wrapper");
+    fs::set_permissions(delete_shim.join("git"), fs::Permissions::from_mode(0o755))
+        .expect("delete git wrapper mode");
+    std::os::unix::fs::symlink(ssh_keygen, delete_shim.join("ssh-keygen"))
+        .expect("delete ssh-keygen link");
+
+    let verified = result_on(&request(&fixture, "v-deleted"), Some(&delete_shim));
+
+    assert_eq!(verified["status"], "approved", "{verified}");
+    assert_eq!(verified["tag_object_id"], deleted_object, "{verified}");
+    let deleted = Command::new("git")
+        .args([
+            "-C",
+            fixture.repo().to_str().expect("repo path"),
+            "show-ref",
+            "--verify",
+            "refs/tags/v-deleted",
+        ])
+        .output()
+        .expect("show deleted ref");
+    assert!(!deleted.status.success());
+}
+
+#[test]
+#[trace("TC-1010", "FR-041-AC-25")]
+fn tc_338_allowed_signers_changes_after_capture_do_not_change_the_verified_trust_snapshot() {
+    let fixture = fixture();
+    signed_tag(&fixture, "a", "v-trust", &good_message());
+    let shim = fixture.root().join("trust-bin");
+    fs::create_dir(&shim).expect("trust bin");
+    let real_git = std::env::split_paths(&std::env::var_os("PATH").expect("PATH"))
+        .map(|dir| dir.join("git"))
+        .find(|candidate| candidate.is_file())
+        .expect("git");
+    let real_ssh_keygen = std::env::split_paths(&std::env::var_os("PATH").expect("PATH"))
+        .map(|dir| dir.join("ssh-keygen"))
+        .find(|candidate| candidate.is_file())
+        .expect("ssh-keygen");
+    std::os::unix::fs::symlink(real_git, shim.join("git")).expect("git link");
+    let replacement = format!(
+        "mallory@example.test {}",
+        fs::read_to_string(fixture.public("a")).expect("public key")
+    );
+    let ssh_wrapper = format!(
+        "#!/bin/sh\nfor a in \"$@\"; do\n  if [ \"$a\" = find-principals ]; then\n    printf '%s\\n' '{}' > '{}'\n  fi\ndone\nexec '{}' \"$@\"\n",
+        replacement.trim(),
+        fixture.allowed().display(),
+        real_ssh_keygen.display(),
+    );
+    fs::write(shim.join("ssh-keygen"), ssh_wrapper).expect("ssh-keygen wrapper");
+    fs::set_permissions(shim.join("ssh-keygen"), fs::Permissions::from_mode(0o755))
+        .expect("ssh-keygen wrapper mode");
+
+    let verified = result_on(&request(&fixture, "v-trust"), Some(&shim));
+
+    assert_eq!(verified["status"], "approved", "{verified}");
+    assert_eq!(verified["approver"], ALICE, "{verified}");
+    assert!(
+        fs::read_to_string(fixture.allowed())
+            .expect("mutated allowed signers")
+            .starts_with("mallory@example.test ")
+    );
+    assert_ne!(verified["tag_object_id"], Value::Null);
+}
