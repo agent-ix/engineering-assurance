@@ -489,7 +489,7 @@ fn tc_282_a_cms_object_without_a_gitsign_member_is_missing_its_identity() {
 }
 
 #[test]
-#[trace("TC-283", "FR-040-AC-6")]
+#[trace("TC-283", "TC-1016", "FR-040-AC-6", "FR-040-AC-20")]
 fn tc_283_a_missing_gitsign_executable_is_not_started() {
     let fixture = fixture_with_commit();
     forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
@@ -884,7 +884,15 @@ fn tc_299_a_relative_path_entry_never_supplies_git_or_ssh_keygen_on_the_ssh_path
 
 #[test]
 #[ignore = "needs the real gitsign, network access and a public gitsign-signed commit and tag named by FR_040_LIVE_*"]
-#[trace("TC-292", "FR-040-AC-15")]
+#[trace(
+    "TC-292",
+    "TC-1013",
+    "TC-1014",
+    "TC-1015",
+    "TC-1016",
+    "FR-040-AC-15",
+    "FR-040-AC-20"
+)]
 fn tc_292_real_gitsign_verifies_a_public_signed_commit_and_tag() {
     let (Ok(repository), Ok(commit), Ok(tag), Ok(identity), Ok(issuer)) = (
         std::env::var("FR_040_LIVE_REPOSITORY"),
@@ -893,25 +901,191 @@ fn tc_292_real_gitsign_verifies_a_public_signed_commit_and_tag() {
         std::env::var("FR_040_LIVE_IDENTITY"),
         std::env::var("FR_040_LIVE_ISSUER"),
     ) else {
-        panic!("set FR_040_LIVE_REPOSITORY, _COMMIT, _TAG, _IDENTITY and _ISSUER");
+        panic!(
+            "UNAVAILABLE: set FR_040_LIVE_REPOSITORY, _COMMIT, _TAG, _IDENTITY and _ISSUER; this is not live interoperability evidence"
+        );
     };
+    let version = Command::new("gitsign")
+        .arg("--version")
+        .output()
+        .unwrap_or_else(|error| {
+            panic!("LIVE_CASE=UNAVAILABLE gitsign_not_started error={error}; no interoperability pass recorded")
+        });
+    assert!(version.status.success(), "gitsign --version: {version:?}");
+    let version_text = String::from_utf8_lossy(&version.stdout).into_owned();
+    assert_gitsign_018_version(&version_text);
+    let live_checkout = tempfile::tempdir().expect("live checkout");
+    let live_repository = live_checkout.path().join("repository");
+    let clone = Command::new("git")
+        .args(["clone", "--no-hardlinks", "--no-checkout", &repository])
+        .arg(&live_repository)
+        .output()
+        .expect("clone public live repository");
+    assert!(clone.status.success(), "git clone: {clone:?}");
+    let commit_id = git(
+        &live_repository,
+        &["rev-parse", &format!("{commit}^{{commit}}")],
+    );
+    let tag_id = git(
+        &live_repository,
+        &["rev-parse", &format!("refs/tags/{tag}^{{tag}}")],
+    );
+    eprintln!(
+        "LIVE_CASE=STARTED gitsign_version={:?} commit_object={} tag_object={} identity={identity:?} issuer={issuer:?} trust_service=probe_pending",
+        version_text.trim(),
+        commit_id.trim(),
+        tag_id.trim()
+    );
     let fixture = fixture();
     fs::write(fixture.allowed(), "").expect("allowed");
-    let path = std::env::var_os("PATH").expect("PATH");
-    let live = |revision: &str, kind: &str, identity: &str, issuer: &str| {
-        let mut body = request(&fixture, revision, kind, true);
-        body["repository"] = json!(repository);
-        body["gitsign"]["certificate_identity"] = json!(identity);
-        body["gitsign"]["certificate_oidc_issuer"] = json!(issuer);
-        verdict_on(&fixture, &body, Path::new(&path))
-    };
     for (revision, kind) in [(&commit, "commit"), (&tag, "tag")] {
-        assert_eq!(
-            live(revision, kind, &identity, &issuer)["status"],
-            "signed_valid"
+        assert_live_identity_cases(
+            &fixture,
+            &live_repository,
+            revision,
+            kind,
+            &identity,
+            &issuer,
         );
-        let wrong = live(revision, kind, &identity, OTHER_ISSUER);
-        assert_eq!(wrong["status"], "signed_untrusted");
-        assert_eq!(wrong["mismatch"], "issuer");
     }
+    let (tag_object, changed_id) =
+        mutate_live_tag(&fixture, &live_repository, &tag, &identity, &issuer);
+    assert_ne!(
+        tag_object, changed_id,
+        "tag payload mutation must change immutable object id"
+    );
+    eprintln!(
+        "LIVE_CASE=INTEROP_PASS gitsign_version={:?} commit_object={} original_tag_object={} changed_tag_object={} identity={identity:?} issuer={issuer:?} trust_service=available",
+        version_text.trim(),
+        commit_id.trim(),
+        tag_object,
+        changed_id
+    );
+}
+
+fn assert_gitsign_018_version(version: &str) {
+    let token = version
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .split_whitespace()
+        .last()
+        .unwrap_or_default();
+    assert!(
+        matches!(token, "v0.18.0" | "0.18.0"),
+        "expected exact gitsign v0.18.0 version token, got {version:?}"
+    );
+}
+
+fn assert_live_identity_cases(
+    fixture: &Fixture,
+    repository: &Path,
+    revision: &str,
+    kind: &str,
+    identity: &str,
+    issuer: &str,
+) {
+    let accepted = live_verdict(fixture, repository, revision, kind, identity, issuer);
+    assert_ne!(
+        accepted["status"], "unverifiable",
+        "LIVE_CASE=UNAVAILABLE kind={kind} reason={} trust_service=unavailable_or_unverifiable; no interoperability pass recorded",
+        accepted["reason"]
+    );
+    assert_eq!(accepted["status"], "signed_valid", "{accepted}");
+    let wrong_identity = live_verdict(
+        fixture,
+        repository,
+        revision,
+        kind,
+        "wrong-identity@example.test",
+        issuer,
+    );
+    assert_eq!(
+        wrong_identity["status"], "signed_untrusted",
+        "{wrong_identity}"
+    );
+    assert_eq!(wrong_identity["mismatch"], "identity", "{wrong_identity}");
+    let wrong_issuer = live_verdict(fixture, repository, revision, kind, identity, OTHER_ISSUER);
+    assert_eq!(wrong_issuer["status"], "signed_untrusted", "{wrong_issuer}");
+    assert_eq!(wrong_issuer["mismatch"], "issuer", "{wrong_issuer}");
+}
+
+fn live_verdict(
+    fixture: &Fixture,
+    repository: &Path,
+    revision: &str,
+    kind: &str,
+    identity: &str,
+    issuer: &str,
+) -> Value {
+    let mut body = request(fixture, revision, kind, true);
+    body["repository"] = json!(repository.display().to_string());
+    body["gitsign"]["certificate_identity"] = json!(identity);
+    body["gitsign"]["certificate_oidc_issuer"] = json!(issuer);
+    let path = std::env::var_os("PATH").expect("PATH");
+    verdict_on(fixture, &body, Path::new(&path))
+}
+
+fn mutate_live_tag(
+    fixture: &Fixture,
+    repository: &Path,
+    tag: &str,
+    identity: &str,
+    issuer: &str,
+) -> (String, String) {
+    let refname = format!("refs/tags/{tag}");
+    let original_id = git(repository, &["rev-parse", &format!("{refname}^{{tag}}")])
+        .trim()
+        .to_owned();
+    let raw = git(repository, &["cat-file", "tag", &original_id]);
+    let (headers, signed_message) = raw.split_once("\n\n").expect("annotated tag headers");
+    let signature_at = signed_message
+        .find("-----BEGIN SIGNED MESSAGE-----")
+        .expect("gitsign CMS block in live tag");
+    let (_, signature) = signed_message.split_at(signature_at);
+    let changed = format!("{headers}\n\nchanged-by-ea-129\n{signature}");
+    let changed_id = git_store_tag(repository.to_str().expect("repository path"), &changed);
+    let update = git(repository, &["update-ref", &refname, &changed_id]);
+    assert!(update.is_empty(), "update-ref: {update}");
+    eprintln!(
+        "LIVE_CASE=TAG_MUTATION original_tag_object={original_id} changed_tag_object={changed_id}"
+    );
+    let mutation = live_verdict(fixture, repository, tag, "tag", identity, issuer);
+    assert_eq!(mutation["status"], "unverifiable", "{mutation}");
+    assert_eq!(
+        mutation["reason"], "gitsign_verification_failed",
+        "{mutation}"
+    );
+    (original_id, changed_id)
+}
+
+fn git_store_tag(repository: &str, object: &str) -> String {
+    let output = Command::new("git")
+        .args([
+            "-C",
+            repository,
+            "hash-object",
+            "-t",
+            "tag",
+            "-w",
+            "--stdin",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("git hash-object");
+    let mut child = output;
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(object.as_bytes())
+        .expect("tag object");
+    let output = child.wait_with_output().expect("hash-object output");
+    assert!(output.status.success(), "{output:?}");
+    String::from_utf8(output.stdout)
+        .expect("object id")
+        .trim()
+        .to_owned()
 }
