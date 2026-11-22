@@ -65,9 +65,10 @@ The retained `sbom` artifact of the FR-038 result, unchanged.
   report that state unchanged and SHALL NOT present an artifact.
 - For each Syft-dependent fixture run, the release recorded from the exact
   `EA_TEST_SYFT` executable, the FR-038 request's `producer.version`, and the
-  CycloneDX `metadata.tools` Syft version SHALL all identify supported release
-  `1.57.1`. The package-count and identity claims in AC-1 through AC-4 apply
-  only to that observed release.
+  CycloneDX `metadata.tools` Syft version SHALL all identify the supported
+  release pinned in `spec/fixtures/syft-supported-release.json`. The
+  package-count and identity claims in AC-1 through AC-4 apply only to that
+  observed release.
 
 ## Acceptance Criteria
 
@@ -81,7 +82,7 @@ The retained `sbom` artifact of the FR-038 result, unchanged.
 | FR-039-AC-6 | A non-`completed` FR-038 result (`unavailable`, `failed`, `timed_out`) is reported as that state with no artifact presented. | Test |
 | FR-039-AC-7 | Design review confirms Engineering Assurance contains no CycloneDX component reader, no quoin dependency and no quoin launch path in production code. Test code that checks the artifact in AC-1 to AC-4 and AC-8 is the only reader. | Inspection |
 | FR-039-AC-8 | The licence fixture's retained artifact has the declared package count with `pkg:npm/` purls; for each purl the component carries the CycloneDX field (`license.id` or `expression`) and the text that the expected-result file names, and the entry that declares no licence has no `licenses` entry. | Test |
-| FR-039-AC-9 | Real runs for the Rust, npm, Python, and container fixtures independently identify Syft `1.57.1` from the executable's `--version` output, the request `producer.version`, and CycloneDX `metadata.tools`; each run satisfies its declared population and purl-family AC. A missing executable, unsupported release, failed process, timeout, malformed output, or absent artifact provides no passing producer evidence. | Integration |
+| FR-039-AC-9 | Real runs for the Rust, npm, Python, and container fixtures independently identify Syft from the version in `spec/fixtures/syft-supported-release.json` through the executable's `--version` output, the request `producer.version`, and CycloneDX `metadata.tools`; each run satisfies its declared population and purl-family AC. A missing executable, unsupported release, failed process, timeout, malformed output, or absent artifact provides no passing producer evidence. | Integration |
 
 ## Dependencies
 
