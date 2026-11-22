@@ -42,7 +42,7 @@ The `verify` job has read-only repository permission and no signing permission. 
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-069-AC-1 | A source workflow trusted for the selected signed tag is authenticated by the verifier and bound to the workflow-computed subject; the Quoin-produced result is signed unchanged after verification. | Test |
+| FR-069-AC-1 | With authenticated provenance and a matching workflow-computed subject, an integration test confirms that EA passes through and signs a Quoin `FAILED` result unchanged, without evaluating or reclassifying run evidence. | Test |
 | FR-069-AC-2 | An absent required provenance envelope, missing or unreadable export, mismatched subject, or producer identity that is invalid, untrusted, or not authorized for the selected signed tag stops attestation and produces no release statement. | Test |
 | FR-069-AC-3 | Static inspection shows the workflow and the statement builder call no Quoin evidence command that reads git or the network. | Inspection |
 | FR-069-AC-4 | The export runs in the `verify` job, with the evidence store taken from the `evidence_artifact` input and the subject computed by the workflow; the `attest` job runs no Quoin command, and a caller-built export is not accepted. | Test |
