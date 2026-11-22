@@ -240,10 +240,6 @@ fn requested_trailers(
 /// Refuses an allowed-signers file git should not be given: one that is not a
 /// regular file, is over 1 MiB, cannot be read, or is not UTF-8. The grammar of
 /// the file is git's and `ssh-keygen`'s to read.
-pub(crate) fn check_allowed_signers(path: &Path) -> Result<(), SignatureVerifyError> {
-    read_allowed_signers(path).map(drop)
-}
-
 pub(crate) fn capture_allowed_signers(
     path: &Path,
 ) -> Result<AllowedSignersSnapshot, SignatureVerifyError> {
@@ -306,12 +302,12 @@ pub(crate) struct CheckedTag {
 pub(crate) fn check_tag(
     repository: &Path,
     revision: &str,
-    allowed_signers: &Path,
+    allowed_signers: &AllowedSignersSnapshot,
     gitsign: Option<&GitsignIdentity>,
 ) -> CheckedTag {
     Git {
         repository,
-        allowed_signers: allowed_signers.to_path_buf(),
+        allowed_signers: allowed_signers.path.clone(),
         gitsign,
     }
     .tag_checked(revision)
@@ -817,10 +813,13 @@ impl Git<'_> {
     /// The id and object of an annotated tag; `None` for a lightweight tag.
     fn load_tag(&self, revision: &str) -> Result<Option<(String, Vec<u8>)>, Reason> {
         self.require_repository()?;
+        if !self.names_tag_ref(revision)? {
+            return Err(Reason::RevisionUnresolved);
+        }
         let id = self.resolve(revision)?;
         let kind = self.successful(&["cat-file", "-t", &id])?;
         match kind.as_slice() {
-            b"commit\n" if self.names_tag_ref(revision)? => Ok(None),
+            b"commit\n" => Ok(None),
             b"tag\n" => {
                 let object = self.successful(&["cat-file", "tag", &id])?;
                 Ok(Some((id, object)))
@@ -842,10 +841,17 @@ impl Git<'_> {
 
     /// Whether `revision` names a ref under `refs/tags/`.
     fn names_tag_ref(&self, revision: &str) -> Result<bool, Reason> {
-        // The revision cannot begin with `-` (checked before git starts), and git
-        // 2.34 echoes `--end-of-options` under `--symbolic-full-name`.
-        let output = self.successful(&["rev-parse", "--symbolic-full-name", revision])?;
-        Ok(output.starts_with(b"refs/tags/"))
+        // A full refs/tags name can contain an option-like short name even
+        // though the revision itself does not begin with `-`.
+        if revision
+            .strip_prefix("refs/tags/")
+            .unwrap_or(revision)
+            .starts_with('-')
+        {
+            return Ok(false);
+        }
+        let output = self.run(&["rev-parse", "--symbolic-full-name", revision])?;
+        Ok(output.status.success() && output.stdout.starts_with(b"refs/tags/"))
     }
 
     fn annotated_tag(&self, id: &str, split: &SplitTag<'_>) -> Result<TagObservation, Reason> {

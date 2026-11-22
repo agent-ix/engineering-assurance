@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::signature_verify_host::{
-    CheckedTag, GitsignRequest, capture_allowed_signers, check_tag,
+    AllowedSignersSnapshot, CheckedTag, GitsignRequest, capture_allowed_signers, check_tag,
 };
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.approval-verify-request/v1";
@@ -113,19 +113,20 @@ impl<'a> ResultLine<'a> {
         repository: &Path,
         tag: &'a str,
         record: (&'a str, &'a str),
-        allowed_signers: &'a Path,
+        request_allowed_signers: &'a Path,
+        verification_allowed_signers: &AllowedSignersSnapshot,
         gitsign: Option<&'a GitsignRequest>,
         identity: Option<&GitsignIdentity>,
     ) -> Self {
         let (record_id, record_digest) = record;
-        let checked = check_tag(repository, tag, allowed_signers, identity);
+        let checked = check_tag(repository, tag, verification_allowed_signers, identity);
         Self {
             protocol: RESULT_PROTOCOL,
             tag: tag.strip_prefix("refs/tags/").unwrap_or(tag),
             record_id,
             record_digest,
             trust: Trust {
-                allowed_signers,
+                allowed_signers: request_allowed_signers,
                 gitsign,
             },
             tag_object_id: checked.tag_object_id.clone(),
@@ -209,7 +210,8 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalVerifyError> {
         &request.repository,
         &request.tag,
         (&request.record_id, &request.record_digest),
-        &allowed_signers.path,
+        &request.allowed_signers,
+        &allowed_signers,
         request.gitsign.as_ref(),
         identity.as_ref(),
     );
