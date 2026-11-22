@@ -911,12 +911,9 @@ fn tc_292_real_gitsign_verifies_a_public_signed_commit_and_tag() {
         .unwrap_or_else(|error| {
             panic!("LIVE_CASE=UNAVAILABLE gitsign_not_started error={error}; no interoperability pass recorded")
         });
-    let version_text = String::from_utf8_lossy(&version.stdout);
     assert!(version.status.success(), "gitsign --version: {version:?}");
-    assert!(
-        version_text.contains("0.18.0"),
-        "expected gitsign v0.18.0, got {version_text:?}"
-    );
+    let version_text = String::from_utf8_lossy(&version.stdout).into_owned();
+    assert_gitsign_018_version(&version_text);
     let live_checkout = tempfile::tempdir().expect("live checkout");
     let live_repository = live_checkout.path().join("repository");
     let clone = Command::new("git")
@@ -926,11 +923,11 @@ fn tc_292_real_gitsign_verifies_a_public_signed_commit_and_tag() {
         .expect("clone public live repository");
     assert!(clone.status.success(), "git clone: {clone:?}");
     let commit_id = git(
-        Path::new(&repository),
+        &live_repository,
         &["rev-parse", &format!("{commit}^{{commit}}")],
     );
     let tag_id = git(
-        Path::new(&repository),
+        &live_repository,
         &["rev-parse", &format!("refs/tags/{tag}^{{tag}}")],
     );
     eprintln!(
@@ -941,54 +938,18 @@ fn tc_292_real_gitsign_verifies_a_public_signed_commit_and_tag() {
     );
     let fixture = fixture();
     fs::write(fixture.allowed(), "").expect("allowed");
-    let path = std::env::var_os("PATH").expect("PATH");
-    let live = |revision: &str, kind: &str, identity: &str, issuer: &str| {
-        let mut body = request(&fixture, revision, kind, true);
-        body["repository"] = json!(live_repository.display().to_string());
-        body["gitsign"]["certificate_identity"] = json!(identity);
-        body["gitsign"]["certificate_oidc_issuer"] = json!(issuer);
-        verdict_on(&fixture, &body, Path::new(&path))
-    };
     for (revision, kind) in [(&commit, "commit"), (&tag, "tag")] {
-        let accepted = live(revision, kind, &identity, &issuer);
-        if accepted["status"] == "unverifiable" {
-            panic!(
-                "LIVE_CASE=UNAVAILABLE kind={kind} reason={} trust_service=unavailable_or_unverifiable; no interoperability pass recorded",
-                accepted["reason"]
-            );
-        }
-        assert_eq!(accepted["status"], "signed_valid", "{accepted}");
-        let wrong_identity = live(revision, kind, "wrong-identity@example.test", &issuer);
-        assert_eq!(
-            wrong_identity["status"], "signed_untrusted",
-            "{wrong_identity}"
+        assert_live_identity_cases(
+            &fixture,
+            &live_repository,
+            revision,
+            kind,
+            &identity,
+            &issuer,
         );
-        assert_eq!(wrong_identity["mismatch"], "identity", "{wrong_identity}");
-        let wrong = live(revision, kind, &identity, OTHER_ISSUER);
-        assert_eq!(wrong["status"], "signed_untrusted");
-        assert_eq!(wrong["mismatch"], "issuer");
     }
-    let tag_object = tag_id.trim();
-    let raw = git(&Path::new(&repository), &["cat-file", "tag", tag_object]);
-    let (headers, signed_message) = raw.split_once("\n\n").expect("annotated tag headers");
-    let signature_at = signed_message
-        .find("-----BEGIN SIGNED MESSAGE-----")
-        .expect("gitsign CMS block in live tag");
-    let (_message, signature) = signed_message.split_at(signature_at);
-    let changed = format!("{headers}\n\nchanged-by-ea-129\n{signature}");
-    let changed_id = git_store_tag(live_repository.to_str().expect("repository path"), &changed);
-    let refname = format!("refs/tags/{tag}");
-    let update = git(&live_repository, &["update-ref", &refname, &changed_id]);
-    assert!(update.is_empty(), "update-ref: {update}");
-    eprintln!(
-        "LIVE_CASE=TAG_MUTATION original_tag_object={tag_object} changed_tag_object={changed_id}"
-    );
-    let mutation = live(&tag, "tag", &identity, &issuer);
-    assert_eq!(mutation["status"], "unverifiable", "{mutation}");
-    assert_eq!(
-        mutation["reason"], "gitsign_verification_failed",
-        "{mutation}"
-    );
+    let (tag_object, changed_id) =
+        mutate_live_tag(&fixture, &live_repository, &tag, &identity, &issuer);
     assert_ne!(
         tag_object, changed_id,
         "tag payload mutation must change immutable object id"
@@ -1000,6 +961,102 @@ fn tc_292_real_gitsign_verifies_a_public_signed_commit_and_tag() {
         tag_object,
         changed_id
     );
+}
+
+fn assert_gitsign_018_version(version: &str) {
+    let token = version
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .split_whitespace()
+        .last()
+        .unwrap_or_default();
+    assert!(
+        matches!(token, "v0.18.0" | "0.18.0"),
+        "expected exact gitsign v0.18.0 version token, got {version:?}"
+    );
+}
+
+fn assert_live_identity_cases(
+    fixture: &Fixture,
+    repository: &Path,
+    revision: &str,
+    kind: &str,
+    identity: &str,
+    issuer: &str,
+) {
+    let accepted = live_verdict(fixture, repository, revision, kind, identity, issuer);
+    assert_ne!(
+        accepted["status"], "unverifiable",
+        "LIVE_CASE=UNAVAILABLE kind={kind} reason={} trust_service=unavailable_or_unverifiable; no interoperability pass recorded",
+        accepted["reason"]
+    );
+    assert_eq!(accepted["status"], "signed_valid", "{accepted}");
+    let wrong_identity = live_verdict(
+        fixture,
+        repository,
+        revision,
+        kind,
+        "wrong-identity@example.test",
+        issuer,
+    );
+    assert_eq!(
+        wrong_identity["status"], "signed_untrusted",
+        "{wrong_identity}"
+    );
+    assert_eq!(wrong_identity["mismatch"], "identity", "{wrong_identity}");
+    let wrong_issuer = live_verdict(fixture, repository, revision, kind, identity, OTHER_ISSUER);
+    assert_eq!(wrong_issuer["status"], "signed_untrusted", "{wrong_issuer}");
+    assert_eq!(wrong_issuer["mismatch"], "issuer", "{wrong_issuer}");
+}
+
+fn live_verdict(
+    fixture: &Fixture,
+    repository: &Path,
+    revision: &str,
+    kind: &str,
+    identity: &str,
+    issuer: &str,
+) -> Value {
+    let mut body = request(fixture, revision, kind, true);
+    body["repository"] = json!(repository.display().to_string());
+    body["gitsign"]["certificate_identity"] = json!(identity);
+    body["gitsign"]["certificate_oidc_issuer"] = json!(issuer);
+    let path = std::env::var_os("PATH").expect("PATH");
+    verdict_on(fixture, &body, Path::new(&path))
+}
+
+fn mutate_live_tag(
+    fixture: &Fixture,
+    repository: &Path,
+    tag: &str,
+    identity: &str,
+    issuer: &str,
+) -> (String, String) {
+    let refname = format!("refs/tags/{tag}");
+    let original_id = git(repository, &["rev-parse", &format!("{refname}^{{tag}}")])
+        .trim()
+        .to_owned();
+    let raw = git(repository, &["cat-file", "tag", &original_id]);
+    let (headers, signed_message) = raw.split_once("\n\n").expect("annotated tag headers");
+    let signature_at = signed_message
+        .find("-----BEGIN SIGNED MESSAGE-----")
+        .expect("gitsign CMS block in live tag");
+    let (_, signature) = signed_message.split_at(signature_at);
+    let changed = format!("{headers}\n\nchanged-by-ea-129\n{signature}");
+    let changed_id = git_store_tag(repository.to_str().expect("repository path"), &changed);
+    let update = git(repository, &["update-ref", &refname, &changed_id]);
+    assert!(update.is_empty(), "update-ref: {update}");
+    eprintln!(
+        "LIVE_CASE=TAG_MUTATION original_tag_object={original_id} changed_tag_object={changed_id}"
+    );
+    let mutation = live_verdict(fixture, repository, tag, "tag", identity, issuer);
+    assert_eq!(mutation["status"], "unverifiable", "{mutation}");
+    assert_eq!(
+        mutation["reason"], "gitsign_verification_failed",
+        "{mutation}"
+    );
+    (original_id, changed_id)
 }
 
 fn git_store_tag(repository: &str, object: &str) -> String {
