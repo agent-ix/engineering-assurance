@@ -247,7 +247,7 @@ pub(crate) fn check_allowed_signers(path: &Path) -> Result<(), SignatureVerifyEr
 pub(crate) fn capture_allowed_signers(
     path: &Path,
 ) -> Result<AllowedSignersSnapshot, SignatureVerifyError> {
-    snapshot_allowed_signers(path).map_err(|_| SignatureVerifyError::AllowedSigners)
+    snapshot_allowed_signers(path).map_err(|()| SignatureVerifyError::AllowedSigners)
 }
 
 fn read_allowed_signers(path: &Path) -> Result<Vec<u8>, SignatureVerifyError> {

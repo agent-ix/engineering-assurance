@@ -380,7 +380,8 @@ fn tc_294_gitsign_keeps_verification_on_the_loaded_object_after_its_tag_ref_is_d
     let deleted_id = git(&fixture.repo(), &["rev-parse", "v-deleted^{tag}"])
         .trim()
         .to_owned();
-    let real_git = which("git").display();
+    let real_git_path = which("git");
+    let real_git = real_git_path.display();
     let stand_in = STAND_IN.replace(
         "exit \"$status\"",
         &format!(

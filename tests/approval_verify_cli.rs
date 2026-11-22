@@ -1010,7 +1010,7 @@ fn tc_338_allowed_signers_changes_after_capture_do_not_change_the_verified_trust
         fs::read_to_string(fixture.public("a")).expect("public key")
     );
     let git_wrapper = format!(
-        "#!/bin/sh\nfor a in \"$@\"; do\n  if [ \"$a\" = verify-tag ]; then\n    printf '%s\\n' '{}' > '{}'\n    for setting in \"$@\"; do\n      case \"$setting\" in gpg.ssh.allowedSignersFile=*) cat \"${{setting#*=}}\" > '{}' ;; esac\n    done\n  fi\ndone\nexec '{}' \"$@\"\n",
+        "#!/bin/sh\nfor a in \"$@\"; do\n  if [ \"$a\" = verify-tag ]; then\n    printf '%s\\n' '{}' > '{}'\n    for setting in \"$@\"; do\n      case \"$setting\" in gpg.ssh.allowedSignersFile=*) /usr/bin/cat \"${{setting#*=}}\" > '{}' ;; esac\n    done\n  fi\ndone\nexec '{}' \"$@\"\n",
         replacement.trim(),
         fixture.allowed().display(),
         fixture.root().join("observed-allowed-signers").display(),
