@@ -21,7 +21,9 @@ use engineering_assurance::signature_verify::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::signature_verify_host::{CheckedTag, GitsignRequest, check_allowed_signers, check_tag};
+use crate::signature_verify_host::{
+    CheckedTag, GitsignRequest, capture_allowed_signers, check_tag,
+};
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.approval-verify-request/v1";
 const RESULT_PROTOCOL: &str = "engineering-assurance.approval-verify-result/v1";
@@ -201,13 +203,13 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalVerifyError> {
     }
     let identity =
         gitsign_identity(request.gitsign.as_ref()).map_err(|()| ApprovalVerifyError::Invalid)?;
-    check_allowed_signers(&request.allowed_signers)
+    let allowed_signers = capture_allowed_signers(&request.allowed_signers)
         .map_err(|_| ApprovalVerifyError::AllowedSigners)?;
     let result = ResultLine::verify(
         &request.repository,
         &request.tag,
         (&request.record_id, &request.record_digest),
-        &request.allowed_signers,
+        &allowed_signers.path,
         request.gitsign.as_ref(),
         identity.as_ref(),
     );

@@ -162,10 +162,10 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, SignatureVerifyError> {
             .ok_or(SignatureVerifyError::Invalid)
         })
         .transpose()?;
-    check_allowed_signers(&request.allowed_signers)?;
+    let allowed_signers = capture_allowed_signers(&request.allowed_signers)?;
     let git = Git {
         repository: &request.repository,
-        allowed_signers: request.allowed_signers.clone(),
+        allowed_signers: allowed_signers.path.clone(),
         gitsign: gitsign.as_ref(),
     };
     let checked = match request.kind {
@@ -244,6 +244,12 @@ pub(crate) fn check_allowed_signers(path: &Path) -> Result<(), SignatureVerifyEr
     read_allowed_signers(path).map(drop)
 }
 
+pub(crate) fn capture_allowed_signers(
+    path: &Path,
+) -> Result<AllowedSignersSnapshot, SignatureVerifyError> {
+    snapshot_allowed_signers(path).map_err(|_| SignatureVerifyError::AllowedSigners)
+}
+
 fn read_allowed_signers(path: &Path) -> Result<Vec<u8>, SignatureVerifyError> {
     let invalid = |_| SignatureVerifyError::AllowedSigners;
     // The type is checked before the open: opening a FIFO would block.
@@ -311,9 +317,9 @@ pub(crate) fn check_tag(
     .tag_checked(revision)
 }
 
-struct AllowedSignersSnapshot {
+pub(crate) struct AllowedSignersSnapshot {
     _directory: tempfile::TempDir,
-    path: PathBuf,
+    pub(crate) path: PathBuf,
 }
 
 fn snapshot_allowed_signers(path: &Path) -> Result<AllowedSignersSnapshot, ()> {
@@ -436,21 +442,13 @@ pub(crate) fn run_git(repository: &Path, arguments: &[&str]) -> Result<Completed
 /// Verifies a tag read by [`load_tag`], exactly as [`check_tag`] verifies it.
 pub(crate) fn verify_loaded_tag(
     repository: &Path,
-    allowed_signers: &Path,
+    allowed_signers: &AllowedSignersSnapshot,
     gitsign: Option<&GitsignIdentity>,
     loaded: LoadedTag,
 ) -> CheckedTag {
-    let Ok(snapshot) = snapshot_allowed_signers(allowed_signers) else {
-        return CheckedTag {
-            verdict: Verdict::unverifiable(TargetKind::Tag, Reason::UnrecognizedOutput),
-            trailers: loaded.trailers,
-            tagger_signed_at: None,
-            tag_object_id: Some(loaded.id),
-        };
-    };
     Git {
         repository,
-        allowed_signers: snapshot.path.clone(),
+        allowed_signers: allowed_signers.path.clone(),
         gitsign,
     }
     .verify_loaded(loaded)
@@ -766,16 +764,8 @@ impl Git<'_> {
             tagger_signed_at: None,
             tag_object_id: None,
         };
-        let Ok(snapshot) = snapshot_allowed_signers(&self.allowed_signers) else {
-            return without_message(Verdict::unverifiable(kind, Reason::UnrecognizedOutput));
-        };
-        let verifier = Self {
-            repository: self.repository,
-            allowed_signers: snapshot.path.clone(),
-            gitsign: self.gitsign,
-        };
-        match verifier.load(revision) {
-            Ok(Some(loaded)) => verifier.verify_loaded(loaded),
+        match self.load(revision) {
+            Ok(Some(loaded)) => self.verify_loaded(loaded),
             Ok(None) => without_message(classify_tag(&TagObservation::Lightweight)),
             Err(reason) => without_message(Verdict::unverifiable(kind, reason)),
         }

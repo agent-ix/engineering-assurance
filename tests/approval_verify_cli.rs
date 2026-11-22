@@ -994,6 +994,7 @@ fn tc_337_moving_the_tag_ref_after_message_read_keeps_verification_on_the_loaded
 fn tc_338_allowed_signers_changes_after_capture_do_not_change_the_verified_trust_snapshot() {
     let fixture = fixture();
     signed_tag(&fixture, "a", "v-trust", &good_message());
+    let captured_trust = fs::read(fixture.allowed()).expect("initial allowed signers");
     let shim = fixture.root().join("trust-bin");
     fs::create_dir(&shim).expect("trust bin");
     let real_git = std::env::split_paths(&std::env::var_os("PATH").expect("PATH"))
@@ -1004,20 +1005,21 @@ fn tc_338_allowed_signers_changes_after_capture_do_not_change_the_verified_trust
         .map(|dir| dir.join("ssh-keygen"))
         .find(|candidate| candidate.is_file())
         .expect("ssh-keygen");
-    std::os::unix::fs::symlink(real_git, shim.join("git")).expect("git link");
     let replacement = format!(
         "mallory@example.test {}",
         fs::read_to_string(fixture.public("a")).expect("public key")
     );
-    let ssh_wrapper = format!(
-        "#!/bin/sh\nfor a in \"$@\"; do\n  if [ \"$a\" = find-principals ]; then\n    printf '%s\\n' '{}' > '{}'\n  fi\ndone\nexec '{}' \"$@\"\n",
+    let git_wrapper = format!(
+        "#!/bin/sh\nfor a in \"$@\"; do\n  if [ \"$a\" = verify-tag ]; then\n    printf '%s\\n' '{}' > '{}'\n    for setting in \"$@\"; do\n      case \"$setting\" in gpg.ssh.allowedSignersFile=*) cat \"${{setting#*=}}\" > '{}' ;; esac\n    done\n  fi\ndone\nexec '{}' \"$@\"\n",
         replacement.trim(),
         fixture.allowed().display(),
-        real_ssh_keygen.display(),
+        fixture.root().join("observed-allowed-signers").display(),
+        real_git.display(),
     );
-    fs::write(shim.join("ssh-keygen"), ssh_wrapper).expect("ssh-keygen wrapper");
-    fs::set_permissions(shim.join("ssh-keygen"), fs::Permissions::from_mode(0o755))
-        .expect("ssh-keygen wrapper mode");
+    fs::write(shim.join("git"), git_wrapper).expect("git wrapper");
+    fs::set_permissions(shim.join("git"), fs::Permissions::from_mode(0o755))
+        .expect("git wrapper mode");
+    std::os::unix::fs::symlink(real_ssh_keygen, shim.join("ssh-keygen")).expect("ssh-keygen link");
 
     let verified = result_on(&request(&fixture, "v-trust"), Some(&shim));
 
@@ -1027,6 +1029,11 @@ fn tc_338_allowed_signers_changes_after_capture_do_not_change_the_verified_trust
         fs::read_to_string(fixture.allowed())
             .expect("mutated allowed signers")
             .starts_with("mallory@example.test ")
+    );
+    assert_eq!(
+        fs::read(fixture.root().join("observed-allowed-signers"))
+            .expect("git verifier's allowed-signers bytes"),
+        captured_trust
     );
     assert_ne!(verified["tag_object_id"], Value::Null);
 }

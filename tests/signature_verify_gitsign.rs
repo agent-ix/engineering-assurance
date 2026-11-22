@@ -341,7 +341,7 @@ fn tc_293_gitsign_uses_an_isolated_config_snapshot_when_repository_config_change
     let stand_in = STAND_IN.replace(
         "exit \"$status\"",
         &format!(
-            "git config --get-regexp 'gitsign\\..*' > \"$d/snapshot-gitsign-config\" 2>&1 || true\n{real_git} -C '{}' update-ref refs/tags/v-cms '{replacement_id}'\n{real_git} -C '{}' config gitsign.program /changed/during/verification\nexit \"$status\"",
+            "{real_git} -C '{}' update-ref refs/tags/v-cms '{replacement_id}'\n{real_git} -C '{}' config gitsign.program /changed/during/verification\ngit config --get-regexp 'gitsign\\..*' > \"$d/snapshot-gitsign-config\" 2>&1 || true\nexit \"$status\"",
             repository.display(),
             repository.display(),
         ),
@@ -366,6 +366,48 @@ fn tc_293_gitsign_uses_an_isolated_config_snapshot_when_repository_config_change
             .expect("snapshot config")
             .is_empty()
     );
+}
+
+#[test]
+#[trace("TC-1012", "FR-041-AC-23", "FR-041-AC-24")]
+fn tc_294_gitsign_keeps_verification_on_the_loaded_object_after_its_tag_ref_is_deleted() {
+    let fixture = fixture();
+    forged_tag(&fixture, "v-control", "control", CMS_BLOCK);
+    forged_tag(&fixture, "v-deleted", "deleted", CMS_BLOCK);
+    let control_id = git(&fixture.repo(), &["rev-parse", "v-control^{tag}"])
+        .trim()
+        .to_owned();
+    let deleted_id = git(&fixture.repo(), &["rev-parse", "v-deleted^{tag}"])
+        .trim()
+        .to_owned();
+    let real_git = which("git").display();
+    let stand_in = STAND_IN.replace(
+        "exit \"$status\"",
+        &format!(
+            "if [ \"$7\" = '{deleted_id}' ]; then {real_git} -C '{}' update-ref -d refs/tags/v-deleted; fi\nexit \"$status\"",
+            fixture.repo().display(),
+        ),
+    );
+    fs::write(fixture.bin().join("gitsign"), stand_in).expect("gitsign stand-in");
+
+    let control = verdict(&fixture, &request(&fixture, "v-control", "tag", true));
+    assert_eq!(control["status"], "signed_valid", "{control}");
+    assert_eq!(fixture.lines("args", 1)[6], control_id);
+
+    let deleted = verdict(&fixture, &request(&fixture, "v-deleted", "tag", true));
+    assert_eq!(deleted["status"], "signed_valid", "{deleted}");
+    assert_eq!(fixture.lines("args", 2)[6], deleted_id);
+    let deleted_ref = Command::new("git")
+        .args([
+            "-C",
+            fixture.repo().to_str().expect("repo path"),
+            "show-ref",
+            "--verify",
+            "refs/tags/v-deleted",
+        ])
+        .output()
+        .expect("show deleted ref");
+    assert!(!deleted_ref.status.success());
 }
 
 #[test]

@@ -30,7 +30,8 @@ use thiserror::Error;
 
 use crate::approval_verify_host::{Assessment, Trust, assess};
 use crate::signature_verify_host::{
-    GitsignRequest, ListedRef, check_allowed_signers, list_tags, load_tag, verify_loaded_tag,
+    AllowedSignersSnapshot, GitsignRequest, ListedRef, capture_allowed_signers, list_tags,
+    load_tag, verify_loaded_tag,
 };
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.approval-trail-request/v1";
@@ -164,6 +165,7 @@ pub(crate) fn execute(bytes: &[u8], format: Format) -> Result<Vec<u8>, ApprovalT
 struct Parsed {
     request: Request,
     identity: Option<GitsignIdentity>,
+    allowed_signers: AllowedSignersSnapshot,
 }
 
 fn parse(bytes: &[u8]) -> Result<Parsed, ApprovalTrailError> {
@@ -190,9 +192,13 @@ fn parse(bytes: &[u8]) -> Result<Parsed, ApprovalTrailError> {
             .ok_or(ApprovalTrailError::Invalid)
         })
         .transpose()?;
-    check_allowed_signers(&request.allowed_signers)
+    let allowed_signers = capture_allowed_signers(&request.allowed_signers)
         .map_err(|_| ApprovalTrailError::AllowedSigners)?;
-    Ok(Parsed { request, identity })
+    Ok(Parsed {
+        request,
+        identity,
+        allowed_signers,
+    })
 }
 
 /// What one annotated tag contributes to the trail.
@@ -213,7 +219,7 @@ fn examine(parsed: &Parsed, listed: &ListedRef) -> Examined {
         ));
     };
     let revision = format!("refs/tags/{name}");
-    let loaded = match load_tag(&request.repository, &revision, &request.allowed_signers) {
+    let loaded = match load_tag(&request.repository, &revision, &parsed.allowed_signers.path) {
         Ok(Some(loaded)) => loaded,
         // The ref was replaced by a lightweight tag after it was listed.
         Ok(None) => return Examined::Other,
@@ -241,7 +247,7 @@ fn examine(parsed: &Parsed, listed: &ListedRef) -> Examined {
     let object = loaded.id().to_owned();
     let checked = verify_loaded_tag(
         &request.repository,
-        &request.allowed_signers,
+        &parsed.allowed_signers,
         parsed.identity.as_ref(),
         loaded,
     );
@@ -263,7 +269,7 @@ fn execute_within(
     let request = &parsed.request;
     let listing = list_tags(
         &request.repository,
-        &request.allowed_signers,
+        &parsed.allowed_signers.path,
         MAX_TAGS_CONSIDERED,
     )
     .ok_or(ApprovalTrailError::Repository)?;
