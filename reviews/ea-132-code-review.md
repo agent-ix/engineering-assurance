@@ -141,3 +141,9 @@ scope:
   role: examined
   excerpt: Index entry for FR-080.
 ```
+
+### Independent reviewer disposition round 1
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Independent round 1: fixed. At PR head cfa055b, FR-080 uses one purpose-bound statement digest and scope; it resolves one immutable annotated tag object, parses and verifies that same object, and returns its object ID. No manifest-head/ledger remains. |

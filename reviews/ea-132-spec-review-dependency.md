@@ -141,3 +141,9 @@ scope:
   role: examined
   excerpt: Index entry for FR-080.
 ```
+
+### Independent reviewer disposition round 1
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Independent round 1: fixed. FR-080 references Quoin FR-210 as the owner of the statement contract and names Quoin as supplier of digest/scope and consumer of the exact-object verification result. |

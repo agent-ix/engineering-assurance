@@ -141,3 +141,9 @@ scope:
   role: examined
   excerpt: Index entry for FR-080.
 ```
+
+### Independent reviewer disposition round 1
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Independent round 1: fixed. AC-3 through AC-7 cover missing/malformed/altered digest and scope, signature/trust refusals, and parsed-versus-verified object binding; the competing manifest ledger is removed. |

@@ -141,3 +141,9 @@ scope:
   role: examined
   excerpt: Index entry for FR-080.
 ```
+
+### Independent reviewer disposition round 1
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Independent round 1: fixed. EA scope is limited to verifying a signature over statement digest/scope and returning the exact tag object identity; Quoin owns statement bytes, digest computation, and independent retention. |

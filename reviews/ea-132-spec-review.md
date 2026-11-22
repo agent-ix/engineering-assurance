@@ -141,3 +141,9 @@ scope:
   role: examined
   excerpt: Index entry for FR-080.
 ```
+
+### Independent reviewer disposition round 1
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Independent round 1: fixed. The requirement subject is one proof-integrity-statement/v1 identity digest and scope bound to the exact signed tag object; approval, role authorization, qualification, and retention remain separate. |

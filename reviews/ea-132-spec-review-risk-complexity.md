@@ -141,3 +141,9 @@ scope:
   role: examined
   excerpt: Index entry for FR-080.
 ```
+
+### Independent reviewer disposition round 1
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Independent round 1: fixed. The FR defines no manifest, sequence, ledger, or retention mechanism; Quoin owns statement creation/digest and retained objects while EA verifies only the signed digest/scope. |

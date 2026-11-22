@@ -141,3 +141,9 @@ scope:
   role: examined
   excerpt: Index entry for FR-080.
 ```
+
+### Independent reviewer disposition round 1
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Independent round 1: fixed. AC-1 through AC-8 specify positive SSH/gitsign cases, exact statement digest/scope refusals, trust failures, unavailable services, object-binding negative control, and separation from approval/qualification. |

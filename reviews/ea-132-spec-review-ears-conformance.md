@@ -141,3 +141,9 @@ scope:
   role: examined
   excerpt: Index entry for FR-080.
 ```
+
+### Independent reviewer disposition round 1
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Independent round 1: fixed. Normative SHALL clauses now state the statement digest/scope contract and exact-object refusal behavior with explicit outcomes for malformed, mismatched, untrusted, and unavailable inputs. |

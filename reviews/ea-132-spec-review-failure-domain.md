@@ -141,3 +141,9 @@ scope:
   role: examined
   excerpt: Index entry for FR-080.
 ```
+
+### Independent reviewer disposition round 1
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Independent round 1: fixed. FR-080 specifies malformed request refusal before git, missing/unavailable tag/verifier/trust outcomes, unsupported tag forms, mismatch states, and same-object parse/signature binding. |
