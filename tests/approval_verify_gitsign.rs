@@ -20,6 +20,7 @@ use serde_json::{Value, json};
 
 const IDENTITY: &str = "alice@example.test";
 const ISSUER: &str = concat!("https:", "//issuer.example.test");
+const OTHER_ISSUER: &str = concat!("https:", "//other.example.test");
 const PRINCIPAL: &str = "Alice Example";
 const CMS_BLOCK: &str = "-----BEGIN SIGNED MESSAGE-----\nAAAA\n-----END SIGNED MESSAGE-----\n";
 const RECORD_ID: &str = "change-record-17";
@@ -200,10 +201,14 @@ fn request(fixture: &Fixture, tag: &str, gitsign: bool) -> Value {
 }
 
 fn result(fixture: &Fixture, request: &Value) -> Value {
+    result_on(fixture, request, &fixture.bin())
+}
+
+fn result_on(fixture: &Fixture, request: &Value, path: &Path) -> Value {
     let mut child = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
         .args(["approval-verify", "--request", "-"])
         .env_clear()
-        .env("PATH", fixture.bin())
+        .env("PATH", path)
         .env("HOME", fixture.root().join("home"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -219,6 +224,223 @@ fn result(fixture: &Fixture, request: &Value) -> Value {
     let output: Output = child.wait_with_output().expect("output");
     assert_eq!(output.status.code(), Some(0), "{output:?}");
     serde_json::from_slice(&output.stdout).expect("json line")
+}
+
+#[test]
+#[ignore = "needs real gitsign v0.18.0, available Sigstore trust services and a public approval tag named by FR_041_LIVE_*"]
+#[trace("TC-1017", "TC-1018", "TC-1019", "TC-1020", "FR-041-AC-26")]
+fn tc_1017_real_gitsign_verifies_and_binds_a_public_approval_tag() {
+    let (Ok(repository), Ok(tag), Ok(identity), Ok(issuer), Ok(record_id), Ok(record_digest)) = (
+        std::env::var("FR_041_LIVE_REPOSITORY"),
+        std::env::var("FR_041_LIVE_TAG"),
+        std::env::var("FR_041_LIVE_IDENTITY"),
+        std::env::var("FR_041_LIVE_ISSUER"),
+        std::env::var("FR_041_LIVE_RECORD_ID"),
+        std::env::var("FR_041_LIVE_RECORD_DIGEST"),
+    ) else {
+        panic!(
+            "UNAVAILABLE: set FR_041_LIVE_REPOSITORY, _TAG, _IDENTITY, _ISSUER, _RECORD_ID and _RECORD_DIGEST; this is not live interoperability evidence"
+        );
+    };
+    let version = Command::new("gitsign")
+        .arg("--version")
+        .output()
+        .unwrap_or_else(|error| {
+            panic!("LIVE_CASE=UNAVAILABLE gitsign_not_started error={error}; no approval interoperability pass recorded")
+        });
+    let version_text = String::from_utf8_lossy(&version.stdout);
+    assert!(version.status.success(), "gitsign --version: {version:?}");
+    assert!(
+        version_text.contains("0.18.0"),
+        "expected gitsign v0.18.0, got {version_text:?}"
+    );
+
+    let live = tempfile::tempdir().expect("live checkout");
+    let live_repository = live.path().join("repository");
+    let clone = Command::new("git")
+        .args(["clone", "--no-hardlinks", "--no-checkout", &repository])
+        .arg(&live_repository)
+        .output()
+        .expect("clone public live repository");
+    assert!(clone.status.success(), "git clone: {clone:?}");
+    let tag_ref = format!("refs/tags/{tag}");
+    let original_id = git(
+        &live_repository,
+        &["rev-parse", &format!("{tag_ref}^{{tag}}")],
+    )
+    .trim()
+    .to_owned();
+    eprintln!(
+        "LIVE_CASE=STARTED gitsign_version={:?} tag_object={original_id} identity={identity:?} issuer={issuer:?} trust_service=probe_pending",
+        version_text.trim()
+    );
+    let fixture = fixture();
+    let path = std::env::var_os("PATH").expect("PATH");
+    let live_request = |identity: &str, issuer: &str| {
+        let mut body = request(&fixture, &tag, true);
+        body["repository"] = json!(live_repository.display().to_string());
+        body["record_id"] = json!(record_id);
+        body["record_digest"] = json!(record_digest);
+        body["gitsign"]["certificate_identity"] = json!(identity);
+        body["gitsign"]["certificate_oidc_issuer"] = json!(issuer);
+        body
+    };
+    let accepted = result_on(
+        &fixture,
+        &live_request(&identity, &issuer),
+        Path::new(&path),
+    );
+    if accepted["status"] == "unverifiable" {
+        panic!(
+            "LIVE_CASE=UNAVAILABLE reason={} trust_service=unavailable_or_unverifiable; no approval interoperability pass recorded",
+            accepted["reason"]
+        );
+    }
+    eprintln!(
+        "LIVE_CASE=APPROVAL_PASS gitsign_version={:?} tag_object={original_id} identity={identity:?} issuer={issuer:?} trust_service=available",
+        version_text.trim()
+    );
+    assert_eq!(accepted["status"], "approved", "{accepted}");
+    assert_eq!(accepted["tag_object_id"], original_id, "{accepted}");
+    assert_eq!(
+        accepted["signature"]["status"], "signed_valid",
+        "{accepted}"
+    );
+    assert_eq!(
+        accepted["signature"]["signature_kind"], "gitsign",
+        "{accepted}"
+    );
+
+    let wrong_identity = result_on(
+        &fixture,
+        &live_request("wrong-identity@example.test", &issuer),
+        Path::new(&path),
+    );
+    assert_eq!(
+        wrong_identity["status"], "untrusted_signer",
+        "{wrong_identity}"
+    );
+    assert_eq!(
+        wrong_identity["signature"]["mismatch"], "identity",
+        "{wrong_identity}"
+    );
+    assert!(wrong_identity.get("approver").is_none(), "{wrong_identity}");
+    assert!(wrong_identity.get("meaning").is_none(), "{wrong_identity}");
+    assert!(
+        wrong_identity.get("signed_at").is_none(),
+        "{wrong_identity}"
+    );
+    let wrong_issuer = result_on(
+        &fixture,
+        &live_request(&identity, OTHER_ISSUER),
+        Path::new(&path),
+    );
+    assert_eq!(wrong_issuer["status"], "untrusted_signer", "{wrong_issuer}");
+    assert_eq!(
+        wrong_issuer["signature"]["mismatch"], "issuer",
+        "{wrong_issuer}"
+    );
+    assert!(wrong_issuer.get("approver").is_none(), "{wrong_issuer}");
+    assert!(wrong_issuer.get("meaning").is_none(), "{wrong_issuer}");
+    assert!(wrong_issuer.get("signed_at").is_none(), "{wrong_issuer}");
+
+    let config = git(
+        &live_repository,
+        &["config", "gitsign.fulcioRoot", "/dev/null"],
+    );
+    assert!(config.is_empty(), "config: {config}");
+    let restricted = result_on(
+        &fixture,
+        &live_request(&identity, &issuer),
+        Path::new(&path),
+    );
+    assert_eq!(restricted["status"], "unverifiable", "{restricted}");
+    assert_eq!(
+        restricted["reason"], "gitsign_repository_config",
+        "{restricted}"
+    );
+    assert!(restricted.get("approver").is_none(), "{restricted}");
+    assert!(restricted.get("meaning").is_none(), "{restricted}");
+
+    let raw = git(&live_repository, &["cat-file", "tag", &original_id]);
+    let (headers, signed_message) = raw.split_once("\n\n").expect("annotated tag headers");
+    let signature_at = signed_message
+        .find("-----BEGIN SIGNED MESSAGE-----")
+        .expect("gitsign CMS block in live tag");
+    let (_, signature) = signed_message.split_at(signature_at);
+    let changed = format!("{headers}\n\nchanged-by-ea-129\n{signature}");
+    let changed_id = git_store_tag(&live_repository, &changed);
+    eprintln!(
+        "LIVE_CASE=TAG_MUTATION original_tag_object={original_id} changed_tag_object={changed_id}"
+    );
+    let update = git(&live_repository, &["update-ref", &tag_ref, &changed_id]);
+    assert!(update.is_empty(), "update-ref: {update}");
+    eprintln!(
+        "LIVE_CASE=TAG_MUTATION original_tag_object={original_id} changed_tag_object={changed_id}"
+    );
+    let changed_result = result_on(
+        &fixture,
+        &live_request(&identity, &issuer),
+        Path::new(&path),
+    );
+    assert_eq!(changed_result["status"], "unverifiable", "{changed_result}");
+    assert_eq!(
+        changed_result["reason"], "gitsign_verification_failed",
+        "{changed_result}"
+    );
+    assert_eq!(
+        changed_result["tag_object_id"], changed_id,
+        "{changed_result}"
+    );
+    assert!(changed_result.get("approver").is_none(), "{changed_result}");
+    assert!(changed_result.get("meaning").is_none(), "{changed_result}");
+    assert!(
+        changed_result.get("signed_at").is_none(),
+        "{changed_result}"
+    );
+}
+
+fn git_store_tag(repository: &Path, object: &str) -> String {
+    let mut child = Command::new("git")
+        .args([
+            "-C",
+            repository.to_str().expect("repository path"),
+            "hash-object",
+            "-t",
+            "tag",
+            "-w",
+            "--stdin",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("git hash-object");
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(object.as_bytes())
+        .expect("tag object");
+    let output = child.wait_with_output().expect("hash-object output");
+    assert!(output.status.success(), "{output:?}");
+    String::from_utf8(output.stdout)
+        .expect("object id")
+        .trim()
+        .to_owned()
+}
+
+#[test]
+#[trace("TC-1020", "FR-041-AC-26")]
+fn tc_1020_missing_gitsign_is_unverifiable_not_an_approval() {
+    let fixture = fixture();
+    forged_tag(&fixture, "v-cms", &good_message(), CMS_BLOCK);
+    fs::remove_file(fixture.bin().join("gitsign")).expect("remove stand-in gitsign");
+    let missing = result(&fixture, &request(&fixture, "v-cms", true));
+    assert_eq!(missing["status"], "unverifiable", "{missing}");
+    assert_eq!(missing["reason"], "gitsign_not_started", "{missing}");
+    assert!(missing.get("approver").is_none(), "{missing}");
+    assert!(missing.get("meaning").is_none(), "{missing}");
 }
 
 #[test]
