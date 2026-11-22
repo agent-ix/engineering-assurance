@@ -82,8 +82,10 @@ carried by commits, merge commits or notes.
   status, as FR-036 does. The members are:
   - `status`, one of `approved`, `wrong_record`, `untrusted_signer`,
     `meaning_missing`, `signed_bad`, `unsigned`, `unverifiable`;
-  - `tag`, the tag name the command resolved, and `record_id` and
-    `record_digest` as requested;
+  - `tag`, the tag name the command resolved; `tag_object_id`, the canonical
+    full object id of the annotated tag object whose message was parsed and
+    whose signature was verified, or `null` when the request did not resolve to
+    an annotated tag; and `record_id` and `record_digest` as requested;
   - `trust`, the trust input the verdict was made against, copied from the
     request: `allowed_signers` (the path) and, when the request had one, `gitsign`
     (`certificate_identity`, `certificate_oidc_issuer` and `principal`);
@@ -130,6 +132,18 @@ carried by commits, merge commits or notes.
   verification of FR-036, FR-037 and FR-040 with kind `tag`, the request's
   `tag` as the revision, and the request's `allowed_signers` and `gitsign`,
   and SHALL NOT restate, relax or re-implement any rule they define.
+- The command SHALL resolve an annotated tag once to its canonical full object
+  id and SHALL read the tag message, tagger line and signature bytes from that
+  immutable object. Its signature-verifier observation SHALL be for that same
+  object id. It SHALL report the id as `tag_object_id` on every result after
+  resolving an annotated tag, including refusals, and SHALL report `null` when
+  no annotated tag object was resolved.
+- If a signature verifier accepts only a mutable tag ref, the command SHALL
+  verify an isolated ref that is bound to the resolved object id for the whole
+  verifier invocation, or SHALL refuse as `unverifiable` if it cannot
+  guarantee that binding. It SHALL NOT approve by combining parsed bytes from
+  one object with a verifier result obtained from another object. This rule
+  preserves the SSH and gitsign verifier distinctions of FR-036 and FR-040.
 - The command SHALL report a lightweight tag as `unsigned` and a revision that
   does not resolve to a tag as `unverifiable`, as FR-040 defines, and SHALL
   accept no commit, merge commit or note as the approval object.
@@ -201,6 +215,7 @@ carried by commits, merge commits or notes.
 | FR-041-CON-1 | A result SHALL NOT be `approved` unless the FR-036 verdict for the tag is `signed_valid` with a mapped signer, the tag message carries exactly one `Approved-Record-Id` equal to the request's `record_id`, exactly one `Approved-Record-Digest` equal to the request's `record_digest`, and a `Signed-off-meaning` trailer. | Safety | Test |
 | FR-041-CON-2 | The command SHALL contain no signature, certificate or trailer-parsing code of its own, and no rule of FR-036, FR-037 or FR-040 restated. | Architecture | Inspection |
 | FR-041-CON-3 | A result SHALL NOT report a `signed_at` that was not read from a well-formed tagger line of the tag object that was verified. | Safety | Test |
+| FR-041-CON-4 | A result SHALL NOT be `approved` unless trailer parsing and signature verification refer to the same immutable annotated tag object, identified by `tag_object_id`. | Safety | Test |
 
 ## Acceptance Criteria
 
@@ -228,6 +243,10 @@ criteria use real signatures from throwaway keys generated in the test.
 | FR-041-AC-16 | A mapped, validly signed SSH tag with matching trailers and a `Signed-off-meaning` trailer, created with a known tagger date in a non-UTC zone (`+0530`, and `-0800` across a UTC day boundary), yields `approved` carrying `approver`, `meaning`, `signed_at` equal to the UTC instant of that date and `signed_at_source` `tagger_date`, for a bare and a `refs/tags/` name. | Test |
 | FR-041-AC-17 | The tagger time is read from the tag header block only: a tagger-shaped line in the message, two tagger headers, a missing or non-digit epoch, an epoch past 9999-12-31T23:59:59Z, a malformed zone, extra fields or non-UTF-8 text yield no time, and epochs `0`, a leap day and the last accepted instant format correctly. | Test (captured) |
 | FR-041-AC-18 | An `approved` result for a tag whose tagger date is missing or malformed carries `signed_at_missing` `tagger_date_unreadable` and neither `signed_at` nor `signed_at_source`, together with `approver` and `meaning`, and the result carries no time member other than `signed_at_missing`. | Test (stand-in) |
+| FR-041-AC-22 | A valid SSH-signed annotated tag with matching approval trailers remains `approved` when its ref is unchanged; the result's `tag_object_id` equals an independent `git rev-parse` of the tag object, and that same id supplies the parsed message and SSH verification. | Test |
+| FR-041-AC-23 | After the command reads a validly signed tag message, moving or deleting the named ref before signature verification cannot produce `approved`: the command verifies the already-resolved immutable object or returns `unverifiable` with no approval members. Any result after annotated-tag resolution reports the originally resolved `tag_object_id`; it never combines the original message with verification of a replacement object. | Test |
+| FR-041-AC-24 | The moved-ref and deleted-ref cases in AC-23 are synchronized at the boundary between message extraction and verifier observation; an unchanged-ref healthy control proves the synchronization does not itself cause refusal. Repeat the identity-binding cases for SSH and gitsign using the verifier appropriate to each signature type; a missing gitsign executable or unavailable trust service is reported as unavailable/unverifiable, not as a passing integration case. | Test |
+| FR-041-AC-25 | With the annotated tag ref unchanged, mutate the allowed-signers bytes or relevant repository gitsign configuration after request/trust capture but before verifier execution. A synchronized adapter observation proves the verifier uses the captured trust/configuration snapshot and returns a verdict for that snapshot; if the implementation cannot preserve that snapshot, it returns `unverifiable` with no approval members. The test's independent oracle identifies the exact trust/configuration bytes observed by the verifier. | Test |
 | FR-041-AC-19 | `wrong_record`, `untrusted_signer` and `meaning_missing` results for tags with a readable tagger date carry none of `signed_at`, `signed_at_source` and `signed_at_missing`, and supplying a time to the pure decision changes no status or reason for any combination. | Test |
 | FR-041-AC-20 | A gitsign-signed tag approved through the stand-in reports `signed_at` from its tagger date (normalized from a non-UTC zone) with `signed_at_source` `tagger_date`; a stand-in rejecting the identity still yields `untrusted_signer` with no time; the time read starts no `gitsign` run. | Test (stand-in) |
 | FR-041-AC-21 | The `signature-verify` output for the same tag has no signing-time member and equals the `signature` member of the approval result. | Test |
