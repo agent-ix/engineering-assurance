@@ -217,12 +217,12 @@ signing needs a network and an OIDC login. Every criterion marked "Test
 `PATH` that records its arguments and environment and exits with a scripted
 status, against real repositories whose commits and tags carry a fabricated CMS
 signature block. Every criterion marked "Test (captured)" is exercised only by
-the pure classifier on captured outcomes. FR-040-AC-15 is the only criterion
-that runs the real `gitsign`; it is ignored by default and needs `gitsign` and
-network access. The other criteria do not show that a real Sigstore signature
-verifies. The procedure meets the ticket's wish for a distinct bad-signature
-result only as far as exit status allows: a wrong identity or issuer is
-distinct from `unverifiable`, and a bad signature is `unverifiable`.
+the pure classifier on captured outcomes. FR-040-AC-15 and FR-040-AC-20 run the
+real `gitsign`; they are ignored by default and need gitsign v0.18.0 and
+available trust services. FR-041-AC-26 exercises the real verifier through
+approval. The other criteria do not show that a real Sigstore signature
+verifies. A wrong identity or issuer is distinct from `unverifiable`, while a
+bad signature is `unverifiable`.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
@@ -240,11 +240,12 @@ distinct from `unverifiable`, and a bad signature is `unverifiable`.
 | FR-040-AC-12 | An SSH-signed commit and tag in a request that also carries `gitsign` yield the FR-036 and FR-037 statuses, signer principal and mapping unchanged, with `signature_kind` `ssh` and `signer.source` `allowed_signers`, and `gitsign` is never started. | Test (stand-in) |
 | FR-040-AC-13 | A gitsign-signed commit and tag whose message carries a `Signed-off-meaning:` trailer report it as FR-037 does, and an `unverifiable` gitsign commit still reports it. | Test (stand-in) |
 | FR-040-AC-14 | The `signature-verify` feature and the binary add no crate dependency that performs signature verification, cryptography or Sigstore access; the only verifying programs invoked are git, `ssh-keygen` and `gitsign`. | Inspection |
-| FR-040-AC-15 | Against real `gitsign` and the network, a public gitsign-signed commit and tag yield `signed_valid` for their true identity and issuer, `signed_untrusted` with `mismatch` `issuer` for a wrong issuer. An unreachable network is covered by the stand-in tests of FR-040-AC-4, because gitsign reports it as an exit status 1 with every matcher. | Test (live, ignored by default) |
-| FR-040-AC-16 | The gitsign argument vectors, including `verify`, `verify-tag`, the four certificate flags and the wildcard values, match the command line documented for the gitsign release the adapter targets. | Inspection |
+| FR-040-AC-15 | Against real `gitsign` v0.18.0 and available Sigstore trust services, a public gitsign-signed commit and annotated tag yield `signed_valid` for their true identity and issuer; the same objects yield `signed_untrusted` with `mismatch` `identity` for a wrong identity and `mismatch` `issuer` for a wrong issuer. The run records the exact gitsign version, object ids, identity, issuer, and network/trust-service outcome. | Test (live, ignored by default) |
+| FR-040-AC-16 | The gitsign argument vectors, including `verify`, `verify-tag`, the four certificate flags and the wildcard values, match the command line documented for gitsign v0.18.0. | Inspection |
 | FR-040-AC-17 | A CMS-signed commit in a repository that sets `gitsign.fulcioRoot` (or any other `gitsign.*` key) in its local configuration, in a file named by `include.path`, or in `config.worktree` with `extensions.worktreeConfig` enabled, or injected by a newline inside another key's value (including one whose first token holds a non-ASCII character, such as `gitſign.`), yields `unverifiable` with reason `gitsign_repository_config`, and the stand-in is never started; a repository with no such key proceeds. | Test (stand-in) |
 | FR-040-AC-18 | The stand-in's recorded environment holds exactly `PATH`, `HOME`, `GIT_CONFIG_NOSYSTEM` and `GIT_CONFIG_GLOBAL`, even when the parent environment sets `SIGSTORE_ROOT_FILE`, `GITSIGN_FULCIO_ROOT`, `TUF_ROOT` and `GIT_DIR`. | Test (stand-in) |
 | FR-040-AC-19 | A lightweight tag yields `unsigned` with reason `lightweight_tag`, and a tag revision that resolves to no annotated tag under `refs/tags/`, or whose name begins with `-` (`refs/tags/--help`), yields `unverifiable` with reason `revision_unresolved`, without starting `gitsign`. | Test (stand-in) |
+| FR-040-AC-20 | Against real `gitsign` v0.18.0, changing the signed message of a public gitsign-signed annotated tag while retaining its original signature yields `unverifiable` with reason `gitsign_verification_failed`, never `signed_valid` or `signed_untrusted`. The test records the original and changed tag object ids. A missing executable remains `gitsign_not_started`; when the executable runs but the trust service or network is unavailable, the result is `unverifiable` and the live case is recorded unavailable, not as a successful interoperability run. Nonstandard exits, timeouts, output bounds and malformed adapter output remain covered by the adapter tests and do not become valid or bad-signature evidence. | Test (live, ignored by default) |
 
 ## Dependencies
 
