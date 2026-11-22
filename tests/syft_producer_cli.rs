@@ -20,6 +20,7 @@ use serde_json::{Value, json};
 
 const REQUEST_SCHEMA: &str =
     include_str!("../src/producer_execute_schemas/producer-execution-request-v1.schema.json");
+const SUPPORTED_RELEASE: &str = include_str!("../spec/fixtures/syft-supported-release.json");
 const SBOM_PATH: &str = "out/sbom.cdx.json";
 
 struct Syft {
@@ -42,22 +43,67 @@ fn resolve_syft(variable: Option<OsString>) -> Result<Syft, String> {
                 executable.display()
             )
         })?;
-    let text = String::from_utf8_lossy(&output.stdout);
-    let version = text
-        .split_whitespace()
-        .last()
-        .filter(|_| output.status.success())
-        .ok_or_else(|| {
-            format!(
-                "EA_TEST_SYFT {} did not report a version",
-                executable.display()
-            )
-        })?
-        .to_owned();
+    if !output.status.success() {
+        return Err(format!(
+            "EA_TEST_SYFT {} --version exited {:?}",
+            executable.display(),
+            output.status.code()
+        ));
+    }
+    let text = std::str::from_utf8(&output.stdout).map_err(|_| {
+        format!(
+            "EA_TEST_SYFT {} --version output is not UTF-8",
+            executable.display()
+        )
+    })?;
+    let lines: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    let version = if lines.len() == 1 {
+        match lines[0].get(..5) {
+            Some(prefix) if prefix.eq_ignore_ascii_case("syft ") => lines[0][5..].to_owned(),
+            _ => String::new(),
+        }
+    } else {
+        String::new()
+    };
+    if !valid_release(&version) {
+        return Err(format!(
+            "EA_TEST_SYFT {} --version output is malformed",
+            executable.display()
+        ));
+    }
+    let pin: Value = serde_json::from_str(SUPPORTED_RELEASE).expect("checked-in Syft pin is JSON");
+    let supported = pin["version"].as_str().expect("Syft pin has version");
+    if version != supported {
+        return Err(format!(
+            "EA_TEST_SYFT {} reports {version}; supported Syft release is {supported}",
+            executable.display()
+        ));
+    }
     Ok(Syft {
         executable,
         version,
     })
+}
+
+fn valid_release(value: &str) -> bool {
+    let mut parts = value.split('.');
+    let Some(major) = parts.next() else {
+        return false;
+    };
+    let Some(minor) = parts.next() else {
+        return false;
+    };
+    let Some(patch) = parts.next() else {
+        return false;
+    };
+    parts.next().is_none()
+        && [major, minor, patch]
+            .iter()
+            .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
 fn syft() -> Syft {
@@ -200,11 +246,40 @@ fn assert_fixture(sbom: &Value, count: usize, purl_prefix: &str) {
     }
 }
 
+fn assert_syft_provenance(sbom: &Value, request: &Value, syft: &Syft) {
+    let pin: Value = serde_json::from_str(SUPPORTED_RELEASE).expect("checked-in Syft pin is JSON");
+    let expected = pin["version"].as_str().expect("Syft pin has version");
+    assert_eq!(
+        syft.version, expected,
+        "release from the requested executable"
+    );
+    assert_eq!(
+        request["producer"]["executable"],
+        syft.executable.to_str().expect("Syft path is UTF-8"),
+        "request names the exact executable whose version was checked"
+    );
+    assert_eq!(
+        request["producer"]["version"], expected,
+        "request producer version"
+    );
+    let tools = sbom["metadata"]["tools"]["components"]
+        .as_array()
+        .expect("CycloneDX metadata tool components");
+    let syft: Vec<&Value> = tools.iter().filter(|tool| tool["name"] == "syft").collect();
+    assert_eq!(syft.len(), 1, "CycloneDX metadata must name Syft once");
+    assert_eq!(
+        syft[0]["version"], expected,
+        "CycloneDX Syft metadata version"
+    );
+}
+
 fn sbom_for_source(files: &[(&str, &str)]) -> Value {
     let syft = syft();
     let root = workspace(files);
     let request = syft_request(root.path(), &syft.executable, &syft.version, "dir:scan");
-    completed_sbom(root.path(), &request)
+    let sbom = completed_sbom(root.path(), &request);
+    assert_syft_provenance(&sbom, &request, &syft);
+    sbom
 }
 
 const CARGO_LOCK: &str = r#"version = 3
@@ -354,7 +429,7 @@ fn fixture_request(root: &Path, arguments: &[&str]) -> Value {
     request
 }
 
-#[trace("TC-300", "FR-038-AC-1", "FR-039-AC-1")]
+#[trace("TC-300", "FR-038-AC-1", "FR-038-AC-10", "FR-039-AC-1", "FR-039-AC-9")]
 #[test]
 #[ignore = "needs EA_TEST_SYFT"]
 fn tc_300_rust_fixture_yields_declared_component_count() {
@@ -362,7 +437,7 @@ fn tc_300_rust_fixture_yields_declared_component_count() {
     assert_fixture(&sbom, 3, "pkg:cargo/");
 }
 
-#[trace("TC-301", "FR-039-AC-2")]
+#[trace("TC-301", "FR-038-AC-10", "FR-039-AC-2", "FR-039-AC-9")]
 #[test]
 #[ignore = "needs EA_TEST_SYFT"]
 fn tc_301_npm_fixture_yields_declared_component_count() {
@@ -373,7 +448,7 @@ fn tc_301_npm_fixture_yields_declared_component_count() {
     assert_fixture(&sbom, 3, "pkg:npm/");
 }
 
-#[trace("TC-377", "FR-039-AC-8")]
+#[trace("TC-377", "FR-038-AC-10", "FR-039-AC-8", "FR-039-AC-9")]
 #[test]
 #[ignore = "needs EA_TEST_SYFT"]
 fn tc_377_licence_fixture_components_carry_the_expected_licences() {
@@ -415,7 +490,7 @@ fn tc_377_licence_fixture_components_carry_the_expected_licences() {
     }
 }
 
-#[trace("TC-302", "FR-039-AC-3")]
+#[trace("TC-302", "FR-038-AC-10", "FR-039-AC-3", "FR-039-AC-9")]
 #[test]
 #[ignore = "needs EA_TEST_SYFT"]
 fn tc_302_python_fixture_yields_declared_component_count() {
@@ -423,7 +498,7 @@ fn tc_302_python_fixture_yields_declared_component_count() {
     assert_fixture(&sbom, 3, "pkg:pypi/");
 }
 
-#[trace("TC-303", "FR-038-AC-2", "FR-039-AC-4")]
+#[trace("TC-303", "FR-038-AC-2", "FR-038-AC-10", "FR-039-AC-4", "FR-039-AC-9")]
 #[test]
 #[ignore = "needs EA_TEST_SYFT"]
 fn tc_303_container_archive_yields_declared_component_count() {
@@ -437,6 +512,7 @@ fn tc_303_container_archive_yields_declared_component_count() {
         "oci-archive:scan/image.tar",
     );
     let sbom = completed_sbom(root.path(), &request);
+    assert_syft_provenance(&sbom, &request, &syft);
     let mut names: Vec<&str> = components(&sbom)
         .iter()
         .map(|component| component["name"].as_str().unwrap_or_default())
@@ -448,7 +524,7 @@ fn tc_303_container_archive_yields_declared_component_count() {
     }
 }
 
-#[trace("TC-304", "FR-038-AC-7")]
+#[trace("TC-304", "FR-038-AC-7", "FR-038-AC-10", "FR-039-AC-9")]
 #[test]
 #[ignore = "needs EA_TEST_SYFT"]
 fn tc_304_scan_ignores_planted_configuration_and_earlier_output() {
@@ -469,6 +545,7 @@ fn tc_304_scan_ignores_planted_configuration_and_earlier_output() {
     .expect("earlier SBOM");
     let request = syft_request(root.path(), &syft.executable, &syft.version, "dir:scan");
     let sbom = completed_sbom(root.path(), &request);
+    assert_syft_provenance(&sbom, &request, &syft);
     assert_fixture(&sbom, 3, "pkg:cargo/");
     assert!(
         !sbom.to_string().contains("fx-ghost"),
@@ -504,6 +581,11 @@ fn tc_306_failed_and_timed_out_runs_carry_no_sbom() {
     slow["budget"]["timeoutMillis"] = json!(1000);
     let value = result(&slow);
     assert_eq!(value["state"]["kind"], "timed_out", "{value}");
+    assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
+
+    let missing_output = fixture_request(root.path(), &["touch", "out/not-sbom.cdx.json"]);
+    let value = result(&missing_output);
+    assert_eq!(value["state"]["kind"], "failed", "{value}");
     assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
 }
 
@@ -596,4 +678,58 @@ fn tc_309_missing_syft_fails_the_integration_target_naming_the_variable() {
     }
     let message = resolve_syft(None).err().expect("unset must fail");
     assert!(message.contains("EA_TEST_SYFT"), "{message}");
+}
+
+#[trace("TC-1021", "FR-038-AC-9", "FR-038-CON-2")]
+#[test]
+fn tc_1021_syft_preflight_accepts_only_the_pinned_successful_release() {
+    let temp = tempfile::tempdir().expect("temporary directory");
+    let executable = temp.path().join("syft");
+    let cases = [
+        ("syft 1.57.1\n", 0, true),
+        ("syft 1.57.2\n", 0, false),
+        ("no version here\n", 0, false),
+        ("", 0, false),
+        (
+            "Application: syft\nVersion: 1.57.1\nVersion: 1.57.1\n",
+            0,
+            false,
+        ),
+        ("syft 1.57.1\n", 7, false),
+    ];
+    for (stdout, exit_code, accepted) in cases {
+        let script = format!(
+            "#!/bin/sh\nprintf '%s' '{}'\nexit {}\n",
+            stdout.replace('\'', "'\\''"),
+            exit_code
+        );
+        fs::write(&executable, script).expect("write fake Syft");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&executable, fs::Permissions::from_mode(0o755))
+                .expect("make fake Syft executable");
+        }
+        let resolved = resolve_syft(Some(executable.clone().into_os_string()));
+        assert_eq!(resolved.is_ok(), accepted, "Rust preflight: {stdout:?}");
+        if let Err(message) = resolved {
+            assert!(message.contains("EA_TEST_SYFT"), "{message}");
+        }
+        let output = Command::new("make")
+            .args(["-C", env!("CARGO_MANIFEST_DIR"), "syft-preflight"])
+            .env("EA_TEST_SYFT", &executable)
+            .output()
+            .expect("make preflight starts");
+        assert_eq!(
+            output.status.success(),
+            accepted,
+            "{stdout:?} exit={exit_code}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if accepted {
+            assert!(String::from_utf8_lossy(&output.stdout).contains("1.57.1"));
+        } else {
+            assert!(String::from_utf8_lossy(&output.stderr).contains("EA_TEST_SYFT"));
+        }
+    }
 }
