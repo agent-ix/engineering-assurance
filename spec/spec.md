@@ -260,6 +260,7 @@ same canonical bundle and do not redefine these responsibilities.
 - [FR-077](./functional/FR-077-missing-receipt-check.md) — list commits with no valid receipt; unknown status counts as missing.
 - [FR-078](./functional/FR-078-receipt-verify.md) — verify a receipt against the pinned workflow identity, the commit and the role policy.
 - [FR-079](./functional/FR-079-content-rights-admits-the-attestation-schema-prefix.md) — admit the attestation schema prefix in the content-rights URL check.
+- [FR-080](./functional/FR-080-signed-proof-integrity-statement-verification.md) — verify a signed proof-integrity statement against one exact tag object.
 
 ### Non-Functional Requirements
 
