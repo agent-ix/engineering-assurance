@@ -289,10 +289,10 @@ fn tc_278_an_accepted_commit_and_tag_are_signed_valid_with_the_request_identity(
 
 #[test]
 #[trace("TC-279", "FR-040-AC-2")]
-fn tc_279_gitsign_gets_the_resolved_commit_id_or_bare_tag_name_and_runs_in_the_repository() {
+fn tc_279_gitsign_gets_the_resolved_object_id_in_an_isolated_repository() {
     let fixture = fixture();
     let id = forged_commit(&fixture, "signed", CMS_BLOCK);
-    forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
+    let tag_id = forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
     // A branch name resolves to the id; the request text is never passed.
     verdict(&fixture, &request(&fixture, "signed", "commit", true));
     verdict(&fixture, &request(&fixture, "v-cms", "tag", true));
@@ -310,12 +310,16 @@ fn tc_279_gitsign_gets_the_resolved_commit_id_or_bare_tag_name_and_runs_in_the_r
         ]
     };
     assert_eq!(fixture.lines("args", 1), flags(&id, "verify"));
-    assert_eq!(fixture.lines("args", 2), flags("v-cms", "verify-tag"));
-    assert_eq!(fixture.lines("args", 3), flags("v-cms", "verify-tag"));
-    let repo = fs::canonicalize(fixture.repo()).expect("repo");
+    assert_eq!(fixture.lines("args", 2), flags(&tag_id, "verify-tag"));
+    assert_eq!(fixture.lines("args", 3), flags(&tag_id, "verify-tag"));
     for call in 1..=3 {
-        let cwd = fs::canonicalize(&fixture.lines("cwd", call)[0]).expect("cwd");
-        assert_eq!(cwd, repo);
+        let cwd = PathBuf::from(&fixture.lines("cwd", call)[0]);
+        if call == 1 {
+            assert_eq!(cwd, fixture.repo());
+        } else {
+            assert_ne!(cwd, fixture.repo());
+            assert!(cwd.starts_with(std::env::temp_dir()));
+        }
     }
     // Git is never asked to verify the CMS object.
     let log = fs::read_to_string(fixture.bin().join("gitlog")).expect("git log");
@@ -323,6 +327,88 @@ fn tc_279_gitsign_gets_the_resolved_commit_id_or_bare_tag_name_and_runs_in_the_r
         !log.contains("verify-commit") && !log.contains("verify-tag"),
         "{log}"
     );
+}
+
+#[test]
+#[trace("TC-1011", "FR-041-AC-25")]
+fn tc_293_gitsign_uses_an_isolated_config_snapshot_when_repository_config_changes() {
+    let fixture = fixture();
+    let tag_id = forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
+    let replacement_id = forged_tag(&fixture, "v-replacement", "replacement", CMS_BLOCK);
+    let repository = fixture.repo();
+    let real_git_path = which("git");
+    let real_git = real_git_path.display();
+    let stand_in = STAND_IN.replace(
+        "exit \"$status\"",
+        &format!(
+            "{real_git} -C '{}' update-ref refs/tags/v-cms '{replacement_id}'\n{real_git} -C '{}' config gitsign.program /changed/during/verification\ngit config --get-regexp 'gitsign\\..*' > \"$d/snapshot-gitsign-config\" 2>&1 || true\nexit \"$status\"",
+            repository.display(),
+            repository.display(),
+        ),
+    );
+    fs::write(fixture.bin().join("gitsign"), stand_in).expect("gitsign stand-in");
+    let verified = verdict(&fixture, &request(&fixture, "v-cms", "tag", true));
+
+    assert_eq!(verified["status"], "signed_valid", "{verified}");
+    assert_eq!(fixture.lines("args", 1)[6], tag_id);
+    assert_eq!(
+        git(&repository, &["config", "--get", "gitsign.program"]),
+        "/changed/during/verification\n"
+    );
+    assert_eq!(
+        git(&repository, &["rev-parse", "refs/tags/v-cms"]).trim(),
+        replacement_id
+    );
+    let cwd = PathBuf::from(&fixture.lines("cwd", 1)[0]);
+    assert_ne!(cwd, repository);
+    assert!(
+        fs::read_to_string(fixture.bin().join("snapshot-gitsign-config"))
+            .expect("snapshot config")
+            .is_empty()
+    );
+}
+
+#[test]
+#[trace("TC-1012", "FR-041-AC-23", "FR-041-AC-24")]
+fn tc_294_gitsign_keeps_verification_on_the_loaded_object_after_its_tag_ref_is_deleted() {
+    let fixture = fixture();
+    forged_tag(&fixture, "v-control", "control", CMS_BLOCK);
+    forged_tag(&fixture, "v-deleted", "deleted", CMS_BLOCK);
+    let control_id = git(&fixture.repo(), &["rev-parse", "v-control^{tag}"])
+        .trim()
+        .to_owned();
+    let deleted_id = git(&fixture.repo(), &["rev-parse", "v-deleted^{tag}"])
+        .trim()
+        .to_owned();
+    let real_git_path = which("git");
+    let real_git = real_git_path.display();
+    let stand_in = STAND_IN.replace(
+        "exit \"$status\"",
+        &format!(
+            "if [ \"$7\" = '{deleted_id}' ]; then {real_git} -C '{}' update-ref -d refs/tags/v-deleted; fi\nexit \"$status\"",
+            fixture.repo().display(),
+        ),
+    );
+    fs::write(fixture.bin().join("gitsign"), stand_in).expect("gitsign stand-in");
+
+    let control = verdict(&fixture, &request(&fixture, "v-control", "tag", true));
+    assert_eq!(control["status"], "signed_valid", "{control}");
+    assert_eq!(fixture.lines("args", 1)[6], control_id);
+
+    let deleted = verdict(&fixture, &request(&fixture, "v-deleted", "tag", true));
+    assert_eq!(deleted["status"], "signed_valid", "{deleted}");
+    assert_eq!(fixture.lines("args", 2)[6], deleted_id);
+    let deleted_ref = Command::new("git")
+        .args([
+            "-C",
+            fixture.repo().to_str().expect("repo path"),
+            "show-ref",
+            "--verify",
+            "refs/tags/v-deleted",
+        ])
+        .output()
+        .expect("show deleted ref");
+    assert!(!deleted_ref.status.success());
 }
 
 #[test]

@@ -165,7 +165,8 @@ fn signed_tag(fixture: &Fixture, key: &str, name: &str) {
     );
 }
 
-/// Rewrites an object's bytes with `edit` and stores the result.
+/// Rewrites an object's bytes with `edit` and stores the result. A rewritten
+/// tag gets a separate ref so the original fixture remains available as a control.
 fn rewrite(fixture: &Fixture, kind: &str, revision: &str, edit: impl Fn(&str) -> String) -> String {
     let repo = fixture.repo();
     let object = git(&repo, None, &["cat-file", kind, revision]);
@@ -176,7 +177,15 @@ fn rewrite(fixture: &Fixture, kind: &str, revision: &str, edit: impl Fn(&str) ->
         &["hash-object", "-t", kind, "-w", "--stdin"],
         Some(edited.as_bytes()),
     );
-    String::from_utf8(id).expect("utf-8").trim().to_owned()
+    let id = String::from_utf8(id).expect("utf-8").trim().to_owned();
+    if kind == "tag" {
+        let ref_name = revision.strip_prefix("refs/tags/").unwrap_or(revision);
+        let rewritten_ref = format!("refs/tags/{ref_name}-rewritten");
+        git(&repo, None, &["update-ref", &rewritten_ref, &id]);
+        rewritten_ref
+    } else {
+        id
+    }
 }
 
 const FORGED_PGP: &str = "-----BEGIN PGP SIGNATURE-----\nAAAA\n-----END PGP SIGNATURE-----\n";

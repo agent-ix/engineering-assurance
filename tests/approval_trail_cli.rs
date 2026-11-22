@@ -397,6 +397,15 @@ fn tc_355_each_entry_is_the_approval_verify_result_for_its_tag() {
             )),
             "{tag}"
         );
+        assert_eq!(
+            verified["tag_object_id"],
+            object.clone().expect("tag object"),
+            "{tag}"
+        );
+        verified
+            .as_object_mut()
+            .expect("approval result")
+            .remove("tag_object_id");
         assert_eq!(listed, verified, "{tag}");
         assert_eq!(claimed, Some(json!("2026-05-01T17:00:00Z")), "{tag}");
     }

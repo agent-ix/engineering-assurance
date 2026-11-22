@@ -21,7 +21,9 @@ use engineering_assurance::signature_verify::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::signature_verify_host::{CheckedTag, GitsignRequest, check_allowed_signers, check_tag};
+use crate::signature_verify_host::{
+    AllowedSignersSnapshot, CheckedTag, GitsignRequest, capture_allowed_signers, check_tag,
+};
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.approval-verify-request/v1";
 const RESULT_PROTOCOL: &str = "engineering-assurance.approval-verify-result/v1";
@@ -100,6 +102,7 @@ pub(crate) struct ResultLine<'a> {
     record_id: &'a str,
     record_digest: &'a str,
     trust: Trust<'a>,
+    tag_object_id: Option<String>,
     #[serde(flatten)]
     assessment: Assessment,
 }
@@ -110,21 +113,23 @@ impl<'a> ResultLine<'a> {
         repository: &Path,
         tag: &'a str,
         record: (&'a str, &'a str),
-        allowed_signers: &'a Path,
+        request_allowed_signers: &'a Path,
+        verification_allowed_signers: &AllowedSignersSnapshot,
         gitsign: Option<&'a GitsignRequest>,
         identity: Option<&GitsignIdentity>,
     ) -> Self {
         let (record_id, record_digest) = record;
-        let checked = check_tag(repository, tag, allowed_signers, identity);
+        let checked = check_tag(repository, tag, verification_allowed_signers, identity);
         Self {
             protocol: RESULT_PROTOCOL,
             tag: tag.strip_prefix("refs/tags/").unwrap_or(tag),
             record_id,
             record_digest,
             trust: Trust {
-                allowed_signers,
+                allowed_signers: request_allowed_signers,
                 gitsign,
             },
+            tag_object_id: checked.tag_object_id.clone(),
             assessment: assess(checked, record_id, record_digest),
         }
     }
@@ -199,13 +204,14 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalVerifyError> {
     }
     let identity =
         gitsign_identity(request.gitsign.as_ref()).map_err(|()| ApprovalVerifyError::Invalid)?;
-    check_allowed_signers(&request.allowed_signers)
+    let allowed_signers = capture_allowed_signers(&request.allowed_signers)
         .map_err(|_| ApprovalVerifyError::AllowedSigners)?;
     let result = ResultLine::verify(
         &request.repository,
         &request.tag,
         (&request.record_id, &request.record_digest),
         &request.allowed_signers,
+        &allowed_signers,
         request.gitsign.as_ref(),
         identity.as_ref(),
     );

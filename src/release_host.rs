@@ -26,7 +26,9 @@ use thiserror::Error;
 
 use crate::approval_verify_host::{ResultLine as ApprovalLine, gitsign_identity};
 use crate::process_host::CompletedProcess;
-use crate::signature_verify_host::{GitsignRequest, check_allowed_signers, run_git};
+use crate::signature_verify_host::{
+    AllowedSignersSnapshot, GitsignRequest, capture_allowed_signers, run_git,
+};
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.release-verify-request/v1";
 const RESULT_PROTOCOL: &str = "engineering-assurance.release-verify-result/v1";
@@ -418,9 +420,9 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ReleaseVerifyError> {
     }
     let identity =
         gitsign_identity(request.gitsign.as_ref()).map_err(|()| ReleaseVerifyError::Invalid)?;
-    check_allowed_signers(&request.allowed_signers)
+    let allowed_signers = capture_allowed_signers(&request.allowed_signers)
         .map_err(|_| ReleaseVerifyError::AllowedSigners)?;
-    let mut line = match verify(&request, identity.as_ref()) {
+    let mut line = match verify(&request, &allowed_signers, identity.as_ref()) {
         Ok(line) => line,
         Err(VerifyError::Git) => return Err(ReleaseVerifyError::GitFailed),
         Err(VerifyError::Encoding) => return Err(ReleaseVerifyError::ResultEncoding),
@@ -555,6 +557,7 @@ fn commit_shape(
 
 fn verify(
     request: &Request,
+    allowed_signers: &AllowedSignersSnapshot,
     identity: Option<&engineering_assurance::signature_verify::GitsignIdentity>,
 ) -> Result<Vec<u8>, VerifyError> {
     let repository = request.repository.as_path();
@@ -588,6 +591,7 @@ fn verify(
         &request.tag,
         (&record.id, &digest),
         &request.allowed_signers,
+        allowed_signers,
         request.gitsign.as_ref(),
         identity,
     );
