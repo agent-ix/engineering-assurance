@@ -23,6 +23,9 @@ const IDENTITY: &str = "alice@example.test";
 const ISSUER: &str = concat!("https:", "//issuer.example.test");
 const OTHER_ISSUER: &str = concat!("https:", "//other.example.test");
 const PRINCIPAL: &str = "Alice Example";
+/// The committed identity registry every request names: branch `registry`, file
+/// `registry.json`.
+const REGISTRY: &str = "registry:registry.json";
 const CMS_BLOCK: &str = "-----BEGIN SIGNED MESSAGE-----\nAAAA\n-----END SIGNED MESSAGE-----\n";
 
 /// Records every call as `args_N`, `cwd_N` and `env_N` (the environment the
@@ -165,17 +168,83 @@ fn fixture() -> Fixture {
     fs::create_dir(&repo).expect("repo dir");
     git(&repo, &["init", "-q", "-b", "main"]);
     git(&repo, &["commit", "-q", "--allow-empty", "-m", "base"]);
+    commit_registry(&repo, "registry", &default_registry());
     Fixture { dir }
 }
 
 fn store(repo: &Path, kind: &str, object: &str) -> String {
+    store_bytes(repo, kind, object.as_bytes())
+}
+
+fn store_bytes(repo: &Path, kind: &str, object: &[u8]) -> String {
     let id = run_program(
         repo,
         "git",
         &["hash-object", "-t", kind, "-w", "--stdin"],
-        Some(object.as_bytes()),
+        Some(object),
     );
     String::from_utf8(id).expect("utf-8").trim().to_owned()
+}
+
+/// The registry document with the given `(identity, issuer, principal)` entries.
+fn registry_json(entries: &[(&str, &str, &str)]) -> String {
+    let entries: Vec<Value> = entries
+        .iter()
+        .map(|(identity, issuer, principal)| {
+            json!({
+                "certificate_identity": identity,
+                "certificate_oidc_issuer": issuer,
+                "principal": principal,
+            })
+        })
+        .collect();
+    json!({
+        "protocol": "engineering-assurance.gitsign-identity-registry/v1",
+        "entries": entries,
+    })
+    .to_string()
+}
+
+/// The registry that maps the fixture identity to [`PRINCIPAL`].
+fn default_registry() -> String {
+    registry_json(&[(IDENTITY, ISSUER, PRINCIPAL)])
+}
+
+/// Commits `content` as `registry.json` in a root commit that `branch` names,
+/// without touching HEAD, the index or the working tree. Returns the commit id.
+fn commit_registry(repo: &Path, branch: &str, content: &str) -> String {
+    commit_registry_bytes(repo, branch, content.as_bytes())
+}
+
+fn commit_registry_bytes(repo: &Path, branch: &str, content: &[u8]) -> String {
+    let blob = store_bytes(repo, "blob", content);
+    commit_tree_listing(
+        repo,
+        branch,
+        &format!("100644 blob {blob}\tregistry.json\n"),
+    )
+}
+
+/// Commits the tree `git mktree` builds from `listing` in a root commit that
+/// `branch` names. Returns the commit id.
+fn commit_tree_listing(repo: &Path, branch: &str, listing: &str) -> String {
+    let tree = String::from_utf8(run_program(
+        repo,
+        "git",
+        &["mktree", "--missing"],
+        Some(listing.as_bytes()),
+    ))
+    .expect("utf-8")
+    .trim()
+    .to_owned();
+    let commit = git(repo, &["commit-tree", &tree, "-m", "registry"])
+        .trim()
+        .to_owned();
+    git(
+        repo,
+        &["update-ref", &format!("refs/heads/{branch}"), &commit],
+    );
+    commit
 }
 
 /// A continued header value: every line after the first starts with a space.
@@ -185,10 +254,19 @@ fn header_block(block: &str) -> String {
 
 /// A commit whose message is `message` and whose `gpgsig` header is `block`.
 fn forged_commit(fixture: &Fixture, message: &str, block: &str) -> String {
+    forged_commit_by(
+        fixture,
+        message,
+        block,
+        "t <t@example.test> 1700000000 +0000",
+    )
+}
+
+/// As [`forged_commit`], with `who` as author and committer line.
+fn forged_commit_by(fixture: &Fixture, message: &str, block: &str, who: &str) -> String {
     let repo = fixture.repo();
     let tree = git(&repo, &["rev-parse", "HEAD^{tree}"]).trim().to_owned();
     let parent = git(&repo, &["rev-parse", "HEAD"]).trim().to_owned();
-    let who = "t <t@example.test> 1700000000 +0000";
     let object = format!(
         "tree {tree}\nparent {parent}\nauthor {who}\ncommitter {who}\ngpgsig {}\n\n{message}\n",
         header_block(block)
@@ -222,8 +300,8 @@ fn request(fixture: &Fixture, revision: &str, kind: &str, gitsign: bool) -> Valu
         value["gitsign"] = json!({
             "certificate_identity": IDENTITY,
             "certificate_oidc_issuer": ISSUER,
-            "principal": PRINCIPAL,
         });
+        value["identity_registry"] = json!(REGISTRY);
     }
     value
 }
@@ -279,7 +357,7 @@ fn tc_278_an_accepted_commit_and_tag_are_signed_valid_with_the_request_identity(
         );
         assert_eq!(
             result["signer"],
-            json!({"source": "request", "mapping": "mapped", "principal": PRINCIPAL})
+            json!({"source": "gitsign_registry", "mapping": "mapped", "principal": PRINCIPAL})
         );
         assert!(result.get("reason").is_none());
         assert!(result.get("key_fingerprint").is_none());
@@ -598,7 +676,7 @@ fn tc_280_a_wildcard_only_acceptance_is_untrusted_with_the_mismatch() {
         assert_eq!(result["mismatch"], mismatch);
         assert_eq!(
             result["signer"],
-            json!({"source": "request", "mapping": "unmapped"})
+            json!({"source": "gitsign_registry", "mapping": "unmapped"})
         );
         assert!(result.get("certificate").is_none());
         assert_eq!(result["signature_kind"], "gitsign");
@@ -713,34 +791,78 @@ fn tc_286_a_malformed_gitsign_member_is_refused_before_git_starts() {
     fs::create_dir(&empty).expect("empty");
     let long = "x".repeat(257);
     let bad: Vec<Value> = vec![
-        json!({"certificate_oidc_issuer": ISSUER, "principal": PRINCIPAL}),
-        json!({"certificate_identity": IDENTITY, "principal": PRINCIPAL}),
-        json!({"certificate_identity": IDENTITY, "certificate_oidc_issuer": ISSUER}),
+        json!({"certificate_oidc_issuer": ISSUER}),
+        json!({"certificate_identity": IDENTITY}),
+        json!({"certificate_identity": "", "certificate_oidc_issuer": ISSUER}),
+        json!({"certificate_identity": IDENTITY, "certificate_oidc_issuer": ""}),
+        json!({"certificate_identity": long, "certificate_oidc_issuer": ISSUER}),
+        json!({"certificate_identity": IDENTITY, "certificate_oidc_issuer": long}),
+        json!({"certificate_identity": "-alice@example.test", "certificate_oidc_issuer": ISSUER}),
+        json!({"certificate_identity": IDENTITY, "certificate_oidc_issuer": concat!("-https:", "//x.test")}),
+        json!({"certificate_identity": "alice\n@example.test", "certificate_oidc_issuer": ISSUER}),
+        json!({"certificate_identity": IDENTITY, "certificate_oidc_issuer": ISSUER, "extra": 1}),
+        // A principal beside an invalid member does not validate, so it is a
+        // request error and not the principal refusal.
         json!({"certificate_identity": "", "certificate_oidc_issuer": ISSUER, "principal": PRINCIPAL}),
-        json!({"certificate_identity": IDENTITY, "certificate_oidc_issuer": ISSUER, "principal": ""}),
-        json!({"certificate_identity": long, "certificate_oidc_issuer": ISSUER, "principal": PRINCIPAL}),
-        json!({"certificate_identity": IDENTITY, "certificate_oidc_issuer": long, "principal": PRINCIPAL}),
-        json!({"certificate_identity": IDENTITY, "certificate_oidc_issuer": ISSUER, "principal": long}),
-        json!({"certificate_identity": "-alice@example.test", "certificate_oidc_issuer": ISSUER, "principal": PRINCIPAL}),
-        json!({"certificate_identity": IDENTITY, "certificate_oidc_issuer": concat!("-https:", "//x.test"), "principal": PRINCIPAL}),
-        json!({"certificate_identity": "alice\n@example.test", "certificate_oidc_issuer": ISSUER, "principal": PRINCIPAL}),
-        json!({"certificate_identity": IDENTITY, "certificate_oidc_issuer": ISSUER, "principal": "A\u{7}"}),
-        json!({"certificate_identity": IDENTITY, "certificate_oidc_issuer": ISSUER, "principal": PRINCIPAL, "extra": 1}),
         json!("alice"),
     ];
     for gitsign in bad {
         let mut body = request(&fixture, "signed", "commit", false);
         body["gitsign"] = gitsign.clone();
-        // An empty PATH could not start git: exit 2 proves git was not started.
-        let output = run(&fixture, body.to_string().as_bytes(), &empty);
-        assert_eq!(output.status.code(), Some(2), "{gitsign}: {output:?}");
-        let error: Value = serde_json::from_slice(&output.stdout).expect("machine error");
-        assert_eq!(
-            error["code"], "signature_verify_request_invalid",
-            "{gitsign}"
-        );
+        body["identity_registry"] = json!(REGISTRY);
+        assert_request_invalid(&fixture, &body, &empty);
+    }
+    // `gitsign` without `identity_registry`, with or without a `principal`,
+    // `identity_registry` without `gitsign`, and a malformed address.
+    let identity = json!({"certificate_identity": IDENTITY, "certificate_oidc_issuer": ISSUER});
+    let with_principal = json!({
+        "certificate_identity": IDENTITY,
+        "certificate_oidc_issuer": ISSUER,
+        "principal": PRINCIPAL,
+    });
+    let mut bodies = Vec::new();
+    for gitsign in [identity.clone(), with_principal] {
+        let mut body = request(&fixture, "signed", "commit", false);
+        body["gitsign"] = gitsign;
+        bodies.push(body);
+    }
+    let mut body = request(&fixture, "signed", "commit", false);
+    body["identity_registry"] = json!(REGISTRY);
+    bodies.push(body);
+    for address in [
+        "registry.json",
+        ":registry.json",
+        "registry:",
+        "-x:registry.json",
+        "registry:/registry.json",
+        "registry:../registry.json",
+        "registry:a//b",
+        "registry:./registry.json",
+        "registry:registry.json/",
+        "reg\u{7}:registry.json",
+        "registry:reg\u{7}.json",
+    ] {
+        let mut body = request(&fixture, "signed", "commit", false);
+        body["gitsign"] = identity.clone();
+        body["identity_registry"] = json!(address);
+        bodies.push(body);
+    }
+    let mut body = request(&fixture, "signed", "commit", false);
+    body["gitsign"] = identity;
+    body["identity_registry"] = json!(7);
+    bodies.push(body);
+    for body in bodies {
+        assert_request_invalid(&fixture, &body, &empty);
     }
     assert_eq!(fixture.calls(), 0);
+}
+
+/// An empty PATH could not start git: exit 2 proves git was not started.
+fn assert_request_invalid(fixture: &Fixture, body: &Value, empty: &Path) {
+    let output = run(fixture, body.to_string().as_bytes(), empty);
+    assert_eq!(output.status.code(), Some(2), "{body}: {output:?}");
+    let error: Value = serde_json::from_slice(&output.stdout).expect("machine error");
+    assert_eq!(error["code"], "signature_verify_request_invalid", "{body}");
 }
 
 /// Executables that record that they ran, then exit 0.
@@ -1186,6 +1308,11 @@ fn live_verdict(
     issuer: &str,
 ) -> Value {
     let mut body = request(fixture, revision, kind, true);
+    commit_registry(
+        repository,
+        "registry",
+        &registry_json(&[(identity, issuer, PRINCIPAL)]),
+    );
     body["repository"] = json!(repository.display().to_string());
     body["gitsign"]["certificate_identity"] = json!(identity);
     body["gitsign"]["certificate_oidc_issuer"] = json!(issuer);
@@ -1255,4 +1382,534 @@ fn git_store_tag(repository: &str, object: &str) -> String {
         .expect("object id")
         .trim()
         .to_owned()
+}
+
+// ---------------------------------------------------------------------------
+// Identity registry (FR-037 trust-source reading, FR-040 mapping)
+// ---------------------------------------------------------------------------
+
+/// The registry commit a branch names.
+fn tip(repo: &Path, branch: &str) -> String {
+    git(repo, &["rev-parse", &format!("refs/heads/{branch}")])
+        .trim()
+        .to_owned()
+}
+
+/// The request for a CMS commit with the registry address `address`.
+fn request_with_registry(fixture: &Fixture, address: &str) -> Value {
+    let mut body = request(fixture, "signed", "commit", true);
+    body["identity_registry"] = json!(address);
+    body
+}
+
+/// Runs a request and returns its machine error, asserting exit status 2.
+fn machine_error(fixture: &Fixture, body: &Value, path: &Path) -> Value {
+    let output = run(fixture, body.to_string().as_bytes(), path);
+    assert_eq!(output.status.code(), Some(2), "{body}: {output:?}");
+    serde_json::from_slice(&output.stdout).expect("machine error")
+}
+
+#[test]
+#[trace("TC-1041", "FR-040-AC-25", "FR-040-CON-3")]
+fn tc_1041_only_an_exact_registry_entry_maps_the_accepted_identity() {
+    let fixture = fixture_with_commit();
+    forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
+    let repo = fixture.repo();
+    let other_issuer = OTHER_ISSUER;
+    let mapped = |result: &Value| {
+        assert_eq!(result["status"], "signed_valid", "{result}");
+        result["signer"].clone()
+    };
+    for (revision, kind) in [("signed", "commit"), ("v-cms", "tag")] {
+        let run = |fixture: &Fixture| {
+            let mut body = request(fixture, revision, kind, true);
+            body["identity_registry"] = json!(REGISTRY);
+            verdict(fixture, &body)
+        };
+        assert_eq!(
+            mapped(&run(&fixture)),
+            json!({"source": "gitsign_registry", "mapping": "mapped", "principal": PRINCIPAL})
+        );
+        // None of these registries holds an entry for exactly this identity and issuer.
+        let near_misses = [
+            registry_json(&[]),
+            registry_json(&[("bob@example.test", ISSUER, "Bob")]),
+            registry_json(&[(IDENTITY, other_issuer, "Wrong issuer")]),
+            registry_json(&[("bob@example.test", ISSUER, "Wrong identity")]),
+            registry_json(&[("ALICE@example.test", ISSUER, "Case")]),
+            registry_json(&[(IDENTITY, &ISSUER.to_uppercase(), "Case issuer")]),
+            registry_json(&[("alice@example", ISSUER, "Prefix")]),
+            registry_json(&[("alice@example.test.evil", ISSUER, "Longer")]),
+            registry_json(&[("alice@.*", ISSUER, "Pattern")]),
+            registry_json(&[(".*", ".*", "Wildcard")]),
+        ];
+        for registry in near_misses {
+            commit_registry(&repo, "registry", &registry);
+            let result = run(&fixture);
+            assert_eq!(
+                mapped(&result),
+                json!({"source": "gitsign_registry", "mapping": "unmapped"}),
+                "{registry}"
+            );
+            assert!(result["signer"].get("principal").is_none(), "{registry}");
+            // The accepted identity is still reported.
+            assert_eq!(result["certificate"]["identity"], IDENTITY);
+        }
+        commit_registry(&repo, "registry", &default_registry());
+    }
+}
+
+#[test]
+#[trace("TC-1042", "FR-040-AC-26")]
+fn tc_1042_a_principal_in_gitsign_is_refused_before_git_starts_and_never_echoed() {
+    let fixture = fixture_with_commit();
+    let empty = fixture.root().join("empty");
+    fs::create_dir(&empty).expect("empty");
+    let secret = "Mallory Principal";
+    for registry in [
+        default_registry(),
+        registry_json(&[("bob@example.test", ISSUER, "Bob")]),
+    ] {
+        commit_registry(&fixture.repo(), "registry", &registry);
+        let mut body = request(&fixture, "signed", "commit", true);
+        body["gitsign"]["principal"] = json!(secret);
+        // No git on this PATH: exit 2 with the refusal proves git never started.
+        let output = run(&fixture, body.to_string().as_bytes(), &empty);
+        assert_eq!(output.status.code(), Some(2), "{output:?}");
+        let error: Value = serde_json::from_slice(&output.stdout).expect("machine error");
+        assert_eq!(error["code"], "signature_verify_gitsign_principal_refused");
+        let text = format!("{output:?}");
+        assert!(!text.contains(secret), "{text}");
+        // And with a working git, still no git call and no gitsign run.
+        let output = run(&fixture, body.to_string().as_bytes(), &fixture.bin());
+        assert_eq!(output.status.code(), Some(2), "{output:?}");
+        assert!(!format!("{output:?}").contains(secret));
+    }
+    assert!(!fixture.bin().join("gitlog").exists());
+    assert_eq!(fixture.calls(), 0);
+}
+
+/// Every way an identity registry is unusable, as `(name, address)`;
+/// [`break_registry`] builds the state that makes the registry unusable.
+const UNUSABLE_REGISTRIES: [(&str, &str); 19] = [
+    ("unresolved revision", "no-such-branch:registry.json"),
+    ("a revision holding a colon", "HEAD@{12:00}"),
+    ("absent path", "registry:missing.json"),
+    ("symbolic link", REGISTRY),
+    ("directory", REGISTRY),
+    ("submodule", REGISTRY),
+    ("over 1 MiB", REGISTRY),
+    ("not UTF-8", REGISTRY),
+    ("not JSON", REGISTRY),
+    ("wrong protocol", REGISTRY),
+    ("unknown top-level member", REGISTRY),
+    ("unknown entry member", REGISTRY),
+    ("empty value", REGISTRY),
+    ("oversized value", REGISTRY),
+    ("leading dash identity", REGISTRY),
+    ("control character", REGISTRY),
+    ("more than 4096 entries", REGISTRY),
+    ("duplicate identity and issuer", REGISTRY),
+    ("duplicate with the same principal", REGISTRY),
+];
+
+/// A registry document with one entry for the fixture identity and `extra`
+/// members appended to the entry.
+fn single_entry_registry(extra: &str) -> String {
+    format!(
+        r#"{{"protocol":"engineering-assurance.gitsign-identity-registry/v1","entries":[{{"certificate_identity":"alice@example.test","certificate_oidc_issuer":"{ISSUER}","principal":"Alice"{extra}}}]}}"#
+    )
+}
+
+/// Makes the registry that [`UNUSABLE_REGISTRIES`] names `name` unusable.
+fn break_registry(repo: &Path, name: &str) {
+    let content = |text: &str| {
+        commit_registry(repo, "registry", text);
+    };
+    match name {
+        "symbolic link" => {
+            let target = store(repo, "blob", "elsewhere.json");
+            commit_tree_listing(
+                repo,
+                "registry",
+                &format!("120000 blob {target}\tregistry.json\n"),
+            );
+        }
+        "directory" => {
+            let blob = store(repo, "blob", "x");
+            let subtree = String::from_utf8(run_program(
+                repo,
+                "git",
+                &["mktree"],
+                Some(format!("100644 blob {blob}\tinner\n").as_bytes()),
+            ))
+            .expect("utf-8")
+            .trim()
+            .to_owned();
+            commit_tree_listing(
+                repo,
+                "registry",
+                &format!("040000 tree {subtree}\tregistry.json\n"),
+            );
+        }
+        "submodule" => {
+            let head = git(repo, &["rev-parse", "HEAD"]).trim().to_owned();
+            commit_tree_listing(
+                repo,
+                "registry",
+                &format!("160000 commit {head}\tregistry.json\n"),
+            );
+        }
+        "over 1 MiB" => {
+            let mut bytes = default_registry().into_bytes();
+            bytes.resize(1024 * 1024 + 1, b' ');
+            commit_registry_bytes(repo, "registry", &bytes);
+        }
+        "not UTF-8" => {
+            commit_registry_bytes(repo, "registry", &[0xff, 0xfe, b'{', b'}']);
+        }
+        "not JSON" => content("entries: []"),
+        "wrong protocol" => content(
+            r#"{"protocol":"engineering-assurance.gitsign-identity-registry/v2","entries":[]}"#,
+        ),
+        "unknown top-level member" => content(
+            r#"{"protocol":"engineering-assurance.gitsign-identity-registry/v1","entries":[],"extra":1}"#,
+        ),
+        "unknown entry member" => content(&single_entry_registry(r#","email":"a@example.test""#)),
+        "empty value" => content(&single_entry_registry("").replace("\"Alice\"", "\"\"")),
+        "oversized value" => {
+            let long = format!("\"{}\"", "x".repeat(257));
+            content(&single_entry_registry("").replace("\"Alice\"", &long));
+        }
+        "leading dash identity" => {
+            content(&single_entry_registry("").replace("\"alice@", "\"-alice@"));
+        }
+        "control character" => {
+            content(&single_entry_registry("").replace("\"Alice\"", "\"Al\\u0007ice\""));
+        }
+        "more than 4096 entries" => {
+            let users: Vec<String> = (0..4097).map(|n| format!("user{n}@example.test")).collect();
+            let entries: Vec<(&str, &str, &str)> = users
+                .iter()
+                .map(|user| (user.as_str(), ISSUER, "P"))
+                .collect();
+            content(&registry_json(&entries));
+        }
+        "duplicate identity and issuer" => content(&registry_json(&[
+            (IDENTITY, ISSUER, "One"),
+            (IDENTITY, ISSUER, "Two"),
+        ])),
+        "duplicate with the same principal" => content(&registry_json(&[
+            (IDENTITY, ISSUER, "One"),
+            (IDENTITY, ISSUER, "One"),
+        ])),
+        // The address alone is unusable.
+        _ => {}
+    }
+}
+
+/// A repository whose `v-ssh` tag and HEAD commit carry real SSH signatures, and
+/// the PATH (real git and ssh-keygen plus the stand-in gitsign) that verifies them.
+fn ssh_signed_fixture() -> (Fixture, PathBuf) {
+    let (fixture, key) = ssh_fixture();
+    let repo = fixture.repo();
+    let setting = format!("user.signingkey={key}");
+    git(
+        &repo,
+        &[
+            "-c",
+            "gpg.format=ssh",
+            "-c",
+            &setting,
+            "commit",
+            "-q",
+            "-S",
+            "--allow-empty",
+            "-m",
+            "s",
+        ],
+    );
+    git(
+        &repo,
+        &[
+            "-c",
+            "gpg.format=ssh",
+            "-c",
+            &setting,
+            "tag",
+            "-s",
+            "-m",
+            "t",
+            "v-ssh",
+        ],
+    );
+    let path = fixture.root().join("ssh-bin");
+    fs::create_dir(&path).expect("ssh-bin");
+    symlink(which("git"), path.join("git")).expect("git link");
+    symlink(which("ssh-keygen"), path.join("ssh-keygen")).expect("ssh-keygen link");
+    symlink(fixture.bin().join("gitsign"), path.join("gitsign")).expect("gitsign link");
+    (fixture, path)
+}
+
+#[test]
+#[trace("TC-1043", "TC-1038", "FR-040-AC-27", "FR-037-AC-20")]
+fn tc_1043_an_unusable_identity_registry_is_refused_and_starts_no_verifier() {
+    let cms = fixture_with_commit();
+    forged_tag(&cms, "v-cms", "tag message", CMS_BLOCK);
+    let (ssh, ssh_path) = ssh_signed_fixture();
+    for (name, address) in UNUSABLE_REGISTRIES {
+        // A CMS-signed commit and tag.
+        break_registry(&cms.repo(), name);
+        for (revision, kind) in [("signed", "commit"), ("v-cms", "tag")] {
+            let mut body = request(&cms, revision, kind, true);
+            body["identity_registry"] = json!(address);
+            let error = machine_error(&cms, &body, &cms.bin());
+            assert_eq!(
+                error["code"], "signature_verify_identity_registry_invalid",
+                "{name} {kind}"
+            );
+        }
+        assert_eq!(cms.calls(), 0, "{name}: gitsign must not start");
+        commit_registry(&cms.repo(), "registry", &default_registry());
+        // An SSH-signed commit and tag in a request that also carries gitsign.
+        break_registry(&ssh.repo(), name);
+        for (revision, kind) in [("HEAD", "commit"), ("v-ssh", "tag")] {
+            let mut body = request(&ssh, revision, kind, true);
+            body["identity_registry"] = json!(address);
+            let error = machine_error(&ssh, &body, &ssh_path);
+            assert_eq!(
+                error["code"], "signature_verify_identity_registry_invalid",
+                "{name} ssh {kind}"
+            );
+        }
+        commit_registry(&ssh.repo(), "registry", &default_registry());
+    }
+    assert_eq!(ssh.calls(), 0);
+}
+
+#[test]
+#[trace("TC-1044", "TC-1037", "FR-040-AC-28", "FR-037-AC-19")]
+fn tc_1044_the_registry_is_read_from_the_committed_revision_not_the_working_tree() {
+    let fixture = fixture_with_commit();
+    let repo = fixture.repo();
+    let address = "main:registry.json";
+    let registry = repo.join("registry.json");
+    let result = |fixture: &Fixture| verdict(fixture, &request_with_registry(fixture, address));
+    let principal = |result: &Value| result["signer"]["mapping"].clone();
+
+    // The committed registry lacks the entry; the working tree and the index hold it.
+    fs::write(&registry, registry_json(&[])).expect("registry");
+    git(&repo, &["add", "registry.json"]);
+    git(&repo, &["commit", "-q", "-m", "registry without alice"]);
+    fs::write(&registry, default_registry()).expect("edited registry");
+    git(&repo, &["add", "registry.json"]);
+    assert_eq!(principal(&result(&fixture)), "unmapped");
+
+    // The committed registry holds the entry; the working tree and the index drop it.
+    git(&repo, &["commit", "-q", "-m", "registry with alice"]);
+    fs::write(&registry, registry_json(&[])).expect("edited registry");
+    git(&repo, &["add", "registry.json"]);
+    fs::write(&registry, "not even json").expect("edited again");
+    let mapped = result(&fixture);
+    assert_eq!(principal(&mapped), "mapped");
+    assert_eq!(mapped["signer"]["principal"], PRINCIPAL);
+
+    // A replace ref naming the commit does not change the content read.
+    let committed = git(&repo, &["rev-parse", "main"]).trim().to_owned();
+    let decoy = commit_registry(&repo, "decoy", &registry_json(&[]));
+    git(
+        &repo,
+        &["update-ref", &format!("refs/replace/{committed}"), &decoy],
+    );
+    let replaced = result(&fixture);
+    assert_eq!(replaced["signer"]["principal"], PRINCIPAL);
+    assert_eq!(replaced["identity_registry_commit"], committed);
+}
+
+#[test]
+#[trace("TC-1045", "FR-040-AC-29")]
+fn tc_1045_the_mapped_principal_depends_only_on_the_registry_revision() {
+    let fixture = fixture_with_commit();
+    let repo = fixture.repo();
+    commit_registry(
+        &repo,
+        "first",
+        &registry_json(&[(IDENTITY, ISSUER, "First Person")]),
+    );
+    commit_registry(
+        &repo,
+        "second",
+        &registry_json(&[(IDENTITY, ISSUER, "Second Person")]),
+    );
+    let principal = |address: &str| {
+        let result = verdict(&fixture, &request_with_registry(&fixture, address));
+        result["signer"]["principal"].clone()
+    };
+    assert_eq!(principal("first:registry.json"), "First Person");
+    assert_eq!(principal("second:registry.json"), "Second Person");
+    // An author, committer and message that name another registered person
+    // change nothing.
+    let impostor = forged_commit_by(
+        &fixture,
+        "Second Person <second@example.test>",
+        CMS_BLOCK,
+        "Second Person <second@example.test> 1700000000 +0000",
+    );
+    let mut body = request(&fixture, &impostor, "commit", true);
+    body["identity_registry"] = json!("first:registry.json");
+    let result = verdict(&fixture, &body);
+    assert_eq!(result["signer"]["principal"], "First Person", "{result}");
+}
+
+#[test]
+#[trace("TC-1046", "TC-1040", "FR-040-AC-30", "FR-037-AC-22")]
+fn tc_1046_a_git_failure_while_reading_the_registry_is_unverifiable_not_invalid() {
+    // Not a repository.
+    let fixture = fixture_with_commit();
+    let plain = fixture.root().join("plain");
+    fs::create_dir(&plain).expect("plain directory");
+    let mut body = request_with_registry(&fixture, REGISTRY);
+    body["repository"] = json!(plain.display().to_string());
+    let result = verdict(&fixture, &body);
+    assert_eq!(result["status"], "unverifiable", "{result}");
+    assert_eq!(result["reason"], "repository_unavailable");
+    assert!(result.get("identity_registry_commit").is_none());
+
+    // A git that cannot start.
+    let nogit = fixture.root().join("nogit");
+    fs::create_dir(&nogit).expect("empty PATH directory");
+    let result = verdict_on(&fixture, &request_with_registry(&fixture, REGISTRY), &nogit);
+    assert_eq!(result["status"], "unverifiable", "{result}");
+    assert_eq!(result["reason"], "git_not_started");
+    assert!(result.get("identity_registry_commit").is_none());
+    assert_eq!(fixture.calls(), 0, "no verifier starts");
+
+    // A git that exceeds its output bound while the registry is read.
+    git_misbehaving_when(
+        &fixture,
+        "*ls-tree*",
+        "/usr/bin/head -c 9000000 /dev/zero; exit 0",
+    );
+    let result = verdict(&fixture, &request_with_registry(&fixture, REGISTRY));
+    assert_eq!(result["status"], "unverifiable", "{result}");
+    assert_eq!(result["reason"], "output_exceeded");
+    assert!(result.get("identity_registry_commit").is_none());
+
+    // A git that times out while the registry is read (the 60 second bound).
+    git_misbehaving_when(&fixture, "*ls-tree*", "exec /usr/bin/sleep 120");
+    let result = verdict(&fixture, &request_with_registry(&fixture, REGISTRY));
+    assert_eq!(result["status"], "unverifiable", "{result}");
+    assert_eq!(result["reason"], "timeout");
+    assert!(result.get("identity_registry_commit").is_none());
+    assert_eq!(fixture.calls(), 0, "no verifier starts");
+}
+
+#[test]
+#[trace("TC-1047", "TC-1039", "FR-040-AC-31", "FR-037-AC-21")]
+fn tc_1047_every_verdict_carries_the_commit_the_registry_revision_resolved_to() {
+    let fixture = fixture_with_commit();
+    let repo = fixture.repo();
+    forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
+    git(&repo, &["tag", "light"]);
+    git(&repo, &["tag", "-a", "-m", "plain", "v-plain"]);
+    let registry_commit = tip(&repo, "registry");
+    // An annotated tag as the revision is peeled to the commit it names.
+    git(
+        &repo,
+        &[
+            "tag",
+            "-a",
+            "-m",
+            "registry release",
+            "registry-tag",
+            "registry",
+        ],
+    );
+
+    let cases = [
+        ("signed", "commit"),
+        ("main", "commit"),
+        ("nope", "commit"),
+        ("v-cms", "tag"),
+        ("v-plain", "tag"),
+        ("light", "tag"),
+        ("refs/tags/nope", "tag"),
+    ];
+    for address in [REGISTRY, "registry-tag:registry.json"] {
+        for (revision, kind) in cases {
+            let mut body = request(&fixture, revision, kind, true);
+            body["identity_registry"] = json!(address);
+            let result = verdict(&fixture, &body);
+            assert_eq!(
+                result["identity_registry_commit"], registry_commit,
+                "{address} {revision}: {result}"
+            );
+        }
+    }
+    // Also with the gitsign member's absent object, SSH and failed verdicts.
+    fixture.script("default", 1);
+    let failed = verdict(&fixture, &request(&fixture, "signed", "commit", true));
+    assert_eq!(failed["reason"], "gitsign_verification_failed");
+    assert_eq!(failed["identity_registry_commit"], registry_commit);
+    fixture.script("default", 0);
+
+    // The commit and the mapping come from the revision as it resolved at the
+    // reading, even when the branch moves while gitsign runs.
+    let moved = commit_registry(&repo, "other-registry", &registry_json(&[]));
+    let real_git_path = which("git");
+    let real_git = real_git_path.display();
+    let stand_in = STAND_IN.replace(
+        "exit \"$status\"",
+        &format!(
+            "{real_git} -C '{}' update-ref refs/heads/registry '{moved}'\nexit \"$status\"",
+            repo.display()
+        ),
+    );
+    fs::write(fixture.bin().join("gitsign"), stand_in).expect("gitsign stand-in");
+    let result = verdict(&fixture, &request(&fixture, "signed", "commit", true));
+    assert_eq!(result["signer"]["principal"], PRINCIPAL, "{result}");
+    assert_eq!(result["identity_registry_commit"], registry_commit);
+    assert_eq!(
+        tip(&repo, "registry"),
+        moved,
+        "the stand-in moved the branch"
+    );
+}
+
+#[test]
+#[trace("TC-1047", "FR-040-AC-31", "FR-040-AC-12")]
+fn tc_1047_an_ssh_verdict_carries_the_registry_commit_and_its_unchanged_signer() {
+    let (fixture, path) = ssh_signed_fixture();
+    let registry_commit = tip(&fixture.repo(), "registry");
+    for (revision, kind) in [("HEAD", "commit"), ("v-ssh", "tag")] {
+        let result = verdict_on(&fixture, &request(&fixture, revision, kind, true), &path);
+        assert_eq!(result["status"], "signed_valid", "{result}");
+        assert_eq!(result["signature_kind"], "ssh");
+        assert_eq!(result["signer"]["source"], "allowed_signers");
+        assert_eq!(result["identity_registry_commit"], registry_commit);
+    }
+}
+
+#[test]
+#[trace("TC-1038", "FR-037-AC-20")]
+fn tc_1038_an_ill_formed_address_never_starts_git_and_a_colon_revision_addresses_nothing() {
+    let fixture = fixture_with_commit();
+    let empty = fixture.root().join("empty");
+    fs::create_dir(&empty).expect("empty");
+    for address in [
+        "",
+        "registry",
+        ":registry.json",
+        "registry:",
+        "-x:registry.json",
+        "registry:/registry.json",
+        "registry:a/../registry.json",
+    ] {
+        let body = request_with_registry(&fixture, address);
+        assert_request_invalid(&fixture, &body, &empty);
+    }
+    // `HEAD@{12:00}` splits at its first colon: revision `HEAD@{12`, path `00}`.
+    let body = request_with_registry(&fixture, "HEAD@{12:00}");
+    let error = machine_error(&fixture, &body, &fixture.bin());
+    assert_eq!(error["code"], "signature_verify_identity_registry_invalid");
 }

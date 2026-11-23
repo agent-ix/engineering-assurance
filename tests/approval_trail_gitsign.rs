@@ -24,6 +24,7 @@ const PRINCIPAL: &str = "Alice Example";
 const CMS_BLOCK: &str = "-----BEGIN SIGNED MESSAGE-----\nAAAA\n-----END SIGNED MESSAGE-----\n";
 const RECORD_ID: &str = "change-record-17";
 const DIGEST: &str = "sha256:0123456789abcdef";
+const REGISTRY: &str = "registry:registry.json";
 
 /// Scripted by flavor: `exit_<identity>_<issuer>` holds the exit status.
 const STAND_IN: &str = r#"#!/bin/sh
@@ -118,7 +119,47 @@ fn fixture() -> Fixture {
     fs::create_dir(&repo).expect("repo dir");
     git(&repo, &["init", "-q", "-b", "main"]);
     git(&repo, &["commit", "-q", "--allow-empty", "-m", "base"]);
+    commit_registry(&repo, &[(IDENTITY, ISSUER, PRINCIPAL)]);
     Fixture { dir }
+}
+
+/// Commits a registry holding `entries` as `registry.json` in a root commit that
+/// branch `registry` names. Returns the commit id.
+fn commit_registry(repo: &Path, entries: &[(&str, &str, &str)]) -> String {
+    let entries: Vec<Value> = entries
+        .iter()
+        .map(|(identity, issuer, principal)| {
+            json!({
+                "certificate_identity": identity,
+                "certificate_oidc_issuer": issuer,
+                "principal": principal,
+            })
+        })
+        .collect();
+    let document = json!({
+        "protocol": "engineering-assurance.gitsign-identity-registry/v1",
+        "entries": entries,
+    })
+    .to_string();
+    let blob = run_program(
+        repo,
+        "git",
+        &["hash-object", "-t", "blob", "-w", "--stdin"],
+        Some(document.as_bytes()),
+    );
+    let blob = String::from_utf8(blob).expect("utf-8").trim().to_owned();
+    let tree = run_program(
+        repo,
+        "git",
+        &["mktree"],
+        Some(format!("100644 blob {blob}\tregistry.json\n").as_bytes()),
+    );
+    let tree = String::from_utf8(tree).expect("utf-8").trim().to_owned();
+    let commit = git(repo, &["commit-tree", &tree, "-m", "registry"])
+        .trim()
+        .to_owned();
+    git(repo, &["update-ref", "refs/heads/registry", &commit]);
+    commit
 }
 
 fn forged_tag(fixture: &Fixture, name: &str, epoch: u64, meaning: &str) {
@@ -144,8 +185,8 @@ fn forged_tag(fixture: &Fixture, name: &str, epoch: u64, meaning: &str) {
     );
 }
 
-fn trail(fixture: &Fixture) -> Value {
-    let request = json!({
+fn request(fixture: &Fixture) -> Value {
+    json!({
         "protocol": "engineering-assurance.approval-trail-request/v1",
         "repository": fixture.repo().display().to_string(),
         "record_id": RECORD_ID,
@@ -154,13 +195,22 @@ fn trail(fixture: &Fixture) -> Value {
         "gitsign": {
             "certificate_identity": IDENTITY,
             "certificate_oidc_issuer": ISSUER,
-            "principal": PRINCIPAL,
         },
-    });
+        "identity_registry": REGISTRY,
+    })
+}
+
+fn trail(fixture: &Fixture) -> Value {
+    let output = run_trail(fixture, &request(fixture), &fixture.bin());
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    serde_json::from_slice(&output.stdout).expect("json line")
+}
+
+fn run_trail(fixture: &Fixture, request: &Value, path: &Path) -> std::process::Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
         .args(["approval-trail", "--request", "-"])
         .env_clear()
-        .env("PATH", fixture.bin())
+        .env("PATH", path)
         .env("HOME", fixture.root().join("home"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -173,9 +223,7 @@ fn trail(fixture: &Fixture) -> Value {
         .expect("stdin")
         .write_all(request.to_string().as_bytes())
         .expect("request");
-    let output = child.wait_with_output().expect("output");
-    assert_eq!(output.status.code(), Some(0), "{output:?}");
-    serde_json::from_slice(&output.stdout).expect("json line")
+    child.wait_with_output().expect("output")
 }
 
 #[test]
@@ -203,4 +251,78 @@ fn tc_362_gitsign_tags_are_listed_with_the_stand_in_verdict() {
         assert_eq!(listed["status"], "untrusted_signer", "{listed}");
         assert!(listed.get("approver").is_none());
     }
+}
+
+#[test]
+#[trace("TC-362", "FR-043-AC-11", "FR-043-AC-4")]
+fn tc_362_an_identity_the_registry_does_not_name_is_listed_untrusted() {
+    let fixture = fixture();
+    forged_tag(&fixture, "v-1", 1_700_000_000, "approved");
+    let registry_commit = commit_registry(&fixture.repo(), &[("bob@example.test", ISSUER, "Bob")]);
+    let listed = trail(&fixture);
+    let entries = listed["entries"].as_array().expect("entries");
+    assert_eq!(entries.len(), 1, "{listed}");
+    assert_eq!(entries[0]["status"], "untrusted_signer", "{listed}");
+    assert_eq!(entries[0]["signature"]["status"], "signed_valid");
+    assert!(entries[0].get("approver").is_none());
+    // The trust carries the registry and the commit it resolved to.
+    assert_eq!(listed["trust"]["identity_registry"], REGISTRY);
+    assert_eq!(listed["trust"]["identity_registry_commit"], registry_commit);
+    assert_eq!(
+        entries[0]["signature"]["identity_registry_commit"],
+        registry_commit
+    );
+}
+
+#[test]
+#[trace("TC-361", "FR-043-AC-10")]
+fn tc_361_the_gitsign_inputs_are_refused_with_the_trail_codes() {
+    let fixture = fixture();
+    forged_tag(&fixture, "v-1", 1_700_000_000, "approved");
+    let no_git = fixture.root().join("no-git");
+    fs::create_dir(&no_git).expect("empty PATH directory");
+    let code = |request: &Value, path: &Path| {
+        let output = run_trail(&fixture, request, path);
+        assert_eq!(output.status.code(), Some(2), "{request}: {output:?}");
+        let error: Value = serde_json::from_slice(&output.stdout).expect("machine error");
+        error["code"].clone()
+    };
+
+    let mut principal = request(&fixture);
+    principal["gitsign"]["principal"] = json!("Mallory");
+    assert_eq!(
+        code(&principal, &no_git),
+        "approval_trail_gitsign_principal_refused"
+    );
+    let mut without_registry = request(&fixture);
+    without_registry
+        .as_object_mut()
+        .expect("object")
+        .remove("identity_registry");
+    assert_eq!(
+        code(&without_registry, &no_git),
+        "approval_trail_request_invalid"
+    );
+
+    let mut unresolved = request(&fixture);
+    unresolved["identity_registry"] = json!("no-such-branch:registry.json");
+    assert_eq!(
+        code(&unresolved, &fixture.bin()),
+        "approval_trail_identity_registry_invalid"
+    );
+
+    // Not a repository: the repository code, with or without `gitsign`.
+    let plain = fixture.root().join("plain");
+    fs::create_dir(&plain).expect("plain directory");
+    let mut with_gitsign = request(&fixture);
+    with_gitsign["repository"] = json!(plain.display().to_string());
+    assert_eq!(
+        code(&with_gitsign, &fixture.bin()),
+        "approval_trail_repository_unavailable"
+    );
+    // A git that cannot start while the registry is read is the same refusal.
+    assert_eq!(
+        code(&request(&fixture), &no_git),
+        "approval_trail_repository_unavailable"
+    );
 }

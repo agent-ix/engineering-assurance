@@ -25,6 +25,8 @@ const PRINCIPAL: &str = "Alice Example";
 const CMS_BLOCK: &str = "-----BEGIN SIGNED MESSAGE-----\nAAAA\n-----END SIGNED MESSAGE-----\n";
 const RECORD_ID: &str = "change-record-17";
 const DIGEST: &str = "sha256:0123456789abcdef";
+/// The committed identity registry every gitsign request names.
+const REGISTRY: &str = "registry:registry.json";
 
 /// Scripted by flavor: `exit_<identity>_<issuer>` holds the exit status.
 const STAND_IN: &str = r#"#!/bin/sh
@@ -134,7 +136,54 @@ fn fixture() -> Fixture {
     fs::create_dir(&repo).expect("repo dir");
     git(&repo, &["init", "-q", "-b", "main"]);
     git(&repo, &["commit", "-q", "--allow-empty", "-m", "base"]);
+    commit_registry(
+        &repo,
+        "registry",
+        &registry_json(&[(IDENTITY, ISSUER, PRINCIPAL)]),
+    );
     Fixture { dir }
+}
+
+/// The registry document with the given `(identity, issuer, principal)` entries.
+fn registry_json(entries: &[(&str, &str, &str)]) -> String {
+    let entries: Vec<Value> = entries
+        .iter()
+        .map(|(identity, issuer, principal)| {
+            json!({
+                "certificate_identity": identity,
+                "certificate_oidc_issuer": issuer,
+                "principal": principal,
+            })
+        })
+        .collect();
+    json!({
+        "protocol": "engineering-assurance.gitsign-identity-registry/v1",
+        "entries": entries,
+    })
+    .to_string()
+}
+
+/// Commits `content` as `registry.json` in a root commit that `branch` names,
+/// without touching HEAD, the index or the working tree. Returns the commit id.
+fn commit_registry(repo: &Path, branch: &str, content: &str) -> String {
+    let blob = store(repo, "blob", content);
+    let tree = String::from_utf8(run_program(
+        repo,
+        "git",
+        &["mktree"],
+        Some(format!("100644 blob {blob}\tregistry.json\n").as_bytes()),
+    ))
+    .expect("utf-8")
+    .trim()
+    .to_owned();
+    let commit = git(repo, &["commit-tree", &tree, "-m", "registry"])
+        .trim()
+        .to_owned();
+    git(
+        repo,
+        &["update-ref", &format!("refs/heads/{branch}"), &commit],
+    );
+    commit
 }
 
 fn store(repo: &Path, kind: &str, object: &str) -> String {
@@ -194,8 +243,8 @@ fn request(fixture: &Fixture, tag: &str, gitsign: bool) -> Value {
         value["gitsign"] = json!({
             "certificate_identity": IDENTITY,
             "certificate_oidc_issuer": ISSUER,
-            "principal": PRINCIPAL,
         });
+        value["identity_registry"] = json!(REGISTRY);
     }
     value
 }
@@ -308,6 +357,11 @@ impl LiveApproval {
         body["record_digest"] = json!(self.record_digest);
         body["gitsign"]["certificate_identity"] = json!(identity);
         body["gitsign"]["certificate_oidc_issuer"] = json!(issuer);
+        commit_registry(
+            &self.repository,
+            "registry",
+            &registry_json(&[(&self.identity, &self.issuer, PRINCIPAL)]),
+        );
         body
     }
 
@@ -484,7 +538,7 @@ fn tc_1020_missing_gitsign_is_unverifiable_not_an_approval() {
 
 #[test]
 #[trace("TC-328", "FR-041-AC-8")]
-fn tc_328_a_gitsign_tag_is_approved_by_the_request_principal() {
+fn tc_328_a_gitsign_tag_is_approved_by_the_registry_principal() {
     let fixture = fixture();
     forged_tag(&fixture, "v-cms", &good_message(), CMS_BLOCK);
     let approved = result(&fixture, &request(&fixture, "v-cms", true));
@@ -497,9 +551,70 @@ fn tc_328_a_gitsign_tag_is_approved_by_the_request_principal() {
         json!({
             "certificate_identity": IDENTITY,
             "certificate_oidc_issuer": ISSUER,
-            "principal": PRINCIPAL,
         })
     );
+    assert_eq!(approved["trust"]["identity_registry"], REGISTRY);
+    assert_eq!(
+        approved["signature"]["signer"]["source"],
+        "gitsign_registry"
+    );
+}
+
+#[test]
+#[trace("TC-325", "FR-041-AC-14")]
+fn tc_325_the_trust_echoes_the_registry_and_the_commit_it_resolved_to() {
+    let fixture = fixture();
+    forged_tag(&fixture, "v-cms", &good_message(), CMS_BLOCK);
+    let repo = fixture.repo();
+    let first = git(&repo, &["rev-parse", "refs/heads/registry"])
+        .trim()
+        .to_owned();
+    let approved = result(&fixture, &request(&fixture, "v-cms", true));
+    assert_eq!(
+        approved["trust"]["identity_registry_commit"], first,
+        "{approved}"
+    );
+    assert_eq!(approved["signature"]["identity_registry_commit"], first);
+    assert_eq!(approved["approver"], PRINCIPAL);
+
+    // Another committed registry names a different person for the same identity:
+    // a different approver under a different trust.
+    let second = commit_registry(
+        &repo,
+        "other",
+        &registry_json(&[(IDENTITY, ISSUER, "Other Person")]),
+    );
+    let mut other = request(&fixture, "v-cms", true);
+    other["identity_registry"] = json!("other:registry.json");
+    let changed = result(&fixture, &other);
+    assert_eq!(changed["approver"], "Other Person", "{changed}");
+    assert_eq!(changed["trust"]["identity_registry"], "other:registry.json");
+    assert_eq!(changed["trust"]["identity_registry_commit"], second);
+    assert_ne!(first, second);
+
+    // The echo is on every status, an untrusted signer included.
+    fixture.script("exact_exact", 1);
+    let untrusted = result(&fixture, &request(&fixture, "v-cms", true));
+    assert_eq!(untrusted["status"], "untrusted_signer");
+    assert_eq!(untrusted["trust"]["identity_registry_commit"], first);
+
+    // A request with no `gitsign` carries neither member.
+    let plain = result(&fixture, &request(&fixture, "v-cms", false));
+    assert!(plain["trust"].get("identity_registry").is_none());
+    assert!(plain["trust"].get("identity_registry_commit").is_none());
+
+    // A git failure while the registry is read yields no commit: not a repository.
+    let not_a_repository = fixture.root().join("plain");
+    fs::create_dir(&not_a_repository).expect("plain directory");
+    let mut body = request(&fixture, "v-cms", true);
+    body["repository"] = json!(not_a_repository.display().to_string());
+    let failed = result(&fixture, &body);
+    assert_eq!(failed["status"], "unverifiable", "{failed}");
+    assert_eq!(failed["reason"], "repository_unavailable");
+    assert!(failed["tag_object_id"].is_null());
+    assert_eq!(failed["trust"]["identity_registry"], REGISTRY);
+    assert!(failed["trust"].get("identity_registry_commit").is_none());
+    assert!(failed.get("approver").is_none());
 }
 
 #[test]
@@ -512,11 +627,102 @@ fn tc_329_an_identity_gitsign_does_not_accept_is_untrusted_and_a_missing_one_is_
     assert_eq!(untrusted["status"], "untrusted_signer", "{untrusted}");
     assert_eq!(untrusted["signature"]["status"], "signed_untrusted");
     assert!(untrusted.get("approver").is_none());
+    fixture.script("exact_exact", 0);
+
+    // An identity gitsign accepts but no registry entry names is not an approval.
+    commit_registry(
+        &fixture.repo(),
+        "registry",
+        &registry_json(&[("bob@example.test", ISSUER, "Bob")]),
+    );
+    let unnamed = result(&fixture, &request(&fixture, "v-cms", true));
+    assert_eq!(unnamed["status"], "untrusted_signer", "{unnamed}");
+    assert_eq!(unnamed["signature"]["status"], "signed_valid");
+    assert_eq!(unnamed["signature"]["signer"]["mapping"], "unmapped");
+    for member in ["approver", "meaning", "signed_at", "signature_kind"] {
+        assert!(unnamed.get(member).is_none(), "{member}: {unnamed}");
+    }
 
     let missing = result(&fixture, &request(&fixture, "v-cms", false));
     assert_eq!(missing["status"], "unverifiable", "{missing}");
     assert_eq!(missing["reason"], "gitsign_identity_missing");
     assert!(missing["trust"].get("gitsign").is_none());
+}
+
+/// The machine error of a request that yields no verdict, asserting exit 2.
+fn refusal(fixture: &Fixture, request: &Value, path: &Path) -> Value {
+    let output = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
+        .args(["approval-verify", "--request", &request.to_string()])
+        .env_clear()
+        .env("PATH", path)
+        .env("HOME", fixture.root().join("home"))
+        .output()
+        .expect("the Cargo-built CLI must start");
+    assert_eq!(output.status.code(), Some(2), "{request}: {output:?}");
+    serde_json::from_slice(&output.stdout).expect("machine error")
+}
+
+#[test]
+#[trace("TC-327", "FR-041-AC-10")]
+fn tc_327_the_gitsign_inputs_are_refused_with_their_own_codes() {
+    let fixture = fixture();
+    forged_tag(&fixture, "v-cms", &good_message(), CMS_BLOCK);
+    let no_git = fixture.root().join("no-git");
+    fs::create_dir(&no_git).expect("empty PATH directory");
+    let code = |request: &Value, path: &Path| refusal(&fixture, request, path)["code"].clone();
+
+    // A request error: registry absent with `gitsign`, present without it, malformed.
+    let mut without_registry = request(&fixture, "v-cms", true);
+    without_registry
+        .as_object_mut()
+        .expect("object")
+        .remove("identity_registry");
+    let mut without_gitsign = request(&fixture, "v-cms", false);
+    without_gitsign["identity_registry"] = json!(REGISTRY);
+    let mut malformed = request(&fixture, "v-cms", true);
+    malformed["identity_registry"] = json!("registry:../registry.json");
+    let mut with_principal_no_registry = without_registry.clone();
+    with_principal_no_registry["gitsign"]["principal"] = json!("p");
+    for body in [
+        &without_registry,
+        &without_gitsign,
+        &malformed,
+        &with_principal_no_registry,
+    ] {
+        assert_eq!(
+            code(body, &no_git),
+            "approval_verify_request_invalid",
+            "{body}"
+        );
+    }
+
+    // A principal in a request that otherwise validates: refused before git starts.
+    let mut principal = request(&fixture, "v-cms", true);
+    principal["gitsign"]["principal"] = json!("Mallory");
+    let error = refusal(&fixture, &principal, &no_git);
+    assert_eq!(error["code"], "approval_verify_gitsign_principal_refused");
+    assert!(!error.to_string().contains("Mallory"));
+
+    // An unusable registry starts git (it reads the repository) and no verifier.
+    let mut unresolved = request(&fixture, "v-cms", true);
+    unresolved["identity_registry"] = json!("no-such-branch:registry.json");
+    let mut absent = request(&fixture, "v-cms", true);
+    absent["identity_registry"] = json!("registry:missing.json");
+    commit_registry(
+        &fixture.repo(),
+        "broken",
+        "{\"protocol\":\"wrong\",\"entries\":[]}",
+    );
+    let mut wrong_protocol = request(&fixture, "v-cms", true);
+    wrong_protocol["identity_registry"] = json!("broken:registry.json");
+    for body in [&unresolved, &absent, &wrong_protocol] {
+        assert_eq!(
+            code(body, &fixture.bin()),
+            "approval_verify_identity_registry_invalid",
+            "{body}"
+        );
+    }
+    assert!(!fixture.bin().join("invocations").exists());
 }
 
 #[test]

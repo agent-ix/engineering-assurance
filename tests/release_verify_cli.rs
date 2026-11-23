@@ -1522,3 +1522,101 @@ fn tc_428_a_baseline_item_spelled_as_pathspec_magic_is_a_literal_path() {
     assert_not_released(&result, &["baseline_item_absent"]);
     assert_eq!(result["absent_items"], json!([":(exclude)spec/a.md"]));
 }
+
+/// Commits `entries` as `registry.json` in a root commit that branch `registry`
+/// names, without touching HEAD or the working tree. Returns the commit id.
+fn commit_registry(fixture: &Fixture, content: &str) -> String {
+    let repo = fixture.repo();
+    let blob = run_program(
+        "git",
+        &repo,
+        &["hash-object", "-t", "blob", "-w", "--stdin"],
+        Some(content.as_bytes()),
+    );
+    let blob = String::from_utf8(blob).expect("utf-8").trim().to_owned();
+    let tree = run_program(
+        "git",
+        &repo,
+        &["mktree"],
+        Some(format!("100644 blob {blob}\tregistry.json\n").as_bytes()),
+    );
+    let tree = String::from_utf8(tree).expect("utf-8").trim().to_owned();
+    let commit = git(&repo, None, &["commit-tree", &tree, "-m", "registry"]);
+    git(&repo, None, &["update-ref", "refs/heads/registry", &commit]);
+    commit
+}
+
+#[test]
+#[trace("TC-1048", "FR-047-AC-14")]
+fn tc_1048_the_gitsign_inputs_are_refused_with_the_release_codes() {
+    let fixture = fixture();
+    standard(&fixture);
+    let identity = "carol@example.test";
+    let issuer = concat!("https:", "//issuer.example.test");
+    let registry_commit = commit_registry(
+        &fixture,
+        &json!({
+            "protocol": "engineering-assurance.gitsign-identity-registry/v1",
+            "entries": [{
+                "certificate_identity": identity,
+                "certificate_oidc_issuer": issuer,
+                "principal": "Carol Example",
+            }],
+        })
+        .to_string(),
+    );
+    let mut with_registry = request(&fixture, "v1");
+    with_registry["gitsign"] = json!({
+        "certificate_identity": identity,
+        "certificate_oidc_issuer": issuer,
+    });
+    with_registry["identity_registry"] = json!("registry:registry.json");
+    let code = |body: &Value, path: Option<&Path>| {
+        let output = run_command("release-verify", body.to_string().as_bytes(), path);
+        assert_eq!(output.status.code(), Some(2), "{body}: {output:?}");
+        let error: Value = serde_json::from_slice(&output.stdout).expect("error json");
+        assert_eq!(error["capability"], "release-verify");
+        error["code"].clone()
+    };
+
+    // A principal in a request that otherwise validates.
+    let mut principal = with_registry.clone();
+    principal["gitsign"]["principal"] = json!("Mallory");
+    assert_eq!(
+        code(&principal, None),
+        "release_verify_gitsign_principal_refused"
+    );
+
+    // An unusable registry: an unresolvable revision and a content error.
+    let mut unresolved = with_registry.clone();
+    unresolved["identity_registry"] = json!("no-such-branch:registry.json");
+    assert_eq!(
+        code(&unresolved, None),
+        "release_verify_identity_registry_invalid"
+    );
+    let mut missing_path = with_registry.clone();
+    missing_path["identity_registry"] = json!("registry:absent.json");
+    assert_eq!(
+        code(&missing_path, None),
+        "release_verify_identity_registry_invalid"
+    );
+
+    // A git that fails while the registry is read is `release_verify_git_failed`,
+    // never the registry code.
+    let shim = fixture.root().join("shim-bin");
+    fs::create_dir(&shim).expect("shim dir");
+    fs::write(shim.join("git"), "#!/bin/sh\nexit 3\n").expect("shim");
+    fs::set_permissions(shim.join("git"), fs::Permissions::from_mode(0o755)).expect("mode");
+    assert_eq!(
+        code(&with_registry, Some(&shim)),
+        "release_verify_git_failed"
+    );
+
+    // A usable registry on an SSH-signed release leaves the verdict unchanged
+    // and echoes the registry and its commit in the approval trust.
+    let released = result_on(&with_registry, None);
+    assert_eq!(released["status"], "released", "{released}");
+    let trust = &released["approval"]["trust"];
+    assert_eq!(trust["identity_registry"], "registry:registry.json");
+    assert_eq!(trust["identity_registry_commit"], registry_commit);
+}

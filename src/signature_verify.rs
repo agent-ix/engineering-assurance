@@ -112,8 +112,8 @@ pub enum SignatureKind {
 pub enum SignerSource {
     /// The allowed-signers file (SSH).
     AllowedSigners,
-    /// The request's `gitsign.principal`.
-    Request,
+    /// The identity registry read from a committed revision (gitsign, FR-040).
+    GitsignRegistry,
 }
 
 /// How a `gitsign` identity or issuer differs from the request's.
@@ -137,37 +137,37 @@ pub struct Certificate {
     pub oidc_issuer: String,
 }
 
-/// The `gitsign` member of a request: who the signature must come from.
+/// The `gitsign` member of a request: who the signature must come from. It
+/// carries no person's name; the identity registry names the person (FR-040).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GitsignIdentity {
     certificate_identity: String,
     certificate_oidc_issuer: String,
-    principal: String,
+}
+
+/// Whether `value` is a non-empty string of at most [`MAX_GITSIGN_VALUE_BYTES`]
+/// bytes with no control character.
+fn is_plain_value(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_GITSIGN_VALUE_BYTES
+        && !value.chars().any(char::is_control)
+}
+
+/// A [`is_plain_value`] that does not begin with `-`, so it is never an option.
+fn is_option_safe_value(value: &str) -> bool {
+    is_plain_value(value) && !value.starts_with('-')
 }
 
 impl GitsignIdentity {
     /// Builds an identity, or `None` when a value is empty, longer than
-    /// [`MAX_GITSIGN_VALUE_BYTES`], holds a control character, or (identity and
-    /// issuer only) begins with `-`.
+    /// [`MAX_GITSIGN_VALUE_BYTES`], holds a control character, or begins with `-`.
     #[must_use]
-    pub fn new(
-        certificate_identity: String,
-        certificate_oidc_issuer: String,
-        principal: String,
-    ) -> Option<Self> {
-        let plain = |value: &str| {
-            !value.is_empty()
-                && value.len() <= MAX_GITSIGN_VALUE_BYTES
-                && !value.chars().any(char::is_control)
-        };
-        let option_safe = |value: &str| plain(value) && !value.starts_with('-');
-        (option_safe(&certificate_identity)
-            && option_safe(&certificate_oidc_issuer)
-            && plain(&principal))
+    pub fn new(certificate_identity: String, certificate_oidc_issuer: String) -> Option<Self> {
+        (is_option_safe_value(&certificate_identity)
+            && is_option_safe_value(&certificate_oidc_issuer))
         .then_some(Self {
             certificate_identity,
             certificate_oidc_issuer,
-            principal,
         })
     }
 
@@ -181,6 +181,155 @@ impl GitsignIdentity {
     #[must_use]
     pub fn certificate_oidc_issuer(&self) -> &str {
         &self.certificate_oidc_issuer
+    }
+}
+
+/// Protocol value of an identity registry document (FR-040).
+pub const IDENTITY_REGISTRY_PROTOCOL: &str = "engineering-assurance.gitsign-identity-registry/v1";
+
+/// Most entries an identity registry holds.
+pub const MAX_REGISTRY_ENTRIES: usize = 4096;
+
+/// One identity-registry entry: the person a certificate identity and OIDC
+/// issuer belong to.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RegistryEntry {
+    certificate_identity: String,
+    certificate_oidc_issuer: String,
+    principal: String,
+}
+
+impl RegistryEntry {
+    /// Builds an entry, or `None` when the identity or issuer breaks the bounds
+    /// of [`GitsignIdentity::new`] or the principal is empty, longer than
+    /// [`MAX_GITSIGN_VALUE_BYTES`] or holds a control character.
+    #[must_use]
+    pub fn new(
+        certificate_identity: String,
+        certificate_oidc_issuer: String,
+        principal: String,
+    ) -> Option<Self> {
+        (is_option_safe_value(&certificate_identity)
+            && is_option_safe_value(&certificate_oidc_issuer)
+            && is_plain_value(&principal))
+        .then_some(Self {
+            certificate_identity,
+            certificate_oidc_issuer,
+            principal,
+        })
+    }
+}
+
+/// The version-controlled map from a certificate identity and OIDC issuer to a
+/// person's name (FR-040).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IdentityRegistry {
+    entries: Vec<RegistryEntry>,
+}
+
+impl IdentityRegistry {
+    /// Builds a registry, or `None` when it holds more than
+    /// [`MAX_REGISTRY_ENTRIES`] entries or two entries with the same identity
+    /// and issuer, whether or not their principals differ.
+    #[must_use]
+    pub fn new(entries: Vec<RegistryEntry>) -> Option<Self> {
+        if entries.len() > MAX_REGISTRY_ENTRIES {
+            return None;
+        }
+        let mut keys: Vec<(&str, &str)> = entries
+            .iter()
+            .map(|e| {
+                (
+                    e.certificate_identity.as_str(),
+                    e.certificate_oidc_issuer.as_str(),
+                )
+            })
+            .collect();
+        keys.sort_unstable();
+        if keys.windows(2).any(|pair| pair[0] == pair[1]) {
+            return None;
+        }
+        Some(Self { entries })
+    }
+
+    /// The principal of the entry whose identity and issuer equal `identity`
+    /// and `issuer` exactly: no pattern, prefix, case folding or partial match.
+    #[must_use]
+    pub fn principal(&self, identity: &str, issuer: &str) -> Option<&str> {
+        self.entries
+            .iter()
+            .find(|e| e.certificate_identity == identity && e.certificate_oidc_issuer == issuer)
+            .map(|e| e.principal.as_str())
+    }
+}
+
+/// What a `gitsign` verification needs besides the object: the identity the
+/// signature must carry and the registry that names the person.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GitsignTrust {
+    identity: GitsignIdentity,
+    registry: IdentityRegistry,
+}
+
+impl GitsignTrust {
+    /// Pairs a request identity with the registry read for it.
+    #[must_use]
+    pub const fn new(identity: GitsignIdentity, registry: IdentityRegistry) -> Self {
+        Self { identity, registry }
+    }
+
+    /// The identity the signature must carry.
+    #[must_use]
+    pub const fn identity(&self) -> &GitsignIdentity {
+        &self.identity
+    }
+}
+
+/// A trust source address `<rev>:<path>` split at its first `:` (FR-037).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TrustSourceAddress {
+    revision: String,
+    path: String,
+}
+
+/// Longest accepted trust source revision in bytes.
+const MAX_SOURCE_REVISION_BYTES: usize = 256;
+/// Longest accepted trust source path in bytes.
+const MAX_SOURCE_PATH_BYTES: usize = 1024;
+
+impl TrustSourceAddress {
+    /// Splits `address` at the first `:`, or `None` when it is not well formed:
+    /// an empty, over-long, control-bearing or `-`-leading revision, or an empty,
+    /// over-long, control-bearing or `/`-leading path, or a path with an empty,
+    /// `.` or `..` component.
+    #[must_use]
+    pub fn parse(address: &str) -> Option<Self> {
+        let (revision, path) = address.split_once(':')?;
+        let revision_ok = !revision.is_empty()
+            && revision.len() <= MAX_SOURCE_REVISION_BYTES
+            && !revision.chars().any(char::is_control)
+            && !revision.starts_with('-');
+        let path_ok = !path.is_empty()
+            && path.len() <= MAX_SOURCE_PATH_BYTES
+            && !path.chars().any(char::is_control)
+            && !path.starts_with('/')
+            && path.split('/').all(|part| !matches!(part, "" | "." | ".."));
+        (revision_ok && path_ok).then(|| Self {
+            revision: revision.to_owned(),
+            path: path.to_owned(),
+        })
+    }
+
+    /// The revision before the first `:`.
+    #[must_use]
+    pub fn revision(&self) -> &str {
+        &self.revision
+    }
+
+    /// The repository-relative path after the first `:`.
+    #[must_use]
+    pub fn path(&self) -> &str {
+        &self.path
     }
 }
 
@@ -233,7 +382,7 @@ pub struct Signer {
     pub source: SignerSource,
     /// Whether the key is mapped.
     pub mapping: Mapping,
-    /// The principal named in the allowed-signers file; only when mapped.
+    /// The principal the trust source names; only when mapped.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub principal: Option<String>,
 }
@@ -309,6 +458,11 @@ pub struct Verdict {
     /// The recorded meaning, when the object's message was readable.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signed_off_meaning: Option<SignedOffMeaning>,
+    /// The full commit id the identity registry revision resolved to; present
+    /// in every status of a request that names a registry whose revision
+    /// resolved (FR-040).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identity_registry_commit: Option<String>,
 }
 
 impl Verdict {
@@ -326,6 +480,7 @@ impl Verdict {
             certificate: None,
             mismatch: None,
             signed_off_meaning: None,
+            identity_registry_commit: None,
         }
     }
 
@@ -333,6 +488,13 @@ impl Verdict {
     #[must_use]
     pub fn with_meaning(mut self, meaning: Option<SignedOffMeaning>) -> Self {
         self.signed_off_meaning = meaning;
+        self
+    }
+
+    /// The verdict with the commit the identity registry revision resolved to.
+    #[must_use]
+    pub fn with_identity_registry_commit(mut self, commit: Option<String>) -> Self {
+        self.identity_registry_commit = commit;
         self
     }
 
@@ -362,6 +524,7 @@ impl Verdict {
             certificate: None,
             mismatch: None,
             signed_off_meaning: None,
+            identity_registry_commit: None,
         }
     }
 
@@ -678,25 +841,26 @@ pub fn config_sets_gitsign_key(output: &[u8]) -> bool {
 ///
 /// `run` performs one [`Probe`] and reports only what was observed; the
 /// classifier asks for at most four, each only when the earlier exit statuses
-/// require it, and reads nothing but exit statuses. Without an `identity` no
-/// probe runs and the object is never valid. With `repository_sets_key`, the
-/// repository could choose the roots that verify it, so no probe runs.
+/// require it, and reads nothing but exit statuses. Without a `trust` no probe
+/// runs and the object is never valid. With `repository_sets_key`, the
+/// repository could choose the roots that verify it, so no probe runs. The
+/// person of an accepted identity comes only from the trust's registry.
 #[must_use]
 pub fn classify_gitsign(
     kind: TargetKind,
-    identity: Option<&GitsignIdentity>,
+    trust: Option<&GitsignTrust>,
     repository_sets_key: bool,
     mut run: impl FnMut(Probe) -> Run,
 ) -> Verdict {
     let verdict = |reason| Verdict::unverifiable(kind, reason);
-    let Some(identity) = identity else {
+    let Some(trust) = trust else {
         return verdict(Reason::GitsignIdentityMissing)
             .with_signature_kind(Some(SignatureKind::Gitsign));
     };
     let outcome = if repository_sets_key {
         Err(Reason::GitsignRepositoryConfig)
     } else {
-        probe_gitsign(kind, identity, &mut run)
+        probe_gitsign(kind, trust, &mut run)
     };
     outcome
         .unwrap_or_else(verdict)
@@ -705,7 +869,7 @@ pub fn classify_gitsign(
 
 fn probe_gitsign(
     kind: TargetKind,
-    identity: &GitsignIdentity,
+    trust: &GitsignTrust,
     run: &mut impl FnMut(Probe) -> Run,
 ) -> Result<Verdict, Reason> {
     let mut accepted = |probe| match run(probe) {
@@ -718,8 +882,18 @@ fn probe_gitsign(
         Run::Unobserved => Err(Reason::UnrecognizedOutput),
         Run::SnapshotChanged => Err(Reason::SnapshotRefChanged),
     };
+    let identity = &trust.identity;
     if accepted(Probe::Exact)? {
-        let signer = Signer::mapped(SignerSource::Request, identity.principal.clone());
+        let signer = trust
+            .registry
+            .principal(
+                &identity.certificate_identity,
+                &identity.certificate_oidc_issuer,
+            )
+            .map_or_else(
+                || Signer::unmapped(SignerSource::GitsignRegistry),
+                |principal| Signer::mapped(SignerSource::GitsignRegistry, principal.to_owned()),
+            );
         return Ok(Verdict {
             certificate: Some(Certificate {
                 identity: identity.certificate_identity.clone(),
@@ -743,7 +917,7 @@ fn probe_gitsign(
         ..Verdict::signed(
             kind,
             Status::SignedUntrusted,
-            Signer::unmapped(SignerSource::Request),
+            Signer::unmapped(SignerSource::GitsignRegistry),
         )
     })
 }

@@ -500,12 +500,48 @@ fn tc_281_gitsign_receives_the_resolved_commit_id() {
     .expect("gitsign recorder");
     fs::set_permissions(&gitsign, fs::Permissions::from_mode(0o755)).expect("mode");
 
+    // The registry that names the person is committed apart from the signed commit.
+    let registry = json!({
+        "protocol": "engineering-assurance.gitsign-identity-registry/v1",
+        "entries": [{
+            "certificate_identity": "builder@example.invalid",
+            "certificate_oidc_issuer": "fictional-issuer",
+            "principal": "builder",
+        }],
+    })
+    .to_string();
+    let blob = run_program(
+        "git",
+        &fixture.repo(),
+        &["hash-object", "-t", "blob", "-w", "--stdin"],
+        Some(registry.as_bytes()),
+    );
+    let blob = String::from_utf8(blob).expect("utf-8").trim().to_owned();
+    let tree = run_program(
+        "git",
+        &fixture.repo(),
+        &["mktree"],
+        Some(format!("100644 blob {blob}\tregistry.json\n").as_bytes()),
+    );
+    let tree = String::from_utf8(tree).expect("utf-8").trim().to_owned();
+    let registry_commit = git(
+        &fixture.repo(),
+        None,
+        &["commit-tree", &tree, "-m", "registry"],
+    )
+    .trim()
+    .to_owned();
+    git(
+        &fixture.repo(),
+        None,
+        &["update-ref", "refs/heads/registry", &registry_commit],
+    );
     let mut body = request(&fixture, "HEAD", "commit");
     body["gitsign"] = json!({
         "certificate_identity": "builder@example.invalid",
         "certificate_oidc_issuer": "fictional-issuer",
-        "principal": "builder",
     });
+    body["identity_registry"] = json!("registry:registry.json");
     let result = verdict_with(&body, Some(&path));
     assert_eq!(result["verified_commit_id"], id);
     let calls = fs::read_to_string(gitsign_log).expect("recorded gitsign calls");

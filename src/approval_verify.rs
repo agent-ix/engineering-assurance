@@ -13,7 +13,9 @@
 
 use serde::Serialize;
 
-use crate::signature_verify::{Presence, Reason, SignatureKind, SignedAt, Status, Verdict};
+use crate::signature_verify::{
+    Mapping, Presence, Reason, SignatureKind, SignedAt, Status, Verdict,
+};
 
 /// Trailer naming the record the tag approves.
 pub const RECORD_ID_TRAILER: &str = "Approved-Record-Id";
@@ -85,7 +87,8 @@ pub enum ApprovalStatus {
     Approved,
     /// A valid, mapped signature whose tag does not bind the requested record.
     WrongRecord,
-    /// A good signature by a key or identity the trust input does not accept.
+    /// A good signature by a key or identity the trust input does not accept or
+    /// does not name.
     UntrustedSigner,
     /// A valid, mapped, bound tag with no `Signed-off-meaning` trailer.
     MeaningMissing,
@@ -227,6 +230,17 @@ pub fn decide(
             |reason| Decision::unverifiable(UnverifiableReason::Signature(reason)),
         ),
         Status::SignedUntrusted => Decision::status(ApprovalStatus::UntrustedSigner),
+        // An approval is by a named person: a valid signature whose signer the
+        // trust input does not name (a gitsign identity no registry entry names)
+        // is an untrusted signer.
+        Status::SignedValid
+            if verdict
+                .signer
+                .as_ref()
+                .is_some_and(|signer| signer.mapping == Mapping::Unmapped) =>
+        {
+            Decision::status(ApprovalStatus::UntrustedSigner)
+        }
         Status::SignedValid => decide_valid(verdict, bindings, tagger_signed_at),
     }
 }

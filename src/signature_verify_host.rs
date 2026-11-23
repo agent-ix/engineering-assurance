@@ -26,13 +26,14 @@ use std::{
 };
 
 use engineering_assurance::signature_verify::{
-    CommitObservation, GitGrade, GitsignIdentity, PrincipalLookup, Probe, Reason, Run,
-    SignatureFormat, SignedAt, SplitTag, SshCheck, TagObservation, TargetKind, Verdict,
+    CommitObservation, GitGrade, GitsignIdentity, GitsignTrust, IDENTITY_REGISTRY_PROTOCOL,
+    IdentityRegistry, PrincipalLookup, Probe, Reason, RegistryEntry, Run, SignatureFormat,
+    SignedAt, SplitTag, SshCheck, TagObservation, TargetKind, TrustSourceAddress, Verdict,
     classify_commit, classify_gitsign, classify_tag, commit_signature_format,
     config_sets_gitsign_key, is_plain_revision, object_message, signed_off_meaning,
     split_tag_object, tagger_signed_at, trailer_values,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de::IgnoredAny};
 use thiserror::Error;
 
 use crate::process_host::{self, CompletedProcess, ProcessError, ProcessLimits};
@@ -43,6 +44,8 @@ const MAX_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
 /// Largest accepted allowed-signers file in bytes.
 const MAX_ALLOWED_SIGNERS_BYTES: u64 = 1024 * 1024;
 const PROCESS_TIMEOUT: Duration = Duration::from_secs(60);
+/// Largest accepted trust source (identity registry) in bytes.
+const MAX_TRUST_SOURCE_BYTES: u64 = 1024 * 1024;
 
 /// Repository-selecting and configuration variables git must not inherit.
 pub(crate) const REMOVED_ENVIRONMENT: [&str; 12] = [
@@ -69,16 +72,148 @@ struct Request {
     kind: TargetKind,
     allowed_signers: PathBuf,
     gitsign: Option<GitsignRequest>,
+    identity_registry: Option<String>,
     trailer_keys: Option<Vec<String>>,
 }
 
-/// The `gitsign` member of a request, as the request documents spell it.
+/// The `gitsign` member of a request, as the request documents spell it. It
+/// names no person: a `principal` member is recognised only to be refused.
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct GitsignRequest {
     pub(crate) certificate_identity: String,
     pub(crate) certificate_oidc_issuer: String,
-    pub(crate) principal: String,
+    /// Whether the member carried a `principal`, of any type. The value is
+    /// dropped as it is read, so it is never used or echoed (FR-040).
+    #[serde(
+        default,
+        rename = "principal",
+        deserialize_with = "member_present",
+        skip_serializing
+    )]
+    principal_supplied: bool,
+}
+
+fn member_present<'de, D: Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+    IgnoredAny::deserialize(deserializer)?;
+    Ok(true)
+}
+
+/// Why the `gitsign` and `identity_registry` members of a request are refused.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum GitsignInputError {
+    /// The members are malformed, or only one of the two is present.
+    Invalid,
+    /// A request that otherwise validates names a person in `gitsign`.
+    PrincipalRefused,
+}
+
+/// A validated `gitsign` identity and the address of the registry that names
+/// the person.
+pub(crate) struct GitsignInput {
+    identity: GitsignIdentity,
+    address: TrustSourceAddress,
+}
+
+/// Validates the `gitsign` and `identity_registry` members together, before
+/// anything is read: `identity_registry` is required with `gitsign` and refused
+/// without it, and a `principal` is refused only after everything else is valid.
+pub(crate) fn validate_gitsign(
+    gitsign: Option<&GitsignRequest>,
+    identity_registry: Option<&str>,
+) -> Result<Option<GitsignInput>, GitsignInputError> {
+    let (gitsign, registry) = match (gitsign, identity_registry) {
+        (None, None) => return Ok(None),
+        (Some(gitsign), Some(registry)) => (gitsign, registry),
+        _ => return Err(GitsignInputError::Invalid),
+    };
+    let identity = GitsignIdentity::new(
+        gitsign.certificate_identity.clone(),
+        gitsign.certificate_oidc_issuer.clone(),
+    )
+    .ok_or(GitsignInputError::Invalid)?;
+    let address = TrustSourceAddress::parse(registry).ok_or(GitsignInputError::Invalid)?;
+    if gitsign.principal_supplied {
+        return Err(GitsignInputError::PrincipalRefused);
+    }
+    Ok(Some(GitsignInput { identity, address }))
+}
+
+/// The `gitsign` trust of a run: the identity, the registry read for it and the
+/// commit that registry was read from.
+pub(crate) struct LoadedGitsign {
+    trust: GitsignTrust,
+    commit: String,
+}
+
+impl LoadedGitsign {
+    /// The full commit id the registry revision resolved to.
+    pub(crate) fn commit(&self) -> &str {
+        &self.commit
+    }
+}
+
+/// Why the identity registry could not be used.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RegistryFailure {
+    /// The source is `invalid` (FR-037) or its content is not a usable registry.
+    Invalid,
+    /// Git could not answer (FR-037): the FR-036 reason for the failure.
+    Git(Reason),
+}
+
+/// Reads the identity registry of `input` once, from the committed revision it
+/// names, and validates its content (FR-037, FR-040).
+pub(crate) fn load_gitsign(
+    repository: &Path,
+    input: GitsignInput,
+) -> Result<LoadedGitsign, RegistryFailure> {
+    let git = Git {
+        repository,
+        allowed_signers: PathBuf::from("/dev/null"),
+        gitsign: None,
+    };
+    let (commit, content) = git.read_trust_source(&input.address)?;
+    let registry = parse_registry(&content).ok_or(RegistryFailure::Invalid)?;
+    Ok(LoadedGitsign {
+        trust: GitsignTrust::new(input.identity, registry),
+        commit,
+    })
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RegistryDocument {
+    protocol: String,
+    entries: Vec<RegistryEntryDocument>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RegistryEntryDocument {
+    certificate_identity: String,
+    certificate_oidc_issuer: String,
+    principal: String,
+}
+
+/// The identity registry the UTF-8 JSON `content` holds, or `None`.
+fn parse_registry(content: &str) -> Option<IdentityRegistry> {
+    let document: RegistryDocument = serde_json::from_str(content).ok()?;
+    if document.protocol != IDENTITY_REGISTRY_PROTOCOL {
+        return None;
+    }
+    let entries = document
+        .entries
+        .into_iter()
+        .map(|entry| {
+            RegistryEntry::new(
+                entry.certificate_identity,
+                entry.certificate_oidc_issuer,
+                entry.principal,
+            )
+        })
+        .collect::<Option<Vec<_>>>()?;
+    IdentityRegistry::new(entries)
 }
 
 #[derive(Serialize)]
@@ -112,6 +247,12 @@ pub(crate) enum SignatureVerifyError {
         "signature-verify allowed-signers file is not a readable UTF-8 regular file of at most 1 MiB"
     )]
     AllowedSigners,
+    /// The `gitsign` member names a person, which only the identity registry may do.
+    #[error("signature-verify gitsign member must not carry a principal")]
+    GitsignPrincipal,
+    /// The identity registry source is invalid or its content is unusable.
+    #[error("signature-verify identity registry is not a usable committed registry")]
+    IdentityRegistry,
     /// The requested trailer keys are not a valid bounded set.
     #[error("signature-verify trailer_keys is not a valid bounded set of trailer keys")]
     TrailerKeys,
@@ -128,6 +269,8 @@ impl SignatureVerifyError {
             Self::Invalid => "signature_verify_request_invalid",
             Self::Revision => "signature_verify_revision_invalid",
             Self::AllowedSigners => "signature_verify_allowed_signers_invalid",
+            Self::GitsignPrincipal => "signature_verify_gitsign_principal_refused",
+            Self::IdentityRegistry => "signature_verify_identity_registry_invalid",
             Self::TrailerKeys => "signature_verify_trailer_keys_invalid",
             Self::ResultEncoding => "signature_verify_result_encoding_failed",
         }
@@ -151,18 +294,27 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, SignatureVerifyError> {
     if !is_plain_revision(&request.revision) {
         return Err(SignatureVerifyError::Revision);
     }
-    let gitsign = request
-        .gitsign
-        .map(|g| {
-            GitsignIdentity::new(
-                g.certificate_identity,
-                g.certificate_oidc_issuer,
-                g.principal,
-            )
-            .ok_or(SignatureVerifyError::Invalid)
-        })
-        .transpose()?;
+    let input = validate_gitsign(
+        request.gitsign.as_ref(),
+        request.identity_registry.as_deref(),
+    )
+    .map_err(|error| match error {
+        GitsignInputError::Invalid => SignatureVerifyError::Invalid,
+        GitsignInputError::PrincipalRefused => SignatureVerifyError::GitsignPrincipal,
+    })?;
     let allowed_signers = capture_allowed_signers(&request.allowed_signers)?;
+    let gitsign = match input
+        .map(|input| load_gitsign(&request.repository, input))
+        .transpose()
+    {
+        Ok(gitsign) => gitsign,
+        Err(RegistryFailure::Invalid) => return Err(SignatureVerifyError::IdentityRegistry),
+        // Git could not answer: a verdict, and no verifier is started.
+        Err(RegistryFailure::Git(reason)) => {
+            let verdict = Verdict::unverifiable(request.kind, reason);
+            return encode_line(&verdict, None);
+        }
+    };
     let git = Git {
         repository: &request.repository,
         allowed_signers: allowed_signers.path.clone(),
@@ -179,9 +331,16 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, SignatureVerifyError> {
         }
     };
     let trailers = requested_trailers(checked.trailers.as_deref(), trailer_keys);
+    encode_line(&checked.verdict, trailers)
+}
+
+fn encode_line(
+    verdict: &Verdict,
+    trailers: Option<BTreeMap<String, Vec<String>>>,
+) -> Result<Vec<u8>, SignatureVerifyError> {
     let mut line = serde_json::to_vec(&ResultLine {
         protocol: RESULT_PROTOCOL,
-        verdict: &checked.verdict,
+        verdict,
         trailers,
     })
     .map_err(|_| SignatureVerifyError::ResultEncoding)?;
@@ -297,13 +456,26 @@ pub(crate) struct CheckedTag {
     pub(crate) tag_object_id: Option<String>,
 }
 
+impl CheckedTag {
+    /// A tag that was never read, because git could not answer while the
+    /// identity registry was read (FR-037): `unverifiable` with `reason`.
+    pub(crate) const fn unread(reason: Reason) -> Self {
+        Self {
+            verdict: Verdict::unverifiable(TargetKind::Tag, reason),
+            trailers: None,
+            tagger_signed_at: None,
+            tag_object_id: None,
+        }
+    }
+}
+
 /// Verifies the tag `revision` exactly as `signature-verify` does for kind
 /// `tag`, and returns the parsed trailer block read for the same verdict.
 pub(crate) fn check_tag(
     repository: &Path,
     revision: &str,
     allowed_signers: &AllowedSignersSnapshot,
-    gitsign: Option<&GitsignIdentity>,
+    gitsign: Option<&LoadedGitsign>,
 ) -> CheckedTag {
     Git {
         repository,
@@ -439,7 +611,7 @@ pub(crate) fn run_git(repository: &Path, arguments: &[&str]) -> Result<Completed
 pub(crate) fn verify_loaded_tag(
     repository: &Path,
     allowed_signers: &AllowedSignersSnapshot,
-    gitsign: Option<&GitsignIdentity>,
+    gitsign: Option<&LoadedGitsign>,
     loaded: LoadedTag,
 ) -> CheckedTag {
     Git {
@@ -453,7 +625,7 @@ pub(crate) fn verify_loaded_tag(
 struct Git<'a> {
     repository: &'a Path,
     allowed_signers: PathBuf,
-    gitsign: Option<&'a GitsignIdentity>,
+    gitsign: Option<&'a LoadedGitsign>,
 }
 
 /// Name of the verifier program for CMS signatures; never taken from input.
@@ -572,7 +744,22 @@ fn observed(result: &Result<CompletedProcess, ProcessError>) -> Run {
 }
 
 impl Git<'_> {
+    /// The commit the identity registry was read from, when one was named.
+    fn registry_commit(&self) -> Option<String> {
+        self.gitsign.map(|gitsign| gitsign.commit.clone())
+    }
+
     fn commit_checked(&self, revision: &str) -> CheckedMessage {
+        let checked = self.commit_checked_unlabelled(revision);
+        CheckedMessage {
+            verdict: checked
+                .verdict
+                .with_identity_registry_commit(self.registry_commit()),
+            trailers: checked.trailers,
+        }
+    }
+
+    fn commit_checked_unlabelled(&self, revision: &str) -> CheckedMessage {
         let kind = TargetKind::Commit;
         if let Err(reason) = self.require_repository() {
             return CheckedMessage {
@@ -627,13 +814,14 @@ impl Git<'_> {
     /// immutable annotated-tag object id. Without a supplied identity nothing
     /// is started.
     fn gitsign_verdict(&self, kind: TargetKind, target: &str) -> Result<Verdict, Reason> {
-        let Some(identity) = self.gitsign else {
+        let Some(loaded) = self.gitsign else {
             // The classifier asks for no probe without an identity.
             return Ok(classify_gitsign(kind, None, false, |_| Run::Unobserved));
         };
+        let identity = loaded.trust.identity();
         let sets_key = self.repository_sets_gitsign_key()?;
         if sets_key {
-            return Ok(classify_gitsign(kind, Some(identity), true, |_| {
+            return Ok(classify_gitsign(kind, Some(&loaded.trust), true, |_| {
                 Run::Unobserved
             }));
         }
@@ -642,30 +830,35 @@ impl Git<'_> {
         } else {
             None
         };
-        Ok(classify_gitsign(kind, Some(identity), false, |probe| {
-            match &tag_snapshot {
-                // The ref must name the resolved object before and after the run;
-                // anything else is a run that cannot be trusted.
-                Some(snapshot) => {
-                    if !snapshot.binds_object() {
-                        return Run::SnapshotChanged;
+        Ok(classify_gitsign(
+            kind,
+            Some(&loaded.trust),
+            false,
+            |probe| {
+                match &tag_snapshot {
+                    // The ref must name the resolved object before and after the run;
+                    // anything else is a run that cannot be trusted.
+                    Some(snapshot) => {
+                        if !snapshot.binds_object() {
+                            return Run::SnapshotChanged;
+                        }
+                        let run = Self::gitsign_run(
+                            identity,
+                            kind,
+                            SNAPSHOT_TAG,
+                            snapshot.directory.path(),
+                            probe,
+                        );
+                        if snapshot.binds_object() {
+                            run
+                        } else {
+                            Run::SnapshotChanged
+                        }
                     }
-                    let run = Self::gitsign_run(
-                        identity,
-                        kind,
-                        SNAPSHOT_TAG,
-                        snapshot.directory.path(),
-                        probe,
-                    );
-                    if snapshot.binds_object() {
-                        run
-                    } else {
-                        Run::SnapshotChanged
-                    }
+                    None => Self::gitsign_run(identity, kind, target, self.repository, probe),
                 }
-                None => Self::gitsign_run(identity, kind, target, self.repository, probe),
-            }
-        }))
+            },
+        ))
     }
 
     /// Whether the configuration `gitsign` will see sets any `gitsign.*` key,
@@ -780,6 +973,52 @@ impl Git<'_> {
         Ok(snapshot)
     }
 
+    /// Reads a trust source `<rev>:<path>` from the committed git object, once,
+    /// as FR-037 defines: the revision is resolved to a full commit id (an
+    /// annotated tag peeled, replace refs and grafts ignored) and the content is
+    /// the blob at the path in that commit's tree, never the working tree or the
+    /// index. Returns the commit id and the content.
+    fn read_trust_source(
+        &self,
+        address: &TrustSourceAddress,
+    ) -> Result<(String, String), RegistryFailure> {
+        let git_failed = RegistryFailure::Git;
+        self.require_repository().map_err(git_failed)?;
+        let commit = match self.resolve(&format!("{}^{{commit}}", address.revision())) {
+            Ok(commit) => commit,
+            Err(Reason::RevisionUnresolved) => return Err(RegistryFailure::Invalid),
+            Err(reason) => return Err(git_failed(reason)),
+        };
+        let listing = self
+            .successful(&[
+                "--literal-pathspecs",
+                "ls-tree",
+                "-z",
+                "--full-tree",
+                &commit,
+                "--",
+                address.path(),
+            ])
+            .map_err(git_failed)?;
+        let object =
+            regular_file_object(&listing, address.path()).ok_or(RegistryFailure::Invalid)?;
+        let size = self
+            .successful(&["cat-file", "-s", &object])
+            .map_err(git_failed)?;
+        let size: u64 = std::str::from_utf8(&size)
+            .ok()
+            .and_then(|text| text.trim_end().parse().ok())
+            .ok_or(RegistryFailure::Git(Reason::UnrecognizedOutput))?;
+        if size > MAX_TRUST_SOURCE_BYTES {
+            return Err(RegistryFailure::Invalid);
+        }
+        let bytes = self
+            .successful(&["cat-file", "blob", &object])
+            .map_err(git_failed)?;
+        let content = String::from_utf8(bytes).map_err(|_| RegistryFailure::Invalid)?;
+        Ok((commit, content))
+    }
+
     fn grade(&self, id: &str) -> Result<GitGrade, Reason> {
         let verify_accepted = self.run(&["verify-commit", id])?.status.success();
         let log = self.successful(&[
@@ -810,8 +1049,8 @@ impl Git<'_> {
 
     fn tag_checked(&self, revision: &str) -> CheckedTag {
         let kind = TargetKind::Tag;
-        let without_message = |verdict| CheckedTag {
-            verdict,
+        let without_message = |verdict: Verdict| CheckedTag {
+            verdict: verdict.with_identity_registry_commit(self.registry_commit()),
             trailers: None,
             tagger_signed_at: None,
             tag_object_id: None,
@@ -869,7 +1108,8 @@ impl Git<'_> {
                 Verdict::unverifiable(kind, reason)
                     .with_signature_kind(format.and_then(SignatureFormat::signature_kind))
             })
-            .with_meaning(meaning);
+            .with_meaning(meaning)
+            .with_identity_registry_commit(self.registry_commit());
         CheckedTag {
             verdict,
             trailers,
@@ -1126,6 +1366,24 @@ impl Git<'_> {
         }
         .map_err(|error| mechanics_reason(&error, Reason::GitNotStarted))
     }
+}
+
+/// The object id of the one regular-file entry (mode 100644 or 100755) that
+/// `git ls-tree -z` listed for `path`, or `None` when the path is absent or is a
+/// symbolic link, submodule or tree.
+fn regular_file_object(listing: &[u8], path: &str) -> Option<String> {
+    let mut entries = listing
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty());
+    let entry = std::str::from_utf8(entries.next()?).ok()?;
+    if entries.next().is_some() {
+        return None;
+    }
+    let (header, name) = entry.split_once('\t')?;
+    let mut fields = header.split(' ');
+    let (mode, kind, object) = (fields.next()?, fields.next()?, fields.next()?);
+    (name == path && kind == "blob" && matches!(mode, "100644" | "100755"))
+        .then(|| object.to_owned())
 }
 
 const fn limits() -> ProcessLimits {
