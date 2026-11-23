@@ -382,7 +382,7 @@ fn tc_279_gitsign_verify_tag_runs_in_a_non_bare_repository_bound_to_the_resolved
     let tag_id = forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
     let stand_in = STAND_IN.replace(
         "exit \"$status\"",
-        "{ git rev-parse --is-bare-repository; git rev-parse --git-dir; git rev-parse \"refs/tags/$7\"; git cat-file -t \"refs/tags/$7\"; test ! -e .git/objects/info/alternates && echo no-alternates; } > \"$d/snapshot_state_$n\" 2>&1\nexit \"$status\"",
+        "{ git rev-parse --is-bare-repository; git rev-parse --git-dir; git rev-parse \"refs/tags/$7\"; git cat-file -t \"refs/tags/$7\"; test ! -e .git/objects/info/alternates && echo no-alternates; } > \"$d/snapshot_state_$n\" 2>&1\ngit cat-file --batch-all-objects --batch-check='%(objectname) %(objecttype)' > \"$d/snapshot_objects_$n\" 2>&1\nexit \"$status\"",
     );
     fs::write(fixture.bin().join("gitsign"), stand_in).expect("gitsign stand-in");
     let result = verdict(&fixture, &request(&fixture, "v-cms", "tag", true));
@@ -391,6 +391,11 @@ fn tc_279_gitsign_verify_tag_runs_in_a_non_bare_repository_bound_to_the_resolved
     assert_eq!(
         fixture.lines("snapshot_state", 1),
         ["false", ".git", tag_id.as_str(), "tag", "no-alternates"]
+    );
+    // Every object loose or packed in the snapshot: the resolved tag and nothing else.
+    assert_eq!(
+        fixture.lines("snapshot_objects", 1),
+        [format!("{tag_id} tag")]
     );
 }
 
