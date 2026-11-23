@@ -69,3 +69,13 @@ scope:
   role: examined
   excerpt: meaning.presence == Presence::Present && meaning.values.iter().all(|value| !value.trim().is_empty())
 ```
+
+## Dispositions
+
+Round 1, fix commit `47fd111`. Focused checks at that head: `cargo test --features full --test approval_verify --test approval_verify_cli -- tc_310 tc_321`.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | TC-310 now enumerates six meaning shapes (unread, missing, real, empty, Unicode-whitespace, real-then-empty), and `is_approval` admits only `Real`; a dropped or ASCII-only blank check now fails the property |
+| FND-002 | fixed | The `v-blank-and-real` case now asserts that `meaning` and `approver` are absent |
+| FND-003 | fixed | FR-041 step 3, CON-1 and AC-5 now say "Unicode White_Space" |

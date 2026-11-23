@@ -48,3 +48,11 @@ scope:
   role: examined
   excerpt: ... and a `Signed-off-meaning` trailer whose every value holds a non-whitespace character.
 ```
+
+## Dispositions
+
+Round 1, fix commit `47fd111`.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | TC-310 now covers the blank-value dimension of CON-1 (empty, Unicode-whitespace, real-then-empty) in the pure decision; only `Real` is approved |
