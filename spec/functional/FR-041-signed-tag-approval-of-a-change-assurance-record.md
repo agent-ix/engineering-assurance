@@ -20,8 +20,8 @@ relationships:
 Engineering Assurance SHALL provide an `approval-verify` command that reports
 whether a signed annotated git tag is a named person's approval of one exact
 change-assurance record. The named person is the principal that the supplied trust
-input (the allowed-signers file, or the `gitsign` identity and principal) names for
-the signing key; the result is not an established identity, and it echoes that
+input (the allowed-signers file, or the `gitsign` identity with the version-controlled
+identity registry) names for the signing key; the result is not an established identity, and it echoes that
 trust input so a consumer can tell which trust root named the approver and can
 re-run the command. The tag message carries the record id and the record
 digest as trailers, so the signature binds the signer to the record content
@@ -70,7 +70,9 @@ carried by commits, merge commits or notes.
   `record_id` and `record_digest` (non-empty strings of at most 256 bytes with
   no control character and no leading `-`), `allowed_signers` (absolute file
   path, required, as FR-036 and FR-037), and optionally `gitsign` (the object
-  FR-040 defines, with the same bounds). Unknown members are rejected.
+  FR-040 defines, with the same bounds, and no `principal`) with its
+  `identity_registry` (FR-040), required with `gitsign`. Unknown members are
+  rejected.
 - Trailer names, fixed by this requirement: `Approved-Record-Id` and
   `Approved-Record-Digest`, read from the tag message. The approval meaning is
   the `Signed-off-meaning` trailer of FR-037.
@@ -88,7 +90,10 @@ carried by commits, merge commits or notes.
     an annotated tag; and `record_id` and `record_digest` as requested;
   - `trust`, the trust input the verdict was made against, copied from the
     request: `allowed_signers` (the path) and, when the request had one, `gitsign`
-    (`certificate_identity`, `certificate_oidc_issuer` and `principal`);
+    (`certificate_identity` and `certificate_oidc_issuer`), `identity_registry`
+    (the request's `<rev>:<path>` value) and `identity_registry_commit` (the full
+    commit id it resolved to, as FR-040 reports it, present whenever the
+    revision resolved and absent otherwise);
   - `reason`, present only when `status` is `unverifiable`: the FR-036 or FR-040
     reason, or `trailer_unreadable` when a validly signed tag's message could not
     be read;
@@ -112,7 +117,9 @@ carried by commits, merge commits or notes.
      `lightweight_tag`) is `unsigned`; `signed_bad` is `signed_bad`;
      `unverifiable` is `unverifiable`; `signed_untrusted` (a good signature by a
      key or identity the supplied trust inputs do not accept, so the signer is
-     `unmapped`) is `untrusted_signer`; `signed_valid` with no readable tag
+     `unmapped`) is `untrusted_signer`; `signed_valid` whose signer is `unmapped`
+     (a gitsign identity that no identity-registry entry names) is
+     `untrusted_signer`, because an approval is by a named person; `signed_valid` with no readable tag
      message is `unverifiable` with reason `trailer_unreadable`;
   2. `signed_valid` with `binding` other than `match` for either member is
      `wrong_record`;
@@ -123,14 +130,20 @@ carried by commits, merge commits or notes.
   machine error for capability `approval-verify` to stdout and its message to
   stderr, and exits with status 2. The codes are
   `approval_verify_request_unreadable`, `approval_verify_request_invalid`,
-  `approval_verify_allowed_signers_invalid` and
-  `approval_verify_result_encoding_failed`.
+  `approval_verify_allowed_signers_invalid`,
+  `approval_verify_gitsign_principal_refused`,
+  `approval_verify_identity_registry_invalid` and
+  `approval_verify_result_encoding_failed`, the middle two being the FR-040 refusals
+  for a `gitsign` member that carries `principal` and for an identity registry
+  whose source is `invalid` or whose content is unusable. A git failure while
+  the registry is read is the `unverifiable` result of FR-040, not a machine
+  error.
 
 ## Behavior
 
 - The command SHALL obtain the `signature` verdict by the signature-verify
   verification of FR-036, FR-037 and FR-040 with kind `tag`, the request's
-  `tag` as the revision, and the request's `allowed_signers` and `gitsign`,
+  `tag` as the revision, and the request's `allowed_signers`, `gitsign` and `identity_registry`,
   and SHALL NOT restate, relax or re-implement any rule they define.
 - The command SHALL resolve an annotated tag once to its canonical full object
   id and SHALL read the tag message, tagger line and signature bytes from that
@@ -235,11 +248,11 @@ criteria use real signatures from throwaway keys generated in the test.
 | FR-041-AC-5 | A valid, mapped tag with matching record trailers and no `Signed-off-meaning` trailer yields `meaning_missing` and no `meaning` default; the same tag with a trailer whose value is empty or Unicode White_Space-only, alone or repeated, or beside a non-blank value, yields `meaning_missing` and no `meaning`. | Test |
 | FR-041-AC-6 | A tag whose signature does not verify yields `signed_bad`; an unsigned annotated tag yields `unsigned`; a lightweight tag yields `unsigned` with `signature` reason `lightweight_tag`; a name resolving to no tag, or to a branch or commit, yields `unverifiable`; none of them yields `approved` even when the message carries matching trailers. | Test |
 | FR-041-AC-7 | Record trailers placed in the tagged commit's message but not in the tag message do not bind the record (binding `missing`, status `wrong_record`), and a name that resolves to a signed commit or a merge commit rather than an annotated tag yields `unverifiable` with `signature` reason `revision_unresolved`, not `approved`. | Test |
-| FR-041-AC-8 | A gitsign-signed tag with a `gitsign` member whose identity and issuer gitsign accepts, and matching trailers, yields `approved` with `signature_kind` `gitsign` and `approver` equal to the request's `gitsign.principal`; a tag whose identity gitsign does not accept yields `untrusted_signer`; a CMS-signed tag with no `gitsign` member yields `unverifiable`. | Test |
-| FR-041-AC-9 | The decision from the FR-036 verdict and the binding is exercised without starting any process, covering every combination of verdict status, binding member and meaning presence, and `approved` is returned for exactly one combination (CON-1). | Property |
-| FR-041-AC-10 | A request with an unknown member, an empty or over-long `record_id` or `record_digest`, a leading `-`, a control character, a relative `repository` or `allowed_signers` path, or an invalid `gitsign` member writes `approval_verify_request_invalid` and exits 2; an invalid allowed-signers file writes `approval_verify_allowed_signers_invalid` and exits 2; neither starts git. | Test |
+| FR-041-AC-8 | A gitsign-signed tag with a `gitsign` member whose identity and issuer gitsign accepts, and matching trailers, yields `approved` with `signature_kind` `gitsign` and `approver` equal to the `principal` of the identity-registry entry for that identity and issuer; a tag whose identity gitsign accepts but the registry does not name, or whose identity gitsign does not accept, yields `untrusted_signer`; a CMS-signed tag with no `gitsign` member yields `unverifiable`. | Test |
+| FR-041-AC-9 | The decision from the FR-036 verdict and the binding is exercised without starting any process, covering every combination of verdict status, signer mapping, binding member and meaning presence, and `approved` is returned for exactly one combination (CON-1). | Property |
+| FR-041-AC-10 | A request with an unknown member, an empty or over-long `record_id` or `record_digest`, a leading `-`, a control character, a relative `repository` or `allowed_signers` path, an invalid `gitsign` member, or an `identity_registry` that is absent with `gitsign` or present without it writes `approval_verify_request_invalid` and exits 2; an invalid allowed-signers file writes `approval_verify_allowed_signers_invalid`, a `gitsign` member carrying `principal` writes `approval_verify_gitsign_principal_refused`, and an unusable identity registry writes `approval_verify_identity_registry_invalid`, each exiting 2; none of them starts a signature verifier, and only the identity registry refusal starts git. A request that validates with a `principal` is refused before git starts. A git failure while the registry is read yields `unverifiable` at exit 0. | Test |
 | FR-041-AC-13 | A tag message made only of the trailer lines, with no subject paragraph, yields binding `missing` for both members and status `wrong_record`; the same trailers after a subject paragraph yield `match`. | Test |
-| FR-041-AC-14 | The result of an `approved` or any other status carries `trust` equal to the request's `allowed_signers` and `gitsign` members; a tag allowed-signers file naming a different principal for the same key yields a different `approver` under the different `trust`. | Test |
+| FR-041-AC-14 | The result of an `approved` or any other status carries `trust` equal to the request's `allowed_signers`, `gitsign` and `identity_registry` members plus `identity_registry_commit`, the full commit id the registry revision resolved to, present whenever the revision resolved and absent when it did not or when the registry reading was `git_failed`; a tag allowed-signers file naming a different principal for the same key yields a different `approver` under the different `trust`. | Test |
 | FR-041-AC-15 | A validly signed tag whose message cannot be read yields `unverifiable` with reason `trailer_unreadable` and not `wrong_record`; a message cannot be read when git cannot parse it, when it holds a NUL byte, or when the parsed trailer output is not valid UTF-8, and no byte is replaced or truncated to make a trailer match. | Test |
 | FR-041-AC-11 | Every status other than a request error exits 0 and writes one JSON line carrying the result protocol, and a validly signed tag whose trailers are unrelated to the request still carries the unchanged `signature` verdict that `signature-verify` yields for the same tag. | Test |
 | FR-041-AC-12 | Static inspection shows no signature, certificate or trailer-parsing code in the approval module and no restated FR-036, FR-037 or FR-040 rule (CON-2). | Inspection |
@@ -249,7 +262,7 @@ criteria use real signatures from throwaway keys generated in the test.
 | FR-041-AC-22 | A valid SSH-signed annotated tag with matching approval trailers remains `approved` when its ref is unchanged; the result's `tag_object_id` equals an independent `git rev-parse` of the tag object, and that same id supplies the parsed message and SSH verification. | Test |
 | FR-041-AC-23 | After the command reads a validly signed tag message, moving or deleting the named ref before signature verification cannot produce `approved`: the command verifies the already-resolved immutable object or returns `unverifiable` with no approval members. Any result after annotated-tag resolution reports the originally resolved `tag_object_id`; it never combines the original message with verification of a replacement object. For a CMS-signed tag the verifier sees only the isolated tag snapshot of FR-040: a non-bare repository holding only the resolved tag object, re-hashed to the resolved id, under the ref `refs/tags/verified`; a source ref moved or deleted after resolution does not change the verified object, and a snapshot ref that stops naming the resolved id during verification yields `unverifiable`, never `approved`. | Test |
 | FR-041-AC-24 | The moved-ref and deleted-ref cases in AC-23 are synchronized at the boundary between message extraction and verifier observation; an unchanged-ref healthy control proves the synchronization does not itself cause refusal. Repeat the identity-binding cases for SSH and gitsign using the verifier appropriate to each signature type; a missing gitsign executable or unavailable trust service is reported as unavailable/unverifiable, not as a passing integration case. | Test |
-| FR-041-AC-25 | With the annotated tag ref unchanged, mutate the allowed-signers bytes or relevant repository gitsign configuration after request/trust capture but before verifier execution. A synchronized adapter observation proves the verifier uses the captured trust/configuration snapshot and returns a verdict for that snapshot; if the implementation cannot preserve that snapshot, it returns `unverifiable` with no approval members. The test's independent oracle identifies the exact trust/configuration bytes observed by the verifier. | Test |
+| FR-041-AC-25 | With the annotated tag ref unchanged, mutate the allowed-signers bytes, move the branch the `identity_registry` revision names, edit the working-tree registry, or change relevant repository gitsign configuration after request/trust capture but before verifier execution. A synchronized adapter observation proves the verifier uses the captured trust/configuration snapshot and returns a verdict for that snapshot; if the implementation cannot preserve that snapshot, it returns `unverifiable` with no approval members. The test's independent oracle identifies the exact trust/configuration bytes observed by the verifier. | Test |
 | FR-041-AC-26 | Against real `gitsign` v0.18.0 and available Sigstore trust services, `approval-verify` on a public gitsign-signed annotated tag with matching approval trailers and a `Signed-off-meaning` yields `approved`, carries the same `tag_object_id` as an independent resolution of the tag, and preserves the FR-040 signature verdict. Wrong identity or issuer yields `untrusted_signer` with the corresponding FR-040 mismatch; a changed signed tag object yields `unverifiable` with no approval members; a gitsign-disallowed repository trust configuration yields `unverifiable` with no approval members. Missing executable or unavailable trust service yields `unverifiable` with no approval members and is recorded unavailable, not as a passing integration run. The test records the gitsign version, tag object ids, identity, issuer, and network/trust-service outcome. | Test (live, ignored by default) |
 | FR-041-AC-19 | `wrong_record`, `untrusted_signer` and `meaning_missing` results for tags with a readable tagger date carry none of `signed_at`, `signed_at_source` and `signed_at_missing`, and supplying a time to the pure decision changes no status or reason for any combination. | Test |
 | FR-041-AC-20 | A gitsign-signed tag approved through the stand-in reports `signed_at` from its tagger date (normalized from a non-UTC zone) with `signed_at_source` `tagger_date`; a stand-in rejecting the identity still yields `untrusted_signer` with no time; the time read starts no `gitsign` run. | Test (stand-in) |
