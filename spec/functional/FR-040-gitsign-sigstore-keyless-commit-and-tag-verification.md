@@ -124,9 +124,10 @@ remain `unverifiable`, FR-036).
   `signed_untrusted`, `signer` is `source` `gitsign_registry`, `mapping`
   `unmapped`, no principal (FR-037), and no `certificate` member, because the
   certificate's actual identity is not read from gitsign's message text.
-- Whenever the identity registry was read, the verdict adds
-  `identity_registry_commit`, the full commit id the registry revision resolved
-  to, in every status.
+- Whenever the registry revision resolved to a commit, the verdict adds
+  `identity_registry_commit`, the full commit id it resolved to, in every
+  status. The member is absent when the revision did not resolve or the
+  registry reading was `git_failed`.
 - `reason` gains seven values in the closed list: `gitsign_not_started`,
   `gitsign_identity_missing`, `gitsign_verification_failed` (gitsign did not
   accept the signature even with wildcard matchers, exited 2, or exited with
@@ -349,8 +350,8 @@ bad signature is `unverifiable`.
 | FR-040-AC-27 | An `identity_registry` whose revision does not resolve to a commit, whose path is absent from that commit, is a symbolic link or directory, exceeds 1 MiB, is not UTF-8 or JSON, has a wrong `protocol`, has an unknown member, has an oversized or empty value, has more than 4096 entries, or repeats an identity and issuer yields `signature_verify_identity_registry_invalid` and exit status 2, and starts no signature verifier, for a CMS-signed and for an SSH-signed object. | Test |
 | FR-040-AC-28 | The registry is read from the committed revision and not the working tree: with the working-tree registry holding an entry the committed registry lacks, the signer is `unmapped`; with the working-tree registry edited to drop an entry the committed registry holds, the signer is `mapped`. | Test (stand-in) |
 | FR-040-AC-29 | The `mapped` principal depends only on the registry: the same accepted identity and issuer yield different principals under two committed registry revisions that name different people, and the commit author, committer, tagger, email and certificate text change nothing. | Test (stand-in) |
-| FR-040-AC-30 | In a directory that is not a git repository, with a git that cannot start, and with a git that times out while the registry is read, the verdict is `unverifiable` at exit 0 with reason `repository_unavailable`, `git_not_started` and `timeout` respectively, not `signature_verify_identity_registry_invalid`, and no signature verifier starts. | Test |
-| FR-040-AC-31 | Every verdict for a request with `gitsign` carries `identity_registry_commit` equal to the full commit id the registry revision resolved to, including after the branch the revision names has moved. | Test (stand-in) |
+| FR-040-AC-30 | In a directory that is not a git repository, with a git that cannot start, and with a git that times out while the registry is read, the verdict is `unverifiable` at exit 0 with reason `repository_unavailable`, `git_not_started` and `timeout` respectively, not `signature_verify_identity_registry_invalid`, and no signature verifier starts; the verdict has no `identity_registry_commit` member. | Test |
+| FR-040-AC-31 | Every verdict for a request with `gitsign` whose registry revision resolved to a commit carries `identity_registry_commit` equal to that full commit id, including after the branch the revision names has moved, and a verdict whose revision did not resolve carries none. | Test (stand-in) |
 
 ## Dependencies
 

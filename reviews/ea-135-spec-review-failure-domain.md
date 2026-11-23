@@ -22,3 +22,10 @@ identity registry, including the lead-accepted caller choice of `<rev>`.
 ## Verdict
 
 PASS with findings for the failure-domain lens. Exact string equality, closed registry members, the duplicate rule, the 4096/1 MiB bounds, read-once and no working tree/index are all sound, and the unmapped-but-`signed_valid` result fails closed for approval (FR-041). Security judgement on the lead-accepted caller-chosen `<rev>`: it is not a defect in itself, because it is the same caller-controlled trust model as the SSH allowed-signers path. It becomes one only because the resolved commit is not reported (FND-001). The FR-037 reading section is reusable for EA-138 as written, apart from the FND-002 gaps.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-040 Description now says the mapping is only as trustworthy as the commit the consumer accepts. The verdict carries `identity_registry_commit`, which FR-041, FR-043 and FR-080 echo in `trust`, so a consumer can run an ancestry check and re-run. One echo case still contradicts AC-30; it is recorded as base FND-006. |
+| FND-002 | fixed | FR-037 now refuses an empty `<rev>` or path before git starts, peels an annotated tag to its commit, says a revision containing `:` cannot be addressed, and ignores replace refs and grafts (AC-19, AC-20, AC-21). |

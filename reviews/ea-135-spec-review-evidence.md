@@ -22,3 +22,10 @@ Test (stand-in) and can be tested with the existing stand-in gitsign and throwaw
 ## Verdict
 
 PASS with findings once FND-001 is resolved.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The blob id and the repeat-read clause are gone. FR-037-AC-21 now tests branch resolution and tag peeling, and the reading yields only the content and the commit id, which `identity_registry_commit` consumes. |
+| FND-002 | fixed | TC-1037 to TC-1048 cover FR-037-AC-19..22, FR-040-AC-25..31, CON-3 and FR-047-AC-14, and TC-286, TC-287, TC-327 and TC-361 are updated. The rows still stale are recorded as base FND-007. |

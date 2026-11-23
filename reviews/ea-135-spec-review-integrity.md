@@ -23,3 +23,10 @@ consistent; the error taxonomy is not.
 ## Verdict
 
 FAIL on FND-001 (medium); see the base review for the code-list and FR-080 gaps. FR-037-CON-1, FR-040-CON-3 and FR-041-CON-1 agree that `mapped` requires a registry entry and that no principal comes from a request.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-037 now has three reading outcomes (read, `invalid`, `git_failed`). `git_failed` takes each capability's existing git-failure outcome: `unverifiable` at exit 0 for signature-verify and approval-verify (FR-040-AC-30), `approval_trail_repository_unavailable` (FR-043-AC-10, never the registry code), `release_verify_git_failed` (FR-047-AC-14), and `unverifiable` for FR-080. |
+| FND-002 | fixed | FR-041-AC-9 now covers signer mapping as a dimension of the property. |

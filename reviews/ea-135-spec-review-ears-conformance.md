@@ -22,3 +22,9 @@ registry) are well-formed ubiquitous/negative statements.
 ## Verdict
 
 PASS with one low finding.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The FR-037 reading rules are now system-subject "The command SHALL" and "If ..., then the command SHALL" statements, and the FR-040 ordering is split into four single-action SHALL statements. |

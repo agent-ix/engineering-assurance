@@ -30,3 +30,20 @@ FND-002); the remaining findings are cross-spec gaps.
 ## Verdict
 
 FAIL, not mergeable as is: fix FND-001 and FND-002 (both one-line AC/ordering edits) and FND-003/FND-004 (cross-spec amendments in the same PR). The code is implementable: `GitsignIdentity` drops `principal`, `classify_gitsign`/`probe_gitsign` take a registry lookup in place of `identity.principal` (src/signature_verify.rs), `SignerSource::Request` becomes a registry source, and the registry read can reuse the host git runner, which already sets `GIT_NO_REPLACE_OBJECTS` and a dead graft file (src/signature_verify_host.rs). FR-080 has no host yet (no proof-checkpoint code in src/), so its amendment is spec-only.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | high | FR-040-AC-31 requires "every verdict for a request with `gitsign`" to carry `identity_registry_commit`, but FR-040-AC-30 requires an `unverifiable` verdict, at exit 0, for a registry reading that is `git_failed`. In a directory that is not a repository, or with a git that cannot start, no commit was resolved, so no such id exists. FR-040 Outputs say the member is added only "whenever the identity registry was read", which fits AC-30. FR-041-AC-14 repeats the "any other status" form for `trust.identity_registry_commit`. Fix: in AC-31 and FR-041-AC-14, say "whenever the registry revision resolved", and have AC-30 assert the member is absent. | spec/functional/FR-040-gitsign-sigstore-keyless-commit-and-tag-verification.md:127-129,352-353; spec/functional/FR-041-signed-tag-approval-of-a-change-assurance-record.md:254 |
+| FND-007 | low | Test-plan rows the fix round did not update: TC-310 (FR-041-AC-9) still varies only signature status, bindings and meaning, not signer mapping; TC-325 (FR-041-AC-14) does not check `identity_registry_commit`; TC-1026 (FR-080-AC-5) lacks the registry-unnamed identity case that AC-5 now lists. | spec/tests.md:735,750,1049 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-040 Behavior now validates the request first and refuses `principal` only after it validates; AC-11 covers `gitsign` without `identity_registry` "with or without a `principal`", and AC-26 applies only to a request that otherwise validates. One code per input. |
+| FND-002 | fixed | FR-041-AC-10 now says none of the refusals starts a signature verifier, only the registry refusal starts git, and a principal refusal comes before git. |
+| FND-003 | fixed | FR-036, FR-043 and FR-047 Outputs code lists carry both new codes; FR-043-AC-10 and the new FR-047-AC-14 test them; FR-080 names `proof_checkpoint_verify_gitsign_principal_refused` and `proof_checkpoint_verify_identity_registry_invalid`. |
+| FND-004 | fixed | FR-080 rule (4) makes `signed_valid` with an `unmapped` signer `untrusted_signer`, and FR-080-AC-5 tests it. |
+| FND-005 | fixed | The README row now names the allowed-signers file for SSH and the identity registry for gitsign. |

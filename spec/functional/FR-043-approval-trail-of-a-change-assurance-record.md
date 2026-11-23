@@ -63,7 +63,7 @@ signature rule (FR-036, FR-037, FR-040 own them), and a persisted log of the tra
 - With `--format json`, one line of JSON on stdout and exit status 0, the result
   with the member `protocol` equal to `engineering-assurance.approval-trail-result/v1`:
   - `record_id`, `record_digest` and `trust` as requested (the `trust` member of
-    FR-041, which with `gitsign` also carries `identity_registry_commit`);
+    FR-041, which with `gitsign` also carries `identity_registry_commit` whenever the revision resolved);
   - `ordering`, the string `claimed_at_ascending`;
   - `entries`, the array of entries in order;
   - `unreadable`, the array of annotated tags that cannot be known to name the
