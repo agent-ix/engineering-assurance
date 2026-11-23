@@ -446,7 +446,7 @@ fn tc_320_a_good_signature_by_an_unlisted_key_is_an_untrusted_signer() {
 
 #[test]
 #[trace("TC-321", "FR-041-AC-5")]
-fn tc_321_a_missing_meaning_is_not_approved_and_an_empty_one_is() {
+fn tc_321_a_missing_or_blank_meaning_is_not_approved() {
     let fixture = fixture();
     let id_line = format!("Approved-Record-Id: {RECORD_ID}");
     let digest_line = format!("Approved-Record-Digest: {DIGEST}");
@@ -460,15 +460,39 @@ fn tc_321_a_missing_meaning_is_not_approved_and_an_empty_one_is() {
     assert_eq!(missing["status"], "meaning_missing", "{missing}");
     assert!(missing.get("meaning").is_none());
     assert!(missing.get("approver").is_none());
+    let blanks: [(&str, &[&str]); 4] = [
+        ("v-empty", &["Signed-off-meaning:"]),
+        ("v-spaces", &["Signed-off-meaning:    "]),
+        ("v-unicode", &["Signed-off-meaning: \u{a0}\u{2003}"]),
+        (
+            "v-repeated-empty",
+            &["Signed-off-meaning:", "Signed-off-meaning:  "],
+        ),
+    ];
+    for (tag, meaning) in blanks {
+        let mut trailers = vec![id_line.as_str(), digest_line.as_str()];
+        trailers.extend_from_slice(meaning);
+        signed_tag(&fixture, "a", tag, &approval(&trailers));
+        let blank = status(&fixture, tag);
+        assert_eq!(blank["status"], "meaning_missing", "{tag}: {blank}");
+        assert!(blank.get("meaning").is_none(), "{tag}: {blank}");
+        assert!(blank.get("approver").is_none(), "{tag}: {blank}");
+    }
     signed_tag(
         &fixture,
         "a",
-        "v-empty-meaning",
-        &approval(&[&id_line, &digest_line, "Signed-off-meaning:"]),
+        "v-blank-and-real",
+        &approval(&[
+            &id_line,
+            &digest_line,
+            "Signed-off-meaning: reviewed",
+            "Signed-off-meaning:",
+        ]),
     );
-    let empty = status(&fixture, "v-empty-meaning");
-    assert_eq!(empty["status"], "approved", "{empty}");
-    assert_eq!(empty["meaning"], json!([""]));
+    let mixed = status(&fixture, "v-blank-and-real");
+    assert_eq!(mixed["status"], "meaning_missing", "{mixed}");
+    assert!(mixed.get("meaning").is_none(), "{mixed}");
+    assert!(mixed.get("approver").is_none(), "{mixed}");
 }
 
 #[test]
