@@ -29,6 +29,20 @@ const BINDINGS: [Binding; 4] = [
 ];
 
 fn verdict(status: Status, meaning: Option<Presence>) -> Verdict {
+    verdict_with(
+        status,
+        meaning.map(|presence| SignedOffMeaning {
+            presence,
+            values: if presence == Presence::Present {
+                vec!["reviewed".to_owned(), "released".to_owned()]
+            } else {
+                Vec::new()
+            },
+        }),
+    )
+}
+
+fn verdict_with(status: Status, signed_off_meaning: Option<SignedOffMeaning>) -> Verdict {
     let signer = match status {
         Status::SignedValid => Some(Signer {
             source: SignerSource::AllowedSigners,
@@ -52,26 +66,60 @@ fn verdict(status: Status, meaning: Option<Presence>) -> Verdict {
         signer,
         certificate: None,
         mismatch: None,
-        signed_off_meaning: meaning.map(|presence| SignedOffMeaning {
-            presence,
-            values: if presence == Presence::Present {
-                vec!["reviewed".to_owned(), "released".to_owned()]
-            } else {
-                Vec::new()
-            },
-        }),
+        signed_off_meaning,
     }
 }
 
+/// A meaning as the verdict carries it: unread, or a presence with its values.
+#[derive(Clone, Copy, Debug)]
+enum Meaning {
+    Unread,
+    Missing,
+    Real,
+    Empty,
+    Whitespace,
+    RealThenEmpty,
+}
+
+const MEANINGS: [Meaning; 6] = [
+    Meaning::Unread,
+    Meaning::Missing,
+    Meaning::Real,
+    Meaning::Empty,
+    Meaning::Whitespace,
+    Meaning::RealThenEmpty,
+];
+
+fn meaning_verdict(status: Status, meaning: Meaning) -> Verdict {
+    let present = |values: &[&str]| SignedOffMeaning {
+        presence: Presence::Present,
+        values: values.iter().map(|value| (*value).to_owned()).collect(),
+    };
+    verdict_with(
+        status,
+        match meaning {
+            Meaning::Unread => None,
+            Meaning::Missing => Some(SignedOffMeaning {
+                presence: Presence::Missing,
+                values: Vec::new(),
+            }),
+            Meaning::Real => Some(present(&["reviewed", "released"])),
+            Meaning::Empty => Some(present(&[""])),
+            Meaning::Whitespace => Some(present(&[" \u{a0}\u{2003}"])),
+            Meaning::RealThenEmpty => Some(present(&["reviewed", ""])),
+        },
+    )
+}
+
 /// The one combination CON-1 allows `approved` for.
-fn is_approval(status: Status, bindings: Option<Bindings>, meaning: Option<Presence>) -> bool {
+fn is_approval(status: Status, bindings: Option<Bindings>, meaning: Meaning) -> bool {
     status == Status::SignedValid
         && bindings
             == Some(Bindings {
                 record_id: Binding::Match,
                 record_digest: Binding::Match,
             })
-        && meaning == Some(Presence::Present)
+        && matches!(meaning, Meaning::Real)
 }
 
 #[test]
@@ -91,9 +139,9 @@ fn tc_310_every_combination_decides_and_only_one_is_approved() {
     let mut total = 0;
     for status in STATUSES {
         for bindings in &combinations {
-            for meaning in [None, Some(Presence::Missing), Some(Presence::Present)] {
+            for meaning in MEANINGS {
                 total += 1;
-                let decision = decide(&verdict(status, meaning), *bindings, None);
+                let decision = decide(&meaning_verdict(status, meaning), *bindings, None);
                 let expected = is_approval(status, *bindings, meaning);
                 assert_eq!(
                     decision.status == ApprovalStatus::Approved,
@@ -102,7 +150,11 @@ fn tc_310_every_combination_decides_and_only_one_is_approved() {
                 );
                 assert_eq!(decision.approval.is_some(), expected);
                 // The signing time fills an approval and changes no status.
-                let timed = decide(&verdict(status, meaning), *bindings, time_at(1_772_598_600));
+                let timed = decide(
+                    &meaning_verdict(status, meaning),
+                    *bindings,
+                    time_at(1_772_598_600),
+                );
                 assert_eq!(timed.status, decision.status);
                 assert_eq!(timed.reason, decision.reason);
                 assert_eq!(
@@ -113,7 +165,7 @@ fn tc_310_every_combination_decides_and_only_one_is_approved() {
             }
         }
     }
-    assert_eq!(total, 5 * 17 * 3);
+    assert_eq!(total, 5 * 17 * MEANINGS.len());
     assert_eq!(approved, 1);
 }
 

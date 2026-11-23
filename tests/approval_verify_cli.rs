@@ -491,6 +491,8 @@ fn tc_321_a_missing_or_blank_meaning_is_not_approved() {
     );
     let mixed = status(&fixture, "v-blank-and-real");
     assert_eq!(mixed["status"], "meaning_missing", "{mixed}");
+    assert!(mixed.get("meaning").is_none(), "{mixed}");
+    assert!(mixed.get("approver").is_none(), "{mixed}");
 }
 
 #[test]
