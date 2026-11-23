@@ -12,7 +12,9 @@ relationships:
 ## Description
 
 Engineering Assurance SHALL attach to a signature result (FR-036) the named
-person an allowed-signers file maps the signing key to, and the meaning a
+person a trust source maps the signing key or certificate identity to (an
+allowed-signers file for an SSH signature, a version-controlled identity
+registry for a gitsign signature), and the meaning a
 signer declared in a `Signed-off-meaning:` trailer. A good signature by a key
 the file does not accept at signing time is reported `signed_untrusted` with mapping `unmapped`,
 and a message without the trailer is reported as lacking it. Neither is
@@ -24,6 +26,8 @@ signature, is a claim that needs its own evidence.
 - The allowed-signers file named in the FR-036 request, in the format git
   documents for `gpg.ssh.allowedSignersFile`. It is required: git refuses to
   verify an SSH signature without it.
+- For a gitsign signature, the identity registry FR-040 names, read as a trust
+  source (below).
 - For kind `commit`, the commit message; for kind `tag`, the tag message.
 - An optional request member `trailer_keys`: an array of at most 16 trailer
   keys, for example `["Formal-rule"]`, whose values the caller wants read from
@@ -33,16 +37,20 @@ signature, is a claim that needs its own evidence.
 
 ## Outputs
 
-- On the FR-036 verdict: `signer` with `source` (`allowed_signers` for an SSH signature, `request` for a
-  gitsign signature, FR-040), `mapping` (`mapped` or `unmapped`) and,
-  when mapped, `principal`, the name from the allowed-signers file (for an SSH
-  signature; FR-040 defines the source for a gitsign signature): for a
-  commit git's `%GS` code, and for a tag the first line printed by
+- On the FR-036 verdict: `signer` with `source` (`allowed_signers` for an SSH
+  signature, `gitsign_registry` for a gitsign signature, FR-040), `mapping`
+  (`mapped` or `unmapped`) and, when mapped, `principal`, the name from the
+  allowed-signers file (for an SSH signature) or from the matching
+  identity-registry entry (for a gitsign signature, FR-040). For an SSH
+  signature the name is, for a
+  commit, git's `%GS` code, and for a tag the first line printed by
   `ssh-keygen -Y find-principals -s <extracted signature> -f <allowed_signers>`
   when it exits 0; and `signed_off_meaning` with `presence` (`present` or `missing`) and,
   when present, the trailer `values` in order.
-- `signer` is present only for `signed_valid` (`mapped`) and `signed_untrusted`
-  (`unmapped`). There is no other `principal` member; FR-040 sets it from the request for a gitsign signature.
+- `signer` is present only for `signed_valid` and `signed_untrusted`. For an SSH
+  signature `signed_valid` is `mapped` and `signed_untrusted` is `unmapped`; a
+  gitsign signature's mapping is set by FR-040. There is no other `principal`
+  member, and a `principal` never comes from a request.
 - An accepted signature without a principal is `unverifiable` with reason
   `unrecognized_output`: a commit graded `G` whose `%GS` is empty, and a tag
   git accepted for which `ssh-keygen -Y find-principals` fails or prints
@@ -74,12 +82,40 @@ signature, is a claim that needs its own evidence.
 - A missing, unreadable or invalid allowed-signers file writes the machine
   error `signature_verify_allowed_signers_invalid` and exits with status 2.
 
+## Trust-source reading
+
+A trust source addressed as `<rev>:<path>` is read in one way, whichever
+requirement names it (the identity registry of FR-040 is one):
+
+- `<rev>:<path>` is split at the first `:`. `<rev>` is a revision of at most
+  256 bytes with no control character and no leading `-`. `<path>` is a
+  repository-relative path of at most 1024 bytes, with no control character, no
+  leading `/`, and no empty, `.` or `..` component.
+- The command SHALL resolve `<rev>` once, in the repository under verification,
+  to a full commit id, and SHALL read the content from that commit's tree by git
+  object, as `git cat-file blob <commit-id>:<path>` does. It SHALL NOT read the
+  working tree or the index.
+- The entry SHALL be a regular file blob (mode 100644 or 100755), not a
+  symbolic link, submodule or tree; the content SHALL be at most 1 MiB and valid
+  UTF-8.
+- The reading yields the content bytes, the resolved commit id and the blob id.
+  It is made once per command run, and every decision of that run uses those
+  bytes.
+- A `<rev>` that does not resolve to a commit, a path absent from that commit,
+  an entry that is not a regular blob, content over the bound or not UTF-8, and
+  a git failure each make the source unreadable, and the requirement that names
+  the source says what refusal follows. The command SHALL start no signature
+  verifier after an unreadable source.
+
 ## Behavior
 
 - For an SSH signature the command SHALL report `mapped` only when git's own
   verification, run against the supplied file, accepts the signing key for a
   principal in that file, and SHALL report the key `unmapped` otherwise. For a
-  gitsign signature FR-040 governs.
+  gitsign signature FR-040 governs: the mapping comes from the identity registry
+  and from nowhere else.
+- The command SHALL NOT take a `principal` from a request, for any signature
+  kind.
 - The command SHALL NOT infer a person from the commit author, committer,
   tagger, email, or key comment.
 - The command SHALL refuse the allowed-signers file, before git is started,
@@ -122,7 +158,7 @@ signature, is a claim that needs its own evidence.
 
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
-| FR-037-CON-1 | A signer SHALL NOT be reported `mapped` unless git accepted the key against the allowed-signers file (SSH) or FR-040-CON-1 holds (gitsign). | Safety | Test |
+| FR-037-CON-1 | A signer SHALL NOT be reported `mapped` unless git accepted the key against the allowed-signers file (SSH), or FR-040-CON-1 holds and the verified identity and issuer match an entry of the identity registry (gitsign). No principal comes from a request. | Safety | Test |
 | FR-037-CON-2 | A missing trailer SHALL NOT be reported as `present` or given a default value. | Safety | Test |
 
 ## Acceptance Criteria
@@ -134,6 +170,9 @@ signature, is a claim that needs its own evidence.
 | FR-037-AC-3 | An allowed-signers file that is missing, a directory, over 1 MiB or not UTF-8 yields `signature_verify_allowed_signers_invalid` and exit status 2, and does not start git. | Test |
 | FR-037-AC-4 | A file whose only line is unparsable yields `signed_untrusted` for a validly signed commit, and a file with an unparsable line plus a valid line for the signer yields `signed_valid` with that principal. | Test |
 | FR-037-AC-9 | A commit and an annotated tag signed by a key whose allowed-signers entry has expired (`valid-before` in the past) each yield `signed_untrusted` with mapping `unmapped`, and not `signed_valid`, on git 2.34.1 with `ssh-keygen` installed. | Test |
+| FR-037-AC-19 | A trust source `<rev>:<path>` is read from the git object of the commit `<rev>` resolves to: with the working-tree file edited, or the index changed, after the commit, the content read is the committed bytes; moving the branch `<rev>` names after the reading does not change the bytes used in that run. | Test |
+| FR-037-AC-20 | A trust source whose `<rev>` does not resolve to a commit, whose path is absent from that commit, is a directory, symbolic link or submodule, exceeds 1 MiB, is not UTF-8, or is addressed with a leading `/`, a `..` component, a control character or a `<rev>` with a leading `-`, is unreadable and no signature verifier is started. | Test |
+| FR-037-AC-21 | The reading yields the content, the resolved full commit id and the blob id, and a second read of an unchanged commit yields the same three values. | Test |
 | FR-037-AC-5 | A message with one `Signed-off-meaning:` trailer yields `present` with that value; a message with two yields both in order; a trailer in the body but not in the trailer block is not read. | Test |
 | FR-037-AC-6 | A message with no such trailer yields `missing` with no values, and a trailer with an empty value yields `present` with an empty value. | Test |
 | FR-037-AC-7 | A `signed_bad` and an `unsigned` commit that carry the trailer report its values and keep their status. | Test |

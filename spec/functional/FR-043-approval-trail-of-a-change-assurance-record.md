@@ -54,7 +54,7 @@ signature rule (FR-036, FR-037, FR-040 own them), and a persisted log of the tra
 - One request document `engineering-assurance.approval-trail-request/v1` with the
   members `protocol`, `repository` (absolute directory path), `record_id` and
   `record_digest` (as FR-041), `allowed_signers` (absolute file path, required) and
-  optionally `gitsign` (as FR-041). Unknown members are rejected. The command takes
+  optionally `gitsign` with its `identity_registry` (as FR-041, whose `gitsign.principal` and registry refusals use the codes `approval_trail_gitsign_principal_refused` and `approval_trail_identity_registry_invalid`). Unknown members are rejected. The command takes
   the document as `--request <json>` or `--request -`, as `approval-verify` does.
 - `--format json|table`, default `json`.
 
@@ -182,7 +182,7 @@ throwaway keys generated in the test.
 | FR-043-AC-8 | A validly signed tag whose message holds a NUL byte is listed in `unreadable` with its name and reason `trailer_unreadable`, is not in `entries`, and the result is not `complete`. | Test |
 | FR-043-AC-9 | `--format table` prints a header, one row per entry in trail order with status, reason, approver, meaning, claimed time and tag, one `unreadable` row per unreadable tag, and the final `considered`, `unreadable`, `truncated`, `complete` line, and exits 0. | Test |
 | FR-043-AC-10 | A request with an unknown member, a wrong protocol, a bad record id or digest, a relative path or an invalid `gitsign` member writes `approval_trail_request_invalid`; unreadable JSON and an invalid allowed-signers file write their codes; a path that is not a git repository writes `approval_trail_repository_unavailable`; each exits 2. | Test |
-| FR-043-AC-11 | A gitsign-signed tag naming the record, through the stand-in, is listed `approved` with `signature_kind` `gitsign`, and one the stand-in rejects is listed `untrusted_signer`. | Test (stand-in) |
+| FR-043-AC-11 | A gitsign-signed tag naming the record, through the stand-in, is listed `approved` with `signature_kind` `gitsign`, and one the stand-in rejects, or whose identity the identity registry does not name, is listed `untrusted_signer`. | Test (stand-in) |
 | FR-043-AC-12 | The ordering and the record-naming test are exercised by pure functions alone for equal, missing and out-of-order times and for repeated, different and case-variant ids. | Test |
 | FR-043-AC-13 | The total time bound is 300 seconds and each git and signature run uses the shared host's time and output bounds. | Inspection |
 | FR-043-AC-14 | An annotated tag whose ref name holds a byte that is not valid UTF-8 is listed in `unreadable` with `tag` escaped as `\xNN`, `tag_escaped` true, `tag_hex` equal to the raw name bytes and reason `tag_name_not_utf8`, and the result is not `complete`. | Test |

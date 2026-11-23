@@ -64,7 +64,7 @@ signature.
 - One request document `engineering-assurance.release-verify-request/v1` with
   `protocol`, `repository` (absolute directory), `tag`, `record_path`
   (repository-relative path of the release record), `allowed_signers` (absolute
-  file) and optionally `gitsign`, with the bounds FR-041 sets for them. Unknown
+  file) and optionally `gitsign` with its `identity_registry`, with the bounds FR-041 sets for them (the refusals of a `principal` and of an unusable registry use the codes `release_verify_gitsign_principal_refused` and `release_verify_identity_registry_invalid`). Unknown
   members are rejected.
 - One Release document with a closed frontmatter schema: `id`, `title`,
   `type: Release`, `name`, `baseline` (an object with `path`, the
