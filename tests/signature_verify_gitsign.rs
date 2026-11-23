@@ -289,10 +289,10 @@ fn tc_278_an_accepted_commit_and_tag_are_signed_valid_with_the_request_identity(
 
 #[test]
 #[trace("TC-279", "FR-040-AC-2")]
-fn tc_279_gitsign_gets_the_resolved_object_id_in_an_isolated_repository() {
+fn tc_279_gitsign_gets_the_commit_id_or_the_snapshot_tag_ref_in_an_isolated_repository() {
     let fixture = fixture();
     let id = forged_commit(&fixture, "signed", CMS_BLOCK);
-    let tag_id = forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
+    forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
     // A branch name resolves to the id; the request text is never passed.
     verdict(&fixture, &request(&fixture, "signed", "commit", true));
     verdict(&fixture, &request(&fixture, "v-cms", "tag", true));
@@ -310,8 +310,9 @@ fn tc_279_gitsign_gets_the_resolved_object_id_in_an_isolated_repository() {
         ]
     };
     assert_eq!(fixture.lines("args", 1), flags(&id, "verify"));
-    assert_eq!(fixture.lines("args", 2), flags(&tag_id, "verify-tag"));
-    assert_eq!(fixture.lines("args", 3), flags(&tag_id, "verify-tag"));
+    // verify-tag gets the bare name of the snapshot's tag ref, never the object id.
+    assert_eq!(fixture.lines("args", 2), flags("verified", "verify-tag"));
+    assert_eq!(fixture.lines("args", 3), flags("verified", "verify-tag"));
     for call in 1..=3 {
         let cwd = PathBuf::from(&fixture.lines("cwd", call)[0]);
         if call == 1 {
@@ -341,7 +342,7 @@ fn tc_293_gitsign_uses_an_isolated_config_snapshot_when_repository_config_change
     let stand_in = STAND_IN.replace(
         "exit \"$status\"",
         &format!(
-            "{real_git} -C '{}' update-ref refs/tags/v-cms '{replacement_id}'\n{real_git} -C '{}' config gitsign.program /changed/during/verification\ngit config --get-regexp 'gitsign\\..*' > \"$d/snapshot-gitsign-config\" 2>&1 || true\nexit \"$status\"",
+            "{real_git} -C '{}' update-ref refs/tags/v-cms '{replacement_id}'\n{real_git} -C '{}' config gitsign.program /changed/during/verification\ngit rev-parse refs/tags/verified > \"$d/snapshot-tag\"\ngit config --get-regexp 'gitsign\\..*' > \"$d/snapshot-gitsign-config\" 2>&1 || true\nexit \"$status\"",
             repository.display(),
             repository.display(),
         ),
@@ -350,7 +351,13 @@ fn tc_293_gitsign_uses_an_isolated_config_snapshot_when_repository_config_change
     let verified = verdict(&fixture, &request(&fixture, "v-cms", "tag", true));
 
     assert_eq!(verified["status"], "signed_valid", "{verified}");
-    assert_eq!(fixture.lines("args", 1)[6], tag_id);
+    assert_eq!(fixture.lines("args", 1)[6], "verified");
+    assert_eq!(
+        fs::read_to_string(fixture.bin().join("snapshot-tag"))
+            .expect("snapshot tag")
+            .trim(),
+        tag_id
+    );
     assert_eq!(
         git(&repository, &["config", "--get", "gitsign.program"]),
         "/changed/during/verification\n"
@@ -366,6 +373,163 @@ fn tc_293_gitsign_uses_an_isolated_config_snapshot_when_repository_config_change
             .expect("snapshot config")
             .is_empty()
     );
+}
+
+#[test]
+#[trace("TC-1033", "FR-040-AC-21", "FR-041-AC-23")]
+fn tc_279_gitsign_verify_tag_runs_in_a_non_bare_repository_bound_to_the_resolved_tag_object() {
+    let fixture = fixture();
+    let tag_id = forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
+    let stand_in = STAND_IN.replace(
+        "exit \"$status\"",
+        "{ git rev-parse --is-bare-repository; git rev-parse --git-dir; git rev-parse \"refs/tags/$7\"; git cat-file -t \"refs/tags/$7\"; test ! -e .git/objects/info/alternates && echo no-alternates; } > \"$d/snapshot_state_$n\" 2>&1\ngit cat-file --batch-all-objects --batch-check='%(objectname) %(objecttype)' > \"$d/snapshot_objects_$n\" 2>&1\nexit \"$status\"",
+    );
+    fs::write(fixture.bin().join("gitsign"), stand_in).expect("gitsign stand-in");
+    let result = verdict(&fixture, &request(&fixture, "v-cms", "tag", true));
+    assert_eq!(result["status"], "signed_valid", "{result}");
+    assert_eq!(fixture.lines("args", 1)[6], "verified");
+    assert_eq!(
+        fixture.lines("snapshot_state", 1),
+        ["false", ".git", tag_id.as_str(), "tag", "no-alternates"]
+    );
+    // Every object loose or packed in the snapshot: the resolved tag and nothing else.
+    assert_eq!(
+        fixture.lines("snapshot_objects", 1),
+        [format!("{tag_id} tag")]
+    );
+}
+
+/// Replaces the fixture's `git` with a wrapper that runs `branch` first for
+/// the arguments it matches, so a test can make one snapshot step misbehave.
+fn git_misbehaving_when(fixture: &Fixture, pattern: &str, branch: &str) {
+    let wrapper = format!(
+        "#!/bin/sh\necho \"$*\" >> \"${{0%/*}}/gitlog\"\ncase \"$*\" in\n  {pattern}) {branch} ;;\nesac\nexec {} \"$@\"\n",
+        which("git").display()
+    );
+    fs::write(fixture.bin().join("git"), wrapper).expect("git wrapper");
+}
+
+#[test]
+#[trace("TC-1034", "FR-040-AC-22")]
+fn tc_1034_a_snapshot_object_that_does_not_rehash_to_the_resolved_id_is_refused() {
+    let fixture = fixture();
+    forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
+    // The object read for the snapshot gains a line, so it stores under another id.
+    let real_git = which("git");
+    git_misbehaving_when(
+        &fixture,
+        "*\"cat-file tag\"*",
+        &format!("{} \"$@\"; echo extra; exit 0", real_git.display()),
+    );
+    let result = verdict(&fixture, &request(&fixture, "v-cms", "tag", true));
+    assert_eq!(result["status"], "unverifiable", "{result}");
+    assert_eq!(result["reason"], "snapshot_object_mismatch", "{result}");
+    assert_eq!(fixture.calls(), 0, "the stand-in must never start");
+}
+
+#[test]
+#[trace("TC-1034", "FR-040-AC-22")]
+fn tc_1034_a_snapshot_that_cannot_be_made_is_unavailable() {
+    let fixture = fixture();
+    forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
+    git_misbehaving_when(&fixture, "*hash-object*", "exit 1");
+    let result = verdict(&fixture, &request(&fixture, "v-cms", "tag", true));
+    assert_eq!(result["status"], "unverifiable", "{result}");
+    assert_eq!(result["reason"], "snapshot_unavailable", "{result}");
+    assert_eq!(fixture.calls(), 0, "the stand-in must never start");
+}
+
+#[test]
+#[trace("TC-1035", "FR-040-AC-23", "FR-041-AC-23")]
+fn tc_1035_a_snapshot_ref_that_changes_during_verification_fails_closed() {
+    for name in ["moved", "deleted"] {
+        let fixture = fixture();
+        let other_id = forged_tag(&fixture, "v-other", "other", CMS_BLOCK);
+        forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
+        let change = if name == "moved" {
+            format!("echo '{other_id}' > .git/refs/tags/verified")
+        } else {
+            "/usr/bin/rm .git/refs/tags/verified".to_owned()
+        };
+        let stand_in = STAND_IN.replace("exit \"$status\"", &format!("{change}\nexit \"$status\""));
+        fs::write(fixture.bin().join("gitsign"), stand_in).expect("gitsign stand-in");
+        let result = verdict(&fixture, &request(&fixture, "v-cms", "tag", true));
+        assert_eq!(result["status"], "unverifiable", "{name}: {result}");
+        assert_eq!(result["reason"], "snapshot_ref_changed", "{name}: {result}");
+    }
+}
+
+#[test]
+#[trace("TC-1036", "FR-040-AC-24", "FR-040-CON-1")]
+fn tc_1036_the_snapshot_holds_no_template_include_or_gitsign_configuration() {
+    let fixture = fixture();
+    forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
+    // A global init template with a gitsign root and a hook, named from the
+    // caller's HOME configuration.
+    let template = fixture.root().join("template");
+    fs::create_dir_all(template.join("hooks")).expect("template hooks");
+    fs::write(template.join("hooks/post-checkout"), "#!/bin/sh\n").expect("hook");
+    fs::write(template.join("config"), "[gitsign]\n\tfulcioRoot = /evil\n").expect("template");
+    fs::write(
+        fixture.home().join(".gitconfig"),
+        format!(
+            "[init]\n\ttemplateDir = {}\n[gitsign]\n\tfulcioRoot = /evil\n",
+            template.display()
+        ),
+    )
+    .expect("global config");
+    // Source include and includeIf keys that pull in only a harmless setting.
+    let git_dir = fixture.repo().join(".git");
+    fs::write(git_dir.join("extra.cfg"), "[user]\n\tname = included\n").expect("include");
+    let mut config = fs::read_to_string(git_dir.join("config")).expect("config");
+    config
+        .push_str("[include]\n\tpath = extra.cfg\n[includeIf \"gitdir:**\"]\n\tpath = extra.cfg\n");
+    fs::write(git_dir.join("config"), config).expect("config");
+    let stand_in = STAND_IN.replace(
+        "exit \"$status\"",
+        "git config --list > \"$d/snapshot_config_$n\" 2>&1\nfor f in * .[!.]* .git/* .git/.[!.]*; do [ -e \"$f\" ] && echo \"$f\"; done > \"$d/snapshot_files_$n\"\nexit \"$status\"",
+    );
+    fs::write(fixture.bin().join("gitsign"), stand_in).expect("gitsign stand-in");
+
+    let result = verdict(&fixture, &request(&fixture, "v-cms", "tag", true));
+    assert_eq!(result["status"], "signed_valid", "{result}");
+    let mut config = fixture.lines("snapshot_config", 1);
+    config.sort();
+    assert_eq!(
+        config,
+        ["core.bare=false", "core.repositoryformatversion=0"]
+    );
+    let mut files = fixture.lines("snapshot_files", 1);
+    files.sort();
+    assert_eq!(
+        files,
+        [
+            ".git",
+            ".git/HEAD",
+            ".git/config",
+            ".git/objects",
+            ".git/refs"
+        ]
+    );
+
+    // A gitsign key in the source repository still stops the run before any
+    // snapshot is made.
+    let refused = {
+        let fixture = fixture_with_tag_and_source_key();
+        let result = verdict(&fixture, &request(&fixture, "v-cms", "tag", true));
+        assert_eq!(result["status"], "unverifiable", "{result}");
+        assert_eq!(result["reason"], "gitsign_repository_config", "{result}");
+        assert_eq!(fixture.calls(), 0);
+        fs::read_to_string(fixture.bin().join("gitlog")).expect("git log")
+    };
+    assert!(!refused.contains("hash-object"), "{refused}");
+}
+
+fn fixture_with_tag_and_source_key() -> Fixture {
+    let fixture = fixture();
+    forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
+    git(&fixture.repo(), &["config", "gitsign.fulcioRoot", "/x"]);
+    fixture
 }
 
 #[test]
@@ -385,7 +549,7 @@ fn tc_294_gitsign_keeps_verification_on_the_loaded_object_after_its_tag_ref_is_d
     let stand_in = STAND_IN.replace(
         "exit \"$status\"",
         &format!(
-            "if [ \"$7\" = '{deleted_id}' ]; then {real_git} -C '{}' update-ref -d refs/tags/v-deleted; fi\nexit \"$status\"",
+            "if [ \"$(git rev-parse refs/tags/verified)\" = '{deleted_id}' ]; then {real_git} -C '{}' update-ref -d refs/tags/v-deleted; : > \"$d/source-ref-deleted\"; fi\nexit \"$status\"",
             fixture.repo().display(),
         ),
     );
@@ -393,11 +557,14 @@ fn tc_294_gitsign_keeps_verification_on_the_loaded_object_after_its_tag_ref_is_d
 
     let control = verdict(&fixture, &request(&fixture, "v-control", "tag", true));
     assert_eq!(control["status"], "signed_valid", "{control}");
-    assert_eq!(fixture.lines("args", 1)[6], control_id);
+    assert_eq!(fixture.lines("args", 1)[6], "verified");
+    assert!(!fixture.bin().join("source-ref-deleted").exists());
+    assert_ne!(control_id, deleted_id);
 
     let deleted = verdict(&fixture, &request(&fixture, "v-deleted", "tag", true));
     assert_eq!(deleted["status"], "signed_valid", "{deleted}");
-    assert_eq!(fixture.lines("args", 2)[6], deleted_id);
+    assert_eq!(fixture.lines("args", 2)[6], "verified");
+    assert!(fixture.bin().join("source-ref-deleted").exists());
     let deleted_ref = Command::new("git")
         .args([
             "-C",

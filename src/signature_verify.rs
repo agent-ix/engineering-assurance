@@ -88,6 +88,12 @@ pub enum Reason {
     GitsignVerificationFailed,
     /// The repository sets a `gitsign.*` configuration key.
     GitsignRepositoryConfig,
+    /// The isolated tag snapshot could not be made.
+    SnapshotUnavailable,
+    /// The snapshot's stored tag object did not hash to the resolved id.
+    SnapshotObjectMismatch,
+    /// The snapshot's tag ref did not name the resolved id around a run.
+    SnapshotRefChanged,
 }
 
 /// Which verifier a signature belongs to.
@@ -206,6 +212,8 @@ pub enum Run {
     Signaled,
     /// The run could not be observed for another reason.
     Unobserved,
+    /// The snapshot ref no longer named the resolved object around the run.
+    SnapshotChanged,
 }
 
 /// Whether the allowed-signers file maps the signing key to a person.
@@ -708,6 +716,7 @@ fn probe_gitsign(
         Run::TimedOut => Err(Reason::Timeout),
         Run::CutShort => Err(Reason::OutputExceeded),
         Run::Unobserved => Err(Reason::UnrecognizedOutput),
+        Run::SnapshotChanged => Err(Reason::SnapshotRefChanged),
     };
     if accepted(Probe::Exact)? {
         let signer = Signer::mapped(SignerSource::Request, identity.principal.clone());
