@@ -310,8 +310,10 @@ fn tc_279_gitsign_gets_the_resolved_object_id_in_an_isolated_repository() {
         ]
     };
     assert_eq!(fixture.lines("args", 1), flags(&id, "verify"));
-    assert_eq!(fixture.lines("args", 2), flags(&tag_id, "verify-tag"));
-    assert_eq!(fixture.lines("args", 3), flags(&tag_id, "verify-tag"));
+    // verify-tag gets the bare name of the snapshot's tag ref, never the object id.
+    assert_eq!(fixture.lines("args", 2), flags("verified", "verify-tag"));
+    assert_eq!(fixture.lines("args", 3), flags("verified", "verify-tag"));
+    assert_ne!(tag_id, "verified");
     for call in 1..=3 {
         let cwd = PathBuf::from(&fixture.lines("cwd", call)[0]);
         if call == 1 {
@@ -341,7 +343,7 @@ fn tc_293_gitsign_uses_an_isolated_config_snapshot_when_repository_config_change
     let stand_in = STAND_IN.replace(
         "exit \"$status\"",
         &format!(
-            "{real_git} -C '{}' update-ref refs/tags/v-cms '{replacement_id}'\n{real_git} -C '{}' config gitsign.program /changed/during/verification\ngit config --get-regexp 'gitsign\\..*' > \"$d/snapshot-gitsign-config\" 2>&1 || true\nexit \"$status\"",
+            "{real_git} -C '{}' update-ref refs/tags/v-cms '{replacement_id}'\n{real_git} -C '{}' config gitsign.program /changed/during/verification\ngit rev-parse refs/tags/verified > \"$d/snapshot-tag\"\ngit config --get-regexp 'gitsign\\..*' > \"$d/snapshot-gitsign-config\" 2>&1 || true\nexit \"$status\"",
             repository.display(),
             repository.display(),
         ),
@@ -350,7 +352,13 @@ fn tc_293_gitsign_uses_an_isolated_config_snapshot_when_repository_config_change
     let verified = verdict(&fixture, &request(&fixture, "v-cms", "tag", true));
 
     assert_eq!(verified["status"], "signed_valid", "{verified}");
-    assert_eq!(fixture.lines("args", 1)[6], tag_id);
+    assert_eq!(fixture.lines("args", 1)[6], "verified");
+    assert_eq!(
+        fs::read_to_string(fixture.bin().join("snapshot-tag"))
+            .expect("snapshot tag")
+            .trim(),
+        tag_id
+    );
     assert_eq!(
         git(&repository, &["config", "--get", "gitsign.program"]),
         "/changed/during/verification\n"
@@ -366,6 +374,41 @@ fn tc_293_gitsign_uses_an_isolated_config_snapshot_when_repository_config_change
             .expect("snapshot config")
             .is_empty()
     );
+}
+
+#[test]
+#[trace("TC-279", "FR-040-AC-2", "FR-041-AC-23")]
+fn tc_279_gitsign_verify_tag_runs_in_a_non_bare_repository_bound_to_the_resolved_tag_object() {
+    let fixture = fixture();
+    let tag_id = forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
+    let stand_in = STAND_IN.replace(
+        "exit \"$status\"",
+        "{ git rev-parse --is-bare-repository; git rev-parse --git-dir; git rev-parse \"refs/tags/$7\"; git cat-file -t \"refs/tags/$7\"; } > \"$d/snapshot_state_$n\" 2>&1\nexit \"$status\"",
+    );
+    fs::write(fixture.bin().join("gitsign"), stand_in).expect("gitsign stand-in");
+    let result = verdict(&fixture, &request(&fixture, "v-cms", "tag", true));
+    assert_eq!(result["status"], "signed_valid", "{result}");
+    assert_eq!(fixture.lines("args", 1)[6], "verified");
+    assert_eq!(
+        fixture.lines("snapshot_state", 1),
+        ["false", ".git", tag_id.as_str(), "tag"]
+    );
+}
+
+#[test]
+#[trace("TC-1011", "FR-041-AC-23")]
+fn tc_279_a_snapshot_ref_that_moves_during_verification_fails_closed() {
+    let fixture = fixture();
+    let other_id = forged_tag(&fixture, "v-other", "other", CMS_BLOCK);
+    forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
+    let stand_in = STAND_IN.replace(
+        "exit \"$status\"",
+        &format!("echo '{other_id}' > .git/refs/tags/verified\nexit \"$status\""),
+    );
+    fs::write(fixture.bin().join("gitsign"), stand_in).expect("gitsign stand-in");
+    let result = verdict(&fixture, &request(&fixture, "v-cms", "tag", true));
+    assert_eq!(result["status"], "unverifiable", "{result}");
+    assert_ne!(result["status"], "signed_valid");
 }
 
 #[test]

@@ -459,6 +459,28 @@ struct Git<'a> {
 /// Name of the verifier program for CMS signatures; never taken from input.
 const GITSIGN_PROGRAM: &str = "gitsign";
 
+/// The tag name gitsign verifies in the isolated snapshot repository.
+const SNAPSHOT_TAG: &str = "verified";
+
+/// An isolated, non-bare repository whose only tag ref is bound to one
+/// resolved tag object id for the whole verification.
+struct TagSnapshot {
+    directory: tempfile::TempDir,
+    object_id: String,
+}
+
+impl TagSnapshot {
+    /// Whether `refs/tags/verified` still names exactly the resolved object.
+    fn binds_object(&self) -> bool {
+        let reference = self
+            .directory
+            .path()
+            .join(".git/refs/tags")
+            .join(SNAPSHOT_TAG);
+        std::fs::read_to_string(reference).is_ok_and(|text| text.trim_end() == self.object_id)
+    }
+}
+
 /// Environment variables `gitsign` and the configuration check keep from the
 /// parent; `GIT_CONFIG_NOSYSTEM` and `GIT_CONFIG_GLOBAL` are set, not kept.
 const KEPT_ENVIRONMENT: [&str; 2] = ["PATH", "HOME"];
@@ -620,11 +642,29 @@ impl Git<'_> {
         } else {
             None
         };
-        let repository = tag_snapshot
-            .as_ref()
-            .map_or(self.repository, |directory| directory.path());
         Ok(classify_gitsign(kind, Some(identity), false, |probe| {
-            Self::gitsign_run(identity, kind, target, repository, probe)
+            match &tag_snapshot {
+                // The ref must name the resolved object before and after the run;
+                // anything else is a run that cannot be trusted.
+                Some(snapshot) => {
+                    if !snapshot.binds_object() {
+                        return Run::Unobserved;
+                    }
+                    let run = Self::gitsign_run(
+                        identity,
+                        kind,
+                        SNAPSHOT_TAG,
+                        snapshot.directory.path(),
+                        probe,
+                    );
+                    if snapshot.binds_object() {
+                        run
+                    } else {
+                        Run::Unobserved
+                    }
+                }
+                None => Self::gitsign_run(identity, kind, target, self.repository, probe),
+            }
         }))
     }
 
@@ -685,11 +725,12 @@ impl Git<'_> {
         observed(&run_tool(GITSIGN_PROGRAM, &arguments, repository))
     }
 
-    /// Makes a read-only bare repository view whose sole tag ref names the
-    /// already-resolved object. Its object database is an alternate to the
-    /// source repository, so gitsign cannot resolve a moved source ref or read
-    /// source repository configuration during verification.
-    fn snapshot_tag_repository(&self, id: &str) -> Result<tempfile::TempDir, Reason> {
+    /// Makes an ordinary, non-bare repository whose sole tag ref,
+    /// `refs/tags/verified`, names the already-resolved object. Its object
+    /// database is an alternate to the source repository, so gitsign cannot
+    /// resolve a moved source ref or read source repository configuration
+    /// during verification. gitsign needs a tag ref and a normal `.git` layout.
+    fn snapshot_tag_repository(&self, id: &str) -> Result<TagSnapshot, Reason> {
         let object_directory = self.successful(&[
             "rev-parse",
             "--path-format=absolute",
@@ -703,25 +744,38 @@ impl Git<'_> {
             return Err(Reason::UnrecognizedOutput);
         }
         let directory = tempfile::tempdir().map_err(|_| Reason::UnrecognizedOutput)?;
-        let root = directory.path();
-        std::fs::create_dir_all(root.join("objects/info"))
-            .map_err(|_| Reason::UnrecognizedOutput)?;
-        std::fs::create_dir_all(root.join("refs/tags")).map_err(|_| Reason::UnrecognizedOutput)?;
+        let git_directory = directory.path().join(".git");
+        let unrecognized = |_| Reason::UnrecognizedOutput;
+        std::fs::create_dir_all(git_directory.join("objects/info")).map_err(unrecognized)?;
+        std::fs::create_dir_all(git_directory.join("refs/tags")).map_err(unrecognized)?;
         std::fs::write(
-            root.join("config"),
-            "[core]\n\trepositoryformatversion = 0\n\tbare = true\n",
+            git_directory.join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n",
         )
-        .map_err(|_| Reason::UnrecognizedOutput)?;
-        std::fs::write(root.join("HEAD"), "ref: refs/tags/verified\n")
-            .map_err(|_| Reason::UnrecognizedOutput)?;
-        std::fs::write(root.join("refs/tags/verified"), format!("{id}\n"))
-            .map_err(|_| Reason::UnrecognizedOutput)?;
+        .map_err(unrecognized)?;
         std::fs::write(
-            root.join("objects/info/alternates"),
+            git_directory.join("HEAD"),
+            format!("ref: refs/tags/{SNAPSHOT_TAG}\n"),
+        )
+        .map_err(unrecognized)?;
+        std::fs::write(
+            git_directory.join("refs/tags").join(SNAPSHOT_TAG),
+            format!("{id}\n"),
+        )
+        .map_err(unrecognized)?;
+        std::fs::write(
+            git_directory.join("objects/info/alternates"),
             format!("{object_directory}\n"),
         )
-        .map_err(|_| Reason::UnrecognizedOutput)?;
-        Ok(directory)
+        .map_err(unrecognized)?;
+        let snapshot = TagSnapshot {
+            directory,
+            object_id: id.to_owned(),
+        };
+        if !snapshot.binds_object() {
+            return Err(Reason::UnrecognizedOutput);
+        }
+        Ok(snapshot)
     }
 
     fn grade(&self, id: &str) -> Result<GitGrade, Reason> {
