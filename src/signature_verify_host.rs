@@ -1178,6 +1178,27 @@ mod tests {
     use super::*;
 
     #[test]
+    #[trace("TC-1035", "FR-040-AC-23")]
+    fn the_snapshot_binds_only_while_its_ref_names_the_resolved_object() {
+        let id = "a".repeat(40);
+        let directory = tempfile::tempdir().expect("tempdir");
+        let tags = directory.path().join(".git/refs/tags");
+        std::fs::create_dir_all(&tags).expect("tags");
+        let snapshot = TagSnapshot {
+            directory,
+            object_id: id.clone(),
+        };
+        // No ref at all, as when it is deleted.
+        assert!(!snapshot.binds_object());
+        std::fs::write(tags.join(SNAPSHOT_TAG), format!("{id}\n")).expect("ref");
+        assert!(snapshot.binds_object());
+        std::fs::write(tags.join(SNAPSHOT_TAG), format!("{}\n", "b".repeat(40))).expect("moved");
+        assert!(!snapshot.binds_object());
+        std::fs::write(tags.join(SNAPSHOT_TAG), format!("{id}{id}\n")).expect("longer");
+        assert!(!snapshot.binds_object());
+    }
+
+    #[test]
     #[trace("TC-295", "FR-040-AC-7")]
     fn gitsign_process_failures_are_observed_as_runs() {
         use engineering_assurance::signature_verify::Run;
