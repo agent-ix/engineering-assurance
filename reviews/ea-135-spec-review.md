@@ -47,3 +47,5 @@ FAIL, not mergeable as is: fix FND-001 and FND-002 (both one-line AC/ordering ed
 | FND-003 | fixed | FR-036, FR-043 and FR-047 Outputs code lists carry both new codes; FR-043-AC-10 and the new FR-047-AC-14 test them; FR-080 names `proof_checkpoint_verify_gitsign_principal_refused` and `proof_checkpoint_verify_identity_registry_invalid`. |
 | FND-004 | fixed | FR-080 rule (4) makes `signed_valid` with an `unmapped` signer `untrusted_signer`, and FR-080-AC-5 tests it. |
 | FND-005 | fixed | The README row now names the allowed-signers file for SSH and the identity registry for gitsign. |
+| FND-006 | fixed | Round 2: FR-040 Outputs, AC-30 and AC-31, FR-041 `trust` and AC-14, FR-043 and FR-080 now carry `identity_registry_commit` only when the registry revision resolved to a commit, and AC-30 says the member is absent on a `git_failed` reading. AC-30 and AC-31 no longer conflict. |
+| FND-007 | fixed | Round 2: TC-310 adds signer mapping, TC-325 checks `identity_registry` and `identity_registry_commit` (present or absent), TC-1026 adds the registry-unnamed identity, and TC-1047 matches the new AC-31. |
