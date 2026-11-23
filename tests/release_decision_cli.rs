@@ -1183,3 +1183,170 @@ fn tc_473_the_outcome_is_fixed_once_the_gate_is_acknowledged_even_before_the_ter
     assert_eq!(decided["decision"]["outcome"], "released");
     assert_eq!(decided["release"]["tag_message"], "Release x\n");
 }
+
+const RISK_SUMMARY: &str = r#"{"attribution":"Regions come from the project's policy.","rows":[{"hazard":"HAZ-1","situation":null}]}"#;
+
+fn evaluation_document(decision: &str) -> String {
+    format!(
+        "---\nid: ORE-1\ntitle: \"Overall\"\ntype: overall_residual_risk_evaluation\n---\n\n\
+         | Product | Decision | Rationale | Decided by |\n| - | - | - | - |\n\
+         | Brake | {decision} | Because. | A. Person |\n"
+    )
+}
+
+fn review_document(plan_executed: &str, readiness: &str) -> String {
+    format!(
+        "---\nid: RMR-1\ntitle: \"Review\"\ntype: risk_management_review\n---\n\n\
+         | Reviewer | Plan executed | Post-production readiness | Statement |\n| - | - | - | - |\n\
+         | A. Reviewer | {plan_executed} | {readiness} | Said so. |\n"
+    )
+}
+
+fn present_with_risk(fixture: &Fixture, run: &str, evaluation: &str, review: &str) -> Value {
+    let mut request = present_request(fixture, run);
+    request["anomalies"] = json!(fixture.input("anomalies.json", ANOMALIES));
+    request["risk_summary"] = json!(fixture.input("risk.json", RISK_SUMMARY));
+    request["overall_evaluation"] = json!(fixture.input("evaluation.md", evaluation));
+    request["risk_review"] = json!(fixture.input("review.md", review));
+    ok(&request)
+}
+
+#[test]
+#[trace("FR-048-AC-18")]
+fn the_presentation_shows_the_risk_files_verbatim_or_not_provided() {
+    let fixture = fixture();
+    let evaluation = evaluation_document("accepted");
+    let review = review_document("yes", "ready");
+    let presented = present_with_risk(&fixture, "run-risk", &evaluation, &review);
+    let risk = &presented["presentation"]["risk"];
+    assert_eq!(risk["summary"]["state"], "supplied");
+    assert_eq!(
+        risk["summary"]["document"],
+        serde_json::from_str::<Value>(RISK_SUMMARY).expect("fixture")
+    );
+    assert_eq!(risk["overall_evaluation"]["state"], "supplied");
+    assert_eq!(risk["overall_evaluation"]["text"], evaluation);
+    assert_eq!(risk["review"]["text"], review);
+    assert!(
+        risk["review"]["source"]
+            .as_str()
+            .expect("source")
+            .ends_with("review.md")
+    );
+    let retained = ix_flow(&fixture, &["status", "run-risk"])["data"]["items"]["release_presentation"][0]["risk"]["review"]["text"].clone();
+    assert_eq!(retained, review);
+
+    let none = ok(&present_request(&fixture, "run-norisk"))["presentation"]["risk"].clone();
+    for member in ["summary", "overall_evaluation", "review"] {
+        assert_eq!(none[member], json!({"state": "not provided"}), "{member}");
+    }
+}
+
+#[test]
+#[trace("FR-048-AC-19")]
+fn the_release_choice_does_not_depend_on_what_the_risk_files_say() {
+    let fixture = fixture();
+    let cases = [
+        ("accepted", "yes", "ready"),
+        ("not_accepted", "no", "not_ready"),
+        ("undecided", "partly", "not_ready"),
+    ];
+    for (index, (decision, executed, readiness)) in cases.into_iter().enumerate() {
+        let run = format!("run-risk-{index}");
+        let presented = present_with_risk(
+            &fixture,
+            &run,
+            &evaluation_document(decision),
+            &review_document(executed, readiness),
+        );
+        // The presentation names no verdict of its own: the risk member holds
+        // exactly the three supplied sources, each exactly its own members.
+        assert_eq!(
+            keys(&presented["presentation"]["risk"]),
+            ["overall_evaluation", "review", "summary"]
+        );
+        let risk = &presented["presentation"]["risk"];
+        assert_eq!(keys(&risk["summary"]), ["document", "source", "state"]);
+        assert_eq!(
+            keys(&risk["overall_evaluation"]),
+            ["source", "state", "text"]
+        );
+        assert_eq!(keys(&risk["review"]), ["source", "state", "text"]);
+
+        // Both refusal grounds and the success behave as they do with no risk
+        // files supplied.
+        let mut request = decide_request(&fixture, &run, Some("release"));
+        refused(&request, "anomaly_not_accepted");
+        request["accepted_anomalies"] = json!(["ANOM-1", "ANOM-2", "ANOM-9"]);
+        refused(&request, "accepted_anomaly_unknown");
+        assert_eq!(phase(&fixture, &run), "decision_ready", "{decision}");
+        request["accepted_anomalies"] = json!(["ANOM-1", "ANOM-2"]);
+        let decided = ok(&request);
+        assert!(decided["release"]["document"].is_string(), "{decision}");
+        assert_eq!(phase(&fixture, &run), "released", "{decision}");
+    }
+
+    let mut bare = present_request(&fixture, "run-risk-none");
+    bare["anomalies"] = json!(fixture.input("anomalies.json", ANOMALIES));
+    ok(&bare);
+    let mut request = decide_request(&fixture, "run-risk-none", Some("release"));
+    refused(&request, "anomaly_not_accepted");
+    request["accepted_anomalies"] = json!(["ANOM-1", "ANOM-2", "ANOM-9"]);
+    refused(&request, "accepted_anomaly_unknown");
+    request["accepted_anomalies"] = json!(["ANOM-1", "ANOM-2"]);
+    assert!(ok(&request)["release"]["document"].is_string());
+}
+
+/// The sorted member names of a JSON object.
+fn keys(value: &Value) -> Vec<&str> {
+    let mut names: Vec<&str> = value
+        .as_object()
+        .expect("an object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    names.sort_unstable();
+    names
+}
+
+#[test]
+#[trace("FR-048-AC-18")]
+fn risk_documents_saved_with_crlf_line_ends_are_accepted_by_their_type() {
+    let fixture = fixture();
+    let crlf = |text: String| text.replace('\n', "\r\n");
+    let evaluation = crlf(evaluation_document("accepted"));
+    let review = crlf(review_document("yes", "ready"));
+    let presented = present_with_risk(&fixture, "run-crlf", &evaluation, &review);
+    let risk = &presented["presentation"]["risk"];
+    assert_eq!(risk["overall_evaluation"]["text"], evaluation);
+    assert_eq!(risk["review"]["text"], review);
+
+    let mut request = present_request(&fixture, "run-crlf-wrong");
+    request["risk_review"] = json!(fixture.input("wrong.md", &evaluation));
+    refused(&request, "release_input_unreadable");
+}
+
+#[test]
+#[trace("FR-048-AC-20")]
+fn a_risk_file_of_the_wrong_shape_is_unreadable_and_stops_before_the_gate() {
+    let fixture = fixture();
+    let cases = [
+        ("risk_summary", "{\"attribution\":\"x\"}".to_owned()),
+        ("risk_summary", "[1]".to_owned()),
+        ("overall_evaluation", review_document("yes", "ready")),
+        ("overall_evaluation", "no frontmatter".to_owned()),
+        ("risk_review", evaluation_document("accepted")),
+    ];
+    for (index, (member, content)) in cases.into_iter().enumerate() {
+        let run = format!("run-risk-bad-{index}");
+        let path = fixture.input(&format!("risk-bad-{index}.txt"), &content);
+        let mut request = present_request(&fixture, &run);
+        request[member] = json!(path);
+        let value = refused(&request, "release_input_unreadable");
+        assert!(
+            value["message"].as_str().expect("message").contains(&path),
+            "{value}"
+        );
+        assert_eq!(phase(&fixture, &run), "capture", "{member}");
+    }
+}

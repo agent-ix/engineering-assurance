@@ -6,8 +6,9 @@
 //! The command gathers what a named person needs to decide one release, holds
 //! the run at the `hitl` gate of the `release-decision` workflow, and records
 //! the person's explicit `release` or `reject`. It reads the Baseline from git
-//! objects and the evidence status, SOUP report, anomaly list and snapshot from
-//! supplied files; it computes none of them. It creates no commit and no tag,
+//! objects and the evidence status, SOUP report, anomaly list, risk management
+//! files and snapshot from supplied files; it computes none of them and judges
+//! no risk. It creates no commit and no tag,
 //! signs nothing and pushes nothing: the `release` outcome is the Release
 //! document, its path and the tag message for the person to commit and sign.
 
@@ -16,6 +17,7 @@ use std::{io::Read, path::Path};
 use engineering_assurance::{
     approval_tag::is_meaning,
     approval_verify::{RECORD_DIGEST_TRAILER, RECORD_ID_TRAILER},
+    onboarding::frontmatter_type,
     release::is_repository_path,
     signature_verify::MEANING_TOKEN,
     workflow::{
@@ -37,6 +39,10 @@ const WORKFLOW: &str = "release-decision";
 const WORKFLOW_VERSION: &str = "0.1.0";
 const PRESENTATION_LIMIT: usize = 2 * 1024 * 1024;
 const NOT_PROVIDED: &str = "not provided";
+/// The frontmatter `type` of the overall residual-risk evaluation and of the
+/// risk management review, as `spec-objects-safety` declares them.
+const OVERALL_EVALUATION_TYPE: &str = "overall_residual_risk_evaluation";
+const REVIEW_TYPE: &str = "risk_management_review";
 /// The largest supplied file read.
 const MAX_INPUT_BYTES: u64 = 1024 * 1024;
 /// The largest presentation as ix-flow prints it. ix-flow pretty-prints its
@@ -144,6 +150,9 @@ struct Request {
     evidence_status: Option<String>,
     soup_report: Option<String>,
     anomalies: Option<String>,
+    risk_summary: Option<String>,
+    overall_evaluation: Option<String>,
+    risk_review: Option<String>,
     snapshot_file: Option<String>,
     // `decide` only.
     choice: Option<Choice>,
@@ -247,6 +256,9 @@ fn validate(request: &Request) -> Result<(), ReleaseDecisionError> {
         request.evidence_status.is_some(),
         request.soup_report.is_some(),
         request.anomalies.is_some(),
+        request.risk_summary.is_some(),
+        request.overall_evaluation.is_some(),
+        request.risk_review.is_some(),
         request.snapshot_file.is_some(),
     ];
     let decide_only = [
@@ -283,6 +295,9 @@ fn validate(request: &Request) -> Result<(), ReleaseDecisionError> {
                 ("evidence_status", &request.evidence_status),
                 ("soup_report", &request.soup_report),
                 ("anomalies", &request.anomalies),
+                ("risk_summary", &request.risk_summary),
+                ("overall_evaluation", &request.overall_evaluation),
+                ("risk_review", &request.risk_review),
                 ("snapshot_file", &request.snapshot_file),
             ] {
                 if file.as_deref().is_some_and(|f| !Path::new(f).is_absolute()) {
@@ -427,6 +442,15 @@ fn gather(request: &Request) -> Result<Value, ReleaseDecisionError> {
         };
         Ok(json!({"items": items, "unreadable": unreadable_entries, "document": document}))
     })?;
+    let risk_summary = supplied(request.risk_summary.as_deref(), |source, document| {
+        array_member(source, &document, "rows")?;
+        Ok(json!({"document": document}))
+    })?;
+    let overall_evaluation = supplied_document(
+        request.overall_evaluation.as_deref(),
+        OVERALL_EVALUATION_TYPE,
+    )?;
+    let risk_review = supplied_document(request.risk_review.as_deref(), REVIEW_TYPE)?;
     let snapshot_file = supplied_text(request.snapshot_file.as_deref(), |text| {
         Ok(json!({"text": text}))
     })?;
@@ -444,6 +468,11 @@ fn gather(request: &Request) -> Result<Value, ReleaseDecisionError> {
         "evidence_status": evidence,
         "soup": {"baseline_records": soup_records, "report": soup_report},
         "anomalies": anomalies,
+        "risk": {
+            "summary": risk_summary,
+            "overall_evaluation": overall_evaluation,
+            "review": risk_review,
+        },
         "snapshot": {"snapshot_path": request.snapshot_path, "file": snapshot_file},
     });
     let observed = printed_size(&presentation);
@@ -496,6 +525,28 @@ fn supplied_text(
         return Ok(json!({"state": NOT_PROVIDED}));
     };
     Ok(supplied_value(path, read(read_text(path)?)?))
+}
+
+/// A supplied Markdown document of the given frontmatter `type`, shown
+/// verbatim with its source, or `not provided`. Only the type is read, so a
+/// document of another type is not presented as this one.
+fn supplied_document(
+    path: Option<&str>,
+    expected_type: &str,
+) -> Result<Value, ReleaseDecisionError> {
+    let Some(path) = path else {
+        return Ok(json!({"state": NOT_PROVIDED}));
+    };
+    let text = read_text(path)?;
+    // The frontmatter reader takes `\n` line ends; a checkout with CRLF is the same document.
+    let normalized = text.replace("\r\n", "\n");
+    if frontmatter_type(&normalized).ok().flatten().as_deref() != Some(expected_type) {
+        return Err(unreadable(
+            path,
+            &format!("the file is not a document of type {expected_type}"),
+        ));
+    }
+    Ok(supplied_value(path, json!({"text": text})))
 }
 
 /// A supplied JSON object, with its source, or `not provided`. The document is
