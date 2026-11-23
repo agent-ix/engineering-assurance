@@ -773,3 +773,63 @@ fn tc_337_an_approval_with_no_readable_tagger_date_reports_the_time_missing() {
         assert!(approved.get("signed_at_source").is_none());
     }
 }
+
+#[test]
+#[trace("TC-1011", "FR-041-AC-25")]
+fn tc_1011_the_registry_captured_before_verification_survives_a_moved_branch_and_an_edited_worktree()
+ {
+    let fixture = fixture();
+    forged_tag(&fixture, "v-cms", &good_message(), CMS_BLOCK);
+    let repo = fixture.repo();
+    // A second registry, on its own branch, that names nobody for the identity.
+    let empty = commit_registry(&repo, "empty", &registry_json(&[]));
+    // The same registry as a tracked file on main, for the working-tree edit.
+    fs::write(
+        repo.join("registry.json"),
+        registry_json(&[(IDENTITY, ISSUER, PRINCIPAL)]),
+    )
+    .expect("registry file");
+    git(&repo, &["add", "registry.json"]);
+    git(&repo, &["commit", "-q", "-m", "registry on main"]);
+    let main_commit = git(&repo, &["rev-parse", "main"]).trim().to_owned();
+    let registry_commit = git(&repo, &["rev-parse", "refs/heads/registry"])
+        .trim()
+        .to_owned();
+
+    let real_git = which("git");
+    let during = format!(
+        "{git} -C '{repo}' update-ref refs/heads/registry '{empty}'\nprintf '%s' '{blank}' > '{repo}/registry.json'\nexit \"$status\"",
+        git = real_git.display(),
+        repo = repo.display(),
+        blank = registry_json(&[]),
+    );
+    fs::write(
+        fixture.bin().join("gitsign"),
+        STAND_IN.replace("exit \"$status\"", &during),
+    )
+    .expect("stand-in");
+
+    // The branch the revision names moves while gitsign runs.
+    let moved = result(&fixture, &request(&fixture, "v-cms", true));
+    assert_eq!(moved["status"], "approved", "{moved}");
+    assert_eq!(moved["approver"], PRINCIPAL);
+    assert_eq!(moved["trust"]["identity_registry_commit"], registry_commit);
+    assert_eq!(
+        git(&repo, &["rev-parse", "refs/heads/registry"]).trim(),
+        empty,
+        "the stand-in moved the branch"
+    );
+
+    // The working-tree registry is edited while gitsign runs.
+    let mut worktree = request(&fixture, "v-cms", true);
+    worktree["identity_registry"] = json!("main:registry.json");
+    let edited = result(&fixture, &worktree);
+    assert_eq!(edited["status"], "approved", "{edited}");
+    assert_eq!(edited["approver"], PRINCIPAL);
+    assert_eq!(edited["trust"]["identity_registry_commit"], main_commit);
+    assert_eq!(
+        fs::read_to_string(repo.join("registry.json")).expect("file"),
+        registry_json(&[]),
+        "the stand-in edited the working tree"
+    );
+}

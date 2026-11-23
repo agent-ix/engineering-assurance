@@ -1528,7 +1528,9 @@ fn break_registry(repo: &Path, name: &str) {
     };
     match name {
         "symbolic link" => {
-            let target = store(repo, "blob", "elsewhere.json");
+            // The link target is a valid registry document, so only the entry
+            // mode can make the source unusable.
+            let target = store(repo, "blob", &default_registry());
             commit_tree_listing(
                 repo,
                 "registry",
@@ -1566,7 +1568,16 @@ fn break_registry(repo: &Path, name: &str) {
             commit_registry_bytes(repo, "registry", &bytes);
         }
         "not UTF-8" => {
-            commit_registry_bytes(repo, "registry", &[0xff, 0xfe, b'{', b'}']);
+            // A valid registry document except for invalid UTF-8 inside a value.
+            let text = registry_json(&[(IDENTITY, ISSUER, "@@")]);
+            let mut bytes = Vec::new();
+            for (index, part) in text.split("@@").enumerate() {
+                if index > 0 {
+                    bytes.extend([0xff, 0xfe]);
+                }
+                bytes.extend(part.as_bytes());
+            }
+            commit_registry_bytes(repo, "registry", &bytes);
         }
         "not JSON" => content("entries: []"),
         "wrong protocol" => content(
@@ -1645,8 +1656,16 @@ fn ssh_signed_fixture() -> (Fixture, PathBuf) {
     );
     let path = fixture.root().join("ssh-bin");
     fs::create_dir(&path).expect("ssh-bin");
-    symlink(which("git"), path.join("git")).expect("git link");
-    symlink(which("ssh-keygen"), path.join("ssh-keygen")).expect("ssh-keygen link");
+    // Recording wrappers: `git` logs its arguments to `gitlog` and `ssh-keygen`
+    // to `sshlog`, both beside the wrappers, then run the real programs.
+    for (program, log) in [("git", "gitlog"), ("ssh-keygen", "sshlog")] {
+        let wrapper = format!(
+            "#!/bin/sh\necho \"$*\" >> \"${{0%/*}}/{log}\"\nexec {} \"$@\"\n",
+            which(program).display()
+        );
+        fs::write(path.join(program), wrapper).expect("wrapper");
+        fs::set_permissions(path.join(program), fs::Permissions::from_mode(0o755)).expect("mode");
+    }
     symlink(fixture.bin().join("gitsign"), path.join("gitsign")).expect("gitsign link");
     (fixture, path)
 }
@@ -1685,6 +1704,13 @@ fn tc_1043_an_unusable_identity_registry_is_refused_and_starts_no_verifier() {
         commit_registry(&ssh.repo(), "registry", &default_registry());
     }
     assert_eq!(ssh.calls(), 0);
+    // No SSH verifier started either: no git verification and no ssh-keygen.
+    let git_log = fs::read_to_string(ssh_path.join("gitlog")).expect("git log");
+    assert!(
+        !git_log.contains("verify-commit") && !git_log.contains("verify-tag"),
+        "{git_log}"
+    );
+    assert!(!ssh_path.join("sshlog").exists(), "ssh-keygen started");
 }
 
 #[test]
@@ -1724,6 +1750,18 @@ fn tc_1044_the_registry_is_read_from_the_committed_revision_not_the_working_tree
     let replaced = result(&fixture);
     assert_eq!(replaced["signer"]["principal"], PRINCIPAL);
     assert_eq!(replaced["identity_registry_commit"], committed);
+    git(&repo, &["replace", "-d", &committed]);
+
+    // A graft naming the commit changes neither the commit nor the content.
+    let parent = git(&repo, &["rev-parse", "main^"]).trim().to_owned();
+    fs::write(
+        repo.join(".git/info/grafts"),
+        format!("{committed} {decoy}\n{decoy} {parent}\n"),
+    )
+    .expect("grafts");
+    let grafted = result(&fixture);
+    assert_eq!(grafted["signer"]["principal"], PRINCIPAL, "{grafted}");
+    assert_eq!(grafted["identity_registry_commit"], committed);
 }
 
 #[test]
@@ -1759,6 +1797,37 @@ fn tc_1045_the_mapped_principal_depends_only_on_the_registry_revision() {
     body["identity_registry"] = json!("first:registry.json");
     let result = verdict(&fixture, &body);
     assert_eq!(result["signer"]["principal"], "First Person", "{result}");
+
+    // A tag's tagger, and the certificate text of the signature block, change
+    // nothing either.
+    let repo = fixture.repo();
+    let commit = git(&repo, &["rev-parse", "HEAD"]).trim().to_owned();
+    for (name, tagger, block) in [
+        ("v-a", "t <t@example.test> 1700000000 +0000", CMS_BLOCK),
+        (
+            "v-b",
+            "Second Person <second@example.test> 1600000000 -0700",
+            CMS_BLOCK,
+        ),
+        (
+            "v-c",
+            "t <t@example.test> 1700000000 +0000",
+            "-----BEGIN SIGNED MESSAGE-----\nBBBBCCCCDDDD\n-----END SIGNED MESSAGE-----\n",
+        ),
+    ] {
+        let object = format!(
+            "object {commit}\ntype commit\ntag {name}\ntagger {tagger}\n\nSecond Person\n{block}"
+        );
+        let id = store(&repo, "tag", &object);
+        git(&repo, &["update-ref", &format!("refs/tags/{name}"), &id]);
+        let mut body = request(&fixture, name, "tag", true);
+        body["identity_registry"] = json!("first:registry.json");
+        let result = verdict(&fixture, &body);
+        assert_eq!(
+            result["signer"]["principal"], "First Person",
+            "{name}: {result}"
+        );
+    }
 }
 
 #[test]
@@ -1795,7 +1864,14 @@ fn tc_1046_a_git_failure_while_reading_the_registry_is_unverifiable_not_invalid(
     assert_eq!(result["reason"], "output_exceeded");
     assert!(result.get("identity_registry_commit").is_none());
 
-    // A git that times out while the registry is read (the 60 second bound).
+    assert_eq!(fixture.calls(), 0, "no verifier starts");
+}
+
+#[test]
+#[trace("TC-1046", "TC-1040", "FR-040-AC-30", "FR-037-AC-22")]
+fn tc_1046_a_git_that_times_out_while_reading_the_registry_is_unverifiable() {
+    // The real 60 second process bound: no production knob shortens it.
+    let fixture = fixture_with_commit();
     git_misbehaving_when(&fixture, "*ls-tree*", "exec /usr/bin/sleep 120");
     let result = verdict(&fixture, &request_with_registry(&fixture, REGISTRY));
     assert_eq!(result["status"], "unverifiable", "{result}");

@@ -27,7 +27,7 @@ use thiserror::Error;
 use crate::approval_verify_host::{GitsignEcho, ResultLine as ApprovalLine};
 use crate::process_host::CompletedProcess;
 use crate::signature_verify_host::{
-    AllowedSignersSnapshot, GitsignInputError, GitsignRequest, LoadedGitsign, RegistryFailure,
+    AllowedSignersSnapshot, GitsignRequest, LoadedGitsign, RegistryFailure,
     capture_allowed_signers, load_gitsign, run_git, validate_gitsign,
 };
 
@@ -465,9 +465,11 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ReleaseVerifyError> {
         request.gitsign.as_ref(),
         request.identity_registry.as_deref(),
     )
-    .map_err(|error| match error {
-        GitsignInputError::Invalid => ReleaseVerifyError::Invalid,
-        GitsignInputError::PrincipalRefused => ReleaseVerifyError::GitsignPrincipal,
+    .map_err(|error| {
+        error.refusal(
+            ReleaseVerifyError::Invalid,
+            ReleaseVerifyError::GitsignPrincipal,
+        )
     })?;
     let allowed_signers = capture_allowed_signers(&request.allowed_signers)
         .map_err(|_| ReleaseVerifyError::AllowedSigners)?;

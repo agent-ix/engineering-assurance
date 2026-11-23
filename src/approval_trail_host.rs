@@ -30,9 +30,9 @@ use thiserror::Error;
 
 use crate::approval_verify_host::{Assessment, GitsignEcho, Trust, assess};
 use crate::signature_verify_host::{
-    AllowedSignersSnapshot, GitsignInputError, GitsignRequest, ListedRef, LoadedGitsign,
-    RegistryFailure, capture_allowed_signers, list_tags, load_gitsign, load_listed_tag,
-    validate_gitsign, verify_loaded_tag,
+    AllowedSignersSnapshot, GitsignRequest, ListedRef, LoadedGitsign, RegistryFailure,
+    capture_allowed_signers, list_tags, load_gitsign, load_listed_tag, validate_gitsign,
+    verify_loaded_tag,
 };
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.approval-trail-request/v1";
@@ -194,9 +194,11 @@ fn parse(bytes: &[u8]) -> Result<Parsed, ApprovalTrailError> {
         request.gitsign.as_ref(),
         request.identity_registry.as_deref(),
     )
-    .map_err(|error| match error {
-        GitsignInputError::Invalid => ApprovalTrailError::Invalid,
-        GitsignInputError::PrincipalRefused => ApprovalTrailError::GitsignPrincipal,
+    .map_err(|error| {
+        error.refusal(
+            ApprovalTrailError::Invalid,
+            ApprovalTrailError::GitsignPrincipal,
+        )
     })?;
     let allowed_signers = capture_allowed_signers(&request.allowed_signers)
         .map_err(|_| ApprovalTrailError::AllowedSigners)?;

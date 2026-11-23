@@ -747,9 +747,9 @@ fn is_trace_attribute(attribute: &Attribute) -> bool {
 }
 
 fn is_test_case_id(value: &str) -> bool {
-    value.len() == 6
-        && value.starts_with("TC-")
-        && value.as_bytes()[3..].iter().all(u8::is_ascii_digit)
+    value
+        .strip_prefix("TC-")
+        .is_some_and(|digits| digits.len() >= 3 && digits.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
 fn is_acceptance_id(value: &str) -> bool {

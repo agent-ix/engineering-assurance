@@ -108,6 +108,17 @@ pub(crate) enum GitsignInputError {
     PrincipalRefused,
 }
 
+impl GitsignInputError {
+    /// The refusal a capability reports: `invalid` for a request error and
+    /// `principal` for a refused person's name.
+    pub(crate) fn refusal<E>(self, invalid: E, principal: E) -> E {
+        match self {
+            Self::Invalid => invalid,
+            Self::PrincipalRefused => principal,
+        }
+    }
+}
+
 /// A validated `gitsign` identity and the address of the registry that names
 /// the person.
 pub(crate) struct GitsignInput {
@@ -298,9 +309,11 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, SignatureVerifyError> {
         request.gitsign.as_ref(),
         request.identity_registry.as_deref(),
     )
-    .map_err(|error| match error {
-        GitsignInputError::Invalid => SignatureVerifyError::Invalid,
-        GitsignInputError::PrincipalRefused => SignatureVerifyError::GitsignPrincipal,
+    .map_err(|error| {
+        error.refusal(
+            SignatureVerifyError::Invalid,
+            SignatureVerifyError::GitsignPrincipal,
+        )
     })?;
     let allowed_signers = capture_allowed_signers(&request.allowed_signers)?;
     let gitsign = match input

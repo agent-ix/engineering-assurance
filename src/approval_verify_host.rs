@@ -15,14 +15,13 @@ use engineering_assurance::approval_verify::{
     Approval, ApprovalStatus, Bindings, RECORD_DIGEST_TRAILER, RECORD_ID_TRAILER,
     UnverifiableReason, bind, decide, is_record_value,
 };
-use engineering_assurance::signature_verify::{Verdict, is_plain_revision, trailer_values};
+use engineering_assurance::signature_verify::{Reason, Verdict, is_plain_revision, trailer_values};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::signature_verify_host::{
-    AllowedSignersSnapshot, CheckedTag, GitsignInput, GitsignInputError, GitsignRequest,
-    LoadedGitsign, RegistryFailure, capture_allowed_signers, check_tag, load_gitsign,
-    validate_gitsign,
+    AllowedSignersSnapshot, CheckedTag, GitsignInput, GitsignRequest, LoadedGitsign,
+    RegistryFailure, capture_allowed_signers, check_tag, load_gitsign, validate_gitsign,
 };
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.approval-verify-request/v1";
@@ -234,20 +233,12 @@ impl ApprovalVerifyError {
     }
 }
 
-/// The refusal for a `gitsign` and `identity_registry` request error.
-pub(crate) const fn gitsign_error(error: GitsignInputError) -> ApprovalVerifyError {
-    match error {
-        GitsignInputError::Invalid => ApprovalVerifyError::Invalid,
-        GitsignInputError::PrincipalRefused => ApprovalVerifyError::GitsignPrincipal,
-    }
-}
-
 /// What reading the identity registry of a request yielded.
 enum Registry {
     /// The registry was read, or the request names none.
     Loaded(Option<LoadedGitsign>),
     /// Git could not answer while the registry was read.
-    GitFailed(engineering_assurance::signature_verify::Reason),
+    GitFailed(Reason),
 }
 
 fn load_registry(
@@ -283,7 +274,12 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalVerifyError> {
         request.gitsign.as_ref(),
         request.identity_registry.as_deref(),
     )
-    .map_err(gitsign_error)?;
+    .map_err(|error| {
+        error.refusal(
+            ApprovalVerifyError::Invalid,
+            ApprovalVerifyError::GitsignPrincipal,
+        )
+    })?;
     let allowed_signers = capture_allowed_signers(&request.allowed_signers)
         .map_err(|_| ApprovalVerifyError::AllowedSigners)?;
     let registry = load_registry(&request.repository, input)?;
