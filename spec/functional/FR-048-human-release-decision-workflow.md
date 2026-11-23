@@ -34,6 +34,10 @@ provided" when the source was not supplied, never as "none" or "clean":
   supplies for them;
 - the unresolved anomalies: the list the caller supplies, each with its id and
   status;
+- the risk management files, each shown verbatim with its source: the risk summary
+  (the JSON of `quoin risk-summary --format json`, `ix://agent-ix/spec-objects-safety/FR-305`), the overall
+  residual-risk evaluation (`ix://agent-ix/spec-objects-safety/FR-107`) and the risk management review
+  (`ix://agent-ix/spec-objects-safety/FR-109`), the last two as the documents people wrote;
 - the snapshot file, if supplied, shown verbatim and unparsed with its `snapshot_path`. The owner's signature on the
   tag covers whatever bytes the release commit holds at `snapshot_path`; the workflow does not check that they are
   the bytes shown.
@@ -64,7 +68,15 @@ the report's `unreadable` list (an anomaly document Quoin could not read, `{ pat
 named as accepted by its `path`, like an unresolved anomaly. A matrix document that carries a `reason` and no criteria is
 shown verbatim with that reason.
 
-Out of scope: computing evidence, SOUP or anomaly status; any automatic,
+The risk management files are presented and never judged. The workflow reads from them only what
+identifies them: the risk summary is a JSON object with a `rows` list, and each of the two documents is a Markdown document
+whose frontmatter `type` is `overall_residual_risk_evaluation` and `risk_management_review` respectively, so a document of
+another type is refused as `release_input_unreadable` naming the file. It does not read the evaluation's decision, the
+review's statements, or any residual-risk decision, and what the owner may choose does not depend on them: accepting or
+rejecting the risk is the evaluation's named person's act and releasing is the owner's, and the workflow assigns no score,
+class or acceptability to either.
+
+Out of scope: computing evidence, SOUP or anomaly status; computing, aggregating or deciding risk acceptability; any automatic,
 scheduled, or agent-made release choice; signing; pushing the tag.
 
 ## Inputs
@@ -79,7 +91,8 @@ scheduled, or agent-made release choice; signing; pushing the tag.
 - With the `release` choice: the `meaning`, the text of the `Signed-off-meaning:` trailer, which the owner states
   because the tag has no default meaning ([FR-037](./FR-037-signer-mapping-and-signed-off-meaning.md)), and the
   accepted anomaly ids.
-- Optional files, each a regular file of at most 1 MiB: evidence status, SOUP report, anomaly list, and the snapshot
+- Optional files, each a regular file of at most 1 MiB: evidence status, SOUP report, anomaly list, risk summary, overall
+  residual-risk evaluation, risk management review, and the snapshot
   file Quoin wrote for the owner to commit ([FR-051](./FR-051-release-evidence-snapshot-placement.md)). The
   workflow reads these members: per criterion `id` and `evidence_status` (`requirements[].criteria[]`), per SOUP report
   row `purl` (`rows[]`), per anomaly `id` and `status` (`anomalies[]`, `status` possibly `null`), and per `unreadable`
@@ -117,6 +130,11 @@ scheduled, or agent-made release choice; signing; pushing the tag.
 - The workflow SHALL NOT create, sign, move or push a tag.
 - The workflow SHALL NOT create a commit.
 - The workflow SHALL present each input source as supplied or "not provided".
+- The workflow SHALL present a supplied risk summary, overall evaluation and risk management review verbatim, beside their sources.
+- The workflow SHALL NOT read, derive, require or check the risk decision, the plan-executed or readiness statement of a supplied
+  risk file, and SHALL NOT refuse or permit a `release` choice because of what those files say.
+- If a supplied risk summary is not a JSON object with a `rows` list, or a supplied evaluation or review is not a document
+  of its type, then the workflow SHALL refuse with `release_input_unreadable` naming the file and leave the run before the gate.
 - While an unresolved anomaly is not named as accepted, the workflow SHALL NOT
   write a Release document for the `release` choice.
 - If the owner names an accepted anomaly id that is not in the supplied anomaly
@@ -173,10 +191,13 @@ scheduled, or agent-made release choice; signing; pushing the tag.
 | FR-048-AC-15 | A `decide` on a run id that does not exist creates no run; a supplied file that is a FIFO, not UTF-8 or over 1 MiB is refused naming the file; a presentation over its printed bound, by escaping or by nesting, is refused before the run changes, and one just under it stays decidable. | Test |
 | FR-048-AC-16 | A `release` choice is refused, writing no Release document, when a Baseline item is absent at the baseline commit (`baseline_item_absent`) or `record_path` exists at it (`record_path_present_at_baseline`); `reject` stays available. | Test |
 | FR-048-AC-17 | A non-empty `unreadable` list of the supplied anomaly report is shown, a `release` that does not name each entry's `path` as accepted is refused, and each supplied Quoin document is presented verbatim. | Test |
+| FR-048-AC-18 | A supplied risk summary, overall evaluation and risk management review are presented verbatim with their sources and an unsupplied one is shown "not provided". | Test |
+| FR-048-AC-19 | A `release` choice is accepted and refused on exactly the same grounds whether the supplied evaluation is `accepted`, `not_accepted` or `undecided` and whatever the review states, and the presentation names no verdict of its own. | Test |
+| FR-048-AC-20 | A risk summary that is not a JSON object with a `rows` list, an evaluation of another document type and a review of another document type each yield `release_input_unreadable` naming the file and leave the run before the gate. | Test |
 
 ## Dependencies
 
-- **Upstream**: [FR-005](./FR-005-resumable-human-decisions.md),
+- **Upstream**: `ix://agent-ix/spec-objects-safety/FR-109` (the review), [FR-005](./FR-005-resumable-human-decisions.md),
   [FR-046](./FR-046-baseline-archetype.md),
   [FR-047](./FR-047-release-record-and-signed-release-tag.md).
 - **Downstream**: the owner's release commit and `git tag -s` signing, and `release-verify`.

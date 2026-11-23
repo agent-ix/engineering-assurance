@@ -24,7 +24,7 @@ itemSchemas:
     required: [id, repository_id, workflow, workflow_version, decision_boundary, decision_owner]
   release_request: {}
   release_presentation:
-    required: [id, baseline, evidence_status, soup, anomalies, snapshot]
+    required: [id, baseline, evidence_status, soup, anomalies, risk, snapshot]
   release_outcome:
     required: [id, meaning, accepted_anomalies, document, record_path, tag_message]
 linkSchemas: {}
