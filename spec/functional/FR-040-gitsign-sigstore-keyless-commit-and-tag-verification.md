@@ -151,11 +151,29 @@ remain `unverifiable`, FR-036).
   - for kind `commit`, `gitsign verify -- <commit-id>`, where `<commit-id>` is the
     commit id git resolved from the request revision, never the request
     revision text;
-  - for kind `tag`, `gitsign verify-tag -- <name>`, where `<name>` is the tag name
-    defined in Inputs; a revision that does not resolve to an annotated tag
-    under `refs/tags/<name>` is `unverifiable` with reason
+  - for kind `tag`, `gitsign verify-tag -- verified`, run in the isolated tag
+    snapshot below, where `verified` is the fixed name of the snapshot's only
+    tag ref and never the request's tag name or an object id (gitsign v0.18.0
+    verifies a tag ref in a non-bare repository and cannot verify a bare
+    repository or a tag object id); a revision that does not resolve to an
+    annotated tag under `refs/tags/<name>` is `unverifiable` with reason
     `revision_unresolved`, and a lightweight tag is `unsigned` with reason
     `lightweight_tag` as FR-036.
+- The command SHALL verify a CMS-signed annotated tag only in an isolated tag
+  snapshot: an ordinary, non-bare repository in a private temporary directory
+  that holds exactly one object, the resolved annotated tag object, written as a
+  loose object, and exactly one ref, `refs/tags/verified`, naming that object
+  id. The snapshot has no alternates, holds no commit, tree or other tag, and
+  carries only a minimal configuration of its own. The command SHALL re-hash the
+  stored object and refuse the verification as `unverifiable` unless it hashes
+  to the resolved id, and SHALL check that `refs/tags/verified` still names the
+  resolved id before and after each `gitsign` run, treating any other state as
+  `unverifiable` and never as a signature verdict. gitsign therefore verifies
+  that ref with the request's original identity and issuer, and a source ref
+  that is moved or deleted, or source configuration changed, after resolution
+  cannot change the object that was verified. A snapshot that cannot be made is
+  `unverifiable`, never `signed_bad`. The `gitsign.*` configuration check above
+  still runs against the source repository before any snapshot is used.
 - The command SHALL classify from exit statuses only, using at most four
   invocations of `gitsign`:
   1. the exact identity and issuer: exit 0 is `signed_valid`;
@@ -181,8 +199,9 @@ remain `unverifiable`, FR-036).
   verification (the working directory) can never supply a program, directly or
   through a program the command starts. It SHALL report `unverifiable` with reason `gitsign_not_started`
   when `gitsign` cannot start.
-- The command SHALL run `gitsign` with the repository as its working directory,
-  through the process host of FR-019 with the same 60 second wall-clock timeout
+- The command SHALL run `gitsign` for kind `commit` with the repository as its
+  working directory, and for kind `tag` with the isolated tag snapshot as its
+  working directory, through the process host of FR-019 with the same 60 second wall-clock timeout
   and 8 MiB capture bound per invocation.
 - The command SHALL pass `gitsign` exactly this environment and nothing else:
   `PATH`, `HOME` (gitsign's TUF cache location), `GIT_CONFIG_NOSYSTEM=1` and
@@ -227,7 +246,7 @@ bad signature is `unverifiable`.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-040-AC-1 | With a stand-in `gitsign` exiting 0 for the exact identity and issuer, a CMS-signed commit and a CMS-signed annotated tag each yield `signed_valid` with `signature_kind` `gitsign`, `certificate` carrying that identity and issuer, and `signer` with `source` `request`, `mapping` `mapped` and the request's `principal`. | Test (stand-in) |
-| FR-040-AC-2 | The stand-in receives, for a commit, `verify` and the resolved commit id and not the request revision text, and for a tag, `verify-tag` and the bare tag name for both a bare-name and a `refs/tags/<name>` revision; both carry `--certificate-identity` and `--certificate-oidc-issuer` with the request values as separate arguments, with the target after a `--` argument, run with the repository as the working directory, and git is not asked to verify the object. | Test (stand-in) |
+| FR-040-AC-2 | The stand-in receives, for a commit, `verify` and the resolved commit id and not the request revision text, run with the repository as the working directory; and for a tag, `verify-tag` and the fixed snapshot ref name `verified`, never the request's tag name or an object id, for both a bare-name and a `refs/tags/<name>` revision, run with the isolated tag snapshot as the working directory. Both carry `--certificate-identity` and `--certificate-oidc-issuer` with the request values as separate arguments and the target after a `--` argument, and git is not asked to verify the object. | Test (stand-in) |
 | FR-040-AC-3 | With a stand-in that exits 1 for the exact flags and 0 for the wildcard flags, the verdict is `signed_untrusted` with `signer` `unmapped`, no `certificate`, and `mismatch` `issuer` when only the issuer differs, `identity` when only the identity differs, and `identity_and_issuer` when both differ, using no more than four invocations. | Test (stand-in) |
 | FR-040-AC-4 | With a stand-in that exits 1 for every invocation, the verdict is `unverifiable` with reason `gitsign_verification_failed`, never `signed_bad` and never `signed_untrusted`; a stand-in that exits 2, or any status other than 0 or 1, at any step gives the same result. | Test (stand-in) |
 | FR-040-AC-5 | A CMS-signed commit and tag in a request without `gitsign` yield `unverifiable` with reason `gitsign_identity_missing`, the stand-in is never started, and the status is never `signed_valid`. | Test (stand-in) |

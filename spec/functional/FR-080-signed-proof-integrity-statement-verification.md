@@ -18,8 +18,9 @@ relationships:
 ## Description
 
 Engineering Assurance SHALL provide a `proof-checkpoint-verify` command that
-verifies a signed annotated tag against the identity digest and scope of one
-`proof-integrity-statement/v1` defined by Quoin FR-210. The signed checkpoint
+verifies a signed annotated tag against the caller's expected exact tag object
+id and the identity digest and scope of one `proof-integrity-statement/v1`
+defined by Quoin FR-210. The signed checkpoint
 states the purpose `proof-integrity-statement/v1`, the statement's SHA-256
 identity digest, and its record id/revision, candidate revision, proof id, and
 attestation id. The result SHALL identify the exact immutable tag object whose
@@ -49,14 +50,14 @@ valid.
 ## Inputs
 
 - One closed request document `engineering-assurance.proof-checkpoint-verify-request/v1` with `protocol`, `repository` (absolute path), `tag` (a bare tag name or `refs/tags/<name>`), `expected` (the exact statement digest and scope), `allowed_signers` (the FR-036 SSH trust file), and optional `gitsign` (the FR-040 identity, issuer, and principal). Unknown members are rejected.
-- `expected` contains `purpose` (exactly `proof-integrity-statement/v1`), `statement_digest` (`sha256:` followed by 64 lowercase hexadecimal digits), `record_id`, `record_revision`, `candidate_revision`, `proof_id`, and `attestation_id`. The statement digest is the identity digest specified by Quoin FR-210. Identifiers are non-empty strings without control characters; `record_revision` is a positive integer.
+- `expected` contains `purpose` (exactly `proof-integrity-statement/v1`), `statement_digest` (`sha256:` followed by 64 lowercase hexadecimal digits), `record_id`, `record_revision`, `candidate_revision`, `proof_id`, and `attestation_id`, and `tag_object_id` (the full lowercase hexadecimal id of the one annotated tag object the caller expects, 40 or 64 digits). The statement digest is the identity digest specified by Quoin FR-210. Identifiers are non-empty strings without control characters; `record_revision` is a positive integer.
 - The signed tag message carries exactly one each of `Proof-Checkpoint-Purpose`, `Proof-Statement-Digest`, `Proof-Record-Id`, `Proof-Record-Revision`, `Proof-Candidate-Revision`, `Proof-Id`, and `Proof-Attestation-Id` trailers. Trailer keys are matched ASCII case-insensitively; values are compared exactly without normalization.
-- The request SHALL include a well-formed statement digest and every scope field. A missing or malformed field is a request error and SHALL NOT start git or a signature verifier. The caller supplies the digest computed from the exact Quoin statement; this command does not accept or recompute statement bytes.
+- The request SHALL include a well-formed expected tag object id, a well-formed statement digest and every scope field. A missing or malformed field is a request error and SHALL NOT start git or a signature verifier. The caller supplies the digest computed from the exact Quoin statement; this command does not accept or recompute statement bytes.
 
 ## Outputs
 
 - One line of JSON `engineering-assurance.proof-checkpoint-verify-result/v1` at exit 0 for every verdict. The closed result includes `status`, `tag`, `tag_object_id`, `checkpoint`, `signer`, `trust`, and `signature`.
-- `status` is `verified`, `wrong_checkpoint`, `untrusted_signer`, `signed_bad`, `unsigned`, or `unverifiable`. `checkpoint` returns the observed purpose, statement digest, and scope values, with each field classified as `match`, `mismatch`, `missing`, or `repeated`.
+- `status` is `verified`, `wrong_checkpoint`, `untrusted_signer`, `signed_bad`, `unsigned`, or `unverifiable`. `checkpoint` returns the observed purpose, statement digest, and scope values, with each field classified as `match`, `mismatch`, `missing`, or `repeated`, and the resolved `tag_object_id` classified as `match` or `mismatch` against the expected id.
 - `tag_object_id` is the canonical full object id of the annotated tag object whose message was parsed and whose signature was verified. It is `null` only when the request did not resolve to an annotated tag object.
 - `signer` and `signature` preserve the corresponding FR-036, FR-037, and FR-040 verification results. `trust` echoes the allowed-signers path and, when supplied, the configured gitsign identity, OIDC issuer, and principal. A non-verified result never reports an accepted signer.
 - A request that cannot yield a verdict writes the `engineering-assurance.error/v1` machine error for `proof-checkpoint-verify` and exits 2. An `unverifiable` result carries the refusal cause from the unavailable tag, object binding, verifier, or trust configuration.
@@ -65,7 +66,10 @@ valid.
 
 - The command SHALL resolve the requested tag exactly once to a canonical annotated tag object id, then read the message and signature from that object. It SHALL bind signature verification to the same object id, using an isolated ref pinned to that id when a delegated verifier accepts only a ref. If that binding cannot be guaranteed, the result SHALL be `unverifiable`.
 - The command SHALL obtain signature verdicts only through FR-036, FR-037, and FR-040. It SHALL NOT implement cryptography, alter their signature classification, or infer signer identity or trust beyond their returned data.
-- The command SHALL report `verified` only when the delegated signature verdict is `signed_valid` with a mapped signer and the purpose, statement digest, and every scope field occur exactly once and match `expected`.
+- The command SHALL report `verified` only when the delegated signature verdict is `signed_valid` with a mapped signer, the resolved `tag_object_id` equals `expected.tag_object_id`, and the purpose, statement digest, and every scope field occur exactly once and match `expected`.
+- A second signed tag whose message carries identical statement fields is a different object and SHALL NOT satisfy a request pinned to another object id.
+- A request whose requested tag resolves to an annotated tag object other than `expected.tag_object_id` SHALL yield `wrong_checkpoint` with `checkpoint.tag_object_id` `mismatch`, reporting the resolved id as `tag_object_id`.
+- The command SHALL NOT yield `verified` for a tag object other than `expected.tag_object_id`, however its signature and fields verify.
 - A signed tag with a different purpose, statement digest, record id or revision, candidate revision, proof id, attestation id, missing field, or repeated field SHALL yield `wrong_checkpoint`.
 - A good signature from an untrusted identity SHALL yield `untrusted_signer`. A signature classified bad by the delegated verifier SHALL yield `signed_bad`. An unsigned annotated tag SHALL yield `unsigned`.
 - An unavailable repository, tag object, verifier, or required trust configuration SHALL yield `unverifiable`. The command SHALL NOT convert any of these cases into a positive result.
@@ -78,6 +82,7 @@ valid.
 | --- | --- | --- | --- |
 | FR-080-CON-1 | A `verified` result SHALL bind checkpoint parsing and delegated signature verification to the same immutable annotated tag object identified by `tag_object_id`. | Safety | Test |
 | FR-080-CON-2 | A `verified` result SHALL NOT imply human approval, role authorization, proof validity, or qualification. | Safety | Test |
+| FR-080-CON-3 | A `verified` result SHALL NOT be reported unless the verified tag object id equals the caller's expected tag object id. | Safety | Test |
 
 ## Acceptance Criteria
 
@@ -91,6 +96,7 @@ valid.
 | FR-080-AC-6 | A lightweight tag, commit, note, unresolved ref, malformed request, missing statement digest, or unsupported/missing trust configuration never yields `verified`; malformed requests produce the declared machine error before invoking git. | Test |
 | FR-080-AC-7 | Replacing the tag ref after resolution cannot combine checkpoint fields from one tag object with a successful signature verdict for another; the verifier observes the resolved object id or returns `unverifiable`, and a deliberate removal of this binding makes the negative-control test fail. | Test |
 | FR-080-AC-8 | A result with status `verified` contains no `approved`, role-authorization, or proof-qualification claim, and a consumer can distinguish statement integrity from FR-041 approval. | Test |
+| FR-080-AC-9 | Two annotated tags, each validly signed by an accepted key and carrying identical purpose, statement digest and scope fields, are distinct objects: a request pinned to the first tag's object id yields `verified` for the first and `wrong_checkpoint` with `checkpoint.tag_object_id` `mismatch` for the second, which reports its own resolved id; a missing or malformed `expected.tag_object_id` is a request error that does not start git. | Test |
 
 ## Dependencies
 
