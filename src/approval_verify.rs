@@ -244,11 +244,10 @@ fn decide_valid(
     if !bindings.both_match() {
         return Decision::status(ApprovalStatus::WrongRecord);
     }
-    let Some(meaning) = verdict
-        .signed_off_meaning
-        .as_ref()
-        .filter(|meaning| meaning.presence == Presence::Present)
-    else {
+    let Some(meaning) = verdict.signed_off_meaning.as_ref().filter(|meaning| {
+        meaning.presence == Presence::Present
+            && meaning.values.iter().all(|value| !value.trim().is_empty())
+    }) else {
         return Decision::status(ApprovalStatus::MeaningMissing);
     };
     let approver = verdict
