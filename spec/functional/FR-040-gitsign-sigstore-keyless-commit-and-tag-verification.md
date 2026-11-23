@@ -32,9 +32,12 @@ trust source, and never from the request. The registry maps a certificate
 identity and OIDC issuer to a person's name. A verified identity and issuer that
 match an entry are `mapped` to that person; one that matches no entry are
 `unmapped`. A request that carries a person's name for the identity is refused.
-This is the same attribution FR-037 makes for an SSH signature through the
-allowed-signers file: a named person is a claim that needs evidence a caller
-cannot supply by itself.
+The caller chooses the revision of the registry in its own repository, as it
+chooses the allowed-signers file for an SSH signature, so the mapping is only
+as trustworthy as the commit the consumer accepts. The result names the
+resolved full commit id of the registry, so a consumer can check that commit
+against its own history (for example, that it lies on a protected branch) and
+re-run against the same bytes.
 
 gitsign exits 0 when it accepts a signature and 1 for every failure: a bad
 signature, an identity or issuer mismatch, a missing signature, and an
@@ -121,6 +124,9 @@ remain `unverifiable`, FR-036).
   `signed_untrusted`, `signer` is `source` `gitsign_registry`, `mapping`
   `unmapped`, no principal (FR-037), and no `certificate` member, because the
   certificate's actual identity is not read from gitsign's message text.
+- Whenever the identity registry was read, the verdict adds
+  `identity_registry_commit`, the full commit id the registry revision resolved
+  to, in every status.
 - `reason` gains seven values in the closed list: `gitsign_not_started`,
   `gitsign_identity_missing`, `gitsign_verification_failed` (gitsign did not
   accept the signature even with wildcard matchers, exited 2, or exited with
@@ -135,23 +141,31 @@ remain `unverifiable`, FR-036).
 - `signed_off_meaning` is reported as FR-037 for every status with a readable
   message.
 - A malformed `gitsign` member, or an `identity_registry` that is present
-  without `gitsign`, absent with `gitsign`, or not of the form `<rev>:<path>`
-  that FR-037 accepts, writes the machine error
+  without `gitsign`, absent with `gitsign`, or not a well-formed `<rev>:<path>`
+  address (FR-037), writes the machine error
   `signature_verify_request_invalid` and exits with status 2, as FR-036.
-- A `gitsign` member that carries `principal` writes the machine error
-  `signature_verify_gitsign_principal_refused` and exits with status 2. The
-  value is not used, not echoed and not a fallback.
-- An identity registry that is unreadable as a trust source (FR-037), is not
+- A request that otherwise validates, with both `gitsign` and
+  `identity_registry`, and whose `gitsign` member carries `principal`, writes
+  the machine error `signature_verify_gitsign_principal_refused` and exits with
+  status 2. The value is not used, not echoed and not a fallback.
+- An identity registry source that is `invalid` (FR-037), or whose content is not
   valid JSON, has a wrong `protocol`, has an entry that breaks the bounds above,
   has an unknown member, or repeats an identity and issuer writes the machine
   error `signature_verify_identity_registry_invalid` and exits with status 2.
+- A registry reading that is `git_failed` (FR-037) yields `unverifiable` at exit
+  0 with the FR-036 reason for the failure (`git_not_started`, `timeout`,
+  `output_exceeded` or `repository_unavailable`), and no machine error.
 
 ## Behavior
 
-- The command SHALL validate the request, then refuse a `gitsign` member that
-  carries `principal`, then read and validate the identity registry as a trust
-  source once, before it starts git on the target or `gitsign`, whatever the
-  signature kind of the object.
+- The command SHALL validate the request first, so that a `gitsign` member
+  without `identity_registry` is `signature_verify_request_invalid`.
+- The command SHALL refuse a `gitsign` member that carries `principal` only
+  after the request validates.
+- The command SHALL read the identity registry as a trust source once, after
+  that refusal, whatever the signature kind of the object.
+- The command SHALL validate the content of the registry before it starts any
+  signature verifier.
 - The command SHALL map a verified gitsign identity to a person only by exact
   string equality of the accepted identity and issuer with a registry entry.
 - The command SHALL NOT map by a pattern, a prefix, case folding or a partial
@@ -316,7 +330,7 @@ bad signature is `unverifiable`.
 | FR-040-AC-8 | An unsigned commit and tag still yield `unsigned` with no `signature_kind`, and an OpenPGP-signed commit and tag still yield `unverifiable` with reason `unsupported_signature_format`, whether or not `gitsign` is supplied. | Test |
 | FR-040-AC-9 | A commit whose signature headers mix CMS and SSH yields `unverifiable` with reason `unsupported_signature_format`, and a commit whose `gpgsig` header begins with the CMS marker but has trailing characters on the same line is still detected as CMS. | Test (captured) |
 | FR-040-AC-10 | The classifier maps the format, identity-supplied flag, repository-config flag, snapshot outcomes (could not be made; object did not re-hash; ref changed before or after a run) and invocation outcomes (exit 0; 1 then wildcard 1; 1 then wildcard 0 with each issuer and identity probe result; exit 2; other exit status; not started; timeout; cut short) to the statuses, `mismatch` values and reasons above, without running `gitsign` or git, and the classification does not change when the captured message text is replaced. | Test (captured) |
-| FR-040-AC-11 | A request whose `gitsign` member lacks a field, has an empty or oversized value, a leading `-` identity, a control character, or an unknown member other than `principal`, a request with `gitsign` and no `identity_registry`, with `identity_registry` and no `gitsign`, or with an `identity_registry` that is not of the form `<rev>:<path>`, yields `signature_verify_request_invalid` and exit status 2, and does not start git or `gitsign`. | Test |
+| FR-040-AC-11 | A request whose `gitsign` member lacks a field, has an empty or oversized value, a leading `-` identity, a control character, or an unknown member other than `principal`, a request with `gitsign` and no `identity_registry` (with or without a `principal` in `gitsign`), with `identity_registry` and no `gitsign`, or with an `identity_registry` that is not a well-formed `<rev>:<path>` address, yields `signature_verify_request_invalid` and exit status 2, and does not start git or `gitsign`. | Test |
 | FR-040-AC-12 | An SSH-signed commit and tag in a request that also carries `gitsign` yield the FR-036 and FR-037 statuses, signer principal and mapping unchanged, with `signature_kind` `ssh` and `signer.source` `allowed_signers`, and `gitsign` is never started; the identity registry is still read and validated, so an invalid registry in such a request yields `signature_verify_identity_registry_invalid`. | Test (stand-in) |
 | FR-040-AC-13 | A gitsign-signed commit and tag whose message carries a `Signed-off-meaning:` trailer report it as FR-037 does, and an `unverifiable` gitsign commit still reports it. | Test (stand-in) |
 | FR-040-AC-14 | The `signature-verify` feature and the binary add no crate dependency that performs signature verification, cryptography or Sigstore access; the only verifying programs invoked are git, `ssh-keygen` and `gitsign`. | Inspection |
@@ -331,10 +345,12 @@ bad signature is `unverifiable`.
 | FR-040-AC-23 | When `refs/tags/verified` is changed to another object before a `gitsign` run, or by the stand-in during a run, the verdict is `unverifiable` with reason `snapshot_ref_changed`, never `signed_valid`, `signed_bad` or `signed_untrusted`; moving or deleting the source tag ref after resolution leaves the verified object unchanged. | Test (stand-in) |
 | FR-040-AC-24 | With a global `init.templateDir` holding a `gitsign.fulcioRoot` configuration and a `hooks` entry, and with a source repository configuration holding `include.path` and `includeIf` keys, the snapshot's configuration holds no `gitsign.*`, `include` or `includeIf` key, no template content is present, and the stand-in's configuration query inside the snapshot reports none; a source repository with a `gitsign.*` key is still `gitsign_repository_config` without a snapshot being made. | Test (stand-in) |
 | FR-040-AC-25 | With a stand-in `gitsign` exiting 0, a registry committed at `<rev>:<path>` holding an entry for the exact identity and issuer yields `signed_valid` with `signer` `mapped` and that entry's `principal`; a registry with no entry for that identity and issuer yields `signed_valid` with `signer` `unmapped`, `source` `gitsign_registry` and no principal; an entry matching only the identity, only the issuer, or only by case, prefix or pattern does not map. | Test (stand-in) |
-| FR-040-AC-26 | A request whose `gitsign` member carries `principal` yields `signature_verify_gitsign_principal_refused` and exit status 2, does not start git or `gitsign`, and the value appears nowhere in the output, including when the registry holds an entry for the identity, when it holds none, and when `identity_registry` is absent. | Test |
-| FR-040-AC-27 | An `identity_registry` whose revision does not resolve to a commit, whose path is absent from that commit, is a symbolic link or directory, exceeds 1 MiB, is not UTF-8 or JSON, has a wrong `protocol`, has an unknown member, has an oversized or empty value, has more than 4096 entries, or repeats an identity and issuer yields `signature_verify_identity_registry_invalid` and exit status 2, and does not start `gitsign`, for a CMS-signed and for an SSH-signed object. | Test |
+| FR-040-AC-26 | A request that otherwise validates, with `gitsign` carrying `principal` and with `identity_registry`, yields `signature_verify_gitsign_principal_refused` and exit status 2, does not start git or `gitsign`, and the value appears nowhere in the output, whether the registry holds an entry for the identity or none. | Test |
+| FR-040-AC-27 | An `identity_registry` whose revision does not resolve to a commit, whose path is absent from that commit, is a symbolic link or directory, exceeds 1 MiB, is not UTF-8 or JSON, has a wrong `protocol`, has an unknown member, has an oversized or empty value, has more than 4096 entries, or repeats an identity and issuer yields `signature_verify_identity_registry_invalid` and exit status 2, and starts no signature verifier, for a CMS-signed and for an SSH-signed object. | Test |
 | FR-040-AC-28 | The registry is read from the committed revision and not the working tree: with the working-tree registry holding an entry the committed registry lacks, the signer is `unmapped`; with the working-tree registry edited to drop an entry the committed registry holds, the signer is `mapped`. | Test (stand-in) |
 | FR-040-AC-29 | The `mapped` principal depends only on the registry: the same accepted identity and issuer yield different principals under two committed registry revisions that name different people, and the commit author, committer, tagger, email and certificate text change nothing. | Test (stand-in) |
+| FR-040-AC-30 | In a directory that is not a git repository, with a git that cannot start, and with a git that times out while the registry is read, the verdict is `unverifiable` at exit 0 with reason `repository_unavailable`, `git_not_started` and `timeout` respectively, not `signature_verify_identity_registry_invalid`, and no signature verifier starts. | Test |
+| FR-040-AC-31 | Every verdict for a request with `gitsign` carries `identity_registry_commit` equal to the full commit id the registry revision resolved to, including after the branch the revision names has moved. | Test (stand-in) |
 
 ## Dependencies
 

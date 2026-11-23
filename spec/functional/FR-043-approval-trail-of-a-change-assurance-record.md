@@ -63,7 +63,7 @@ signature rule (FR-036, FR-037, FR-040 own them), and a persisted log of the tra
 - With `--format json`, one line of JSON on stdout and exit status 0, the result
   with the member `protocol` equal to `engineering-assurance.approval-trail-result/v1`:
   - `record_id`, `record_digest` and `trust` as requested (the `trust` member of
-    FR-041);
+    FR-041, which with `gitsign` also carries `identity_registry_commit`);
   - `ordering`, the string `claimed_at_ascending`;
   - `entries`, the array of entries in order;
   - `unreadable`, the array of annotated tags that cannot be known to name the
@@ -106,7 +106,10 @@ signature rule (FR-036, FR-037, FR-040 own them), and a persisted log of the tra
   exits with status 2. The codes are `approval_trail_request_unreadable`,
   `approval_trail_request_invalid`, `approval_trail_allowed_signers_invalid`,
   `approval_trail_repository_unavailable` (the repository is not a directory git
-  can list, or the listing cannot be read) and `approval_trail_result_encoding_failed`.
+  can list, the listing cannot be read, or git fails while the identity registry
+  is read, FR-037), `approval_trail_gitsign_principal_refused`,
+  `approval_trail_identity_registry_invalid` and
+  `approval_trail_result_encoding_failed`.
 
 ## Behavior
 
@@ -181,7 +184,7 @@ throwaway keys generated in the test.
 | FR-043-AC-7 | A tag named `--help`, one named like a revision expression and one with characters such as `'`, `"`, `$` and `;` are listed correctly, executed nothing and altered no other entry. | Test |
 | FR-043-AC-8 | A validly signed tag whose message holds a NUL byte is listed in `unreadable` with its name and reason `trailer_unreadable`, is not in `entries`, and the result is not `complete`. | Test |
 | FR-043-AC-9 | `--format table` prints a header, one row per entry in trail order with status, reason, approver, meaning, claimed time and tag, one `unreadable` row per unreadable tag, and the final `considered`, `unreadable`, `truncated`, `complete` line, and exits 0. | Test |
-| FR-043-AC-10 | A request with an unknown member, a wrong protocol, a bad record id or digest, a relative path or an invalid `gitsign` member writes `approval_trail_request_invalid`; unreadable JSON and an invalid allowed-signers file write their codes; a path that is not a git repository writes `approval_trail_repository_unavailable`; each exits 2. | Test |
+| FR-043-AC-10 | A request with an unknown member, a wrong protocol, a bad record id or digest, a relative path or an invalid `gitsign` member writes `approval_trail_request_invalid`; unreadable JSON and an invalid allowed-signers file write their codes; a `gitsign` member that carries `principal` in a request that otherwise validates writes `approval_trail_gitsign_principal_refused`; an `identity_registry` whose source is `invalid` or whose content is unusable writes `approval_trail_identity_registry_invalid`; a path that is not a git repository, with or without `gitsign`, writes `approval_trail_repository_unavailable`, never `approval_trail_identity_registry_invalid`; each exits 2. | Test |
 | FR-043-AC-11 | A gitsign-signed tag naming the record, through the stand-in, is listed `approved` with `signature_kind` `gitsign`, and one the stand-in rejects, or whose identity the identity registry does not name, is listed `untrusted_signer`. | Test (stand-in) |
 | FR-043-AC-12 | The ordering and the record-naming test are exercised by pure functions alone for equal, missing and out-of-order times and for repeated, different and case-variant ids. | Test |
 | FR-043-AC-13 | The total time bound is 300 seconds and each git and signature run uses the shared host's time and output bounds. | Inspection |

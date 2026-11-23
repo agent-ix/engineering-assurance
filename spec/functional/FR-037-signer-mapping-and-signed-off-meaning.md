@@ -85,27 +85,43 @@ signature, is a claim that needs its own evidence.
 ## Trust-source reading
 
 A trust source addressed as `<rev>:<path>` is read in one way, whichever
-requirement names it (the identity registry of FR-040 is one):
+requirement names it (the identity registry of FR-040 is one). The reading has
+three outcomes: the content was read, the source is `invalid`, or git could not
+answer (`git_failed`).
 
-- `<rev>:<path>` is split at the first `:`. `<rev>` is a revision of at most
-  256 bytes with no control character and no leading `-`. `<path>` is a
-  repository-relative path of at most 1024 bytes, with no control character, no
-  leading `/`, and no empty, `.` or `..` component.
+- The command SHALL split `<rev>:<path>` at the first `:`. A revision that
+  itself contains `:`, such as `HEAD@{12:00}` or `:/text`, cannot be addressed.
+- If `<rev>` is empty, is longer than 256 bytes, holds a control character or
+  begins with `-`, or if `<path>` is empty, is longer than 1024 bytes, holds a
+  control character, begins with `/`, or has an empty, `.` or `..` component,
+  then the address is not well formed, and the requirement that names the source
+  treats it as a request error, before git starts.
 - The command SHALL resolve `<rev>` once, in the repository under verification,
-  to a full commit id, and SHALL read the content from that commit's tree by git
-  object, as `git cat-file blob <commit-id>:<path>` does. It SHALL NOT read the
-  working tree or the index.
-- The entry SHALL be a regular file blob (mode 100644 or 100755), not a
-  symbolic link, submodule or tree; the content SHALL be at most 1 MiB and valid
-  UTF-8.
-- The reading yields the content bytes, the resolved commit id and the blob id.
-  It is made once per command run, and every decision of that run uses those
-  bytes.
-- A `<rev>` that does not resolve to a commit, a path absent from that commit,
-  an entry that is not a regular blob, content over the bound or not UTF-8, and
-  a git failure each make the source unreadable, and the requirement that names
-  the source says what refusal follows. The command SHALL start no signature
-  verifier after an unreadable source.
+  to a full commit id, peeling an annotated tag to the commit it names, and
+  SHALL ignore replace refs and grafts.
+- The command SHALL read the content from that commit's tree by git object, as
+  `git cat-file blob <commit-id>:<path>` does, and SHALL NOT read the working
+  tree or the index.
+- If `<rev>` does not resolve to a commit, the path is absent from that commit,
+  the entry is not a regular file blob (mode 100644 or 100755; a symbolic link,
+  submodule or tree is not), the content exceeds 1 MiB, or the content is not
+  UTF-8, then the command SHALL treat the source as `invalid`.
+- If git cannot start, times out, exceeds its output bound, or the path is not a
+  repository git can use, then the command SHALL treat the reading as
+  `git_failed`, and SHALL NOT report it as `invalid`.
+- The command SHALL make the reading once per run and SHALL use the same bytes
+  for every decision of that run. The reading yields the content and the
+  resolved full commit id.
+- If the outcome is not "read", then the command SHALL start no signature
+  verifier.
+- Each requirement that names a source gives its outcomes this effect, and no
+  other: `invalid`, like a registry whose content breaks the rules of the
+  requirement that names it, writes that capability's
+  `identity_registry_invalid` machine error at exit 2; `git_failed` has the
+  capability's existing outcome for a git failure on the target, which is
+  `unverifiable` at exit 0 with the FR-036 reason for `signature-verify` and
+  `approval-verify`, `approval_trail_repository_unavailable` for
+  `approval-trail`, and `release_verify_git_failed` for `release-verify`.
 
 ## Behavior
 
@@ -170,9 +186,10 @@ requirement names it (the identity registry of FR-040 is one):
 | FR-037-AC-3 | An allowed-signers file that is missing, a directory, over 1 MiB or not UTF-8 yields `signature_verify_allowed_signers_invalid` and exit status 2, and does not start git. | Test |
 | FR-037-AC-4 | A file whose only line is unparsable yields `signed_untrusted` for a validly signed commit, and a file with an unparsable line plus a valid line for the signer yields `signed_valid` with that principal. | Test |
 | FR-037-AC-9 | A commit and an annotated tag signed by a key whose allowed-signers entry has expired (`valid-before` in the past) each yield `signed_untrusted` with mapping `unmapped`, and not `signed_valid`, on git 2.34.1 with `ssh-keygen` installed. | Test |
-| FR-037-AC-19 | A trust source `<rev>:<path>` is read from the git object of the commit `<rev>` resolves to: with the working-tree file edited, or the index changed, after the commit, the content read is the committed bytes; moving the branch `<rev>` names after the reading does not change the bytes used in that run. | Test |
-| FR-037-AC-20 | A trust source whose `<rev>` does not resolve to a commit, whose path is absent from that commit, is a directory, symbolic link or submodule, exceeds 1 MiB, is not UTF-8, or is addressed with a leading `/`, a `..` component, a control character or a `<rev>` with a leading `-`, is unreadable and no signature verifier is started. | Test |
-| FR-037-AC-21 | The reading yields the content, the resolved full commit id and the blob id, and a second read of an unchanged commit yields the same three values. | Test |
+| FR-037-AC-19 | A trust source `<rev>:<path>` is read from the git object of the commit `<rev>` resolves to: with the working-tree file edited, or the index changed, after the commit, the content read is the committed bytes; a replace ref or graft naming the commit changes neither the commit nor the content; moving the branch `<rev>` names after the reading does not change the bytes used in that run. | Test |
+| FR-037-AC-20 | A `<rev>` that does not resolve to a commit, a path absent from that commit, a directory, symbolic link or submodule entry, content over 1 MiB and content that is not UTF-8 each make the source `invalid` and start no signature verifier; an address with an empty `<rev>`, an empty path, a leading `/`, a `..` component, a control character or a `<rev>` with a leading `-` is not well formed, is refused before git starts, and a `<rev>` such as `HEAD@{12:00}` is split at its first `:` and so addresses nothing. | Test |
+| FR-037-AC-21 | With `<rev>` a branch name the reading yields the content and the full commit id the branch named at the reading, and with `<rev>` an annotated tag it yields the commit the tag peels to. | Test |
+| FR-037-AC-22 | A git that cannot start, times out, exceeds its output bound, or runs in a directory that is not a repository makes the reading `git_failed`, which is not reported as `invalid`, and starts no signature verifier. | Test |
 | FR-037-AC-5 | A message with one `Signed-off-meaning:` trailer yields `present` with that value; a message with two yields both in order; a trailer in the body but not in the trailer block is not read. | Test |
 | FR-037-AC-6 | A message with no such trailer yields `missing` with no values, and a trailer with an empty value yields `present` with an empty value. | Test |
 | FR-037-AC-7 | A `signed_bad` and an `unsigned` commit that carry the trailer report its values and keep their status. | Test |

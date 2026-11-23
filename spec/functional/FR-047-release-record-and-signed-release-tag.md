@@ -95,7 +95,9 @@ signature.
 - A request that yields no verdict writes the `engineering-assurance.error/v1`
   machine error and exits 2, with the codes
   `release_verify_request_unreadable`, `release_verify_request_invalid`,
-  `release_verify_allowed_signers_invalid`, `release_verify_git_failed` and
+  `release_verify_allowed_signers_invalid`, `release_verify_git_failed`,
+  `release_verify_gitsign_principal_refused`,
+  `release_verify_identity_registry_invalid` and
   `release_verify_result_encoding_failed`.
 
 ## Behavior
@@ -103,6 +105,10 @@ signature.
 - The command SHALL read the release record from the commit the tag peels to,
   with git object access.
 - The command SHALL NOT read the working tree.
+- If git cannot answer while the identity registry is read (FR-037), then the
+  command SHALL write `release_verify_git_failed` and exit 2.
+- The command SHALL NOT write `release_verify_identity_registry_invalid` for a
+  git failure.
 - If git cannot answer a read the verdict needs (it cannot start, times out,
   exceeds its output bound, or exits with a status other than the one that
   means the object does not exist), then the command SHALL write the machine
@@ -169,6 +175,7 @@ signature.
 | FR-047-AC-10 | The `approval` member equals the output of `approval-verify` for the same tag, record id and digest, and the command refuses a request with an unknown member, a relative path or a `-`-leading value with `release_verify_request_invalid` and exit 2 before starting git. | Test |
 | FR-047-AC-11 | Static inspection shows no signature, certificate, trailer-parsing or hashing code in the release module (CON-2, CON-3). | Inspection |
 | FR-047-AC-12 | The decision from the FR-041 status and the record checks is exercised without any process, over every combination, and `released` is returned for exactly one. | Property |
+| FR-047-AC-14 | A request whose `gitsign` member carries `principal`, and that otherwise validates, yields `release_verify_gitsign_principal_refused`; an `identity_registry` whose source is `invalid` or whose content is unusable yields `release_verify_identity_registry_invalid`; a git that fails while the registry is read yields `release_verify_git_failed`; each exits 2 with no verdict. | Test |
 | FR-047-AC-13 | A git that fails every call yields `release_verify_git_failed` at exit 2 and no verdict, and a replace ref or a graft in the repository changes neither the record read nor the parent compared. | Test |
 
 ## Dependencies
