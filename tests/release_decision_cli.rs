@@ -1310,6 +1310,23 @@ fn keys(value: &Value) -> Vec<&str> {
 }
 
 #[test]
+#[trace("FR-048-AC-18")]
+fn risk_documents_saved_with_crlf_line_ends_are_accepted_by_their_type() {
+    let fixture = fixture();
+    let crlf = |text: String| text.replace('\n', "\r\n");
+    let evaluation = crlf(evaluation_document("accepted"));
+    let review = crlf(review_document("yes", "ready"));
+    let presented = present_with_risk(&fixture, "run-crlf", &evaluation, &review);
+    let risk = &presented["presentation"]["risk"];
+    assert_eq!(risk["overall_evaluation"]["text"], evaluation);
+    assert_eq!(risk["review"]["text"], review);
+
+    let mut request = present_request(&fixture, "run-crlf-wrong");
+    request["risk_review"] = json!(fixture.input("wrong.md", &evaluation));
+    refused(&request, "release_input_unreadable");
+}
+
+#[test]
 #[trace("FR-048-AC-20")]
 fn a_risk_file_of_the_wrong_shape_is_unreadable_and_stops_before_the_gate() {
     let fixture = fixture();

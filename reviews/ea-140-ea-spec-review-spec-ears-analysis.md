@@ -31,3 +31,9 @@ Ticket: EA-140 (part 2). This review covers the three requirement statements the
 ## Verdict
 
 Statements 1 and 3 conform to EARS. Statement 2 should be split and its verb sharpened (low). No blocking EARS defects.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified on 7eb7f387c: the statement is split into three single-SHALL bullets. "SHALL read from a supplied risk file only its identity: the `rows` member … and the frontmatter `type` …". "SHALL NOT derive, require or check the risk decision, the plan-executed statement or the readiness statement …". "SHALL NOT refuse or permit a `release` choice because of what a supplied risk file says." `quire validate` shows only the pre-existing line-158 warning ("shall be stored"), not from this PR. |

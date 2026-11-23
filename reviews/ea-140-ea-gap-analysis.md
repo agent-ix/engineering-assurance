@@ -40,3 +40,9 @@ Static trace: `decide` and `release_outcome` never read `presentation.risk`, so 
 ## Verdict
 
 All three new ACs are tagged, bound correctly and can fail. M1 proves that the gate-independence test bites. One low coverage gap on AC-19's "exactly the same grounds". The medium oracle weakness on AC-19's "no verdict of its own" clause is in the code-review artifact.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified on 7eb7f387c: for each of `accepted`, `not_accepted` and `undecided`, AC-19 now exercises two refusal grounds (`anomaly_not_accepted`, `accepted_anomaly_unknown` with the phase held at `decision_ready`) and the success. A `run-risk-none` run with no risk files gets the same two refusals and the same success. All 26 release_decision_cli tests pass. |

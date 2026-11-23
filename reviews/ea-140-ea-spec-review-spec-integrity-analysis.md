@@ -30,3 +30,10 @@ The cited targets were checked on origin/main. `ix://agent-ix/spec-objects-safet
 ## Verdict
 
 The amendment is consistent with the code and with spec-objects-safety FR-104/FR-107/FR-109. Two low completeness inconsistencies. Merge spec-objects-safety#51 first so that the FR-109 reference resolves.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified on 7eb7f387c: the Inputs bullet now ends "… per `unreadable` entry `path`, per risk summary the `rows` list, and per overall evaluation and risk management review the frontmatter `type`." |
+| FND-002 | fixed | Verified on 7eb7f387c: Upstream now lists `ix://agent-ix/spec-objects-safety/FR-109` (the review), `…/FR-107` (the overall evaluation) and `…/FR-305` (the risk summary). FR-109 still resolves only after spec-objects-safety#51 merges. |

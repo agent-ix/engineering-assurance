@@ -36,3 +36,18 @@ Gates: `cargo test --features full --test release_decision_cli` and `cargo clipp
 ## Verdict
 
 The changes are correct, and the code meets the ticket's core constraint: supplied risk files cannot change the gate outcome. There are no panics, sizes are bounded and hostile content is escaped. One medium finding: the "no verdict of its own" test oracle is too weak to catch the defect it names. Three low findings. Mergeable after FND-001, provided spec-objects-safety#51 merges first.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-005 | low | The fix switched to `onboarding::frontmatter_type`, whose `split_frontmatter` accepts only a `---\n` opener. A CRLF-encoded evaluation or review is therefore refused as `release_input_unreadable` ("not a document of type …"), although `quire validate` accepts the same document with CRLF line endings (checked on FR-048 converted to CRLF, rc 0). The previous scan used `str::lines` and accepted CRLF, so this is a regression on a real edge (Windows checkouts with autocrlf). It does not affect gate independence. `engineering_assurance::release::frontmatter` already accepts `---\r\n`. | src/release_decision_host.rs:533-548 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Verified on 7eb7f387c: `assert_eq!(keys(&presented["presentation"]["risk"]), ["overall_evaluation", "review", "summary"]);` plus exact key sets for `summary` (`document, source, state`), `overall_evaluation` and `review` (`source, state, text`). Mutation M2 (host adds `"acceptability": "accepted"`) is now killed at tests/release_decision_cli.rs:1264. |
+| FND-002 | fixed | Verified on 7eb7f387c: the hand-rolled scan is deleted and `engineering_assurance::onboarding::frontmatter_type` is reused. `frontmatter_type(&text).ok().flatten().as_deref() != Some(expected_type)` maps a YAML parse error, a missing envelope or `type`, and a different type all to `release_input_unreadable`. An unclosed envelope now yields `None`. |
+| FND-003 | fixed | Verified on 7eb7f387c: `let Some(path) = path else { return Ok(json!({"state": NOT_PROVIDED})); };` binds the path; `unwrap_or_default` is gone. |
+| FND-004 | fixed | Verified on 7eb7f387c: the README row now lists "risk summary, overall residual-risk evaluation, risk management review and snapshot from supplied files … (the three risk inputs are shown verbatim and never judged)". |

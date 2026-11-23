@@ -538,7 +538,9 @@ fn supplied_document(
         return Ok(json!({"state": NOT_PROVIDED}));
     };
     let text = read_text(path)?;
-    if frontmatter_type(&text).ok().flatten().as_deref() != Some(expected_type) {
+    // The frontmatter reader takes `\n` line ends; a checkout with CRLF is the same document.
+    let normalized = text.replace("\r\n", "\n");
+    if frontmatter_type(&normalized).ok().flatten().as_deref() != Some(expected_type) {
         return Err(unreadable(
             path,
             &format!("the file is not a document of type {expected_type}"),
