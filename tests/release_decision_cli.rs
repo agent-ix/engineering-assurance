@@ -1259,17 +1259,54 @@ fn the_release_choice_does_not_depend_on_what_the_risk_files_say() {
             &evaluation_document(decision),
             &review_document(executed, readiness),
         );
-        let text = presented["presentation"].to_string();
-        for verdict in ["acceptable", "unacceptable", "risk_accepted"] {
-            assert!(!text.contains(verdict), "{verdict}");
-        }
+        // The presentation names no verdict of its own: the risk member holds
+        // exactly the three supplied sources, each exactly its own members.
+        assert_eq!(
+            keys(&presented["presentation"]["risk"]),
+            ["overall_evaluation", "review", "summary"]
+        );
+        let risk = &presented["presentation"]["risk"];
+        assert_eq!(keys(&risk["summary"]), ["document", "source", "state"]);
+        assert_eq!(
+            keys(&risk["overall_evaluation"]),
+            ["source", "state", "text"]
+        );
+        assert_eq!(keys(&risk["review"]), ["source", "state", "text"]);
+
+        // Both refusal grounds and the success behave as they do with no risk
+        // files supplied.
         let mut request = decide_request(&fixture, &run, Some("release"));
         refused(&request, "anomaly_not_accepted");
+        request["accepted_anomalies"] = json!(["ANOM-1", "ANOM-2", "ANOM-9"]);
+        refused(&request, "accepted_anomaly_unknown");
+        assert_eq!(phase(&fixture, &run), "decision_ready", "{decision}");
         request["accepted_anomalies"] = json!(["ANOM-1", "ANOM-2"]);
         let decided = ok(&request);
         assert!(decided["release"]["document"].is_string(), "{decision}");
         assert_eq!(phase(&fixture, &run), "released", "{decision}");
     }
+
+    let mut bare = present_request(&fixture, "run-risk-none");
+    bare["anomalies"] = json!(fixture.input("anomalies.json", ANOMALIES));
+    ok(&bare);
+    let mut request = decide_request(&fixture, "run-risk-none", Some("release"));
+    refused(&request, "anomaly_not_accepted");
+    request["accepted_anomalies"] = json!(["ANOM-1", "ANOM-2", "ANOM-9"]);
+    refused(&request, "accepted_anomaly_unknown");
+    request["accepted_anomalies"] = json!(["ANOM-1", "ANOM-2"]);
+    assert!(ok(&request)["release"]["document"].is_string());
+}
+
+/// The sorted member names of a JSON object.
+fn keys(value: &Value) -> Vec<&str> {
+    let mut names: Vec<&str> = value
+        .as_object()
+        .expect("an object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    names.sort_unstable();
+    names
 }
 
 #[test]

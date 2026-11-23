@@ -17,6 +17,7 @@ use std::{io::Read, path::Path};
 use engineering_assurance::{
     approval_tag::is_meaning,
     approval_verify::{RECORD_DIGEST_TRAILER, RECORD_ID_TRAILER},
+    onboarding::frontmatter_type,
     release::is_repository_path,
     signature_verify::MEANING_TOKEN,
     workflow::{
@@ -533,27 +534,17 @@ fn supplied_document(
     path: Option<&str>,
     expected_type: &str,
 ) -> Result<Value, ReleaseDecisionError> {
-    supplied_text(path, |text| {
-        if frontmatter_type(&text) != Some(expected_type) {
-            return Err(unreadable(
-                path.unwrap_or_default(),
-                &format!("the file is not a document of type {expected_type}"),
-            ));
-        }
-        Ok(json!({"text": text}))
-    })
-}
-
-/// The `type` member of a document's frontmatter, when it has one.
-fn frontmatter_type(text: &str) -> Option<&str> {
-    let mut lines = text.lines();
-    if lines.next()?.trim_end() != "---" {
-        return None;
+    let Some(path) = path else {
+        return Ok(json!({"state": NOT_PROVIDED}));
+    };
+    let text = read_text(path)?;
+    if frontmatter_type(&text).ok().flatten().as_deref() != Some(expected_type) {
+        return Err(unreadable(
+            path,
+            &format!("the file is not a document of type {expected_type}"),
+        ));
     }
-    lines
-        .take_while(|line| line.trim_end() != "---")
-        .find_map(|line| line.strip_prefix("type:"))
-        .map(|value| value.trim().trim_matches(['"', '\'']))
+    Ok(supplied_value(path, json!({"text": text})))
 }
 
 /// A supplied JSON object, with its source, or `not provided`. The document is

@@ -96,7 +96,7 @@ scheduled, or agent-made release choice; signing; pushing the tag.
   file Quoin wrote for the owner to commit ([FR-051](./FR-051-release-evidence-snapshot-placement.md)). The
   workflow reads these members: per criterion `id` and `evidence_status` (`requirements[].criteria[]`), per SOUP report
   row `purl` (`rows[]`), per anomaly `id` and `status` (`anomalies[]`, `status` possibly `null`), and per `unreadable`
-  entry `path`.
+  entry `path`, per risk summary the `rows` list, and per overall evaluation and risk management review the frontmatter `type`.
 
 ## Outputs
 
@@ -131,8 +131,9 @@ scheduled, or agent-made release choice; signing; pushing the tag.
 - The workflow SHALL NOT create a commit.
 - The workflow SHALL present each input source as supplied or "not provided".
 - The workflow SHALL present a supplied risk summary, overall evaluation and risk management review verbatim, beside their sources.
-- The workflow SHALL NOT read, derive, require or check the risk decision, the plan-executed or readiness statement of a supplied
-  risk file, and SHALL NOT refuse or permit a `release` choice because of what those files say.
+- The workflow SHALL read from a supplied risk file only its identity: the `rows` member of the risk summary and the frontmatter `type` of the evaluation and the review.
+- The workflow SHALL NOT derive, require or check the risk decision, the plan-executed statement or the readiness statement from a supplied risk file.
+- The workflow SHALL NOT refuse or permit a `release` choice because of what a supplied risk file says.
 - If a supplied risk summary is not a JSON object with a `rows` list, or a supplied evaluation or review is not a document
   of its type, then the workflow SHALL refuse with `release_input_unreadable` naming the file and leave the run before the gate.
 - While an unresolved anomaly is not named as accepted, the workflow SHALL NOT
@@ -197,7 +198,7 @@ scheduled, or agent-made release choice; signing; pushing the tag.
 
 ## Dependencies
 
-- **Upstream**: `ix://agent-ix/spec-objects-safety/FR-109` (the review), [FR-005](./FR-005-resumable-human-decisions.md),
+- **Upstream**: `ix://agent-ix/spec-objects-safety/FR-109` (the review), `ix://agent-ix/spec-objects-safety/FR-107` (the overall evaluation), `ix://agent-ix/spec-objects-safety/FR-305` (the risk summary), [FR-005](./FR-005-resumable-human-decisions.md),
   [FR-046](./FR-046-baseline-archetype.md),
   [FR-047](./FR-047-release-record-and-signed-release-tag.md).
 - **Downstream**: the owner's release commit and `git tag -s` signing, and `release-verify`.
