@@ -648,7 +648,7 @@ impl Git<'_> {
                 // anything else is a run that cannot be trusted.
                 Some(snapshot) => {
                     if !snapshot.binds_object() {
-                        return Run::Unobserved;
+                        return Run::SnapshotChanged;
                     }
                     let run = Self::gitsign_run(
                         identity,
@@ -660,7 +660,7 @@ impl Git<'_> {
                     if snapshot.binds_object() {
                         run
                     } else {
-                        Run::Unobserved
+                        Run::SnapshotChanged
                     }
                 }
                 None => Self::gitsign_run(identity, kind, target, self.repository, probe),
@@ -734,45 +734,48 @@ impl Git<'_> {
     /// or changed source configuration cannot affect it.
     fn snapshot_tag_repository(&self, id: &str) -> Result<TagSnapshot, Reason> {
         let object = self.successful(&["cat-file", "tag", id])?;
-        let directory = tempfile::tempdir().map_err(|_| Reason::UnrecognizedOutput)?;
+        let directory = tempfile::tempdir().map_err(|_| Reason::SnapshotUnavailable)?;
         let git_directory = directory.path().join(".git");
-        let unrecognized = |_| Reason::UnrecognizedOutput;
-        std::fs::create_dir_all(git_directory.join("objects")).map_err(unrecognized)?;
-        std::fs::create_dir_all(git_directory.join("refs/tags")).map_err(unrecognized)?;
+        let unavailable = |_| Reason::SnapshotUnavailable;
+        std::fs::create_dir_all(git_directory.join("objects")).map_err(unavailable)?;
+        std::fs::create_dir_all(git_directory.join("refs/tags")).map_err(unavailable)?;
         std::fs::write(
             git_directory.join("config"),
             "[core]\n\trepositoryformatversion = 0\n\tbare = false\n",
         )
-        .map_err(unrecognized)?;
+        .map_err(unavailable)?;
         std::fs::write(
             git_directory.join("HEAD"),
             format!("ref: refs/tags/{SNAPSHOT_TAG}\n"),
         )
-        .map_err(unrecognized)?;
+        .map_err(unavailable)?;
         std::fs::write(
             git_directory.join("refs/tags").join(SNAPSHOT_TAG),
             format!("{id}\n"),
         )
-        .map_err(unrecognized)?;
+        .map_err(unavailable)?;
         let object_path = git_directory.join("tag-object");
-        std::fs::write(&object_path, &object).map_err(unrecognized)?;
-        let stdin = File::open(&object_path).map_err(unrecognized)?;
+        std::fs::write(&object_path, &object).map_err(unavailable)?;
+        let stdin = File::open(&object_path).map_err(unavailable)?;
         let stored = self.run_with_stdin(
             &["hash-object", "-t", "tag", "-w", "--stdin"],
             Some(stdin),
             Some(directory.path()),
         )?;
-        std::fs::remove_file(&object_path).map_err(unrecognized)?;
+        std::fs::remove_file(&object_path).map_err(unavailable)?;
         // The stored bytes must hash to the resolved id, or nothing is verified.
-        if !stored.status.success() || String::from_utf8_lossy(&stored.stdout).trim_end() != id {
-            return Err(Reason::UnrecognizedOutput);
+        if !stored.status.success() {
+            return Err(Reason::SnapshotUnavailable);
+        }
+        if String::from_utf8_lossy(&stored.stdout).trim_end() != id {
+            return Err(Reason::SnapshotObjectMismatch);
         }
         let snapshot = TagSnapshot {
             directory,
             object_id: id.to_owned(),
         };
         if !snapshot.binds_object() {
-            return Err(Reason::UnrecognizedOutput);
+            return Err(Reason::SnapshotUnavailable);
         }
         Ok(snapshot)
     }

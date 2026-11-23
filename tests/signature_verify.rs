@@ -376,6 +376,10 @@ fn tc_293_gitsign_outcomes_map_to_statuses_mismatches_and_reasons() {
     unverifiable(&[(Probe::Exact, Run::Exit(2))], failed);
     unverifiable(&[(Probe::Exact, Run::Signaled)], failed);
     unverifiable(
+        &[(Probe::Exact, Run::SnapshotChanged)],
+        Reason::SnapshotRefChanged,
+    );
+    unverifiable(
         &[
             (Probe::Exact, Run::Exit(1)),
             (Probe::AnyIdentityAnyIssuer, Run::Exit(2)),
