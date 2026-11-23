@@ -67,9 +67,11 @@ remain `unverifiable`, FR-036).
   request carries the trust inputs for either signature kind.
 - For the pure classifier: the target kind, the signature format read from the
   signature header (SSH, CMS, or other), whether an identity was supplied,
-  whether the repository sets a `gitsign.*` key, and the observed outcome of
-  each delegated invocation (below): did not start, timed out, output cut
-  short, or exit status.
+  whether the repository sets a `gitsign.*` key, the outcome of making the
+  tag snapshot (made, could not be made, stored object did not re-hash to the
+  resolved id), whether the snapshot ref still named the resolved id before and
+  after each invocation, and the observed outcome of each delegated invocation
+  (below): did not start, timed out, output cut short, or exit status.
 - For kind `tag`, the request `revision` names the tag: it is either a bare
   tag name or `refs/tags/<name>`, and the name is the part after
   `refs/tags/`. A name that begins with `-` is `revision_unresolved`, because
@@ -96,11 +98,17 @@ remain `unverifiable`, FR-036).
   `source` `request`, `mapping` `unmapped`, no principal (FR-037), and no
   `certificate` member, because the certificate's actual identity is not read
   from gitsign's message text.
-- `reason` gains four values in the closed list: `gitsign_not_started`,
+- `reason` gains seven values in the closed list: `gitsign_not_started`,
   `gitsign_identity_missing`, `gitsign_verification_failed` (gitsign did not
   accept the signature even with wildcard matchers, exited 2, or exited with
-  any status other than 0 or 1) and `gitsign_repository_config` (the
-  repository sets a `gitsign.*` key). The list is otherwise as FR-036.
+  any status other than 0 or 1), `gitsign_repository_config` (the
+  repository sets a `gitsign.*` key), `snapshot_unavailable` (the tag
+  snapshot could not be made), `snapshot_object_mismatch` (the stored
+  snapshot object did not hash to the resolved tag object id) and
+  `snapshot_ref_changed` (`refs/tags/verified` did not name the resolved id
+  before or after a `gitsign` run). Each of the three snapshot reasons
+  accompanies `unverifiable`, never `signed_bad` or `signed_untrusted`. The
+  list is otherwise as FR-036.
 - `signed_off_meaning` is reported as FR-037 for every status with a readable
   message.
 - A malformed `gitsign` member writes the machine error
@@ -160,20 +168,30 @@ remain `unverifiable`, FR-036).
     `revision_unresolved`, and a lightweight tag is `unsigned` with reason
     `lightweight_tag` as FR-036.
 - The command SHALL verify a CMS-signed annotated tag only in an isolated tag
-  snapshot: an ordinary, non-bare repository in a private temporary directory
-  that holds exactly one object, the resolved annotated tag object, written as a
-  loose object, and exactly one ref, `refs/tags/verified`, naming that object
-  id. The snapshot has no alternates, holds no commit, tree or other tag, and
-  carries only a minimal configuration of its own. The command SHALL re-hash the
-  stored object and refuse the verification as `unverifiable` unless it hashes
-  to the resolved id, and SHALL check that `refs/tags/verified` still names the
-  resolved id before and after each `gitsign` run, treating any other state as
-  `unverifiable` and never as a signature verdict. gitsign therefore verifies
-  that ref with the request's original identity and issuer, and a source ref
-  that is moved or deleted, or source configuration changed, after resolution
-  cannot change the object that was verified. A snapshot that cannot be made is
-  `unverifiable`, never `signed_bad`. The `gitsign.*` configuration check above
-  still runs against the source repository before any snapshot is used.
+  snapshot: an ordinary, non-bare repository in a private temporary directory.
+- The command SHALL store in the snapshot exactly one object, the resolved
+  annotated tag object, as a loose object, with no alternates and no commit,
+  tree or other tag.
+- The command SHALL give the snapshot exactly one ref, `refs/tags/verified`,
+  naming the resolved tag object id.
+- The command SHALL create the snapshot without init templates, in the
+  environment pinned below, and SHALL give it a configuration holding only
+  core repository keys, with no `gitsign.*`, `include` or `includeIf` key and
+  no key injected from the caller's, global or system configuration.
+- The command SHALL re-hash the stored object and report `unverifiable` with
+  reason `snapshot_object_mismatch` unless it hashes to the resolved id.
+- The command SHALL report `unverifiable` with reason `snapshot_unavailable`
+  when the snapshot cannot be made.
+- The command SHALL check that `refs/tags/verified` names the resolved id at
+  the start and at the end of each `gitsign` run.
+- When `refs/tags/verified` does not name the resolved id at either check, the
+  command SHALL report `unverifiable` with reason `snapshot_ref_changed`.
+- The command SHALL NOT report `signed_bad` or `signed_untrusted` for any
+  snapshot refusal.
+- While the snapshot is in use, the command SHALL verify the resolved object
+  whatever happens to the source ref or the source configuration.
+- When the source repository's `gitsign.*` configuration check finds a key,
+  the command SHALL make no snapshot.
 - The command SHALL classify from exit statuses only, using at most four
   invocations of `gitsign`:
   1. the exact identity and issuer: exit 0 is `signed_valid`;
@@ -225,7 +243,7 @@ remain `unverifiable`, FR-036).
 
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
-| FR-040-CON-1 | A result SHALL NOT be `signed_valid` for a gitsign signature unless `gitsign` run with the request's exact identity and issuer, on a repository whose configuration, includes and worktree configuration included, has no `gitsign.*` key, and in the environment above, exited 0. | Safety | Test |
+| FR-040-CON-1 | A result SHALL NOT be `signed_valid` for a gitsign signature unless `gitsign` run with the request's exact identity and issuer, in the environment above, exited 0, the source repository's configuration (includes and worktree configuration included) has no `gitsign.*` key, and, for a tag, the isolated snapshot's configuration also has no `gitsign.*`, `include` or `includeIf` key. | Safety | Test |
 | FR-040-CON-2 | The implementation SHALL contain no cryptographic, certificate-parsing or Sigstore client code, and add no crate dependency that performs signature verification. | Architecture | Inspection |
 
 ## Acceptance Criteria
@@ -254,7 +272,7 @@ bad signature is `unverifiable`.
 | FR-040-AC-7 | A simulated timeout and a simulated output above 8 MiB at the gitsign adapter boundary yield `unverifiable` with reason `timeout` and `output_exceeded`. | Test (stand-in) |
 | FR-040-AC-8 | An unsigned commit and tag still yield `unsigned` with no `signature_kind`, and an OpenPGP-signed commit and tag still yield `unverifiable` with reason `unsupported_signature_format`, whether or not `gitsign` is supplied. | Test |
 | FR-040-AC-9 | A commit whose signature headers mix CMS and SSH yields `unverifiable` with reason `unsupported_signature_format`, and a commit whose `gpgsig` header begins with the CMS marker but has trailing characters on the same line is still detected as CMS. | Test (captured) |
-| FR-040-AC-10 | The classifier maps the format, identity-supplied flag, repository-config flag and invocation outcomes (exit 0; 1 then wildcard 1; 1 then wildcard 0 with each issuer and identity probe result; exit 2; other exit status; not started; timeout; cut short) to the statuses, `mismatch` values and reasons above, without running `gitsign` or git, and the classification does not change when the captured message text is replaced. | Test (captured) |
+| FR-040-AC-10 | The classifier maps the format, identity-supplied flag, repository-config flag, snapshot outcomes (could not be made; object did not re-hash; ref changed before or after a run) and invocation outcomes (exit 0; 1 then wildcard 1; 1 then wildcard 0 with each issuer and identity probe result; exit 2; other exit status; not started; timeout; cut short) to the statuses, `mismatch` values and reasons above, without running `gitsign` or git, and the classification does not change when the captured message text is replaced. | Test (captured) |
 | FR-040-AC-11 | A request whose `gitsign` member lacks a field, has an empty or oversized value, a leading `-` identity, a control character, or an unknown member yields `signature_verify_request_invalid` and exit status 2, and does not start git or `gitsign`. | Test |
 | FR-040-AC-12 | An SSH-signed commit and tag in a request that also carries `gitsign` yield the FR-036 and FR-037 statuses, signer principal and mapping unchanged, with `signature_kind` `ssh` and `signer.source` `allowed_signers`, and `gitsign` is never started. | Test (stand-in) |
 | FR-040-AC-13 | A gitsign-signed commit and tag whose message carries a `Signed-off-meaning:` trailer report it as FR-037 does, and an `unverifiable` gitsign commit still reports it. | Test (stand-in) |
@@ -265,6 +283,10 @@ bad signature is `unverifiable`.
 | FR-040-AC-18 | The stand-in's recorded environment holds exactly `PATH`, `HOME`, `GIT_CONFIG_NOSYSTEM` and `GIT_CONFIG_GLOBAL`, even when the parent environment sets `SIGSTORE_ROOT_FILE`, `GITSIGN_FULCIO_ROOT`, `TUF_ROOT` and `GIT_DIR`. | Test (stand-in) |
 | FR-040-AC-19 | A lightweight tag yields `unsigned` with reason `lightweight_tag`, and a tag revision that resolves to no annotated tag under `refs/tags/`, or whose name begins with `-` (`refs/tags/--help`), yields `unverifiable` with reason `revision_unresolved`, without starting `gitsign`. | Test (stand-in) |
 | FR-040-AC-20 | Against real `gitsign` v0.18.0, changing the signed message of a public gitsign-signed annotated tag while retaining its original signature yields `unverifiable` with reason `gitsign_verification_failed`, never `signed_valid` or `signed_untrusted`. The test records the original and changed tag object ids. A missing executable remains `gitsign_not_started`; when the executable runs but the trust service or network is unavailable, the result is `unverifiable` and the live case is recorded unavailable, not as a successful interoperability run. Nonstandard exits, timeouts, output bounds and malformed adapter output remain covered by the adapter tests and do not become valid or bad-signature evidence. | Test (live, ignored by default) |
+| FR-040-AC-21 | For a CMS-signed annotated tag verified through `signature-verify`, the stand-in observes a non-bare repository whose only object is the resolved tag object (no alternates, no commit, tree or other tag), whose only ref is `refs/tags/verified` naming the resolved id, and whose stored object hashes to that id. | Test (stand-in) |
+| FR-040-AC-22 | When the stored snapshot object does not hash to the resolved id, the verdict is `unverifiable` with reason `snapshot_object_mismatch` and the stand-in is never started; when the snapshot cannot be made, the verdict is `unverifiable` with reason `snapshot_unavailable`; neither is `signed_bad` or `signed_untrusted`. | Test (stand-in) |
+| FR-040-AC-23 | When `refs/tags/verified` is changed to another object before a `gitsign` run, or by the stand-in during a run, the verdict is `unverifiable` with reason `snapshot_ref_changed`, never `signed_valid`, `signed_bad` or `signed_untrusted`; moving or deleting the source tag ref after resolution leaves the verified object unchanged. | Test (stand-in) |
+| FR-040-AC-24 | With a global `init.templateDir` holding a `gitsign.fulcioRoot` configuration and a `hooks` entry, and with a source repository configuration holding `include.path` and `includeIf` keys, the snapshot's configuration holds no `gitsign.*`, `include` or `includeIf` key, no template content is present, and the stand-in's configuration query inside the snapshot reports none; a source repository with a `gitsign.*` key is still `gitsign_repository_config` without a snapshot being made. | Test (stand-in) |
 
 ## Dependencies
 
