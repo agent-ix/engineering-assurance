@@ -292,6 +292,7 @@ fn tc_275_a_message_is_everything_after_the_header_block() {
 }
 
 const ISSUER: &str = concat!("https:", "//issuer.example.test");
+const OTHER_ISSUER: &str = concat!("https:", "//other.example.test");
 
 fn identity() -> GitsignIdentity {
     GitsignIdentity::new("alice@example.test".to_owned(), ISSUER.to_owned())
@@ -529,9 +530,9 @@ fn tc_1041_the_registry_maps_only_by_exact_identity_and_issuer() {
         ("alice@example.test.evil", ISSUER),
         ("alice@.*", ISSUER),
         (".*", ".*"),
-        ("alice@example.test", "https://other.example.test"),
+        ("alice@example.test", OTHER_ISSUER),
         ("alice@example.test", ""),
-        ("bob@example.test", "https://other.example.test"),
+        ("bob@example.test", OTHER_ISSUER),
     ] {
         assert_eq!(registry.principal(identity, issuer), None, "{identity}");
     }
