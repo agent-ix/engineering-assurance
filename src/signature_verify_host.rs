@@ -726,27 +726,18 @@ impl Git<'_> {
     }
 
     /// Makes an ordinary, non-bare repository whose sole tag ref,
-    /// `refs/tags/verified`, names the already-resolved object. Its object
-    /// database is an alternate to the source repository, so gitsign cannot
-    /// resolve a moved source ref or read source repository configuration
-    /// during verification. gitsign needs a tag ref and a normal `.git` layout.
+    /// `refs/tags/verified`, names the already-resolved tag object, stored in
+    /// the snapshot as a loose object. gitsign needs a tag ref and a normal
+    /// `.git` layout, and its git library cannot read packed objects through an
+    /// alternate, so the snapshot holds the object itself. The source repository
+    /// is neither read nor reachable during verification, and a moved source ref
+    /// or changed source configuration cannot affect it.
     fn snapshot_tag_repository(&self, id: &str) -> Result<TagSnapshot, Reason> {
-        let object_directory = self.successful(&[
-            "rev-parse",
-            "--path-format=absolute",
-            "--git-path",
-            "objects",
-        ])?;
-        let object_directory = std::str::from_utf8(&object_directory)
-            .map_err(|_| Reason::UnrecognizedOutput)?
-            .trim_end_matches('\n');
-        if object_directory.is_empty() || !Path::new(object_directory).is_absolute() {
-            return Err(Reason::UnrecognizedOutput);
-        }
+        let object = self.successful(&["cat-file", "tag", id])?;
         let directory = tempfile::tempdir().map_err(|_| Reason::UnrecognizedOutput)?;
         let git_directory = directory.path().join(".git");
         let unrecognized = |_| Reason::UnrecognizedOutput;
-        std::fs::create_dir_all(git_directory.join("objects/info")).map_err(unrecognized)?;
+        std::fs::create_dir_all(git_directory.join("objects")).map_err(unrecognized)?;
         std::fs::create_dir_all(git_directory.join("refs/tags")).map_err(unrecognized)?;
         std::fs::write(
             git_directory.join("config"),
@@ -763,11 +754,19 @@ impl Git<'_> {
             format!("{id}\n"),
         )
         .map_err(unrecognized)?;
-        std::fs::write(
-            git_directory.join("objects/info/alternates"),
-            format!("{object_directory}\n"),
-        )
-        .map_err(unrecognized)?;
+        let object_path = git_directory.join("tag-object");
+        std::fs::write(&object_path, &object).map_err(unrecognized)?;
+        let stdin = File::open(&object_path).map_err(unrecognized)?;
+        let stored = self.run_with_stdin(
+            &["hash-object", "-t", "tag", "-w", "--stdin"],
+            Some(stdin),
+            Some(directory.path()),
+        )?;
+        std::fs::remove_file(&object_path).map_err(unrecognized)?;
+        // The stored bytes must hash to the resolved id, or nothing is verified.
+        if !stored.status.success() || String::from_utf8_lossy(&stored.stdout).trim_end() != id {
+            return Err(Reason::UnrecognizedOutput);
+        }
         let snapshot = TagSnapshot {
             directory,
             object_id: id.to_owned(),
