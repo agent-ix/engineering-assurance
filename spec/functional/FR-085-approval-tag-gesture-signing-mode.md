@@ -69,8 +69,16 @@ Out of scope: choosing a key, configuring `ssh-add`, `ssh-agent`, an askpass pro
   invocation-owned process group the foreground process group of the controlling terminal
   for the run (`tcsetpgrp`), because a background group that reads `/dev/tty` is stopped
   by `SIGTTIN`.
+- The process host SHALL hold git before exec until the foreground handoff succeeds, so
+  git and its signer cannot race the handoff with a terminal read.
+- If the controlling terminal cannot be opened, its foreground group cannot be read, or
+  foreground acquisition fails, the process host SHALL terminate git before exec and
+  report the run as failed; it SHALL NOT continue signing in the background.
 - The command SHALL, when `gesture` is present, ask the process host to restore the
   previous foreground process group after the run, whether git exits, fails or times out.
+  If restoration fails, the process host SHALL report the run as failed and retry the
+  restoration during cleanup; approval-tag SHALL report `approval_tag_create_failed` and
+  remove any tag ref written by that run.
 - The command SHALL, when `gesture` is present, ask the process host to pass git's
   standard error to the command's own standard error and to leave the environment
   variables `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE`, `DISPLAY` and `SSH_AUTH_SOCK` in place.
@@ -81,9 +89,10 @@ Out of scope: choosing a key, configuring `ssh-add`, `ssh-agent`, an askpass pro
 - The command SHALL, when `gesture` is present, give the process host a 300 second
   wall-clock deadline in place of the 60 second deadline of FR-042.
 - The command SHALL, when `gesture` is absent, ask the process host to run git in its
-  invocation-owned process group and give it the 60 second deadline of FR-042. When the
-  caller has a controlling terminal, that process group SHALL differ from the terminal's
-  foreground process group. Git's standard input remains closed as required by FR-019.
+  invocation-owned process group and give it the 60 second deadline of FR-042.
+- When `gesture` is absent and the caller has a controlling terminal, git's process group
+  SHALL differ from the terminal's foreground process group. Git's standard input remains
+  closed as required by FR-019.
 - The command SHALL pass the same environment to git as FR-042 does, with the same
   variables removed, so `SSH_AUTH_SOCK`, `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE` and
   `DISPLAY` reach a signer.
@@ -121,6 +130,8 @@ test with a throwaway key and an askpass script that records each call.
 | FR-085-AC-8 | The declared value is copied verbatim whichever signer ran: a request declaring `device_touch` with a software key creates the tag and the command reports no error. | Test |
 | FR-085-AC-10 | With `gesture` present, the environment of the stand-in signer holds the `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE`, `DISPLAY` and `SSH_AUTH_SOCK` values of the command's environment, its standard error is the command's standard error, and its standard input is closed. | Test (stand-in) |
 | FR-085-AC-11 | With `gesture` present, under a pseudo-terminal, after a run that completes, after one whose stand-in signer exits nonzero and after one that reaches its deadline, the terminal's foreground process group equals the one before the run, and git's process group no longer exists. | Test (pty, stand-in) |
+| FR-085-AC-12 | If the controlling terminal cannot be acquired, the process host fails before executing git or its signer. | Test (process host) |
+| FR-085-AC-13 | If foreground restoration fails after signing, the process host retries restoration and reports the run as failed; the command reports `approval_tag_create_failed` and removes the tag ref written by that run. | Test (process host, pty) |
 | FR-085-AC-9 | Static inspection shows no terminal, prompt, PIN or askpass code in the approval-tag modules (CON-1, CON-2). | Inspection |
 
 ## Dependencies

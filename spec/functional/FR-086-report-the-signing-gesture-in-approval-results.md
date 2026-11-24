@@ -69,7 +69,7 @@ Out of scope: the status decision (FR-041), the signing mode (FR-085), the evide
 | FR-086-AC-3 | A software-key tag declaring `device_touch` yields `approved` with `declared` `device_touch`, `signature.gesture.evidenced` `none`, and the same `status`, `approver` and `meaning` as the tag without the declaration. | Test |
 | FR-086-AC-4 | A tag with a `Signing-Gesture` trailer of another value, and a tag repeating the trailer, each yield `declared` `unrecognized`. | Test |
 | FR-086-AC-5 | A tag with status `wrong_record`, `untrusted_signer`, `meaning_missing`, `signed_bad`, `unsigned` or `unverifiable` carries no `gesture` member. | Test |
-| FR-086-AC-6 | An `approval-trail` run lists an approved entry whose `gesture` equals the `approval-verify` result for the same tag, for a software-key tag and a declared one. | Test |
+| FR-086-AC-6 | An `approval-trail` run lists approved entries for an undeclared software-key tag and a declared software-key tag; for each tag, the entry's `gesture` equals the `approval-verify` result for that same tag. | Test |
 | FR-086-AC-7 | With a real FIDO security key present, `approval-tag` with `gesture` `device_touch`, the key touched, yields a tag that `approval-verify` reports `approved` with `declared` `device_touch` and `signature.gesture.evidenced` `device_touch`; where no device is present the test is reported not executed and is not counted as passed. | Test (hardware) |
 | FR-086-AC-8 | No result of either command holds a member that scores, classes or accepts a gesture, and `status` is equal with and without `gesture` for the same tag. | Test |
 
