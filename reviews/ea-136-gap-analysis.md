@@ -86,9 +86,10 @@ bindings:
   accepted case verifies the signature, Rekor SET, inclusion proof, checkpoint,
   certificate chain and integrated time. Five fail-closed cases cover changed
   integrated time, changed SET, changed inclusion proof, substitution of an
-  entry from a second valid tag, and a trusted root with an unrelated Rekor
-  key. Evidence: the focused extraction test passed 1/1 and the filtered
-  rejection tests passed 5/5 through `locked-build.sh`.
+  entry from a second independently valid tag with a distinct certificate, and
+  a trusted root with an unrelated Rekor key. Evidence on the final committed
+  source: the focused extraction test passed 1/1 and the filtered rejection
+  tests passed 5/5 through `locked-build.sh`.
 
   The fixtures use fictional locally generated CMS/Rekor material and are not
   gitsign-produced. They do not establish production-root trust or replace the
