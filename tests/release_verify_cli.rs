@@ -1676,15 +1676,17 @@ fn tc_1060_every_verdict_keeps_the_trust_identity_of_the_run() {
     assert_eq!(result_on(&committed, None)["trust"], released["trust"]);
 
     // A verdict with no `approval` member still carries the trust.
-    let early = commit_files(&fixture, &[(SNAPSHOT_PATH, "{}\n")], "snapshot only");
+    let bare = self::fixture();
+    commit_baseline(&bare, &[]);
+    let early = commit_files(&bare, &[(SNAPSHOT_PATH, "{}\n")], "snapshot only");
     sign(
-        &fixture,
+        &bare,
         "a",
         "v-no-record",
         &early,
         &message("git-blob:unknown"),
     );
-    let without = result_on(&request(&fixture, "v-no-record"), None);
+    let without = result_on(&request(&bare, "v-no-record"), None);
     assert_eq!(without["status"], "not_released", "{without}");
     assert!(without.get("approval").is_none());
     assert!(without["trust"]["allowed_signers_sha256"].is_string());
