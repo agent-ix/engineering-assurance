@@ -62,7 +62,7 @@ receipted object is not a finding: the tag's own entry carries `tag_receipt` `ve
 again at the identical object id passes, because the object id matches; a tag re-signed or re-created has a different
 object id, and the earlier receipt is listed as `missing_tag` with reason `tag_changed`. The command reports and never
 decides whether a changed tag was legitimate; a person records acceptance of a specific finding in the `accepted_tags`
-list of the receipt policy ([FR-082](./FR-082-detect-deleted-and-changed-tags-from-tag-receipts.md)), and a matched `missing_tag` finding is listed with the status `accepted` and `finding` `missing_tag`. An absent or changed tag is never `approved`: it is listed with the status
+list of the receipt policy ([FR-082](./FR-082-detect-deleted-and-changed-tags-from-tag-receipts.md)), and a matched `missing_tag` finding is listed with the status `accepted`, `finding` `missing_tag` and its other members, `accepted_by` and `accepted_reason`, exactly as FR-082 reports it. An absent or changed tag is never `approved`: it is listed with the status
 `missing_tag`. A receipt that does not verify is listed with the status `invalid_receipt` and never dropped. A current tag whose name starts with a policy prefix and has no verified receipt for its current object id carries `tag_receipt` `none` and counts against `complete` unless accepted. A notes ref that does not exist is an empty receipt set: `checked` is true and every such tag is `none`.
 
 Out of scope: creating, pushing or deleting tags, writing a receipt (FR-081 owns it), computing the record digest,
@@ -180,7 +180,7 @@ signature rule (FR-036, FR-037, FR-040 own them), and any log or store that the 
 - The command SHALL report a receipt with `trailers_readable` false in the trail of every record with `attributed` false.
 - The command SHALL report `complete` false while any `missing_tag` or `invalid_receipt` entry exists, any prefix-matching present tag has `tag_receipt` `none`, or `tag_receipts.checked` is false, except for findings an `accepted_tags` entry accepts.
 - The command SHALL read an absent notes ref as an empty receipt set with `checked` true.
-- The command SHALL report a finding that an `accepted_tags` entry matches with the status `accepted`, `finding` naming the replaced status, `accepted_by` and its reason.
+- The command SHALL report a finding that an `accepted_tags` entry matches with the status `accepted`, `finding` naming the replaced status, `accepted_by` and `accepted_reason`.
 - The command SHALL NOT count a finding that an `accepted_tags` entry matches against `complete`.
 - The command SHALL NOT decide whether an absent or changed tag was legitimate.
 - The command SHALL NOT write to the repository, create a log, or record a digest of
@@ -233,7 +233,7 @@ throwaway keys generated in the test.
 | FR-043-AC-23 | A receipt whose `record_ids` holds only another record's id is not listed for the requested record; a receipt with `trailers_readable` false for an absent tag is listed with `attributed` false in the trail of each of two different records. | Test |
 | FR-043-AC-24 | A request without a `tag_receipts` member yields `tag_receipts.checked` false and `complete` false and consults no receipt; a `tag_receipts` member with a relative path or an unknown member is refused with `approval_trail_request_invalid`. | Test |
 | FR-043-AC-26 | With `tag_receipts` given and the notes ref absent, `checked` is true, no error is raised, each tag whose name starts with a policy prefix has `tag_receipt` `none`, and `complete` is false; the same request with an `accepted_tags` entry for each such tag yields `complete` true. | Test |
-| FR-043-AC-27 | A `missing_tag` finding matched by an `accepted_tags` entry on `ref` and `tag_object` is listed with the status `accepted`, `finding` `missing_tag`, `accepted_by` and its reason and does not make `complete` false; an entry that differs in either member changes nothing; an `invalid_receipt` entry is never accepted. | Test |
+| FR-043-AC-27 | A `missing_tag` finding matched by an `accepted_tags` entry on `ref` and `tag_object` is listed with the status `accepted`, `finding` `missing_tag`, `accepted_by` and `accepted_reason` and does not make `complete` false; an entry that differs in either member changes nothing; an `invalid_receipt` entry is never accepted. | Test |
 | FR-043-AC-25 | The fixture trail's `missing_tag` and `invalid_receipt` entries equal those `receipt-missing` lists for the same receipts and tag set (FR-082), and the command writes nothing to the repository. | Test |
 
 ## Dependencies

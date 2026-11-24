@@ -36,7 +36,7 @@ a closed object with `prefixes` (a non-empty list of at most 16 literal strings 
 literal text against the tag name after `refs/tags/`, with no wildcard) and the optional `accepted_tags`, a list of
 at most 1000 closed entries `{ref, tag_object, accepted_by, reason}` that
 [FR-082](./FR-082-detect-deleted-and-changed-tags-from-tag-receipts.md) reads (`ref` a full ref name, `tag_object` a
-tag object id or null for "tag absent", `accepted_by` a non-empty person identity string of at most 256 bytes and
+tag object id, or null only to accept a "tag absent" finding, `accepted_by` a non-empty person identity string of at most 256 bytes and
 `reason` a non-empty string of at most 1024 bytes). A repository without `tag_receipts` writes no tag receipt and
 this requirement does not apply to it. A malformed `tag_receipts` member fails the run with `tag_receipt_policy_invalid`.
 
