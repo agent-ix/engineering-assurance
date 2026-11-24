@@ -1264,6 +1264,18 @@ echo "[GNUPG:] SIG_CREATED D 1 8 00 1700000000 00 AAAA" >&2
 printf -- '-----BEGIN SIGNED MESSAGE-----\nAAAA\n-----END SIGNED MESSAGE-----\n'
 "#;
 
+/// A non-interactive signer that records its inherited process-group boundary.
+const BACKGROUND_PTY_SIGNER: &str = r#"#!/bin/sh
+d=${0%/*}
+while read -r line || [ -n "$line" ]; do :; done
+read -r stat < /proc/$$/stat
+set -- ${stat##*) }
+echo "$3 $6" > "$d/groups"
+echo "[GNUPG:] KEY_CONSIDERED AAAA 0" >&2
+echo "[GNUPG:] SIG_CREATED D 1 8 00 1700000000 00 AAAA" >&2
+printf -- '-----BEGIN SIGNED MESSAGE-----\nAAAA\n-----END SIGNED MESSAGE-----\n'
+"#;
+
 /// What one `approval-tag` run under a pseudo-terminal left behind.
 struct PtyRun {
     /// The terminal's foreground process group before and after the run.
@@ -1431,4 +1443,24 @@ fn tc_1157_the_foreground_group_is_restored_after_a_signer_fails() {
     assert_eq!(run.after, run.before);
     assert!(!process_group_exists(signer));
     assert_eq!(tags(&fixture), "");
+}
+
+#[test]
+#[trace("TC-1160", "FR-085-AC-1")]
+fn tc_1160_without_a_gesture_git_runs_outside_the_terminal_foreground_group() {
+    let fixture = fixture();
+    fixture.x509_config();
+    fixture.executable("sign-standin", BACKGROUND_PTY_SIGNER);
+    let request = tag_request(&fixture, "approve-17", "reviewed");
+    let run = approval_tag_under_pty(&fixture, &request, "unused\n");
+
+    assert_eq!(run.code, 0, "{} / {}", run.stdout, run.stderr);
+    let (signer, foreground) = run.signer_group.expect("signer groups");
+    assert_ne!(signer, foreground, "git's group is not foreground");
+    assert_eq!(foreground, run.before, "the caller stays foreground");
+    assert_eq!(run.after, run.before, "the foreground group is unchanged");
+    let line: Value = serde_json::from_str(&run.stdout).expect("json line");
+    assert_eq!(line["status"], "created");
+    assert!(line.get("gesture").is_none(), "{line}");
+    assert!(tags(&fixture).contains("approve-17"));
 }
