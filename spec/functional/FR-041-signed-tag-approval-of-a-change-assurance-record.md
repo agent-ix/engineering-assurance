@@ -298,12 +298,12 @@ carried by commits, merge commits or notes.
 - The command SHALL NOT report `integratedTime`, the SET, the inclusion proof
   or any other transparency-log field of an unverified entry, anywhere in a
   result.
-- The command SHALL use the compiled-in `SIGSTORE_PRODUCTION_TRUSTED_ROOT` as
-  the trusted root for production verification. A test helper SHALL accept a
-  trusted-root JSON value and pass it to the verifier. The production command
-  SHALL NOT fetch or configure a trusted root. When the compiled-in root no
-  longer verifies an entry after key rotation, the command SHALL return
-  `trusted_at_missing` `log_entry_unverified`.
+- The production command SHALL use only the compiled-in
+  `SIGSTORE_PRODUCTION_TRUSTED_ROOT` for trusted-root verification.
+- When a unit test supplies a trusted-root JSON value, the test helper SHALL
+  pass that value to the verifier.
+- When key rotation makes the compiled-in root unable to verify an entry, the
+  command SHALL return `trusted_at_missing` `log_entry_unverified`.
 - The command SHALL NOT run `gitsign`, or change any invocation, status, probe
   or classification of FR-040, to obtain a signing time, and SHALL NOT parse
   `gitsign` output text for one.
