@@ -525,12 +525,123 @@ impl Git<'_> {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::{
+        fs,
+        os::unix::fs::PermissionsExt,
+        process::{Command, Stdio},
+        time::Duration,
+    };
 
     use engineering_assurance::approval_verify::SigningGesture;
     use ix_trace_rs::trace;
+    use serde_json::json;
 
-    use super::SigningRun;
+    use super::{execute, SigningRun};
+
+    const RESTORE_FIXTURE: &str = "EA113_RESTORE_FIXTURE";
+    const RESTORE_SIGNER_RAN: &str = "EA113_RESTORE_SIGNER_RAN";
+
+    fn git(repository: &std::path::Path, arguments: &[&str]) {
+        let output = Command::new("git")
+            .args(arguments)
+            .current_dir(repository)
+            .output()
+            .expect("git must start");
+        assert!(output.status.success(), "{output:?}");
+    }
+
+    fn restore_fixture() -> tempfile::TempDir {
+        let root = tempfile::tempdir().expect("fixture directory");
+        let repository = root.path().join("repository");
+        fs::create_dir(&repository).expect("repository directory");
+        git(&repository, &["init", "-q"]);
+        git(
+            &repository,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "commit",
+                "--allow-empty",
+                "-q",
+                "-m",
+                "base",
+            ],
+        );
+
+        let signer = root.path().join("signer");
+        fs::write(
+            &signer,
+            format!(
+                "#!/bin/sh\ntouch \"${RESTORE_SIGNER_RAN}\"\nwhile read -r line || [ -n \"$line\" ]; do :; done\necho \"[GNUPG:] KEY_CONSIDERED AAAA 0\" >&2\necho \"[GNUPG:] SIG_CREATED D 1 8 00 1700000000 00 AAAA\" >&2\nprintf -- '-----BEGIN SIGNED MESSAGE-----\\nAAAA\\n-----END SIGNED MESSAGE-----\\n'\n",
+                RESTORE_SIGNER_RAN = RESTORE_SIGNER_RAN
+            ),
+        )
+        .expect("signer script");
+        fs::set_permissions(&signer, fs::Permissions::from_mode(0o755)).expect("signer mode");
+        let global = root.path().join("gitconfig");
+        fs::write(
+            &global,
+            format!(
+                "[user]\n\tname = Fixture\n\temail = fixture@example.invalid\n[gpg]\n\tformat = x509\n[gpg \"x509\"]\n\tprogram = {}\n",
+                signer.display()
+            ),
+        )
+        .expect("git configuration");
+        let record = root.path().join("record.json");
+        fs::write(
+            &record,
+            serde_json::to_vec(&json!({
+                "schema_version": 2,
+                "record_type": "change_assurance",
+                "record_id": "restore-failure",
+                "review_workflow": {"signed_approval": {}},
+            }))
+            .expect("record json"),
+        )
+        .expect("record file");
+        let request = json!({
+            "protocol": "engineering-assurance.approval-tag-request/v1",
+            "repository": repository,
+            "tag": "restore-failure",
+            "record": record,
+            "record_id": "restore-failure",
+            "record_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "meaning": "approved",
+            "gesture": "oidc_interactive",
+        });
+        fs::write(
+            root.path().join("request.json"),
+            serde_json::to_vec(&request).expect("request json"),
+        )
+        .expect("request file");
+        root
+    }
+
+    fn restore_failure_scenario(root: &std::path::Path) {
+        crate::process_host::fail_next_foreground_restore();
+        let error = execute(&fs::read(root.join("request.json")).expect("request"))
+            .expect_err("the injected restore failure must fail tag creation");
+        assert_eq!(error.code(), "approval_tag_create_failed");
+        assert!(
+            std::env::var_os(RESTORE_SIGNER_RAN)
+                .is_some_and(|marker| std::path::Path::new(&marker).exists()),
+            "the successful signing command must reach its signer"
+        );
+        let reference = Command::new("git")
+            .args([
+                "show-ref",
+                "--verify",
+                "--quiet",
+                "refs/tags/restore-failure",
+            ])
+            .current_dir(root.join("repository"))
+            .output()
+            .expect("git must inspect the ref");
+        assert_eq!(reference.status.code(), Some(1), "the ref must be removed");
+        fs::write(root.join("scenario-done"), "ok").expect("completion marker");
+    }
 
     #[test]
     #[trace("FR-085-AC-7")]
@@ -555,5 +666,39 @@ mod tests {
                 deadline: Duration::from_secs(60),
             }
         );
+    }
+
+    #[test]
+    #[trace("FR-085-AC-13")]
+    fn restore_failure_propagates_through_approval_tag_and_removes_the_ref() {
+        if let Some(root) = std::env::var_os(RESTORE_FIXTURE) {
+            restore_failure_scenario(std::path::Path::new(&root));
+            return;
+        }
+
+        let fixture = restore_fixture();
+        let test = format!(
+            "'{}' --exact approval_tag_host::tests::restore_failure_propagates_through_approval_tag_and_removes_the_ref --nocapture",
+            std::env::current_exe().expect("test binary").display()
+        );
+        let output = Command::new("/usr/bin/script")
+            .args(["-q", "-e", "-c"])
+            .arg(test)
+            .arg("/dev/null")
+            .current_dir(fixture.path().join("repository"))
+            .env(RESTORE_FIXTURE, fixture.path())
+            .env(RESTORE_SIGNER_RAN, fixture.path().join("signer-ran"))
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_CONFIG_GLOBAL", fixture.path().join("gitconfig"))
+            .env("HOME", fixture.path())
+            .env("SHELL", "/bin/sh")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .expect("script must start");
+        let report = String::from_utf8_lossy(&output.stdout);
+        assert!(output.status.success(), "{report}");
+        assert!(fixture.path().join("scenario-done").exists(), "{report}");
     }
 }

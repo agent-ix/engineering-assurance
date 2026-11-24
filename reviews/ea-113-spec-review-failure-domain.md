@@ -27,4 +27,3 @@ Ticket: EA-113; failure-domain analysis of the interactive terminal handoff and 
 ## Examined scope
 
 FR-085 Behavior bullets for foreground-group acquisition/restoration; FR-085-AC-2, AC-11; process-host terminal failure handling.
-

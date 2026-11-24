@@ -27,4 +27,3 @@ Ticket: EA-113; EARS review of the edited no-gesture Behavior statement. The det
 ## Examined scope
 
 The FR-085 Behavior bullet for a missing gesture, including its conditional foreground-group clause; the related FR-085-AC-1 and TC-1160.
-

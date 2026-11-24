@@ -30,4 +30,3 @@ Ticket: EA-113; integrity review of acceptance testability, changed Test Case Su
 ## Examined scope
 
 FR-085-AC-1 and TC-1160; FR-086-AC-5 and AC-6 with TC-1162; NFR-005-AC-5; the added TC-1140..1162 tags and their summary rows.
-

@@ -33,4 +33,3 @@ quoin advise reports FR-085-AC-1 as Test / property-based-testing recommendation
 ## Examined scope
 
 FR-085-AC-1 and FR-086-AC-6.
-

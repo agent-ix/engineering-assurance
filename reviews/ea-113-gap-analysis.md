@@ -37,4 +37,3 @@ Ticket: EA-113; planless, PR-diff-scoped gap analysis at a0b60649 against origin
 ## Examined scope
 
 FR-085-AC-1..11; FR-086-AC-1..6; TC-1140..TC-1162; new source/test paths named in scope.
-

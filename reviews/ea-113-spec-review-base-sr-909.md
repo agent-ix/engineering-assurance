@@ -33,4 +33,3 @@ Ticket: EA-113; base checklist review of the changed FR-085 acceptance wording, 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | low | No findings (placeholder) | - |
-

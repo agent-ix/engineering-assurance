@@ -8,6 +8,11 @@
 
 use std::{ffi::OsStr, path::Path};
 
+#[cfg(test)]
+thread_local! {
+    static FAIL_NEXT_FOREGROUND_RESTORE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 pub(crate) use engineering_assurance::producer_execution::__private::{
     CompletedProcess, ProcessError, ProcessLimits,
 };
@@ -48,14 +53,28 @@ pub(crate) fn run_configured_foreground(
     removed_environment: &[&OsStr],
     limits: ProcessLimits,
 ) -> Result<CompletedProcess, ProcessError> {
-    engineering_assurance::producer_execution::__private::run_configured_foreground(
+    let result = engineering_assurance::producer_execution::__private::run_configured_foreground(
         executable,
         arguments,
         current_directory,
         environment,
         removed_environment,
         limits,
-    )
+    );
+    #[cfg(test)]
+    if FAIL_NEXT_FOREGROUND_RESTORE.with(|failure| failure.replace(false))
+        && result.as_ref().is_ok_and(|output| output.status.success())
+    {
+        return Err(ProcessError::Observation {
+            detail: "injected foreground restoration failure after successful child run".to_owned(),
+        });
+    }
+    result
+}
+
+#[cfg(test)]
+pub(crate) fn fail_next_foreground_restore() {
+    FAIL_NEXT_FOREGROUND_RESTORE.with(|failure| failure.set(true));
 }
 
 pub(crate) fn run_configured_stdin(

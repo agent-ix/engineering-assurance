@@ -48,4 +48,3 @@ ForegroundGroup::acquire runs after command.spawn. A fast child can attempt a /d
 - Subsequent focused tests invoked through locked-build.sh: PTY deadline restoration 1 passed; TC-1160, TC-1161 and TC-1162 each passed; approval verification tc_32 filter 8 passed; signature gesture tc_114 filter 8 passed.
 - Exact command make test was interrupted at the content-rights-tree prerequisite, exit 130, as directed; the full suite was intentionally not run. make ci and make package-audit were not run.
 - cargo deny and whole-workspace clippy/fmt gates were not run because whole-repository checks were disallowed.
-
