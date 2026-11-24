@@ -1,0 +1,3 @@
+# Local Rekor verification fixture
+
+These bytes were generated locally for the EA-306 offline verifier-path regression. They use a fictional self-signed code-signing certificate and an isolated one-entry Rekor log; they are not a gitsign-produced signature and do not establish Sigstore production-root trust. The valid tag exercises CMS signer and unsigned-attribute extraction, bundle construction, and successful SET, inclusion, checkpoint, certificate-chain, artifact and signature verification against a test-only trusted root. The second tag changes `integratedTime` without resigning the SET and must be rejected.

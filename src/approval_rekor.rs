@@ -113,16 +113,24 @@ pub(crate) fn extract(tag_object: &[u8]) -> EmbeddedEntry {
 /// Verify the extracted entry and return only its library-authenticated
 /// integrated time.
 pub(crate) fn verify(bundle: &Bundle, artifact: &[u8], trusted_root_json: &str) -> Option<i64> {
+    verify_with_policy(
+        bundle,
+        artifact,
+        trusted_root_json,
+        &sigstore_verify::VerificationPolicy::any_identity(),
+    )
+}
+
+fn verify_with_policy(
+    bundle: &Bundle,
+    artifact: &[u8],
+    trusted_root_json: &str,
+    policy: &sigstore_verify::VerificationPolicy,
+) -> Option<i64> {
     let trusted_root =
         sigstore_verify::trust_root::TrustedRoot::from_json(trusted_root_json).ok()?;
     let verifier = sigstore_verify::Verifier::new(&trusted_root).ok()?;
-    let result = verifier
-        .verify(
-            artifact,
-            bundle,
-            &sigstore_verify::VerificationPolicy::any_identity(),
-        )
-        .ok()?;
+    let result = verifier.verify(artifact, bundle, policy).ok()?;
     result.integrated_time().map(|time| time.as_second())
 }
 
@@ -259,9 +267,58 @@ struct RekorInclusionProof {
     reason = "in a test, a panic IS the failure report; the production lints stand"
 )]
 mod tests {
-    use super::bundle_signature;
+    use super::{EmbeddedEntry, bundle_signature, extract, verify_with_policy};
     use base64::{Engine, engine::general_purpose::STANDARD};
-    use der::asn1::OctetString;
+    use der::{Decode, Encode, asn1::OctetString};
+    use serde_json::json;
+    use sigstore_types::Bundle;
+
+    const VERIFIED_TAG: &[u8] = include_bytes!("../tests/fixtures/approval-rekor/tag-object.txt");
+    const TAMPERED_TAG: &[u8] =
+        include_bytes!("../tests/fixtures/approval-rekor/tag-object-tampered.txt");
+
+    fn fixture_trusted_root(bundle: &Bundle) -> String {
+        let certificate_der = bundle
+            .signing_certificate()
+            .expect("fixture bundle contains its signer certificate");
+        let certificate = cms::cert::Certificate::from_der(certificate_der.as_bytes())
+            .expect("fixture signer certificate is DER");
+        let public_key_der = certificate
+            .tbs_certificate
+            .subject_public_key_info
+            .to_der()
+            .expect("fixture signer public key encodes as DER");
+        let log_id = bundle
+            .verification_material
+            .tlog_entries
+            .first()
+            .expect("fixture bundle contains a Rekor entry")
+            .log_id
+            .key_id
+            .as_bytes();
+        json!({
+            "mediaType": "application/vnd.dev.sigstore.trustedroot+json;version=0.1",
+            "tlogs": [{
+                "baseUrl": "urn:ea-306-offline-fixture",
+                "hashAlgorithm": "SHA2_256",
+                "publicKey": {
+                    "rawBytes": STANDARD.encode(public_key_der),
+                    "keyDetails": "PKIX_ECDSA_P256_SHA_256",
+                    "validFor": { "start": "2020-01-01T00:00:00Z", "end": "2099-01-01T00:00:00Z" }
+                },
+                "logId": { "keyId": STANDARD.encode(log_id) }
+            }],
+            "certificateAuthorities": [{
+                "subject": { "commonName": "EA Offline Fixture Signer" },
+                "uri": "urn:ea-306-offline-fixture",
+                "certChain": { "certificates": [{ "rawBytes": STANDARD.encode(certificate_der.as_bytes()) }] },
+                "validFor": { "start": "2020-01-01T00:00:00Z", "end": "2099-01-01T00:00:00Z" }
+            }],
+            "ctlogs": [],
+            "timestampAuthorities": []
+        })
+        .to_string()
+    }
 
     #[test]
     #[ix_trace_rs::trace("FR-041-AC-28")]
@@ -275,5 +332,35 @@ mod tests {
 
         assert_eq!(encoded, STANDARD.encode(raw_octets));
         assert_ne!(encoded, STANDARD.encode([0x04, 0x02, 0x30, 0x00]));
+    }
+
+    #[test]
+    #[ix_trace_rs::trace("FR-041-AC-28")]
+    fn cms_rekor_fixture_extracts_verified_integrated_time_offline() {
+        let EmbeddedEntry::Bundle { artifact, bundle } = extract(VERIFIED_TAG) else {
+            panic!("fixture must yield a bundle from CMS extraction");
+        };
+
+        let policy = sigstore_verify::VerificationPolicy::any_identity().skip_sct();
+        assert_eq!(
+            verify_with_policy(&bundle, &artifact, &fixture_trusted_root(&bundle), &policy),
+            Some(1_767_225_600),
+            "successful SET, inclusion, checkpoint, artifact and signature verification yields integratedTime"
+        );
+    }
+
+    #[test]
+    #[ix_trace_rs::trace("FR-041-AC-29")]
+    fn cms_rekor_fixture_rejects_an_integrated_time_mutation() {
+        let EmbeddedEntry::Bundle { artifact, bundle } = extract(TAMPERED_TAG) else {
+            panic!("tampered fixture remains structurally extractable");
+        };
+
+        let policy = sigstore_verify::VerificationPolicy::any_identity().skip_sct();
+        assert_eq!(
+            verify_with_policy(&bundle, &artifact, &fixture_trusted_root(&bundle), &policy),
+            None,
+            "mutating integratedTime without resigning the SET fails closed"
+        );
     }
 }
