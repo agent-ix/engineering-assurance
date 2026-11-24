@@ -538,6 +538,9 @@ pub(crate) struct CheckedTag {
     pub(crate) tagger_signed_at: Option<SignedAt>,
     /// Immutable annotated tag object whose message and signature were checked.
     pub(crate) tag_object_id: Option<String>,
+    /// The immutable object bytes from which the signature and trailers were
+    /// checked, retained for FR-041's Rekor extraction.
+    pub(crate) tag_object: Option<Vec<u8>>,
 }
 
 impl CheckedTag {
@@ -549,6 +552,7 @@ impl CheckedTag {
             trailers: None,
             tagger_signed_at: None,
             tag_object_id: None,
+            tag_object: None,
         }
     }
 }
@@ -1155,6 +1159,7 @@ impl Git<'_> {
             trailers: None,
             tagger_signed_at: None,
             tag_object_id: None,
+            tag_object: None,
         };
         match self.load(revision) {
             Ok(Some(loaded)) => self.verify_loaded(loaded),
@@ -1216,6 +1221,7 @@ impl Git<'_> {
             trailers,
             tagger_signed_at: tagger_signed_at(payload),
             tag_object_id: Some(id),
+            tag_object: Some(object),
         }
     }
 

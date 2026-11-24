@@ -279,7 +279,7 @@ fn examine(parsed: &Parsed, listed: &ListedRef) -> Examined {
         tag: name.to_owned(),
         object,
         claimed_at: checked.tagger_signed_at.clone(),
-        assessment: assess(checked, &request.record_id, &request.record_digest),
+        assessment: assess(&checked, &request.record_id, &request.record_digest),
     }))
 }
 

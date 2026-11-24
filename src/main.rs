@@ -8,6 +8,7 @@
 mod agent_evals_host;
 mod agent_evals_provider;
 mod approval_gate_host;
+mod approval_rekor;
 mod approval_tag_host;
 mod approval_trail_host;
 mod approval_verify_host;

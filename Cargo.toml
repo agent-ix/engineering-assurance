@@ -598,8 +598,12 @@ full = [
   "workflow-invariants",
   "exact-numbers",
   "dep:cap-std",
+  "dep:base64",
+  "dep:cms",
   "dep:clap",
+  "dep:der",
   "dep:ix-cli-kit",
+  "dep:prost",
   "dep:flate2",
   "dep:tar",
   "dep:tempfile",
@@ -608,6 +612,8 @@ full = [
 
 [dependencies]
 base64 = { version = "0.22", optional = true }
+cms = { version = "0.2", optional = true }
+der = { version = "0.7", optional = true }
 ix-cli-kit = { git = "https://github.com/agent-ix/ix-cli-kit", branch = "main", version = "0.1.0", optional = true }
 agent-ix-engineering-assurance-campaign = { path = "campaign/generated/rust", version = "0.0.0", optional = true }
 cap-std = { version = "4", optional = true }
@@ -616,6 +622,7 @@ flate2 = { version = "1.1", default-features = false, features = ["rust_backend"
 jsonschema = { version = "0.56", default-features = false, optional = true }
 cyclonedx-bom = { version = "0.9", optional = true }
 regex = { version = "1.13", optional = true }
+prost = { version = "0.14", optional = true }
 rustix = { version = "1.1", features = ["fs", "process"], optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }
