@@ -20,8 +20,9 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::signature_verify_host::{
-    AllowedSignersSnapshot, CheckedTag, GitsignInput, GitsignRequest, LoadedGitsign,
-    RegistryFailure, capture_allowed_signers, check_tag, load_gitsign, validate_gitsign,
+    AllowedSignersSnapshot, AllowedSignersSource, CaptureFailure, CheckedTag, GitsignInput,
+    GitsignRequest, LoadedGitsign, RegistryFailure, capture_allowed_signers, check_tag,
+    git_version, load_gitsign, validate_gitsign,
 };
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.approval-verify-request/v1";
@@ -35,16 +36,23 @@ struct Request {
     tag: String,
     record_id: String,
     record_digest: String,
-    allowed_signers: PathBuf,
+    allowed_signers: String,
     gitsign: Option<GitsignRequest>,
     identity_registry: Option<String>,
 }
 
-/// The trust input a verdict was made against, copied from the request, with
-/// the commit the identity registry revision resolved to.
-#[derive(Serialize)]
+/// The trust input a verdict was made against: the request's members, the
+/// identity of the bytes and the programs the run used, and the commit the
+/// identity registry revision resolved to (FR-041).
+#[derive(Clone, Copy, Serialize)]
 pub(crate) struct Trust<'a> {
-    pub(crate) allowed_signers: &'a Path,
+    pub(crate) allowed_signers: &'a str,
+    pub(crate) allowed_signers_sha256: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) allowed_signers_commit: Option<&'a str>,
+    pub(crate) ea_version: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) git_version: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) gitsign: Option<&'a GitsignRequest>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -73,16 +81,31 @@ impl<'a> GitsignEcho<'a> {
     }
 }
 
+/// What a run read of the allowed-signers source, and the git it ran.
+#[derive(Clone, Copy)]
+pub(crate) struct TrustReading<'a> {
+    /// The request's `allowed_signers` value, as requested.
+    pub(crate) requested: &'a str,
+    /// The bytes the run used.
+    pub(crate) snapshot: &'a AllowedSignersSnapshot,
+    /// What `git --version` printed.
+    pub(crate) git_version: Option<&'a str>,
+}
+
 impl<'a> Trust<'a> {
-    /// The trust of a run that read `loaded`, or none when the revision did not
-    /// resolve or no registry was named.
+    /// The trust of a run that read `reading` and `loaded`, or no registry
+    /// commit when the revision did not resolve or no registry was named.
     pub(crate) fn new(
-        allowed_signers: &'a Path,
+        reading: TrustReading<'a>,
         echo: GitsignEcho<'a>,
         loaded: Option<&'a LoadedGitsign>,
     ) -> Self {
         Self {
-            allowed_signers,
+            allowed_signers: reading.requested,
+            allowed_signers_sha256: reading.snapshot.sha256(),
+            allowed_signers_commit: reading.snapshot.commit(),
+            ea_version: env!("CARGO_PKG_VERSION"),
+            git_version: reading.git_version,
             gitsign: echo.gitsign,
             identity_registry: echo.identity_registry,
             identity_registry_commit: loaded.map(LoadedGitsign::commit),
@@ -143,7 +166,10 @@ pub(crate) struct ResultLine<'a> {
     tag: &'a str,
     record_id: &'a str,
     record_digest: &'a str,
-    trust: Trust<'a>,
+    /// Absent only when git failed while the allowed-signers `<rev>:<path>`
+    /// source was read, so no digest, commit or versions were established.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    trust: Option<Trust<'a>>,
     tag_object_id: Option<String>,
     #[serde(flatten)]
     assessment: Assessment,
@@ -155,17 +181,16 @@ impl<'a> ResultLine<'a> {
         repository: &Path,
         tag: &'a str,
         record: (&'a str, &'a str),
-        request_allowed_signers: &'a Path,
-        verification_allowed_signers: &AllowedSignersSnapshot,
+        reading: TrustReading<'a>,
         echo: GitsignEcho<'a>,
         loaded: Option<&'a LoadedGitsign>,
     ) -> Self {
-        let checked = check_tag(repository, tag, verification_allowed_signers, loaded);
+        let checked = check_tag(repository, tag, reading.snapshot, loaded);
         Self::from_checked(
             checked,
             tag,
             record,
-            Trust::new(request_allowed_signers, echo, loaded),
+            Some(Trust::new(reading, echo, loaded)),
         )
     }
 
@@ -174,7 +199,7 @@ impl<'a> ResultLine<'a> {
         checked: CheckedTag,
         tag: &'a str,
         record: (&'a str, &'a str),
-        trust: Trust<'a>,
+        trust: Option<Trust<'a>>,
     ) -> Self {
         let (record_id, record_digest) = record;
         Self {
@@ -191,6 +216,11 @@ impl<'a> ResultLine<'a> {
     /// The decision part of the result.
     pub(crate) const fn assessment(&self) -> &Assessment {
         &self.assessment
+    }
+
+    /// The trust the verdict was made against, when one was established.
+    pub(crate) const fn trust(&self) -> Option<Trust<'a>> {
+        self.trust
     }
 }
 
@@ -263,13 +293,14 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalVerifyError> {
         serde_json::from_value(value).map_err(|_| ApprovalVerifyError::Invalid)?;
     if request.protocol != REQUEST_PROTOCOL
         || !request.repository.is_absolute()
-        || !request.allowed_signers.is_absolute()
         || !is_plain_revision(&request.tag)
         || !is_record_value(&request.record_id)
         || !is_record_value(&request.record_digest)
     {
         return Err(ApprovalVerifyError::Invalid);
     }
+    let source = AllowedSignersSource::parse(&request.allowed_signers)
+        .ok_or(ApprovalVerifyError::Invalid)?;
     let input = validate_gitsign(
         request.gitsign.as_ref(),
         request.identity_registry.as_deref(),
@@ -280,21 +311,35 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalVerifyError> {
             ApprovalVerifyError::GitsignPrincipal,
         )
     })?;
-    let allowed_signers = capture_allowed_signers(&request.allowed_signers)
-        .map_err(|_| ApprovalVerifyError::AllowedSigners)?;
+    let record = (request.record_id.as_str(), request.record_digest.as_str());
+    let allowed_signers = match capture_allowed_signers(&request.repository, &source) {
+        Ok(snapshot) => snapshot,
+        Err(CaptureFailure::Invalid) => return Err(ApprovalVerifyError::AllowedSigners),
+        // Git could not answer while the source was read: no verifier starts,
+        // and no trust identity was established.
+        Err(CaptureFailure::Git(reason)) => {
+            let result =
+                ResultLine::from_checked(CheckedTag::unread(reason), &request.tag, record, None);
+            return encode(&result);
+        }
+    };
     let registry = load_registry(&request.repository, input)?;
+    let git_version = git_version(&request.repository);
+    let reading = TrustReading {
+        requested: &request.allowed_signers,
+        snapshot: &allowed_signers,
+        git_version: git_version.as_deref(),
+    };
     let echo = GitsignEcho::new(
         request.gitsign.as_ref(),
         request.identity_registry.as_deref(),
     );
-    let record = (request.record_id.as_str(), request.record_digest.as_str());
     let result = match &registry {
         Registry::Loaded(loaded) => ResultLine::verify(
             &request.repository,
             &request.tag,
             record,
-            &request.allowed_signers,
-            &allowed_signers,
+            reading,
             echo,
             loaded.as_ref(),
         ),
@@ -303,10 +348,14 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalVerifyError> {
             CheckedTag::unread(*reason),
             &request.tag,
             record,
-            Trust::new(&request.allowed_signers, echo, None),
+            Some(Trust::new(reading, echo, None)),
         ),
     };
-    let mut line = serde_json::to_vec(&result).map_err(|_| ApprovalVerifyError::ResultEncoding)?;
+    encode(&result)
+}
+
+fn encode(result: &ResultLine<'_>) -> Result<Vec<u8>, ApprovalVerifyError> {
+    let mut line = serde_json::to_vec(result).map_err(|_| ApprovalVerifyError::ResultEncoding)?;
     line.push(b'\n');
     Ok(line)
 }
