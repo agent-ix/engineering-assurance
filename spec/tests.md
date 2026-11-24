@@ -421,38 +421,6 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-079 | FR-079-AC-2 | TC-619 | 🚧 Specified |
 | FR-079 | FR-079-AC-3 | TC-620 | 🚧 Specified |
 | FR-079 | FR-079-AC-4 | TC-621 | 🚧 Specified |
-| FR-081 | FR-081-AC-1 | TC-1049 | 🚧 Specified |
-| FR-081 | FR-081-AC-2 | TC-1050 | 🚧 Specified |
-| FR-081 | FR-081-AC-3 | TC-1051 | 🚧 Specified |
-| FR-081 | FR-081-AC-4 | TC-1052 | 🚧 Specified |
-| FR-081 | FR-081-AC-5 | TC-1053 | 🚧 Specified |
-| FR-081 | FR-081-AC-6 | TC-1054 | 🚧 Specified |
-| FR-081 | FR-081-AC-7 | TC-1055 | 🚧 Specified |
-| FR-081 | FR-081-AC-8 | TC-1056 | 🚧 Specified |
-| FR-081 | FR-081-AC-9 | TC-1057 | 🚧 Specified |
-| FR-081 | FR-081-AC-10 | TC-1058 | 🚧 Specified |
-| FR-081 | FR-081-AC-11 | TC-1059 | 🚧 Specified |
-| FR-082 | FR-082-AC-1 | TC-1060 | 🚧 Specified |
-| FR-082 | FR-082-AC-2 | TC-1061 | 🚧 Specified |
-| FR-082 | FR-082-AC-3 | TC-1062 | 🚧 Specified |
-| FR-082 | FR-082-AC-4 | TC-1063 | 🚧 Specified |
-| FR-082 | FR-082-AC-5 | TC-1064 | 🚧 Specified |
-| FR-082 | FR-082-AC-6 | TC-1065 | 🚧 Specified |
-| FR-082 | FR-082-AC-7 | TC-1066 | 🚧 Specified |
-| FR-082 | FR-082-AC-8 | TC-1067 | 🚧 Specified |
-| FR-082 | FR-082-AC-9 | TC-1068 | 🚧 Specified |
-| FR-083 | FR-083-AC-1 | TC-1069 | 🚧 Specified |
-| FR-083 | FR-083-AC-2 | TC-1070 | 🚧 Specified |
-| FR-083 | FR-083-AC-3 | TC-1071 | 🚧 Specified |
-| FR-083 | FR-083-AC-4 | TC-1072 | 🚧 Specified |
-| FR-043 | FR-043-AC-20 | TC-1073 | 🚧 Specified |
-| FR-043 | FR-043-AC-21 | TC-1074 | 🚧 Specified |
-| FR-043 | FR-043-AC-22 | TC-1075 | 🚧 Specified |
-| FR-043 | FR-043-AC-23 | TC-1076 | 🚧 Specified |
-| FR-043 | FR-043-AC-24 | TC-1077 | 🚧 Specified |
-| FR-043 | FR-043-AC-25 | TC-1078 | 🚧 Specified |
-| FR-064 | FR-064-AC-29 | TC-1079 | 🚧 Specified |
-| FR-070 | FR-070-AC-14 | TC-1080 | 🚧 Specified |
 
 ### Non-Functional Requirement Coverage
 
@@ -1101,38 +1069,6 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-1046 | A git failure while the registry is read yields `unverifiable` with `repository_unavailable`, `git_not_started` or `timeout`, not the registry error | Integration | P0 | FR-040-AC-30 | 🚧 |
 | TC-1047 | Every verdict for a request with `gitsign` whose registry revision resolved carries `identity_registry_commit` equal to the resolved full commit id, and none otherwise | Integration | P0 | FR-040-AC-31 | 🚧 |
 | TC-1048 | `release-verify` refuses a `principal` and an unusable identity registry with its own codes, and a git failure while the registry is read with `release_verify_git_failed` | Integration | P0 | FR-047-AC-14 | 🚧 |
-| TC-1049 | A tag-push run for a matching annotated tag writes one note on the peeled commit under `refs/notes/assurance-tag-receipts` whose statement has the subject `refs/tags/<name>` with `gitTag` and exactly the closed predicate members | Integration | P0 | FR-081-AC-1 | 🚧 |
-| TC-1050 | A non-matching tag name, a tag pushed before `adopted_at` and a policy without `tag_receipts` each write no note and end successfully | Integration | P0 | FR-081-AC-2 | 🚧 |
-| TC-1051 | `pushed_at` equals the fixture trigger's push time and not a tag, author or committer date | Unit | P0 | FR-081-AC-3 | 🚧 |
-| TC-1052 | `record_ids` copies the trailer values byte for byte in order, is empty with none, and an unreadable, NUL, over-64-value or over-256-byte message gives `trailers_readable` false | Unit | P0 | FR-081-AC-4 | 🚧 |
-| TC-1053 | A tag re-pushed at the identical object id adds no second entry and a re-signed tag adds a second entry leaving the first unchanged | Integration | P0 | FR-081-AC-5 | 🚧 |
-| TC-1054 | A note over 1 MiB, six rejected notes pushes and two concurrent runs end with `tag_receipt_note_too_large`, `tag_receipt_note_conflict` and both entries present respectively | Integration | P0 | FR-081-AC-6 | 🚧 |
-| TC-1055 | Change receipts and tag receipts never read or accept each other and share no notes ref | Integration | P0 | FR-081-AC-7 | 🚧 |
-| TC-1056 | A tag receipt verifies only against a `receipt_writer` entry with `source_ref_prefix` and a certificate source ref equal to its `ref`; every other signer shape is `untrusted_signer` | Integration | P0 | FR-081-AC-8 | 🚧 |
-| TC-1057 | A changed byte, an extra predicate member and a subject, digest or commit disagreement yield `signature_invalid`, `predicate_invalid` and `wrong_subject` | Unit | P0 | FR-081-AC-9 | 🚧 |
-| TC-1058 | A public fixture whose trailer references a private team fails with `tag_receipt_leak_check_refused`, and the signing job runs no repository file and no agent | Integration | P0 | FR-081-AC-10 | 🚧 |
-| TC-1059 | A repository on sink `none` fails with `receipt_private_store_required` and writes no tag receipt | Integration | P0 | FR-081-AC-11 | 🚧 |
-| TC-1060 | A receipt whose tag was deleted lists exactly one `missing_tag` with reason `tag_absent` | Integration | P0 | FR-082-AC-1 | 🚧 |
-| TC-1061 | A receipt whose tag was re-created with a different object lists `missing_tag` `tag_changed` with `current_object` | Integration | P0 | FR-082-AC-2 | 🚧 |
-| TC-1062 | A tag deleted and pushed at the identical object id lists nothing, and two receipts for two objects list the non-current one | Integration | P0 | FR-082-AC-3 | 🚧 |
-| TC-1063 | A tampered, unparsable or unlisted-signer receipt is `invalid_receipt` with its reason and is not judged as missing | Integration | P0 | FR-082-AC-4 | 🚧 |
-| TC-1064 | The comparison function gives identical results over absent, equal, different, repeated-ref and empty inputs from both commands | Unit | P0 | FR-082-AC-5 | 🚧 |
-| TC-1065 | `receipt-missing` lists `tag_no_receipt` only for a matching, post-adoption, post-grace tag without a receipt, and `status_unknown` for a tag absent from the push record | Integration | P0 | FR-082-AC-6 | 🚧 |
-| TC-1066 | `missing-receipt-check.yml` is green on no tag findings and fails on each of the three tag findings | Integration | P0 | FR-082-AC-7 | 🚧 |
-| TC-1067 | A deleted release tag yields `missing_tag` while its release attestation is unchanged, and neither reader reads the other's content | Integration | P0 | FR-082-AC-8 | 🚧 |
-| TC-1068 | The commands write nothing, keep no log and mark no finding resolved | Static | P0 | FR-082-AC-9 | 🚧 |
-| TC-1069 | The adoption documentation names the four refs and their blocked operations | Static | P0 | FR-083-AC-1 | 🚧 |
-| TC-1070 | The example ruleset payload parses, targets the three repository refs with deletion and non-fast-forward rules and has an empty bypass list | Unit | P0 | FR-083-AC-2 | 🚧 |
-| TC-1071 | The documentation states the empty approver and agent bypass and that protection is platform setup while detection is what the tool tests | Static | P0 | FR-083-AC-3 | 🚧 |
-| TC-1072 | No command or workflow applies, reads or reports a ruleset for these refs | Static | P0 | FR-083-AC-4 | 🚧 |
-| TC-1073 | `approval-trail` lists a receipted deleted tag as `missing_tag` `tag_absent`, never `approved`, with `complete` false | Integration | P0 | FR-043-AC-20 | 🚧 |
-| TC-1074 | `approval-trail` passes a tag re-pushed at the identical object id and lists the earlier receipt of a re-signed tag as `tag_changed` | Integration | P0 | FR-043-AC-21 | 🚧 |
-| TC-1075 | `approval-trail` lists a tampered receipt and an unlisted-signer receipt as `invalid_receipt` with `complete` false | Integration | P0 | FR-043-AC-22 | 🚧 |
-| TC-1076 | `approval-trail` attributes receipts by `record_ids` and reports an unreadable-trailer receipt in every record's trail with `attributed` false | Integration | P0 | FR-043-AC-23 | 🚧 |
-| TC-1077 | A request without `tag_receipts` yields `checked` false and `complete` false, and an invalid member is refused | Integration | P0 | FR-043-AC-24 | 🚧 |
-| TC-1078 | `approval-trail` and `receipt-missing` list identical tag findings for the same inputs and the command writes nothing | Integration | P0 | FR-043-AC-25 | 🚧 |
-| TC-1079 | A `receipt_writer` entry with `source_ref_prefix` is a tag receipt identity only, and a policy with both entry kinds is valid | Unit | P0 | FR-064-AC-29 | 🚧 |
-| TC-1080 | The checked-in `tag-receipt.yml` matches the trigger, jobs and permissions of the table, rejects a mismatched `tag` input with `tag_receipt_input_mismatch` and takes tag, object and push time from the trigger context | Integration | P0 | FR-070-AC-14 | 🚧 |
 | TC-639 | Changing only the private form leaves the public form's signed bytes and signature unchanged | Unit | P0 | FR-056-AC-5 | ✅ `tests/record_sink.rs` passing |
 | TC-640 | Over generated strings a public member accepts a string only when it matches its grammar | Property | P0 | FR-056-AC-6 | ✅ `tests/record_sink.rs` passing |
 | TC-641 | An approval statement published as a record has the statement digest in the public form and its meaning, approver and pull request only in the private form | Unit | P0 | FR-056-AC-7 | ✅ `tests/record_sink.rs` passing |

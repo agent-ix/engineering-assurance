@@ -263,7 +263,7 @@ same canonical bundle and do not redefine these responsibilities.
 - [FR-080](./functional/FR-080-signed-proof-integrity-statement-verification.md) — verify a signed proof-integrity statement against one exact tag object.
 - [FR-081](./functional/FR-081-tag-receipt-on-approval-and-release-tag-push.md) — write a signed tag receipt when an approval or release tag is pushed.
 - [FR-082](./functional/FR-082-detect-deleted-and-changed-tags-from-tag-receipts.md) — detect deleted, changed and unreceipted tags by comparing the tag set with the tag receipts.
-- [FR-083](./functional/FR-083-document-the-adoption-ruleset-for-tags-notes-and-records.md) — document the adoption ruleset that protects tags, receipt notes and the private records branch.
+- [FR-083](./functional/FR-083-document-the-adoption-rulesets-for-tags-and-the-private-records-branch.md) — document the adoption rulesets that protect tags and the private records branch, and state what cannot be protected.
 
 ### Non-Functional Requirements
 

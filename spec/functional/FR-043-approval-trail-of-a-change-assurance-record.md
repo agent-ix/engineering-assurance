@@ -61,8 +61,9 @@ time, so a tag that no longer exists can still be attributed. A receipt whose ta
 receipted object is not a finding: the tag's own entry carries `tag_receipt` `verified`. A tag deleted and pushed
 again at the identical object id passes, because the object id matches; a tag re-signed or re-created has a different
 object id, and the earlier receipt is listed as `missing_tag` with reason `tag_changed`. The command reports and never
-decides whether a changed tag was legitimate. An absent or changed tag is never `approved`: it is listed with the status
-`missing_tag`. A receipt that does not verify is listed with the status `invalid_receipt` and never dropped.
+decides whether a changed tag was legitimate; a person records acceptance of a specific finding in the `accepted_tags`
+list of the receipt policy ([FR-082](./FR-082-detect-deleted-and-changed-tags-from-tag-receipts.md)), and a matched `missing_tag` finding is listed with the status `accepted` and `finding` `missing_tag`. An absent or changed tag is never `approved`: it is listed with the status
+`missing_tag`. A receipt that does not verify is listed with the status `invalid_receipt` and never dropped. A current tag whose name starts with a policy prefix and has no verified receipt for its current object id carries `tag_receipt` `none` and counts against `complete` unless accepted. A notes ref that does not exist is an empty receipt set: `checked` is true and every such tag is `none`.
 
 Out of scope: creating, pushing or deleting tags, writing a receipt (FR-081 owns it), computing the record digest,
 deciding which approval is current, what a meaning permits or who may approve, any
@@ -73,7 +74,7 @@ signature rule (FR-036, FR-037, FR-040 own them), and any log or store that the 
 - One request document `engineering-assurance.approval-trail-request/v1` with the
   members `protocol`, `repository` (absolute directory path), `record_id` and
   `record_digest` (as FR-041), `allowed_signers` (absolute file path, required) and
-  optionally `tag_receipts`, an object with the member `workflow_identities` (absolute path of the workflow-identity policy file of FR-064, read by the caller from the protected base branch), and optionally `gitsign` with its `identity_registry` (as FR-041, whose `gitsign.principal` and registry refusals use the codes `approval_trail_gitsign_principal_refused` and `approval_trail_identity_registry_invalid`). Unknown members are rejected. The command takes
+  optionally `tag_receipts`, an object with the member `workflow_identities` (absolute path of the workflow-identity policy file of FR-064, read by the caller from the protected base branch) and `receipt_policy` (absolute path of the receipt policy file of FR-075, read by the caller from the protected base branch, whose `tag_receipts` member gives the prefixes and `accepted_tags`), and optionally `gitsign` with its `identity_registry` (as FR-041, whose `gitsign.principal` and registry refusals use the codes `approval_trail_gitsign_principal_refused` and `approval_trail_identity_registry_invalid`). Unknown members are rejected. The command takes
   the document as `--request <json>` or `--request -`, as `approval-verify` does.
 - `--format json|table`, default `json`.
 
@@ -85,7 +86,7 @@ signature rule (FR-036, FR-037, FR-040 own them), and any log or store that the 
     FR-041, which with `gitsign` also carries `identity_registry_commit` whenever the revision resolved);
   - `ordering`, the string `claimed_at_ascending`;
   - `entries`, the array of entries in order;
-  - `tag_receipts`, an object with `checked` (true when the request carried a `tag_receipts` member and the notes ref was read, false otherwise; with false no receipt was consulted and `complete` is false) and `considered`, the number of receipt entries read;
+  - `tag_receipts`, an object with `checked` (true when the request carried a `tag_receipts` member and the notes ref was read or found absent, false otherwise; with false no receipt was consulted and `complete` is false) and `considered`, the number of receipt entries read;
   - `unreadable`, the array of annotated tags that cannot be known to name the
     record, in listing order (the byte order of the ref name). Each item has `tag`
     (the name; every byte that is not valid UTF-8 and every control character is
@@ -100,7 +101,7 @@ signature rule (FR-036, FR-037, FR-040 own them), and any log or store that the 
     to the tag limit, and only the refs before the stop after a `time_limit`;
     `truncated`, a boolean; and, only when `truncated` is true, `truncation`, one of
     `tag_limit` or `time_limit`;
-  - `complete`, true only when `truncated` is false, `unreadable` is empty, `tag_receipts.checked` is true and no entry has the status `missing_tag` or `invalid_receipt`. A
+  - `complete`, true only when `truncated` is false, `unreadable` is empty, `tag_receipts.checked` is true, no entry has the status `missing_tag` or `invalid_receipt`, and no entry for a tag whose name starts with a policy prefix has `tag_receipt` `none` unless an `accepted_tags` entry accepts it. Accepted entries do not count against `complete`. A
     trail that is not `complete` is a partial list and says so.
 - An entry carries `tag` (the tag name without `refs/tags/`), `object` (the id of
   the tag object that was verified, so one signed object published under several
@@ -109,7 +110,7 @@ signature rule (FR-036, FR-037, FR-040 own them), and any log or store that the 
   member of the FR-041 result for that tag except `protocol`, `record_id`,
   `record_digest` and `trust`: `status`, `reason`, `signature`, `binding` and, on
   `approved`, `approver`, `meaning`, `signature_kind` and the signing time.
-- An entry for a present tag also carries `tag_receipt`: `verified` when a verified receipt names its ref and object id, otherwise `none`. An entry with the status `missing_tag` carries `tag`, `object` (the receipted object id), `reason` (`tag_absent` or `tag_changed`), `current_object` (only for `tag_changed`), `commit`, `pushed_at` and `attributed` (false only for a receipt with `trailers_readable` false); it has no `claimed_at`, `signature` or `approver`. An entry with the status `invalid_receipt` carries `commit`, `reason` (`signature_invalid`, `untrusted_signer`, `predicate_invalid` or `wrong_subject`) and `attributed` false, and no tag name, because an unverified receipt's content is not trusted.
+- An entry for a present tag also carries `tag_receipt`: `verified` when a verified receipt names its ref and object id, otherwise `none` (with `accepted_by` and `accepted_reason` when an `accepted_tags` entry accepts it as FR-082 matches a `tag_no_receipt` finding). An entry with the status `missing_tag` carries `tag`, `object` (the receipted object id), `reason` (`tag_absent` or `tag_changed`), `current_object` (only for `tag_changed`), `commit`, `pushed_at` and `attributed` (false only for a receipt with `trailers_readable` false); it has no `claimed_at`, `signature` or `approver`. An entry with the status `invalid_receipt` carries `commit`, `reason` (`signature_invalid`, `untrusted_signer`, `predicate_invalid` or `wrong_subject`) and `attributed` false, and no tag name, because an unverified receipt's content is not trusted.
 - Entries are ordered by `claimed_at` ascending; entries without one follow all
   entries with one; entries with equal or no `claimed_at` are ordered by `tag` in
   byte order, then `object`, then `commit` (an entry without `tag` follows those with one). The order is therefore total and does not depend on listing order.
@@ -173,11 +174,14 @@ signature rule (FR-036, FR-037, FR-040 own them), and any log or store that the 
 - The command SHALL NOT pass a tag name to a shell.
 - The command SHALL read the tag receipts under `refs/notes/assurance-tag-receipts`, verify each under FR-081, and apply the comparison of FR-082 to the receipts that belong to the requested record.
 - The command SHALL list a receipt whose ref is absent, or names a different object id, with the status `missing_tag`.
-- The command SHALL NOT list it as `approved`.
+- The command SHALL NOT list a receipt whose tag is absent or changed as `approved`.
 - The command SHALL list a receipt that does not verify with the status `invalid_receipt`.
-- The command SHALL NOT drop it.
+- The command SHALL NOT drop a receipt that does not verify.
 - The command SHALL report a receipt with `trailers_readable` false in the trail of every record with `attributed` false.
-- The command SHALL report `complete` false while any `missing_tag` or `invalid_receipt` entry exists or `tag_receipts.checked` is false.
+- The command SHALL report `complete` false while any `missing_tag` or `invalid_receipt` entry exists, any prefix-matching present tag has `tag_receipt` `none`, or `tag_receipts.checked` is false, except for findings an `accepted_tags` entry accepts.
+- The command SHALL read an absent notes ref as an empty receipt set with `checked` true.
+- The command SHALL report a finding that an `accepted_tags` entry matches with the status `accepted`, `finding` naming the replaced status, `accepted_by` and its reason.
+- The command SHALL NOT count a finding that an `accepted_tags` entry matches against `complete`.
 - The command SHALL NOT decide whether an absent or changed tag was legitimate.
 - The command SHALL NOT write to the repository, create a log, or record a digest of
   the trail.
@@ -228,6 +232,8 @@ throwaway keys generated in the test.
 | FR-043-AC-22 | A receipt with a changed byte and a receipt signed by an unlisted identity yield `invalid_receipt` entries with `signature_invalid` and `untrusted_signer`, and `complete` false. | Test |
 | FR-043-AC-23 | A receipt whose `record_ids` holds only another record's id is not listed for the requested record; a receipt with `trailers_readable` false for an absent tag is listed with `attributed` false in the trail of each of two different records. | Test |
 | FR-043-AC-24 | A request without a `tag_receipts` member yields `tag_receipts.checked` false and `complete` false and consults no receipt; a `tag_receipts` member with a relative path or an unknown member is refused with `approval_trail_request_invalid`. | Test |
+| FR-043-AC-26 | With `tag_receipts` given and the notes ref absent, `checked` is true, no error is raised, each tag whose name starts with a policy prefix has `tag_receipt` `none`, and `complete` is false; the same request with an `accepted_tags` entry for each such tag yields `complete` true. | Test |
+| FR-043-AC-27 | A `missing_tag` finding matched by an `accepted_tags` entry on `ref` and `tag_object` is listed with the status `accepted`, `finding` `missing_tag`, `accepted_by` and its reason and does not make `complete` false; an entry that differs in either member changes nothing; an `invalid_receipt` entry is never accepted. | Test |
 | FR-043-AC-25 | The fixture trail's `missing_tag` and `invalid_receipt` entries equal those `receipt-missing` lists for the same receipts and tag set (FR-082), and the command writes nothing to the repository. | Test |
 
 ## Dependencies
