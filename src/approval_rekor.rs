@@ -102,8 +102,8 @@ pub(crate) fn extract(tag_object: &[u8]) -> EmbeddedEntry {
     let Ok(artifact) = signed_attrs.to_der() else {
         return EmbeddedEntry::Invalid;
     };
-    let signature = signature_octets(&signer.signature);
-    let Some(bundle) = bundle(&entry, &signer_certificate, signature) else {
+    let signature = bundle_signature(&signer.signature);
+    let Some(bundle) = bundle(&entry, &signer_certificate, &signature) else {
         return EmbeddedEntry::Invalid;
     };
 
@@ -157,7 +157,7 @@ fn decode_armor(signature: &[u8]) -> Option<Vec<u8>> {
 fn bundle(
     entry: &RekorTransparencyLogEntry,
     certificate: &[u8],
-    signature: &[u8],
+    signature: &str,
 ) -> Option<Bundle> {
     let log_id = entry.log_id.as_ref()?;
     let kind_version = entry.kind_version.as_ref()?;
@@ -192,17 +192,13 @@ fn bundle(
                 "canonicalizedBody": STANDARD.encode(canonicalized_body),
             }]
         },
-        "messageSignature": { "signature": signature_base64(signature) }
+        "messageSignature": { "signature": signature }
     });
     Bundle::from_json(&json_bundle.to_string()).ok()
 }
 
-fn signature_octets(signature: &OctetString) -> &[u8] {
-    signature.as_bytes()
-}
-
-fn signature_base64(signature: &[u8]) -> String {
-    STANDARD.encode(signature)
+fn bundle_signature(signature: &OctetString) -> String {
+    STANDARD.encode(signature.as_bytes())
 }
 
 #[derive(Clone, PartialEq, Message)]
@@ -263,7 +259,7 @@ struct RekorInclusionProof {
     reason = "in a test, a panic IS the failure report; the production lints stand"
 )]
 mod tests {
-    use super::{signature_base64, signature_octets};
+    use super::bundle_signature;
     use base64::{Engine, engine::general_purpose::STANDARD};
     use der::asn1::OctetString;
 
@@ -275,9 +271,9 @@ mod tests {
         let raw_octets = [0x30, 0x00];
         let cms_signature = OctetString::new(raw_octets.to_vec())
             .expect("opaque octets are valid CMS OCTET STRING contents");
-        let bundle_signature = signature_base64(signature_octets(&cms_signature));
+        let encoded = bundle_signature(&cms_signature);
 
-        assert_eq!(bundle_signature, STANDARD.encode(raw_octets));
-        assert_ne!(bundle_signature, STANDARD.encode([0x04, 0x02, 0x30, 0x00]));
+        assert_eq!(encoded, STANDARD.encode(raw_octets));
+        assert_ne!(encoded, STANDARD.encode([0x04, 0x02, 0x30, 0x00]));
     }
 }
