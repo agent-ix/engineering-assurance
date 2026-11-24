@@ -72,6 +72,37 @@ findings:
 bindings: []
 ```
 
+## Deferred finding (disposition pass 4)
+
+| ID | Severity | Summary | Refs | Disposition |
+| --- | --- | --- | --- | --- |
+| FND-002 | high | A policy-prefix tag that does not become an approval entry is skipped as `TagNoReceipt`; it is absent from the trail and does not make `complete` false, even when no receipt exists. | src/approval_trail_host.rs:589-595; FR-043-AC-28 | deferred to EA-146; unchanged from `origin/main`, outside EA-306 scope |
+
+This is reproducible by a `tag_receipts` request for record R with an absent
+notes ref and a current policy-prefix tag whose readable trailers do not name R.
+`examine` returns `Other`, `compare_tags` emits `TagNoReceipt`, and the trail
+loop drops that finding before updating `complete`. FR-043-AC-28 requires the
+prefix tag to have `tag_receipt` `none` and the result to be incomplete.
+
+This behavior is present in `origin/main` unchanged; EA-146 now tracks the missing-receipt regression acceptance. It is not a new EA-306 finding. Review of the seven named merge-resolution files found no separate defect introduced by the EA-306 changes.
+
+```yaml
+deferred_findings:
+  - fnd: FND-002
+    severity: high
+    confidence: high
+    method: code-review
+    check: deferred
+    artifact_id: FR-043-AC-28
+    related_ids: []
+    path: src/approval_trail_host.rs
+    lines: "589-595"
+    excerpt: "A current tag whose name starts with a policy prefix and has no verified receipt for its current object id carries `tag_receipt` `none` and counts against `complete` unless accepted."
+    finding: "`examine` drops tags whose readable trailers do not name the requested record. `compare_tags` then emits `TagNoReceipt` for a current policy-prefix tag with no note, but `tag_section` skips every such finding on the assumption that it is represented by an approval entry. In this case no entry exists, so the tag is omitted and `complete` can remain true. This violates FR-043-AC-28 and the complete-result rule. The behavior is unchanged from origin/main and is tracked by EA-146, so it is deferred and out of EA-306 scope."
+    deferred_to: EA-146
+    scope: unchanged_from_origin_main
+```
+
 ## Dispositions
 
 ### Round 2 — HEAD 9fa56daa0196f4c62bbd8788df5279726b81b98d
@@ -108,4 +139,25 @@ dispositions:
       fn bundle_signature(signature: &OctetString) -> String {
           STANDARD.encode(signature.as_bytes())
       }
+```
+
+### Round 4 — requested HEAD eb390a6839adccbdd857475011f9e6d7e94aa759 (checked-out HEAD f819ab8c1271d245beae1cfcc0ff728f1c550e59; identical tree)
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | The CMS/Rekor bundle signature continues to use raw signature octets; the offline fixture binders remain present in the computed matrix. |
+| FND-002 | deferred to EA-146 | This behavior is unchanged from `origin/main`; the missing-receipt regression acceptance is tracked by EA-146 and is outside EA-306 scope. |
+
+No separate EA-306 defect was found in the seven merge-resolution files.
+
+```yaml
+dispositions:
+  - fnd: FND-001
+    outcome: fixed
+    reason: "The corrected raw-octet bundle mapping remains in place; Quoin matrix still binds the positive offline verifier fixture and five rejection cases."
+  - fnd: FND-002
+    outcome: deferred
+    deferred_to: EA-146
+    scope: unchanged_from_origin_main
+    reason: "The TagNoReceipt skip is unchanged from origin/main; EA-146 now carries the missing-receipt regression acceptance, so this is outside EA-306 scope."
 ```
