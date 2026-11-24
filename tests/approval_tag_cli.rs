@@ -813,3 +813,588 @@ fn tc_350_a_failing_signer_leaves_no_tag_for_x509_and_for_ssh() {
     fixture.ssh_config("a");
     created(&fixture, &tag_request(&fixture, "approve-17", "reviewed"));
 }
+
+// ---------------------------------------------------------------------------
+// FR-085, FR-086: the declared gesture and the interactive signing run.
+// ---------------------------------------------------------------------------
+
+/// As [`run`], with extra environment variables for the CLI.
+fn run_env(
+    fixture: &Fixture,
+    subcommand: &str,
+    body: &[u8],
+    path: &Path,
+    extra: &[(&str, &Path)],
+) -> Output {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"));
+    command
+        .args([subcommand, "--request", "-"])
+        .current_dir(fixture.repo())
+        .env_clear()
+        .env("PATH", path)
+        .env("HOME", fixture.root())
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", fixture.global())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    for (name, value) in extra {
+        command.env(name, value);
+    }
+    let mut child = command.spawn().expect("the Cargo-built CLI must start");
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(body)
+        .expect("request");
+    child.wait_with_output().expect("output")
+}
+
+fn gesture_request(fixture: &Fixture, tag: &str, gesture: &str) -> Value {
+    let mut request = tag_request(fixture, tag, "reviewed");
+    request["gesture"] = json!(gesture);
+    request
+}
+
+fn tag_message(fixture: &Fixture, tag: &str) -> String {
+    let object = git(&fixture.repo(), &["cat-file", "tag", tag]);
+    let body = object.split_once("\n\n").expect("headers then message").1;
+    body.split("-----BEGIN SSH SIGNATURE-----")
+        .next()
+        .expect("message")
+        .to_owned()
+}
+
+#[test]
+#[trace("TC-1149", "FR-085-AC-1", "FR-086-AC-1")]
+fn tc_1149_a_request_without_gesture_keeps_three_trailers_and_declares_none() {
+    let fixture = fixture();
+    fixture.ssh_config("a");
+    let result = created(&fixture, &tag_request(&fixture, "approve-17", "reviewed"));
+    assert!(result.get("gesture").is_none(), "{result}");
+    assert_eq!(
+        tag_message(&fixture, "approve-17"),
+        format!(
+            "Approve change-assurance record {RECORD_ID}\n\nApproved-Record-Id: {RECORD_ID}\nApproved-Record-Digest: {DIGEST}\nSigned-off-meaning: reviewed\n"
+        )
+    );
+    let approved = verified(&fixture, "approve-17", false);
+    assert_eq!(approved["status"], "approved", "{approved}");
+    assert_eq!(approved["gesture"], json!({"declared": "none"}));
+    assert_eq!(approved["signature"]["gesture"], json!({"evidenced": "none"}));
+}
+
+#[test]
+#[trace("TC-1150", "FR-085-AC-3", "FR-085-AC-8", "FR-086-AC-3", "FR-086-AC-8")]
+fn tc_1150_a_declared_gesture_is_copied_verbatim_and_never_changes_the_status() {
+    let fixture = fixture();
+    fixture.ssh_config("a");
+    created(&fixture, &tag_request(&fixture, "plain-17", "reviewed"));
+    let plain = verified(&fixture, "plain-17", false);
+    let result = created(&fixture, &gesture_request(&fixture, "touch-17", "device_touch"));
+    assert_eq!(result["gesture"], "device_touch");
+    assert_eq!(
+        tag_message(&fixture, "touch-17"),
+        format!(
+            "Approve change-assurance record {RECORD_ID}\n\nApproved-Record-Id: {RECORD_ID}\nApproved-Record-Digest: {DIGEST}\nSigned-off-meaning: reviewed\nSigning-Gesture: device_touch\n"
+        )
+    );
+    let touched = verified(&fixture, "touch-17", false);
+    assert_eq!(touched["status"], "approved", "{touched}");
+    assert_eq!(touched["gesture"], json!({"declared": "device_touch"}));
+    assert_eq!(touched["signature"]["gesture"], json!({"evidenced": "none"}));
+    for member in ["status", "approver", "meaning", "signature_kind"] {
+        assert_eq!(touched[member], plain[member], "{member}");
+    }
+    // No member scores, classes or accepts a gesture.
+    assert_eq!(touched["gesture"].as_object().expect("object").len(), 1);
+    assert_eq!(
+        touched["signature"]["gesture"]
+            .as_object()
+            .expect("object")
+            .len(),
+        1
+    );
+}
+
+#[test]
+#[trace("TC-1151", "FR-085-AC-4")]
+fn tc_1151_a_gesture_outside_the_three_values_is_refused_without_starting_git() {
+    let fixture = fixture();
+    fixture.ssh_config("a");
+    let marker = fixture.root().join("git-was-started");
+    let shim = fixture.root().join("shim-bin");
+    fs::create_dir(&shim).expect("shim dir");
+    fs::write(
+        shim.join("git"),
+        format!("#!/bin/sh\ntouch '{}'\nexit 1\n", marker.display()),
+    )
+    .expect("shim");
+    fs::set_permissions(shim.join("git"), fs::Permissions::from_mode(0o755)).expect("mode");
+    for bad in [
+        json!("touch"),
+        json!(""),
+        json!("Device_Touch"),
+        json!("DEVICE_TOUCH"),
+        json!(5),
+        json!(null),
+        json!(["device_touch"]),
+        json!(true),
+    ] {
+        let mut body = tag_request(&fixture, "approve-17", "reviewed");
+        body["gesture"] = bad.clone();
+        let output = run(&fixture, "approval-tag", body.to_string().as_bytes(), &shim);
+        assert_eq!(output.status.code(), Some(2), "{bad}: {output:?}");
+        let error: Value = serde_json::from_slice(&output.stdout).expect("error json");
+        assert_eq!(error["code"], "approval_tag_request_invalid", "{bad}");
+    }
+    assert!(!marker.exists(), "a refused request must not start git");
+}
+
+#[test]
+#[trace("TC-1152", "FR-085-AC-10")]
+fn tc_1152_the_signing_run_keeps_its_environment_and_passes_stderr_through() {
+    let fixture = fixture();
+    fixture.ssh_config("a");
+    let record = fixture.root().join("git-run");
+    fixture.executable(
+        "git",
+        &format!(
+            "#!/bin/sh\ncase \"$*\" in *' tag -s '*|'tag -s '*)\n  {{ echo \"stdin=$(/bin/readlink /proc/$$/fd/0)\"; echo \"askpass=$SSH_ASKPASS\"; echo \"require=$SSH_ASKPASS_REQUIRE\"; echo \"display=$DISPLAY\"; echo \"sock=$SSH_AUTH_SOCK\"; }} > '{}'\n  echo STDERR-REACHED-THE-CALLER >&2 ;;\nesac\nexec {} \"$@\"\n",
+            record.display(),
+            which("git").display()
+        ),
+    );
+    let askpass = fixture.root().join("askpass-program");
+    let sock = fixture.root().join("agent-sock");
+    let extra: [(&str, &Path); 4] = [
+        ("SSH_ASKPASS", &askpass),
+        ("SSH_ASKPASS_REQUIRE", Path::new("force")),
+        ("DISPLAY", Path::new(":77")),
+        ("SSH_AUTH_SOCK", &sock),
+    ];
+    let with = run_env(
+        &fixture,
+        "approval-tag",
+        gesture_request(&fixture, "approve-17", "device_touch")
+            .to_string()
+            .as_bytes(),
+        &fixture.bin(),
+        &extra,
+    );
+    assert_eq!(with.status.code(), Some(0), "{with:?}");
+    assert!(
+        String::from_utf8_lossy(&with.stderr).contains("STDERR-REACHED-THE-CALLER"),
+        "{with:?}"
+    );
+    let seen = fs::read_to_string(&record).expect("git run record");
+    assert_eq!(
+        seen,
+        format!(
+            "stdin=/dev/null\naskpass={}\nrequire=force\ndisplay=:77\nsock={}\n",
+            askpass.display(),
+            sock.display()
+        )
+    );
+    // Without a gesture the same variables reach git and its stderr stays captured.
+    fs::remove_file(&record).expect("reset");
+    let without = run_env(
+        &fixture,
+        "approval-tag",
+        tag_request(&fixture, "approve-18", "reviewed")
+            .to_string()
+            .as_bytes(),
+        &fixture.bin(),
+        &extra,
+    );
+    assert_eq!(without.status.code(), Some(0), "{without:?}");
+    assert!(
+        !String::from_utf8_lossy(&without.stderr).contains("STDERR-REACHED-THE-CALLER"),
+        "{without:?}"
+    );
+    assert_eq!(fs::read_to_string(&record).expect("record"), seen);
+}
+
+#[test]
+#[trace("TC-1153", "FR-086-AC-4", "FR-086-AC-5")]
+fn tc_1153_an_unrecognized_or_repeated_declaration_is_unrecognized_and_other_statuses_have_none() {
+    let fixture = fixture();
+    fixture.ssh_config("a");
+    let repo = fixture.repo();
+    let public = fixture.public("a");
+    let sign = |name: &str, message: &str| {
+        git(
+            &repo,
+            &[
+                "-c",
+                "gpg.format=ssh",
+                "-c",
+                &format!("user.signingkey={}", public.display()),
+                "tag",
+                "-s",
+                "--cleanup=verbatim",
+                "-m",
+                message,
+                name,
+            ],
+        );
+    };
+    let base = format!(
+        "Approve\n\nApproved-Record-Id: {RECORD_ID}\nApproved-Record-Digest: {DIGEST}\nSigned-off-meaning: reviewed\n"
+    );
+    sign("other", &format!("{base}Signing-Gesture: fingerprint\n"));
+    sign(
+        "repeated",
+        &format!("{base}Signing-Gesture: device_touch\nSigning-Gesture: device_touch\n"),
+    );
+    sign("wrong-record", &base.replace(DIGEST, "sha256:ff"));
+    for tag in ["other", "repeated"] {
+        let result = verified(&fixture, tag, false);
+        assert_eq!(result["status"], "approved", "{result}");
+        assert_eq!(result["gesture"], json!({"declared": "unrecognized"}), "{tag}");
+    }
+    let wrong = verified(&fixture, "wrong-record", false);
+    assert_eq!(wrong["status"], "wrong_record", "{wrong}");
+    assert!(wrong.get("gesture").is_none());
+    git(&repo, &["tag", "-a", "-m", "plain", "unsigned"]);
+    let unsigned = verified(&fixture, "unsigned", false);
+    assert_eq!(unsigned["status"], "unsigned");
+    assert!(unsigned.get("gesture").is_none());
+    let missing = verified(&fixture, "no-such-tag", false);
+    assert_eq!(missing["status"], "unverifiable");
+    assert!(missing.get("gesture").is_none());
+    // A key the trust input does not name: untrusted_signer carries none.
+    fs::write(fixture.root().join("allowed_signers"), "").expect("empty trust");
+    let untrusted = verified(&fixture, "other", false);
+    assert_eq!(untrusted["status"], "untrusted_signer", "{untrusted}");
+    assert!(untrusted.get("gesture").is_none());
+}
+
+#[test]
+#[trace("TC-1154", "FR-086-AC-2")]
+fn tc_1154_an_oidc_interactive_declaration_through_the_gitsign_stand_in_is_declared_only() {
+    let fixture = fixture();
+    fixture.x509_config();
+    let committed = git(&fixture.repo(), &["rev-parse", "HEAD"]);
+    assert!(!committed.is_empty());
+    let registry = json!({
+        "protocol": "engineering-assurance.gitsign-identity-registry/v1",
+        "entries": [{
+            "certificate_identity": IDENTITY,
+            "certificate_oidc_issuer": ISSUER,
+            "principal": PRINCIPAL,
+        }],
+    })
+    .to_string();
+    let repo = fixture.repo();
+    fs::write(repo.join("identity-registry.json"), registry).expect("registry");
+    git(&repo, &["add", "identity-registry.json"]);
+    git(&repo, &["commit", "-q", "-m", "registry"]);
+    let result = created(
+        &fixture,
+        &gesture_request(&fixture, "approve-17", "oidc_interactive"),
+    );
+    assert_eq!(result["gesture"], "oidc_interactive");
+    let approved = verified(&fixture, "approve-17", true);
+    assert_eq!(approved["status"], "approved", "{approved}");
+    assert_eq!(approved["gesture"], json!({"declared": "oidc_interactive"}));
+    assert_eq!(approved["signature"]["gesture"], json!({"evidenced": "none"}));
+}
+
+/// A real `ssh-agent` on a socket in the fixture, killed on drop.
+struct Agent {
+    child: std::process::Child,
+    socket: PathBuf,
+}
+
+impl Drop for Agent {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// Starts an `ssh-agent` whose confirmation program is `askpass`, and adds key
+/// `a` of the fixture with `ssh-add -c`. The configured signing key is the
+/// public key given literally, so git signs through the agent.
+fn agent_with_confirmed_key(fixture: &Fixture, askpass: &Path) -> Agent {
+    let socket = fixture.root().join("agent.sock");
+    let child = Command::new("ssh-agent")
+        .args(["-D", "-a"])
+        .arg(&socket)
+        .env("SSH_ASKPASS", askpass)
+        .env("SSH_ASKPASS_REQUIRE", "force")
+        .env("DISPLAY", ":0")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("ssh-agent must start");
+    let agent = Agent { child, socket };
+    for _ in 0..200 {
+        if agent.socket.exists() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    let added = Command::new("ssh-add")
+        .arg("-c")
+        .arg(fixture.root().join("a"))
+        .env("SSH_AUTH_SOCK", &agent.socket)
+        .env_remove("SSH_ASKPASS")
+        .stdin(Stdio::null())
+        .output()
+        .expect("ssh-add must start");
+    assert!(added.status.success(), "{added:?}");
+    let public = fs::read_to_string(fixture.public("a")).expect("public key");
+    let literal: Vec<&str> = public.split_whitespace().take(2).collect();
+    fixture.config(&format!(
+        "[gpg]\n\tformat = ssh\n[user]\n\tsigningkey = key::{}\n",
+        literal.join(" ")
+    ));
+    agent
+}
+
+fn askpass_program(fixture: &Fixture) -> (PathBuf, PathBuf) {
+    let log = fixture.root().join("askpass.log");
+    let deny = fixture.root().join("askpass.deny");
+    let path = fixture.root().join("askpass.sh");
+    fs::write(
+        &path,
+        format!(
+            "#!/bin/sh\necho call >> '{}'\n[ -e '{}' ] && exit 1\nexit 0\n",
+            log.display(),
+            deny.display()
+        ),
+    )
+    .expect("askpass");
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("mode");
+    (path, log)
+}
+
+fn refs(fixture: &Fixture) -> String {
+    git(&fixture.repo(), &["for-each-ref"])
+}
+
+#[test]
+#[trace("TC-1155", "FR-085-AC-5", "FR-085-AC-6", "FR-086-AC-2")]
+fn tc_1155_ssh_add_c_confirms_each_signature_and_a_denial_creates_no_tag() {
+    let fixture = fixture();
+    let (askpass, log) = askpass_program(&fixture);
+    let agent = agent_with_confirmed_key(&fixture, &askpass);
+    let socket = agent.socket.clone();
+    let create_as = |tag: &str| {
+        run_env(
+            &fixture,
+            "approval-tag",
+            gesture_request(&fixture, tag, "agent_confirm")
+                .to_string()
+                .as_bytes(),
+            &fixture.bin(),
+            &[("SSH_AUTH_SOCK", &socket)],
+        )
+    };
+    for tag in ["approve-1", "approve-2"] {
+        let output = create_as(tag);
+        assert_eq!(output.status.code(), Some(0), "{output:?}");
+    }
+    let calls = fs::read_to_string(&log).expect("askpass log");
+    assert_eq!(calls.lines().count(), 2, "one confirmation per signature: {calls:?}");
+    let approved = verified(&fixture, "approve-1", false);
+    assert_eq!(approved["status"], "approved", "{approved}");
+    assert_eq!(approved["gesture"], json!({"declared": "agent_confirm"}));
+    assert_eq!(approved["signature"]["gesture"], json!({"evidenced": "none"}));
+
+    fs::write(fixture.root().join("askpass.deny"), "").expect("deny");
+    let before = refs(&fixture);
+    let denied = create_as("approve-3");
+    assert_eq!(denied.status.code(), Some(2), "{denied:?}");
+    let error: Value = serde_json::from_slice(&denied.stdout).expect("error json");
+    assert_eq!(error["code"], "approval_tag_create_failed", "{error}");
+    assert_eq!(refs(&fixture), before, "no ref may change");
+    assert_eq!(
+        fs::read_to_string(&log).expect("askpass log").lines().count(),
+        3
+    );
+}
+
+/// A stand-in `gpg.x509.program` that talks to a person: it records its process
+/// group and the terminal's foreground group, then (unless a `fail` file sits
+/// beside it) writes a prompt to `/dev/tty`, reads one line from it, records the
+/// line and emits a CMS-shaped block. Git feeds it the message on standard
+/// input, which it drains with builtins first.
+const PTY_SIGNER: &str = r#"#!/bin/sh
+d=${0%/*}
+while read -r line || [ -n "$line" ]; do :; done
+read -r stat < /proc/$$/stat
+set -- ${stat##*) }
+echo "$3 $6" > "$d/groups"
+if [ -e "$d/fail" ]; then exit 1; fi
+printf 'enter the code: ' > /dev/tty
+read -r answer < /dev/tty
+echo "$answer" > "$d/answer"
+echo "[GNUPG:] KEY_CONSIDERED AAAA 0" >&2
+echo "[GNUPG:] SIG_CREATED D 1 8 00 1700000000 00 AAAA" >&2
+printf -- '-----BEGIN SIGNED MESSAGE-----\nAAAA\n-----END SIGNED MESSAGE-----\n'
+"#;
+
+/// What one `approval-tag` run under a pseudo-terminal left behind.
+struct PtyRun {
+    /// The terminal's foreground process group before and after the run.
+    before: i32,
+    after: i32,
+    /// Exit status of the CLI.
+    code: i32,
+    /// The CLI's standard output and standard error.
+    stdout: String,
+    stderr: String,
+    /// The signer's process group and the foreground group it saw.
+    signer_group: Option<(i32, i32)>,
+    /// The line the signer read from the terminal.
+    answer: Option<String>,
+}
+
+/// Runs `approval-tag --request -` as the session leader of a pseudo-terminal
+/// made by `script`, with the request on standard input and standard output and
+/// standard error in files, so that only `/dev/tty` is the terminal. `typed` is
+/// what the person types.
+fn approval_tag_under_pty(fixture: &Fixture, request: &Value, typed: &str) -> PtyRun {
+    let root = fixture.root();
+    let (request_file, out, stdout, stderr) = (
+        root.join("pty-request.json"),
+        root.join("pty-out"),
+        root.join("pty-stdout"),
+        root.join("pty-stderr"),
+    );
+    fs::write(&request_file, request.to_string()).expect("request file");
+    let wrapper = root.join("pty-wrapper.sh");
+    fs::write(
+        &wrapper,
+        format!(
+            "#!/bin/sh\ntp() {{ read -r s < /proc/$$/stat; set -- ${{s##*) }}; echo \"$6\"; }}\necho \"before=$(tp)\" > '{out}'\n'{cli}' approval-tag --request - < '{request}' > '{stdout}' 2> '{stderr}'\necho \"rc=$?\" >> '{out}'\necho \"after=$(tp)\" >> '{out}'\n",
+            out = out.display(),
+            cli = env!("CARGO_BIN_EXE_engineering-assurance"),
+            request = request_file.display(),
+            stdout = stdout.display(),
+            stderr = stderr.display(),
+        ),
+    )
+    .expect("wrapper");
+    fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755)).expect("mode");
+    let mut child = Command::new("/usr/bin/script")
+        .args(["-q", "-e", "-c"])
+        .arg(&wrapper)
+        .arg("/dev/null")
+        .current_dir(fixture.repo())
+        .env_clear()
+        .env("PATH", fixture.bin())
+        .env("SHELL", "/bin/sh")
+        .env("HOME", root)
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", fixture.global())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("script must start");
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(typed.as_bytes())
+        .expect("typed input");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(90);
+    loop {
+        if child.try_wait().expect("wait").is_some() {
+            break;
+        }
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("the run under the pseudo-terminal did not finish: a stopped signer?");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    let record = fs::read_to_string(&out).expect("wrapper record");
+    let field = |name: &str| -> i32 {
+        record
+            .lines()
+            .find_map(|line| line.strip_prefix(name))
+            .unwrap_or_else(|| panic!("{name} missing: {record:?}"))
+            .parse()
+            .expect("number")
+    };
+    let signer_group = fs::read_to_string(fixture.bin().join("groups"))
+        .ok()
+        .map(|text| {
+            let mut parts = text.split_whitespace().map(|p| p.parse::<i32>().expect("number"));
+            (parts.next().expect("pgrp"), parts.next().expect("tpgid"))
+        });
+    PtyRun {
+        before: field("before="),
+        after: field("after="),
+        code: field("rc="),
+        stdout: fs::read_to_string(&stdout).expect("stdout"),
+        stderr: fs::read_to_string(&stderr).expect("stderr"),
+        signer_group,
+        answer: fs::read_to_string(fixture.bin().join("answer"))
+            .ok()
+            .map(|text| text.trim_end().to_owned()),
+    }
+}
+
+fn process_group_exists(group: i32) -> bool {
+    let pid = rustix::process::Pid::from_raw(group).expect("group id");
+    for _ in 0..100 {
+        if rustix::process::test_kill_process_group(pid).is_err() {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    true
+}
+
+#[test]
+#[trace("TC-1156", "FR-085-AC-2", "FR-085-AC-11")]
+fn tc_1156_a_signer_reads_the_terminal_in_the_foreground_and_the_group_is_restored() {
+    let fixture = fixture();
+    fixture.x509_config();
+    fixture.executable("sign-standin", PTY_SIGNER);
+    let request = gesture_request(&fixture, "approve-17", "oidc_interactive");
+    let run = approval_tag_under_pty(&fixture, &request, "typed-by-the-person\n");
+    assert_eq!(run.code, 0, "{} / {}", run.stdout, run.stderr);
+    // The line came from the terminal, not from the request on standard input.
+    assert_eq!(run.answer.as_deref(), Some("typed-by-the-person"));
+    // The signer was not stopped by SIGTTIN: its group was the foreground group.
+    let (signer, foreground) = run.signer_group.expect("signer groups");
+    assert_eq!(signer, foreground, "git's group is the terminal's foreground");
+    assert_ne!(signer, run.before);
+    // Standard output is exactly one created line holding the declaration.
+    assert!(run.stdout.ends_with('\n') && run.stdout.matches('\n').count() == 1);
+    let line: Value = serde_json::from_str(&run.stdout).expect("json line");
+    assert_eq!(line["status"], "created");
+    assert_eq!(line["gesture"], "oidc_interactive");
+    // The previous foreground group is back and git's group is gone.
+    assert_eq!(run.after, run.before);
+    assert!(!process_group_exists(signer), "git's group must not outlive the run");
+    assert!(tags(&fixture).contains("approve-17"));
+}
+
+#[test]
+#[trace("TC-1157", "FR-085-AC-11")]
+fn tc_1157_the_foreground_group_is_restored_after_a_signer_fails() {
+    let fixture = fixture();
+    fixture.x509_config();
+    fixture.executable("sign-standin", PTY_SIGNER);
+    fs::write(fixture.bin().join("fail"), "").expect("fail flag");
+    let request = gesture_request(&fixture, "approve-17", "oidc_interactive");
+    let run = approval_tag_under_pty(&fixture, &request, "unused\n");
+    assert_eq!(run.code, 2, "{} / {}", run.stdout, run.stderr);
+    let error: Value = serde_json::from_str(&run.stdout).expect("error json");
+    assert_eq!(error["code"], "approval_tag_create_failed", "{error}");
+    let (signer, foreground) = run.signer_group.expect("signer groups");
+    assert_eq!(signer, foreground);
+    assert_eq!(run.after, run.before);
+    assert!(!process_group_exists(signer));
+    assert_eq!(tags(&fixture), "");
+}
