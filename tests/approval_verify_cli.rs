@@ -356,6 +356,9 @@ fn tc_318_a_digest_differing_by_one_character_is_the_wrong_record() {
     let tampered = status(&fixture, "v-tampered");
     assert_eq!(tampered["status"], "signed_bad", "{tampered}");
     assert_eq!(tampered["binding"]["record_digest"], "mismatch");
+    assert!(tampered.get("approver").is_none(), "{tampered}");
+    assert!(tampered.get("meaning").is_none(), "{tampered}");
+    assert!(tampered.get("signature_kind").is_none(), "{tampered}");
 }
 
 #[test]
@@ -460,6 +463,7 @@ fn tc_321_a_missing_or_blank_meaning_is_not_approved() {
     assert_eq!(missing["status"], "meaning_missing", "{missing}");
     assert!(missing.get("meaning").is_none());
     assert!(missing.get("approver").is_none());
+    assert!(missing.get("signature_kind").is_none());
     let blanks: [(&str, &[&str]); 4] = [
         ("v-empty", &["Signed-off-meaning:"]),
         ("v-spaces", &["Signed-off-meaning:    "]),
@@ -477,6 +481,7 @@ fn tc_321_a_missing_or_blank_meaning_is_not_approved() {
         assert_eq!(blank["status"], "meaning_missing", "{tag}: {blank}");
         assert!(blank.get("meaning").is_none(), "{tag}: {blank}");
         assert!(blank.get("approver").is_none(), "{tag}: {blank}");
+        assert!(blank.get("signature_kind").is_none(), "{tag}: {blank}");
     }
     signed_tag(
         &fixture,
@@ -493,6 +498,7 @@ fn tc_321_a_missing_or_blank_meaning_is_not_approved() {
     assert_eq!(mixed["status"], "meaning_missing", "{mixed}");
     assert!(mixed.get("meaning").is_none(), "{mixed}");
     assert!(mixed.get("approver").is_none(), "{mixed}");
+    assert!(mixed.get("signature_kind").is_none(), "{mixed}");
 }
 
 #[test]
@@ -508,6 +514,9 @@ fn tc_322_bad_unsigned_lightweight_and_unresolved_tags_are_never_approved() {
         bad["binding"],
         json!({"record_id": "match", "record_digest": "match"})
     );
+    assert!(bad.get("approver").is_none(), "{bad}");
+    assert!(bad.get("meaning").is_none(), "{bad}");
+    assert!(bad.get("signature_kind").is_none(), "{bad}");
 
     git(
         &repo,
@@ -1132,8 +1141,8 @@ fn pin_allowed_signers(fixture: &Fixture) {
 }
 
 #[test]
-#[trace("TC-1049", "FR-041-AC-34", "FR-037-AC-24", "FR-037-AC-25")]
-fn tc_1049_a_committed_allowed_signers_source_fixes_the_trust_identity() {
+#[trace("FR-041-AC-34", "FR-037-AC-24", "FR-037-AC-25")]
+fn a_committed_allowed_signers_source_fixes_the_trust_identity() {
     let fixture = fixture();
     pin_allowed_signers(&fixture);
     signed_tag(&fixture, "a", "v-pinned", &good_message());
@@ -1190,8 +1199,8 @@ fn tc_1049_a_committed_allowed_signers_source_fixes_the_trust_identity() {
 }
 
 #[test]
-#[trace("TC-1050", "FR-037-AC-24", "FR-041-AC-10")]
-fn tc_1050_a_committed_allowed_signers_source_is_refused_as_the_trust_source_rules_say() {
+#[trace("FR-037-AC-24", "FR-041-AC-10")]
+fn a_committed_allowed_signers_source_is_refused_as_the_trust_source_rules_say() {
     let fixture = fixture();
     pin_allowed_signers(&fixture);
     let repo = fixture.repo();
@@ -1239,8 +1248,8 @@ fn tc_1050_a_committed_allowed_signers_source_is_refused_as_the_trust_source_rul
 }
 
 #[test]
-#[trace("TC-1051", "FR-041-AC-35")]
-fn tc_1051_trust_is_absent_only_when_git_failed_reading_the_allowed_signers_source() {
+#[trace("FR-041-AC-35")]
+fn trust_is_absent_only_when_git_failed_reading_the_allowed_signers_source() {
     let fixture = fixture();
     pin_allowed_signers(&fixture);
     signed_tag(&fixture, "a", "v-signed", &good_message());
@@ -1316,8 +1325,8 @@ fn expire_alice(fixture: &Fixture) {
 }
 
 #[test]
-#[trace("TC-1052", "FR-041-AC-36", "FR-041-AC-31", "FR-037-AC-23")]
-fn tc_1052_a_backdated_tag_is_judged_by_the_recorded_git_version() {
+#[trace("FR-041-AC-36", "FR-041-AC-31", "FR-037-AC-23")]
+fn a_backdated_tag_is_judged_by_the_recorded_git_version() {
     let fixture = fixture();
     expire_alice(&fixture);
     signed_tag_at(
@@ -1344,8 +1353,8 @@ fn tc_1052_a_backdated_tag_is_judged_by_the_recorded_git_version() {
 }
 
 #[test]
-#[trace("TC-1053", "FR-041-AC-32")]
-fn tc_1053_a_key_expired_before_signing_and_verification_is_untrusted_on_any_git() {
+#[trace("FR-041-AC-32")]
+fn a_key_expired_before_signing_and_verification_is_untrusted_on_any_git() {
     let fixture = fixture();
     expire_alice(&fixture);
     signed_tag_at(
@@ -1361,8 +1370,8 @@ fn tc_1053_a_key_expired_before_signing_and_verification_is_untrusted_on_any_git
 }
 
 #[test]
-#[trace("TC-1054", "FR-041-AC-27", "FR-043-AC-27")]
-fn tc_1054_an_ssh_approval_has_a_claimed_time_and_no_trusted_time_however_backdated() {
+#[trace("FR-041-AC-27", "FR-043-AC-27")]
+fn an_ssh_approval_has_a_claimed_time_and_no_trusted_time_however_backdated() {
     let fixture = fixture();
     signed_tag_at(
         &fixture,

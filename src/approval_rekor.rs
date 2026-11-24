@@ -102,10 +102,8 @@ pub(crate) fn extract(tag_object: &[u8]) -> EmbeddedEntry {
     let Ok(artifact) = signed_attrs.to_der() else {
         return EmbeddedEntry::Invalid;
     };
-    let Ok(signature) = signer.signature.to_der() else {
-        return EmbeddedEntry::Invalid;
-    };
-    let Some(bundle) = bundle(&entry, &signer_certificate, &signature) else {
+    let signature = signature_octets(&signer.signature);
+    let Some(bundle) = bundle(&entry, &signer_certificate, signature) else {
         return EmbeddedEntry::Invalid;
     };
 
@@ -199,6 +197,10 @@ fn bundle(
     Bundle::from_json(&json_bundle.to_string()).ok()
 }
 
+fn signature_octets(signature: &OctetString) -> &[u8] {
+    signature.as_bytes()
+}
+
 #[derive(Clone, PartialEq, Message)]
 struct RekorTransparencyLogEntry {
     #[prost(int64, tag = "1")]
@@ -249,4 +251,98 @@ struct RekorInclusionProof {
     hashes: Vec<Vec<u8>>,
     #[prost(bytes = "vec", tag = "5")]
     checkpoint: Vec<u8>,
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    reason = "in a test, a panic IS the failure report; the production lints stand"
+)]
+mod tests {
+    use super::{
+        RekorInclusionPromise, RekorInclusionProof, RekorKindVersion, RekorLogId,
+        RekorTransparencyLogEntry, bundle, signature_octets, verify,
+    };
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    use der::asn1::OctetString;
+    use serde_json::Value;
+    use sigstore_types::Bundle;
+
+    #[test]
+    #[ix_trace_rs::trace("FR-041-AC-28")]
+    fn cms_octet_string_contents_are_not_der_wrapped_in_the_bundle() {
+        // These opaque bytes deliberately resemble a DER sequence so wrapping
+        // the CMS OCTET STRING would produce a distinguishable value.
+        let raw_octets = [0x30, 0x00];
+        let cms_signature = OctetString::new(raw_octets.to_vec())
+            .expect("opaque octets are valid CMS OCTET STRING contents");
+        let entry = RekorTransparencyLogEntry {
+            log_index: 1,
+            log_id: Some(RekorLogId { key_id: vec![1] }),
+            kind_version: Some(RekorKindVersion {
+                kind: "hashedrekord".to_owned(),
+                version: "0.0.1".to_owned(),
+            }),
+            integrated_time: 1,
+            inclusion_promise: Some(RekorInclusionPromise {
+                signed_entry_timestamp: vec![1],
+            }),
+            inclusion_proof: Some(RekorInclusionProof {
+                log_index: 1,
+                root_hash: vec![1],
+                tree_size: 1,
+                hashes: Vec::new(),
+                checkpoint: b"checkpoint".to_vec(),
+            }),
+            canonicalized_body: Some(vec![1]),
+        };
+
+        let bundle = bundle(&entry, &[0x30, 0x00], signature_octets(&cms_signature))
+            .expect("a structurally valid entry forms a bundle");
+        let value: Value = serde_json::from_str(&bundle.to_json().expect("bundle JSON"))
+            .expect("bundle JSON parses");
+        assert_eq!(
+            value["messageSignature"]["signature"],
+            STANDARD.encode(raw_octets),
+            "Sigstore's signature field holds the CMS OCTET STRING contents, not its DER encoding"
+        );
+    }
+
+    #[test]
+    #[ix_trace_rs::trace("FR-041-AC-29")]
+    fn structurally_valid_bundle_with_unverifiable_cms_evidence_has_no_trusted_time() {
+        let entry = RekorTransparencyLogEntry {
+            log_index: 1,
+            log_id: Some(RekorLogId { key_id: vec![1] }),
+            kind_version: Some(RekorKindVersion {
+                kind: "hashedrekord".to_owned(),
+                version: "0.0.1".to_owned(),
+            }),
+            integrated_time: 1,
+            inclusion_promise: Some(RekorInclusionPromise {
+                signed_entry_timestamp: Vec::new(),
+            }),
+            inclusion_proof: Some(RekorInclusionProof {
+                log_index: 1,
+                root_hash: vec![1],
+                tree_size: 1,
+                hashes: Vec::new(),
+                checkpoint: b"untrusted checkpoint".to_vec(),
+            }),
+            canonicalized_body: Some(vec![1]),
+        };
+        let bundle = bundle(&entry, &[0x30, 0x00], &[0x30, 0x00])
+            .expect("the invalid evidence still forms a structurally valid bundle");
+
+        assert_eq!(
+            verify(
+                &bundle,
+                b"artifact",
+                sigstore_verify::trust_root::SIGSTORE_PRODUCTION_TRUSTED_ROOT,
+            ),
+            None
+        );
+    }
 }

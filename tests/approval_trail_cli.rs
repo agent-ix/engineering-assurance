@@ -891,8 +891,8 @@ fn sha256_of(bytes: &[u8]) -> String {
 }
 
 #[test]
-#[trace("TC-1059", "FR-043-AC-26", "FR-043-AC-27")]
-fn tc_1059_the_trail_trust_is_read_once_and_each_entry_carries_the_trusted_time_members() {
+#[trace("FR-043-AC-26", "FR-043-AC-27")]
+fn the_trail_trust_is_read_once_and_each_entry_carries_the_trusted_time_members() {
     let fixture = fixture();
     let repo = fixture.repo();
     fs::create_dir_all(repo.join("trust")).expect("trust dir");

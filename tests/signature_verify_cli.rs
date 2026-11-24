@@ -1388,8 +1388,8 @@ fn error_code(output: &Output) -> String {
 }
 
 #[test]
-#[trace("TC-1055", "FR-037-AC-24", "FR-036-AC-3")]
-fn tc_1055_a_committed_allowed_signers_source_decides_over_the_working_tree() {
+#[trace("FR-037-AC-24", "FR-036-AC-3")]
+fn a_committed_allowed_signers_source_decides_over_the_working_tree() {
     let fixture = fixture();
     set_allowed(
         &fixture,
@@ -1413,8 +1413,8 @@ fn tc_1055_a_committed_allowed_signers_source_decides_over_the_working_tree() {
 }
 
 #[test]
-#[trace("TC-1056", "FR-037-AC-24")]
-fn tc_1056_a_refused_allowed_signers_source_starts_no_verifier() {
+#[trace("FR-037-AC-24")]
+fn a_refused_allowed_signers_source_starts_no_verifier() {
     let fixture = fixture();
     set_allowed(
         &fixture,
@@ -1469,8 +1469,8 @@ fn tc_1056_a_refused_allowed_signers_source_starts_no_verifier() {
 }
 
 #[test]
-#[trace("TC-1057", "FR-037-AC-24")]
-fn tc_1057_a_git_that_cannot_answer_for_a_committed_source_is_unverifiable() {
+#[trace("FR-037-AC-24")]
+fn a_git_that_cannot_answer_for_a_committed_source_is_unverifiable() {
     let fixture = fixture();
     let plain = fixture.root().join("plain");
     fs::create_dir(&plain).expect("plain directory");
@@ -1483,8 +1483,8 @@ fn tc_1057_a_git_that_cannot_answer_for_a_committed_source_is_unverifiable() {
 }
 
 #[test]
-#[trace("TC-1058", "FR-037-AC-23")]
-fn tc_1058_git_2_35_judges_a_backdated_tag_at_the_claimed_date() {
+#[trace("FR-037-AC-23")]
+fn git_2_35_judges_a_backdated_tag_at_the_claimed_date() {
     let text = String::from_utf8(
         Command::new("git")
             .arg("--version")

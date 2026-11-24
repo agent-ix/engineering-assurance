@@ -1622,8 +1622,8 @@ fn tc_1048_the_gitsign_inputs_are_refused_with_the_release_codes() {
 }
 
 #[test]
-#[trace("TC-1060", "FR-047-AC-15", "FR-047-AC-16")]
-fn tc_1060_every_verdict_keeps_the_trust_identity_of_the_run() {
+#[trace("FR-047-AC-15", "FR-047-AC-16")]
+fn every_verdict_keeps_the_trust_identity_of_the_run() {
     let fixture = fixture();
     fs::create_dir_all(fixture.repo().join("trust")).expect("trust dir");
     let mapping = fs::read_to_string(fixture.allowed()).expect("mapping");
