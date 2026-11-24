@@ -18,10 +18,13 @@ relationships:
 ## Description
 
 Tracked by Linear EA-113. The `approval-tag` command ([FR-042](./FR-042-create-signed-approval-tag-for-a-change-assurance-record.md))
-runs git through the FR-019 process host with no terminal and a 60 second limit, so a
-signer that needs a person (a security-key PIN prompt, an `ssh-add -c` confirmation, a
-`gitsign` browser or out-of-band login) cannot finish. This requirement adds one optional request member,
-`gesture`, that selects an interactive mode and records the mode the caller says it used.
+runs git through the FR-019 process host with standard input closed and a 60 second
+limit. Without `gesture`, git runs in a process group other than the caller's foreground
+process group when a controlling terminal exists; this does not promise a detached session
+or the absence of a controlling terminal. A signer that reads `/dev/tty` while its group
+is in the background can be stopped by `SIGTTIN`. This requirement adds one optional
+request member, `gesture`, that selects an interactive mode and records the mode the
+caller says it used.
 
 The three values name the per-signature gestures of the baseline: `device_touch` (a FIDO
 security-key SSH key), `agent_confirm` (a key held by an agent that asks for
@@ -77,8 +80,10 @@ Out of scope: choosing a key, configuring `ssh-add`, `ssh-agent`, an askpass pro
 - The command SHALL write nothing but the one result line to its own standard output.
 - The command SHALL, when `gesture` is present, give the process host a 300 second
   wall-clock deadline in place of the 60 second deadline of FR-042.
-- The command SHALL, when `gesture` is absent, give the process host the detached session
-  and the 60 second deadline of FR-042.
+- The command SHALL, when `gesture` is absent, ask the process host to run git in its
+  invocation-owned process group and give it the 60 second deadline of FR-042. When the
+  caller has a controlling terminal, that process group SHALL differ from the terminal's
+  foreground process group. Git's standard input remains closed as required by FR-019.
 - The command SHALL pass the same environment to git as FR-042 does, with the same
   variables removed, so `SSH_AUTH_SOCK`, `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE` and
   `DISPLAY` reach a signer.
@@ -106,7 +111,7 @@ test with a throwaway key and an askpass script that records each call.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-085-AC-1 | A request with no `gesture` creates a tag whose message holds exactly the three FR-042 trailers, whose result line holds no `gesture` member, and whose git run had no controlling terminal. | Test |
+| FR-085-AC-1 | A request with no `gesture` creates a tag whose message holds exactly the three FR-042 trailers and whose result line holds no `gesture` member. Under a pseudo-terminal, git's process group differs from the terminal's foreground process group. | Test (pty, stand-in) |
 | FR-085-AC-2 | A request with `gesture` `oidc_interactive`, passed with `--request -`, run under a pseudo-terminal with a stand-in signer that opens `/dev/tty`, writes a prompt there and reads a line from it, creates a tag; the signer was not stopped by `SIGTTIN` and the line was read from the pseudo-terminal and not from standard input, while the terminal's foreground process group during the run was git's process group; standard output is exactly one `created` line holding `"gesture":"oidc_interactive"`. | Test (pty, stand-in) |
 | FR-085-AC-3 | The created tag message holds the trailers `Approved-Record-Id`, `Approved-Record-Digest`, `Signed-off-meaning`, `Signing-Gesture` in that order, and the FR-037 trailer reader returns the declared value for `Signing-Gesture`. | Test |
 | FR-085-AC-4 | A `gesture` of `touch`, an empty string, a wrong case or a non-string is refused with `approval_tag_request_invalid`, exit status 2 and git not started. | Test |
