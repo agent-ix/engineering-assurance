@@ -32,7 +32,8 @@ key, program or format, so git signs with the key and the program that the
 caller's own git configuration names: an SSH key (`gpg.format=ssh`) or
 `gitsign` (`gpg.format=x509` with `gpg.x509.program` set; `gitsign` is the x509
 program FR-040 verifies, and a tag signed by another x509 program is created but
-reads `unverifiable` under `approval-verify`). The signer must be
+reads `unverifiable` under `approval-verify`). Unless the request names a `gesture`
+([FR-085](./FR-085-approval-tag-gesture-signing-mode.md)), the signer must be
 non-interactive (an agent-held or unlocked key, or a program that needs no
 terminal): the command gives git no terminal and no passphrase prompt can be
 answered. It adds no cryptography, never pushes, never writes git configuration,
@@ -64,7 +65,7 @@ or checking a record digest, recognising a stale or wrong digest, deciding who m
   members `protocol`, `repository` (absolute directory path), `tag` (a bare tag
   name that does not start with `refs/`), `revision` (optional, default
   `HEAD`; the commit the tag points to), `record` (absolute path of the record
-  file), `record_id`, `record_digest` and `meaning`. Unknown members are rejected.
+  file), `record_id`, `record_digest` and `meaning`, and the optional `gesture` of FR-085. Unknown members are rejected.
 - `tag` and `revision` follow the revision bounds of FR-036 (non-empty, at most
   256 bytes, not option-like, no whitespace or control character). `record_id` and `record_digest`
   follow the bounds of FR-041, `record_digest` is further `sha256:` followed by 64
@@ -84,7 +85,7 @@ or checking a record digest, recognising a stale or wrong digest, deciding who m
   tag points to), `record_id`, `record_digest` (as requested) and `meaning`.
 - The tag message is a subject paragraph, then the trailers
   `Approved-Record-Id`, `Approved-Record-Digest` and `Signed-off-meaning`, in
-  that order, with the names FR-041 and FR-037 fix.
+  that order, with the names FR-041 and FR-037 fix. A request with a `gesture` adds the fourth trailer FR-085 defines.
 - A request that is refused writes the `engineering-assurance.error/v1` machine
   error for capability `approval-tag` to stdout and its message to stderr, exits
   with status 2, and leaves the repository without the tag. The codes are
@@ -156,8 +157,8 @@ or checking a record digest, recognising a stale or wrong digest, deciding who m
   configuration; it SHALL remove the repository-selecting and
   configuration-injecting environment variables FR-036 removes.
 - The command SHALL run git through the process host of FR-019 with a 60 second
-  wall-clock timeout and an 8 MiB capture bound, and the signer SHALL be
-  non-interactive.
+  wall-clock timeout and an 8 MiB capture bound, and, unless the request names a `gesture` (FR-085, which sets the terminal and
+  the timeout), the signer SHALL be non-interactive.
 - The command SHALL pass a tag name, revision and target to git only after the
   option-like and whitespace checks, after `--` or `--end-of-options`.
 - The command SHALL contain no signature, certificate or trailer-parsing code,
