@@ -167,6 +167,38 @@ impl SigningTime {
     }
 }
 
+/// Why an `approved` result has no trusted time.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TrustedAtMissing {
+    /// An SSH signature has no transparency-log entry, so no trusted time.
+    SshSignature,
+    /// A gitsign signature whose transparency-log entry was not verified into a
+    /// trusted time. No log entry is read or reported yet, so no gitsign
+    /// approval carries `trusted_at`.
+    LogEntryUnverified,
+}
+
+/// The trusted time of an approval: the explicit statement that none is
+/// obtainable. It is never read from the local clock, the tagger date or an
+/// unverified log entry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub struct TrustedTime {
+    /// Why there is no trusted time.
+    pub trusted_at_missing: TrustedAtMissing,
+}
+
+impl TrustedTime {
+    const fn of(kind: SignatureKind) -> Self {
+        Self {
+            trusted_at_missing: match kind {
+                SignatureKind::Ssh => TrustedAtMissing::SshSignature,
+                SignatureKind::Gitsign => TrustedAtMissing::LogEntryUnverified,
+            },
+        }
+    }
+}
+
 /// The members only an `approved` result carries.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Approval {
@@ -179,6 +211,9 @@ pub struct Approval {
     /// When the approval was signed, or why that is not known.
     #[serde(flatten)]
     pub signing_time: SigningTime,
+    /// The time an independent transparency log attested, or why there is none.
+    #[serde(flatten)]
+    pub trusted_time: TrustedTime,
 }
 
 /// What the status decision yields.
@@ -275,6 +310,7 @@ fn decide_valid(
                 meaning: meaning.values.clone(),
                 signature_kind,
                 signing_time: SigningTime::from_tagger(tagger_signed_at),
+                trusted_time: TrustedTime::of(signature_kind),
             }),
             ..Decision::status(ApprovalStatus::Approved)
         },
