@@ -23,15 +23,16 @@ use engineering_assurance::approval_trail::{
 use engineering_assurance::approval_verify::{
     RECORD_ID_TRAILER, TrailerUnreadable, UnverifiableReason, is_record_value,
 };
-use engineering_assurance::signature_verify::{GitsignIdentity, SignedAt, trailer_values};
+use engineering_assurance::signature_verify::{SignedAt, trailer_values};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::approval_verify_host::{Assessment, Trust, assess};
+use crate::approval_verify_host::{Assessment, GitsignEcho, Trust, assess};
 use crate::signature_verify_host::{
-    AllowedSignersSnapshot, GitsignRequest, ListedRef, capture_allowed_signers, list_tags,
-    load_listed_tag, verify_loaded_tag,
+    AllowedSignersSnapshot, GitsignRequest, ListedRef, LoadedGitsign, RegistryFailure,
+    capture_allowed_signers, list_tags, load_gitsign, load_listed_tag, validate_gitsign,
+    verify_loaded_tag,
 };
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.approval-trail-request/v1";
@@ -57,6 +58,7 @@ struct Request {
     record_digest: String,
     allowed_signers: PathBuf,
     gitsign: Option<GitsignRequest>,
+    identity_registry: Option<String>,
 }
 
 /// Why a trail is a partial list.
@@ -138,6 +140,12 @@ pub(crate) enum ApprovalTrailError {
     /// The repository cannot be listed.
     #[error("approval-trail repository is not a git repository whose tags can be listed")]
     Repository,
+    /// The `gitsign` member names a person, which only the identity registry may do.
+    #[error("approval-trail gitsign member must not carry a principal")]
+    GitsignPrincipal,
+    /// The identity registry source is invalid or its content is unusable.
+    #[error("approval-trail identity registry is not a usable committed registry")]
+    IdentityRegistry,
     /// The result cannot be encoded.
     #[error("approval-trail result cannot be encoded")]
     ResultEncoding,
@@ -151,6 +159,8 @@ impl ApprovalTrailError {
             Self::Invalid => "approval_trail_request_invalid",
             Self::AllowedSigners => "approval_trail_allowed_signers_invalid",
             Self::Repository => "approval_trail_repository_unavailable",
+            Self::GitsignPrincipal => "approval_trail_gitsign_principal_refused",
+            Self::IdentityRegistry => "approval_trail_identity_registry_invalid",
             Self::ResultEncoding => "approval_trail_result_encoding_failed",
         }
     }
@@ -161,10 +171,10 @@ pub(crate) fn execute(bytes: &[u8], format: Format) -> Result<Vec<u8>, ApprovalT
     execute_within(bytes, format, TOTAL_TIME)
 }
 
-/// A parsed request and its `gitsign` identity.
+/// A parsed request and its `gitsign` trust.
 struct Parsed {
     request: Request,
-    identity: Option<GitsignIdentity>,
+    gitsign: Option<LoadedGitsign>,
     allowed_signers: AllowedSignersSnapshot,
 }
 
@@ -180,23 +190,29 @@ fn parse(bytes: &[u8]) -> Result<Parsed, ApprovalTrailError> {
     {
         return Err(ApprovalTrailError::Invalid);
     }
-    let identity = request
-        .gitsign
-        .clone()
-        .map(|g| {
-            GitsignIdentity::new(
-                g.certificate_identity,
-                g.certificate_oidc_issuer,
-                g.principal,
-            )
-            .ok_or(ApprovalTrailError::Invalid)
-        })
-        .transpose()?;
+    let input = validate_gitsign(
+        request.gitsign.as_ref(),
+        request.identity_registry.as_deref(),
+    )
+    .map_err(|error| {
+        error.refusal(
+            ApprovalTrailError::Invalid,
+            ApprovalTrailError::GitsignPrincipal,
+        )
+    })?;
     let allowed_signers = capture_allowed_signers(&request.allowed_signers)
         .map_err(|_| ApprovalTrailError::AllowedSigners)?;
+    // Git failing while the registry is read is the repository being unavailable.
+    let gitsign = input
+        .map(|input| load_gitsign(&request.repository, input))
+        .transpose()
+        .map_err(|failure| match failure {
+            RegistryFailure::Invalid => ApprovalTrailError::IdentityRegistry,
+            RegistryFailure::Git(_) => ApprovalTrailError::Repository,
+        })?;
     Ok(Parsed {
         request,
-        identity,
+        gitsign,
         allowed_signers,
     })
 }
@@ -247,7 +263,7 @@ fn examine(parsed: &Parsed, listed: &ListedRef) -> Examined {
     let checked = verify_loaded_tag(
         &request.repository,
         &parsed.allowed_signers,
-        parsed.identity.as_ref(),
+        parsed.gitsign.as_ref(),
         loaded,
     );
     Examined::Entry(Box::new(Entry {
@@ -298,10 +314,14 @@ fn execute_within(
         protocol: RESULT_PROTOCOL,
         record_id: &request.record_id,
         record_digest: &request.record_digest,
-        trust: Trust {
-            allowed_signers: &request.allowed_signers,
-            gitsign: request.gitsign.as_ref(),
-        },
+        trust: Trust::new(
+            &request.allowed_signers,
+            GitsignEcho::new(
+                request.gitsign.as_ref(),
+                request.identity_registry.as_deref(),
+            ),
+            parsed.gitsign.as_ref(),
+        ),
         ordering: "claimed_at_ascending",
         complete: truncation.is_none() && unreadable.is_empty(),
         entries,

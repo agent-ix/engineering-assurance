@@ -15,7 +15,7 @@
 
 use std::path::{Path, PathBuf};
 
-use engineering_assurance::approval_verify::{ApprovalStatus, SigningTime};
+use engineering_assurance::approval_verify::{Approval, ApprovalStatus, SigningTime};
 use engineering_assurance::release::{
     BaselineState, Changes, Check, Facts, Reason, frontmatter, is_repository_path, reasons,
 };
@@ -24,10 +24,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::approval_verify_host::{ResultLine as ApprovalLine, gitsign_identity};
+use crate::approval_verify_host::{GitsignEcho, ResultLine as ApprovalLine};
 use crate::process_host::CompletedProcess;
 use crate::signature_verify_host::{
-    AllowedSignersSnapshot, GitsignRequest, capture_allowed_signers, run_git,
+    AllowedSignersSnapshot, GitsignRequest, LoadedGitsign, RegistryFailure,
+    capture_allowed_signers, load_gitsign, run_git, validate_gitsign,
 };
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.release-verify-request/v1";
@@ -294,6 +295,7 @@ struct Request {
     record_path: String,
     allowed_signers: PathBuf,
     gitsign: Option<GitsignRequest>,
+    identity_registry: Option<String>,
 }
 
 /// Typed refusal that produces no verdict.
@@ -313,6 +315,12 @@ pub(crate) enum ReleaseVerifyError {
     /// Git could not answer a read the verdict needs.
     #[error("release-verify could not read the repository with git")]
     GitFailed,
+    /// The `gitsign` member names a person, which only the identity registry may do.
+    #[error("release-verify gitsign member must not carry a principal")]
+    GitsignPrincipal,
+    /// The identity registry source is invalid or its content is unusable.
+    #[error("release-verify identity registry is not a usable committed registry")]
+    IdentityRegistry,
     /// The result cannot be encoded.
     #[error("release-verify result cannot be encoded")]
     ResultEncoding,
@@ -326,6 +334,8 @@ impl ReleaseVerifyError {
             Self::Invalid => "release_verify_request_invalid",
             Self::AllowedSigners => "release_verify_allowed_signers_invalid",
             Self::GitFailed => "release_verify_git_failed",
+            Self::GitsignPrincipal => "release_verify_gitsign_principal_refused",
+            Self::IdentityRegistry => "release_verify_identity_registry_invalid",
             Self::ResultEncoding => "release_verify_result_encoding_failed",
         }
     }
@@ -402,6 +412,39 @@ impl<'a> ResultLine<'a> {
             accepted_anomalies: None,
         }
     }
+
+    /// The members of a `released` result.
+    fn mark_released(
+        &mut self,
+        record: &'a ReleaseDocument,
+        resolution: &'a Resolution,
+        approved: &'a Approval,
+    ) {
+        self.status = Status::Released;
+        self.release = Some(ReleaseInfo {
+            id: &record.id,
+            name: &record.name,
+            snapshot_path: &record.snapshot_path,
+        });
+        self.baseline = Some(BaselineInfo {
+            name: &resolution.name,
+            commit: &resolution.commit,
+            items: resolution
+                .items
+                .iter()
+                .map(|item| ItemInfo {
+                    path: &item.path,
+                    kind: item.kind,
+                })
+                .collect(),
+        });
+        self.decision = Some(DecisionInfo {
+            approver: &approved.approver,
+            meaning: &approved.meaning,
+            signing_time: &approved.signing_time,
+        });
+        self.accepted_anomalies = Some(&record.accepted_anomalies);
+    }
 }
 
 /// Runs one request document and returns the result line.
@@ -418,11 +461,26 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ReleaseVerifyError> {
     {
         return Err(ReleaseVerifyError::Invalid);
     }
-    let identity =
-        gitsign_identity(request.gitsign.as_ref()).map_err(|()| ReleaseVerifyError::Invalid)?;
+    let input = validate_gitsign(
+        request.gitsign.as_ref(),
+        request.identity_registry.as_deref(),
+    )
+    .map_err(|error| {
+        error.refusal(
+            ReleaseVerifyError::Invalid,
+            ReleaseVerifyError::GitsignPrincipal,
+        )
+    })?;
     let allowed_signers = capture_allowed_signers(&request.allowed_signers)
         .map_err(|_| ReleaseVerifyError::AllowedSigners)?;
-    let mut line = match verify(&request, &allowed_signers, identity.as_ref()) {
+    let gitsign = input
+        .map(|input| load_gitsign(&request.repository, input))
+        .transpose()
+        .map_err(|failure| match failure {
+            RegistryFailure::Invalid => ReleaseVerifyError::IdentityRegistry,
+            RegistryFailure::Git(_) => ReleaseVerifyError::GitFailed,
+        })?;
+    let mut line = match verify(&request, &allowed_signers, gitsign.as_ref()) {
         Ok(line) => line,
         Err(VerifyError::Git) => return Err(ReleaseVerifyError::GitFailed),
         Err(VerifyError::Encoding) => return Err(ReleaseVerifyError::ResultEncoding),
@@ -558,7 +616,7 @@ fn commit_shape(
 fn verify(
     request: &Request,
     allowed_signers: &AllowedSignersSnapshot,
-    identity: Option<&engineering_assurance::signature_verify::GitsignIdentity>,
+    gitsign: Option<&LoadedGitsign>,
 ) -> Result<Vec<u8>, VerifyError> {
     let repository = request.repository.as_path();
     let tag = request
@@ -592,8 +650,11 @@ fn verify(
         (&record.id, &digest),
         &request.allowed_signers,
         allowed_signers,
-        request.gitsign.as_ref(),
-        identity,
+        GitsignEcho::new(
+            request.gitsign.as_ref(),
+            request.identity_registry.as_deref(),
+        ),
+        gitsign,
     );
     let status = approval.assessment().status();
     let approved = approval.assessment().approval().cloned();
@@ -633,30 +694,7 @@ fn verify(
     result.absent_items = absent_items;
     if released && let (Some(approved), Some(resolution)) = (approved.as_ref(), resolution.as_ref())
     {
-        result.status = Status::Released;
-        result.release = Some(ReleaseInfo {
-            id: &record.id,
-            name: &record.name,
-            snapshot_path: &record.snapshot_path,
-        });
-        result.baseline = Some(BaselineInfo {
-            name: &resolution.name,
-            commit: &resolution.commit,
-            items: resolution
-                .items
-                .iter()
-                .map(|item| ItemInfo {
-                    path: &item.path,
-                    kind: item.kind,
-                })
-                .collect(),
-        });
-        result.decision = Some(DecisionInfo {
-            approver: &approved.approver,
-            meaning: &approved.meaning,
-            signing_time: &approved.signing_time,
-        });
-        result.accepted_anomalies = Some(&record.accepted_anomalies);
+        result.mark_released(&record, resolution, approved);
     }
     result.approval = Some(approval);
     encode(&result)

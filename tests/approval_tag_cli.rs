@@ -28,6 +28,7 @@ const BOB: &str = "bob@example.test";
 const IDENTITY: &str = "carol@example.test";
 const ISSUER: &str = concat!("https:", "//issuer.example.test");
 const PRINCIPAL: &str = "Carol Example";
+const REGISTRY: &str = "HEAD:identity-registry.json";
 
 /// Verifies as the FR-040 stand-in does: exits 0 unless `exit_exact_exact` says
 /// otherwise.
@@ -309,8 +310,8 @@ fn verify_request(fixture: &Fixture, tag: &str, gitsign: bool) -> Value {
         value["gitsign"] = json!({
             "certificate_identity": IDENTITY,
             "certificate_oidc_issuer": ISSUER,
-            "principal": PRINCIPAL,
         });
+        value["identity_registry"] = json!(REGISTRY);
     }
     value
 }
@@ -375,6 +376,25 @@ fn tc_341_an_ssh_signed_tag_is_approved_by_approval_verify() {
 fn tc_342_a_gitsign_style_tag_is_approved_with_the_stand_in_gitsign() {
     let fixture = fixture();
     fixture.x509_config();
+    // The registry that names the approver is committed in the repository.
+    let registry = json!({
+        "protocol": "engineering-assurance.gitsign-identity-registry/v1",
+        "entries": [{
+            "certificate_identity": IDENTITY,
+            "certificate_oidc_issuer": ISSUER,
+            "principal": PRINCIPAL,
+        }],
+    });
+    fs::write(
+        fixture.repo().join("identity-registry.json"),
+        registry.to_string(),
+    )
+    .expect("registry");
+    git(&fixture.repo(), &["add", "identity-registry.json"]);
+    git(
+        &fixture.repo(),
+        &["commit", "-q", "-m", "identity registry"],
+    );
     created(&fixture, &tag_request(&fixture, "approve-17", "reviewed"));
     let arguments = fs::read_to_string(fixture.bin().join("sign_args")).expect("signer ran");
     assert!(arguments.contains("-bsau"), "{arguments}");

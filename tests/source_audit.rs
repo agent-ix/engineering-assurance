@@ -1432,3 +1432,27 @@ fn cargo_feature_tree(manifest_path: &Path, features: &[&str]) -> String {
     );
     String::from_utf8(feature_tree.stdout).expect("feature tree must be UTF-8")
 }
+
+#[test]
+#[trace("TC-117", "NFR-005-AC-2")]
+fn tc_117_a_test_case_id_is_tc_and_three_or_more_digits() {
+    for (id, accepted) in [
+        ("TC-117", true),
+        ("TC-1035", true),
+        ("TC-12345", true),
+        ("TC-12", false),
+        ("TC-", false),
+        ("TC-12a", false),
+        ("TC-１１７", false),
+        ("tc-117", false),
+    ] {
+        let source = synthetic_source(&format!(
+            "use ix_trace_rs::TRACE;\n#[test]\n#[TRACE(\"{id}\", \"NFR-005-AC-2\")]\nfn case() {{}}"
+        ));
+        assert_eq!(
+            categories(&source, ATTRIBUTE_TESTS).is_empty(),
+            accepted,
+            "{id}"
+        );
+    }
+}

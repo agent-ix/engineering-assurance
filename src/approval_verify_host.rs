@@ -15,14 +15,13 @@ use engineering_assurance::approval_verify::{
     Approval, ApprovalStatus, Bindings, RECORD_DIGEST_TRAILER, RECORD_ID_TRAILER,
     UnverifiableReason, bind, decide, is_record_value,
 };
-use engineering_assurance::signature_verify::{
-    GitsignIdentity, Verdict, is_plain_revision, trailer_values,
-};
+use engineering_assurance::signature_verify::{Reason, Verdict, is_plain_revision, trailer_values};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::signature_verify_host::{
-    AllowedSignersSnapshot, CheckedTag, GitsignRequest, capture_allowed_signers, check_tag,
+    AllowedSignersSnapshot, CheckedTag, GitsignInput, GitsignRequest, LoadedGitsign,
+    RegistryFailure, capture_allowed_signers, check_tag, load_gitsign, validate_gitsign,
 };
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.approval-verify-request/v1";
@@ -38,14 +37,57 @@ struct Request {
     record_digest: String,
     allowed_signers: PathBuf,
     gitsign: Option<GitsignRequest>,
+    identity_registry: Option<String>,
 }
 
-/// The trust input a verdict was made against, copied from the request.
+/// The trust input a verdict was made against, copied from the request, with
+/// the commit the identity registry revision resolved to.
 #[derive(Serialize)]
 pub(crate) struct Trust<'a> {
     pub(crate) allowed_signers: &'a Path,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) gitsign: Option<&'a GitsignRequest>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) identity_registry: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) identity_registry_commit: Option<&'a str>,
+}
+
+/// The `gitsign` trust of a request as the `trust` member echoes it.
+#[derive(Clone, Copy)]
+pub(crate) struct GitsignEcho<'a> {
+    pub(crate) gitsign: Option<&'a GitsignRequest>,
+    pub(crate) identity_registry: Option<&'a str>,
+}
+
+impl<'a> GitsignEcho<'a> {
+    /// The `gitsign` and `identity_registry` members of a request.
+    pub(crate) const fn new(
+        gitsign: Option<&'a GitsignRequest>,
+        identity_registry: Option<&'a str>,
+    ) -> Self {
+        Self {
+            gitsign,
+            identity_registry,
+        }
+    }
+}
+
+impl<'a> Trust<'a> {
+    /// The trust of a run that read `loaded`, or none when the revision did not
+    /// resolve or no registry was named.
+    pub(crate) fn new(
+        allowed_signers: &'a Path,
+        echo: GitsignEcho<'a>,
+        loaded: Option<&'a LoadedGitsign>,
+    ) -> Self {
+        Self {
+            allowed_signers,
+            gitsign: echo.gitsign,
+            identity_registry: echo.identity_registry,
+            identity_registry_commit: loaded.map(LoadedGitsign::commit),
+        }
+    }
 }
 
 /// The FR-041 result for one tag, less the members that echo the request.
@@ -115,20 +157,32 @@ impl<'a> ResultLine<'a> {
         record: (&'a str, &'a str),
         request_allowed_signers: &'a Path,
         verification_allowed_signers: &AllowedSignersSnapshot,
-        gitsign: Option<&'a GitsignRequest>,
-        identity: Option<&GitsignIdentity>,
+        echo: GitsignEcho<'a>,
+        loaded: Option<&'a LoadedGitsign>,
+    ) -> Self {
+        let checked = check_tag(repository, tag, verification_allowed_signers, loaded);
+        Self::from_checked(
+            checked,
+            tag,
+            record,
+            Trust::new(request_allowed_signers, echo, loaded),
+        )
+    }
+
+    /// The result for a tag that was checked, or never read.
+    pub(crate) fn from_checked(
+        checked: CheckedTag,
+        tag: &'a str,
+        record: (&'a str, &'a str),
+        trust: Trust<'a>,
     ) -> Self {
         let (record_id, record_digest) = record;
-        let checked = check_tag(repository, tag, verification_allowed_signers, identity);
         Self {
             protocol: RESULT_PROTOCOL,
             tag: tag.strip_prefix("refs/tags/").unwrap_or(tag),
             record_id,
             record_digest,
-            trust: Trust {
-                allowed_signers: request_allowed_signers,
-                gitsign,
-            },
+            trust,
             tag_object_id: checked.tag_object_id.clone(),
             assessment: assess(checked, record_id, record_digest),
         }
@@ -138,22 +192,6 @@ impl<'a> ResultLine<'a> {
     pub(crate) const fn assessment(&self) -> &Assessment {
         &self.assessment
     }
-}
-
-/// The `gitsign` identity of a request, or `Err` when it is not acceptable.
-pub(crate) fn gitsign_identity(
-    request: Option<&GitsignRequest>,
-) -> Result<Option<GitsignIdentity>, ()> {
-    request
-        .map(|g| {
-            GitsignIdentity::new(
-                g.certificate_identity.clone(),
-                g.certificate_oidc_issuer.clone(),
-                g.principal.clone(),
-            )
-            .ok_or(())
-        })
-        .transpose()
 }
 
 /// Typed refusal that produces no verdict.
@@ -170,6 +208,12 @@ pub(crate) enum ApprovalVerifyError {
         "approval-verify allowed-signers file is not a readable UTF-8 regular file of at most 1 MiB"
     )]
     AllowedSigners,
+    /// The `gitsign` member names a person, which only the identity registry may do.
+    #[error("approval-verify gitsign member must not carry a principal")]
+    GitsignPrincipal,
+    /// The identity registry source is invalid or its content is unusable.
+    #[error("approval-verify identity registry is not a usable committed registry")]
+    IdentityRegistry,
     /// The result cannot be encoded.
     #[error("approval-verify result cannot be encoded")]
     ResultEncoding,
@@ -182,8 +226,32 @@ impl ApprovalVerifyError {
             Self::Unreadable => "approval_verify_request_unreadable",
             Self::Invalid => "approval_verify_request_invalid",
             Self::AllowedSigners => "approval_verify_allowed_signers_invalid",
+            Self::GitsignPrincipal => "approval_verify_gitsign_principal_refused",
+            Self::IdentityRegistry => "approval_verify_identity_registry_invalid",
             Self::ResultEncoding => "approval_verify_result_encoding_failed",
         }
+    }
+}
+
+/// What reading the identity registry of a request yielded.
+enum Registry {
+    /// The registry was read, or the request names none.
+    Loaded(Option<LoadedGitsign>),
+    /// Git could not answer while the registry was read.
+    GitFailed(Reason),
+}
+
+fn load_registry(
+    repository: &Path,
+    input: Option<GitsignInput>,
+) -> Result<Registry, ApprovalVerifyError> {
+    match input
+        .map(|input| load_gitsign(repository, input))
+        .transpose()
+    {
+        Ok(loaded) => Ok(Registry::Loaded(loaded)),
+        Err(RegistryFailure::Invalid) => Err(ApprovalVerifyError::IdentityRegistry),
+        Err(RegistryFailure::Git(reason)) => Ok(Registry::GitFailed(reason)),
     }
 }
 
@@ -202,19 +270,42 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalVerifyError> {
     {
         return Err(ApprovalVerifyError::Invalid);
     }
-    let identity =
-        gitsign_identity(request.gitsign.as_ref()).map_err(|()| ApprovalVerifyError::Invalid)?;
+    let input = validate_gitsign(
+        request.gitsign.as_ref(),
+        request.identity_registry.as_deref(),
+    )
+    .map_err(|error| {
+        error.refusal(
+            ApprovalVerifyError::Invalid,
+            ApprovalVerifyError::GitsignPrincipal,
+        )
+    })?;
     let allowed_signers = capture_allowed_signers(&request.allowed_signers)
         .map_err(|_| ApprovalVerifyError::AllowedSigners)?;
-    let result = ResultLine::verify(
-        &request.repository,
-        &request.tag,
-        (&request.record_id, &request.record_digest),
-        &request.allowed_signers,
-        &allowed_signers,
+    let registry = load_registry(&request.repository, input)?;
+    let echo = GitsignEcho::new(
         request.gitsign.as_ref(),
-        identity.as_ref(),
+        request.identity_registry.as_deref(),
     );
+    let record = (request.record_id.as_str(), request.record_digest.as_str());
+    let result = match &registry {
+        Registry::Loaded(loaded) => ResultLine::verify(
+            &request.repository,
+            &request.tag,
+            record,
+            &request.allowed_signers,
+            &allowed_signers,
+            echo,
+            loaded.as_ref(),
+        ),
+        // Git could not answer while the registry was read: no verifier starts.
+        Registry::GitFailed(reason) => ResultLine::from_checked(
+            CheckedTag::unread(*reason),
+            &request.tag,
+            record,
+            Trust::new(&request.allowed_signers, echo, None),
+        ),
+    };
     let mut line = serde_json::to_vec(&result).map_err(|_| ApprovalVerifyError::ResultEncoding)?;
     line.push(b'\n');
     Ok(line)

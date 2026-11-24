@@ -4,11 +4,12 @@
 //! Contract tests for the pure signature-verification classifier (FR-036).
 
 use engineering_assurance::signature_verify::{
-    CommitObservation, GitGrade, GitsignIdentity, MAX_REVISION_BYTES, Mapping, Mismatch, Presence,
-    PrincipalLookup, Probe, Reason, Run, SignatureFormat, SignatureKind, SignerSource, SshCheck,
-    Status, TagObservation, TargetKind, classify_commit, classify_gitsign, classify_tag,
-    commit_signature_format, config_sets_gitsign_key, is_plain_revision, object_message,
-    signed_off_meaning, split_tag_object,
+    CommitObservation, GitGrade, GitsignIdentity, GitsignTrust, IdentityRegistry,
+    MAX_REGISTRY_ENTRIES, MAX_REVISION_BYTES, Mapping, Mismatch, Presence, PrincipalLookup, Probe,
+    Reason, RegistryEntry, Run, SignatureFormat, SignatureKind, SignerSource, SshCheck, Status,
+    TagObservation, TargetKind, TrustSourceAddress, classify_commit, classify_gitsign,
+    classify_tag, commit_signature_format, config_sets_gitsign_key, is_plain_revision,
+    object_message, signed_off_meaning, split_tag_object,
 };
 use ix_trace_rs::trace;
 
@@ -290,25 +291,39 @@ fn tc_275_a_message_is_everything_after_the_header_block() {
     assert_eq!(object_message(b"tree x\n"), b"");
 }
 
+const ISSUER: &str = concat!("https:", "//issuer.example.test");
+const OTHER_ISSUER: &str = concat!("https:", "//other.example.test");
+
 fn identity() -> GitsignIdentity {
-    GitsignIdentity::new(
-        "alice@example.test".to_owned(),
-        concat!("https:", "//issuer.example.test").to_owned(),
-        "Alice Example".to_owned(),
-    )
-    .expect("valid identity")
+    GitsignIdentity::new("alice@example.test".to_owned(), ISSUER.to_owned())
+        .expect("valid identity")
+}
+
+fn entry(identity: &str, issuer: &str, principal: &str) -> RegistryEntry {
+    RegistryEntry::new(identity.to_owned(), issuer.to_owned(), principal.to_owned())
+        .expect("valid entry")
+}
+
+/// A trust whose registry names Alice for the fixture identity and issuer.
+fn trust() -> GitsignTrust {
+    let registry = IdentityRegistry::new(vec![
+        entry("bob@example.test", ISSUER, "Bob Example"),
+        entry("alice@example.test", ISSUER, "Alice Example"),
+    ])
+    .expect("valid registry");
+    GitsignTrust::new(identity(), registry)
 }
 
 /// Runs the classifier against a script of outcomes by probe; returns the
 /// verdict and the probes asked for, in order. The classifier takes no message
 /// text, so replacing the text of a captured outcome cannot change a verdict.
 fn gitsign(
-    identity: Option<&GitsignIdentity>,
+    trust: Option<&GitsignTrust>,
     repository_sets_key: bool,
     outcomes: &[(Probe, Run)],
 ) -> (engineering_assurance::signature_verify::Verdict, Vec<Probe>) {
     let mut asked = Vec::new();
-    let verdict = classify_gitsign(TargetKind::Commit, identity, repository_sets_key, |probe| {
+    let verdict = classify_gitsign(TargetKind::Commit, trust, repository_sets_key, |probe| {
         asked.push(probe);
         outcomes
             .iter()
@@ -321,13 +336,13 @@ fn gitsign(
 #[test]
 #[trace("TC-293", "FR-040-AC-10", "FR-040-CON-1")]
 fn tc_293_gitsign_outcomes_map_to_statuses_mismatches_and_reasons() {
-    let id = identity();
+    let id = trust();
     let (valid, asked) = gitsign(Some(&id), false, &[(Probe::Exact, Run::Exit(0))]);
     assert_eq!(valid.status, Status::SignedValid);
     assert_eq!(valid.signature_kind, Some(SignatureKind::Gitsign));
     assert_eq!(asked, [Probe::Exact]);
     let signer = valid.signer.expect("signer");
-    assert_eq!(signer.source, SignerSource::Request);
+    assert_eq!(signer.source, SignerSource::GitsignRegistry);
     assert_eq!(signer.mapping, Mapping::Mapped);
     assert_eq!(signer.principal.as_deref(), Some("Alice Example"));
     assert_eq!(
@@ -424,6 +439,22 @@ fn tc_293_gitsign_outcomes_map_to_statuses_mismatches_and_reasons() {
 }
 
 #[test]
+#[trace("TC-1041", "FR-040-AC-25", "FR-040-CON-3")]
+fn tc_1041_an_accepted_identity_no_registry_entry_names_is_valid_and_unmapped() {
+    let stranger = GitsignTrust::new(
+        identity(),
+        IdentityRegistry::new(vec![entry("bob@example.test", ISSUER, "Bob Example")])
+            .expect("valid registry"),
+    );
+    let (unmapped, _) = gitsign(Some(&stranger), false, &[(Probe::Exact, Run::Exit(0))]);
+    assert_eq!(unmapped.status, Status::SignedValid);
+    let signer = unmapped.signer.expect("signer");
+    assert_eq!(signer.source, SignerSource::GitsignRegistry);
+    assert_eq!(signer.mapping, Mapping::Unmapped);
+    assert_eq!(signer.principal, None);
+}
+
+#[test]
 #[trace("TC-294", "FR-040-AC-9")]
 fn tc_294_cms_headers_are_detected_and_mixed_formats_are_unsupported() {
     let cms = "-----BEGIN SIGNED MESSAGE-----";
@@ -463,11 +494,60 @@ fn tc_294_cms_headers_are_detected_and_mixed_formats_are_unsupported() {
 #[test]
 #[trace("TC-296", "FR-040-AC-11")]
 fn tc_296_gitsign_identity_values_are_bounded() {
+    let make =
+        |identity: &str, issuer: &str| GitsignIdentity::new(identity.to_owned(), issuer.to_owned());
+    assert!(make("a", "issuer").is_some());
+    assert!(make(&"x".repeat(256), "i").is_some());
+    for (identity, issuer) in [
+        ("", "i"),
+        ("a", ""),
+        ("-a", "i"),
+        ("a", "-i"),
+        ("a\n", "i"),
+        ("a", "i\u{7}"),
+    ] {
+        assert!(make(identity, issuer).is_none(), "{identity:?}");
+    }
+    assert!(make(&"x".repeat(257), "i").is_none());
+    assert!(make("a", &"x".repeat(257)).is_none());
+}
+
+#[test]
+#[trace("TC-1041", "FR-040-AC-25", "FR-040-CON-3")]
+fn tc_1041_the_registry_maps_only_by_exact_identity_and_issuer() {
+    let registry = IdentityRegistry::new(vec![
+        entry("bob@example.test", ISSUER, "Bob Example"),
+        entry("alice@example.test", ISSUER, "Alice Example"),
+    ])
+    .expect("valid registry");
+    assert_eq!(
+        registry.principal("alice@example.test", ISSUER),
+        Some("Alice Example")
+    );
+    for (identity, issuer) in [
+        ("ALICE@example.test", ISSUER),
+        ("alice@example", ISSUER),
+        ("alice@example.test.evil", ISSUER),
+        ("alice@.*", ISSUER),
+        (".*", ".*"),
+        ("alice@example.test", OTHER_ISSUER),
+        ("alice@example.test", ""),
+        ("bob@example.test", OTHER_ISSUER),
+    ] {
+        assert_eq!(registry.principal(identity, issuer), None, "{identity}");
+    }
+}
+
+#[test]
+#[trace("TC-1043", "FR-040-AC-27")]
+fn tc_1043_registry_entries_and_size_are_bounded_and_duplicates_refused() {
     let make = |identity: &str, issuer: &str, principal: &str| {
-        GitsignIdentity::new(identity.to_owned(), issuer.to_owned(), principal.to_owned())
+        RegistryEntry::new(identity.to_owned(), issuer.to_owned(), principal.to_owned())
     };
-    assert!(make("a", "issuer", "p").is_some());
+    assert!(make("a", "i", "p").is_some());
     assert!(make(&"x".repeat(256), "i", &"p".repeat(256)).is_some());
+    // A principal may begin with `-`: it is never an argument.
+    assert!(make("a", "i", "-p").is_some());
     for (identity, issuer, principal) in [
         ("", "i", "p"),
         ("a", "", "p"),
@@ -480,11 +560,62 @@ fn tc_296_gitsign_identity_values_are_bounded() {
     ] {
         assert!(make(identity, issuer, principal).is_none(), "{identity:?}");
     }
-    assert!(make(&"x".repeat(257), "i", "p").is_none());
-    assert!(make("a", &"x".repeat(257), "p").is_none());
-    assert!(make("a", "i", &"x".repeat(257)).is_none());
-    // A principal may begin with `-`: it is never an argument.
-    assert!(make("a", "i", "-p").is_some());
+    assert!(make("a", "i", &"p".repeat(257)).is_none());
+
+    let numbered = |count: usize| -> Vec<RegistryEntry> {
+        (0..count)
+            .map(|n| entry(&format!("user{n}@example.test"), ISSUER, "P"))
+            .collect()
+    };
+    assert!(IdentityRegistry::new(numbered(MAX_REGISTRY_ENTRIES)).is_some());
+    assert!(IdentityRegistry::new(numbered(MAX_REGISTRY_ENTRIES + 1)).is_none());
+    // The same identity and issuer twice is invalid, whatever the principals.
+    for second in ["Alice", "Someone Else"] {
+        let duplicate = vec![
+            entry("a", "i", "Alice"),
+            entry("b", "i", "Bob"),
+            entry("a", "i", second),
+        ];
+        assert!(IdentityRegistry::new(duplicate).is_none(), "{second}");
+    }
+    // The same identity under two issuers is two entries.
+    assert!(IdentityRegistry::new(vec![entry("a", "i", "P"), entry("a", "j", "P")]).is_some());
+}
+
+#[test]
+#[trace("TC-1038", "FR-037-AC-20")]
+fn tc_1038_a_trust_source_address_splits_at_the_first_colon_and_is_bounded() {
+    let parsed = TrustSourceAddress::parse("main:spec/registry.json").expect("well formed");
+    assert_eq!(
+        (parsed.revision(), parsed.path()),
+        ("main", "spec/registry.json")
+    );
+    // Only the first colon splits: the rest is the path.
+    let parsed = TrustSourceAddress::parse("HEAD@{12:00}").expect("well formed");
+    assert_eq!((parsed.revision(), parsed.path()), ("HEAD@{12", "00}"));
+    let parsed = TrustSourceAddress::parse("a:b:c").expect("well formed");
+    assert_eq!((parsed.revision(), parsed.path()), ("a", "b:c"));
+    for address in [
+        "",
+        "main",
+        ":path",
+        "main:",
+        "-main:path",
+        "main:/path",
+        "main:a/../b",
+        "main:../b",
+        "main:./b",
+        "main:a//b",
+        "main:a/",
+        "ma\u{7}in:path",
+        "main:pa\nth",
+    ] {
+        assert!(TrustSourceAddress::parse(address).is_none(), "{address:?}");
+    }
+    assert!(TrustSourceAddress::parse(&format!("{}:p", "r".repeat(256))).is_some());
+    assert!(TrustSourceAddress::parse(&format!("{}:p", "r".repeat(257))).is_none());
+    assert!(TrustSourceAddress::parse(&format!("r:{}", "p".repeat(1024))).is_some());
+    assert!(TrustSourceAddress::parse(&format!("r:{}", "p".repeat(1025))).is_none());
 }
 
 #[test]

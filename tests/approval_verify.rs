@@ -43,7 +43,22 @@ fn verdict(status: Status, meaning: Option<Presence>) -> Verdict {
 }
 
 fn verdict_with(status: Status, signed_off_meaning: Option<SignedOffMeaning>) -> Verdict {
+    verdict_mapped(status, Mapping::Mapped, signed_off_meaning)
+}
+
+/// A verdict whose `signed_valid` signer has `mapping`: a gitsign identity that
+/// no registry entry names is valid and unmapped.
+fn verdict_mapped(
+    status: Status,
+    mapping: Mapping,
+    signed_off_meaning: Option<SignedOffMeaning>,
+) -> Verdict {
     let signer = match status {
+        Status::SignedValid if mapping == Mapping::Unmapped => Some(Signer {
+            source: SignerSource::GitsignRegistry,
+            mapping: Mapping::Unmapped,
+            principal: None,
+        }),
         Status::SignedValid => Some(Signer {
             source: SignerSource::AllowedSigners,
             mapping: Mapping::Mapped,
@@ -67,6 +82,7 @@ fn verdict_with(status: Status, signed_off_meaning: Option<SignedOffMeaning>) ->
         certificate: None,
         mismatch: None,
         signed_off_meaning,
+        identity_registry_commit: None,
     }
 }
 
@@ -90,13 +106,14 @@ const MEANINGS: [Meaning; 6] = [
     Meaning::RealThenEmpty,
 ];
 
-fn meaning_verdict(status: Status, meaning: Meaning) -> Verdict {
+fn meaning_verdict(status: Status, mapping: Mapping, meaning: Meaning) -> Verdict {
     let present = |values: &[&str]| SignedOffMeaning {
         presence: Presence::Present,
         values: values.iter().map(|value| (*value).to_owned()).collect(),
     };
-    verdict_with(
+    verdict_mapped(
         status,
+        mapping,
         match meaning {
             Meaning::Unread => None,
             Meaning::Missing => Some(SignedOffMeaning {
@@ -112,8 +129,14 @@ fn meaning_verdict(status: Status, meaning: Meaning) -> Verdict {
 }
 
 /// The one combination CON-1 allows `approved` for.
-fn is_approval(status: Status, bindings: Option<Bindings>, meaning: Meaning) -> bool {
+fn is_approval(
+    status: Status,
+    mapping: Mapping,
+    bindings: Option<Bindings>,
+    meaning: Meaning,
+) -> bool {
     status == Status::SignedValid
+        && mapping == Mapping::Mapped
         && bindings
             == Some(Bindings {
                 record_id: Binding::Match,
@@ -138,34 +161,39 @@ fn tc_310_every_combination_decides_and_only_one_is_approved() {
     let mut approved = 0;
     let mut total = 0;
     for status in STATUSES {
-        for bindings in &combinations {
-            for meaning in MEANINGS {
-                total += 1;
-                let decision = decide(&meaning_verdict(status, meaning), *bindings, None);
-                let expected = is_approval(status, *bindings, meaning);
-                assert_eq!(
-                    decision.status == ApprovalStatus::Approved,
-                    expected,
-                    "{status:?} {bindings:?} {meaning:?}"
-                );
-                assert_eq!(decision.approval.is_some(), expected);
-                // The signing time fills an approval and changes no status.
-                let timed = decide(
-                    &meaning_verdict(status, meaning),
-                    *bindings,
-                    time_at(1_772_598_600),
-                );
-                assert_eq!(timed.status, decision.status);
-                assert_eq!(timed.reason, decision.reason);
-                assert_eq!(
-                    decision.reason.is_some(),
-                    decision.status == ApprovalStatus::Unverifiable
-                );
-                approved += usize::from(expected);
+        for mapping in [Mapping::Mapped, Mapping::Unmapped] {
+            for bindings in &combinations {
+                for meaning in MEANINGS {
+                    total += 1;
+                    let verdict = meaning_verdict(status, mapping, meaning);
+                    let decision = decide(&verdict, *bindings, None);
+                    let expected = is_approval(status, mapping, *bindings, meaning);
+                    assert_eq!(
+                        decision.status == ApprovalStatus::Approved,
+                        expected,
+                        "{status:?} {mapping:?} {bindings:?} {meaning:?}"
+                    );
+                    assert_eq!(decision.approval.is_some(), expected);
+                    // A valid signature no trust entry names is an untrusted
+                    // signer, whatever the binding or the meaning.
+                    if status == Status::SignedValid && mapping == Mapping::Unmapped {
+                        assert_eq!(decision.status, ApprovalStatus::UntrustedSigner);
+                        assert_eq!(decision.reason, None);
+                    }
+                    // The signing time fills an approval and changes no status.
+                    let timed = decide(&verdict, *bindings, time_at(1_772_598_600));
+                    assert_eq!(timed.status, decision.status);
+                    assert_eq!(timed.reason, decision.reason);
+                    assert_eq!(
+                        decision.reason.is_some(),
+                        decision.status == ApprovalStatus::Unverifiable
+                    );
+                    approved += usize::from(expected);
+                }
             }
         }
     }
-    assert_eq!(total, 5 * 17 * MEANINGS.len());
+    assert_eq!(total, 5 * 2 * 17 * MEANINGS.len());
     assert_eq!(approved, 1);
 }
 
