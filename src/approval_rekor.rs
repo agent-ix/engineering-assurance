@@ -288,11 +288,20 @@ mod tests {
                 "baseUrl": "urn:ea-306-offline-fixture",
                 "hashAlgorithm": "SHA2_256",
                 "publicKey": {
-                    "rawBytes": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEM+oXmw0MPZmfQ1XPmWxxys0Wi5e/NKv5kU2AHG+apj/M+RrHcQEelIklJm94O2tBPZN3bX/xTxD5aIbFSCoiwA==",
+                    "rawBytes": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE0OOrukb0TlXmQ+VGSmn/KIiD7F5VEQ7c6yO9wh1EkRJxSUD14B4SQDrLcqeNflP7M1DMjxK9DDiNOij+M9zX6A==",
                     "keyDetails": "PKIX_ECDSA_P256_SHA_256",
                     "validFor": { "start": "2020-01-01T00:00:00Z", "end": "2099-01-01T00:00:00Z" }
                 },
-                "logId": { "keyId": "6bO1Ky4NBPRL0tn6bavKTZwrBEyAHU9igPi/9sPwHSg=" }
+                "logId": { "keyId": "72outTSDeRP7OxwD1u4X5TUijrbl/GrQCMu04tF5vr8=" }
+            }, {
+                "baseUrl": "urn:ea-306-offline-fixture-two",
+                "hashAlgorithm": "SHA2_256",
+                "publicKey": {
+                    "rawBytes": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEFEKTsPqQ1yX7t+HtszWIVrGqpEU2kcO4Go5C1evhijExaVQO1jy8BDqXSjuLTTCzuiWNKl9J0FO/IV5tASqbsQ==",
+                    "keyDetails": "PKIX_ECDSA_P256_SHA_256",
+                    "validFor": { "start": "2020-01-01T00:00:00Z", "end": "2099-01-01T00:00:00Z" }
+                },
+                "logId": { "keyId": "3pYjQzKKsAXQI0v795v01hYeWIDo6qDA7CBVrC77FPA=" }
             }],
             "certificateAuthorities": [{
                 "subject": { "commonName": "EA Offline Fixture Root" },
