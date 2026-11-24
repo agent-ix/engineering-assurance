@@ -32,7 +32,7 @@ fn foreground_group() -> Pid {
 fn deadline_scenario(directory: &std::path::Path) {
     let before = foreground_group();
     let pid_file = directory.join("child.pid");
-    let script = format!("echo $$ > '{}'; read -r line < /dev/tty", pid_file.display());
+    let script = format!("echo $$ > '{}'; sleep 30", pid_file.display());
     let started = Instant::now();
     let result = run_configured_foreground(
         OsStr::new("/bin/sh"),
