@@ -269,6 +269,38 @@ impl WorkflowIdentityDocument {
         })
     }
 
+    /// Every `receipt_writer` entry that signs tag receipts (FR-081), that is
+    /// every one carrying `source_ref_prefix`, as its signer and caller policy.
+    ///
+    /// A tag receipt names no signer, so a verifier tries each pair in turn.
+    #[must_use]
+    pub fn tag_receipt_signers(
+        &self,
+        transparency: TransparencyRequirement,
+    ) -> Vec<(WorkflowIdentityPolicy, SourceWorkflowPolicy)> {
+        self.identities
+            .iter()
+            .filter(|entry| entry.role == WorkflowRole::ReceiptWriter)
+            .filter_map(|entry| {
+                let source = SourceWorkflowPolicy {
+                    repository: entry.source_repository.clone()?,
+                    workflow_path: entry.source_workflow_path.clone()?,
+                    event: entry.event.clone()?,
+                    source_ref: None,
+                    source_ref_prefix: Some(entry.source_ref_prefix.clone()?),
+                };
+                let signer = WorkflowIdentityPolicy {
+                    repository: entry.repository.clone(),
+                    workflow_path: entry.workflow_path.clone(),
+                    references: BTreeSet::from([entry.reference.clone()]),
+                    issuer: entry.issuer.clone(),
+                    transparency,
+                };
+                Some((signer, source))
+            })
+            .collect()
+    }
+
     /// Find the source workflow policy associated with an exact reusable
     /// release or receipt signer entry.
     #[must_use]
@@ -344,11 +376,17 @@ impl WorkflowIdentityEntry {
                         .as_deref()
                         .is_some_and(valid_workflow_path)
                     && self.event.as_deref() == Some("push")
-                    && self
-                        .source_ref
-                        .as_deref()
-                        .is_some_and(|value| value.starts_with("refs/heads/") && valid_ref(value))
-                    && self.source_ref_prefix.is_none()
+                    && match (&self.source_ref, &self.source_ref_prefix) {
+                        // A change receipt: one exact branch ref (FR-074).
+                        (Some(value), None) => {
+                            value.starts_with("refs/heads/") && valid_ref(value)
+                        }
+                        // A tag receipt: a literal tag-ref prefix (FR-081).
+                        (None, Some(prefix)) => {
+                            prefix.starts_with("refs/tags/") && valid_ref(prefix)
+                        }
+                        _ => false,
+                    }
             }
         }
     }
