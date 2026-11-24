@@ -59,7 +59,9 @@ access. This is accepted for gitsign signatures only; the SSH path of FR-036
 stays offline.
 
 Out of scope: Fulcio, Rekor and transparency-log checks beyond what `gitsign`
-itself performs, offline trust roots, the production of signatures, any policy
+itself performs, except that FR-041 verifies the Rekor entry embedded in an
+approval tag through the `sigstore-verify` library to report a trusted signing
+time (FR-040-CON-2), offline trust roots, the production of signatures, any policy
 about which identities may approve or release, and OpenPGP signatures (which
 remain `unverifiable`, FR-036).
 
@@ -302,7 +304,7 @@ remain `unverifiable`, FR-036).
 | --- | --- | --- | --- |
 | FR-040-CON-1 | A result SHALL NOT be `signed_valid` for a gitsign signature unless `gitsign` run with the request's exact identity and issuer, in the environment above, exited 0, the source repository's configuration (includes and worktree configuration included) has no `gitsign.*` key, and, for a tag, the isolated snapshot's configuration also has no `gitsign.*`, `include` or `includeIf` key. | Safety | Test |
 | FR-040-CON-3 | A gitsign signer SHALL NOT be reported `mapped` unless the identity and issuer `gitsign` accepted equal an entry of the identity registry read from the committed revision the request names, and no `principal` is taken from a request. | Safety | Test |
-| FR-040-CON-2 | The implementation SHALL contain no cryptographic, certificate-parsing or Sigstore client code, and add no crate dependency that performs signature verification. | Architecture | Inspection |
+| FR-040-CON-2 | The implementation SHALL contain no cryptographic, certificate-parsing or Sigstore client code of its own, and add no crate dependency that performs signature verification, with one exception: transparency-log time verification for FR-041 (SET, inclusion proof and entry binding of the Rekor entry embedded in a gitsign tag) is done only by the `sigstore-verify` crate Engineering Assurance already depends on. Reading `integratedTime` without that verification is forbidden. Every other exclusion, including Fulcio checks, offline trust roots and any `gitsign` classification by anything but `gitsign`, stays. | Architecture | Inspection |
 
 ## Acceptance Criteria
 
@@ -334,7 +336,7 @@ bad signature is `unverifiable`.
 | FR-040-AC-11 | A request whose `gitsign` member lacks a field, has an empty or oversized value, a leading `-` identity, a control character, or an unknown member other than `principal`, a request with `gitsign` and no `identity_registry` (with or without a `principal` in `gitsign`), with `identity_registry` and no `gitsign`, or with an `identity_registry` that is not a well-formed `<rev>:<path>` address, yields `signature_verify_request_invalid` and exit status 2, and does not start git or `gitsign`. | Test |
 | FR-040-AC-12 | An SSH-signed commit and tag in a request that also carries `gitsign` yield the FR-036 and FR-037 statuses, signer principal and mapping unchanged, with `signature_kind` `ssh` and `signer.source` `allowed_signers`, and `gitsign` is never started; the identity registry is still read and validated, so an invalid registry in such a request yields `signature_verify_identity_registry_invalid`. | Test (stand-in) |
 | FR-040-AC-13 | A gitsign-signed commit and tag whose message carries a `Signed-off-meaning:` trailer report it as FR-037 does, and an `unverifiable` gitsign commit still reports it. | Test (stand-in) |
-| FR-040-AC-14 | The `signature-verify` feature and the binary add no crate dependency that performs signature verification, cryptography or Sigstore access; the only verifying programs invoked are git, `ssh-keygen` and `gitsign`. | Inspection |
+| FR-040-AC-14 | The `signature-verify` feature and the binary add no crate dependency that performs signature verification, cryptography or Sigstore access, other than the already-present `sigstore-verify` crate used only for FR-041's trusted time and the digest FR-037-CON-3 allows; the only verifying programs invoked are git, `ssh-keygen` and `gitsign`. | Inspection |
 | FR-040-AC-15 | Against real `gitsign` v0.18.0 and available Sigstore trust services, a public gitsign-signed commit and annotated tag yield `signed_valid` for their true identity and issuer; the same objects yield `signed_untrusted` with `mismatch` `identity` for a wrong identity and `mismatch` `issuer` for a wrong issuer. The run records the exact gitsign version, object ids, identity, issuer, and network/trust-service outcome. | Test (live, ignored by default) |
 | FR-040-AC-16 | The gitsign argument vectors, including `verify`, `verify-tag`, the four certificate flags and the wildcard values, match the command line documented for gitsign v0.18.0. | Inspection |
 | FR-040-AC-17 | A CMS-signed commit in a repository that sets `gitsign.fulcioRoot` (or any other `gitsign.*` key) in its local configuration, in a file named by `include.path`, or in `config.worktree` with `extensions.worktreeConfig` enabled, or injected by a newline inside another key's value (including one whose first token holds a non-ASCII character, such as `gitſign.`), yields `unverifiable` with reason `gitsign_repository_config`, and the stand-in is never started; a repository with no such key proceeds. | Test (stand-in) |

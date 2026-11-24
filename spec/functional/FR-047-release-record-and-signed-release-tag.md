@@ -63,8 +63,8 @@ signature.
 
 - One request document `engineering-assurance.release-verify-request/v1` with
   `protocol`, `repository` (absolute directory), `tag`, `record_path`
-  (repository-relative path of the release record), `allowed_signers` (absolute
-  file) and optionally `gitsign` with its `identity_registry`, with the bounds FR-041 sets for them (the refusals of a `principal` and of an unusable registry use the codes `release_verify_gitsign_principal_refused` and `release_verify_identity_registry_invalid`). Unknown
+  (repository-relative path of the release record), `allowed_signers` (an absolute
+  file or a `<rev>:<path>` trust source, as FR-041) and optionally `gitsign` with its `identity_registry`, with the bounds FR-041 sets for them (the refusals of a `principal` and of an unusable registry use the codes `release_verify_gitsign_principal_refused` and `release_verify_identity_registry_invalid`). Unknown
   members are rejected.
 - One Release document with a closed frontmatter schema: `id`, `title`,
   `type: Release`, `name`, `baseline` (an object with `path`, the
@@ -84,12 +84,18 @@ signature.
   `baseline_commit_unknown`, `baseline_file_absent`, `baseline_file_invalid`,
   `release_commit_not_child_of_baseline`, `release_commit_changes_other_paths`, `release_commit_record_not_added`,
   `release_commit_snapshot_not_added`, `snapshot_path_present_at_baseline`, `baseline_item_absent`, `decision_owner_mismatch`.
+- The `trust` member, on every result with a verdict, the FR-041 `trust` object
+  of the run (`allowed_signers`, `allowed_signers_sha256`, `allowed_signers_commit`
+  for a `<rev>:<path>` source, `ea_version`, and the gitsign members when
+  supplied), so the trust identity is kept even when `approval` is absent.
 - The `approval` member, the unchanged FR-041 result for the tag, whenever the
   record was readable and valid; it is absent, and FR-041 is not run, when the
   reasons include `record_unreadable` or `record_invalid`.
 - On `released` only: `release` (record `id`, `name`, `snapshot_path`), `baseline` (`name`,
-  `commit`, and each item `path`, `kind`), `approver`, `meaning`, `signed_at`
-  with its source, and `accepted_anomalies`.
+  `commit`, and each item `path`, `kind`), `approver`, `meaning`, the claimed time `signed_at` with its source (or
+  `signed_at_missing`), the trusted time of FR-041 (`trusted_at` with
+  `trusted_at_source`, or `trusted_at_missing`) and `time_skew` when present,
+  and `accepted_anomalies`.
 - On `not_released` with a resolved Baseline, `absent_items` lists the path of
   each Baseline item absent at the baseline commit; it is absent otherwise.
 - A request that yields no verdict writes the `engineering-assurance.error/v1`
@@ -147,6 +153,9 @@ signature.
 - The command SHALL NOT decide what a meaning permits.
 - The command SHALL NOT record, compute or accept a digest, hash or manifest of
   the baseline.
+- The command SHALL report `trust` for every verdict from the single trust-input
+  reading the FR-041 verification used, and SHALL NOT read the allowed-signers
+  source a second time.
 - The command SHALL NOT create, move, push or delete any ref.
 - The command SHALL NOT report `released` from a record, a commit signature, a
   merge commit, a note or a lightweight tag.
@@ -157,7 +166,7 @@ signature.
 | --- | --- | --- | --- |
 | FR-047-CON-1 | A result SHALL NOT be `released` unless the FR-041 status for the tag is `approved`. | Safety | Test |
 | FR-047-CON-2 | The command SHALL contain no signature, certificate or trailer-parsing code of its own and no rule of FR-036, FR-037, FR-040 or FR-041 restated. | Architecture | Inspection |
-| FR-047-CON-3 | The command SHALL contain no hashing code. | Architecture | Inspection |
+| FR-047-CON-3 | The release module SHALL contain no hashing code; the SHA-256 of the allowed-signers bytes in `trust` comes from the shared trust-input reading of FR-037 (FR-037-CON-3), not from this module. | Architecture | Inspection |
 
 ## Acceptance Criteria
 
@@ -176,6 +185,8 @@ signature.
 | FR-047-AC-11 | Static inspection shows no signature, certificate, trailer-parsing or hashing code in the release module (CON-2, CON-3). | Inspection |
 | FR-047-AC-12 | The decision from the FR-041 status and the record checks is exercised without any process, over every combination, and `released` is returned for exactly one. | Property |
 | FR-047-AC-14 | A request whose `gitsign` member carries `principal`, and that otherwise validates, yields `release_verify_gitsign_principal_refused`; an `identity_registry` whose source is `invalid` or whose content is unusable yields `release_verify_identity_registry_invalid`; a git that fails while the registry is read yields `release_verify_git_failed`; each exits 2 with no verdict. | Test |
+| FR-047-AC-15 | Every `release-verify` result with a verdict, `released` or `not_released` and including one with no `approval` member, carries a top-level `trust` equal to the `approval.trust` of the same run when `approval` is present, with `allowed_signers_sha256`, `ea_version` and, for a `<rev>:<path>` source, `allowed_signers_commit`; editing the allowed-signers file after signing changes `allowed_signers_sha256` of an absolute-path request but not that of a `<rev>:<path>` request naming the commit in force at signing. | Test |
+| FR-047-AC-16 | A `released` result carries the `signed_at`, `signed_at_source` and `trusted_at` or `trusted_at_missing` members of the FR-041 result of the same run, and `time_skew` when both times are present and differ. | Test |
 | FR-047-AC-13 | A git that fails every call yields `release_verify_git_failed` at exit 2 and no verdict, and a replace ref or a graft in the repository changes neither the record read nor the parent compared. | Test |
 
 ## Dependencies
