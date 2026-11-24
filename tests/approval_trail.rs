@@ -9,12 +9,17 @@ use engineering_assurance::approval_trail::{
 use ix_trace_rs::trace;
 
 fn key<'a>(claimed_at: Option<&'a str>, tag: &'a str) -> OrderKey<'a> {
-    OrderKey { claimed_at, tag }
+    OrderKey {
+        claimed_at,
+        tag: Some(tag),
+        object: "",
+        commit: "",
+    }
 }
 
 fn ordered(mut keys: Vec<OrderKey<'static>>) -> Vec<&'static str> {
     keys.sort_by(compare);
-    keys.iter().map(|k| k.tag).collect()
+    keys.iter().map(|k| k.tag.expect("a tag")).collect()
 }
 
 #[test]
@@ -73,4 +78,37 @@ fn tc_367_unprintable_covers_controls_and_format_characters() {
     for c in ['a', ' ', '\u{e9}', '\u{4e2d}'] {
         assert!(!is_unprintable(c), "{c:?}");
     }
+}
+
+#[test]
+#[trace("TC-351", "FR-043-AC-5")]
+fn tc_351_equal_times_and_tags_order_by_object_then_commit_and_tagless_entries_last() {
+    let at = Some("2026-06-01T12:00:00Z");
+    let entry = |claimed_at, tag, object, commit| OrderKey {
+        claimed_at,
+        tag,
+        object,
+        commit,
+    };
+    let mut keys = [
+        entry(None, None, "", "c2"),
+        entry(None, Some("t"), "o2", "c1"),
+        entry(None, Some("t"), "o1", "c9"),
+        entry(None, Some("t"), "o1", "c1"),
+        entry(None, None, "", "c1"),
+        entry(at, Some("z"), "o0", ""),
+    ];
+    keys.sort_by(compare);
+    let order: Vec<_> = keys.iter().map(|k| (k.tag, k.object, k.commit)).collect();
+    assert_eq!(
+        order,
+        vec![
+            (Some("z"), "o0", ""),
+            (Some("t"), "o1", "c1"),
+            (Some("t"), "o1", "c9"),
+            (Some("t"), "o2", "c1"),
+            (None, "", "c1"),
+            (None, "", "c2"),
+        ]
+    );
 }

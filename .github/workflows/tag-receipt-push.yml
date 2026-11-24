@@ -1,0 +1,17 @@
+name: Tag receipt
+
+on:
+  push:
+    tags:
+      - '**'
+
+permissions: {}
+
+jobs:
+  receipt:
+    uses: ./.github/workflows/tag-receipt.yml
+    with:
+      tag: ${{ github.ref_name }}
+    permissions:
+      contents: write
+      id-token: write

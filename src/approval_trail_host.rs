@@ -12,7 +12,7 @@
 
 use std::{
     fmt::Write as _,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
@@ -23,7 +23,12 @@ use engineering_assurance::approval_trail::{
 use engineering_assurance::approval_verify::{
     RECORD_ID_TRAILER, TrailerUnreadable, UnverifiableReason, is_record_value,
 };
+use engineering_assurance::attestation_signing::WorkflowIdentityDocument;
 use engineering_assurance::signature_verify::{SignedAt, trailer_values};
+use engineering_assurance::tag_receipt::{
+    Candidate, FindingStatus, InvalidReason, Judged, MissingTagReason, TagFinding,
+    TagReceiptPolicy, compare as compare_tags, is_receipted,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
@@ -33,6 +38,9 @@ use crate::signature_verify_host::{
     AllowedSignersSnapshot, GitsignRequest, ListedRef, LoadedGitsign, RegistryFailure,
     capture_allowed_signers, list_tags, load_gitsign, load_listed_tag, validate_gitsign,
     verify_loaded_tag,
+};
+use crate::tag_receipt_host::{
+    ProductionVerifiers, Trust as TagTrust, VerifierSource, current_tags, read_candidates,
 };
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.approval-trail-request/v1";
@@ -57,8 +65,55 @@ struct Request {
     record_id: String,
     record_digest: String,
     allowed_signers: PathBuf,
+    tag_receipts: Option<TagReceiptsRequest>,
     gitsign: Option<GitsignRequest>,
     identity_registry: Option<String>,
+}
+
+/// The policy files the tag receipts are verified and compared against, both
+/// read by the caller from the protected base branch (FR-043).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TagReceiptsRequest {
+    workflow_identities: PathBuf,
+    receipt_policy: PathBuf,
+}
+
+/// The loaded policy of a request that carries `tag_receipts`.
+struct TagContext {
+    identities: WorkflowIdentityDocument,
+    policy: TagReceiptPolicy,
+}
+
+/// Most bytes of either policy file.
+const MAX_POLICY_BYTES: u64 = 1024 * 1024;
+
+fn read_policy_file(path: &Path) -> Result<Vec<u8>, ApprovalTrailError> {
+    use std::io::Read as _;
+    let file = std::fs::File::open(path).map_err(|_| ApprovalTrailError::Invalid)?;
+    let mut bytes = Vec::new();
+    file.take(MAX_POLICY_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| ApprovalTrailError::Invalid)?;
+    if bytes.len() as u64 > MAX_POLICY_BYTES {
+        return Err(ApprovalTrailError::Invalid);
+    }
+    Ok(bytes)
+}
+
+fn load_tag_context(request: &TagReceiptsRequest) -> Result<TagContext, ApprovalTrailError> {
+    if !request.workflow_identities.is_absolute() || !request.receipt_policy.is_absolute() {
+        return Err(ApprovalTrailError::Invalid);
+    }
+    let identities =
+        WorkflowIdentityDocument::parse(&read_policy_file(&request.workflow_identities)?)
+            .map_err(|_| ApprovalTrailError::Invalid)?;
+    // A policy with no `tag_receipts` member has no prefix and accepts nothing;
+    // receipts already written are still compared.
+    let policy = TagReceiptPolicy::from_receipt_policy(&read_policy_file(&request.receipt_policy)?)
+        .map_err(|_| ApprovalTrailError::Invalid)?
+        .unwrap_or_default();
+    Ok(TagContext { identities, policy })
 }
 
 /// Why a trail is a partial list.
@@ -80,6 +135,170 @@ struct Entry {
     claimed_at: Option<SignedAt>,
     #[serde(flatten)]
     assessment: Assessment,
+    /// Whether a verified tag receipt names this ref and object (FR-081);
+    /// absent when the request carried no `tag_receipts`.
+    #[serde(flatten)]
+    receipt: Option<ReceiptState>,
+}
+
+/// `verified` when a verified receipt names the tag's ref and object, else `none`.
+#[derive(Serialize)]
+struct ReceiptState {
+    tag_receipt: ReceiptStateKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    accepted_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    accepted_reason: Option<String>,
+    /// Whether a `none` still counts against `complete`: the tag has a policy
+    /// prefix and no `accepted_tags` entry accepts it. Not part of the result.
+    #[serde(skip)]
+    open: bool,
+}
+
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum ReceiptStateKind {
+    Verified,
+    None,
+}
+
+/// An entry of a receipt whose tag is absent or changed, or that does not verify.
+#[derive(Serialize)]
+struct FindingEntry {
+    /// `missing_tag`, `invalid_receipt` or `accepted`.
+    status: &'static str,
+    /// The status an acceptance replaced.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    finding: Option<FindingStatus>,
+    /// Absent for an invalid receipt: its content is not trusted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tag: Option<String>,
+    /// The receipted object id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    object: Option<String>,
+    reason: FindingEntryReason,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    current_object: Option<String>,
+    commit: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pushed_at: Option<String>,
+    /// False only for a receipt whose trailers were not read, and always for an
+    /// invalid receipt.
+    attributed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    accepted_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    accepted_reason: Option<String>,
+}
+
+#[derive(Clone, Copy, Serialize)]
+#[serde(untagged)]
+enum FindingEntryReason {
+    Missing(MissingTagReason),
+    Invalid(InvalidReason),
+}
+
+/// One line of the trail: the entry of a present tag, or a tag receipt finding.
+#[derive(Serialize)]
+#[serde(untagged)]
+enum TrailEntry {
+    Tag(Box<Entry>),
+    Finding(FindingEntry),
+}
+
+impl TrailEntry {
+    fn key(&self) -> OrderKey<'_> {
+        match self {
+            Self::Tag(entry) => OrderKey {
+                claimed_at: entry.claimed_at.as_ref().map(SignedAt::as_str),
+                tag: Some(&entry.tag),
+                object: &entry.object,
+                commit: "",
+            },
+            Self::Finding(entry) => OrderKey {
+                claimed_at: None,
+                tag: entry.tag.as_deref(),
+                object: entry.object.as_deref().unwrap_or(""),
+                commit: &entry.commit,
+            },
+        }
+    }
+
+    fn status_text(&self) -> Result<String, ApprovalTrailError> {
+        match self {
+            Self::Tag(entry) => text_of(&entry.assessment.status()),
+            Self::Finding(entry) => Ok(entry.status.to_owned()),
+        }
+    }
+}
+
+impl FindingEntry {
+    fn new(judged: &Judged) -> Self {
+        let (status, finding) = match &judged.accepted {
+            Some(_) => ("accepted", Some(judged.finding.status())),
+            None => (
+                match judged.finding.status() {
+                    FindingStatus::InvalidReceipt => "invalid_receipt",
+                    _ => "missing_tag",
+                },
+                None,
+            ),
+        };
+        let mut entry = match &judged.finding {
+            TagFinding::MissingTag {
+                receipt,
+                reason,
+                current_object,
+            } => Self {
+                status,
+                finding,
+                tag: Some(
+                    receipt
+                        .reference
+                        .strip_prefix("refs/tags/")
+                        .unwrap_or(&receipt.reference)
+                        .to_owned(),
+                ),
+                object: Some(receipt.tag_object.clone()),
+                reason: FindingEntryReason::Missing(*reason),
+                current_object: current_object.clone(),
+                commit: receipt.commit.clone(),
+                pushed_at: Some(receipt.pushed_at.clone()),
+                attributed: receipt.trailers_readable,
+                accepted_by: None,
+                accepted_reason: None,
+            },
+            TagFinding::InvalidReceipt(invalid) => Self {
+                status,
+                finding,
+                tag: None,
+                object: None,
+                reason: FindingEntryReason::Invalid(invalid.reason),
+                current_object: None,
+                commit: invalid.commit.clone(),
+                pushed_at: None,
+                attributed: false,
+                accepted_by: None,
+                accepted_reason: None,
+            },
+            // An unreceipted present tag is the `tag_receipt` of its own entry.
+            TagFinding::TagNoReceipt { .. } => unreachable!("filtered by the caller"),
+        };
+        if let Some(acceptance) = &judged.accepted {
+            entry.accepted_by = Some(acceptance.accepted_by.clone());
+            entry.accepted_reason = Some(acceptance.accepted_reason.clone());
+        }
+        entry
+    }
+}
+
+/// The `tag_receipts` object of the result.
+#[derive(Serialize)]
+struct TagReceiptsResult {
+    /// Whether the request carried `tag_receipts` and the notes ref was read.
+    checked: bool,
+    /// The receipt entries read.
+    considered: usize,
 }
 
 /// An annotated tag that could name the record but cannot be read.
@@ -114,7 +333,8 @@ struct ResultLine<'a> {
     record_digest: &'a str,
     trust: Trust<'a>,
     ordering: &'static str,
-    entries: Vec<Entry>,
+    entries: Vec<TrailEntry>,
+    tag_receipts: TagReceiptsResult,
     unreadable: Vec<Unreadable>,
     considered: usize,
     truncated: bool,
@@ -176,6 +396,7 @@ struct Parsed {
     request: Request,
     gitsign: Option<LoadedGitsign>,
     allowed_signers: AllowedSignersSnapshot,
+    tags: Option<TagContext>,
 }
 
 fn parse(bytes: &[u8]) -> Result<Parsed, ApprovalTrailError> {
@@ -210,10 +431,16 @@ fn parse(bytes: &[u8]) -> Result<Parsed, ApprovalTrailError> {
             RegistryFailure::Invalid => ApprovalTrailError::IdentityRegistry,
             RegistryFailure::Git(_) => ApprovalTrailError::Repository,
         })?;
+    let tags = request
+        .tag_receipts
+        .as_ref()
+        .map(load_tag_context)
+        .transpose()?;
     Ok(Parsed {
         request,
         gitsign,
         allowed_signers,
+        tags,
     })
 }
 
@@ -271,6 +498,7 @@ fn examine(parsed: &Parsed, listed: &ListedRef) -> Examined {
         object,
         claimed_at: checked.tagger_signed_at.clone(),
         assessment: assess(checked, &request.record_id, &request.record_digest),
+        receipt: None,
     }))
 }
 
@@ -279,6 +507,97 @@ fn execute_within(
     bytes: &[u8],
     format: Format,
     total_time: Duration,
+) -> Result<Vec<u8>, ApprovalTrailError> {
+    execute_with(bytes, format, total_time, &ProductionVerifiers::default())
+}
+
+/// Whether a receipt candidate belongs in the trail of `record_id`: its
+/// `record_ids` hold the id byte for byte, or its trailers were not read (or it
+/// does not verify), so it belongs to no record by content and is shown in all.
+fn belongs(candidate: &Candidate, record_id: &str) -> bool {
+    match candidate {
+        Candidate::Invalid(_) => true,
+        Candidate::Verified(receipt) => {
+            !receipt.trailers_readable || names_record(&receipt.record_ids, record_id)
+        }
+    }
+}
+
+/// The entries of the trail once the tag receipts are applied.
+struct TagSection {
+    entries: Vec<TrailEntry>,
+    considered: usize,
+    /// No open `missing_tag`, `invalid_receipt` or unreceipted prefix tag.
+    complete: bool,
+}
+
+/// Verifies the receipts, compares them with the tag set and attaches the
+/// result to the entries (FR-043, FR-082).
+fn tag_section(
+    parsed: &Parsed,
+    context: &TagContext,
+    entries: Vec<Entry>,
+    source: &dyn VerifierSource,
+) -> Result<TagSection, ApprovalTrailError> {
+    let request = &parsed.request;
+    let trust =
+        TagTrust::new(&context.identities, source).map_err(|_| ApprovalTrailError::Repository)?;
+    let candidates =
+        read_candidates(&request.repository, &trust).map_err(|_| ApprovalTrailError::Repository)?;
+    let tags = current_tags(&request.repository).map_err(|_| ApprovalTrailError::Repository)?;
+    let belonging: Vec<Candidate> = candidates
+        .iter()
+        .filter(|candidate| belongs(candidate, &request.record_id))
+        .cloned()
+        .collect();
+    let judged = compare_tags(&belonging, &tags, &context.policy);
+    let mut complete = true;
+    let mut out = Vec::with_capacity(entries.len() + judged.len());
+    for mut entry in entries {
+        let reference = format!("refs/tags/{}", entry.tag);
+        let state = if is_receipted(&candidates, &reference, &entry.object) {
+            ReceiptState {
+                tag_receipt: ReceiptStateKind::Verified,
+                accepted_by: None,
+                accepted_reason: None,
+                open: false,
+            }
+        } else {
+            let acceptance = context
+                .policy
+                .accepts_unreceipted(&reference, &entry.object);
+            ReceiptState {
+                tag_receipt: ReceiptStateKind::None,
+                open: context.policy.covers(&entry.tag) && acceptance.is_none(),
+                accepted_by: acceptance.as_ref().map(|a| a.accepted_by.clone()),
+                accepted_reason: acceptance.map(|a| a.accepted_reason),
+            }
+        };
+        complete &= !state.open;
+        entry.receipt = Some(state);
+        out.push(TrailEntry::Tag(Box::new(entry)));
+    }
+    for finding in &judged {
+        // An unreceipted present tag is the `tag_receipt` of its own entry.
+        if matches!(finding.finding, TagFinding::TagNoReceipt { .. }) {
+            continue;
+        }
+        complete &= !finding.is_open();
+        out.push(TrailEntry::Finding(FindingEntry::new(finding)));
+    }
+    Ok(TagSection {
+        entries: out,
+        considered: candidates.len(),
+        complete,
+    })
+}
+
+/// As [`execute_within`], with the verifiers of the tag receipts supplied.
+fn execute_with(
+    bytes: &[u8],
+    format: Format,
+    total_time: Duration,
+    verifiers: &dyn VerifierSource,
 ) -> Result<Vec<u8>, ApprovalTrailError> {
     let parsed = parse(bytes)?;
     let request = &parsed.request;
@@ -309,7 +628,31 @@ fn execute_within(
             Examined::Unreadable(item) => unreadable.push(item),
         }
     }
-    entries.sort_by(|left, right| compare(&key(left), &key(right)));
+    let (mut trail, tag_receipts, tags_complete) = match &parsed.tags {
+        None => (
+            entries
+                .into_iter()
+                .map(|entry| TrailEntry::Tag(Box::new(entry)))
+                .collect(),
+            TagReceiptsResult {
+                checked: false,
+                considered: 0,
+            },
+            false,
+        ),
+        Some(context) => {
+            let section = tag_section(&parsed, context, entries, verifiers)?;
+            (
+                section.entries,
+                TagReceiptsResult {
+                    checked: true,
+                    considered: section.considered,
+                },
+                section.complete,
+            )
+        }
+    };
+    trail.sort_by(|left, right| compare(&left.key(), &right.key()));
     let result = ResultLine {
         protocol: RESULT_PROTOCOL,
         record_id: &request.record_id,
@@ -323,8 +666,9 @@ fn execute_within(
             parsed.gitsign.as_ref(),
         ),
         ordering: "claimed_at_ascending",
-        complete: truncation.is_none() && unreadable.is_empty(),
-        entries,
+        complete: truncation.is_none() && unreadable.is_empty() && tags_complete,
+        entries: trail,
+        tag_receipts,
         unreadable,
         considered,
         truncated: truncation.is_some(),
@@ -338,13 +682,6 @@ fn execute_within(
     };
     out.push(b'\n');
     Ok(out)
-}
-
-fn key(entry: &Entry) -> OrderKey<'_> {
-    OrderKey {
-        claimed_at: entry.claimed_at.as_ref().map(SignedAt::as_str),
-        tag: &entry.tag,
-    }
 }
 
 /// The text of a value that serializes as one JSON string.
@@ -378,20 +715,33 @@ fn table(result: &ResultLine<'_>) -> Result<String, ApprovalTrailError> {
         ]
         .map(str::to_owned),
     ];
-    for entry in &result.entries {
-        let assessment = &entry.assessment;
-        let reason = assessment.reason().map(|r| text_of(&r)).transpose()?;
-        let meaning = assessment
-            .approval()
-            .map(|approval| approval.meaning.join("; "));
-        rows.push([
-            cell(entry.claimed_at.as_ref().map(SignedAt::as_str)),
-            cell(Some(&text_of(&assessment.status())?)),
-            cell(reason.as_deref()),
-            cell(assessment.approval().map(|a| a.approver.as_str())),
-            cell(meaning.as_deref()),
-            cell(Some(&entry.tag)),
-        ]);
+    for trail_entry in &result.entries {
+        let status = trail_entry.status_text()?;
+        match trail_entry {
+            TrailEntry::Tag(entry) => {
+                let assessment = &entry.assessment;
+                let reason = assessment.reason().map(|r| text_of(&r)).transpose()?;
+                let meaning = assessment
+                    .approval()
+                    .map(|approval| approval.meaning.join("; "));
+                rows.push([
+                    cell(entry.claimed_at.as_ref().map(SignedAt::as_str)),
+                    cell(Some(&status)),
+                    cell(reason.as_deref()),
+                    cell(assessment.approval().map(|a| a.approver.as_str())),
+                    cell(meaning.as_deref()),
+                    cell(Some(&entry.tag)),
+                ]);
+            }
+            TrailEntry::Finding(entry) => rows.push([
+                cell(None),
+                cell(Some(&status)),
+                cell(Some(&text_of(&entry.reason)?)),
+                cell(None),
+                cell(None),
+                cell(entry.tag.as_deref()),
+            ]),
+        }
     }
     for item in &result.unreadable {
         rows.push([

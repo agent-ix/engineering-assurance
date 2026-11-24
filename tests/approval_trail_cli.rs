@@ -220,6 +220,46 @@ fn trail(fixture: &Fixture) -> Value {
     trail_of(&request(fixture))
 }
 
+/// The `tag_receipts` request member over policy files written into the fixture:
+/// one `receipt_writer` identity for tag receipts, the given `prefixes` and
+/// `accepted_tags`.
+fn tag_receipts_member(fixture: &Fixture, prefixes: &[&str], accepted: &Value) -> Value {
+    let identities = json!({
+        "protocol": "engineering-assurance.workflow-identities/v1",
+        "identities": [{
+            "role": "receipt_writer",
+            "issuer": concat!("https:", "//token.actions.githubusercontent.com"),
+            "repository": "fictional/engineering-assurance",
+            "workflow_path": ".github/workflows/tag-receipt.yml",
+            "ref": "refs/heads/main",
+            "source_repository": "fictional/project",
+            "source_workflow_path": ".github/workflows/tag-receipt-push.yml",
+            "event": "push",
+            "source_ref_prefix": "refs/tags/approve-"
+        }]
+    });
+    let policy = json!({
+        "protocol": "engineering-assurance.receipt-policy/v1",
+        "tag_receipts": {"prefixes": prefixes, "accepted_tags": accepted}
+    });
+    let identities_path = fixture.root().join("workflow-identities.json");
+    let policy_path = fixture.root().join("receipt-policy.json");
+    fs::write(&identities_path, identities.to_string()).expect("identities");
+    fs::write(&policy_path, policy.to_string()).expect("policy");
+    json!({
+        "workflow_identities": identities_path.display().to_string(),
+        "receipt_policy": policy_path.display().to_string(),
+    })
+}
+
+/// The trail of a request that carries tag receipts whose policy covers no tag
+/// of the fixture and accepts nothing.
+fn trail_with_tag_receipts(fixture: &Fixture) -> Value {
+    let mut body = request(fixture);
+    body["tag_receipts"] = tag_receipts_member(fixture, &["no-such-prefix-"], &json!([]));
+    trail_of(&body)
+}
+
 fn tags(trail: &Value) -> Vec<String> {
     trail["entries"]
         .as_array()
@@ -257,7 +297,7 @@ fn tc_352_an_approval_and_a_later_revocation_are_listed_in_time_order() {
         &good("approved"),
         "2026-05-01T09:00:00+0000",
     );
-    let result = trail(&fixture);
+    let result = trail_with_tag_receipts(&fixture);
     assert_eq!(tags(&result), ["z-approve", "a-revoke"]);
     for (tag, meaning, at) in [
         ("z-approve", "approved", "2026-05-01T09:00:00Z"),
@@ -355,7 +395,7 @@ fn tc_354_other_records_and_non_approval_tags_are_not_listed() {
         &fixture.repo(),
         &["tag", "-a", "-m", "plain release note", "v-plain"],
     );
-    let result = trail(&fixture);
+    let result = trail_with_tag_receipts(&fixture);
     assert_eq!(tags(&result), ["v-mine"]);
     assert_eq!(result["considered"], 4);
     assert_eq!(result["unreadable"], json!([]));
@@ -870,4 +910,90 @@ fn tc_361_invalid_requests_and_repositories_are_machine_errors() {
         )),
         "approval_trail_repository_unavailable"
     );
+}
+
+#[test]
+#[trace("TC-1101", "FR-043-AC-24")]
+fn tc_368_a_request_without_tag_receipts_is_checked_false_and_incomplete() {
+    let fixture = fixture();
+    signed_tag(
+        &fixture,
+        "a",
+        "v-mine",
+        &good("approved"),
+        "2026-05-01T09:00:00+0000",
+    );
+    let result = trail(&fixture);
+    assert_eq!(tags(&result), ["v-mine"]);
+    assert_eq!(
+        result["tag_receipts"],
+        json!({"checked": false, "considered": 0})
+    );
+    assert_eq!(result["complete"], false);
+    assert!(result["entries"][0].get("tag_receipt").is_none());
+}
+
+#[test]
+#[trace("TC-1101", "FR-043-AC-24")]
+fn tc_368_a_malformed_tag_receipts_member_is_refused() {
+    let fixture = fixture();
+    let good_member = tag_receipts_member(&fixture, &["approve-"], &json!([]));
+    let mut relative_policy = good_member.clone();
+    relative_policy["receipt_policy"] = json!("receipt-policy.json");
+    let mut relative_identities = good_member.clone();
+    relative_identities["workflow_identities"] = json!("workflow-identities.json");
+    let mut unknown = good_member;
+    unknown["extra"] = json!(1);
+    for (label, member) in [
+        ("relative policy", relative_policy),
+        ("relative identities", relative_identities),
+        ("unknown member", unknown),
+        ("not an object", json!("x")),
+    ] {
+        let mut body = request(&fixture);
+        body["tag_receipts"] = member;
+        let output = run_command("approval-trail", body.to_string().as_bytes(), &[]);
+        assert_eq!(output.status.code(), Some(2), "{label}: {output:?}");
+        let error: Value = serde_json::from_slice(&output.stdout).expect("error json");
+        assert_eq!(error["code"], "approval_trail_request_invalid", "{label}");
+    }
+}
+
+#[test]
+#[trace("TC-1101", "FR-043-AC-28")]
+fn tc_368_an_absent_notes_ref_is_checked_and_each_prefix_tag_is_unreceipted() {
+    let fixture = fixture();
+    let date = "2026-05-01T09:00:00+0000";
+    signed_tag(&fixture, "a", "approve-1", &good("approved"), date);
+    signed_tag(&fixture, "a", "approve-2", &good("approved"), date);
+    let mut body = request(&fixture);
+    body["tag_receipts"] = tag_receipts_member(&fixture, &["approve-"], &json!([]));
+    let result = trail_of(&body);
+    assert_eq!(
+        result["tag_receipts"],
+        json!({"checked": true, "considered": 0})
+    );
+    for tag in ["approve-1", "approve-2"] {
+        assert_eq!(entry(&result, tag)["tag_receipt"], "none", "{tag}");
+    }
+    assert_eq!(result["complete"], false);
+
+    let accepted: Vec<Value> = ["approve-1", "approve-2"]
+        .iter()
+        .map(|tag| {
+            json!({
+                "ref": format!("refs/tags/{tag}"),
+                "tag_object": git(&fixture.repo(), &["rev-parse", &format!("refs/tags/{tag}")]).trim(),
+                "accepted_by": "alice@example.test",
+                "reason": "predates adoption"
+            })
+        })
+        .collect();
+    body["tag_receipts"] = tag_receipts_member(&fixture, &["approve-"], &json!(accepted));
+    let result = trail_of(&body);
+    assert_eq!(result["complete"], true);
+    let listed = entry(&result, "approve-1");
+    assert_eq!(listed["tag_receipt"], "none");
+    assert_eq!(listed["accepted_by"], "alice@example.test");
+    assert_eq!(listed["accepted_reason"], "predates adoption");
 }

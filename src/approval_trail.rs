@@ -29,17 +29,23 @@ pub fn names_record(record_id_values: &[String], record_id: &str) -> bool {
 }
 
 /// The place of one entry in the trail: the time the tag claims
-/// (`YYYY-MM-DDTHH:MM:SSZ`, or `None` when unreadable) and the tag name.
+/// (`YYYY-MM-DDTHH:MM:SSZ`, or `None` when unreadable), the tag name when the
+/// entry has one, the object id and the commit of a tag receipt.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct OrderKey<'a> {
     /// The claimed UTC instant; the signer's own claim.
     pub claimed_at: Option<&'a str>,
-    /// The tag name.
-    pub tag: &'a str,
+    /// The tag name; absent for an unverified receipt, whose content is not trusted.
+    pub tag: Option<&'a str>,
+    /// The tag object id, empty when the entry has none.
+    pub object: &'a str,
+    /// The commit that carries a tag receipt, empty for an entry of a present tag.
+    pub commit: &'a str,
 }
 
 /// Orders entries by claimed time ascending, entries with no time after all
-/// entries with one, and equal or absent times by tag name in byte order. The
+/// entries with one, and equal or absent times by tag name in byte order, then
+/// object id, then commit; an entry without a tag follows those with one. The
 /// instants have a fixed width, so text order is time order.
 #[must_use]
 pub fn compare(left: &OrderKey<'_>, right: &OrderKey<'_>) -> Ordering {
@@ -49,7 +55,14 @@ pub fn compare(left: &OrderKey<'_>, right: &OrderKey<'_>) -> Ordering {
         (None, Some(_)) => Ordering::Greater,
         (None, None) => Ordering::Equal,
     }
-    .then_with(|| left.tag.as_bytes().cmp(right.tag.as_bytes()))
+    .then_with(|| match (left.tag, right.tag) {
+        (Some(a), Some(b)) => a.as_bytes().cmp(b.as_bytes()),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => Ordering::Equal,
+    })
+    .then_with(|| left.object.as_bytes().cmp(right.object.as_bytes()))
+    .then_with(|| left.commit.as_bytes().cmp(right.commit.as_bytes()))
 }
 
 /// The single value of the reason `tag_name_not_utf8`.

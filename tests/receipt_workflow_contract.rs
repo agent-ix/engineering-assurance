@@ -408,3 +408,169 @@ fn push_caller_and_missing_check_have_the_declared_triggers_and_permissions() {
     assert!(run.contains("record_publisher_workflow_path"));
     assert!(run.contains("record_publisher_ref"));
 }
+
+#[trace("TC-1125", "FR-070-AC-14", "FR-081-AC-10")]
+#[test]
+fn tag_receipt_workflow_has_the_declared_trigger_jobs_permissions_and_trigger_inputs() {
+    let reusable = workflow("tag-receipt.yml");
+    assert_eq!(
+        reusable["on"].as_object().map(serde_json::Map::len),
+        Some(1)
+    );
+    assert_eq!(
+        reusable["on"]["workflow_call"]["inputs"]["tag"]["type"],
+        "string"
+    );
+    let jobs = &reusable["jobs"];
+    assert_eq!(jobs.as_object().map(serde_json::Map::len), Some(3));
+    assert_eq!(jobs["record"]["needs"], "build");
+    assert_eq!(jobs["notes"]["needs"], json!(["build", "record"]));
+    let build_steps = jobs["build"]["steps"].as_array().expect("build steps");
+    assert_actions_are_structural(build_steps);
+    let source_checkout = build_steps
+        .iter()
+        .find(|step| {
+            step["uses"]
+                .as_str()
+                .is_some_and(|value| value.starts_with("actions/checkout@"))
+        })
+        .expect("default source checkout");
+    assert_eq!(
+        source_checkout["with"]["repository"],
+        "agent-ix/engineering-assurance"
+    );
+    assert_eq!(source_checkout["with"]["ref"], "main");
+    assert_eq!(source_checkout["with"]["path"], "source");
+    let build = build_steps
+        .iter()
+        .find(|step| {
+            step["run"]
+                .as_str()
+                .is_some_and(|run| run.contains("cargo build"))
+        })
+        .expect("source build step");
+    let build_script = build["run"].as_str().expect("build script");
+    assert!(
+        build_script
+            .contains("cargo build --locked --release --features full --bin engineering-assurance")
+    );
+    assert!(build_script.contains("tag-receipt-record --help"));
+    assert!(build_script.contains("tag-receipt-note --help"));
+    assert!(build_steps.iter().any(|step| {
+        step["uses"]
+            .as_str()
+            .is_some_and(|value| value.starts_with("actions/upload-artifact@"))
+            && step["with"]["name"] == "tag-receipt-cli"
+    }));
+    assert_permission(
+        &jobs["record"],
+        &serde_json::json!({"contents":"read", "id-token":"write"}),
+        "tag receipt record",
+    );
+    assert_permission(
+        &jobs["notes"],
+        &serde_json::json!({"contents":"write"}),
+        "tag receipt notes",
+    );
+    assert_eq!(jobs["notes"]["needs"], json!(["build", "record"]));
+    for job in ["record", "notes"] {
+        let steps = jobs[job]["steps"].as_array().expect("steps");
+        assert_actions_are_structural(steps);
+        assert!(
+            steps.iter().any(|step| {
+                step["uses"]
+                    .as_str()
+                    .is_some_and(|value| value.starts_with("actions/download-artifact@"))
+                    && step["with"]["name"] == "tag-receipt-cli"
+            }),
+            "{job} executes the CLI artifact built from checked-out source"
+        );
+        assert!(
+            steps
+                .iter()
+                .all(|step| step["run"].as_str().is_none_or(|run| {
+                    !run.contains("cargo ") && !run.contains("python3") && !run.contains("npm ")
+                })),
+            "{job} runs no repository gate, script or package"
+        );
+    }
+    // The identity-bearing job consumes the CLI built from the protected
+    // default branch and never checks out tag-controlled source.
+    assert_record_job_is_isolated_for_tags(jobs);
+    assert!(!format!("{reusable}").to_lowercase().contains("agent-run"));
+
+    // A `tag` input that is not the triggering tag fails before any signing step.
+    let record_steps = jobs["record"]["steps"].as_array().expect("record steps");
+    let check = record_steps[0]["run"].as_str().expect("check step");
+    assert!(check.contains("tag_receipt_input_mismatch"));
+    assert!(check.contains("$INPUT_TAG\" != \"$TRIGGER_TAG"));
+    assert!(record_steps[1..].iter().all(|step| {
+        step["run"]
+            .as_str()
+            .is_none_or(|run| !run.contains("tag_receipt_input_mismatch"))
+    }),);
+    // The tag name, tag object id and push time come from the trigger context.
+    let sign = record_steps
+        .iter()
+        .find(|step| {
+            step["run"]
+                .as_str()
+                .is_some_and(|run| run.contains("tag-receipt-record --request"))
+        })
+        .expect("signing step");
+    assert_eq!(sign["env"]["TAG_NAME"], "${{ github.ref_name }}");
+    assert_eq!(sign["env"]["TAG_OBJECT"], "${{ github.event.after }}");
+    assert_eq!(
+        sign["env"]["PUSHED_AT_UNIX"],
+        "${{ github.event.repository.pushed_at }}"
+    );
+
+    let caller = workflow("tag-receipt-push.yml");
+    assert_eq!(caller["on"]["push"]["tags"][0], "**");
+    let receipt = &caller["jobs"]["receipt"];
+    assert_eq!(receipt["uses"], "./.github/workflows/tag-receipt.yml");
+    assert_eq!(receipt["with"]["tag"], "${{ github.ref_name }}");
+    assert_permission(
+        receipt,
+        &serde_json::json!({"contents":"write", "id-token":"write"}),
+        "tag receipt caller",
+    );
+}
+
+fn assert_record_job_is_isolated_for_tags(jobs: &Value) {
+    let record_steps = jobs["record"]["steps"].as_array().expect("record steps");
+    assert!(
+        record_steps.iter().all(|step| {
+            !step["uses"].as_str().is_some_and(|reference| {
+                reference.starts_with("actions/checkout@") || reference.starts_with("./")
+            })
+        }),
+        "the identity-bearing tag receipt record job does not check out tag-controlled source"
+    );
+}
+
+#[trace("TC-1126", "FR-081-AC-1")]
+#[test]
+fn checked_out_source_cli_reports_its_package_version_and_exposes_both_tag_receipt_commands() {
+    let cli = env!("CARGO_BIN_EXE_engineering-assurance");
+    let version = Command::new(cli)
+        .arg("--version")
+        .output()
+        .expect("built source CLI starts");
+    assert!(version.status.success(), "--version: {version:?}");
+    let version = String::from_utf8(version.stdout).expect("version is UTF-8");
+    assert!(
+        version.contains(env!("CARGO_PKG_VERSION")),
+        "CLI version must come from this checked-out package: {version:?}"
+    );
+
+    for subcommand in ["tag-receipt-record", "tag-receipt-note"] {
+        let output = Command::new(cli)
+            .args([subcommand, "--help"])
+            .output()
+            .expect("built source CLI starts");
+        assert!(output.status.success(), "{subcommand} --help: {output:?}");
+        let help = String::from_utf8(output.stdout).expect("help is UTF-8");
+        assert!(help.contains(subcommand), "{subcommand}: {help}");
+    }
+}

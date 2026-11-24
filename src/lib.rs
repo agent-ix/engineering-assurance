@@ -54,7 +54,7 @@
 //! | `record-sink` | `record_sink` | | `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
 //! | `release` | `release` | `approval-verify` | `serde` |
 //! | `release-history` | `release_history` | | |
-//! | `receipt` | `receipt` | `attestation-verify`, `change-record` | `serde`, `serde_json`, `serde_json_canonicalizer`, `time`, `thiserror` |
+//! | `receipt` | `receipt`, `tag_receipt` | `attestation-verify`, `change-record` | `serde`, `serde_json`, `serde_json_canonicalizer`, `time`, `thiserror` |
 //! | `scope-footprint` | `scope_footprint` | `content-rights` | `serde`, `thiserror` |
 //! | `semantics` | `semantics` | `claim-strength`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
 //! | `signature-verify` | `signature_verify` | | `serde` |
@@ -142,6 +142,8 @@ pub mod signature_verify;
 pub mod source_audit;
 #[cfg(feature = "structured-yaml")]
 pub mod structured_yaml;
+#[cfg(feature = "receipt")]
+pub mod tag_receipt;
 #[cfg(feature = "workflow")]
 pub mod workflow;
 #[cfg(feature = "workflow-invariants")]

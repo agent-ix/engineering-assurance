@@ -53,6 +53,63 @@ explicit repository administration step. This project does not apply it to any
 active repository; use it only where the approval policy is intended to block
 merges until distinct eligible humans approve.
 
+## Detecting deleted tags and protecting refs
+
+A git tag can be deleted or moved, and a deleted tag leaves nothing in the tag
+set to show it was ever there. The optional `tag_receipts` member of the receipt
+policy (`.engineering-assurance/receipt-policy.json`, read from the protected
+base branch) lists literal tag-name `prefixes`; the reusable workflow
+`tag-receipt.yml`, called by `tag-receipt-push.yml` on every tag push, signs one
+receipt for each pushed tag that starts with a prefix and stores it as one
+Sigstore bundle per line of a git note on the tagged commit under
+`refs/notes/assurance-tag-receipts`. A receipt records only what was pushed:
+the ref, the tag object id, the commit, the platform's push time and the
+`Approved-Record-Id` trailer values. The identity that signs it is a
+`receipt_writer` entry of the workflow-identity policy with `source_ref_prefix`
+(`refs/tags/` followed by the tag prefix).
+
+`receipt-missing` compares the receipts with the current tags and lists a
+`missing_tag` finding (`tag_absent` or `tag_changed`), a `tag_no_receipt`
+finding for a current prefix tag whose object has no receipt, and an
+`invalid_receipt` finding for a receipt that does not verify; the scheduled
+`missing-receipt-check.yml` fails on any of them. `approval-trail` applies the
+same comparison to the receipts that belong to one record (it takes a
+`tag_receipts` request member naming the two policy files). A person records
+acceptance of a specific finding, such as a release tag that predates adoption,
+in the `accepted_tags` list of the `tag_receipts` member: each entry names the
+`ref`, the `tag_object` (null accepts only an absent tag), `accepted_by` and
+`reason`. A matched finding is reported as `accepted` and does not fail the
+workflow.
+
+Protection is platform setup that Engineering Assurance does not enforce, and
+detection is what the tool tests. Two example ruleset payloads are applied
+manually by the repository's operator, as the review-gate ruleset is:
+
+- [`examples/tag-protection-ruleset.json`](../examples/tag-protection-ruleset.json)
+  is a `tag` ruleset over `refs/tags/*` that forbids `deletion` and `update`, so
+  no approval or release tag can be deleted or moved.
+- [`examples/private-records-branch-ruleset.json`](../examples/private-records-branch-ruleset.json)
+  is a `branch` ruleset over `refs/heads/engineering-assurance-private-records`
+  that forbids `deletion` and `non_fast_forward`. That ref lives in the private
+  store repository named in the sink configuration, so this ruleset is applied
+  there.
+
+Both payloads have an empty `bypass_actors` list: the bypass list names no person
+who can sign approvals (no member of any role of the role policy) and no agent
+account. A GitHub ruleset has exactly one target type, which is why there are two
+payloads.
+
+The notes refs, `refs/notes/assurance-receipts` and
+`refs/notes/assurance-tag-receipts`, are neither branches nor tags, and no ruleset
+can target them; for them detection is what exists. A deleted or rewritten
+change-receipt note shows as `no_note`, and a deleted tag note leaves its tag
+unreceipted (`tag_no_receipt`). A tag deleted at the same time as its receipt is
+not detectable by the tool: that is a residual risk that a person accepts or
+addresses with platform controls, in general terms by restricting who holds write
+access. The identity that writes receipts needs only to create and fast-forward
+the notes refs. A repository without these rulesets still gets detection from the
+tag receipts and gets no protection.
+
 The workflow uses GraphQL `lastEditedAt` and review edit-history metadata. If
 that metadata cannot be read completely, it returns `unavailable`; it never
 uses the current edited body as the submitted body. An edited approval is
