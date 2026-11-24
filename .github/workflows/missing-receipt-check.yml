@@ -21,6 +21,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Fetch the receipt notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh auth setup-git
+          for notes_ref in refs/notes/assurance-receipts refs/notes/assurance-tag-receipts; do
+            git fetch origin "+$notes_ref:$notes_ref" || true
+          done
+
       - name: Install Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
 

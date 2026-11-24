@@ -44,6 +44,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
+use crate::tag_receipt_host::{
+    ProductionVerifiers, TagFindingLine, TagReceiptHostError, repository_findings,
+};
+
 const REQUEST_PROTOCOL: &str = "engineering-assurance.receipt-note-request/v1";
 const RESULT_PROTOCOL: &str = "engineering-assurance.receipt-note-result/v1";
 const MAX_REQUEST_BYTES: usize = 2 * 1024 * 1024;
@@ -137,6 +141,10 @@ struct ReceiptPolicy {
     gates: Vec<ReceiptGate>,
     adopted_at: String,
     grace_minutes: u16,
+    /// The optional `tag_receipts` member (FR-081), validated by the tag
+    /// receipt policy reader.
+    #[serde(default)]
+    tag_receipts: Option<Value>,
 }
 
 #[derive(Deserialize)]
@@ -146,20 +154,37 @@ struct ReceiptGate {
     argv: Vec<String>,
 }
 
+/// A commit finding as the command prints it: FR-077's members and `kind`.
 #[derive(Serialize)]
-struct MissingResultLine {
+struct ChangeFindingLine<'a> {
+    kind: &'static str,
+    #[serde(flatten)]
+    finding: &'a MissingReceipt,
+}
+
+#[derive(Serialize)]
+struct MissingResultLine<'a> {
     protocol: &'static str,
-    missing: Vec<MissingReceipt>,
-    failed_receipts: Vec<MissingReceipt>,
+    missing: Vec<ChangeFindingLine<'a>>,
+    failed_receipts: Vec<ChangeFindingLine<'a>>,
+    /// The tag findings of FR-082, each with `kind` `tag`.
+    tag_findings: Vec<TagFindingLine>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct MissingResultLineOwned {
     protocol: String,
-    missing: Vec<MissingReceipt>,
+    missing: Vec<Value>,
     #[serde(rename = "failed_receipts")]
-    _failed_receipts: Vec<MissingReceipt>,
+    _failed_receipts: Vec<Value>,
+    #[serde(default)]
+    tag_findings: Vec<TagFindingStatus>,
+}
+
+#[derive(Deserialize)]
+struct TagFindingStatus {
+    status: String,
 }
 
 #[derive(Deserialize)]
@@ -230,6 +255,8 @@ pub(crate) enum ReceiptHostError {
     RecordRequest,
     #[error("receipt-record input, evidence, or publication failed: {0}")]
     Record(#[from] engineering_assurance::receipt_record::ReceiptRecordError),
+    #[error("tag receipts could not be compared: {0}")]
+    Tag(TagReceiptHostError),
 }
 
 impl ReceiptHostError {
@@ -248,6 +275,7 @@ impl ReceiptHostError {
             Self::AdoptedAtInvalid => "receipt_policy_adopted_at_invalid",
             Self::RecordRequest => "receipt_record_request_invalid",
             Self::Record(_) => "receipt_record_failed",
+            Self::Tag(error) => error.code(),
         }
     }
 }
@@ -641,7 +669,7 @@ impl PolicySource for ReceiptPolicySource {
     }
 }
 
-struct GitHubVisibility;
+pub(crate) struct GitHubVisibility;
 
 impl engineering_assurance::record_sink::leak::VisibilityLookup for GitHubVisibility {
     fn repo_visibility(
@@ -790,12 +818,32 @@ pub(crate) fn execute_missing(bytes: &[u8]) -> Result<Vec<u8>, ReceiptHostError>
     {
         return Err(ReceiptHostError::MissingRequest);
     }
-    let findings = missing_receipt_findings(&request)?;
+    let (findings, tag_findings) = missing_receipt_findings(&request)?;
     let (failed_receipts, missing) = separate_receipt_findings(findings);
+    render_missing(&missing, &failed_receipts, &tag_findings)
+}
+
+/// The one line `receipt-missing` prints: every commit finding with `kind`
+/// `change` and every tag finding with `kind` `tag`.
+fn render_missing(
+    missing: &[MissingReceipt],
+    failed_receipts: &[MissingReceipt],
+    tag_findings: &[engineering_assurance::tag_receipt::Judged],
+) -> Result<Vec<u8>, ReceiptHostError> {
+    fn change(findings: &[MissingReceipt]) -> Vec<ChangeFindingLine<'_>> {
+        findings
+            .iter()
+            .map(|finding| ChangeFindingLine {
+                kind: "change",
+                finding,
+            })
+            .collect()
+    }
     let mut encoded = serde_json::to_vec(&MissingResultLine {
         protocol: MISSING_RESULT_PROTOCOL,
-        missing,
-        failed_receipts,
+        missing: change(missing),
+        failed_receipts: change(failed_receipts),
+        tag_findings: tag_findings.iter().map(TagFindingLine::from).collect(),
     })
     .map_err(|_| ReceiptHostError::Encoding)?;
     encoded.push(b'\n');
@@ -812,6 +860,9 @@ fn separate_receipt_findings(
 
 struct MissingHistoryContext {
     policy: ReceiptPolicy,
+    /// The protected base commit the policy documents were read at.
+    base_commit: String,
+    tag_policy: Option<engineering_assurance::tag_receipt::TagReceiptPolicy>,
     commits: Vec<String>,
     pushed_at: BTreeMap<String, u64>,
     in_progress: BTreeSet<String>,
@@ -819,9 +870,17 @@ struct MissingHistoryContext {
 
 fn missing_receipt_findings(
     request: &MissingRequest,
-) -> Result<Vec<MissingReceipt>, ReceiptHostError> {
+) -> Result<
+    (
+        Vec<MissingReceipt>,
+        Vec<engineering_assurance::tag_receipt::Judged>,
+    ),
+    ReceiptHostError,
+> {
     let MissingHistoryContext {
         policy,
+        base_commit,
+        tag_policy,
         commits: history_commits,
         pushed_at,
         in_progress,
@@ -860,14 +919,35 @@ fn missing_receipt_findings(
             state,
         });
     }
-    find_missing_receipts(&history, &policy.adopted_at, policy.grace_minutes, now_unix).map_err(
-        |error| match error {
-            engineering_assurance::receipt::MissingReceiptError::AdoptedAtInvalid => {
-                ReceiptHostError::AdoptedAtInvalid
-            }
-            _ => ReceiptHostError::MissingRequest,
-        },
-    )
+    let findings =
+        find_missing_receipts(&history, &policy.adopted_at, policy.grace_minutes, now_unix)
+            .map_err(|error| match error {
+                engineering_assurance::receipt::MissingReceiptError::AdoptedAtInvalid => {
+                    ReceiptHostError::AdoptedAtInvalid
+                }
+                _ => ReceiptHostError::MissingRequest,
+            })?;
+    let tag_findings = match tag_policy {
+        None => Vec::new(),
+        Some(tag_policy) => {
+            let identity_bytes = git_show_base_file(
+                &request.repository,
+                &base_commit,
+                ".engineering-assurance/workflow-identities.json",
+            )
+            .map_err(|()| ReceiptHostError::MissingRequest)?;
+            let identities = WorkflowIdentityDocument::parse(&identity_bytes)
+                .map_err(|_| ReceiptHostError::MissingRequest)?;
+            repository_findings(
+                &request.repository,
+                &identities,
+                &tag_policy,
+                &ProductionVerifiers::default(),
+            )
+            .map_err(ReceiptHostError::Tag)?
+        }
+    };
+    Ok((findings, tag_findings))
 }
 
 fn load_missing_history_context(
@@ -937,8 +1017,16 @@ fn load_missing_history_context(
     .unwrap_or_default();
     let in_progress = receipt_runs_in_progress(&request.github_repository, &request.base_branch)
         .unwrap_or_default();
+    let tag_policy = policy
+        .tag_receipts
+        .as_ref()
+        .map(engineering_assurance::tag_receipt::TagReceiptPolicy::parse)
+        .transpose()
+        .map_err(|_| ReceiptHostError::Tag(TagReceiptHostError::PolicyInvalid))?;
     Ok(MissingHistoryContext {
         policy,
+        base_commit: base_commit.to_owned(),
+        tag_policy,
         commits: history_commits,
         pushed_at,
         in_progress,
@@ -1419,7 +1507,7 @@ fn verify_groups_for_commit(
 
 struct StatementsNotRetainedReader;
 
-fn gh_api_json(endpoint: &str) -> Result<Value, ()> {
+pub(crate) fn gh_api_json(endpoint: &str) -> Result<Value, ()> {
     let output = run_host_tool(
         OsStr::new("gh"),
         &[OsStr::new("api"), OsStr::new(endpoint)],
@@ -1429,7 +1517,11 @@ fn gh_api_json(endpoint: &str) -> Result<Value, ()> {
     serde_json::from_slice(&output).map_err(|_| ())
 }
 
-fn git_show_base_file(repository: &Path, commit: &str, path: &str) -> Result<Vec<u8>, ()> {
+pub(crate) fn git_show_base_file(
+    repository: &Path,
+    commit: &str,
+    path: &str,
+) -> Result<Vec<u8>, ()> {
     if !is_full_object_id(commit)
         || !matches!(
             path,
@@ -1457,7 +1549,7 @@ fn git_show_base_file(repository: &Path, commit: &str, path: &str) -> Result<Vec
     )
 }
 
-fn run_host_tool(
+pub(crate) fn run_host_tool(
     executable: &OsStr,
     arguments: &[&OsStr],
     current_directory: Option<&Path>,
@@ -1483,7 +1575,7 @@ fn run_host_tool(
     }
 }
 
-fn valid_github_repository(value: &str) -> bool {
+pub(crate) fn valid_github_repository(value: &str) -> bool {
     let Some((owner, repository)) = value.split_once('/') else {
         return false;
     };
@@ -1498,7 +1590,7 @@ fn valid_github_repository(value: &str) -> bool {
             .is_some_and(|extension| extension.eq_ignore_ascii_case("git"))
 }
 
-fn valid_branch(value: &str) -> bool {
+pub(crate) fn valid_branch(value: &str) -> bool {
     !value.is_empty()
         && !value.starts_with('-')
         && !value.starts_with('/')
@@ -1524,7 +1616,7 @@ fn valid_workflow_ref(value: &str) -> bool {
         && !value.chars().any(char::is_control)
 }
 
-fn encode_path_segment(value: &str) -> String {
+pub(crate) fn encode_path_segment(value: &str) -> String {
     value.replace('%', "%25").replace('/', "%2F")
 }
 
@@ -1543,8 +1635,14 @@ impl ApprovalStatementReader for StatementsNotRetainedReader {
 }
 
 pub(crate) fn missing_result_is_non_failing(bytes: &[u8]) -> bool {
-    serde_json::from_slice::<MissingResultLineOwned>(bytes)
-        .is_ok_and(|result| result.protocol == MISSING_RESULT_PROTOCOL && result.missing.is_empty())
+    serde_json::from_slice::<MissingResultLineOwned>(bytes).is_ok_and(|result| {
+        result.protocol == MISSING_RESULT_PROTOCOL
+            && result.missing.is_empty()
+            && result
+                .tag_findings
+                .iter()
+                .all(|finding| finding.status == "accepted")
+    })
 }
 
 /// Read or write one receipt note using the fixed notes ref.
@@ -1684,7 +1782,7 @@ fn map_note_error(error: ReceiptNoteError) -> ReceiptHostError {
     }
 }
 
-fn is_full_object_id(value: &str) -> bool {
+pub(crate) fn is_full_object_id(value: &str) -> bool {
     matches!(value.len(), 40 | 64)
         && value
             .bytes()
@@ -1711,12 +1809,12 @@ fn verify_commit(repository: &Path, commit: &str) -> Result<String, ReceiptHostE
 }
 
 #[derive(Clone, Copy)]
-enum GitError {
+pub(crate) enum GitError {
     NotFound,
     Failed,
 }
 
-fn git_output(repository: &Path, arguments: &[&str]) -> Result<Vec<u8>, GitError> {
+pub(crate) fn git_output(repository: &Path, arguments: &[&str]) -> Result<Vec<u8>, GitError> {
     let output = git_command(repository, arguments, None)?;
     if output.status.success() {
         Ok(output.stdout)
@@ -1730,7 +1828,11 @@ fn git_output(repository: &Path, arguments: &[&str]) -> Result<Vec<u8>, GitError
     }
 }
 
-fn git_with_input(repository: &Path, arguments: &[&str], input: &[u8]) -> Result<(), GitError> {
+pub(crate) fn git_with_input(
+    repository: &Path,
+    arguments: &[&str],
+    input: &[u8],
+) -> Result<(), GitError> {
     let output = git_command(repository, arguments, Some(input))?;
     if output.status.success() {
         Ok(())
@@ -1739,7 +1841,7 @@ fn git_with_input(repository: &Path, arguments: &[&str], input: &[u8]) -> Result
     }
 }
 
-fn git_command(
+pub(crate) fn git_command(
     repository: &Path,
     arguments: &[&str],
     input: Option<&[u8]>,
@@ -2281,5 +2383,107 @@ mod tests {
         assert!(missing_result_is_non_failing(&empty));
         assert!(missing_result_is_non_failing(&failed_only));
         assert!(!missing_result_is_non_failing(&actual_missing));
+    }
+
+    fn tag_receipt(
+        name: &str,
+        object: char,
+        commit: char,
+    ) -> engineering_assurance::tag_receipt::TagReceipt {
+        engineering_assurance::tag_receipt::TagReceipt {
+            reference: format!("refs/tags/{name}"),
+            tag_object: object.to_string().repeat(40),
+            commit: commit.to_string().repeat(40),
+            pushed_at: "2026-11-20T10:00:00Z".to_owned(),
+            trailers_readable: true,
+            record_ids: Vec::new(),
+        }
+    }
+
+    fn judged(
+        finding: engineering_assurance::tag_receipt::TagFinding,
+        accepted: bool,
+    ) -> engineering_assurance::tag_receipt::Judged {
+        engineering_assurance::tag_receipt::Judged {
+            finding,
+            accepted: accepted.then(|| engineering_assurance::tag_receipt::Acceptance {
+                accepted_by: "alice".to_owned(),
+                accepted_reason: "reviewed".to_owned(),
+            }),
+        }
+    }
+
+    #[test]
+    #[trace("TC-1133", "FR-082-AC-7", "FR-082-AC-11")]
+    fn tag_findings_carry_kind_tag_and_fail_the_check_unless_accepted() {
+        use engineering_assurance::tag_receipt::{
+            InvalidReason, InvalidReceipt, MissingTagReason, TagFinding,
+        };
+        let no_receipt = TagFinding::TagNoReceipt {
+            reference: "refs/tags/approve-1".to_owned(),
+            current_object: "a".repeat(40),
+        };
+        let missing = TagFinding::MissingTag {
+            receipt: tag_receipt("approve-2", 'b', 'c'),
+            reason: MissingTagReason::TagChanged,
+            current_object: Some("d".repeat(40)),
+        };
+        let invalid = TagFinding::InvalidReceipt(InvalidReceipt {
+            commit: "c".repeat(40),
+            reason: InvalidReason::SignatureInvalid,
+        });
+        let change = [MissingReceipt {
+            commit: "e".repeat(40),
+            reason: engineering_assurance::receipt::MissingReceiptReason::InvalidReceipt,
+        }];
+
+        // An empty finding list leaves the check green; a commit finding of
+        // `kind` `change` and a tag finding of `kind` `tag` are told apart.
+        let empty = render_missing(&[], &[], &[]).unwrap();
+        assert!(missing_result_is_non_failing(&empty));
+        let line: Value = serde_json::from_slice(
+            &render_missing(
+                &change,
+                &[],
+                &[
+                    judged(missing.clone(), false),
+                    judged(invalid.clone(), false),
+                ],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(line["missing"][0]["kind"], "change");
+        assert_eq!(line["missing"][0]["reason"], "invalid_receipt");
+        let tag_invalid = &line["tag_findings"][1];
+        assert_eq!(tag_invalid["kind"], "tag");
+        assert_eq!(tag_invalid["status"], "invalid_receipt");
+        assert_eq!(tag_invalid["reason"], "signature_invalid");
+        assert!(
+            tag_invalid.get("ref").is_none(),
+            "an untrusted receipt names no ref"
+        );
+        let tag_missing = &line["tag_findings"][0];
+        assert_eq!(tag_missing["status"], "missing_tag");
+        assert_eq!(tag_missing["ref"], "refs/tags/approve-2");
+        assert_eq!(tag_missing["tag_object"], "b".repeat(40));
+        assert_eq!(tag_missing["reason"], "tag_changed");
+        assert_eq!(tag_missing["current_object"], "d".repeat(40));
+        assert_eq!(tag_missing["commit"], "c".repeat(40));
+
+        // Each of the three tag statuses fails the check; an accepted one does not.
+        for finding in [no_receipt.clone(), missing.clone(), invalid] {
+            let result = render_missing(&[], &[], &[judged(finding, false)]).unwrap();
+            assert!(!missing_result_is_non_failing(&result));
+        }
+        let accepted =
+            render_missing(&[], &[], &[judged(missing, true), judged(no_receipt, true)]).unwrap();
+        assert!(missing_result_is_non_failing(&accepted));
+        let accepted: Value = serde_json::from_slice(&accepted).unwrap();
+        assert_eq!(accepted["tag_findings"][0]["status"], "accepted");
+        assert_eq!(accepted["tag_findings"][0]["finding"], "missing_tag");
+        assert_eq!(accepted["tag_findings"][0]["accepted_by"], "alice");
+        assert_eq!(accepted["tag_findings"][0]["accepted_reason"], "reviewed");
+        assert_eq!(accepted["tag_findings"][1]["finding"], "tag_no_receipt");
     }
 }
