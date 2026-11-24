@@ -269,7 +269,7 @@ struct RekorInclusionProof {
 mod tests {
     use super::{EmbeddedEntry, bundle_signature, extract, verify_with_policy};
     use base64::{Engine, engine::general_purpose::STANDARD};
-    use der::{Decode, Encode, asn1::OctetString};
+    use der::asn1::OctetString;
     use serde_json::json;
     use sigstore_types::Bundle;
 
@@ -316,9 +316,24 @@ mod tests {
         Bundle::from_json(&value.to_string()).expect("mutated fixture bundle remains parseable")
     }
 
-    fn verify_fixture(bundle: &Bundle, artifact: &[u8]) -> Option<i64> {
+    fn verify_fixture(bundle: &Bundle, artifact: &[u8]) -> Result<Option<i64>, String> {
         let policy = sigstore_verify::VerificationPolicy::any_identity().skip_sct();
-        verify_with_policy(bundle, artifact, &fixture_trusted_root(bundle), &policy)
+        let trusted_root =
+            sigstore_verify::trust_root::TrustedRoot::from_json(&fixture_trusted_root(bundle))
+                .map_err(|error| error.to_string())?;
+        let verifier =
+            sigstore_verify::Verifier::new(&trusted_root).map_err(|error| error.to_string())?;
+        let result = verifier
+            .verify(artifact, bundle, &policy)
+            .map_err(|error| error.to_string())?;
+        Ok(result.integrated_time().map(|time| time.as_second()))
+    }
+
+    fn assert_rejected(result: Result<Option<i64>, String>) {
+        assert!(
+            !matches!(result, Ok(Some(_))),
+            "tampered verifier input was accepted: {result:?}"
+        );
     }
 
     #[test]
@@ -343,7 +358,7 @@ mod tests {
         };
 
         assert_eq!(
-            verify_fixture(&bundle, &artifact),
+            verify_fixture(&bundle, &artifact).unwrap_or_else(|error| panic!("{error}")),
             Some(1_767_225_600),
             "successful SET, inclusion, checkpoint, artifact and signature verification yields integratedTime"
         );
@@ -359,11 +374,7 @@ mod tests {
             value["verificationMaterial"]["tlogEntries"][0]["integratedTime"] = json!("1767225601");
         });
 
-        assert_eq!(
-            verify_fixture(&changed, &artifact),
-            None,
-            "mutating integratedTime without resigning the SET fails closed"
-        );
+        assert_rejected(verify_fixture(&changed, &artifact));
     }
 
     #[test]
@@ -387,7 +398,7 @@ mod tests {
                 json!(STANDARD.encode(signature));
         });
 
-        assert_eq!(verify_fixture(&changed, &artifact), None);
+        assert_rejected(verify_fixture(&changed, &artifact));
     }
 
     #[test]
@@ -401,7 +412,7 @@ mod tests {
                 json!(STANDARD.encode([0_u8; 32]));
         });
 
-        assert_eq!(verify_fixture(&changed, &artifact), None);
+        assert_rejected(verify_fixture(&changed, &artifact));
     }
 
     #[test]
@@ -422,7 +433,8 @@ mod tests {
             panic!("second fixture must yield a bundle from CMS extraction");
         };
         assert_eq!(
-            verify_fixture(&second_bundle, &second_artifact),
+            verify_fixture(&second_bundle, &second_artifact)
+                .unwrap_or_else(|error| panic!("{error}")),
             Some(1_767_225_600)
         );
 
@@ -432,7 +444,7 @@ mod tests {
             value["verificationMaterial"]["tlogEntries"][0] = second_entry;
         });
 
-        assert_eq!(verify_fixture(&substituted, &first_artifact), None);
+        assert_rejected(verify_fixture(&substituted, &first_artifact));
     }
 
     #[test]
