@@ -281,32 +281,17 @@ mod tests {
         let certificate_der = bundle
             .signing_certificate()
             .expect("fixture bundle contains its signer certificate");
-        let certificate = cms::cert::Certificate::from_der(certificate_der.as_bytes())
-            .expect("fixture signer certificate is DER");
-        let public_key_der = certificate
-            .tbs_certificate
-            .subject_public_key_info
-            .to_der()
-            .expect("fixture signer public key encodes as DER");
-        let log_id = bundle
-            .verification_material
-            .tlog_entries
-            .first()
-            .expect("fixture bundle contains a Rekor entry")
-            .log_id
-            .key_id
-            .as_bytes();
         json!({
             "mediaType": "application/vnd.dev.sigstore.trustedroot+json;version=0.1",
             "tlogs": [{
                 "baseUrl": "urn:ea-306-offline-fixture",
                 "hashAlgorithm": "SHA2_256",
                 "publicKey": {
-                    "rawBytes": STANDARD.encode(public_key_der),
+                    "rawBytes": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEu4FhBbU5IY7R+iNdQJf0Mz0pGcwYP1UbkvHRal3IIa+Qh8745bH5x4bjwxg63SR6Nwi7GYaRG8InhTgGr6fg5g==",
                     "keyDetails": "PKIX_ECDSA_P256_SHA_256",
                     "validFor": { "start": "2020-01-01T00:00:00Z", "end": "2099-01-01T00:00:00Z" }
                 },
-                "logId": { "keyId": STANDARD.encode(log_id) }
+                "logId": { "keyId": "gmx56xxygupwnicOAKVfSZo1FJV9J6gQZBke8qZnLi0=" }
             }],
             "certificateAuthorities": [{
                 "subject": { "commonName": "EA Offline Fixture Signer" },
