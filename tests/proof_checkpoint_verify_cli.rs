@@ -257,15 +257,16 @@ fn run_request(request: &Value) -> Output {
 }
 
 fn run_request_with_path(request: &Value, path: Option<&Path>) -> Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"));
+    command
         .args(["proof-checkpoint-verify", "--request", "-"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     if let Some(path) = path {
-        child.env("PATH", path);
+        command.env("PATH", path);
     }
-    let mut child = child.spawn().expect("CLI starts");
+    let mut child = command.spawn().expect("CLI starts");
     child
         .stdin
         .take()
@@ -642,7 +643,6 @@ fn tc_1032_malformed_expected_object_id_is_rejected_before_git() {
     let error: Value = serde_json::from_slice(&output.stdout).expect("machine error stdout");
     assert_eq!(error["code"], "proof_checkpoint_verify_request_invalid");
 
-    let fixture = fixture();
     let object_id = signed_tag(&fixture, "missing-trust", &checkpoint_message(&[]));
     let mut request = request(&fixture, "missing-trust", &object_id);
     request["allowed_signers"] = json!(fixture.root().join("no-such-allowed-signers"));

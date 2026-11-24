@@ -273,7 +273,7 @@ struct RekorInclusionProof {
     reason = "in a test, a panic IS the failure report; the production lints stand"
 )]
 mod tests {
-    use super::{bundle_signature, extract, verify_with_policy, EmbeddedEntry};
+    use super::{bundle_signature, extract, verify_with_policy, EmbeddedEntry, DER_SET_OF_TAG};
     use base64::{engine::general_purpose::STANDARD, Engine};
     use der::asn1::OctetString;
     use ix_trace_rs::trace;
