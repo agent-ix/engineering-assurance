@@ -63,7 +63,7 @@ jobs:
           gh auth setup-git
           git init --bare "$RUNNER_TEMP/tag-repository.git"
           git -C "$RUNNER_TEMP/tag-repository.git" fetch --depth=1 --no-tags \
-            "https://github.com/$REPOSITORY" \
+            "$GITHUB_SERVER_URL/$REPOSITORY" \
             "+refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH" \
             "+refs/tags/$TAG_NAME:refs/tags/$TAG_NAME"
           tag_hex="$(printf '%s' "$TAG_NAME" | od -An -v -tx1 | tr -d ' \n')"
