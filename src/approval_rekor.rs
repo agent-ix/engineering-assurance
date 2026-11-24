@@ -276,27 +276,31 @@ mod tests {
     const VERIFIED_TAG: &[u8] = include_bytes!("../tests/fixtures/approval-rekor/tag-object.txt");
     const SECOND_VERIFIED_TAG: &[u8] =
         include_bytes!("../tests/fixtures/approval-rekor/tag-object-second.txt");
+    const FIXTURE_ROOT_CERTIFICATE: &str =
+        include_str!("../tests/fixtures/approval-rekor/ca-certificate.txt");
 
     fn fixture_trusted_root(bundle: &Bundle) -> String {
         let certificate_der = bundle
             .signing_certificate()
             .expect("fixture bundle contains its signer certificate");
+        let root_certificate = sigstore_types::DerCertificate::from_pem(FIXTURE_ROOT_CERTIFICATE)
+            .expect("fixture root certificate is PEM text");
         json!({
             "mediaType": "application/vnd.dev.sigstore.trustedroot+json;version=0.1",
             "tlogs": [{
                 "baseUrl": "urn:ea-306-offline-fixture",
                 "hashAlgorithm": "SHA2_256",
                 "publicKey": {
-                    "rawBytes": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEu4FhBbU5IY7R+iNdQJf0Mz0pGcwYP1UbkvHRal3IIa+Qh8745bH5x4bjwxg63SR6Nwi7GYaRG8InhTgGr6fg5g==",
+                    "rawBytes": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEM+oXmw0MPZmfQ1XPmWxxys0Wi5e/NKv5kU2AHG+apj/M+RrHcQEelIklJm94O2tBPZN3bX/xTxD5aIbFSCoiwA==",
                     "keyDetails": "PKIX_ECDSA_P256_SHA_256",
                     "validFor": { "start": "2020-01-01T00:00:00Z", "end": "2099-01-01T00:00:00Z" }
                 },
-                "logId": { "keyId": "gmx56xxygupwnicOAKVfSZo1FJV9J6gQZBke8qZnLi0=" }
+                "logId": { "keyId": "6bO1Ky4NBPRL0tn6bavKTZwrBEyAHU9igPi/9sPwHSg=" }
             }],
             "certificateAuthorities": [{
-                "subject": { "commonName": "EA Offline Fixture Signer" },
+                "subject": { "commonName": "EA Offline Fixture Root" },
                 "uri": "urn:ea-306-offline-fixture",
-                "certChain": { "certificates": [{ "rawBytes": STANDARD.encode(certificate_der.as_bytes()) }] },
+                "certChain": { "certificates": [{ "rawBytes": STANDARD.encode(root_certificate.as_bytes()) }] },
                 "validFor": { "start": "2020-01-01T00:00:00Z", "end": "2099-01-01T00:00:00Z" }
             }],
             "ctlogs": [],
