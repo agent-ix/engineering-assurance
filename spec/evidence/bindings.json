@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 1,
+  "bindings": [
+    {
+      "obligation": "FR-038-AC-1",
+      "suite": "SUITE-004",
+      "symbols": [
+        "syft_producer_cli::real_tool_checks"
+      ]
+    },
+    {
+      "obligation": "FR-038-AC-10",
+      "suite": "SUITE-004",
+      "symbols": [
+        "syft_producer_cli::real_tool_checks"
+      ]
+    },
+    {
+      "obligation": "FR-038-AC-2",
+      "suite": "SUITE-004",
+      "symbols": [
+        "syft_producer_cli::real_tool_checks"
+      ]
+    },
+    {
+      "obligation": "FR-038-AC-7",
+      "suite": "SUITE-004",
+      "symbols": [
+        "syft_producer_cli::real_tool_checks"
+      ]
+    },
+    {
+      "obligation": "FR-039-AC-1",
+      "suite": "SUITE-004",
+      "symbols": [
+        "syft_producer_cli::real_tool_checks"
+      ]
+    },
+    {
+      "obligation": "FR-039-AC-2",
+      "suite": "SUITE-004",
+      "symbols": [
+        "syft_producer_cli::real_tool_checks"
+      ]
+    },
+    {
+      "obligation": "FR-039-AC-3",
+      "suite": "SUITE-004",
+      "symbols": [
+        "syft_producer_cli::real_tool_checks"
+      ]
+    },
+    {
+      "obligation": "FR-039-AC-4",
+      "suite": "SUITE-004",
+      "symbols": [
+        "syft_producer_cli::real_tool_checks"
+      ]
+    },
+    {
+      "obligation": "FR-039-AC-8",
+      "suite": "SUITE-004",
+      "symbols": [
+        "syft_producer_cli::real_tool_checks"
+      ]
+    },
+    {
+      "obligation": "FR-039-AC-9",
+      "suite": "SUITE-004",
+      "symbols": [
+        "syft_producer_cli::real_tool_checks"
+      ]
+    },
+    {
+      "obligation": "FR-040-AC-15",
+      "suite": "SUITE-004",
+      "symbols": [
+        "signature_verify_gitsign::tc_292"
+      ]
+    },
+    {
+      "obligation": "FR-040-AC-20",
+      "suite": "SUITE-004",
+      "symbols": [
+        "signature_verify_gitsign::tc_292"
+      ]
+    },
+    {
+      "obligation": "FR-041-AC-26",
+      "suite": "SUITE-004",
+      "symbols": [
+        "approval_verify_gitsign::tc_1017"
+      ]
+    },
+    {
+      "obligation": "FR-044-AC-1",
+      "suite": "SUITE-004",
+      "symbols": [
+        "osv_scanner_producer_cli::real_tool_checks"
+      ]
+    },
+    {
+      "obligation": "FR-044-AC-13",
+      "suite": "SUITE-004",
+      "symbols": [
+        "osv_scanner_producer_cli::real_tool_checks"
+      ]
+    },
+    {
+      "obligation": "FR-044-AC-14",
+      "suite": "SUITE-004",
+      "symbols": [
+        "osv_scanner_producer_cli::real_tool_checks"
+      ]
+    },
+    {
+      "obligation": "FR-044-AC-2",
+      "suite": "SUITE-004",
+      "symbols": [
+        "osv_scanner_producer_cli::real_tool_checks"
+      ]
+    },
+    {
+      "obligation": "FR-044-AC-5",
+      "suite": "SUITE-004",
+      "symbols": [
+        "osv_scanner_producer_cli::real_tool_checks"
+      ]
+    },
+    {
+      "obligation": "FR-044-AC-8",
+      "suite": "SUITE-004",
+      "symbols": [
+        "osv_scanner_producer_cli::real_tool_checks"
+      ]
+    }
+  ]
+}
