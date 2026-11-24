@@ -1149,7 +1149,7 @@ fn agent_with_confirmed_key(fixture: &Fixture, askpass: &Path) -> Agent {
     let public = fs::read_to_string(fixture.public("a")).expect("public key");
     let literal: Vec<&str> = public.split_whitespace().take(2).collect();
     fixture.config(&format!(
-        "[gpg]\n\tformat = ssh\n[user]\n\tsigningkey = key::{}\n",
+        "[gpg]\n\tformat = ssh\n[user]\n\tsigningkey = {}\n",
         literal.join(" ")
     ));
     agent
