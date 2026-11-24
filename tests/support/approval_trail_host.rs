@@ -203,7 +203,7 @@ mod receipts {
                 "-f",
                 "-a",
                 "-m",
-                &message(RECORD).replace("Approve", "Approve again"),
+                &message(RECORD).replacen("Approve", "Approve again", 1),
                 "approve-1",
             ],
         );
