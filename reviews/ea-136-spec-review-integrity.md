@@ -44,3 +44,25 @@ scope:
 findings: []
 bindings: []
 ```
+
+## Dispositions
+
+### Round 2 — HEAD 9fa56daa0196f4c62bbd8788df5279726b81b98d
+
+The changed requirements remain internally consistent. The generated offline
+fixtures exercise the verifier boundary under a test-only root, and the spec
+continues to distinguish them from genuine gitsign/production-root evidence.
+No integrity finding was added.
+
+```yaml
+dispositions: []
+```
+
+### Round 3 — HEAD cec9ee8626c9ce65696040d2e4172bf7f67b584a
+
+The latest change is limited to trace-attribute spelling. The requirements
+remain internally consistent; the clean verdict and empty findings set stand.
+
+```yaml
+dispositions: []
+```

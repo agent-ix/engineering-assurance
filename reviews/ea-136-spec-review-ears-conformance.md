@@ -99,3 +99,50 @@ findings:
     finding: "Quire reports non-singular and mixed-modal at FR-041-CON-2: multiple SHALL clauses and a mix of SHALL/may in one constraint. Split these obligations."
 bindings: []
 ```
+
+## Dispositions
+
+### Round 2 — HEAD 9fa56daa0196f4c62bbd8788df5279726b81b98d
+
+Targeted Quire validation of FR-040, FR-041 and the five review artifacts exited
+0 with 7/7 documents grammar-clean and no grammar findings.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-040 architecture constraints are split into atomic statements. |
+| FND-002 | fixed | FR-041 names the command as the actor using the CMS/DER reader. |
+| FND-003 | fixed | The certificate-clock rule uses a canonical `When` trigger. |
+| FND-004 | fixed | Trusted-root use, test injection, and key-rotation failure behavior are separate statements with named subjects and canonical triggers. |
+| FND-005 | fixed | FR-041 constraints separate parser boundaries, extraction, verifier behavior, payload binding, and implementation limits. |
+
+```yaml
+dispositions:
+  - {fnd: FND-001, outcome: fixed, after_excerpt: "| FR-040-CON-2 | The implementation SHALL contain no cryptographic, certificate-parsing or Sigstore client code of its own. | Architecture | Inspection |"}
+  - {fnd: FND-002, outcome: fixed, after_excerpt: "The command SHALL use a CMS/DER reader only to extract the re-encoded signed-attributes DER, CMS signature octets, signing certificate and Rekor `TransparencyLogEntry`."}
+  - {fnd: FND-003, outcome: fixed, after_excerpt: "When the command verifies a gitsign tag using transparency-log time, it SHALL NOT judge any certificate at the local clock; the SSH path delegates its validity judgement to git, as above."}
+  - {fnd: FND-004, outcome: fixed, after_excerpt: "When a unit test supplies a trusted-root JSON value, the test helper SHALL pass that value to the verifier."}
+  - {fnd: FND-005, outcome: fixed, after_excerpt: "When the command verifies a Rekor entry, `sigstore-verify` SHALL compute the artifact digest from the signed-attributes DER and verify the hashedrekord entry and signature over that artifact."}
+```
+
+### Round 3 — HEAD cec9ee8626c9ce65696040d2e4172bf7f67b584a
+
+Targeted Quire validation still reports FR-040, FR-041 and all five review
+artifacts grammar-clean, with no grammar findings. No requirements changed in
+this commit.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | No change to the split FR-040 constraints. |
+| FND-002 | fixed | No change to the named CMS/DER reader actor. |
+| FND-003 | fixed | No change to the canonical `When` trigger. |
+| FND-004 | fixed | No change to the named trusted-root subjects and triggers. |
+| FND-005 | fixed | No change to the split FR-041 constraints. |
+
+```yaml
+dispositions:
+  - {fnd: FND-001, outcome: fixed, after_excerpt: "| FR-040-CON-2 | The implementation SHALL contain no cryptographic, certificate-parsing or Sigstore client code of its own. | Architecture | Inspection |"}
+  - {fnd: FND-002, outcome: fixed, after_excerpt: "The command SHALL use a CMS/DER reader only to extract the re-encoded signed-attributes DER, CMS signature octets, signing certificate and Rekor `TransparencyLogEntry`."}
+  - {fnd: FND-003, outcome: fixed, after_excerpt: "When the command verifies a gitsign tag using transparency-log time, it SHALL NOT judge any certificate at the local clock; the SSH path delegates its validity judgement to git, as above."}
+  - {fnd: FND-004, outcome: fixed, after_excerpt: "When a unit test supplies a trusted-root JSON value, the test helper SHALL pass that value to the verifier."}
+  - {fnd: FND-005, outcome: fixed, after_excerpt: "When the command verifies a Rekor entry, `sigstore-verify` SHALL compute the artifact digest from the signed-attributes DER and verify the hashedrekord entry and signature over that artifact."}
+```

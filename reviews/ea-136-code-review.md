@@ -71,3 +71,41 @@ findings:
     finding: "The CMS signature is encoded with OctetString::to_der() before it is put in messageSignature.signature. That bundle field contains raw signature octets; sigstore-verify compares it byte-for-byte with Rekor's raw signature. The DER wrapper therefore makes verification fail for valid entries, and the caller maps every such failure to trusted_at_missing=log_entry_unverified. Extract the raw OctetString contents for the bundle field."
 bindings: []
 ```
+
+## Dispositions
+
+### Round 2 — HEAD 9fa56daa0196f4c62bbd8788df5279726b81b98d
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | The production bundle now base64-encodes `OctetString::as_bytes()` directly. The generated CMS/Rekor fixture exercises extraction, bundle construction and successful verifier acceptance; the focused fixture filter passed 6/6, including tamper and substitution rejection cases. |
+
+```yaml
+dispositions:
+  - fnd: FND-001
+    outcome: fixed
+    after_excerpt: |-
+      fn bundle_signature(signature: &OctetString) -> String {
+          STANDARD.encode(signature.as_bytes())
+      }
+```
+
+### Round 3 — HEAD cec9ee8626c9ce65696040d2e4172bf7f67b584a
+
+The latest commit changes the trace attribute import to the form recognized by
+Quoin. The focused offline fixture tests passed 6/6; no new code defect was
+found.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | Raw CMS signature octets still enter the bundle unchanged, and the positive fixture plus five rejection cases pass. |
+
+```yaml
+dispositions:
+  - fnd: FND-001
+    outcome: fixed
+    after_excerpt: |-
+      fn bundle_signature(signature: &OctetString) -> String {
+          STANDARD.encode(signature.as_bytes())
+      }
+```

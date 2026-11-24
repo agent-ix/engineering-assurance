@@ -54,3 +54,37 @@ findings:
     finding: "The checklist prohibits exact tool-version pins and tracking/provenance records except a narrow identity digest that binds a signed statement/proof to its exact artifact. AC-28 requires gitsign v0.18.0 and records version, ref/object id, identity, issuer and service outcome; AC-29 requires source object ids and each mutation be recorded. Remove those pin and tracking-record obligations. The signed-attributes artifact digest itself may remain only insofar as it is the identity digest needed for verification."
 bindings: []
 ```
+
+## Dispositions
+
+### Round 2 — HEAD 9fa56daa0196f4c62bbd8788df5279726b81b98d
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | AC-28/29 no longer pin a gitsign version or require a provenance ledger, source object ids, or mutation records. The locally generated verifier fixtures are documented as fictional and do not establish production-root trust. |
+
+```yaml
+dispositions:
+  - fnd: FND-001
+    outcome: fixed
+    after_excerpt: |-
+      An offline unit test proves that the CMS signature OCTET STRING contents enter the bundle unchanged, without DER wrapping.
+```
+
+### Round 3 — HEAD cec9ee8626c9ce65696040d2e4172bf7f67b584a
+
+The trace-attribute adjustment changes no requirement text. The prior
+disposition remains fixed: AC-28/29 request no exact gitsign pin or extra
+provenance record, and the offline fixtures remain explicitly test-only.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | No change to the already corrected acceptance criteria. |
+
+```yaml
+dispositions:
+  - fnd: FND-001
+    outcome: fixed
+    after_excerpt: |-
+      An offline unit test proves that the CMS signature OCTET STRING contents enter the bundle unchanged, without DER wrapping.
+```

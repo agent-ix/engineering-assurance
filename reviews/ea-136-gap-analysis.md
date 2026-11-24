@@ -97,3 +97,56 @@ bindings:
   The synthetic verifier policy skips SCT validation because the fixture has no
   CT proof, while retaining certificate-chain, Rekor, artifact and signature
   verification.
+
+### Round 2 — HEAD 9fa56daa0196f4c62bbd8788df5279726b81b98d
+
+Quoin 0.36.8 still does not surface the new inline `approval_rekor` tests in its
+computed criterion bindings. `quoin matrix --repo . --json` reports AC-28 bound
+only to `trusted_time_is_utc_and_time_skew_is_signed_minus_integrated_time`
+and AC-29 with no binders. Manual source review confirms that the new tests are
+trace-tagged and the focused binary filter passes all six fixture tests; the
+remaining issue is their absence from computed traceability.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | still-open | The offline fixture closes the runtime coverage gap, but Quoin's computed matrix still does not bind the new inline tests: AC-28 retains only the arithmetic binder and AC-29 is untagged. The acceptance evidence is therefore not represented in the computed matrix. |
+| FND-002 | fixed | TC-1049 through TC-1060 no longer occur in test trace annotations; direct FR-AC trace tags remain. |
+
+```yaml
+dispositions:
+  - fnd: FND-001
+    outcome: still-open
+    reason: "At HEAD, quoin matrix reports AC-28 bound only to the timestamp arithmetic test and AC-29 with no binders, despite the six passing, trace-tagged offline fixture tests."
+  - fnd: FND-002
+    outcome: fixed
+    after_excerpt: |-
+      #[trace("FR-041-AC-34", "FR-037-AC-24", "FR-037-AC-25")]
+      fn a_committed_allowed_signers_source_fixes_the_trust_identity() {
+```
+
+### Round 3 — HEAD cec9ee8626c9ce65696040d2e4172bf7f67b584a
+
+The latest commit imports `ix_trace_rs::trace` and applies the short `#[trace]`
+attribute to the offline fixture tests. Quoin now includes their binders in the
+computed matrix: AC-28 is bound to the raw-octet and positive verifier fixture
+tests; AC-29 is bound to all five fail-closed mutation/substitution tests. The
+focused executable-target test filter passed 6/6 through `locked-build.sh`.
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | The offline extraction/verifier tests are now represented in the computed matrix for AC-28 and AC-29, and all six focused fixture tests passed. |
+| FND-002 | fixed | Undefined TC-1049 through TC-1060 remain absent from the new trace annotations. |
+
+```yaml
+dispositions:
+  - fnd: FND-001
+    outcome: fixed
+    after_excerpt: |-
+      #[trace("FR-041-AC-29")]
+      fn cms_rekor_fixture_rejects_an_entry_from_a_distinct_valid_tag() {
+  - fnd: FND-002
+    outcome: fixed
+    after_excerpt: |-
+      #[trace("FR-041-AC-34", "FR-037-AC-24", "FR-037-AC-25")]
+      fn a_committed_allowed_signers_source_fixes_the_trust_identity() {
+```
