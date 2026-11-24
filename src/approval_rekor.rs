@@ -279,10 +279,7 @@ mod tests {
     const FIXTURE_ROOT_CERTIFICATE: &str =
         include_str!("../tests/fixtures/approval-rekor/ca-certificate.txt");
 
-    fn fixture_trusted_root(bundle: &Bundle) -> String {
-        let certificate_der = bundle
-            .signing_certificate()
-            .expect("fixture bundle contains its signer certificate");
+    fn fixture_trusted_root() -> String {
         let root_certificate = sigstore_types::DerCertificate::from_pem(FIXTURE_ROOT_CERTIFICATE)
             .expect("fixture root certificate is PEM text");
         json!({
@@ -323,7 +320,7 @@ mod tests {
     fn verify_fixture(bundle: &Bundle, artifact: &[u8]) -> Result<Option<i64>, String> {
         let policy = sigstore_verify::VerificationPolicy::any_identity().skip_sct();
         let trusted_root =
-            sigstore_verify::trust_root::TrustedRoot::from_json(&fixture_trusted_root(bundle))
+            sigstore_verify::trust_root::TrustedRoot::from_json(&fixture_trusted_root())
                 .map_err(|error| error.to_string())?;
         let verifier =
             sigstore_verify::Verifier::new(&trusted_root).map_err(|error| error.to_string())?;
@@ -458,8 +455,7 @@ mod tests {
             panic!("fixture must yield a bundle from CMS extraction");
         };
         let mut unrelated_root: serde_json::Value =
-            serde_json::from_str(&fixture_trusted_root(&bundle))
-                .expect("fixture trusted root is JSON");
+            serde_json::from_str(&fixture_trusted_root()).expect("fixture trusted root is JSON");
         unrelated_root["tlogs"][0]["logId"]["keyId"] = json!(STANDARD.encode([0_u8; 32]));
         let policy = sigstore_verify::VerificationPolicy::any_identity().skip_sct();
 
