@@ -77,3 +77,22 @@ bindings:
   - {test_id: trusted_time_is_utc_and_time_skew_is_signed_minus_integrated_time, ac_id: FR-041-AC-28, trace: correct}
   - {test_id: tests/approval_verify_gitsign.rs::tc_1017_real_gitsign_verifies_and_binds_a_public_approval_tag, ac_id: FR-041-AC-26, trace: correct}
 ```
+
+## Dispositions
+
+- **FND-001 — fixed for offline extraction and verifier coverage.** The new
+  locally generated fixtures exercise the production CMS extraction and Bundle
+  construction, then `Verifier::verify` with a test-only trusted root. The
+  accepted case verifies the signature, Rekor SET, inclusion proof, checkpoint,
+  certificate chain and integrated time. Five fail-closed cases cover changed
+  integrated time, changed SET, changed inclusion proof, substitution of an
+  entry from a second valid tag, and a trusted root with an unrelated Rekor
+  key. Evidence: the focused extraction test passed 1/1 and the filtered
+  rejection tests passed 5/5 through `locked-build.sh`.
+
+  The fixtures use fictional locally generated CMS/Rekor material and are not
+  gitsign-produced. They do not establish production-root trust or replace the
+  ignored live AC-26 test; that live test remains unavailable/not executed.
+  The synthetic verifier policy skips SCT validation because the fixture has no
+  CT proof, while retaining certificate-chain, Rekor, artifact and signature
+  verification.
