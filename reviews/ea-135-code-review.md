@@ -101,3 +101,13 @@ No high finding. The behaviour matches FR-037, FR-040, FR-041, FR-042 AC-2, FR-0
 and the breaking rename is complete with no compatibility path. Not mergeable as is: fix
 FND-001 to FND-003 in one fix round, as small test and audit edits. FND-004 and FND-005 are
 optional.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (dd08bdb40): `is_test_case_id` now accepts `TC-` followed by three or more ASCII digits. The new test `tc_117_a_test_case_id_is_tc_and_three_or_more_digits` covers TC-117, TC-1035 and TC-12345, and rejects TC-12, TC-, TC-12a, full-width digits and lower case. `tc_117_every_first_party_rust_test_uses_canonical_trace_syntax` now passes. |
+| FND-002 | fixed | Round 1: the symlink entry's blob is now `default_registry()`. Re-running the mutation that accepts mode 120000 in `regular_file_object` now fails tc_1043 (exit 0, expected 2). |
+| FND-003 | fixed | Round 1: the non-UTF-8 fixture is a valid registry with `ff fe` inside the principal. Re-running the mutation that replaces `String::from_utf8` with `from_utf8_lossy` now fails tc_1043 (exit 0, expected 2). |
+| FND-004 | fixed | Round 1: the real-timeout case is its own test, `tc_1046_a_git_that_times_out_while_reading_the_registry_is_unverifiable`, with no production knob. It passed in 60.16 s. |
+| FND-005 | fixed | Round 1: one shared `GitsignInputError::refusal(invalid, principal)` is used by all four hosts. `Reason` is imported in `approval_verify_host`. |

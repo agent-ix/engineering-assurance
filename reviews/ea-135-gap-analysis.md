@@ -49,3 +49,12 @@ observed passing in 60.14 s.
 The trace coverage is complete for the ACs this PR implements. One AC branch is untested in a
 way that matters (FND-001, medium). Three narrower gaps are low. Together with the
 code-review findings, this needs one fix round. Nothing found is a behavioural defect.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Round 1 (dd08bdb40): `tc_1011_the_registry_captured_before_verification_survives_a_moved_branch_and_an_edited_worktree` in tests/approval_verify_gitsign.rs is bound to FR-041-AC-25. While gitsign runs, the stand-in moves `refs/heads/registry` to an empty registry and blanks the working-tree `registry.json`. The result stays `approved` with the captured principal, and `trust.identity_registry_commit` equals the commit resolved at capture. |
+| FND-002 | still-open | The graft added to tc_1044 cannot change the result. It grafts new parents onto `committed`, but the address is `main:registry.json`, which never follows parents. The commit and its tree are the same whether or not grafts are honoured. Removing `GIT_GRAFT_FILE` from the git runner still passes tc_1044 (mutation survived). For the graft to bite, the address must reach the content through ancestry: for example `main~1:registry.json` (or `main^`), with a graft that redirects that parent to the decoy. |
+| FND-003 | fixed | Round 1: `ssh_signed_fixture` now records `git` and `ssh-keygen` through wrappers. tc_1043 asserts that no `verify-commit` or `verify-tag` appears in the git log and that `ssh-keygen` never ran, for every unusable-registry case on SSH objects. |
+| FND-004 | fixed | Round 1: tc_1045 adds three CMS tags verified against `first:registry.json`: a different tagger name, email and time, and different certificate bytes in the signature block. Each still maps to "First Person". |

@@ -1752,16 +1752,26 @@ fn tc_1044_the_registry_is_read_from_the_committed_revision_not_the_working_tree
     assert_eq!(replaced["identity_registry_commit"], committed);
     git(&repo, &["replace", "-d", &committed]);
 
-    // A graft naming the commit changes neither the commit nor the content.
-    let parent = git(&repo, &["rev-parse", "main^"]).trim().to_owned();
+    // A graft changes neither the commit nor the content a revision that goes
+    // through ancestry names: `main~1` is the registry without Alice, and a graft
+    // gives `main` a parent whose registry names her. Honouring the graft would
+    // resolve `main~1` to that decoy and map the signer.
+    let ancestor = git(&repo, &["rev-parse", "main~1"]).trim().to_owned();
+    let naming_alice = commit_registry(&repo, "decoy-with-alice", &default_registry());
     fs::write(
         repo.join(".git/info/grafts"),
-        format!("{committed} {decoy}\n{decoy} {parent}\n"),
+        format!("{committed} {naming_alice}\n"),
     )
     .expect("grafts");
-    let grafted = result(&fixture);
-    assert_eq!(grafted["signer"]["principal"], PRINCIPAL, "{grafted}");
-    assert_eq!(grafted["identity_registry_commit"], committed);
+    let through_ancestry = verdict(
+        &fixture,
+        &request_with_registry(&fixture, "main~1:registry.json"),
+    );
+    assert_eq!(
+        through_ancestry["signer"]["mapping"], "unmapped",
+        "{through_ancestry}"
+    );
+    assert_eq!(through_ancestry["identity_registry_commit"], ancestor);
 }
 
 #[test]
