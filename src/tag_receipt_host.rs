@@ -401,7 +401,7 @@ fn leak_check_record(
 
 /// As [`execute_record`], with the protected policy, the signer and the
 /// visibility lookup supplied.
-pub(crate) fn record_with(
+fn record_with(
     request: &RecordRequest,
     protected: &Protected,
     signer: &dyn Signer,

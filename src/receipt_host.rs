@@ -830,15 +830,15 @@ fn render_missing(
     failed_receipts: &[MissingReceipt],
     tag_findings: &[engineering_assurance::tag_receipt::Judged],
 ) -> Result<Vec<u8>, ReceiptHostError> {
-    let change = |findings: &'_ [MissingReceipt]| {
+    fn change(findings: &[MissingReceipt]) -> Vec<ChangeFindingLine<'_>> {
         findings
             .iter()
             .map(|finding| ChangeFindingLine {
                 kind: "change",
                 finding,
             })
-            .collect::<Vec<_>>()
-    };
+            .collect()
+    }
     let mut encoded = serde_json::to_vec(&MissingResultLine {
         protocol: MISSING_RESULT_PROTOCOL,
         missing: change(missing),
