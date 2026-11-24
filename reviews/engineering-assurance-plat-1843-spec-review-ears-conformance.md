@@ -20,3 +20,9 @@ Reviewed the requirement-bearing statements in FR-088. The targeted engine check
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-001 | medium | The `When a vulnerability report concerns Engineering Assurance` trigger only requires publishing SECURITY.md after a report arrives, so it does not require the private route to exist before disclosure. | spec/functional/FR-088-document-private-vulnerability-reporting.md:10 |
+
+## Dispositions
+
+| FND | Outcome | Reason |
+| --- | --- | --- |
+| FND-001 | fixed | - |
