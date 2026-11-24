@@ -1414,7 +1414,8 @@ fn packages_are_private_and_have_no_release_configuration() {
         [
             "change-receipt.yml",
             "ea-106-live.yml",
-            "release-attestation.yml"
+            "release-attestation.yml",
+            "tag-receipt.yml"
         ]
     );
 }
@@ -1437,6 +1438,12 @@ fn tc112_workflow_violations(path: &str, text: &str) -> BTreeSet<&'static str> {
             .as_object()
             .is_some_and(|triggers| triggers.len() == 1 && triggers.contains_key("workflow_call")),
         ".github/workflows/receipt.yml" => workflow["on"]
+            .as_object()
+            .is_some_and(|triggers| triggers.len() == 1 && triggers.contains_key("push")),
+        ".github/workflows/tag-receipt.yml" => workflow["on"]
+            .as_object()
+            .is_some_and(|triggers| triggers.len() == 1 && triggers.contains_key("workflow_call")),
+        ".github/workflows/tag-receipt-push.yml" => workflow["on"]
             .as_object()
             .is_some_and(|triggers| triggers.len() == 1 && triggers.contains_key("push")),
         ".github/workflows/missing-receipt-check.yml" => {
