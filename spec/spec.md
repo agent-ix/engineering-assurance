@@ -122,6 +122,8 @@ same canonical bundle and do not redefine these responsibilities.
   definitions, executions, results, evidence, reports, and decisions.
 - [US-006](./usecase/US-006-hand-off-source-facts-to-an-integrator.md) — hand source
   facts to an integrator without closing the integrator's validation.
+- [US-007](./usecase/US-007-report-a-vulnerability-privately.md) — find a private
+  route to report a vulnerability.
 
 ### Functional Requirements
 
