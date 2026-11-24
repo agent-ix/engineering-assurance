@@ -45,12 +45,20 @@ def executable_from_env(name: str) -> tuple[Path | None, str | None]:
     return path, None
 
 
-def resolve_locked_build(value: str | None = None) -> str | None:
-    configured = value or str(Path.home() / "dev/worktrees/locked-build.sh")
-    candidate = Path(configured).expanduser()
-    if candidate.is_file() and os.access(candidate, os.X_OK):
-        return str(candidate.resolve())
-    return shutil.which(configured)
+def resolve_locked_build(value: str | None = None, *, use_standard_fallback: bool = False) -> str | None:
+    if value:
+        candidate = Path(value).expanduser()
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate.resolve())
+        resolved = shutil.which(value)
+        if resolved:
+            return resolved
+    if value not in (None, "locked-build.sh") or (value == "locked-build.sh" and not use_standard_fallback):
+        return None
+    standard = Path.home() / "dev/worktrees/locked-build.sh"
+    if standard.is_file() and os.access(standard, os.X_OK):
+        return str(standard.resolve())
+    return None
 
 
 def add_entry(
@@ -199,7 +207,11 @@ def main() -> int:
             approval_config = config
 
     if available:
-        locked_build = resolve_locked_build(os.environ.get("LOCKED_BUILD"))
+        locked_build_value = os.environ.get("LOCKED_BUILD")
+        locked_build = resolve_locked_build(
+            locked_build_value,
+            use_standard_fallback=os.environ.get("LOCKED_BUILD_DEFAULT") == "1" or locked_build_value is None,
+        )
         if not locked_build:
             print("LOCKED_BUILD must name the locked-build.sh admission wrapper", file=sys.stderr)
             return 2
