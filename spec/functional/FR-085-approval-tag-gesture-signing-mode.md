@@ -60,8 +60,14 @@ Out of scope: choosing a key, configuring `ssh-add`, `ssh-agent`, an askpass pro
 ## Behavior
 
 - The command SHALL, when `gesture` is present, ask the FR-019 process host to run git
-  in the command's own session and controlling terminal, so that `/dev/tty` opens in git
-  and in the signer it starts.
+  in the command's own session, so that `/dev/tty` opens in git and in the signer it
+  starts.
+- The command SHALL, when `gesture` is present, ask the process host to make git's
+  invocation-owned process group the foreground process group of the controlling terminal
+  for the run (`tcsetpgrp`), because a background group that reads `/dev/tty` is stopped
+  by `SIGTTIN`.
+- The command SHALL, when `gesture` is present, ask the process host to restore the
+  previous foreground process group after the run, whether git exits, fails or times out.
 - The command SHALL, when `gesture` is present, ask the process host to pass git's
   standard error to the command's own standard error and to leave the environment
   variables `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE`, `DISPLAY` and `SSH_AUTH_SOCK` in place.
@@ -101,7 +107,7 @@ test with a throwaway key and an askpass script that records each call.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-085-AC-1 | A request with no `gesture` creates a tag whose message holds exactly the three FR-042 trailers, whose result line holds no `gesture` member, and whose git run had no controlling terminal. | Test |
-| FR-085-AC-2 | A request with `gesture` `oidc_interactive`, passed with `--request -`, run under a pseudo-terminal with a stand-in signer that opens `/dev/tty`, writes a prompt there and reads a line from it, creates a tag; the line was read from the pseudo-terminal and not from standard input; standard output is exactly one `created` line holding `"gesture":"oidc_interactive"`. | Test (pty, stand-in) |
+| FR-085-AC-2 | A request with `gesture` `oidc_interactive`, passed with `--request -`, run under a pseudo-terminal with a stand-in signer that opens `/dev/tty`, writes a prompt there and reads a line from it, creates a tag; the signer was not stopped by `SIGTTIN` and the line was read from the pseudo-terminal and not from standard input, while the terminal's foreground process group during the run was git's process group; standard output is exactly one `created` line holding `"gesture":"oidc_interactive"`. | Test (pty, stand-in) |
 | FR-085-AC-3 | The created tag message holds the trailers `Approved-Record-Id`, `Approved-Record-Digest`, `Signed-off-meaning`, `Signing-Gesture` in that order, and the FR-037 trailer reader returns the declared value for `Signing-Gesture`. | Test |
 | FR-085-AC-4 | A `gesture` of `touch`, an empty string, a wrong case or a non-string is refused with `approval_tag_request_invalid`, exit status 2 and git not started. | Test |
 | FR-085-AC-5 | With a key added by `ssh-add -c` to a test `ssh-agent` whose askpass script approves, two requests with `gesture` `agent_confirm` create two tags and the askpass script records exactly two calls, one per signature. | Test |
@@ -109,6 +115,7 @@ test with a throwaway key and an askpass script that records each call.
 | FR-085-AC-7 | A stand-in signer that does not answer is bounded by a 300 second deadline when `gesture` is present and by 60 seconds when it is absent, read from the deadline passed to the host that runs git. | Test |
 | FR-085-AC-8 | The declared value is copied verbatim whichever signer ran: a request declaring `device_touch` with a software key creates the tag and the command reports no error. | Test |
 | FR-085-AC-10 | With `gesture` present, the environment of the stand-in signer holds the `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE`, `DISPLAY` and `SSH_AUTH_SOCK` values of the command's environment, its standard error is the command's standard error, and its standard input is closed. | Test (stand-in) |
+| FR-085-AC-11 | With `gesture` present, under a pseudo-terminal, after a run that completes, after one whose stand-in signer exits nonzero and after one that reaches its deadline, the terminal's foreground process group equals the one before the run, and git's process group no longer exists. | Test (pty, stand-in) |
 | FR-085-AC-9 | Static inspection shows no terminal, prompt, PIN or askpass code in the approval-tag modules (CON-1, CON-2). | Inspection |
 
 ## Dependencies

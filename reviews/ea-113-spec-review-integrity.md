@@ -29,3 +29,11 @@ Ticket: EA-113. This lens checked cross-document consistency, AC testability, id
 ## Verdict
 
 PASS-with-findings on this lens: one medium (FR-042 vs FR-085 timeout contradiction) and two lows. The AC testability problems of FR-084-AC-2..4 belong to the base review's FND-001, not repeated here.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-042 Behavior now scopes "no terminal and a 60 second wall-clock timeout" by "unless the request names a `gesture`", and defers to FR-085 for that case; the Description says the same. No contradiction with FR-085's 300 s remains. |
+| FND-002 | fixed | FR-085-AC-7 now reads the deadline passed to the host that runs git. |
+| FND-003 | fixed | FR-085-AC-4 reads "exit status 2 and git not started". |

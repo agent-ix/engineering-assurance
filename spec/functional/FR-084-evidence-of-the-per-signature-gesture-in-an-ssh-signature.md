@@ -23,8 +23,9 @@ SSH key (`ed25519-sk` or `ecdsa-sk`) differs: the key never leaves the device, a
 device records in each signature a flags byte, with bit 0x01 set when the user touched the
 device (user presence) and bit 0x04 set when the user also verified, for example with a
 PIN (user verification). `ssh-keygen -Y verify` does not enforce either bit; at debug
-level `-vv` it prints them on standard error as `signature details: counter = N, flags =
-0xNN`. A key created with `-O no-touch-required` signs with the 0x01 bit clear, and the
+level `-vv` it prints them on standard error, only for a security-key signature and after
+the signature check, as the line `debug2: sig_verify: signature details: counter = N,
+flags = 0xNN` followed by a carriage return and a line feed. A key created with `-O no-touch-required` signs with the 0x01 bit clear, and the
 result for such a key is `none`, which states that no touch is shown.
 
 For an accepted SSH signature on a tag, the `signature-verify` command
@@ -75,8 +76,9 @@ through a seam, which reports its own gesture.
 - The command SHALL make one `ssh-keygen -Y verify -vv` run on that block, with the
   allowed-signers file, the principal and the namespace of the verification FR-036 and
   FR-037 already made, under the process bounds of FR-019.
-- The command SHALL take the flags only from the `signature details: counter = N, flags =
-  0xNN` line on that run's standard error.
+- The command SHALL take the flags only from the `debug2: sig_verify: signature details:
+  counter = N, flags = 0xNN` line on that run's standard error, accepting a trailing
+  carriage return.
 - The command SHALL report `none` when that run prints no flags line, when its exit status
   is nonzero, or when it cannot start.
 - The command SHALL report `none` for a gitsign signature and for a commit.
@@ -94,8 +96,9 @@ through a seam, which reports its own gesture.
 ## Acceptance Criteria
 
 Stand-in note: a stand-in `ssh-keygen` on `PATH` prints the `-vv` standard-error lines of
-the real one, including `signature details: counter = 3, flags = 0x05`, for a
-security-key signature. The real OpenSSH output on a software key, measured with 8.9p1,
+the real one, including the full line `debug2: sig_verify: signature details: counter =
+3, flags = 0x05` followed by a carriage return and a line feed, for a security-key
+signature, and prints no such line for any other key. The real OpenSSH output on a software key, measured with 8.9p1,
 carries no such line. Where no FIDO device is present, only the stand-in criteria run.
 
 | ID | Criteria | Verification |

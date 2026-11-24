@@ -26,3 +26,10 @@ Ticket: EA-113. This lens checked each added or edited requirement statement for
 ## Verdict
 
 PASS with two low findings. The new statements are atomic, name the command as the actor and are free of pronoun references. The FR-042 edited timeout bullet has a consistency problem, which the integrity lens records.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | FR-084 Behavior bullet 1 is now a single SHALL (extract the armored block); the no-parsing rule stays in FR-084-CON-1 only. |
+| FND-002 | fixed | FR-087 Description now reads "The README explains them ..."; the requirement stays in Behavior. |
