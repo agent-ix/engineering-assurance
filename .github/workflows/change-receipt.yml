@@ -104,7 +104,7 @@ jobs:
           source = Path(os.environ["SOURCE_DIR"])
           protected = Path(os.environ["PROTECTED_BASE_DIR"])
           policy = json.loads((protected / ".engineering-assurance/receipt-policy.json").read_text())
-          if set(policy) != {"protocol", "gates", "adopted_at", "grace_minutes"}:
+          if set(policy) - {"tag_receipts"} != {"protocol", "gates", "adopted_at", "grace_minutes"}:
               raise SystemExit("receipt_policy_invalid")
           if policy["protocol"] != "engineering-assurance.receipt-policy/v1":
               raise SystemExit("receipt_policy_invalid")
