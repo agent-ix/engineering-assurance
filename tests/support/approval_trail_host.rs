@@ -203,7 +203,7 @@ mod receipts {
                 "-f",
                 "-a",
                 "-m",
-                &format!("{}\nre-signed", message(RECORD)),
+                &message(RECORD).replace("Approve", "Approve again"),
                 "approve-1",
             ],
         );
