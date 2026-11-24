@@ -408,3 +408,94 @@ fn push_caller_and_missing_check_have_the_declared_triggers_and_permissions() {
     assert!(run.contains("record_publisher_workflow_path"));
     assert!(run.contains("record_publisher_ref"));
 }
+
+#[trace("TC-1125", "FR-070-AC-14", "FR-081-AC-10")]
+#[test]
+fn tag_receipt_workflow_has_the_declared_trigger_jobs_permissions_and_trigger_inputs() {
+    let reusable = workflow("tag-receipt.yml");
+    assert_eq!(
+        reusable["on"].as_object().map(serde_json::Map::len),
+        Some(1)
+    );
+    assert_eq!(
+        reusable["on"]["workflow_call"]["inputs"]["tag"]["type"],
+        "string"
+    );
+    let jobs = &reusable["jobs"];
+    assert_eq!(jobs.as_object().map(serde_json::Map::len), Some(2));
+    assert_permission(
+        &jobs["record"],
+        &serde_json::json!({"contents":"read", "id-token":"write"}),
+        "tag receipt record",
+    );
+    assert_permission(
+        &jobs["notes"],
+        &serde_json::json!({"contents":"write"}),
+        "tag receipt notes",
+    );
+    assert_eq!(jobs["notes"]["needs"], "record");
+    for job in ["record", "notes"] {
+        let steps = jobs[job]["steps"].as_array().expect("steps");
+        assert_actions_are_structural(steps);
+        assert!(
+            steps
+                .iter()
+                .all(|step| step["run"].as_str().is_none_or(|run| {
+                    !run.contains("cargo ") && !run.contains("python3") && !run.contains("npm ")
+                })),
+            "{job} runs no repository gate, script or package"
+        );
+    }
+    // The identity-bearing job loads no repository code and runs no agent.
+    assert_record_job_is_isolated_for_tags(jobs);
+    assert!(!format!("{reusable}").to_lowercase().contains("agent-run"));
+
+    // A `tag` input that is not the triggering tag fails before any signing step.
+    let record_steps = jobs["record"]["steps"].as_array().expect("record steps");
+    let check = record_steps[0]["run"].as_str().expect("check step");
+    assert!(check.contains("tag_receipt_input_mismatch"));
+    assert!(check.contains("$INPUT_TAG\" != \"$TRIGGER_TAG"));
+    assert!(
+        record_steps[1..]
+            .iter()
+            .all(|step| step["run"].as_str().is_none_or(|run| !run.contains("tag_receipt_input_mismatch"))),
+    );
+    // The tag name, tag object id and push time come from the trigger context.
+    let sign = record_steps
+        .iter()
+        .find(|step| {
+            step["run"]
+                .as_str()
+                .is_some_and(|run| run.contains("tag-receipt-record --request"))
+        })
+        .expect("signing step");
+    assert_eq!(sign["env"]["TAG_NAME"], "${{ github.ref_name }}");
+    assert_eq!(sign["env"]["TAG_OBJECT"], "${{ github.event.after }}");
+    assert_eq!(
+        sign["env"]["PUSHED_AT_UNIX"],
+        "${{ github.event.repository.pushed_at }}"
+    );
+
+    let caller = workflow("tag-receipt-push.yml");
+    assert_eq!(caller["on"]["push"]["tags"][0], "**");
+    let receipt = &caller["jobs"]["receipt"];
+    assert_eq!(receipt["uses"], "./.github/workflows/tag-receipt.yml");
+    assert_eq!(receipt["with"]["tag"], "${{ github.ref_name }}");
+    assert_permission(
+        receipt,
+        &serde_json::json!({"contents":"write", "id-token":"write"}),
+        "tag receipt caller",
+    );
+}
+
+fn assert_record_job_is_isolated_for_tags(jobs: &Value) {
+    let record_steps = jobs["record"]["steps"].as_array().expect("record steps");
+    assert!(
+        record_steps.iter().all(|step| {
+            !step["uses"].as_str().is_some_and(|reference| {
+                reference.starts_with("actions/checkout@") || reference.starts_with("./")
+            })
+        }),
+        "the identity-bearing tag receipt record job neither checks out nor loads repository code"
+    );
+}

@@ -331,6 +331,11 @@ name = "tag_receipt"
 path = "tests/tag_receipt.rs"
 required-features = ["receipt"]
 
+[[test]]
+name = "adoption_rulesets"
+path = "tests/adoption_rulesets.rs"
+required-features = ["full"]
+
 [features]
 # EMPTY ON PURPOSE (EA-17). Cargo unifies features across a whole build, so a
 # default that reached `serde_json/arbitrary_precision` would switch it on for
