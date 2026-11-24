@@ -274,8 +274,8 @@ mod tests {
     use sigstore_types::Bundle;
 
     const VERIFIED_TAG: &[u8] = include_bytes!("../tests/fixtures/approval-rekor/tag-object.txt");
-    const TAMPERED_TAG: &[u8] =
-        include_bytes!("../tests/fixtures/approval-rekor/tag-object-tampered.txt");
+    const SECOND_VERIFIED_TAG: &[u8] =
+        include_bytes!("../tests/fixtures/approval-rekor/tag-object-second.txt");
 
     fn fixture_trusted_root(bundle: &Bundle) -> String {
         let certificate_der = bundle
@@ -320,6 +320,22 @@ mod tests {
         .to_string()
     }
 
+    fn bundle_json(bundle: &Bundle) -> serde_json::Value {
+        serde_json::from_str(&bundle.to_json().expect("fixture bundle serializes"))
+            .expect("fixture bundle serializes as JSON")
+    }
+
+    fn mutate_bundle(bundle: &Bundle, mutate: impl FnOnce(&mut serde_json::Value)) -> Bundle {
+        let mut value = bundle_json(bundle);
+        mutate(&mut value);
+        Bundle::from_json(&value.to_string()).expect("mutated fixture bundle remains parseable")
+    }
+
+    fn verify_fixture(bundle: &Bundle, artifact: &[u8]) -> Option<i64> {
+        let policy = sigstore_verify::VerificationPolicy::any_identity().skip_sct();
+        verify_with_policy(bundle, artifact, &fixture_trusted_root(bundle), &policy)
+    }
+
     #[test]
     #[ix_trace_rs::trace("FR-041-AC-28")]
     fn cms_octet_string_contents_are_not_der_wrapped_in_the_bundle() {
@@ -341,9 +357,8 @@ mod tests {
             panic!("fixture must yield a bundle from CMS extraction");
         };
 
-        let policy = sigstore_verify::VerificationPolicy::any_identity().skip_sct();
         assert_eq!(
-            verify_with_policy(&bundle, &artifact, &fixture_trusted_root(&bundle), &policy),
+            verify_fixture(&bundle, &artifact),
             Some(1_767_225_600),
             "successful SET, inclusion, checkpoint, artifact and signature verification yields integratedTime"
         );
@@ -351,16 +366,105 @@ mod tests {
 
     #[test]
     #[ix_trace_rs::trace("FR-041-AC-29")]
-    fn cms_rekor_fixture_rejects_an_integrated_time_mutation() {
-        let EmbeddedEntry::Bundle { artifact, bundle } = extract(TAMPERED_TAG) else {
-            panic!("tampered fixture remains structurally extractable");
+    fn cms_rekor_fixture_rejects_integrated_time_mutation() {
+        let EmbeddedEntry::Bundle { artifact, bundle } = extract(VERIFIED_TAG) else {
+            panic!("fixture must yield a bundle from CMS extraction");
         };
+        let changed = mutate_bundle(&bundle, |value| {
+            value["verificationMaterial"]["tlogEntries"][0]["integratedTime"] = json!("1767225601");
+        });
 
-        let policy = sigstore_verify::VerificationPolicy::any_identity().skip_sct();
         assert_eq!(
-            verify_with_policy(&bundle, &artifact, &fixture_trusted_root(&bundle), &policy),
+            verify_fixture(&changed, &artifact),
             None,
             "mutating integratedTime without resigning the SET fails closed"
+        );
+    }
+
+    #[test]
+    #[ix_trace_rs::trace("FR-041-AC-29")]
+    fn cms_rekor_fixture_rejects_a_tampered_set() {
+        let EmbeddedEntry::Bundle { artifact, bundle } = extract(VERIFIED_TAG) else {
+            panic!("fixture must yield a bundle from CMS extraction");
+        };
+        let changed = mutate_bundle(&bundle, |value| {
+            let encoded = value["verificationMaterial"]["tlogEntries"][0]
+                ["inclusionPromise"]["signedEntryTimestamp"]
+                .as_str()
+                .expect("fixture SET is base64");
+            let mut signature = STANDARD
+                .decode(encoded)
+                .expect("fixture SET is valid base64");
+            if let Some(first) = signature.first_mut() {
+                *first ^= 1;
+            }
+            value["verificationMaterial"]["tlogEntries"][0]["inclusionPromise"]["signedEntryTimestamp"] =
+                json!(STANDARD.encode(signature));
+        });
+
+        assert_eq!(verify_fixture(&changed, &artifact), None);
+    }
+
+    #[test]
+    #[ix_trace_rs::trace("FR-041-AC-29")]
+    fn cms_rekor_fixture_rejects_a_tampered_inclusion_proof() {
+        let EmbeddedEntry::Bundle { artifact, bundle } = extract(VERIFIED_TAG) else {
+            panic!("fixture must yield a bundle from CMS extraction");
+        };
+        let changed = mutate_bundle(&bundle, |value| {
+            value["verificationMaterial"]["tlogEntries"][0]["inclusionProof"]["rootHash"] =
+                json!(STANDARD.encode([0_u8; 32]));
+        });
+
+        assert_eq!(verify_fixture(&changed, &artifact), None);
+    }
+
+    #[test]
+    #[ix_trace_rs::trace("FR-041-AC-29")]
+    fn cms_rekor_fixture_rejects_an_entry_from_a_distinct_valid_tag() {
+        let EmbeddedEntry::Bundle {
+            artifact: first_artifact,
+            bundle: first_bundle,
+        } = extract(VERIFIED_TAG)
+        else {
+            panic!("first fixture must yield a bundle from CMS extraction");
+        };
+        let EmbeddedEntry::Bundle {
+            artifact: second_artifact,
+            bundle: second_bundle,
+        } = extract(SECOND_VERIFIED_TAG)
+        else {
+            panic!("second fixture must yield a bundle from CMS extraction");
+        };
+        assert_eq!(
+            verify_fixture(&second_bundle, &second_artifact),
+            Some(1_767_225_600)
+        );
+
+        let second_entry =
+            bundle_json(&second_bundle)["verificationMaterial"]["tlogEntries"][0].clone();
+        let substituted = mutate_bundle(&first_bundle, |value| {
+            value["verificationMaterial"]["tlogEntries"][0] = second_entry;
+        });
+
+        assert_eq!(verify_fixture(&substituted, &first_artifact), None);
+    }
+
+    #[test]
+    #[ix_trace_rs::trace("FR-041-AC-29")]
+    fn cms_rekor_fixture_rejects_an_unrelated_trusted_root() {
+        let EmbeddedEntry::Bundle { artifact, bundle } = extract(VERIFIED_TAG) else {
+            panic!("fixture must yield a bundle from CMS extraction");
+        };
+        let mut unrelated_root: serde_json::Value =
+            serde_json::from_str(&fixture_trusted_root(&bundle))
+                .expect("fixture trusted root is JSON");
+        unrelated_root["tlogs"][0]["logId"]["keyId"] = json!(STANDARD.encode([0_u8; 32]));
+        let policy = sigstore_verify::VerificationPolicy::any_identity().skip_sct();
+
+        assert_eq!(
+            verify_with_policy(&bundle, &artifact, &unrelated_root.to_string(), &policy),
+            None
         );
     }
 }
