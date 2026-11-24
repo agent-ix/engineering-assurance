@@ -9,7 +9,9 @@
 //! configuration whether git can sign a tag that FR-036 and FR-040 can verify.
 //! It signs nothing and starts nothing.
 
-use crate::approval_verify::{RECORD_DIGEST_TRAILER, RECORD_ID_TRAILER, is_record_value};
+use crate::approval_verify::{
+    GESTURE_TRAILER, RECORD_DIGEST_TRAILER, RECORD_ID_TRAILER, SigningGesture, is_record_value,
+};
 use crate::signature_verify::{MEANING_TOKEN, SignatureFormat, split_tag_object};
 
 /// Longest accepted `Signed-off-meaning` value in bytes.
@@ -51,17 +53,36 @@ pub fn is_meaning(value: &str) -> bool {
         && survives_trailer(value)
 }
 
-/// The tag message: a subject paragraph, then the three trailers in order. The
-/// subject paragraph is required because git reads no trailers from a message's
-/// only paragraph.
+/// The tag message: a subject paragraph, then the three trailers in order, then
+/// `Signing-Gesture` when a gesture is declared (FR-085). The subject paragraph
+/// is required because git reads no trailers from a message's only paragraph.
 #[must_use]
-pub fn compose_message(record_id: &str, record_digest: &str, meaning: &str) -> String {
+pub fn compose_message(
+    record_id: &str,
+    record_digest: &str,
+    meaning: &str,
+    gesture: Option<SigningGesture>,
+) -> String {
+    let declared = gesture.map_or_else(String::new, |gesture| {
+        format!("{GESTURE_TRAILER}: {}\n", gesture.as_str())
+    });
     format!(
         "Approve change-assurance record {record_id}\n\n\
          {RECORD_ID_TRAILER}: {record_id}\n\
          {RECORD_DIGEST_TRAILER}: {record_digest}\n\
-         {MEANING_TOKEN}: {meaning}\n"
+         {MEANING_TOKEN}: {meaning}\n\
+         {declared}"
     )
+}
+
+/// Wall-clock limit of the git run that signs, in seconds: 300 with a declared
+/// gesture, where a person answers a prompt, and 60 without (FR-085).
+#[must_use]
+pub const fn signing_deadline_seconds(gesture: Option<SigningGesture>) -> u64 {
+    match gesture {
+        Some(_) => 300,
+        None => 60,
+    }
 }
 
 /// A git setting whose absence or unsupported value makes git unable to sign a

@@ -38,6 +38,26 @@ pub(crate) fn run_configured(
     )
 }
 
+/// Runs with the child's group in the terminal's foreground and its standard
+/// error passed through (FR-085).
+pub(crate) fn run_configured_foreground(
+    executable: &OsStr,
+    arguments: &[&OsStr],
+    current_directory: Option<&Path>,
+    environment: &[(&OsStr, &OsStr)],
+    removed_environment: &[&OsStr],
+    limits: ProcessLimits,
+) -> Result<CompletedProcess, ProcessError> {
+    engineering_assurance::producer_execution::__private::run_configured_foreground(
+        executable,
+        arguments,
+        current_directory,
+        environment,
+        removed_environment,
+        limits,
+    )
+}
+
 pub(crate) fn run_configured_stdin(
     executable: &OsStr,
     arguments: &[&OsStr],

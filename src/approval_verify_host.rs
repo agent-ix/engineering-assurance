@@ -12,8 +12,8 @@
 use std::path::{Path, PathBuf};
 
 use engineering_assurance::approval_verify::{
-    Approval, ApprovalStatus, Bindings, RECORD_DIGEST_TRAILER, RECORD_ID_TRAILER,
-    UnverifiableReason, bind, decide, is_record_value,
+    Approval, ApprovalStatus, Bindings, GESTURE_TRAILER, GestureDeclaration, RECORD_DIGEST_TRAILER,
+    RECORD_ID_TRAILER, UnverifiableReason, bind, decide, is_record_value,
 };
 use engineering_assurance::signature_verify::{Reason, Verdict, is_plain_revision, trailer_values};
 use serde::{Deserialize, Serialize};
@@ -101,6 +101,9 @@ pub(crate) struct Assessment {
     approval: Option<Approval>,
     #[serde(skip_serializing_if = "Option::is_none")]
     binding: Option<Bindings>,
+    /// The declared gesture of an `approved` result (FR-086).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    gesture: Option<GestureDeclaration>,
 }
 
 impl Assessment {
@@ -127,12 +130,20 @@ pub(crate) fn assess(checked: CheckedTag, record_id: &str, record_digest: &str) 
         ),
     });
     let decision = decide(&checked.verdict, bindings, checked.tagger_signed_at);
+    let gesture = (decision.status == ApprovalStatus::Approved)
+        .then(|| {
+            checked.trailers.as_deref().map(|trailers| {
+                GestureDeclaration::from_trailer_values(&trailer_values(trailers, GESTURE_TRAILER))
+            })
+        })
+        .flatten();
     Assessment {
         status: decision.status,
         reason: decision.reason,
         signature: checked.verdict,
         approval: decision.approval,
         binding: bindings,
+        gesture,
     }
 }
 
