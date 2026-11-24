@@ -12,11 +12,11 @@ relationships:
 
 ## Summary
 
-Ticket: EA-113; planless, PR-diff-scoped gap analysis at a0b60649 against origin/main a04da1e1. All changed FR-085 criteria and FR-086-AC-6 are tagged by Rust tests; reverse inspection found no new unowned behavior or stubs in the changed paths. Twenty new TC trace ids are untracked by the Test Case Summary.
+Ticket: EA-113; disposition review of PR #307 at f3e299e6 against origin/main a04da1e1. FND-001 was rejected under the supplied owner ruling that TC summary rows and IDs are ceremony; the affected tests use direct AC trace attributes. FND-002 was fixed by a command-level FR-085-AC-13 regression test that verifies error propagation and removal of the created tag ref. No findings remain open.
 
 ## Verdict
 
-**CONDITIONAL** — new behavior has criterion bindings, but the new TC ids lack summary rows.
+**PASS** — FND-001 is rejected under the owner ruling and FND-002 is fixed; no findings remain open.
 
 ## Findings
 
@@ -28,7 +28,7 @@ Ticket: EA-113; planless, PR-diff-scoped gap analysis at a0b60649 against origin
 
 - Reconciliation: quoin matrix (quoin 0.36.8; quire 0.52.0, engine 0.62.2); quire coverage (0.52.0).
 - Changed criteria: FR-085-AC-1..8, AC-10 and AC-11 are tagged; AC-9 and CON-1/2 are inspection-only. FR-086-AC-1..6 and AC-8 are tagged; AC-7 is untagged in the unchanged FR-086 context.
-- New code/test tags: TC-1140..TC-1159 appear as 20 untracked symbols; TC-1160..TC-1162 have Test Case Summary rows.
+- The TC-1140..TC-1159 summary-row concern is rejected under the owner ruling. Direct AC trace attributes are the traceability record; TC summary rows and TC IDs are not required.
 - The repository-wide matrix also reports 149 untagged and 18 ignored-only criteria outside this PR-diff review scope; no run evidence is present for the matrix.
 - Changed-surface reverse check: inventoried behavior groups: approval-tag declaration/signing, terminal handoff/restoration, signature gesture evidence, approval result projection and trail propagation; untraced behavior: 0; source stubs: 0; test stubs: 0.
 - Plan completion: not assessed
@@ -37,3 +37,33 @@ Ticket: EA-113; planless, PR-diff-scoped gap analysis at a0b60649 against origin
 ## Examined scope
 
 FR-085-AC-1..11; FR-086-AC-1..6; TC-1140..TC-1162; new source/test paths named in scope.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-002 | medium | FR-085-AC-13's test exercises the retry helper, not process-host failure propagation and approval-tag ref cleanup | src/producer_execution.rs:1877-1898; src/approval_tag_host.rs:484-492 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | rejected | The owner ruling supplied for EA-113 treats Test Case Summary rows and TC IDs as ceremony; current tests directly trace applicable acceptance criteria, which is sufficient. |
+| FND-002 | fixed | The AC-13 test injects restoration failure after signing, checks approval_tag_create_failed, confirms the signer ran and verifies the tag ref is absent. |
+
+### FND-002 evidence at disposition pass 1 (superseded)
+
+At disposition pass 1, the AC-13 test exercised `ForegroundGroup::restore_with` directly with an injected closure. It did not exercise process-host propagation or approval-tag ref cleanup. That evidence was accurate before the command-level regression test was added and is superseded by disposition pass 2.
+
+### FND-002 after_excerpt
+
+> assert_eq!(error.code(), "approval_tag_create_failed");
+> assert_eq!(reference.status.code(), Some(1), "the ref must be removed");
+
+### FND-002 evidence at disposition pass 2
+
+The direct FR-085-AC-13 test `restore_failure_propagates_through_approval_tag_and_removes_the_ref` in `src/approval_tag_host.rs` injects a restore failure after the signer runs. It asserts `approval_tag_create_failed` and verifies that `refs/tags/restore-failure` is absent. The exact filtered test passed (1 passed, 0 failed).
+
+## Disposition pass 2 summary
+
+FND-001 remains rejected under the owner ruling. FND-002 is fixed by the command-level AC-13 regression test. No findings remain open.
