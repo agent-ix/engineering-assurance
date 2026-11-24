@@ -207,6 +207,11 @@ path = "tests/approval_tag_cli.rs"
 required-features = ["full"]
 
 [[test]]
+name = "approval_gesture_pty"
+path = "tests/approval_gesture_pty.rs"
+required-features = ["producer-execution"]
+
+[[test]]
 name = "approval_verify"
 path = "tests/approval_verify.rs"
 required-features = ["approval-verify"]
