@@ -23,9 +23,13 @@ signature, is a claim that needs its own evidence.
 
 ## Inputs
 
-- The allowed-signers file named in the FR-036 request, in the format git
+- The allowed-signers source named in the FR-036 request, in the format git
   documents for `gpg.ssh.allowedSignersFile`. It is required: git refuses to
-  verify an SSH signature without it.
+  verify an SSH signature without it. The request member `allowed_signers` is
+  either an absolute file path (a value beginning with `/`) or a `<rev>:<path>`
+  trust source (any other value), read as the trust-source reading below
+  defines, so an auditor can verify against the mapping a committed revision
+  held when the object was signed.
 - For a gitsign signature, the identity registry FR-040 names, read as a trust
   source (below).
 - For kind `commit`, the commit message; for kind `tag`, the tag message.
@@ -79,13 +83,22 @@ signature, is a claim that needs its own evidence.
   an unresolved revision, or a trailer read that failed); a message that holds a
   NUL byte, or trailer output that is not valid UTF-8, is a trailer read that
   failed, and no byte is replaced.
-- A missing, unreadable or invalid allowed-signers file writes the machine
-  error `signature_verify_allowed_signers_invalid` and exits with status 2.
+- A missing, unreadable or invalid allowed-signers file, and an allowed-signers
+  `<rev>:<path>` source that is `invalid`, write the machine error
+  `signature_verify_allowed_signers_invalid` and exit with status 2. An
+  `allowed_signers` value that is neither an absolute path nor a well-formed
+  `<rev>:<path>` address is `signature_verify_request_invalid`.
+- The allowed-signers reading SHALL yield `allowed_signers_sha256`, the string
+  `sha256:` followed by 64 lowercase hexadecimal digits of the SHA-256 of the
+  exact bytes the run used, and, for a `<rev>:<path>` source, `allowed_signers_commit`,
+  the resolved full commit id. Both are absent when the reading was
+  `git_failed`. Capabilities that echo trust (FR-041, FR-043, FR-047) report them.
 
 ## Trust-source reading
 
 A trust source addressed as `<rev>:<path>` is read in one way, whichever
-requirement names it (the identity registry of FR-040 is one). The reading has
+requirement names it (the identity registry of FR-040 and the allowed-signers
+source above are two). The reading has
 three outcomes: the content was read, the source is `invalid`, or git could not
 answer (`git_failed`).
 
@@ -114,8 +127,16 @@ answer (`git_failed`).
   resolved full commit id.
 - If the outcome is not "read", then the command SHALL start no signature
   verifier.
+- An allowed-signers file named by an absolute path is read once per run into
+  memory under the rules of the Behavior section below (regular file, at most
+  1 MiB, UTF-8), and, like a `<rev>:<path>` source, the bytes read are the only
+  bytes the run uses. The run SHALL write those bytes to a private temporary
+  file for `git` and `ssh-keygen`, and SHALL NOT pass either program the
+  original path or let it re-read the committed source, so a change to the file
+  after the reading changes neither the verdict nor the digest.
 - Each requirement that names a source gives its outcomes this effect, and no
-  other: `invalid`, like a registry whose content breaks the rules of the
+  other: for the allowed-signers source, `invalid` writes that capability's
+  `allowed_signers_invalid` machine error at exit 2; `invalid`, like a registry whose content breaks the rules of the
   requirement that names it, writes that capability's
   `identity_registry_invalid` machine error at exit 2; `git_failed` has the
   capability's existing outcome for a git failure on the target, which is
@@ -176,6 +197,7 @@ answer (`git_failed`).
 | --- | --- | --- | --- |
 | FR-037-CON-1 | A signer SHALL NOT be reported `mapped` unless git accepted the key against the allowed-signers file (SSH), or FR-040-CON-1 holds and the verified identity and issuer match an entry of the identity registry (gitsign). No principal comes from a request. | Safety | Test |
 | FR-037-CON-2 | A missing trailer SHALL NOT be reported as `present` or given a default value. | Safety | Test |
+| FR-037-CON-3 | `allowed_signers_sha256` SHALL be the SHA-256 of exactly the bytes the run materialised for `git` and `ssh-keygen`, computed once in the shared trust-input reading; that digest is the only hashing code the signature, approval, trail and release capabilities add, and no digest, pin or manifest of anything else is computed or kept. | Safety | Test |
 
 ## Acceptance Criteria
 
@@ -185,7 +207,10 @@ answer (`git_failed`).
 | FR-037-AC-2 | A commit with a good signature by a key the file does not name yields `signed_untrusted` with `mapping` `unmapped` and no principal, none derived from author or email. | Test |
 | FR-037-AC-3 | An allowed-signers file that is missing, a directory, over 1 MiB or not UTF-8 yields `signature_verify_allowed_signers_invalid` and exit status 2, and does not start git. | Test |
 | FR-037-AC-4 | A file whose only line is unparsable yields `signed_untrusted` for a validly signed commit, and a file with an unparsable line plus a valid line for the signer yields `signed_valid` with that principal. | Test |
-| FR-037-AC-9 | A commit and an annotated tag signed by a key whose allowed-signers entry has expired (`valid-before` in the past) each yield `signed_untrusted` with mapping `unmapped`, and not `signed_valid`, on git 2.34.1 with `ssh-keygen` installed. | Test |
+| FR-037-AC-9 | A commit and an annotated tag signed by a key whose allowed-signers entry has expired (`valid-before` in the past, before the time the host git judges the entry at) each yield `signed_untrusted` with mapping `unmapped`, and not `signed_valid`, on any git version with `ssh-keygen` installed. The entry's expiry is set before both the signing time and the verification time, so the criterion holds whether git judges at the verification time (before 2.35) or at the claimed tagger date (2.35 and later). | Test |
+| FR-037-AC-23 | On git 2.35 or later, an annotated tag whose tagger date is set earlier than the `valid-before` of its key's entry, where that `valid-before` is itself in the past at verification time, is judged at the claimed date by the host git and yields `signed_valid`, as FR-041 states; the test reads the git version first and is skipped, not passed, on an older git. | Test |
+| FR-037-AC-24 | An `allowed_signers` value `<rev>:<path>` is read by the trust-source reading: with the working-tree file edited after the commit, the committed bytes decide the verdict; a `<rev>` that does not resolve, an absent path or content over 1 MiB yields `signature_verify_allowed_signers_invalid` and exit 2 without starting a signature verifier; a value that is neither an absolute path nor a well-formed `<rev>:<path>` yields `signature_verify_request_invalid`; a git that cannot answer is `unverifiable` at exit 0 with no digest. | Test |
+| FR-037-AC-25 | The bytes the verifier receives are the bytes digested: replacing the allowed-signers file between the reading and the verifier start (absolute-path form) changes neither the verdict nor `allowed_signers_sha256`, which equals an independent SHA-256 of the file's content at the reading, and the form of `allowed_signers_sha256` is `sha256:` plus 64 lowercase hexadecimal digits. | Test |
 | FR-037-AC-19 | A trust source `<rev>:<path>` is read from the git object of the commit `<rev>` resolves to: with the working-tree file edited, or the index changed, after the commit, the content read is the committed bytes; a replace ref or graft naming the commit changes neither the commit nor the content; moving the branch `<rev>` names after the reading does not change the bytes used in that run. | Test |
 | FR-037-AC-20 | A `<rev>` that does not resolve to a commit, a path absent from that commit, a directory, symbolic link or submodule entry, content over 1 MiB and content that is not UTF-8 each make the source `invalid` and start no signature verifier; an address with an empty `<rev>`, an empty path, a leading `/`, a `..` component, a control character or a `<rev>` with a leading `-` is not well formed, is refused before git starts, and a `<rev>` such as `HEAD@{12:00}` is split at its first `:` and so addresses nothing. | Test |
 | FR-037-AC-21 | With `<rev>` a branch name the reading yields the content and the full commit id the branch named at the reading, and with `<rev>` an annotated tag it yields the commit the tag peels to. | Test |

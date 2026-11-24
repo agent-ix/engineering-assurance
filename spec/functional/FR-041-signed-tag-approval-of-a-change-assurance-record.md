@@ -25,26 +25,39 @@ identity registry) names for the signing key; the result is not an established i
 trust input so a consumer can tell which trust root named the approver and can
 re-run the command. The tag message carries the record id and the record
 digest as trailers, so the signature binds the signer to the record content
-the digest names. The command adds no cryptography and no signature rules: it
+the digest names. The command adds no cryptography of its own and no signature rules (the
+log-entry verification below is the existing library's): it
 runs the signature verification of FR-036, FR-037 and FR-040 on the tag and
 adds only the record binding and the approval meaning. A consumer such as Quoin
 retains the result as data and never re-verifies it.
 
 An `approved` result also reports when the approval was signed, so that the
 person, the time and the meaning appear together, as an electronic record needs.
-The time is the tag's tagger date, which sits inside the signed payload, so the
-signature covers it and a validly signed tag cannot have it altered; it is still
-the signer's own claim, not an independent attestation, and the result names
-that source. A gitsign signature is also made over the tag payload that holds the
-tagger line, so the same source applies to it. No release of `gitsign` (checked
-through v0.18.0) prints the Rekor integrated time from `gitsign verify` or
-`gitsign verify-tag`: they print the log index, the certificate identifier, the
-signer line and claim lines only, and `gitsign show` prints an in-toto statement
-without it. The command therefore reads no transparency-log time and invents no
-output format for one. The source value `transparency_log` is reserved: it is
-reported only after a gitsign release documents how it exposes the integrated
-time and this requirement is amended to parse it. Until then every `signed_at`
-has the source `tagger_date`.
+It reports two times and never merges them. `signed_at` is the tag's tagger
+date, which sits inside the signed payload, so the signature covers it and a
+validly signed tag cannot have it altered; it is still the signer's own claim,
+and the result names that source (`tagger_date`). `trusted_at` is a time an
+independent transparency log attested. A gitsign signature made in gitsign's
+offline Rekor storage mode carries the Rekor log entry in the signature block
+of the tag object itself, as an unauthenticated CMS attribute (OID
+1.3.6.1.4.1.57264.3.1, a protobuf Rekor `TransparencyLogEntry`, as gitsign's
+`docs/verification.md` documents), holding `integratedTime`, the signed entry
+timestamp (SET) and an inclusion proof. Because that attribute is not covered
+by the CMS signature, `integratedTime` read from it is only a claim until the
+SET, the inclusion proof and the binding of the entry to this signature are
+verified. The command extracts the entry, the signing certificate and the
+signed-content digest from the tag bytes it already holds with a CMS/DER reader,
+hands them to the `sigstore-verify` library Engineering Assurance already
+depends on as a sigstore bundle, writes no verification code of its own, and
+reports `trusted_at` only when the library's verification of that bundle
+succeeds. It never reads `integratedTime` without
+that verification, never reads the local clock for a time, and never runs
+`gitsign` or reads `gitsign` output text for a time. An SSH signature has no
+transparency-log entry, so an SSH approval has no baseline trusted time; a
+signer-independent time for SSH needs a timestamp-authority token (RFC 3161),
+which is a reserved seam (`trusted_at_source` `rfc3161`) and is not built. A
+signed tag whose log entry is absent (gitsign online storage mode), cannot be
+verified, or is not bound to the signature has `signed_at` and no `trusted_at`.
 
 An annotated tag is the approval object because a squash merge replaces a
 commit a person signed with a commit the hosting service signed, so a commit
@@ -68,8 +81,9 @@ carried by commits, merge commits or notes.
   the members `protocol`, `repository` (absolute directory path), `tag` (a bare
   tag name or `refs/tags/<name>`, as the tag `revision` of FR-040),
   `record_id` and `record_digest` (non-empty strings of at most 256 bytes with
-  no control character and no leading `-`), `allowed_signers` (absolute file
-  path, required, as FR-036 and FR-037), and optionally `gitsign` (the object
+  no control character and no leading `-`), `allowed_signers` (required: an absolute file
+  path, or a `<rev>:<path>` trust source read from a committed revision, as
+  FR-036 and FR-037), and optionally `gitsign` (the object
   FR-040 defines, with the same bounds, and no `principal`) with its
   `identity_registry` (FR-040), required with `gitsign`. Unknown members are
   rejected.
@@ -89,7 +103,20 @@ carried by commits, merge commits or notes.
     whose signature was verified, or `null` when the request did not resolve to
     an annotated tag; and `record_id` and `record_digest` as requested;
   - `trust`, the trust input the verdict was made against, copied from the
-    request: `allowed_signers` (the path) and, when the request had one, `gitsign`
+    request: `allowed_signers` (the path or `<rev>:<path>` value as requested),
+    `allowed_signers_sha256` (FR-037: `sha256:` and 64 lowercase hexadecimal
+    digits of the exact bytes the run used), `allowed_signers_commit` (the
+    full commit id a `<rev>:<path>` source resolved to; absent for a path), and
+    `ea_version` (the version string of the running Engineering Assurance
+    executable, as built), and `git_version` (the version string `git --version`
+    reported for the git that ran, taken as printed, so a verdict that depends on
+    the git version, such as the SSH validity time of the Behavior section, can
+    be reproduced; absent when git could not answer `--version`). `trust` is
+    present on every result except one where git failed while the
+    allowed-signers `<rev>:<path>` source was read (FR-037 `git_failed`): that
+    result is `unverifiable`, carries no `trust` member at all, and so no
+    `ea_version`, digest or commit. Inside a present `trust`, a registry
+    `git_failed` leaves only `identity_registry_commit` absent (FR-040); and, when the request had one, `gitsign`
     (`certificate_identity` and `certificate_oidc_issuer`), `identity_registry`
     (the request's `<rev>:<path>` value) and `identity_registry_commit` (the full
     commit id it resolved to, as FR-040 reports it, present whenever the
@@ -102,14 +129,25 @@ carried by commits, merge commits or notes.
   - on `approved` only: `approver`, the `principal` of the FR-037 signer;
     `meaning`, the array of `Signed-off-meaning` values in order;
     `signature_kind`, `ssh` or `gitsign` as FR-040 defines it; and the signing
-    time, which is exactly one of `signed_at` with `signed_at_source`, or
-    `signed_at_missing`. `signed_at` is a UTC instant of the form
+    claimed time, which is exactly one of `signed_at` with `signed_at_source`,
+    or `signed_at_missing`. `signed_at` is a UTC instant of the form
     `YYYY-MM-DDTHH:MM:SSZ`, and `signed_at_source` is `tagger_date`.
     `signed_at_missing` is `tagger_date_unreadable`, and appears, with neither
-    other member, when the tag has no readable tagger date (rule below). A
-    status other than `approved` carries none of the three members, because the
-    signer of such a tag is not an accepted approver and a time beside an
-    unaccepted signature would read as an attested one;
+    other member, when the tag has no readable tagger date (rule below); and the
+    trusted time, which is exactly one of `trusted_at` with `trusted_at_source`,
+    or `trusted_at_missing`. `trusted_at` is a UTC instant of the form
+    `YYYY-MM-DDTHH:MM:SSZ`, and `trusted_at_source` is `transparency_log`
+    (`rfc3161` is reserved for a regulated-tier timestamp token and no result
+    carries it). `trusted_at_missing` is one of `ssh_signature` (no log entry
+    exists for an SSH signature), `no_log_entry` (a gitsign signature carrying
+    no embedded entry), `log_entry_unverified` (an embedded entry failed any
+    check of the Behavior section, including a trusted root that no longer
+    verifies the entry), and appears with neither other member. When `signed_at` and `trusted_at` are both present and differ, the
+    result also carries `time_skew`, the integer number of seconds `signed_at`
+    is later than `trusted_at` (negative when earlier). A status other than
+    `approved` carries none of these members, because the signer of such a tag
+    is not an accepted approver and a time beside an unaccepted signature would
+    read as an attested one;
   - `binding`, when the tag message was readable: `record_id` and
     `record_digest`, each one of `match`, `mismatch`, `missing`, `repeated`.
 - `status` is decided in this order, the first rule that applies winning:
@@ -198,20 +236,56 @@ carried by commits, merge commits or notes.
   minutes below 60. Anything else is unreadable and no time is guessed.
 - The command SHALL NOT default the signing time. It SHALL NOT use the
   verification time, the current time, the commit date or the author date for
-  `signed_at`, and an `approved` result whose tagger date is unreadable stays
+  `signed_at` or `trusted_at`, and an `approved` result whose tagger date is unreadable stays
   `approved` and reports `signed_at_missing`.
 - The command SHALL report the claimed time exactly as claimed, with no
   plausibility check: a date in the future, epoch 0, or a date before the
-  signing key existed is reported verbatim. The time is the signer's claim in
-  every rendering. For gitsign the tagger date is not checked against the
-  short-lived certificate's validity window. For SSH, git 2.35 and later passes
-  the claimed tagger date to `ssh-keygen` as `-Overify-time`, so key validity
-  windows in the allowed-signers file are judged at the claimed time and not at
-  the verification time (earlier git versions judge them at the verification
-  time); in neither case does the verification attest the time.
+  signing key existed is reported verbatim as `signed_at`; the claim is the
+  signer's in every rendering. For SSH, git 2.35 and later passes the claimed
+  tagger date to `ssh-keygen` as `-Overify-time`, so key validity windows in the
+  allowed-signers file are judged at the claimed time and not at the
+  verification time (earlier git versions judge them at the verification time);
+  an SSH approval has no trusted time (`trusted_at_missing` `ssh_signature`), so
+  its key validity is judged at the claimed time on git 2.35 and later and is
+  unattested. A deleted or expired allowed-signers entry is judged against the
+  mapping the request supplies, which an auditor holds fixed by supplying the
+  `<rev>:<path>` of the mapping in force at signing.
+- The command SHALL take a trusted time only for an `approved` result whose
+  `signature_kind` is `gitsign`, and only from the Rekor log entry in the CMS
+  signature block of the verified tag object, read from the object bytes it
+  already holds. It SHALL accept the entry as a trusted time only when the
+  `sigstore-verify` library's `Verifier::verify(artifact, bundle, policy)`
+  accepts a bundle built from the entry, the signing certificate and the
+  signed-content digest of the verified tag, against the compiled-in
+  `SIGSTORE_PRODUCTION_TRUSTED_ROOT`; that verification covers the entry's
+  signed entry timestamp and inclusion proof, the entry's binding to this
+  signature, and `integratedTime` within the validity window of the signing
+  certificate. When the tag carries no embedded entry the result is
+  `trusted_at_missing` `no_log_entry`; when the bundle cannot be built from the
+  tag or the library does not accept it, the result is `trusted_at_missing`
+  `log_entry_unverified`, never a partly trusted time, and never a change to
+  `status`, `approver` or `signature`. The CMS/DER reader SHALL be used only to
+  extract the Rekor `TransparencyLogEntry` (the unauthenticated attribute with
+  OID 1.3.6.1.4.1.57264.3.1), the signing certificate and the signed-content
+  digest, and the command SHALL add no verification code of its own.
+- The command SHALL judge the gitsign certificate's validity at `trusted_at`
+  where one exists: the window check above is that judgement, and a certificate
+  whose window does not contain the verified `integratedTime` yields no
+  `trusted_at`. On the gitsign and transparency-log path the command SHALL NOT
+  judge any certificate at the local clock; the SSH path delegates its validity
+  judgement to git, as above.
+- The command SHALL NOT report `integratedTime`, the SET, the inclusion proof
+  or any other transparency-log field of an unverified entry, anywhere in a
+  result.
+- The command SHALL use the compiled-in `SIGSTORE_PRODUCTION_TRUSTED_ROOT` as
+  the trusted root, as every other Engineering Assurance verifier does, and
+  SHALL make the root injectable so a test supplies its own. The compiled-in
+  root is offline; the command SHALL NOT fetch a root, and a root that no longer
+  verifies an entry (rotated keys) yields `trusted_at_missing`
+  `log_entry_unverified`.
 - The command SHALL NOT run `gitsign`, or change any invocation, status, probe
-  or classification of FR-040, to obtain the signing time, and SHALL NOT parse
-  `gitsign` output text for it.
+  or classification of FR-040, to obtain a signing time, and SHALL NOT parse
+  `gitsign` output text for one.
 - The command SHALL leave the `signature-verify` output of FR-036, FR-037 and
   FR-040 unchanged: it gains no signing-time member, and the `signature` member
   of an approval result stays exactly that output.
@@ -229,8 +303,9 @@ carried by commits, merge commits or notes.
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
 | FR-041-CON-1 | A result SHALL NOT be `approved` unless the FR-036 verdict for the tag is `signed_valid` with a mapped signer, the tag message carries exactly one `Approved-Record-Id` equal to the request's `record_id`, exactly one `Approved-Record-Digest` equal to the request's `record_digest`, and a `Signed-off-meaning` trailer whose every value holds a character that is not Unicode White_Space. | Safety | Test |
-| FR-041-CON-2 | The command SHALL contain no signature, certificate or trailer-parsing code of its own, and no rule of FR-036, FR-037 or FR-040 restated. | Architecture | Inspection |
+| FR-041-CON-2 | The command SHALL contain no signature, certificate or trailer-parsing code of its own, and no rule of FR-036, FR-037 or FR-040 restated, with one exception: a CMS/DER reader crate may be used only to extract the Rekor `TransparencyLogEntry`, the signing certificate and the signed-content digest from a gitsign tag signature for the verification by `sigstore-verify`; no verification, SET, inclusion-proof, certificate-window or binding logic is written by this command. | Architecture | Inspection |
 | FR-041-CON-3 | A result SHALL NOT report a `signed_at` that was not read from a well-formed tagger line of the tag object that was verified. | Safety | Test |
+| FR-041-CON-5 | A result SHALL NOT carry `trusted_at` unless the `sigstore-verify` library verified the log entry's SET and inclusion proof, the entry's binding to the verified tag's signature, and `integratedTime` within the certificate window; no `trusted_at` is read from the local clock, the tagger date or an unverified entry. | Safety | Test |
 | FR-041-CON-4 | A result SHALL NOT be `approved` unless trailer parsing and signature verification refer to the same immutable annotated tag object, identified by `tag_object_id`. | Safety | Test |
 
 ## Acceptance Criteria
@@ -258,15 +333,25 @@ criteria use real signatures from throwaway keys generated in the test.
 | FR-041-AC-12 | Static inspection shows no signature, certificate or trailer-parsing code in the approval module and no restated FR-036, FR-037 or FR-040 rule (CON-2). | Inspection |
 | FR-041-AC-16 | A mapped, validly signed SSH tag with matching trailers and a `Signed-off-meaning` trailer, created with a known tagger date in a non-UTC zone (`+0530`, and `-0800` across a UTC day boundary), yields `approved` carrying `approver`, `meaning`, `signed_at` equal to the UTC instant of that date and `signed_at_source` `tagger_date`, for a bare and a `refs/tags/` name. | Test |
 | FR-041-AC-17 | The tagger time is read from the tag header block only: a tagger-shaped line in the message, two tagger headers, a missing or non-digit epoch, an epoch past 9999-12-31T23:59:59Z, a malformed zone, extra fields or non-UTF-8 text yield no time, and epochs `0`, a leap day and the last accepted instant format correctly. | Test (captured) |
-| FR-041-AC-18 | An `approved` result for a tag whose tagger date is missing or malformed carries `signed_at_missing` `tagger_date_unreadable` and neither `signed_at` nor `signed_at_source`, together with `approver` and `meaning`, and the result carries no time member other than `signed_at_missing`. | Test (stand-in) |
+| FR-041-AC-18 | An `approved` result for a tag whose tagger date is missing or malformed carries `signed_at_missing` `tagger_date_unreadable` and neither `signed_at` nor `signed_at_source`, together with `approver` and `meaning`, and the result carries no claimed-time member other than `signed_at_missing` (and no `time_skew`). | Test (stand-in) |
 | FR-041-AC-22 | A valid SSH-signed annotated tag with matching approval trailers remains `approved` when its ref is unchanged; the result's `tag_object_id` equals an independent `git rev-parse` of the tag object, and that same id supplies the parsed message and SSH verification. | Test |
 | FR-041-AC-23 | After the command reads a validly signed tag message, moving or deleting the named ref before signature verification cannot produce `approved`: the command verifies the already-resolved immutable object or returns `unverifiable` with no approval members. Any result after annotated-tag resolution reports the originally resolved `tag_object_id`; it never combines the original message with verification of a replacement object. For a CMS-signed tag the verifier sees only the isolated tag snapshot of FR-040: a non-bare repository holding only the resolved tag object, re-hashed to the resolved id, under the ref `refs/tags/verified`; a source ref moved or deleted after resolution does not change the verified object, and a snapshot ref that stops naming the resolved id during verification yields `unverifiable`, never `approved`. | Test |
 | FR-041-AC-24 | The moved-ref and deleted-ref cases in AC-23 are synchronized at the boundary between message extraction and verifier observation; an unchanged-ref healthy control proves the synchronization does not itself cause refusal. Repeat the identity-binding cases for SSH and gitsign using the verifier appropriate to each signature type; a missing gitsign executable or unavailable trust service is reported as unavailable/unverifiable, not as a passing integration case. | Test |
 | FR-041-AC-25 | With the annotated tag ref unchanged, mutate the allowed-signers bytes, move the branch the `identity_registry` revision names, edit the working-tree registry, or change relevant repository gitsign configuration after request/trust capture but before verifier execution. A synchronized adapter observation proves the verifier uses the captured trust/configuration snapshot and returns a verdict for that snapshot; if the implementation cannot preserve that snapshot, it returns `unverifiable` with no approval members. The test's independent oracle identifies the exact trust/configuration bytes observed by the verifier. | Test |
 | FR-041-AC-26 | Against real `gitsign` v0.18.0 and available Sigstore trust services, `approval-verify` on a public gitsign-signed annotated tag with matching approval trailers and a `Signed-off-meaning` yields `approved`, carries the same `tag_object_id` as an independent resolution of the tag, and preserves the FR-040 signature verdict. Wrong identity or issuer yields `untrusted_signer` with the corresponding FR-040 mismatch; a changed signed tag object yields `unverifiable` with no approval members; a gitsign-disallowed repository trust configuration yields `unverifiable` with no approval members. Missing executable or unavailable trust service yields `unverifiable` with no approval members and is recorded unavailable, not as a passing integration run. The test records the gitsign version, tag object ids, identity, issuer, and network/trust-service outcome. | Test (live, ignored by default) |
-| FR-041-AC-19 | `wrong_record`, `untrusted_signer` and `meaning_missing` results for tags with a readable tagger date carry none of `signed_at`, `signed_at_source` and `signed_at_missing`, and supplying a time to the pure decision changes no status or reason for any combination. | Test |
+| FR-041-AC-19 | `wrong_record`, `untrusted_signer` and `meaning_missing` results for tags with a readable tagger date carry none of `signed_at`, `signed_at_source`, `signed_at_missing`, `trusted_at`, `trusted_at_source`, `trusted_at_missing` and `time_skew`, and supplying a time to the pure decision changes no status or reason for any combination. | Test |
 | FR-041-AC-20 | A gitsign-signed tag approved through the stand-in reports `signed_at` from its tagger date (normalized from a non-UTC zone) with `signed_at_source` `tagger_date`; a stand-in rejecting the identity still yields `untrusted_signer` with no time; the time read starts no `gitsign` run. | Test (stand-in) |
 | FR-041-AC-21 | The `signature-verify` output for the same tag has no signing-time member and equals the `signature` member of the approval result. | Test |
+| FR-041-AC-27 | An `approved` result for an SSH-signed tag carries `signed_at` with `tagger_date` and `trusted_at_missing` `ssh_signature`, and no `trusted_at`, `trusted_at_source` or `time_skew`, for every tagger date including a backdated one. | Test |
+| FR-041-AC-28 | For a gitsign tag whose embedded Rekor entry the `sigstore-verify` library verifies (SET, inclusion proof, binding to the tag's signature, `integratedTime` inside the certificate window), the `approved` result carries `trusted_at` equal to `integratedTime` in UTC, `trusted_at_source` `transparency_log`, `signed_at` with `tagger_date`, and `time_skew` equal to the difference in seconds when the two differ and no `time_skew` when they are equal. The fixture is a captured real gitsign tag with an injected trusted root, so no network is needed. | Test (captured) |
+| FR-041-AC-29 | A gitsign tag whose embedded entry has a tampered `integratedTime`, a SET that does not verify, an inclusion proof that does not verify, an entry copied from a different object, or an `integratedTime` outside the certificate window, or a trusted root that does not verify the entry, yields `approved` with `trusted_at_missing` `log_entry_unverified` and no `trusted_at`, no `integratedTime` or other log field anywhere in the result, and an unchanged `status`, `approver` and `signature`. | Test (captured) |
+| FR-041-AC-30 | A gitsign tag carrying no embedded entry yields `trusted_at_missing` `no_log_entry`; in neither case does the result carry `trusted_at`, and `signed_at` is the tagger date, never the local clock. | Test (stand-in) |
+| FR-041-AC-31 | On git 2.35 or later, an SSH tag whose tagger date is earlier than the `valid-before` of its allowed-signers entry (itself in the past) is `approved` with `signed_at` the backdated claim and `trusted_at_missing` `ssh_signature`, so the claim is reported as unattested. The test reads the git version and is skipped, not passed, on a git older than 2.35. | Test |
+| FR-041-AC-32 | A key whose allowed-signers entry has expired before both the signing and the verification time yields `untrusted_signer` on every git version, by the setup of FR-037-AC-9. | Test |
+| FR-041-AC-33 | The trusted-time code uses a CMS/DER reader only to extract the log entry, signing certificate and signed-content digest, passes them to `sigstore-verify`'s `Verifier::verify`, and contains no SET, inclusion-proof, Merkle, certificate-window or binding logic of its own; no function returns a log field except after that verification succeeds. | Inspection |
+| FR-041-AC-34 | With `allowed_signers` `<rev>:<path>`, the `approved` result's `trust` carries `allowed_signers` as requested, `allowed_signers_commit` equal to the full commit id the revision resolved to, `allowed_signers_sha256` equal to an independent SHA-256 of that committed blob, and `ea_version` equal to the running executable's version. After the working-tree file is edited and the branch moved, a re-run with the same `<rev>:<path>` (the revision held fixed by a tag) yields the same approver, digest and commit, while an absolute-path request against the edited file yields a different `allowed_signers_sha256`. | Test |
+| FR-041-AC-35 | Every `approval-verify` result that has a `trust` member carries `trust.allowed_signers_sha256`, `trust.ea_version` and `trust.git_version`; `allowed_signers_commit` is present exactly when the source was a `<rev>:<path>` that resolved; a git failure while the allowed-signers `<rev>:<path>` source is read yields `unverifiable` with no `trust` member at all, and a registry `git_failed` yields `unverifiable` with `trust` present and only `identity_registry_commit` absent. | Test |
+| FR-041-AC-36 | `trust.git_version` equals the version `git --version` prints for the git the run used, and the same SSH tag, backdated before a past `valid-before`, shows `approved` with a `git_version` of 2.35 or later and `untrusted_signer` with an earlier one, so the recorded version explains the difference. | Test |
 
 ## Dependencies
 

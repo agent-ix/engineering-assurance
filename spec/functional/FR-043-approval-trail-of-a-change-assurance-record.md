@@ -53,7 +53,7 @@ signature rule (FR-036, FR-037, FR-040 own them), and a persisted log of the tra
 
 - One request document `engineering-assurance.approval-trail-request/v1` with the
   members `protocol`, `repository` (absolute directory path), `record_id` and
-  `record_digest` (as FR-041), `allowed_signers` (absolute file path, required) and
+  `record_digest` (as FR-041), `allowed_signers` (required: an absolute file path or a `<rev>:<path>` trust source, as FR-041) and
   optionally `gitsign` with its `identity_registry` (as FR-041, whose `gitsign.principal` and registry refusals use the codes `approval_trail_gitsign_principal_refused` and `approval_trail_identity_registry_invalid`). Unknown members are rejected. The command takes
   the document as `--request <json>` or `--request -`, as `approval-verify` does.
 - `--format json|table`, default `json`.
@@ -63,7 +63,10 @@ signature rule (FR-036, FR-037, FR-040 own them), and a persisted log of the tra
 - With `--format json`, one line of JSON on stdout and exit status 0, the result
   with the member `protocol` equal to `engineering-assurance.approval-trail-result/v1`:
   - `record_id`, `record_digest` and `trust` as requested (the `trust` member of
-    FR-041, which with `gitsign` also carries `identity_registry_commit` whenever the revision resolved);
+    FR-041, with `allowed_signers_sha256`, `allowed_signers_commit` for a
+    `<rev>:<path>` source, `ea_version` and `git_version` as FR-041 defines (a git failure while the allowed-signers `<rev>:<path>` source is read is `approval_trail_repository_unavailable`, so there is no result and no `trust`), read once for the
+    whole trail, so every entry is verified against the same bytes, and with
+    `gitsign` also `identity_registry_commit` whenever the revision resolved);
   - `ordering`, the string `claimed_at_ascending`;
   - `entries`, the array of entries in order;
   - `unreadable`, the array of annotated tags that cannot be known to name the
@@ -88,7 +91,9 @@ signature rule (FR-036, FR-037, FR-040 own them), and a persisted log of the tra
   `YYYY-MM-DDTHH:MM:SSZ`, absent when the tagger date is unreadable) and every other
   member of the FR-041 result for that tag except `protocol`, `record_id`,
   `record_digest` and `trust`: `status`, `reason`, `signature`, `binding` and, on
-  `approved`, `approver`, `meaning`, `signature_kind` and the signing time.
+  `approved`, `approver`, `meaning`, `signature_kind` and the signing times of FR-041
+  (`signed_at` or `signed_at_missing`, `trusted_at` with `trusted_at_source`
+  or `trusted_at_missing`, and `time_skew`).
 - Entries are ordered by `claimed_at` ascending; entries without one follow all
   entries with one; entries with equal or no `claimed_at` are ordered by `tag` in
   byte order. The order is therefore total and does not depend on listing order.
@@ -194,6 +199,8 @@ throwaway keys generated in the test.
 | FR-043-AC-17 | Every entry carries `object` equal to the id of the verified tag object, and two ref names of one tag object carry the same `object`. | Test |
 | FR-043-AC-18 | In `--format table`, escape, C1 control, bidirectional override and zero-width characters in a tag name or meaning are replaced by `?`. | Test |
 | FR-043-AC-19 | The command writes nothing to the repository and keeps no log or digest of the trail. | Inspection |
+| FR-043-AC-26 | The trail result's `trust` carries `allowed_signers_sha256`, `ea_version` and `git_version` on every result that carries `trust`, and `allowed_signers_commit` when the request's `allowed_signers` is a `<rev>:<path>` that resolved; the allowed-signers bytes are read once per trail, so a file changed mid-run changes no entry, and each entry equals the `approval-verify` result against the same bytes. | Test |
+| FR-043-AC-27 | An `approved` gitsign entry carries the `trusted_at`, `trusted_at_source` and `time_skew`, or the `trusted_at_missing` reason, that `approval-verify` yields for the same tag; an `approved` SSH entry carries `trusted_at_missing` `ssh_signature`; entries other than `approved` carry none of them; and `claimed_at` alone orders the trail whatever `trusted_at` says. | Test |
 
 ## Dependencies
 
