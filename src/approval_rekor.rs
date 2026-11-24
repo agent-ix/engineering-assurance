@@ -270,6 +270,7 @@ mod tests {
     use super::{EmbeddedEntry, bundle_signature, extract, verify_with_policy};
     use base64::{Engine, engine::general_purpose::STANDARD};
     use der::asn1::OctetString;
+    use ix_trace_rs::trace;
     use serde_json::json;
     use sigstore_types::Bundle;
 
@@ -347,7 +348,7 @@ mod tests {
     }
 
     #[test]
-    #[ix_trace_rs::trace("FR-041-AC-28")]
+    #[trace("FR-041-AC-28")]
     fn cms_octet_string_contents_are_not_der_wrapped_in_the_bundle() {
         // These opaque bytes deliberately resemble a DER sequence so wrapping
         // the CMS OCTET STRING produces a distinguishable value.
@@ -361,7 +362,7 @@ mod tests {
     }
 
     #[test]
-    #[ix_trace_rs::trace("FR-041-AC-28")]
+    #[trace("FR-041-AC-28")]
     fn cms_rekor_fixture_extracts_verified_integrated_time_offline() {
         let EmbeddedEntry::Bundle { artifact, bundle } = extract(VERIFIED_TAG) else {
             panic!("fixture must yield a bundle from CMS extraction");
@@ -375,7 +376,7 @@ mod tests {
     }
 
     #[test]
-    #[ix_trace_rs::trace("FR-041-AC-29")]
+    #[trace("FR-041-AC-29")]
     fn cms_rekor_fixture_rejects_integrated_time_mutation() {
         let EmbeddedEntry::Bundle { artifact, bundle } = extract(VERIFIED_TAG) else {
             panic!("fixture must yield a bundle from CMS extraction");
@@ -388,7 +389,7 @@ mod tests {
     }
 
     #[test]
-    #[ix_trace_rs::trace("FR-041-AC-29")]
+    #[trace("FR-041-AC-29")]
     fn cms_rekor_fixture_rejects_a_tampered_set() {
         let EmbeddedEntry::Bundle { artifact, bundle } = extract(VERIFIED_TAG) else {
             panic!("fixture must yield a bundle from CMS extraction");
@@ -412,7 +413,7 @@ mod tests {
     }
 
     #[test]
-    #[ix_trace_rs::trace("FR-041-AC-29")]
+    #[trace("FR-041-AC-29")]
     fn cms_rekor_fixture_rejects_a_tampered_inclusion_proof() {
         let EmbeddedEntry::Bundle { artifact, bundle } = extract(VERIFIED_TAG) else {
             panic!("fixture must yield a bundle from CMS extraction");
@@ -426,7 +427,7 @@ mod tests {
     }
 
     #[test]
-    #[ix_trace_rs::trace("FR-041-AC-29")]
+    #[trace("FR-041-AC-29")]
     fn cms_rekor_fixture_rejects_an_entry_from_a_distinct_valid_tag() {
         let EmbeddedEntry::Bundle {
             artifact: first_artifact,
@@ -458,7 +459,7 @@ mod tests {
     }
 
     #[test]
-    #[ix_trace_rs::trace("FR-041-AC-29")]
+    #[trace("FR-041-AC-29")]
     fn cms_rekor_fixture_rejects_an_unrelated_trusted_root() {
         let EmbeddedEntry::Bundle { artifact, bundle } = extract(VERIFIED_TAG) else {
             panic!("fixture must yield a bundle from CMS extraction");
