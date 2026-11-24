@@ -45,6 +45,14 @@ def executable_from_env(name: str) -> tuple[Path | None, str | None]:
     return path, None
 
 
+def resolve_locked_build(value: str | None = None) -> str | None:
+    configured = value or str(Path.home() / "dev/worktrees/locked-build.sh")
+    candidate = Path(configured).expanduser()
+    if candidate.is_file() and os.access(candidate, os.X_OK):
+        return str(candidate.resolve())
+    return shutil.which(configured)
+
+
 def add_entry(
     entries: list[dict[str, object]],
     symbol: str,
@@ -191,9 +199,7 @@ def main() -> int:
             approval_config = config
 
     if available:
-        locked_build = os.environ.get("LOCKED_BUILD", "")
-        if locked_build and not Path(locked_build).is_file():
-            locked_build = shutil.which(locked_build) or ""
+        locked_build = resolve_locked_build(os.environ.get("LOCKED_BUILD"))
         if not locked_build:
             print("LOCKED_BUILD must name the locked-build.sh admission wrapper", file=sys.stderr)
             return 2

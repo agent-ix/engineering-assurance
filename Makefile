@@ -14,7 +14,7 @@ MANIFEST_REGISTRY_ROOT ?=
 PYTHON ?= python3
 QUIRE ?= quire
 CARGO ?= cargo
-LOCKED_BUILD ?= locked-build.sh
+LOCKED_BUILD ?= $(HOME)/dev/worktrees/locked-build.sh
 
 real-tool-test:
 	LOCKED_BUILD="$(LOCKED_BUILD)" CARGO="$(CARGO)" python3 scripts/real_tool_test.py
