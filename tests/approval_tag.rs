@@ -138,3 +138,37 @@ fn tc_340_only_a_tag_with_a_supported_signature_block_counts_as_signed() {
     let pgp = "-----BEGIN PGP SIGNATURE-----\nAAAA\n-----END PGP SIGNATURE-----\n";
     assert!(!tag_is_signed(format!("{head}{pgp}").as_bytes()));
 }
+
+#[test]
+#[trace("TC-1159", "FR-085-AC-3")]
+fn tc_1159_a_declared_gesture_is_the_fourth_trailer_and_reads_back() {
+    use engineering_assurance::approval_verify::{
+        DeclaredGesture, GESTURE_TRAILER, GestureDeclaration, SigningGesture,
+    };
+    let message = compose_message(
+        "change-record-17",
+        DIGEST,
+        "reviewed",
+        Some(SigningGesture::AgentConfirm),
+    );
+    let trailers = message.trim_end_matches('\n').split("\n\n").nth(1).expect("trailers");
+    let names: Vec<&str> = trailers
+        .lines()
+        .filter_map(|line| line.split_once(':').map(|(name, _)| name))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "Approved-Record-Id",
+            "Approved-Record-Digest",
+            "Signed-off-meaning",
+            "Signing-Gesture"
+        ]
+    );
+    let values = trailer_values(trailers, GESTURE_TRAILER);
+    assert_eq!(values, ["agent_confirm"]);
+    assert_eq!(
+        GestureDeclaration::from_trailer_values(&values).declared,
+        DeclaredGesture::AgentConfirm
+    );
+}
