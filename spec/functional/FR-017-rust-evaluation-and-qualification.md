@@ -242,6 +242,8 @@ checking, manifest validation, and qualification assertions to Rust.
   | `https` | `eur-lex.europa.eu` | `/content/legal-notice/legal-notice.html` | `locale=en` | `spec_clauses_eu_law/clauses/eu-ai-act-2024-1689-2026-07-27.json` | `package/clauses/eu-ai-act-2024-1689-2026-07-27.json` |
   | `https` | `eur-lex.europa.eu` | `/eli/reg/2024/1689/2026-07-27/eng` | none | `spec_clauses_eu_law/clauses/eu-ai-act-2024-1689-annex-iv-2026-07-27.json` | `package/clauses/eu-ai-act-2024-1689-annex-iv-2026-07-27.json` |
   | `https` | `eur-lex.europa.eu` | `/content/legal-notice/legal-notice.html` | `locale=en` | `spec_clauses_eu_law/clauses/eu-ai-act-2024-1689-annex-iv-2026-07-27.json` | `package/clauses/eu-ai-act-2024-1689-annex-iv-2026-07-27.json` |
+  | `https` | `health.ec.europa.eu` | `/document/download/8d305550-dd22-4dad-8463-2ddb4a1345f1_en` | `filename=annex11_01-2011_en.pdf` | `spec_clauses_eu_law/clauses/eu-eu-gmp-annex-11-2011-01.json` | `package/clauses/eu-eu-gmp-annex-11-2011-01.json` |
+  | `https` | `commission.europa.eu` | `/legal-notice_en` | none | `spec_clauses_eu_law/clauses/eu-eu-gmp-annex-11-2011-01.json` | `package/clauses/eu-eu-gmp-annex-11-2011-01.json` |
 
   The content-rights classifier SHALL refuse a source URL unless its scheme,
   host, path, query, and archive member path exactly match one row of this table.
@@ -249,6 +251,10 @@ checking, manifest validation, and qualification assertions to Rust.
   the GDPR and both AI Act clause sets. The FDA guidance links in this
   table are exact source references; the pack specs declare no separate FDA
   legal-notice URL.
+  The EU GMP Annex 11 clause set SHALL cite the Annex 11 PDF in
+  `source.officialUrl` and `rights.attribution`, and the Commission legal-notice
+  URL (`commission.europa.eu/legal-notice_en`) in `rights.licence`; both are
+  admitted only at that set's member paths.
   For the MDCG clause set, `source.officialUrl` SHALL contain the PDF source
   URL, and `rights.attribution` SHALL contain both the PDF URL and its listing
   URL. The PDF is authored by the Medical Device Coordination Group and is not
