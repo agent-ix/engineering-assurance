@@ -741,6 +741,12 @@ fn tc_336_a_gitsign_tag_reports_its_tagger_date_and_gitsign_never_changes_the_st
     assert_eq!(approved["approver"], PRINCIPAL);
     assert_eq!(approved["signed_at"], "2023-11-14T22:13:20Z");
     assert_eq!(approved["signed_at_source"], "tagger_date");
+    // No transparency-log entry is verified into a trusted time, so none is
+    // reported and the claimed tagger date is never promoted to one.
+    assert_eq!(approved["trusted_at_missing"], "log_entry_unverified");
+    for member in ["trusted_at", "trusted_at_source", "time_skew"] {
+        assert!(approved.get(member).is_none(), "{member}: {approved}");
+    }
     // Reading the time starts no gitsign run: one approval ran it once.
     let runs = fs::read_to_string(fixture.bin().join("invocations")).expect("log");
     assert_eq!(runs.lines().count(), 1, "{runs:?}");

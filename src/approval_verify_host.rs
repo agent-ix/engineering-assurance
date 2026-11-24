@@ -217,11 +217,6 @@ impl<'a> ResultLine<'a> {
     pub(crate) const fn assessment(&self) -> &Assessment {
         &self.assessment
     }
-
-    /// The trust the verdict was made against, when one was established.
-    pub(crate) const fn trust(&self) -> Option<Trust<'a>> {
-        self.trust
-    }
 }
 
 /// Typed refusal that produces no verdict.
