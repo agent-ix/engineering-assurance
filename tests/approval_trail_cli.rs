@@ -385,9 +385,16 @@ fn tc_353_failed_and_untrusted_approvals_are_listed_with_their_verdict() {
 }
 
 #[test]
-#[trace("TC-1162", "FR-086-AC-6")]
-fn tc_1162_trail_carries_the_declared_gesture_from_approval_verify() {
+#[trace("FR-086-AC-6")]
+fn trail_carries_declared_and_undeclared_gestures_from_approval_verify() {
     let fixture = fixture();
+    signed_tag(
+        &fixture,
+        "a",
+        "v-no-gesture",
+        &good("approved"),
+        "2026-05-01T08:00:00+0000",
+    );
     signed_tag(
         &fixture,
         "a",
@@ -396,9 +403,17 @@ fn tc_1162_trail_carries_the_declared_gesture_from_approval_verify() {
         "2026-05-01T09:00:00+0000",
     );
 
+    let undeclared_verified = approval(&fixture, "v-no-gesture");
     let verified = approval(&fixture, "v-gesture");
     let listed = trail(&fixture);
+    let undeclared_entry = entry(&listed, "v-no-gesture");
     let listed_entry = entry(&listed, "v-gesture");
+    assert_eq!(
+        undeclared_verified["status"], "approved",
+        "{undeclared_verified}"
+    );
+    assert_eq!(undeclared_verified["gesture"], json!({"declared": "none"}));
+    assert_eq!(undeclared_entry["gesture"], undeclared_verified["gesture"]);
     assert_eq!(verified["status"], "approved", "{verified}");
     assert_eq!(verified["gesture"], json!({"declared": "agent_confirm"}));
     assert_eq!(listed_entry["gesture"], verified["gesture"]);

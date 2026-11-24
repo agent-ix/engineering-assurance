@@ -8,6 +8,7 @@
 //! `gitsign`; the identities are fictional.
 
 use std::{
+    ffi::OsStr,
     fs,
     io::Write,
     os::unix::fs::PermissionsExt,
@@ -867,8 +868,8 @@ fn tag_message(fixture: &Fixture, tag: &str) -> String {
 }
 
 #[test]
-#[trace("TC-1149", "FR-085-AC-1", "FR-086-AC-1")]
-fn tc_1149_a_request_without_gesture_keeps_three_trailers_and_declares_none() {
+#[trace("FR-085-AC-1", "FR-086-AC-1")]
+fn a_request_without_gesture_keeps_three_trailers_and_declares_none() {
     let fixture = fixture();
     fixture.ssh_config("a");
     let result = created(&fixture, &tag_request(&fixture, "approve-17", "reviewed"));
@@ -889,16 +890,19 @@ fn tc_1149_a_request_without_gesture_keeps_three_trailers_and_declares_none() {
 }
 
 #[test]
-#[trace("TC-1150", "FR-085-AC-3", "FR-085-AC-8", "FR-086-AC-3", "FR-086-AC-8")]
-fn tc_1150_a_declared_gesture_is_copied_verbatim_and_never_changes_the_status() {
+#[trace("FR-085-AC-3", "FR-085-AC-8", "FR-086-AC-3", "FR-086-AC-8")]
+fn a_declared_gesture_is_copied_verbatim_and_never_changes_the_status() {
     let fixture = fixture();
     fixture.ssh_config("a");
     created(&fixture, &tag_request(&fixture, "plain-17", "reviewed"));
     let plain = verified(&fixture, "plain-17", false);
-    let result = created(
+    let run = approval_tag_under_pty(
         &fixture,
         &gesture_request(&fixture, "touch-17", "device_touch"),
+        "unused\n",
     );
+    assert_eq!(run.code, 0, "{} / {}", run.stdout, run.stderr);
+    let result: Value = serde_json::from_str(&run.stdout).expect("created json");
     assert_eq!(result["gesture"], "device_touch");
     assert_eq!(
         tag_message(&fixture, "touch-17"),
@@ -928,8 +932,8 @@ fn tc_1150_a_declared_gesture_is_copied_verbatim_and_never_changes_the_status() 
 }
 
 #[test]
-#[trace("TC-1151", "FR-085-AC-4")]
-fn tc_1151_a_gesture_outside_the_three_values_is_refused_without_starting_git() {
+#[trace("FR-085-AC-4")]
+fn a_gesture_outside_the_three_values_is_refused_without_starting_git() {
     let fixture = fixture();
     fixture.ssh_config("a");
     let marker = fixture.root().join("git-was-started");
@@ -962,8 +966,8 @@ fn tc_1151_a_gesture_outside_the_three_values_is_refused_without_starting_git() 
 }
 
 #[test]
-#[trace("TC-1152", "FR-085-AC-10")]
-fn tc_1152_the_signing_run_keeps_its_environment_and_passes_stderr_through() {
+#[trace("FR-085-AC-10")]
+fn the_signing_run_keeps_its_environment_and_passes_stderr_through() {
     let fixture = fixture();
     fixture.ssh_config("a");
     let record = fixture.root().join("git-run");
@@ -977,25 +981,29 @@ fn tc_1152_the_signing_run_keeps_its_environment_and_passes_stderr_through() {
     );
     let askpass = fixture.root().join("askpass-program");
     let sock = fixture.root().join("agent-sock");
+    let pty_extra = [
+        ("SSH_ASKPASS", askpass.as_os_str()),
+        ("SSH_ASKPASS_REQUIRE", OsStr::new("force")),
+        ("DISPLAY", OsStr::new(":77")),
+        ("SSH_AUTH_SOCK", sock.as_os_str()),
+    ];
     let extra: [(&str, &Path); 4] = [
         ("SSH_ASKPASS", &askpass),
         ("SSH_ASKPASS_REQUIRE", Path::new("force")),
         ("DISPLAY", Path::new(":77")),
         ("SSH_AUTH_SOCK", &sock),
     ];
-    let with = run_env(
+    let with = approval_tag_under_pty_with_env(
         &fixture,
-        "approval-tag",
-        gesture_request(&fixture, "approve-17", "device_touch")
-            .to_string()
-            .as_bytes(),
-        &fixture.bin(),
-        &extra,
+        &gesture_request(&fixture, "approve-17", "device_touch"),
+        "unused\n",
+        &pty_extra,
     );
-    assert_eq!(with.status.code(), Some(0), "{with:?}");
+    assert_eq!(with.code, 0, "{} / {}", with.stdout, with.stderr);
     assert!(
-        String::from_utf8_lossy(&with.stderr).contains("STDERR-REACHED-THE-CALLER"),
-        "{with:?}"
+        with.stderr.contains("STDERR-REACHED-THE-CALLER"),
+        "{}",
+        with.stderr
     );
     let seen = fs::read_to_string(&record).expect("git run record");
     assert_eq!(
@@ -1026,8 +1034,8 @@ fn tc_1152_the_signing_run_keeps_its_environment_and_passes_stderr_through() {
 }
 
 #[test]
-#[trace("TC-1153", "FR-086-AC-4", "FR-086-AC-5")]
-fn tc_1153_an_unrecognized_or_repeated_declaration_is_unrecognized_and_other_statuses_have_none() {
+#[trace("FR-086-AC-4", "FR-086-AC-5")]
+fn an_unrecognized_or_repeated_declaration_is_unrecognized_and_other_statuses_have_none() {
     let fixture = fixture();
     fixture.ssh_config("a");
     let repo = fixture.repo();
@@ -1085,8 +1093,8 @@ fn tc_1153_an_unrecognized_or_repeated_declaration_is_unrecognized_and_other_sta
 }
 
 #[test]
-#[trace("TC-1154", "FR-086-AC-2")]
-fn tc_1154_an_oidc_interactive_declaration_through_the_gitsign_stand_in_is_declared_only() {
+#[trace("FR-086-AC-2")]
+fn an_oidc_interactive_declaration_through_the_gitsign_stand_in_is_declared_only() {
     let fixture = fixture();
     fixture.x509_config();
     let committed = git(&fixture.repo(), &["rev-parse", "HEAD"]);
@@ -1104,10 +1112,13 @@ fn tc_1154_an_oidc_interactive_declaration_through_the_gitsign_stand_in_is_decla
     fs::write(repo.join("identity-registry.json"), registry).expect("registry");
     git(&repo, &["add", "identity-registry.json"]);
     git(&repo, &["commit", "-q", "-m", "registry"]);
-    let result = created(
+    let run = approval_tag_under_pty(
         &fixture,
         &gesture_request(&fixture, "approve-17", "oidc_interactive"),
+        "unused\n",
     );
+    assert_eq!(run.code, 0, "{} / {}", run.stdout, run.stderr);
+    let result: Value = serde_json::from_str(&run.stdout).expect("created json");
     assert_eq!(result["gesture"], "oidc_interactive");
     let approved = verified(&fixture, "approve-17", true);
     assert_eq!(approved["status"], "approved", "{approved}");
@@ -1193,26 +1204,23 @@ fn refs(fixture: &Fixture) -> String {
 }
 
 #[test]
-#[trace("TC-1155", "FR-085-AC-5", "FR-085-AC-6", "FR-086-AC-2")]
-fn tc_1155_ssh_add_c_confirms_each_signature_and_a_denial_creates_no_tag() {
+#[trace("FR-085-AC-5", "FR-085-AC-6", "FR-086-AC-2")]
+fn ssh_add_c_confirms_each_signature_and_a_denial_creates_no_tag() {
     let fixture = fixture();
     let (askpass, log) = askpass_program(&fixture);
     let agent = agent_with_confirmed_key(&fixture, &askpass);
     let socket = agent.socket.clone();
     let create_as = |tag: &str| {
-        run_env(
+        approval_tag_under_pty_with_env(
             &fixture,
-            "approval-tag",
-            gesture_request(&fixture, tag, "agent_confirm")
-                .to_string()
-                .as_bytes(),
-            &fixture.bin(),
-            &[("SSH_AUTH_SOCK", &socket)],
+            &gesture_request(&fixture, tag, "agent_confirm"),
+            "unused\n",
+            &[("SSH_AUTH_SOCK", socket.as_os_str())],
         )
     };
     for tag in ["approve-1", "approve-2"] {
         let output = create_as(tag);
-        assert_eq!(output.status.code(), Some(0), "{output:?}");
+        assert_eq!(output.code, 0, "{} / {}", output.stdout, output.stderr);
     }
     let calls = fs::read_to_string(&log).expect("askpass log");
     assert_eq!(
@@ -1231,8 +1239,8 @@ fn tc_1155_ssh_add_c_confirms_each_signature_and_a_denial_creates_no_tag() {
     fs::write(fixture.root().join("askpass.deny"), "").expect("deny");
     let before = refs(&fixture);
     let denied = create_as("approve-3");
-    assert_eq!(denied.status.code(), Some(2), "{denied:?}");
-    let error: Value = serde_json::from_slice(&denied.stdout).expect("error json");
+    assert_eq!(denied.code, 2, "{} / {}", denied.stdout, denied.stderr);
+    let error: Value = serde_json::from_str(&denied.stdout).expect("error json");
     assert_eq!(error["code"], "approval_tag_create_failed", "{error}");
     assert_eq!(refs(&fixture), before, "no ref may change");
     assert_eq!(
@@ -1297,6 +1305,15 @@ struct PtyRun {
 /// standard error in files, so that only `/dev/tty` is the terminal. `typed` is
 /// what the person types.
 fn approval_tag_under_pty(fixture: &Fixture, request: &Value, typed: &str) -> PtyRun {
+    approval_tag_under_pty_with_env(fixture, request, typed, &[])
+}
+
+fn approval_tag_under_pty_with_env(
+    fixture: &Fixture,
+    request: &Value,
+    typed: &str,
+    extra: &[(&str, &OsStr)],
+) -> PtyRun {
     let root = fixture.root();
     let (request_file, out, stdout, stderr) = (
         root.join("pty-request.json"),
@@ -1319,7 +1336,8 @@ fn approval_tag_under_pty(fixture: &Fixture, request: &Value, typed: &str) -> Pt
     )
     .expect("wrapper");
     fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755)).expect("mode");
-    let mut child = Command::new("/usr/bin/script")
+    let mut command = Command::new("/usr/bin/script");
+    command
         .args(["-q", "-e", "-c"])
         .arg(&wrapper)
         .arg("/dev/null")
@@ -1332,9 +1350,11 @@ fn approval_tag_under_pty(fixture: &Fixture, request: &Value, typed: &str) -> Pt
         .env("GIT_CONFIG_GLOBAL", fixture.global())
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .expect("script must start");
+        .stderr(Stdio::null());
+    for (name, value) in extra {
+        command.env(name, value);
+    }
+    let mut child = command.spawn().expect("script must start");
     child
         .stdin
         .take()
@@ -1395,8 +1415,8 @@ fn process_group_exists(group: i32) -> bool {
 }
 
 #[test]
-#[trace("TC-1156", "FR-085-AC-2", "FR-085-AC-11")]
-fn tc_1156_a_signer_reads_the_terminal_in_the_foreground_and_the_group_is_restored() {
+#[trace("FR-085-AC-2", "FR-085-AC-11")]
+fn a_signer_reads_the_terminal_in_the_foreground_and_the_group_is_restored() {
     let fixture = fixture();
     fixture.x509_config();
     fixture.executable("sign-standin", PTY_SIGNER);
@@ -1427,8 +1447,8 @@ fn tc_1156_a_signer_reads_the_terminal_in_the_foreground_and_the_group_is_restor
 }
 
 #[test]
-#[trace("TC-1157", "FR-085-AC-11")]
-fn tc_1157_the_foreground_group_is_restored_after_a_signer_fails() {
+#[trace("FR-085-AC-11")]
+fn the_foreground_group_is_restored_after_a_signer_fails() {
     let fixture = fixture();
     fixture.x509_config();
     fixture.executable("sign-standin", PTY_SIGNER);
@@ -1446,8 +1466,8 @@ fn tc_1157_the_foreground_group_is_restored_after_a_signer_fails() {
 }
 
 #[test]
-#[trace("TC-1160", "FR-085-AC-1")]
-fn tc_1160_without_a_gesture_git_runs_outside_the_terminal_foreground_group() {
+#[trace("FR-085-AC-1")]
+fn without_a_gesture_git_runs_outside_the_terminal_foreground_group() {
     let fixture = fixture();
     fixture.x509_config();
     fixture.executable("sign-standin", BACKGROUND_PTY_SIGNER);

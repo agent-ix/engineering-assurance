@@ -2001,8 +2001,8 @@ fn tc_1038_an_ill_formed_address_never_starts_git_and_a_colon_revision_addresses
 }
 
 #[test]
-#[trace("TC-1148", "FR-084-AC-5")]
-fn tc_1148_an_accepted_gitsign_tag_reports_no_evidenced_gesture() {
+#[trace("FR-084-AC-5")]
+fn an_accepted_gitsign_tag_reports_no_evidenced_gesture() {
     let fixture = fixture();
     forged_tag(&fixture, "v-cms", "tag message", CMS_BLOCK);
     let result = verdict(&fixture, &request(&fixture, "v-cms", "tag", true));

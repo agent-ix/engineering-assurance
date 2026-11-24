@@ -1424,8 +1424,8 @@ fn gesture_of(fixture: &Fixture, revision: &str, kind: &str, path: Option<&Path>
 }
 
 #[test]
-#[trace("TC-1141", "FR-084-AC-1")]
-fn tc_1141_a_software_key_tag_is_signed_valid_with_no_evidenced_gesture() {
+#[trace("FR-084-AC-1")]
+fn a_software_key_tag_is_signed_valid_with_no_evidenced_gesture() {
     let fixture = fixture();
     plain_commit(&fixture, "base");
     signed_tag(&fixture, "a", "v1");
@@ -1435,8 +1435,8 @@ fn tc_1141_a_software_key_tag_is_signed_valid_with_no_evidenced_gesture() {
 }
 
 #[test]
-#[trace("TC-1142", "FR-084-AC-2", "FR-084-AC-3", "FR-084-AC-4")]
-fn tc_1142_the_evidenced_gesture_is_read_from_the_flags_of_the_signature_run() {
+#[trace("FR-084-AC-2", "FR-084-AC-3", "FR-084-AC-4")]
+fn the_evidenced_gesture_is_read_from_the_flags_of_the_signature_run() {
     let fixture = fixture();
     plain_commit(&fixture, "base");
     signed_tag(&fixture, "a", "v1");
@@ -1457,8 +1457,8 @@ fn tc_1142_the_evidenced_gesture_is_read_from_the_flags_of_the_signature_run() {
 }
 
 #[test]
-#[trace("TC-1143", "FR-084-AC-6")]
-fn tc_1143_only_a_signed_valid_verdict_carries_a_gesture() {
+#[trace("FR-084-AC-6")]
+fn only_a_signed_valid_verdict_carries_a_gesture() {
     let fixture = fixture();
     plain_commit(&fixture, "base");
     let path = security_key_path(&fixture, "05");
@@ -1485,8 +1485,8 @@ fn tc_1143_only_a_signed_valid_verdict_carries_a_gesture() {
 }
 
 #[test]
-#[trace("TC-1144", "FR-084-AC-7")]
-fn tc_1144_a_signing_gesture_trailer_in_the_message_is_not_evidence() {
+#[trace("FR-084-AC-7")]
+fn a_signing_gesture_trailer_in_the_message_is_not_evidence() {
     let fixture = fixture();
     plain_commit(&fixture, "base");
     signed_tag_with(
@@ -1501,8 +1501,8 @@ fn tc_1144_a_signing_gesture_trailer_in_the_message_is_not_evidence() {
 }
 
 #[test]
-#[trace("TC-1145", "FR-084-AC-5")]
-fn tc_1145_a_signed_commit_reports_none_whatever_the_key_shows() {
+#[trace("FR-084-AC-5")]
+fn a_signed_commit_reports_none_whatever_the_key_shows() {
     let fixture = fixture();
     let id = signed_commit(&fixture, "a", "signed");
     let path = security_key_path(&fixture, "05");
@@ -1516,8 +1516,8 @@ fn tc_1145_a_signed_commit_reports_none_whatever_the_key_shows() {
 }
 
 #[test]
-#[trace("TC-1146", "FR-084-AC-9")]
-fn tc_1146_gesture_is_the_only_member_added_to_a_signed_valid_result() {
+#[trace("FR-084-AC-9")]
+fn gesture_is_the_only_member_added_to_a_signed_valid_result() {
     let fixture = fixture();
     plain_commit(&fixture, "base");
     signed_tag(&fixture, "a", "v1");
@@ -1561,8 +1561,8 @@ fn tc_1146_gesture_is_the_only_member_added_to_a_signed_valid_result() {
 }
 
 #[test]
-#[trace("TC-1147", "FR-084-AC-10")]
-fn tc_1147_the_run_gets_the_tag_signature_block_byte_for_byte() {
+#[trace("FR-084-AC-10")]
+fn the_run_gets_the_tag_signature_block_byte_for_byte() {
     let fixture = fixture();
     plain_commit(&fixture, "base");
     signed_tag(&fixture, "a", "v1");

@@ -16,10 +16,10 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs::File,
     io::{self, Seek, SeekFrom},
-    path::{Component, Path},
+    path::{Component, Path, PathBuf},
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
 };
 
@@ -1545,6 +1545,7 @@ fn capture_process(
         },
         Some(cancellation),
         Terminal::Detached,
+        None,
     );
     let KernelCapture {
         conclusion,
@@ -1598,6 +1599,7 @@ fn capture_command(
     descendant_policy: DescendantPolicy,
     cancellation: Option<&CancellationToken>,
     terminal: Terminal,
+    gate: Option<TerminalGate>,
 ) -> KernelCapture {
     if terminal == Terminal::Foreground {
         // The caller's own standard error: a signer's prompt, URL or code
@@ -1612,53 +1614,81 @@ fn capture_command(
             ));
         }
     };
-    // Held until the function returns, so the previous foreground group comes
-    // back whether the child exits, fails or times out.
-    let _foreground = (terminal == Terminal::Foreground)
-        .then(|| ForegroundGroup::acquire(child.id()))
-        .flatten();
-    let Some(stdout) = child.stdout.take() else {
-        let status = terminate_group(&mut child, &BTreeSet::new());
-        return KernelCapture::without_streams(KernelConclusion::PipeUnavailable("stdout"), status);
+    let mut foreground = if terminal == Terminal::Foreground {
+        match ForegroundGroup::acquire(child.id()) {
+            Ok(group) => Some(group),
+            Err(error) => {
+                terminate_group(&mut child, &BTreeSet::new());
+                return KernelCapture::without_evidence(KernelConclusion::Observation(error));
+            }
+        }
+    } else {
+        None
     };
-    let stderr_reader = match child.stderr.take() {
-        Some(stderr) => bounded_reader(stderr, budget.max_stderr_bytes),
-        None if terminal == Terminal::Foreground => bounded_reader(io::empty(), 0),
-        None => {
+    if let Some(gate) = gate
+        && let Err(error) = gate.release()
+    {
+        terminate_group(&mut child, &BTreeSet::new());
+        if let Some(foreground) = foreground.as_mut() {
+            let _ = foreground.restore();
+        }
+        return KernelCapture::without_evidence(KernelConclusion::Observation(format!(
+            "cannot release terminal handoff gate: {error}"
+        )));
+    }
+    let capture = (|| {
+        let Some(stdout) = child.stdout.take() else {
             let status = terminate_group(&mut child, &BTreeSet::new());
             return KernelCapture::without_streams(
-                KernelConclusion::PipeUnavailable("stderr"),
+                KernelConclusion::PipeUnavailable("stdout"),
                 status,
             );
+        };
+        let stderr_reader = match child.stderr.take() {
+            Some(stderr) => bounded_reader(stderr, budget.max_stderr_bytes),
+            None if terminal == Terminal::Foreground => bounded_reader(io::empty(), 0),
+            None => {
+                let status = terminate_group(&mut child, &BTreeSet::new());
+                return KernelCapture::without_streams(
+                    KernelConclusion::PipeUnavailable("stderr"),
+                    status,
+                );
+            }
+        };
+        let stdout_reader = bounded_reader(stdout, budget.max_stdout_bytes);
+        let (conclusion, terminal_status) =
+            supervise_child(&mut child, budget.timeout, descendant_policy, cancellation);
+        let stdout = match join_reader(stdout_reader) {
+            Ok(captured) => captured,
+            Err(detail) => {
+                return KernelCapture::without_evidence(KernelConclusion::OutputUnreadable {
+                    stream: "stdout",
+                    detail,
+                });
+            }
+        };
+        let stderr = match join_reader(stderr_reader) {
+            Ok(captured) => captured,
+            Err(detail) => {
+                return KernelCapture::without_evidence(KernelConclusion::OutputUnreadable {
+                    stream: "stderr",
+                    detail,
+                });
+            }
+        };
+        KernelCapture {
+            conclusion,
+            terminal_status,
+            stdout: Some(stdout),
+            stderr: Some(stderr),
         }
-    };
-    let stdout_reader = bounded_reader(stdout, budget.max_stdout_bytes);
-    let (conclusion, terminal_status) =
-        supervise_child(&mut child, budget.timeout, descendant_policy, cancellation);
-    let stdout = match join_reader(stdout_reader) {
-        Ok(captured) => captured,
-        Err(detail) => {
-            return KernelCapture::without_evidence(KernelConclusion::OutputUnreadable {
-                stream: "stdout",
-                detail,
-            });
-        }
-    };
-    let stderr = match join_reader(stderr_reader) {
-        Ok(captured) => captured,
-        Err(detail) => {
-            return KernelCapture::without_evidence(KernelConclusion::OutputUnreadable {
-                stream: "stderr",
-                detail,
-            });
-        }
-    };
-    KernelCapture {
-        conclusion,
-        terminal_status,
-        stdout: Some(stdout),
-        stderr: Some(stderr),
+    })();
+    if let Some(foreground) = foreground.as_mut()
+        && let Err(error) = foreground.restore()
+    {
+        return KernelCapture::without_evidence(KernelConclusion::Observation(error));
     }
+    capture
 }
 
 /// Whether a run takes the caller's terminal.
@@ -1674,28 +1704,138 @@ enum Terminal {
     Foreground,
 }
 
+#[cfg(unix)]
+static NEXT_TERMINAL_GATE: AtomicU64 = AtomicU64::new(0);
+
+/// A private FIFO that keeps the shell wrapper from execing git until the
+/// parent has successfully promoted its process group.
+#[cfg(unix)]
+struct TerminalGate {
+    directory: PathBuf,
+    path: PathBuf,
+}
+
+#[cfg(unix)]
+impl TerminalGate {
+    fn new() -> io::Result<Self> {
+        use std::os::unix::fs::DirBuilderExt;
+
+        let root = std::env::temp_dir();
+        let (directory, path) = loop {
+            let sequence = NEXT_TERMINAL_GATE.fetch_add(1, Ordering::Relaxed);
+            let directory = root.join(format!(
+                "ea-terminal-gate-{}-{sequence}",
+                std::process::id()
+            ));
+            let mut builder = std::fs::DirBuilder::new();
+            builder.mode(0o700);
+            match builder.create(&directory) {
+                Ok(()) => break (directory.clone(), directory.join("ready")),
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(error) => return Err(error),
+            }
+        };
+        if let Err(error) = nix::unistd::mkfifo(
+            &path,
+            nix::sys::stat::Mode::S_IRUSR | nix::sys::stat::Mode::S_IWUSR,
+        ) {
+            let _ = std::fs::remove_dir(&directory);
+            return Err(io::Error::other(error));
+        }
+        Ok(Self { directory, path })
+    }
+
+    fn release(self) -> io::Result<()> {
+        use std::io::Write;
+        use std::{os::unix::fs::OpenOptionsExt, time::Duration};
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            match File::options()
+                .write(true)
+                .custom_flags(nix::libc::O_NONBLOCK)
+                .open(&self.path)
+            {
+                Ok(mut writer) => return writer.write_all(b"ready\n"),
+                Err(error)
+                    if error.raw_os_error() == Some(nix::libc::ENXIO)
+                        && Instant::now() < deadline =>
+                {
+                    thread::sleep(Duration::from_millis(1));
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for TerminalGate {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+        let _ = std::fs::remove_dir(&self.directory);
+    }
+}
+
 /// The foreground process group of the controlling terminal, taken for a child
 /// group and given back to the previous one when dropped.
 #[cfg(unix)]
 struct ForegroundGroup {
     tty: File,
     previous: nix::unistd::Pid,
+    restored: bool,
 }
 
 #[cfg(unix)]
 impl ForegroundGroup {
-    /// Makes the group of the child `child` the foreground group. `None` when
-    /// the caller has no controlling terminal or the terminal refuses.
-    fn acquire(child: u32) -> Option<Self> {
+    /// Makes the group of the child `child` the foreground group.
+    fn acquire(child: u32) -> Result<Self, String> {
         let tty = std::fs::OpenOptions::new()
             .read(true)
             .write(true)
             .open("/dev/tty")
-            .ok()?;
-        let previous = nix::unistd::tcgetpgrp(&tty).ok()?;
-        let group = nix::unistd::Pid::from_raw(i32::try_from(child).ok()?);
-        Self::set(&tty, group).ok()?;
-        Some(Self { tty, previous })
+            .map_err(|error| format!("cannot open controlling terminal: {error}"))?;
+        let previous = nix::unistd::tcgetpgrp(&tty)
+            .map_err(|error| format!("cannot read terminal foreground group: {error}"))?;
+        let raw = i32::try_from(child).map_err(|error| error.to_string())?;
+        let group = nix::unistd::Pid::from_raw(raw);
+        let mut foreground = Self {
+            tty,
+            previous,
+            restored: false,
+        };
+        if let Err(error) = Self::set(&foreground.tty, group) {
+            let _ = foreground.restore();
+            return Err(format!("cannot acquire terminal foreground group: {error}"));
+        }
+        Ok(foreground)
+    }
+
+    fn restore(&mut self) -> Result<(), String> {
+        self.restore_with(Self::set)
+    }
+
+    fn restore_with(
+        &mut self,
+        mut set_foreground: impl FnMut(&File, nix::unistd::Pid) -> nix::Result<()>,
+    ) -> Result<(), String> {
+        if self.restored {
+            return Ok(());
+        }
+        match set_foreground(&self.tty, self.previous) {
+            Ok(()) => {
+                self.restored = true;
+                Ok(())
+            }
+            Err(first_error) => {
+                if set_foreground(&self.tty, self.previous).is_ok() {
+                    self.restored = true;
+                }
+                Err(format!(
+                    "cannot restore terminal foreground group: {first_error}"
+                ))
+            }
+        }
     }
 
     /// `tcsetpgrp` with `SIGTTOU` blocked: a caller outside the foreground group
@@ -1719,8 +1859,42 @@ impl ForegroundGroup {
 #[cfg(unix)]
 impl Drop for ForegroundGroup {
     fn drop(&mut self) {
-        // Nothing to report: the run is over and the terminal stays as it is.
-        let _ = Self::set(&self.tty, self.previous);
+        // Retry restoration on every unwind/early-return path. The ordinary
+        // path reports an error through `KernelConclusion::Observation`.
+        let _ = self.restore();
+    }
+}
+
+#[cfg(all(test, unix))]
+mod foreground_group_tests {
+    use std::{cell::Cell, fs::File};
+
+    use ix_trace_rs::trace;
+    use nix::{errno::Errno, unistd::Pid};
+
+    use super::ForegroundGroup;
+
+    #[test]
+    #[trace("FR-085-AC-13")]
+    fn restoration_failure_is_reported_after_a_cleanup_retry() {
+        let mut group = ForegroundGroup {
+            tty: File::open("/dev/null").expect("null device"),
+            previous: Pid::from_raw(1),
+            restored: false,
+        };
+        let attempts = Cell::new(0);
+        let result = group.restore_with(|_, _| {
+            let attempt = attempts.get() + 1;
+            attempts.set(attempt);
+            if attempt == 1 {
+                Err(Errno::EPERM)
+            } else {
+                Ok(())
+            }
+        });
+        assert!(result.is_err(), "a failed first restore fails the run");
+        assert_eq!(attempts.get(), 2, "cleanup retries restoration once");
+        assert!(group.restored, "the retry restored the original group");
     }
 }
 
@@ -2425,12 +2599,35 @@ pub mod __private {
 
         use super::{
             DescendantPolicy, KernelBudget, KernelCapture, KernelConclusion, Terminal,
-            capture_command,
+            TerminalGate, capture_command,
         };
 
         let Launch { stdin, foreground } = launch;
-        let mut command = Command::new(executable);
-        command.args(arguments);
+        let gate = if foreground {
+            Some(
+                TerminalGate::new().map_err(|error| ProcessError::Unavailable {
+                    detail: format!("cannot create terminal handoff gate: {error}"),
+                })?,
+            )
+        } else {
+            None
+        };
+        let mut command = if let Some(gate) = &gate {
+            let mut command = Command::new("/bin/sh");
+            command.args([
+                OsStr::new("-c"),
+                OsStr::new("IFS= read -r _ < \"$1\"; shift; exec \"$@\""),
+                OsStr::new("foreground-gate"),
+                gate.path.as_os_str(),
+                executable,
+            ]);
+            command.args(arguments);
+            command
+        } else {
+            let mut command = Command::new(executable);
+            command.args(arguments);
+            command
+        };
         if let Some(directory) = current_directory {
             command.current_dir(directory);
         }
@@ -2462,6 +2659,7 @@ pub mod __private {
             } else {
                 Terminal::Detached
             },
+            gate,
         );
         match conclusion {
             KernelConclusion::Unavailable(detail) => Err(ProcessError::Unavailable { detail }),

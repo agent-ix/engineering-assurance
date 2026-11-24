@@ -533,7 +533,7 @@ mod tests {
     use super::SigningRun;
 
     #[test]
-    #[trace("TC-1140", "FR-085-AC-7")]
+    #[trace("FR-085-AC-7")]
     fn the_host_is_given_300_seconds_with_a_gesture_and_60_without() {
         for gesture in [
             SigningGesture::DeviceTouch,

@@ -125,8 +125,8 @@ fn tc_340_only_ssh_with_a_key_and_x509_can_sign_a_verifiable_tag() {
 }
 
 #[test]
-#[trace("TC-1161", "FR-042-AC-11")]
-fn tc_1161_only_a_tag_with_a_supported_signature_block_counts_as_signed() {
+#[trace("FR-042-AC-11")]
+fn only_a_tag_with_a_supported_signature_block_counts_as_signed() {
     let head = "object 0123456789abcdef0123456789abcdef01234567\ntype commit\ntag t\ntagger a <a@example.test> 1 +0000\n\nmsg\n";
     assert!(!tag_is_signed(head.as_bytes()));
     for block in [
@@ -140,8 +140,8 @@ fn tc_1161_only_a_tag_with_a_supported_signature_block_counts_as_signed() {
 }
 
 #[test]
-#[trace("TC-1159", "FR-085-AC-3")]
-fn tc_1159_a_declared_gesture_is_the_fourth_trailer_and_reads_back() {
+#[trace("FR-085-AC-3")]
+fn a_declared_gesture_is_the_fourth_trailer_and_reads_back() {
     use engineering_assurance::approval_verify::{
         DeclaredGesture, GESTURE_TRAILER, GestureDeclaration, SigningGesture,
     };

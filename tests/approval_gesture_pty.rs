@@ -65,9 +65,32 @@ fn deadline_scenario(directory: &std::path::Path) {
     fs::write(directory.join("done"), "ok").expect("done marker");
 }
 
+fn acquisition_failure_scenario(directory: &std::path::Path) {
+    assert!(
+        fs::File::open("/dev/tty").is_err(),
+        "the test has no controlling terminal"
+    );
+    let marker = directory.join("child-executed");
+    let script = format!("echo ran > '{}'", marker.display());
+    let result = run_configured_foreground(
+        OsStr::new("/bin/sh"),
+        &[OsStr::new("-c"), OsStr::new(&script)],
+        None,
+        &[],
+        &[],
+        ProcessLimits {
+            timeout: Duration::from_secs(2),
+            max_output_bytes: 1024,
+        },
+    );
+    assert!(matches!(result, Err(ProcessError::Observation { .. })));
+    assert!(!marker.exists(), "the child command must not execute");
+    fs::write(directory.join("done"), "ok").expect("done marker");
+}
+
 #[test]
-#[trace("TC-1158", "FR-085-AC-11")]
-fn tc_1158_the_foreground_group_is_restored_when_the_run_reaches_its_deadline() {
+#[trace("FR-085-AC-11")]
+fn the_foreground_group_is_restored_when_the_run_reaches_its_deadline() {
     if let Some(directory) = std::env::var_os(CHILD_MARKER) {
         deadline_scenario(std::path::Path::new(&directory));
         return;
@@ -76,7 +99,7 @@ fn tc_1158_the_foreground_group_is_restored_when_the_run_reaches_its_deadline() 
     let child = Command::new("/usr/bin/script")
         .args(["-q", "-e", "-c"])
         .arg(format!(
-            "'{}' --exact tc_1158_the_foreground_group_is_restored_when_the_run_reaches_its_deadline --nocapture --test-threads=1",
+            "'{}' --exact the_foreground_group_is_restored_when_the_run_reaches_its_deadline --nocapture --test-threads=1",
             std::env::current_exe().expect("test binary").display()
         ))
         .arg("/dev/null")
@@ -87,6 +110,30 @@ fn tc_1158_the_foreground_group_is_restored_when_the_run_reaches_its_deadline() 
         .stderr(Stdio::piped())
         .output()
         .expect("script must start");
+    let report = String::from_utf8_lossy(&child.stdout).into_owned();
+    assert!(child.status.success(), "{report}");
+    assert!(work.path().join("done").exists(), "{report}");
+}
+
+#[test]
+#[trace("FR-085-AC-12")]
+fn acquisition_failure_does_not_execute_the_child() {
+    if let Some(directory) = std::env::var_os(CHILD_MARKER) {
+        acquisition_failure_scenario(std::path::Path::new(&directory));
+        return;
+    }
+    let work = tempfile::tempdir().expect("work dir");
+    let child = Command::new("/usr/bin/setsid")
+        .args(["--fork", "--wait"])
+        .arg(std::env::current_exe().expect("test binary"))
+        .args([
+            "--exact",
+            "acquisition_failure_does_not_execute_the_child",
+            "--nocapture",
+        ])
+        .env(CHILD_MARKER, work.path())
+        .output()
+        .expect("setsid must start");
     let report = String::from_utf8_lossy(&child.stdout).into_owned();
     assert!(child.status.success(), "{report}");
     assert!(work.path().join("done").exists(), "{report}");
