@@ -20,6 +20,7 @@ const RECORD_ID: &str = "change-record-17";
 const DIGEST: &str = "sha256:0123456789abcdef";
 const REQUEST_PROTOCOL: &str = "engineering-assurance.approval-trail-request/v1";
 const RESULT_PROTOCOL: &str = "engineering-assurance.approval-trail-result/v1";
+const APPROVAL_VERIFY_RESULT_PROTOCOL: &str = "engineering-assurance.approval-verify-result/v1";
 const ALICE: &str = "alice@example.test";
 
 struct Fixture {
@@ -220,6 +221,27 @@ fn trail(fixture: &Fixture) -> Value {
     trail_of(&request(fixture))
 }
 
+fn approval(fixture: &Fixture, tag: &str) -> Value {
+    let request = json!({
+        "protocol": "engineering-assurance.approval-verify-request/v1",
+        "repository": fixture.repo().display().to_string(),
+        "tag": tag,
+        "record_id": RECORD_ID,
+        "record_digest": DIGEST,
+        "allowed_signers": fixture.allowed().display().to_string(),
+    });
+    let output = run_command("approval-verify", request.to_string().as_bytes(), &[]);
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    let text = std::str::from_utf8(&output.stdout).expect("utf-8");
+    assert!(
+        text.ends_with('\n') && text.matches('\n').count() == 1,
+        "{text:?}"
+    );
+    let value: Value = serde_json::from_str(text).expect("json line");
+    assert_eq!(value["protocol"], APPROVAL_VERIFY_RESULT_PROTOCOL);
+    value
+}
+
 /// The `tag_receipts` request member over policy files written into the fixture:
 /// one `receipt_writer` identity for tag receipts, the given `prefixes` and
 /// `accepted_tags`.
@@ -330,7 +352,13 @@ fn tc_353_failed_and_untrusted_approvals_are_listed_with_their_verdict() {
     let fixture = fixture();
     let date = "2026-05-01T09:00:00+0000";
     signed_tag(&fixture, "a", "v-ok", &good("approved"), date);
-    signed_tag(&fixture, "a", "v-bad", &good("approved"), date);
+    signed_tag(
+        &fixture,
+        "a",
+        "v-bad",
+        &format!("{}\nSigning-Gesture: agent_confirm", good("approved")),
+        date,
+    );
     let repo = fixture.repo();
     let object = git(&repo, &["cat-file", "tag", "v-bad"]).replace("reviewed", "x");
     let tampered = object.replace("Approve the change", "Approve the changes");
@@ -348,19 +376,31 @@ fn tc_353_failed_and_untrusted_approvals_are_listed_with_their_verdict() {
             String::from_utf8(id).expect("utf-8").trim(),
         ],
     );
-    signed_tag(&fixture, "b", "v-untrusted", &good("approved"), date);
+    signed_tag(
+        &fixture,
+        "b",
+        "v-untrusted",
+        &format!("{}\nSigning-Gesture: agent_confirm", good("approved")),
+        date,
+    );
     signed_tag(
         &fixture,
         "a",
         "v-digest",
-        &message(RECORD_ID, "sha256:other", Some("approved")),
+        &format!(
+            "{}\nSigning-Gesture: agent_confirm",
+            message(RECORD_ID, "sha256:other", Some("approved"))
+        ),
         date,
     );
     signed_tag(
         &fixture,
         "a",
         "v-nomeaning",
-        &message(RECORD_ID, DIGEST, None),
+        &format!(
+            "{}\nSigning-Gesture: agent_confirm",
+            message(RECORD_ID, DIGEST, None)
+        ),
         date,
     );
     let result = trail(&fixture);
@@ -373,8 +413,50 @@ fn tc_353_failed_and_untrusted_approvals_are_listed_with_their_verdict() {
         ("v-nomeaning", "meaning_missing"),
     ] {
         assert_eq!(entry(&result, tag)["status"], expected, "{tag}");
+        if expected != "approved" {
+            assert!(
+                entry(&result, tag).get("gesture").is_none(),
+                "{tag}: {}",
+                entry(&result, tag)
+            );
+        }
     }
     assert!(entry(&result, "v-untrusted").get("approver").is_none());
+}
+
+#[test]
+#[trace("FR-086-AC-6")]
+fn trail_carries_declared_and_undeclared_gestures_from_approval_verify() {
+    let fixture = fixture();
+    signed_tag(
+        &fixture,
+        "a",
+        "v-no-gesture",
+        &good("approved"),
+        "2026-05-01T08:00:00+0000",
+    );
+    signed_tag(
+        &fixture,
+        "a",
+        "v-gesture",
+        &format!("{}\nSigning-Gesture: agent_confirm", good("approved")),
+        "2026-05-01T09:00:00+0000",
+    );
+
+    let undeclared_verified = approval(&fixture, "v-no-gesture");
+    let verified = approval(&fixture, "v-gesture");
+    let listed = trail(&fixture);
+    let undeclared_entry = entry(&listed, "v-no-gesture");
+    let listed_entry = entry(&listed, "v-gesture");
+    assert_eq!(
+        undeclared_verified["status"], "approved",
+        "{undeclared_verified}"
+    );
+    assert_eq!(undeclared_verified["gesture"], json!({"declared": "none"}));
+    assert_eq!(undeclared_entry["gesture"], undeclared_verified["gesture"]);
+    assert_eq!(verified["status"], "approved", "{verified}");
+    assert_eq!(verified["gesture"], json!({"declared": "agent_confirm"}));
+    assert_eq!(listed_entry["gesture"], verified["gesture"]);
 }
 
 #[test]

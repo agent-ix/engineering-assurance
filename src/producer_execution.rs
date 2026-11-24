@@ -16,10 +16,10 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs::File,
     io::{self, Seek, SeekFrom},
-    path::{Component, Path},
+    path::{Component, Path, PathBuf},
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
 };
 
@@ -1544,6 +1544,8 @@ fn capture_process(
             maximum: budget.max_descendants,
         },
         Some(cancellation),
+        Terminal::Detached,
+        None,
     );
     let KernelCapture {
         conclusion,
@@ -1596,7 +1598,14 @@ fn capture_command(
     budget: KernelBudget,
     descendant_policy: DescendantPolicy,
     cancellation: Option<&CancellationToken>,
+    terminal: Terminal,
+    gate: Option<TerminalGate>,
 ) -> KernelCapture {
+    if terminal == Terminal::Foreground {
+        // The caller's own standard error: a signer's prompt, URL or code
+        // reaches the person while the run is still going.
+        command.stderr(Stdio::inherit());
+    }
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(error) => {
@@ -1605,41 +1614,287 @@ fn capture_command(
             ));
         }
     };
-    let Some(stdout) = child.stdout.take() else {
-        let status = terminate_group(&mut child, &BTreeSet::new());
-        return KernelCapture::without_streams(KernelConclusion::PipeUnavailable("stdout"), status);
-    };
-    let Some(stderr) = child.stderr.take() else {
-        let status = terminate_group(&mut child, &BTreeSet::new());
-        return KernelCapture::without_streams(KernelConclusion::PipeUnavailable("stderr"), status);
-    };
-    let stdout_reader = bounded_reader(stdout, budget.max_stdout_bytes);
-    let stderr_reader = bounded_reader(stderr, budget.max_stderr_bytes);
-    let (conclusion, terminal_status) =
-        supervise_child(&mut child, budget.timeout, descendant_policy, cancellation);
-    let stdout = match join_reader(stdout_reader) {
-        Ok(captured) => captured,
-        Err(detail) => {
-            return KernelCapture::without_evidence(KernelConclusion::OutputUnreadable {
-                stream: "stdout",
-                detail,
-            });
+    let mut foreground = if terminal == Terminal::Foreground {
+        match ForegroundGroup::acquire(child.id()) {
+            Ok(group) => Some(group),
+            Err(error) => {
+                terminate_group(&mut child, &BTreeSet::new());
+                return KernelCapture::without_evidence(KernelConclusion::Observation(error));
+            }
         }
+    } else {
+        None
     };
-    let stderr = match join_reader(stderr_reader) {
-        Ok(captured) => captured,
-        Err(detail) => {
-            return KernelCapture::without_evidence(KernelConclusion::OutputUnreadable {
-                stream: "stderr",
-                detail,
-            });
+    if let Some(gate) = gate
+        && let Err(error) = gate.release()
+    {
+        terminate_group(&mut child, &BTreeSet::new());
+        if let Some(foreground) = foreground.as_mut() {
+            let _ = foreground.restore();
         }
-    };
-    KernelCapture {
-        conclusion,
-        terminal_status,
-        stdout: Some(stdout),
-        stderr: Some(stderr),
+        return KernelCapture::without_evidence(KernelConclusion::Observation(format!(
+            "cannot release terminal handoff gate: {error}"
+        )));
+    }
+    let capture = (|| {
+        let Some(stdout) = child.stdout.take() else {
+            let status = terminate_group(&mut child, &BTreeSet::new());
+            return KernelCapture::without_streams(
+                KernelConclusion::PipeUnavailable("stdout"),
+                status,
+            );
+        };
+        let stderr_reader = match child.stderr.take() {
+            Some(stderr) => bounded_reader(stderr, budget.max_stderr_bytes),
+            None if terminal == Terminal::Foreground => bounded_reader(io::empty(), 0),
+            None => {
+                let status = terminate_group(&mut child, &BTreeSet::new());
+                return KernelCapture::without_streams(
+                    KernelConclusion::PipeUnavailable("stderr"),
+                    status,
+                );
+            }
+        };
+        let stdout_reader = bounded_reader(stdout, budget.max_stdout_bytes);
+        let (conclusion, terminal_status) =
+            supervise_child(&mut child, budget.timeout, descendant_policy, cancellation);
+        let stdout = match join_reader(stdout_reader) {
+            Ok(captured) => captured,
+            Err(detail) => {
+                return KernelCapture::without_evidence(KernelConclusion::OutputUnreadable {
+                    stream: "stdout",
+                    detail,
+                });
+            }
+        };
+        let stderr = match join_reader(stderr_reader) {
+            Ok(captured) => captured,
+            Err(detail) => {
+                return KernelCapture::without_evidence(KernelConclusion::OutputUnreadable {
+                    stream: "stderr",
+                    detail,
+                });
+            }
+        };
+        KernelCapture {
+            conclusion,
+            terminal_status,
+            stdout: Some(stdout),
+            stderr: Some(stderr),
+        }
+    })();
+    if let Some(foreground) = foreground.as_mut()
+        && let Err(error) = foreground.restore()
+    {
+        return KernelCapture::without_evidence(KernelConclusion::Observation(error));
+    }
+    capture
+}
+
+/// Whether a run takes the caller's terminal.
+#[cfg(unix)]
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Terminal {
+    /// No terminal handling: the child's group is not the foreground group and
+    /// its standard error is captured.
+    Detached,
+    /// The child's group is the controlling terminal's foreground group for the
+    /// run, so that a signer can read `/dev/tty`, and its standard error is the
+    /// caller's own.
+    Foreground,
+}
+
+#[cfg(unix)]
+static NEXT_TERMINAL_GATE: AtomicU64 = AtomicU64::new(0);
+
+/// A private FIFO that keeps the shell wrapper from execing git until the
+/// parent has successfully promoted its process group.
+#[cfg(unix)]
+struct TerminalGate {
+    directory: PathBuf,
+    path: PathBuf,
+}
+
+#[cfg(unix)]
+impl TerminalGate {
+    fn new() -> io::Result<Self> {
+        use std::os::unix::fs::DirBuilderExt;
+
+        let root = std::env::temp_dir();
+        let (directory, path) = loop {
+            let sequence = NEXT_TERMINAL_GATE.fetch_add(1, Ordering::Relaxed);
+            let directory = root.join(format!(
+                "ea-terminal-gate-{}-{sequence}",
+                std::process::id()
+            ));
+            let mut builder = std::fs::DirBuilder::new();
+            builder.mode(0o700);
+            match builder.create(&directory) {
+                Ok(()) => break (directory.clone(), directory.join("ready")),
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(error) => return Err(error),
+            }
+        };
+        if let Err(error) = nix::unistd::mkfifo(
+            &path,
+            nix::sys::stat::Mode::S_IRUSR | nix::sys::stat::Mode::S_IWUSR,
+        ) {
+            let _ = std::fs::remove_dir(&directory);
+            return Err(io::Error::other(error));
+        }
+        Ok(Self { directory, path })
+    }
+
+    fn release(self) -> io::Result<()> {
+        use std::io::Write;
+        use std::{os::unix::fs::OpenOptionsExt, time::Duration};
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            match File::options()
+                .write(true)
+                .custom_flags(nix::libc::O_NONBLOCK)
+                .open(&self.path)
+            {
+                Ok(mut writer) => return writer.write_all(b"ready\n"),
+                Err(error)
+                    if error.raw_os_error() == Some(nix::libc::ENXIO)
+                        && Instant::now() < deadline =>
+                {
+                    thread::sleep(Duration::from_millis(1));
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for TerminalGate {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+        let _ = std::fs::remove_dir(&self.directory);
+    }
+}
+
+/// The foreground process group of the controlling terminal, taken for a child
+/// group and given back to the previous one when dropped.
+#[cfg(unix)]
+struct ForegroundGroup {
+    tty: File,
+    previous: nix::unistd::Pid,
+    restored: bool,
+}
+
+#[cfg(unix)]
+impl ForegroundGroup {
+    /// Makes the group of the child `child` the foreground group.
+    fn acquire(child: u32) -> Result<Self, String> {
+        let tty = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/tty")
+            .map_err(|error| format!("cannot open controlling terminal: {error}"))?;
+        let previous = nix::unistd::tcgetpgrp(&tty)
+            .map_err(|error| format!("cannot read terminal foreground group: {error}"))?;
+        let raw = i32::try_from(child).map_err(|error| error.to_string())?;
+        let group = nix::unistd::Pid::from_raw(raw);
+        let mut foreground = Self {
+            tty,
+            previous,
+            restored: false,
+        };
+        if let Err(error) = Self::set(&foreground.tty, group) {
+            let _ = foreground.restore();
+            return Err(format!("cannot acquire terminal foreground group: {error}"));
+        }
+        Ok(foreground)
+    }
+
+    fn restore(&mut self) -> Result<(), String> {
+        self.restore_with(Self::set)
+    }
+
+    fn restore_with(
+        &mut self,
+        mut set_foreground: impl FnMut(&File, nix::unistd::Pid) -> nix::Result<()>,
+    ) -> Result<(), String> {
+        if self.restored {
+            return Ok(());
+        }
+        match set_foreground(&self.tty, self.previous) {
+            Ok(()) => {
+                self.restored = true;
+                Ok(())
+            }
+            Err(first_error) => {
+                if set_foreground(&self.tty, self.previous).is_ok() {
+                    self.restored = true;
+                }
+                Err(format!(
+                    "cannot restore terminal foreground group: {first_error}"
+                ))
+            }
+        }
+    }
+
+    /// `tcsetpgrp` with `SIGTTOU` blocked: a caller outside the foreground group
+    /// is otherwise stopped by it.
+    fn set(tty: &File, group: nix::unistd::Pid) -> nix::Result<()> {
+        use nix::sys::signal::{SigSet, SigmaskHow, Signal, pthread_sigmask};
+        let mut blocked = SigSet::empty();
+        blocked.add(Signal::SIGTTOU);
+        let mut previous_mask = SigSet::empty();
+        pthread_sigmask(
+            SigmaskHow::SIG_BLOCK,
+            Some(&blocked),
+            Some(&mut previous_mask),
+        )?;
+        let result = nix::unistd::tcsetpgrp(tty, group);
+        let restored = pthread_sigmask(SigmaskHow::SIG_SETMASK, Some(&previous_mask), None);
+        result.and(restored)
+    }
+}
+
+#[cfg(unix)]
+impl Drop for ForegroundGroup {
+    fn drop(&mut self) {
+        // Retry restoration on every unwind/early-return path. The ordinary
+        // path reports an error through `KernelConclusion::Observation`.
+        let _ = self.restore();
+    }
+}
+
+#[cfg(all(test, unix))]
+mod foreground_group_tests {
+    use std::{cell::Cell, fs::File};
+
+    use ix_trace_rs::trace;
+    use nix::{errno::Errno, unistd::Pid};
+
+    use super::ForegroundGroup;
+
+    #[test]
+    #[trace("FR-085-AC-13")]
+    fn restoration_failure_is_reported_after_a_cleanup_retry() {
+        let mut group = ForegroundGroup {
+            tty: File::open("/dev/null").expect("null device"),
+            previous: Pid::from_raw(1),
+            restored: false,
+        };
+        let attempts = Cell::new(0);
+        let result = group.restore_with(|_, _| {
+            let attempt = attempts.get() + 1;
+            attempts.set(attempt);
+            if attempt == 1 {
+                Err(Errno::EPERM)
+            } else {
+                Ok(())
+            }
+        });
+        assert!(result.is_err(), "a failed first restore fails the run");
+        assert_eq!(attempts.get(), 2, "cleanup retries restoration once");
+        assert!(group.restored, "the retry restored the original group");
     }
 }
 
@@ -2194,6 +2449,15 @@ pub mod __private {
         run_configured(executable, arguments, None, &[], &[], limits)
     }
 
+    /// How the child's standard input and terminal are set up.
+    #[derive(Default)]
+    struct Launch {
+        /// An already opened file for standard input; the null device when absent.
+        stdin: Option<std::fs::File>,
+        /// Whether the child takes the terminal's foreground (FR-085).
+        foreground: bool,
+    }
+
     /// Runs an existing binary adapter through the shared execution kernel.
     ///
     /// # Errors
@@ -2214,7 +2478,40 @@ pub mod __private {
             current_directory,
             environment,
             removed_environment,
-            None,
+            Launch::default(),
+            limits,
+        )
+    }
+
+    /// Like [`run_configured`], with the child's process group made the
+    /// foreground group of the caller's controlling terminal for the run and
+    /// the previous foreground group restored when the run ends, however it
+    /// ends, and with the child's standard error passed through to the caller's
+    /// own. The child's standard input stays the null device and its standard
+    /// output stays captured. Without a controlling terminal it runs as
+    /// [`run_configured`] does, with the caller's standard error.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed process-mechanics failure, as [`run_configured`] does.
+    pub fn run_configured_foreground(
+        executable: &OsStr,
+        arguments: &[&OsStr],
+        current_directory: Option<&Path>,
+        environment: &[(&OsStr, &OsStr)],
+        removed_environment: &[&OsStr],
+        limits: ProcessLimits,
+    ) -> Result<CompletedProcess, ProcessError> {
+        run_with_stdin(
+            executable,
+            arguments,
+            current_directory,
+            environment,
+            removed_environment,
+            Launch {
+                stdin: None,
+                foreground: true,
+            },
             limits,
         )
     }
@@ -2240,7 +2537,10 @@ pub mod __private {
             current_directory,
             environment,
             removed_environment,
-            Some(stdin),
+            Launch {
+                stdin: Some(stdin),
+                foreground: false,
+            },
             limits,
         )
     }
@@ -2251,7 +2551,7 @@ pub mod __private {
         current_directory: Option<&Path>,
         environment: &[(&OsStr, &OsStr)],
         removed_environment: &[&OsStr],
-        stdin: Option<std::fs::File>,
+        launch: Launch,
         limits: ProcessLimits,
     ) -> Result<CompletedProcess, ProcessError> {
         #[cfg(unix)]
@@ -2262,7 +2562,7 @@ pub mod __private {
                 current_directory,
                 environment,
                 removed_environment,
-                stdin,
+                launch,
                 limits,
             )
         }
@@ -2274,7 +2574,7 @@ pub mod __private {
                 current_directory,
                 environment,
                 removed_environment,
-                stdin,
+                launch,
                 limits,
             );
             Err(ProcessError::Unavailable {
@@ -2291,18 +2591,43 @@ pub mod __private {
         current_directory: Option<&Path>,
         environment: &[(&OsStr, &OsStr)],
         removed_environment: &[&OsStr],
-        stdin: Option<std::fs::File>,
+        launch: Launch,
         limits: ProcessLimits,
     ) -> Result<CompletedProcess, ProcessError> {
         use std::os::unix::process::CommandExt;
         use std::process::{Command, Stdio};
 
         use super::{
-            DescendantPolicy, KernelBudget, KernelCapture, KernelConclusion, capture_command,
+            DescendantPolicy, KernelBudget, KernelCapture, KernelConclusion, Terminal,
+            TerminalGate, capture_command,
         };
 
-        let mut command = Command::new(executable);
-        command.args(arguments);
+        let Launch { stdin, foreground } = launch;
+        let gate = if foreground {
+            Some(
+                TerminalGate::new().map_err(|error| ProcessError::Unavailable {
+                    detail: format!("cannot create terminal handoff gate: {error}"),
+                })?,
+            )
+        } else {
+            None
+        };
+        let mut command = if let Some(gate) = &gate {
+            let mut command = Command::new("/bin/sh");
+            command.args([
+                OsStr::new("-c"),
+                OsStr::new("IFS= read -r _ < \"$1\"; shift; exec \"$@\""),
+                OsStr::new("foreground-gate"),
+                gate.path.as_os_str(),
+                executable,
+            ]);
+            command.args(arguments);
+            command
+        } else {
+            let mut command = Command::new(executable);
+            command.args(arguments);
+            command
+        };
         if let Some(directory) = current_directory {
             command.current_dir(directory);
         }
@@ -2329,6 +2654,12 @@ pub mod __private {
             },
             DescendantPolicy::ProcessGroup,
             None,
+            if foreground {
+                Terminal::Foreground
+            } else {
+                Terminal::Detached
+            },
+            gate,
         );
         match conclusion {
             KernelConclusion::Unavailable(detail) => Err(ProcessError::Unavailable { detail }),

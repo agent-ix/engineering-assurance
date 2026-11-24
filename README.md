@@ -296,7 +296,7 @@ protocol is versioned and documented by the schemas under
 | `scope-footprint` | Compare a declared change scope with the changed paths between two git revisions (`--request <json>` or `-`) and print a `complete`, `false_scope` or `incomplete` verdict. |
 | `signature-verify` | Report whether a commit or annotated tag carries a valid SSH signature, by delegating to `git verify-commit`, `git verify-tag` and `ssh-keygen` against an allowed-signers file, or a valid gitsign (Sigstore keyless) signature, by delegating to `gitsign` against a supplied certificate identity and OIDC issuer, mapped to a person by an identity registry read from a committed git revision (`--request <json>` or `-`), and print a `signed_valid`, `signed_untrusted`, `signed_bad`, `unsigned` or `unverifiable` verdict with the `signer` principal the allowed-signers file maps the key to, or for gitsign the identity registry maps the identity to and the `Signed-off-meaning:` trailer values. |
 | `approval-verify` | Report whether a signed annotated git tag is a named person's approval of one exact change-assurance record, by running the `signature-verify` verification on the tag and comparing the `Approved-Record-Id` and `Approved-Record-Digest` trailers of the tag message to the supplied record id and digest (`--request <json>` or `-`), and print an `approved`, `wrong_record`, `untrusted_signer`, `meaning_missing`, `signed_bad`, `unsigned` or `unverifiable` result that echoes the supplied trust input and, when approved, carries the `approver` principal, the `Signed-off-meaning:` values and the signing time as the signer's own claim, neither attested nor checked for plausibility (`signed_at` in UTC with its `signed_at_source`, or `signed_at_missing`). |
-| `approval-tag` | Write one signed annotated approval tag for a change-assurance record (`--request <json>` or `-`): the tag message is a subject paragraph, then the `Approved-Record-Id`, `Approved-Record-Digest` (the caller-supplied `sha256:` record digest, copied verbatim and never computed here) and caller-chosen `Signed-off-meaning:` trailers that `approval-verify` accepts. Git signs it through the caller's own configuration (`git tag -s`, SSH or `gitsign`), which must sign without a terminal prompt (agent or unlocked key); an unsigned result is removed and refused; the command passes no key, never pushes, never edits configuration, and refuses, writing no tag, when the signing configuration, the record, the tag name or the meaning is missing or invalid. |
+| `approval-tag` | Write one signed annotated approval tag for a change-assurance record (`--request <json>` or `-`): the tag message is a subject paragraph, then the `Approved-Record-Id`, `Approved-Record-Digest` (the caller-supplied `sha256:` record digest, copied verbatim and never computed here) and caller-chosen `Signed-off-meaning:` trailers that `approval-verify` accepts. Git signs it through the caller's own configuration (`git tag -s`, SSH or `gitsign`), which signs without a terminal by default (agent or unlocked key); a request that names a `gesture` (`device_touch`, `agent_confirm` or `oidc_interactive`) instead gives git the caller's terminal and a 300 second deadline so a signer can ask a person, adds a fourth `Signing-Gesture` trailer and echoes the value, which is the caller's declaration and is never checked (see Signing gestures); an unsigned result is removed and refused; the command passes no key, never pushes, never edits configuration, and refuses, writing no tag, when the signing configuration, the record, the tag name or the meaning is missing or invalid. |
 | `approval-trail` | List, oldest first by the signer's claimed tagger date, every annotated git tag whose `Approved-Record-Id` trailer names a change-assurance record, each with its full `approval-verify` result and the tag object id, nothing hidden (`--request <json>` or `-`; `--format json` for the machine result, `--format table` for people). Annotated tags whose message cannot be read are listed by name in `unreadable` and make the result not `complete`; a truncated listing says so. The trail is read from git itself and from the tag receipts CI wrote under `refs/notes/assurance-tag-receipts` (the `tag_receipts` request member), so a deleted or changed tag is listed as `missing_tag` and a receipt that does not verify as `invalid_receipt`; the command keeps no log of its own and records no digest of the trail. |
 | `release-verify` | Report whether a signed annotated git tag is a named person's release of one Baseline (`--request <json>` or `-`), and print a `released` or `not_released` result listing every failed check in `reasons`. The release record is read from the commit the tag peels to, with git object access and never the working tree; its digest is the `git-blob:` object id git reports. The tag is verified by the unchanged `approval-verify` result, carried as `approval`; the record must name the `decision_owner` the signer maps to, the Baseline file and items must be present at the named baseline commit, the release commit must be the single child of that commit and add only the record and the release evidence snapshot, and the snapshot is checked for presence, never read. A `released` result carries the release, the baseline commit and items, the `approver`, the `Signed-off-meaning:` values, the signing time and the accepted anomalies. The command decides nothing: the person's signature is the decision. |
 | `release-history` | List the change-assurance record files (`<records_dir>/<record_id>/<revision>.json`) added on the first-parent history of a baseline commit since the previous release's baseline (`--request <json>` or `-`). The previous release is named by its tag under `refs/tags/` (or `null` for a first release, which lists every record present at the baseline commit); the tag must peel to a one-parent commit, whose parent is the previous baseline. Each listed record carries the first-parent commit that added it (a merge commit for a record merged from a side branch), and the list is ordered by record id, revision (numeric) and commit. Paths alone decide: no record is opened, and no tag signature is checked (that is `release-verify`). Shallow clones are refused. The result is the data the quoin release record takes as its version history. |
@@ -306,6 +306,41 @@ Run `engineering-assurance --help` or
 `engineering-assurance <command> --help` for argument details. Maintainer-only
 commands do not make a release decision and should not be invoked as a
 substitute for the human workflow gates.
+
+### Signing gestures
+
+By default `approval-tag` signs without a terminal, so any process that can reach an
+unlocked `ssh-agent`, including an AI agent in the same session, can sign as a person.
+The baseline tier (git, `ssh-keygen` including security keys, and public Sigstore) has
+three per-signature gestures. The result tells a reviewer what the signature shows and
+what the signer claims; it does not say whether that is enough.
+
+| Gesture | Result value | Reported as |
+| --- | --- | --- |
+| FIDO security-key SSH key (`ed25519-sk`, `ecdsa-sk`) | `device_touch`, `device_touch_and_pin` | `evidenced`: read from the signature's own touch (0x01) and PIN (0x04) flags |
+| `ssh-add -c` (the agent asks on each use) | `agent_confirm` | `declared` only: no signature shows it |
+| Interactive `gitsign` login | `oidc_interactive` | `declared` only: no signature shows it |
+
+- Evidence: `signature-verify` reports `gesture` `{"evidenced": ...}` on a `signed_valid`
+  result, from one extra `ssh-keygen -Y verify -vv` run on the tag's signature block. It
+  is read for a signed tag only; a signed commit, a gitsign signature and any software key
+  show `none`, and so does a security key created with `-O no-touch-required`.
+- Declaration: `approval-tag` takes the optional request member `gesture` and records it
+  as the `Signing-Gesture` trailer; `approval-verify` and each approved `approval-trail`
+  entry report it as `gesture` `{"declared": ...}` (`none` without a trailer,
+  `unrecognized` for another value or a repeated trailer) beside `signature.gesture.evidenced`.
+- Limit: a key unlocked in an agent whose socket other processes of the session can reach
+  lets each of them, including an AI agent, sign without a person. The result then shows
+  `evidenced` `none`. A declared `agent_confirm` or `oidc_interactive` is the signer's claim.
+- Engineering Assurance assigns no score, class or acceptability to a gesture. Whether a
+  gesture suffices for a rule you are bound by, such as 21 CFR 11.200(a), is your decision.
+
+```json
+{"protocol": "engineering-assurance.approval-tag-request/v1", "...": "...", "gesture": "device_touch"}
+```
+
+An approved result then carries `"gesture": {"declared": "device_touch"}` and
+`"signature": {"gesture": {"evidenced": "device_touch"}, "...": "..."}`.
 
 ## Using as a library: Cargo features
 

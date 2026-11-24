@@ -463,6 +463,90 @@ pub struct Verdict {
     /// resolved (FR-040).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub identity_registry_commit: Option<String>,
+    /// The gesture the signature itself evidences (FR-084); `signed_valid` only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gesture: Option<GestureEvidence>,
+}
+
+/// The per-signature gesture a signature evidences (FR-084). It is evidence
+/// from the signature alone: no value scores, classes or accepts a gesture.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidencedGesture {
+    /// The flags show user presence (0x01) and user verification (0x04).
+    DeviceTouchAndPin,
+    /// The flags show user presence (0x01) and no user verification.
+    DeviceTouch,
+    /// No flags line, user presence clear, another key type, gitsign or a commit.
+    None,
+}
+
+/// The `gesture` member of a `signed_valid` verdict (FR-084).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub struct GestureEvidence {
+    /// What the signature's own flags show.
+    pub evidenced: EvidencedGesture,
+}
+
+/// Flag bit the device sets when the user touched it (user presence).
+const FLAG_USER_PRESENT: u8 = 0x01;
+/// Flag bit the device sets when the user also verified (user verification).
+const FLAG_USER_VERIFIED: u8 = 0x04;
+/// What `ssh-keygen -Y verify -vv` prints before the counter of a security-key
+/// signature.
+const FLAGS_LINE_PREFIX: &str = "debug2: sig_verify: signature details: counter = ";
+
+impl EvidencedGesture {
+    /// The gesture the flags line of one `ssh-keygen -Y verify -vv` run shows,
+    /// read from its standard error: the line
+    /// `debug2: sig_verify: signature details: counter = N, flags = 0xNN`,
+    /// accepting a trailing carriage return. No such line yields
+    /// [`EvidencedGesture::None`].
+    #[must_use]
+    pub fn from_verify_stderr(stderr: &[u8]) -> Self {
+        let flags = String::from_utf8_lossy(stderr)
+            .lines()
+            .find_map(|line| flags_of(line.trim_end_matches('\r')));
+        match flags {
+            Some(flags) if flags & FLAG_USER_PRESENT != 0 && flags & FLAG_USER_VERIFIED != 0 => {
+                Self::DeviceTouchAndPin
+            }
+            Some(flags) if flags & FLAG_USER_PRESENT != 0 => Self::DeviceTouch,
+            _ => Self::None,
+        }
+    }
+}
+
+/// The flags byte of one flags line, `None` for any other line.
+fn flags_of(line: &str) -> Option<u8> {
+    let rest = line.strip_prefix(FLAGS_LINE_PREFIX)?;
+    let (counter, flags) = rest.split_once(", flags = 0x")?;
+    if counter.is_empty() || !counter.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    if flags.is_empty() || flags.len() > 2 || !flags.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    u8::from_str_radix(flags, 16).ok()
+}
+
+impl GestureEvidence {
+    /// No gesture is evidenced.
+    pub const NONE: Self = Self {
+        evidenced: EvidencedGesture::None,
+    };
+}
+
+impl Verdict {
+    /// The verdict with the gesture its signature evidences; only a
+    /// `signed_valid` verdict carries one.
+    #[must_use]
+    pub const fn with_gesture(mut self, evidenced: EvidencedGesture) -> Self {
+        if matches!(self.status, Status::SignedValid) {
+            self.gesture = Some(GestureEvidence { evidenced });
+        }
+        self
+    }
 }
 
 impl Verdict {
@@ -481,6 +565,7 @@ impl Verdict {
             mismatch: None,
             signed_off_meaning: None,
             identity_registry_commit: None,
+            gesture: None,
         }
     }
 
@@ -525,6 +610,10 @@ impl Verdict {
             mismatch: None,
             signed_off_meaning: None,
             identity_registry_commit: None,
+            gesture: match status {
+                Status::SignedValid => Some(GestureEvidence::NONE),
+                _ => None,
+            },
         }
     }
 

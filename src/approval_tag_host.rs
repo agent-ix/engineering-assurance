@@ -20,8 +20,9 @@ use std::{
 
 use engineering_assurance::approval_tag::{
     SigningSetting, compose_message, is_meaning, is_record_digest, is_trailer_record_value,
-    signing_refusal, tag_is_signed,
+    signing_deadline_seconds, signing_refusal, tag_is_signed,
 };
+use engineering_assurance::approval_verify::SigningGesture;
 use engineering_assurance::signature_verify::is_plain_revision;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -38,7 +39,7 @@ const RECORD_SCHEMA_VERSION: u64 = 2;
 /// Largest accepted record file in bytes.
 const MAX_RECORD_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
-/// The signer must be non-interactive: the process host gives git no terminal.
+/// Wall-clock limit of every git run that does not sign.
 const PROCESS_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Deserialize)]
@@ -53,6 +54,15 @@ struct Request {
     record_id: String,
     record_digest: String,
     meaning: String,
+    /// A `null` is refused like any other value that is not one of the three.
+    #[serde(default, deserialize_with = "declared_gesture")]
+    gesture: Option<SigningGesture>,
+}
+
+fn declared_gesture<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<SigningGesture>, D::Error> {
+    SigningGesture::deserialize(deserializer).map(Some)
 }
 
 fn head() -> String {
@@ -69,6 +79,26 @@ struct ResultLine<'a> {
     record_id: &'a str,
     record_digest: &'a str,
     meaning: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    gesture: Option<SigningGesture>,
+}
+
+/// How the git run that signs is hosted (FR-085).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct SigningRun {
+    /// Whether git takes the terminal and passes its standard error through.
+    interactive: bool,
+    /// The wall-clock limit passed to the process host.
+    deadline: Duration,
+}
+
+impl SigningRun {
+    const fn for_gesture(gesture: Option<SigningGesture>) -> Self {
+        Self {
+            interactive: gesture.is_some(),
+            deadline: Duration::from_secs(signing_deadline_seconds(gesture)),
+        }
+    }
 }
 
 /// Typed refusal that writes no tag.
@@ -105,7 +135,7 @@ pub(crate) enum ApprovalTagError {
     SigningUnconfigured(SigningSetting),
     /// `git tag -s` did not create a signed tag.
     #[error(
-        "approval-tag: git tag -s did not create a signed tag (signing key, program or ref update failed, or it timed out; the signer must be non-interactive); no tag was left"
+        "approval-tag: git tag -s did not create a signed tag (signing key, program or ref update failed, the signer denied, or it timed out; without a request `gesture` the signer must be non-interactive); no tag was left"
     )]
     CreateFailed,
     /// The message file could not be prepared locally.
@@ -188,7 +218,13 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalTagError> {
     git.create(
         &request.tag,
         &target,
-        &compose_message(&request.record_id, digest, &request.meaning),
+        &compose_message(
+            &request.record_id,
+            digest,
+            &request.meaning,
+            request.gesture,
+        ),
+        SigningRun::for_gesture(request.gesture),
     )?;
     let tag_object = git.created_signed(&request.tag)?;
     let mut line = serde_json::to_vec(&ResultLine {
@@ -200,6 +236,7 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalTagError> {
         record_id: &request.record_id,
         record_digest: digest,
         meaning: &request.meaning,
+        gesture: request.gesture,
     })
     .map_err(|_| ApprovalTagError::ResultEncoding)?;
     line.push(b'\n');
@@ -276,22 +313,60 @@ impl Git<'_> {
     }
 
     fn run_raw(&self, arguments: &[&OsStr]) -> Result<CompletedProcess, ProcessError> {
+        self.run_hosted(arguments, None)
+    }
+
+    /// Runs git as `run_raw` does, or, for the `tag -s` run of a request that
+    /// declares a gesture, with the terminal and the longer deadline of FR-085.
+    /// `SSH_AUTH_SOCK`, `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE` and `DISPLAY` are
+    /// inherited, as for every run.
+    fn run_hosted(
+        &self,
+        arguments: &[&OsStr],
+        signing: Option<SigningRun>,
+    ) -> Result<CompletedProcess, ProcessError> {
         let (git, path) = resolve_program("git")?;
         let removed: Vec<&OsStr> = REMOVED_ENVIRONMENT.iter().map(OsStr::new).collect();
-        process_host::run_configured(
-            git.as_os_str(),
-            arguments,
-            Some(self.repository),
-            &[
-                (OsStr::new("PATH"), path.as_os_str()),
-                (OsStr::new("GIT_OPTIONAL_LOCKS"), OsStr::new("0")),
-            ],
-            &removed,
-            ProcessLimits {
-                timeout: PROCESS_TIMEOUT,
-                max_output_bytes: MAX_OUTPUT_BYTES,
-            },
-        )
+        let environment = [
+            (OsStr::new("PATH"), path.as_os_str()),
+            (OsStr::new("GIT_OPTIONAL_LOCKS"), OsStr::new("0")),
+        ];
+        let limits = |timeout| ProcessLimits {
+            timeout,
+            max_output_bytes: MAX_OUTPUT_BYTES,
+        };
+        match signing {
+            Some(SigningRun {
+                interactive: true,
+                deadline,
+            }) => process_host::run_configured_foreground(
+                git.as_os_str(),
+                arguments,
+                Some(self.repository),
+                &environment,
+                &removed,
+                limits(deadline),
+            ),
+            Some(SigningRun {
+                interactive: false,
+                deadline,
+            }) => process_host::run_configured(
+                git.as_os_str(),
+                arguments,
+                Some(self.repository),
+                &environment,
+                &removed,
+                limits(deadline),
+            ),
+            None => process_host::run_configured(
+                git.as_os_str(),
+                arguments,
+                Some(self.repository),
+                &environment,
+                &removed,
+                limits(PROCESS_TIMEOUT),
+            ),
+        }
     }
 
     /// Whether `git <arguments>` exits 0; exit 1 is "no", anything else is
@@ -384,7 +459,13 @@ impl Git<'_> {
     /// `git tag -s` of `target` as `name` with `message`. Signing goes through
     /// the caller's configuration alone: no key, program or format is passed,
     /// and `-f` is never passed, so an existing tag is never replaced.
-    fn create(&self, name: &str, target: &str, message: &str) -> Result<(), ApprovalTagError> {
+    fn create(
+        &self,
+        name: &str,
+        target: &str,
+        message: &str,
+        signing: SigningRun,
+    ) -> Result<(), ApprovalTagError> {
         let directory = tempfile::tempdir().map_err(|_| ApprovalTagError::LocalIo)?;
         let path = directory.path().join("message");
         std::fs::write(&path, message).map_err(|_| ApprovalTagError::LocalIo)?;
@@ -401,7 +482,7 @@ impl Git<'_> {
         // A timeout or kill can come after the ref update; the check below
         // removes whatever this run wrote.
         let created = self
-            .run_raw(&arguments)
+            .run_hosted(&arguments, Some(signing))
             .is_ok_and(|output| output.status.success());
         if created {
             Ok(())
@@ -439,5 +520,185 @@ impl Git<'_> {
             let arguments = ["update-ref", "-d", &full, &id].map(OsStr::new);
             let _ = self.run_raw(&arguments);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        os::unix::fs::PermissionsExt,
+        process::{Command, Stdio},
+        time::Duration,
+    };
+
+    use engineering_assurance::approval_verify::SigningGesture;
+    use ix_trace_rs::trace;
+    use serde_json::json;
+
+    use super::{execute, SigningRun};
+
+    const RESTORE_FIXTURE: &str = "EA113_RESTORE_FIXTURE";
+    const RESTORE_SIGNER_RAN: &str = "EA113_RESTORE_SIGNER_RAN";
+
+    fn git(repository: &std::path::Path, arguments: &[&str]) {
+        let output = Command::new("git")
+            .args(arguments)
+            .current_dir(repository)
+            .output()
+            .expect("git must start");
+        assert!(output.status.success(), "{output:?}");
+    }
+
+    fn restore_fixture() -> tempfile::TempDir {
+        let root = tempfile::tempdir().expect("fixture directory");
+        let repository = root.path().join("repository");
+        fs::create_dir(&repository).expect("repository directory");
+        git(&repository, &["init", "-q"]);
+        git(
+            &repository,
+            &[
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+                "commit",
+                "--allow-empty",
+                "-q",
+                "-m",
+                "base",
+            ],
+        );
+
+        let signer = root.path().join("signer");
+        fs::write(
+            &signer,
+            format!(
+                "#!/bin/sh\ntouch \"${RESTORE_SIGNER_RAN}\"\nwhile read -r line || [ -n \"$line\" ]; do :; done\necho \"[GNUPG:] KEY_CONSIDERED AAAA 0\" >&2\necho \"[GNUPG:] SIG_CREATED D 1 8 00 1700000000 00 AAAA\" >&2\nprintf -- '-----BEGIN SIGNED MESSAGE-----\\nAAAA\\n-----END SIGNED MESSAGE-----\\n'\n",
+                RESTORE_SIGNER_RAN = RESTORE_SIGNER_RAN
+            ),
+        )
+        .expect("signer script");
+        fs::set_permissions(&signer, fs::Permissions::from_mode(0o755)).expect("signer mode");
+        let global = root.path().join("gitconfig");
+        fs::write(
+            &global,
+            format!(
+                "[user]\n\tname = Fixture\n\temail = fixture@example.invalid\n[gpg]\n\tformat = x509\n[gpg \"x509\"]\n\tprogram = {}\n",
+                signer.display()
+            ),
+        )
+        .expect("git configuration");
+        let record = root.path().join("record.json");
+        fs::write(
+            &record,
+            serde_json::to_vec(&json!({
+                "schema_version": 2,
+                "record_type": "change_assurance",
+                "record_id": "restore-failure",
+                "review_workflow": {"signed_approval": {}},
+            }))
+            .expect("record json"),
+        )
+        .expect("record file");
+        let request = json!({
+            "protocol": "engineering-assurance.approval-tag-request/v1",
+            "repository": repository,
+            "tag": "restore-failure",
+            "record": record,
+            "record_id": "restore-failure",
+            "record_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            "meaning": "approved",
+            "gesture": "oidc_interactive",
+        });
+        fs::write(
+            root.path().join("request.json"),
+            serde_json::to_vec(&request).expect("request json"),
+        )
+        .expect("request file");
+        root
+    }
+
+    fn restore_failure_scenario(root: &std::path::Path) {
+        crate::process_host::fail_next_foreground_restore();
+        let error = execute(&fs::read(root.join("request.json")).expect("request"))
+            .expect_err("the injected restore failure must fail tag creation");
+        assert_eq!(error.code(), "approval_tag_create_failed");
+        assert!(
+            std::env::var_os(RESTORE_SIGNER_RAN)
+                .is_some_and(|marker| std::path::Path::new(&marker).exists()),
+            "the successful signing command must reach its signer"
+        );
+        let reference = Command::new("git")
+            .args([
+                "show-ref",
+                "--verify",
+                "--quiet",
+                "refs/tags/restore-failure",
+            ])
+            .current_dir(root.join("repository"))
+            .output()
+            .expect("git must inspect the ref");
+        assert_eq!(reference.status.code(), Some(1), "the ref must be removed");
+        fs::write(root.join("scenario-done"), "ok").expect("completion marker");
+    }
+
+    #[test]
+    #[trace("FR-085-AC-7")]
+    fn the_host_is_given_300_seconds_with_a_gesture_and_60_without() {
+        for gesture in [
+            SigningGesture::DeviceTouch,
+            SigningGesture::AgentConfirm,
+            SigningGesture::OidcInteractive,
+        ] {
+            assert_eq!(
+                SigningRun::for_gesture(Some(gesture)),
+                SigningRun {
+                    interactive: true,
+                    deadline: Duration::from_secs(300),
+                }
+            );
+        }
+        assert_eq!(
+            SigningRun::for_gesture(None),
+            SigningRun {
+                interactive: false,
+                deadline: Duration::from_secs(60),
+            }
+        );
+    }
+
+    #[test]
+    #[trace("FR-085-AC-13")]
+    fn restore_failure_propagates_through_approval_tag_and_removes_the_ref() {
+        if let Some(root) = std::env::var_os(RESTORE_FIXTURE) {
+            restore_failure_scenario(std::path::Path::new(&root));
+            return;
+        }
+
+        let fixture = restore_fixture();
+        let test = format!(
+            "'{}' --exact approval_tag_host::tests::restore_failure_propagates_through_approval_tag_and_removes_the_ref --nocapture",
+            std::env::current_exe().expect("test binary").display()
+        );
+        let output = Command::new("/usr/bin/script")
+            .args(["-q", "-e", "-c"])
+            .arg(test)
+            .arg("/dev/null")
+            .current_dir(fixture.path().join("repository"))
+            .env(RESTORE_FIXTURE, fixture.path())
+            .env(RESTORE_SIGNER_RAN, fixture.path().join("signer-ran"))
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .env("GIT_CONFIG_GLOBAL", fixture.path().join("gitconfig"))
+            .env("HOME", fixture.path())
+            .env("SHELL", "/bin/sh")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .expect("script must start");
+        let report = String::from_utf8_lossy(&output.stdout);
+        assert!(output.status.success(), "{report}");
+        assert!(fixture.path().join("scenario-done").exists(), "{report}");
     }
 }

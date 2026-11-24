@@ -11,7 +11,7 @@
 //! request and decides the status. It reads no signature, certificate or
 //! trailer text of its own.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::signature_verify::{
     Mapping, Presence, Reason, SignatureKind, SignedAt, Status, Verdict,
@@ -21,6 +21,84 @@ use crate::signature_verify::{
 pub const RECORD_ID_TRAILER: &str = "Approved-Record-Id";
 /// Trailer carrying the digest of the record the tag approves.
 pub const RECORD_DIGEST_TRAILER: &str = "Approved-Record-Digest";
+
+/// Trailer carrying the gesture the signer declared (FR-085).
+pub const GESTURE_TRAILER: &str = "Signing-Gesture";
+
+/// The per-signature gestures a caller may declare when it creates an approval
+/// tag (FR-085). The value is the caller's declaration, never verified.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SigningGesture {
+    /// A FIDO security-key SSH key.
+    DeviceTouch,
+    /// A key held by an agent that confirms each use (`ssh-add -c`).
+    AgentConfirm,
+    /// A `gitsign` login a person completes.
+    OidcInteractive,
+}
+
+impl SigningGesture {
+    /// The value as the request, the trailer and the results spell it.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::DeviceTouch => "device_touch",
+            Self::AgentConfirm => "agent_confirm",
+            Self::OidcInteractive => "oidc_interactive",
+        }
+    }
+
+    /// The gesture a trailer value names, `None` for any other value.
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        [Self::DeviceTouch, Self::AgentConfirm, Self::OidcInteractive]
+            .into_iter()
+            .find(|gesture| gesture.as_str() == value)
+    }
+}
+
+/// What the tag's `Signing-Gesture` trailers declare (FR-086).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeclaredGesture {
+    /// One trailer holding `device_touch`.
+    DeviceTouch,
+    /// One trailer holding `agent_confirm`.
+    AgentConfirm,
+    /// One trailer holding `oidc_interactive`.
+    OidcInteractive,
+    /// A trailer holding another value, or the trailer repeated.
+    Unrecognized,
+    /// No such trailer.
+    None,
+}
+
+/// The `gesture` member of an `approved` result (FR-086): the declaration only.
+/// What the signature evidences is `signature.gesture.evidenced`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub struct GestureDeclaration {
+    /// What the tag declares.
+    pub declared: DeclaredGesture,
+}
+
+impl GestureDeclaration {
+    /// The declaration the values of the `Signing-Gesture` trailers carry.
+    #[must_use]
+    pub fn from_trailer_values(values: &[String]) -> Self {
+        let declared = match values {
+            [] => DeclaredGesture::None,
+            [only] => match SigningGesture::parse(only) {
+                Some(SigningGesture::DeviceTouch) => DeclaredGesture::DeviceTouch,
+                Some(SigningGesture::AgentConfirm) => DeclaredGesture::AgentConfirm,
+                Some(SigningGesture::OidcInteractive) => DeclaredGesture::OidcInteractive,
+                None => DeclaredGesture::Unrecognized,
+            },
+            _ => DeclaredGesture::Unrecognized,
+        };
+        Self { declared }
+    }
+}
 
 /// Longest accepted `record_id` or `record_digest` in bytes.
 pub const MAX_RECORD_VALUE_BYTES: usize = 256;

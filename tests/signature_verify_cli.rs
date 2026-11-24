@@ -1366,6 +1366,96 @@ fn trailer_key_requests_are_validated_before_git_and_before_allowed_signers() {
     assert_eq!(error["code"], "signature_verify_allowed_signers_invalid");
 }
 
+// ---------------------------------------------------------------------------
+// FR-084: the gesture a signature evidences.
+// ---------------------------------------------------------------------------
+
+/// A stand-in `ssh-keygen` that runs the real one and, for the `-vv` verify run
+/// only, records the signature file it was given and then prints what the real
+/// one prints for a security-key signature, as scripted in the `mode` file: a
+/// flags byte in hex prints the full `debug2` line (with a carriage return and a
+/// line feed), `none` prints nothing more, `fail` exits 1.
+const SECURITY_KEY_STAND_IN: &str = r#"#!/bin/sh
+d=${0%/*}
+vv=0
+sig=
+prev=
+for a in "$@"; do
+  [ "$a" = "-vv" ] && vv=1
+  [ "$prev" = "-s" ] && sig=$a
+  prev=$a
+done
+REAL "$@"
+rc=$?
+if [ "$vv" = 1 ]; then
+  echo "$*" >> "$d/vv_calls"
+  /bin/cp "$sig" "$d/sig_seen"
+  read -r mode < "$d/mode"
+  case "$mode" in
+    none) ;;
+    fail) exit 1 ;;
+    *) printf 'debug2: sig_verify: signature details: counter = 3, flags = 0x%s\r\n' "$mode" >&2 ;;
+  esac
+fi
+exit "$rc"
+"#;
+
+/// A `PATH` directory holding git and the security-key stand-in, scripted with
+/// `mode`.
+fn security_key_path(fixture: &Fixture, mode: &str) -> PathBuf {
+    let directory = path_with(fixture, "sk-bin", &["git"]);
+    let real = env::split_paths(&env::var_os("PATH").expect("PATH"))
+        .map(|dir| dir.join("ssh-keygen"))
+        .find(|candidate| candidate.is_file())
+        .expect("real ssh-keygen on PATH");
+    let script = directory.join("ssh-keygen");
+    fs::write(
+        &script,
+        SECURITY_KEY_STAND_IN.replace("REAL", &real.display().to_string()),
+    )
+    .expect("stand-in");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("mode");
+    fs::write(directory.join("mode"), format!("{mode}\n")).expect("mode file");
+    directory
+}
+
+fn gesture_of(fixture: &Fixture, revision: &str, kind: &str, path: Option<&Path>) -> Value {
+    verdict_with(&request(fixture, revision, kind), path)
+}
+
+#[test]
+#[trace("FR-084-AC-1")]
+fn a_software_key_tag_is_signed_valid_with_no_evidenced_gesture() {
+    let fixture = fixture();
+    plain_commit(&fixture, "base");
+    signed_tag(&fixture, "a", "v1");
+    let result = status(&fixture, "v1", "tag");
+    assert_eq!(result["status"], "signed_valid", "{result}");
+    assert_eq!(result["gesture"], json!({"evidenced": "none"}));
+}
+
+#[test]
+#[trace("FR-084-AC-2", "FR-084-AC-3", "FR-084-AC-4")]
+fn the_evidenced_gesture_is_read_from_the_flags_of_the_signature_run() {
+    let fixture = fixture();
+    plain_commit(&fixture, "base");
+    signed_tag(&fixture, "a", "v1");
+    for (mode, expected) in [
+        ("05", "device_touch_and_pin"),
+        ("01", "device_touch"),
+        ("00", "none"),
+        ("04", "none"),
+        ("none", "none"),
+        ("fail", "none"),
+    ] {
+        let path = security_key_path(&fixture, mode);
+        let result = gesture_of(&fixture, "v1", "tag", Some(&path));
+        assert_eq!(result["status"], "signed_valid", "{mode}: {result}");
+        assert_eq!(result["gesture"], json!({"evidenced": expected}), "{mode}");
+        fs::remove_dir_all(&path).expect("remove stand-in bin");
+    }
+}
+
 /// Commits the allowed-signers file at `trust/allowed` and tags it `pin`.
 fn pin_allowed(fixture: &Fixture) {
     let repo = fixture.repo();
@@ -1410,6 +1500,137 @@ fn a_committed_allowed_signers_source_decides_over_the_working_tree() {
         assert_eq!(committed["status"], "signed_valid", "{kind}: {committed}");
         assert_eq!(committed["signer"]["principal"], PRINCIPAL, "{kind}");
     }
+}
+
+#[test]
+#[trace("FR-084-AC-6")]
+fn only_a_signed_valid_verdict_carries_a_gesture() {
+    let fixture = fixture();
+    plain_commit(&fixture, "base");
+    let path = security_key_path(&fixture, "05");
+    signed_tag(&fixture, "b", "untrusted");
+    signed_tag(&fixture, "a", "good");
+    let bad = rewrite(&fixture, "tag", "good", |object| {
+        object.replace("tag message", "altered message")
+    });
+    git(
+        &fixture.repo(),
+        None,
+        &["tag", "-a", "-m", "plain", "unsigned"],
+    );
+    for (revision, expected) in [
+        ("untrusted", "signed_untrusted"),
+        (bad.as_str(), "signed_bad"),
+        ("unsigned", "unsigned"),
+        ("no-such-tag", "unverifiable"),
+    ] {
+        let result = gesture_of(&fixture, revision, "tag", Some(&path));
+        assert_eq!(result["status"], expected, "{result}");
+        assert!(result.get("gesture").is_none(), "{expected}: {result}");
+    }
+}
+
+#[test]
+#[trace("FR-084-AC-7")]
+fn a_signing_gesture_trailer_in_the_message_is_not_evidence() {
+    let fixture = fixture();
+    plain_commit(&fixture, "base");
+    signed_tag_with(
+        &fixture,
+        "a",
+        "v1",
+        "release\n\nSigning-Gesture: device_touch",
+    );
+    let result = status(&fixture, "v1", "tag");
+    assert_eq!(result["status"], "signed_valid", "{result}");
+    assert_eq!(result["gesture"], json!({"evidenced": "none"}));
+}
+
+#[test]
+#[trace("FR-084-AC-5")]
+fn a_signed_commit_reports_none_whatever_the_key_shows() {
+    let fixture = fixture();
+    let id = signed_commit(&fixture, "a", "signed");
+    let path = security_key_path(&fixture, "05");
+    let result = gesture_of(&fixture, &id, "commit", Some(&path));
+    assert_eq!(result["status"], "signed_valid", "{result}");
+    assert_eq!(result["gesture"], json!({"evidenced": "none"}));
+    assert!(
+        !path.join("vv_calls").exists(),
+        "no flags run is made for a commit"
+    );
+}
+
+#[test]
+#[trace("FR-084-AC-9")]
+fn gesture_is_the_only_member_added_to_a_signed_valid_result() {
+    let fixture = fixture();
+    plain_commit(&fixture, "base");
+    signed_tag(&fixture, "a", "v1");
+    let mut touched = gesture_of(
+        &fixture,
+        "v1",
+        "tag",
+        Some(&security_key_path(&fixture, "01")),
+    );
+    assert_eq!(touched["gesture"], json!({"evidenced": "device_touch"}));
+    let mut plain = status(&fixture, "v1", "tag");
+    assert_eq!(touched["status"], "signed_valid");
+    let members = |value: &Value| -> Vec<String> {
+        let mut names: Vec<String> = value.as_object().expect("object").keys().cloned().collect();
+        names.sort();
+        names
+    };
+    assert_eq!(members(&touched), members(&plain));
+    touched.as_object_mut().expect("object").remove("gesture");
+    plain.as_object_mut().expect("object").remove("gesture");
+    assert_eq!(touched, plain);
+    assert_eq!(
+        touched["protocol"],
+        "engineering-assurance.signature-verify-result/v1"
+    );
+    let expected: Vec<&str> = vec![
+        "identity_registry_commit",
+        "kind",
+        "protocol",
+        "signature_kind",
+        "signed_off_meaning",
+        "signer",
+        "status",
+        "verified_commit_id",
+    ];
+    let present: Vec<String> = members(&touched)
+        .into_iter()
+        .filter(|name| expected.contains(&name.as_str()))
+        .collect();
+    assert!(present.iter().all(|name| name != "gesture"), "{present:?}");
+}
+
+#[test]
+#[trace("FR-084-AC-10")]
+fn the_run_gets_the_tag_signature_block_byte_for_byte() {
+    let fixture = fixture();
+    plain_commit(&fixture, "base");
+    signed_tag(&fixture, "a", "v1");
+    let path = security_key_path(&fixture, "01");
+    let result = gesture_of(&fixture, "v1", "tag", Some(&path));
+    assert_eq!(result["gesture"], json!({"evidenced": "device_touch"}));
+    let object = run_program("git", &fixture.repo(), &["cat-file", "tag", "v1"], None);
+    let begin = b"-----BEGIN SSH SIGNATURE-----";
+    let start = object
+        .windows(begin.len())
+        .position(|window| window == begin)
+        .expect("armored block in the tag object");
+    let seen = fs::read(path.join("sig_seen")).expect("signature the stand-in was given");
+    assert_eq!(seen, &object[start..]);
+    let calls = fs::read_to_string(path.join("vv_calls")).expect("calls");
+    assert_eq!(calls.lines().count(), 1, "{calls}");
+    let line = calls.trim_end();
+    assert!(line.starts_with("-Y verify -vv -f "), "{line}");
+    assert!(
+        line.contains(" -I signer@example.invalid -n git -s "),
+        "{line}"
+    );
 }
 
 #[test]

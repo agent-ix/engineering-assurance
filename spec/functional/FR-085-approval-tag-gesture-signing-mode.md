@@ -18,10 +18,13 @@ relationships:
 ## Description
 
 Tracked by Linear EA-113. The `approval-tag` command ([FR-042](./FR-042-create-signed-approval-tag-for-a-change-assurance-record.md))
-runs git through the FR-019 process host with no terminal and a 60 second limit, so a
-signer that needs a person (a security-key PIN prompt, an `ssh-add -c` confirmation, a
-`gitsign` browser or out-of-band login) cannot finish. This requirement adds one optional request member,
-`gesture`, that selects an interactive mode and records the mode the caller says it used.
+runs git through the FR-019 process host with standard input closed and a 60 second
+limit. Without `gesture`, git runs in a process group other than the caller's foreground
+process group when a controlling terminal exists; this does not promise a detached session
+or the absence of a controlling terminal. A signer that reads `/dev/tty` while its group
+is in the background can be stopped by `SIGTTIN`. This requirement adds one optional
+request member, `gesture`, that selects an interactive mode and records the mode the
+caller says it used.
 
 The three values name the per-signature gestures of the baseline: `device_touch` (a FIDO
 security-key SSH key), `agent_confirm` (a key held by an agent that asks for
@@ -66,8 +69,16 @@ Out of scope: choosing a key, configuring `ssh-add`, `ssh-agent`, an askpass pro
   invocation-owned process group the foreground process group of the controlling terminal
   for the run (`tcsetpgrp`), because a background group that reads `/dev/tty` is stopped
   by `SIGTTIN`.
+- The process host SHALL hold git before exec until the foreground handoff succeeds, so
+  git and its signer cannot race the handoff with a terminal read.
+- If the controlling terminal cannot be opened, its foreground group cannot be read, or
+  foreground acquisition fails, the process host SHALL terminate git before exec and
+  report the run as failed; it SHALL NOT continue signing in the background.
 - The command SHALL, when `gesture` is present, ask the process host to restore the
   previous foreground process group after the run, whether git exits, fails or times out.
+  If restoration fails, the process host SHALL report the run as failed and retry the
+  restoration during cleanup; approval-tag SHALL report `approval_tag_create_failed` and
+  remove any tag ref written by that run.
 - The command SHALL, when `gesture` is present, ask the process host to pass git's
   standard error to the command's own standard error and to leave the environment
   variables `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE`, `DISPLAY` and `SSH_AUTH_SOCK` in place.
@@ -77,8 +88,11 @@ Out of scope: choosing a key, configuring `ssh-add`, `ssh-agent`, an askpass pro
 - The command SHALL write nothing but the one result line to its own standard output.
 - The command SHALL, when `gesture` is present, give the process host a 300 second
   wall-clock deadline in place of the 60 second deadline of FR-042.
-- The command SHALL, when `gesture` is absent, give the process host the detached session
-  and the 60 second deadline of FR-042.
+- The command SHALL, when `gesture` is absent, ask the process host to run git in its
+  invocation-owned process group and give it the 60 second deadline of FR-042.
+- When `gesture` is absent and the caller has a controlling terminal, git's process group
+  SHALL differ from the terminal's foreground process group. Git's standard input remains
+  closed as required by FR-019.
 - The command SHALL pass the same environment to git as FR-042 does, with the same
   variables removed, so `SSH_AUTH_SOCK`, `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE` and
   `DISPLAY` reach a signer.
@@ -106,7 +120,7 @@ test with a throwaway key and an askpass script that records each call.
 
 | ID | Criteria | Verification |
 | --- | --- | --- |
-| FR-085-AC-1 | A request with no `gesture` creates a tag whose message holds exactly the three FR-042 trailers, whose result line holds no `gesture` member, and whose git run had no controlling terminal. | Test |
+| FR-085-AC-1 | A request with no `gesture` creates a tag whose message holds exactly the three FR-042 trailers and whose result line holds no `gesture` member. Under a pseudo-terminal, git's process group differs from the terminal's foreground process group. | Test (pty, stand-in) |
 | FR-085-AC-2 | A request with `gesture` `oidc_interactive`, passed with `--request -`, run under a pseudo-terminal with a stand-in signer that opens `/dev/tty`, writes a prompt there and reads a line from it, creates a tag; the signer was not stopped by `SIGTTIN` and the line was read from the pseudo-terminal and not from standard input, while the terminal's foreground process group during the run was git's process group; standard output is exactly one `created` line holding `"gesture":"oidc_interactive"`. | Test (pty, stand-in) |
 | FR-085-AC-3 | The created tag message holds the trailers `Approved-Record-Id`, `Approved-Record-Digest`, `Signed-off-meaning`, `Signing-Gesture` in that order, and the FR-037 trailer reader returns the declared value for `Signing-Gesture`. | Test |
 | FR-085-AC-4 | A `gesture` of `touch`, an empty string, a wrong case or a non-string is refused with `approval_tag_request_invalid`, exit status 2 and git not started. | Test |
@@ -116,6 +130,8 @@ test with a throwaway key and an askpass script that records each call.
 | FR-085-AC-8 | The declared value is copied verbatim whichever signer ran: a request declaring `device_touch` with a software key creates the tag and the command reports no error. | Test |
 | FR-085-AC-10 | With `gesture` present, the environment of the stand-in signer holds the `SSH_ASKPASS`, `SSH_ASKPASS_REQUIRE`, `DISPLAY` and `SSH_AUTH_SOCK` values of the command's environment, its standard error is the command's standard error, and its standard input is closed. | Test (stand-in) |
 | FR-085-AC-11 | With `gesture` present, under a pseudo-terminal, after a run that completes, after one whose stand-in signer exits nonzero and after one that reaches its deadline, the terminal's foreground process group equals the one before the run, and git's process group no longer exists. | Test (pty, stand-in) |
+| FR-085-AC-12 | If the controlling terminal cannot be acquired, the process host fails before executing git or its signer. | Test (process host) |
+| FR-085-AC-13 | If foreground restoration fails after signing, the process host retries restoration and reports the run as failed; the command reports `approval_tag_create_failed` and removes the tag ref written by that run. | Test (process host, pty) |
 | FR-085-AC-9 | Static inspection shows no terminal, prompt, PIN or askpass code in the approval-tag modules (CON-1, CON-2). | Inspection |
 
 ## Dependencies

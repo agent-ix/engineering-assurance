@@ -419,9 +419,11 @@ fn tc_319_id_mismatch_missing_and_repeated_trailers_are_the_wrong_record() {
     for (name, lines, id, digest) in cases {
         let mut all = lines.clone();
         all.push("Signed-off-meaning: reviewed");
+        all.push("Signing-Gesture: agent_confirm");
         signed_tag(&fixture, "a", name, &approval(&all));
         let wrong = status(&fixture, name);
         assert_eq!(wrong["status"], "wrong_record", "{name}: {wrong}");
+        assert!(wrong.get("gesture").is_none(), "{name}: {wrong}");
         assert_eq!(
             wrong["binding"],
             json!({"record_id": id, "record_digest": digest}),
@@ -435,9 +437,15 @@ fn tc_319_id_mismatch_missing_and_repeated_trailers_are_the_wrong_record() {
 #[trace("TC-320", "FR-041-AC-4")]
 fn tc_320_a_good_signature_by_an_unlisted_key_is_an_untrusted_signer() {
     let fixture = fixture();
-    signed_tag(&fixture, "b", "v-untrusted", &good_message());
+    signed_tag(
+        &fixture,
+        "b",
+        "v-untrusted",
+        &format!("{}\nSigning-Gesture: agent_confirm", good_message()),
+    );
     let untrusted = status(&fixture, "v-untrusted");
     assert_eq!(untrusted["status"], "untrusted_signer", "{untrusted}");
+    assert!(untrusted.get("gesture").is_none(), "{untrusted}");
     assert!(untrusted.get("approver").is_none());
     assert_eq!(untrusted["signature"]["status"], "signed_untrusted");
     assert_eq!(untrusted["signature"]["signer"]["mapping"], "unmapped");
@@ -453,16 +461,18 @@ fn tc_321_a_missing_or_blank_meaning_is_not_approved() {
     let fixture = fixture();
     let id_line = format!("Approved-Record-Id: {RECORD_ID}");
     let digest_line = format!("Approved-Record-Digest: {DIGEST}");
+    let gesture_line = "Signing-Gesture: agent_confirm";
     signed_tag(
         &fixture,
         "a",
         "v-no-meaning",
-        &approval(&[&id_line, &digest_line]),
+        &approval(&[&id_line, &digest_line, gesture_line]),
     );
     let missing = status(&fixture, "v-no-meaning");
     assert_eq!(missing["status"], "meaning_missing", "{missing}");
     assert!(missing.get("meaning").is_none());
     assert!(missing.get("approver").is_none());
+    assert!(missing.get("gesture").is_none(), "{missing}");
     assert!(missing.get("signature_kind").is_none());
     let blanks: [(&str, &[&str]); 4] = [
         ("v-empty", &["Signed-off-meaning:"]),
@@ -476,11 +486,13 @@ fn tc_321_a_missing_or_blank_meaning_is_not_approved() {
     for (tag, meaning) in blanks {
         let mut trailers = vec![id_line.as_str(), digest_line.as_str()];
         trailers.extend_from_slice(meaning);
+        trailers.push(gesture_line);
         signed_tag(&fixture, "a", tag, &approval(&trailers));
         let blank = status(&fixture, tag);
         assert_eq!(blank["status"], "meaning_missing", "{tag}: {blank}");
         assert!(blank.get("meaning").is_none(), "{tag}: {blank}");
         assert!(blank.get("approver").is_none(), "{tag}: {blank}");
+        assert!(blank.get("gesture").is_none(), "{tag}: {blank}");
         assert!(blank.get("signature_kind").is_none(), "{tag}: {blank}");
     }
     signed_tag(
@@ -492,12 +504,14 @@ fn tc_321_a_missing_or_blank_meaning_is_not_approved() {
             &digest_line,
             "Signed-off-meaning: reviewed",
             "Signed-off-meaning:",
+            gesture_line,
         ]),
     );
     let mixed = status(&fixture, "v-blank-and-real");
     assert_eq!(mixed["status"], "meaning_missing", "{mixed}");
     assert!(mixed.get("meaning").is_none(), "{mixed}");
     assert!(mixed.get("approver").is_none(), "{mixed}");
+    assert!(mixed.get("gesture").is_none(), "{mixed}");
     assert!(mixed.get("signature_kind").is_none(), "{mixed}");
 }
 
@@ -506,10 +520,16 @@ fn tc_321_a_missing_or_blank_meaning_is_not_approved() {
 fn tc_322_bad_unsigned_lightweight_and_unresolved_tags_are_never_approved() {
     let fixture = fixture();
     let repo = fixture.repo();
-    signed_tag(&fixture, "a", "v-bad", &good_message());
+    signed_tag(
+        &fixture,
+        "a",
+        "v-bad",
+        &format!("{}\nSigning-Gesture: agent_confirm", good_message()),
+    );
     rewrite_tag(&fixture, "v-bad", |o| o.replace("reviewed", "reviewes"));
     let bad = status(&fixture, "v-bad");
     assert_eq!(bad["status"], "signed_bad", "{bad}");
+    assert!(bad.get("gesture").is_none(), "{bad}");
     assert_eq!(
         bad["binding"],
         json!({"record_id": "match", "record_digest": "match"})
@@ -518,16 +538,16 @@ fn tc_322_bad_unsigned_lightweight_and_unresolved_tags_are_never_approved() {
     assert!(bad.get("meaning").is_none(), "{bad}");
     assert!(bad.get("signature_kind").is_none(), "{bad}");
 
-    git(
-        &repo,
-        None,
-        &["tag", "-a", "-m", &good_message(), "v-plain"],
-    );
-    assert_eq!(status(&fixture, "v-plain")["status"], "unsigned");
+    let plain_message = format!("{}\nSigning-Gesture: agent_confirm", good_message());
+    git(&repo, None, &["tag", "-a", "-m", &plain_message, "v-plain"]);
+    let plain = status(&fixture, "v-plain");
+    assert_eq!(plain["status"], "unsigned");
+    assert!(plain.get("gesture").is_none(), "{plain}");
 
     git(&repo, None, &["tag", "v-light"]);
     let light = status(&fixture, "v-light");
     assert_eq!(light["status"], "unsigned");
+    assert!(light.get("gesture").is_none(), "{light}");
     assert_eq!(light["signature"]["reason"], "lightweight_tag");
     assert!(light.get("binding").is_none());
 
@@ -536,6 +556,7 @@ fn tc_322_bad_unsigned_lightweight_and_unresolved_tags_are_never_approved() {
         assert_eq!(unresolved["status"], "unverifiable", "{name}: {unresolved}");
         assert_eq!(unresolved["reason"], "revision_unresolved");
         assert_eq!(unresolved["signature"]["reason"], "revision_unresolved");
+        assert!(unresolved.get("gesture").is_none(), "{unresolved}");
     }
     for name in ["v-bad", "v-plain", "v-light", "main"] {
         assert_ne!(status(&fixture, name)["status"], "approved");
@@ -902,14 +923,17 @@ fn tc_335_a_status_other_than_approved_carries_no_signing_time() {
         &fixture,
         "a",
         "v-wrong",
-        &good_message().replace(DIGEST, "sha256:0"),
+        &format!(
+            "{}\nSigning-Gesture: agent_confirm",
+            good_message().replace(DIGEST, "sha256:0")
+        ),
         "2026-03-04T10:00:00+0000",
     );
     signed_tag_at(
         &fixture,
         "b",
         "v-untrusted",
-        &good_message(),
+        &format!("{}\nSigning-Gesture: agent_confirm", good_message()),
         "2026-03-04T10:00:00+0000",
     );
     signed_tag_at(
@@ -919,6 +943,7 @@ fn tc_335_a_status_other_than_approved_carries_no_signing_time() {
         &approval(&[
             &format!("Approved-Record-Id: {RECORD_ID}"),
             &format!("Approved-Record-Digest: {DIGEST}"),
+            "Signing-Gesture: agent_confirm",
         ]),
         "2026-03-04T10:00:00+0000",
     );
@@ -930,6 +955,8 @@ fn tc_335_a_status_other_than_approved_carries_no_signing_time() {
         let other = status(&fixture, tag);
         assert_eq!(other["status"], expected, "{other}");
         for member in [
+            "gesture",
+            "signature_kind",
             "signed_at",
             "signed_at_source",
             "signed_at_missing",

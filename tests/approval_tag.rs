@@ -16,7 +16,7 @@ const DIGEST: &str = "sha256:0123abcd";
 #[test]
 #[trace("TC-338", "FR-042-AC-3", "FR-042-AC-12")]
 fn tc_338_the_message_is_a_subject_then_the_three_trailers_read_back_exactly() {
-    let message = compose_message("change-record-17", DIGEST, "reviewed for release");
+    let message = compose_message("change-record-17", DIGEST, "reviewed for release", None);
     let paragraphs: Vec<&str> = message.trim_end_matches('\n').split("\n\n").collect();
     assert_eq!(paragraphs.len(), 2, "{message:?}");
     assert!(!paragraphs[0].contains('\n'), "the subject is one line");
@@ -125,8 +125,8 @@ fn tc_340_only_ssh_with_a_key_and_x509_can_sign_a_verifiable_tag() {
 }
 
 #[test]
-#[trace("TC-340", "FR-042-AC-11")]
-fn tc_340_only_a_tag_with_a_supported_signature_block_counts_as_signed() {
+#[trace("FR-042-AC-11")]
+fn only_a_tag_with_a_supported_signature_block_counts_as_signed() {
     let head = "object 0123456789abcdef0123456789abcdef01234567\ntype commit\ntag t\ntagger a <a@example.test> 1 +0000\n\nmsg\n";
     assert!(!tag_is_signed(head.as_bytes()));
     for block in [
@@ -137,4 +137,42 @@ fn tc_340_only_a_tag_with_a_supported_signature_block_counts_as_signed() {
     }
     let pgp = "-----BEGIN PGP SIGNATURE-----\nAAAA\n-----END PGP SIGNATURE-----\n";
     assert!(!tag_is_signed(format!("{head}{pgp}").as_bytes()));
+}
+
+#[test]
+#[trace("FR-085-AC-3")]
+fn a_declared_gesture_is_the_fourth_trailer_and_reads_back() {
+    use engineering_assurance::approval_verify::{
+        DeclaredGesture, GESTURE_TRAILER, GestureDeclaration, SigningGesture,
+    };
+    let message = compose_message(
+        "change-record-17",
+        DIGEST,
+        "reviewed",
+        Some(SigningGesture::AgentConfirm),
+    );
+    let trailers = message
+        .trim_end_matches('\n')
+        .split("\n\n")
+        .nth(1)
+        .expect("trailers");
+    let names: Vec<&str> = trailers
+        .lines()
+        .filter_map(|line| line.split_once(':').map(|(name, _)| name))
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "Approved-Record-Id",
+            "Approved-Record-Digest",
+            "Signed-off-meaning",
+            "Signing-Gesture"
+        ]
+    );
+    let values = trailer_values(trailers, GESTURE_TRAILER);
+    assert_eq!(values, ["agent_confirm"]);
+    assert_eq!(
+        GestureDeclaration::from_trailer_values(&values).declared,
+        DeclaredGesture::AgentConfirm
+    );
 }
