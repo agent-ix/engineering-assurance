@@ -218,7 +218,12 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalTagError> {
     git.create(
         &request.tag,
         &target,
-        &compose_message(&request.record_id, digest, &request.meaning, request.gesture),
+        &compose_message(
+            &request.record_id,
+            digest,
+            &request.meaning,
+            request.gesture,
+        ),
         SigningRun::for_gesture(request.gesture),
     )?;
     let tag_object = git.created_signed(&request.tag)?;

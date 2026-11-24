@@ -1705,7 +1705,11 @@ impl ForegroundGroup {
         let mut blocked = SigSet::empty();
         blocked.add(Signal::SIGTTOU);
         let mut previous_mask = SigSet::empty();
-        pthread_sigmask(SigmaskHow::SIG_BLOCK, Some(&blocked), Some(&mut previous_mask))?;
+        pthread_sigmask(
+            SigmaskHow::SIG_BLOCK,
+            Some(&blocked),
+            Some(&mut previous_mask),
+        )?;
         let result = nix::unistd::tcsetpgrp(tty, group);
         let restored = pthread_sigmask(SigmaskHow::SIG_SETMASK, Some(&previous_mask), None);
         result.and(restored)
@@ -2271,6 +2275,15 @@ pub mod __private {
         run_configured(executable, arguments, None, &[], &[], limits)
     }
 
+    /// How the child's standard input and terminal are set up.
+    #[derive(Default)]
+    struct Launch {
+        /// An already opened file for standard input; the null device when absent.
+        stdin: Option<std::fs::File>,
+        /// Whether the child takes the terminal's foreground (FR-085).
+        foreground: bool,
+    }
+
     /// Runs an existing binary adapter through the shared execution kernel.
     ///
     /// # Errors
@@ -2291,8 +2304,7 @@ pub mod __private {
             current_directory,
             environment,
             removed_environment,
-            None,
-            false,
+            Launch::default(),
             limits,
         )
     }
@@ -2322,8 +2334,10 @@ pub mod __private {
             current_directory,
             environment,
             removed_environment,
-            None,
-            true,
+            Launch {
+                stdin: None,
+                foreground: true,
+            },
             limits,
         )
     }
@@ -2349,8 +2363,10 @@ pub mod __private {
             current_directory,
             environment,
             removed_environment,
-            Some(stdin),
-            false,
+            Launch {
+                stdin: Some(stdin),
+                foreground: false,
+            },
             limits,
         )
     }
@@ -2361,8 +2377,7 @@ pub mod __private {
         current_directory: Option<&Path>,
         environment: &[(&OsStr, &OsStr)],
         removed_environment: &[&OsStr],
-        stdin: Option<std::fs::File>,
-        foreground: bool,
+        launch: Launch,
         limits: ProcessLimits,
     ) -> Result<CompletedProcess, ProcessError> {
         #[cfg(unix)]
@@ -2373,8 +2388,7 @@ pub mod __private {
                 current_directory,
                 environment,
                 removed_environment,
-                stdin,
-                foreground,
+                launch,
                 limits,
             )
         }
@@ -2386,8 +2400,7 @@ pub mod __private {
                 current_directory,
                 environment,
                 removed_environment,
-                stdin,
-                foreground,
+                launch,
                 limits,
             );
             Err(ProcessError::Unavailable {
@@ -2404,8 +2417,7 @@ pub mod __private {
         current_directory: Option<&Path>,
         environment: &[(&OsStr, &OsStr)],
         removed_environment: &[&OsStr],
-        stdin: Option<std::fs::File>,
-        foreground: bool,
+        launch: Launch,
         limits: ProcessLimits,
     ) -> Result<CompletedProcess, ProcessError> {
         use std::os::unix::process::CommandExt;
@@ -2416,6 +2428,7 @@ pub mod __private {
             capture_command,
         };
 
+        let Launch { stdin, foreground } = launch;
         let mut command = Command::new(executable);
         command.args(arguments);
         if let Some(directory) = current_directory {

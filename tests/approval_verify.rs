@@ -83,6 +83,7 @@ fn verdict_mapped(
         mismatch: None,
         signed_off_meaning,
         identity_registry_commit: None,
+        gesture: None,
     }
 }
 
