@@ -436,9 +436,10 @@ fn tag_receipt_workflow_has_the_declared_trigger_jobs_permissions_and_trigger_in
         })
         .expect("default source checkout");
     assert_eq!(
-        source_checkout["with"]["ref"],
-        "${{ github.event.repository.default_branch }}"
+        source_checkout["with"]["repository"],
+        "agent-ix/engineering-assurance"
     );
+    assert_eq!(source_checkout["with"]["ref"], "main");
     assert_eq!(source_checkout["with"]["path"], "source");
     let build = build_steps
         .iter()
