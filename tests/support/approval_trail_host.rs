@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-use std::process::Command;
+use std::{cell::RefCell, process::Command, rc::Rc};
 
+use engineering_assurance::attestation_signing::TransparencyRequirement;
 use ix_trace_rs::trace;
 
 use super::*;
@@ -62,7 +63,7 @@ mod receipts {
 
     use super::*;
     use crate::tag_receipt_host::{
-        repository_findings,
+        Attempt, TagReceiptHostError, Trust, VerifierSource, read_candidates, repository_findings,
         tests::{
             FakeSource, FakeVerifier, add_line, git, identities, identities_json, policy,
             repository, rev, tag_message, write_receipt,
@@ -134,7 +135,11 @@ mod receipts {
         trail_for(setup, record, &json!([]), FakeVerifier::default())
     }
 
-    fn trail_without_tag_receipt_policy(setup: &Setup, record: &str) -> Value {
+    fn trail_without_tag_receipt_policy(
+        setup: &Setup,
+        record: &str,
+        verifier: FakeVerifier,
+    ) -> Value {
         let root = setup.directory.path();
         std::fs::write(
             root.join("receipt-policy.json"),
@@ -156,7 +161,7 @@ mod receipts {
             request.to_string().as_bytes(),
             Format::Json,
             Duration::from_secs(60),
-            &FakeSource(FakeVerifier::default()),
+            &FakeSource(verifier),
         )
         .expect("a trail");
         serde_json::from_slice(&line).expect("json")
@@ -256,7 +261,7 @@ mod receipts {
     }
 
     #[test]
-    #[trace("TC-1128", "FR-043-AC-22")]
+    #[trace("TC-1128", "FR-043-AC-22", "FR-043-AC-33", "FR-043-AC-34")]
     fn receipts_that_do_not_verify_are_listed_as_invalid_receipt_and_never_dropped() {
         let setup = setup();
         let tampered = write_receipt(
@@ -278,6 +283,7 @@ mod receipts {
         let verifier = FakeVerifier {
             invalid: BTreeSet::from([tampered.to_string()]),
             untrusted: BTreeSet::from([unlisted.to_string()]),
+            ..FakeVerifier::default()
         };
         let result = trail_for(&setup, RECORD, &json!([]), verifier);
         let entries = result["entries"].as_array().expect("entries");
@@ -287,6 +293,7 @@ mod receipts {
             .map(|entry| {
                 assert_eq!(entry["status"], "invalid_receipt");
                 assert_eq!(entry["attributed"], false);
+                assert_eq!(entry["commit"], setup.commit);
                 assert!(
                     entry.get("tag").is_none(),
                     "an unverified receipt names no tag"
@@ -388,9 +395,10 @@ mod receipts {
     }
 
     #[test]
-    #[trace("FR-043-AC-32", "FR-082-AC-5")]
-    fn a_policy_without_tag_receipts_is_empty_but_existing_receipts_are_compared() {
+    #[trace("FR-043-AC-32")]
+    fn a_policy_without_tag_receipts_skips_existing_receipt_notes() {
         let setup = setup();
+        tag_message(&setup.repo, "approve-record", &message(RECORD), None);
         write_receipt(
             &setup.repo,
             "refs/tags/approve-deleted",
@@ -400,14 +408,113 @@ mod receipts {
             true,
         );
 
-        let result = trail_without_tag_receipt_policy(&setup, RECORD);
-        assert_eq!(result["tag_receipts"]["checked"], true);
-        assert_eq!(result["tag_receipts"]["considered"], 1);
-        assert_eq!(result["entries"].as_array().expect("entries").len(), 1);
-        assert_eq!(result["entries"][0]["status"], "missing_tag");
-        assert_eq!(result["entries"][0]["reason"], "tag_absent");
-        assert_eq!(result["entries"][0]["tag"], "approve-deleted");
-        assert_eq!(result["complete"], false);
+        let visits = Rc::new(RefCell::new(Vec::new()));
+        let result = trail_without_tag_receipt_policy(
+            &setup,
+            RECORD,
+            FakeVerifier {
+                policy_visits: Some(Rc::clone(&visits)),
+                ..FakeVerifier::default()
+            },
+        );
+        assert_eq!(result["tag_receipts"]["checked"], false);
+        assert_eq!(result["tag_receipts"]["considered"], 0);
+        let entries = result["entries"].as_array().expect("entries");
+        assert_eq!(entries.len(), 1, "{result}");
+        assert_eq!(entries[0]["tag"], "approve-record");
+        assert_eq!(entries[0]["status"], "unsigned");
+        assert!(entries[0].get("tag_receipt").is_none());
+        assert!(visits.borrow().is_empty(), "no stored receipt was verified");
+        assert_eq!(result["complete"], true);
+    }
+
+    struct TwoRootFakeSource(FakeVerifier);
+
+    impl VerifierSource for TwoRootFakeSource {
+        fn attempts(&self) -> Result<Vec<Attempt<'_>>, TagReceiptHostError> {
+            Ok(vec![
+                Attempt {
+                    verifier: &self.0,
+                    transparency: TransparencyRequirement::PublicLog,
+                },
+                Attempt {
+                    verifier: &self.0,
+                    transparency: TransparencyRequirement::TimestampOnly,
+                },
+            ])
+        }
+    }
+
+    #[test]
+    #[trace("FR-043-AC-31")]
+    fn receipt_verification_uses_both_roots_and_each_tag_receipt_identity() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let repo = repository(directory.path());
+        let commit = rev(&repo, "HEAD");
+        let bundle = write_receipt(
+            &repo,
+            "refs/tags/approve-1",
+            &"a".repeat(40),
+            &commit,
+            &[RECORD],
+            true,
+        );
+        let mut identity_document = identities_json();
+        let first = identity_document["identities"][0].clone();
+        let mut second = first.clone();
+        second["repository"] = json!("fictional/second-assurance");
+        second["workflow_path"] = json!(".github/workflows/second-receipt.yml");
+        let mut branch_receipt_writer = first.clone();
+        branch_receipt_writer["repository"] = json!("fictional/branch-assurance");
+        branch_receipt_writer["workflow_path"] = json!(".github/workflows/branch-receipt.yml");
+        branch_receipt_writer
+            .as_object_mut()
+            .expect("identity object")
+            .remove("source_ref_prefix");
+        branch_receipt_writer["source_ref"] = json!("refs/heads/main");
+        identity_document["identities"] = json!([first, second, branch_receipt_writer]);
+        let identity_document =
+            WorkflowIdentityDocument::parse(identity_document.to_string().as_bytes())
+                .expect("identities");
+        let visits = Rc::new(RefCell::new(Vec::new()));
+        let source = TwoRootFakeSource(FakeVerifier {
+            invalid: BTreeSet::from([bundle.to_string()]),
+            policy_visits: Some(Rc::clone(&visits)),
+            ..FakeVerifier::default()
+        });
+        let trust = Trust::new(&identity_document, &source).expect("trust");
+        let candidates = read_candidates(&repo, &trust).expect("verified candidate list");
+        assert_eq!(candidates.len(), 1);
+        assert!(matches!(
+            &candidates[0],
+            engineering_assurance::tag_receipt::Candidate::Invalid(_)
+        ));
+
+        let visits = visits.borrow();
+        assert_eq!(
+            visits
+                .iter()
+                .map(|policy| policy.repository.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "fictional/engineering-assurance",
+                "fictional/second-assurance",
+                "fictional/engineering-assurance",
+                "fictional/second-assurance",
+            ]
+        );
+        assert_eq!(
+            visits
+                .iter()
+                .map(|policy| policy.transparency)
+                .collect::<Vec<_>>(),
+            [
+                TransparencyRequirement::PublicLog,
+                TransparencyRequirement::PublicLog,
+                TransparencyRequirement::TimestampOnly,
+                TransparencyRequirement::TimestampOnly,
+            ]
+        );
     }
 
     #[test]

@@ -96,7 +96,9 @@ the subject digest equals `tag_object`, `repository` equals the `source_reposito
 the note. Anything else is an `invalid_receipt` with one reason of `signature_invalid`, `untrusted_signer`,
 `predicate_invalid` or `wrong_subject`. A change receipt is verified only against the `receipt_writer` entry with
 `source_ref`, so a tag receipt is never accepted as a change receipt and a change receipt is never accepted as a tag
-receipt.
+receipt. [FR-043](./FR-043-approval-trail-of-a-change-assurance-record.md) and
+[FR-082](./FR-082-detect-deleted-and-changed-tags-from-tag-receipts.md) read and verify stored tag receipt notes only
+when the receipt policy contains `tag_receipts`; a missing policy member disables those reads, including for older notes.
 
 Out of scope: verifying or interpreting the tag's own signature or meaning, protecting any ref (the documentation
 requirement of [FR-083](./FR-083-document-the-adoption-rulesets-for-tags-and-the-private-records-branch.md) covers it), changing the
@@ -126,6 +128,7 @@ change receipt of FR-074, and the release attestation (FR-066, FR-067), which th
 - The tag receipt verifier SHALL return `untrusted_signer` unless the signer matches a `receipt_writer` entry with `source_ref_prefix` and the certificate source ref equals the statement `ref`.
 - The tag receipt verifier SHALL return `wrong_subject` when the subject, `ref`, `tag_object`, `commit` or the `repository` (against the matched entry's `source_repository`) disagree.
 - The tag receipt verifier SHALL return `predicate_invalid` when the statement breaks its closed schema.
+- A consumer SHALL read and verify stored tag receipt notes only when the receipt policy contains `tag_receipts`.
 - The change receipt verifier SHALL NOT accept a tag receipt.
 - The tag receipt verifier SHALL NOT accept a change receipt.
 - The tag receipt workflow SHALL NOT interpret a tag's meaning, signature or trailers beyond copying the trailer values.

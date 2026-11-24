@@ -6,10 +6,11 @@
 //! (FR-081, FR-082).
 
 use std::{
-    cell::Cell,
+    cell::{Cell, RefCell},
     collections::BTreeSet,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    rc::Rc,
 };
 
 use engineering_assurance::{
@@ -769,6 +770,8 @@ pub(crate) struct FakeVerifier {
     pub(crate) invalid: BTreeSet<String>,
     /// Bundles that verify cryptographically but were signed by an unlisted identity.
     pub(crate) untrusted: BTreeSet<String>,
+    /// Policies passed to the verifier, when a test needs to inspect its trust attempts.
+    pub(crate) policy_visits: Option<Rc<RefCell<Vec<WorkflowIdentityPolicy>>>>,
 }
 
 impl BundleVerifier for FakeVerifier {
@@ -776,8 +779,11 @@ impl BundleVerifier for FakeVerifier {
         &self,
         _payload: &[u8],
         bundle_json: &str,
-        _policy: &WorkflowIdentityPolicy,
+        policy: &WorkflowIdentityPolicy,
     ) -> Result<(), VerificationFailure> {
+        if let Some(visits) = &self.policy_visits {
+            visits.borrow_mut().push(policy.clone());
+        }
         if self.invalid.contains(bundle_json) {
             Err(VerificationFailure::InvalidSignature)
         } else if self.untrusted.contains(bundle_json) {
@@ -1066,4 +1072,38 @@ fn a_bad_signature_an_unparsable_line_and_an_unlisted_signer_are_invalid_not_mis
             .iter()
             .all(|item| !matches!(item.finding, TagFinding::MissingTag { .. }))
     );
+}
+
+#[test]
+#[trace("FR-082-AC-13", "FR-082-AC-14")]
+fn an_invalid_tag_finding_has_commit_and_reason_but_no_ref_or_tag() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let repo = repository(directory.path());
+    let commit = rev(&repo, "HEAD");
+    let invalid = write_receipt(
+        &repo,
+        "refs/tags/approve-untrusted",
+        &"a".repeat(40),
+        &commit,
+        &[],
+        true,
+    );
+    let judged = repository_findings(
+        &repo,
+        &identities(),
+        &policy(&json!([])),
+        &FakeSource(FakeVerifier {
+            invalid: BTreeSet::from([invalid.to_string()]),
+            ..FakeVerifier::default()
+        }),
+    )
+    .expect("findings");
+    assert_eq!(judged.len(), 1);
+    let line = serde_json::to_value(TagFindingLine::from(&judged[0])).expect("finding JSON");
+    assert_eq!(line["kind"], "tag");
+    assert_eq!(line["status"], "invalid_receipt");
+    assert_eq!(line["commit"], commit);
+    assert_eq!(line["reason"], "signature_invalid");
+    assert!(line.get("ref").is_none());
+    assert!(line.get("tag_object").is_none());
 }

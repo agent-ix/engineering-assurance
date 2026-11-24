@@ -79,10 +79,12 @@ struct TagReceiptsRequest {
     receipt_policy: PathBuf,
 }
 
-/// The loaded policy of a request that carries `tag_receipts`.
+/// Receipt inputs requested by a caller. A missing policy member disables
+/// receipt reads and comparisons rather than treating existing notes as a
+/// repository tracking record.
 struct TagContext {
-    identities: WorkflowIdentityDocument,
-    policy: TagReceiptPolicy,
+    identities: Option<WorkflowIdentityDocument>,
+    policy: Option<TagReceiptPolicy>,
 }
 
 /// Most bytes of either policy file.
@@ -105,14 +107,15 @@ fn load_tag_context(request: &TagReceiptsRequest) -> Result<TagContext, Approval
     if !request.workflow_identities.is_absolute() || !request.receipt_policy.is_absolute() {
         return Err(ApprovalTrailError::Invalid);
     }
-    let identities =
-        WorkflowIdentityDocument::parse(&read_policy_file(&request.workflow_identities)?)
-            .map_err(|_| ApprovalTrailError::Invalid)?;
-    // A policy with no `tag_receipts` member has no prefix and accepts nothing;
-    // receipts already written are still compared.
     let policy = TagReceiptPolicy::from_receipt_policy(&read_policy_file(&request.receipt_policy)?)
-        .map_err(|_| ApprovalTrailError::Invalid)?
-        .unwrap_or_default();
+        .map_err(|_| ApprovalTrailError::Invalid)?;
+    let identities = policy
+        .as_ref()
+        .map(|_| {
+            WorkflowIdentityDocument::parse(&read_policy_file(&request.workflow_identities)?)
+                .map_err(|_| ApprovalTrailError::Invalid)
+        })
+        .transpose()?;
     Ok(TagContext { identities, policy })
 }
 
@@ -577,8 +580,12 @@ fn tag_section(
     source: &dyn VerifierSource,
 ) -> Result<TagSection, ApprovalTrailError> {
     let request = &parsed.request;
-    let trust =
-        TagTrust::new(&context.identities, source).map_err(|_| ApprovalTrailError::Repository)?;
+    let identities = context
+        .identities
+        .as_ref()
+        .ok_or(ApprovalTrailError::Invalid)?;
+    let policy = context.policy.as_ref().ok_or(ApprovalTrailError::Invalid)?;
+    let trust = TagTrust::new(identities, source).map_err(|_| ApprovalTrailError::Repository)?;
     let candidates =
         read_candidates(&request.repository, &trust).map_err(|_| ApprovalTrailError::Repository)?;
     let tags = current_tags(&request.repository).map_err(|_| ApprovalTrailError::Repository)?;
@@ -587,7 +594,7 @@ fn tag_section(
         .filter(|candidate| belongs(candidate, &request.record_id))
         .cloned()
         .collect();
-    let judged = compare_tags(&belonging, &tags, &context.policy);
+    let judged = compare_tags(&belonging, &tags, policy);
     let mut complete = true;
     let mut out = Vec::with_capacity(entries.len() + judged.len());
     for mut entry in entries {
@@ -600,12 +607,10 @@ fn tag_section(
                 open: false,
             }
         } else {
-            let acceptance = context
-                .policy
-                .accepts_unreceipted(&reference, &entry.object);
+            let acceptance = policy.accepts_unreceipted(&reference, &entry.object);
             ReceiptState {
                 tag_receipt: ReceiptStateKind::None,
-                open: context.policy.covers(&entry.tag) && acceptance.is_none(),
+                open: policy.covers(&entry.tag) && acceptance.is_none(),
                 accepted_by: acceptance.as_ref().map(|a| a.accepted_by.clone()),
                 accepted_reason: acceptance.map(|a| a.accepted_reason),
             }
@@ -686,6 +691,17 @@ fn execute_with(
                 considered: 0,
             },
             false,
+        ),
+        Some(context) if context.policy.is_none() => (
+            entries
+                .into_iter()
+                .map(|entry| TrailEntry::Tag(Box::new(entry)))
+                .collect(),
+            TagReceiptsResult {
+                checked: false,
+                considered: 0,
+            },
+            true,
         ),
         Some(context) => {
             let section = tag_section(&parsed, context, entries, verifiers)?;
