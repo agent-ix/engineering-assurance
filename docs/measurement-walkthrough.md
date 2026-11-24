@@ -102,7 +102,8 @@ A collection is one complete run of the tool that produces the number.
         "remote": "origin"
       }
     },
-    "capabilities": ["juniper.retention"]
+    "capabilities": ["juniper.retention"],
+    "artifacts": ["juniper-classifier 2026.09.1"]
   },
   "observations": [
     {
