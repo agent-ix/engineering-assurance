@@ -422,7 +422,45 @@ fn tag_receipt_workflow_has_the_declared_trigger_jobs_permissions_and_trigger_in
         "string"
     );
     let jobs = &reusable["jobs"];
-    assert_eq!(jobs.as_object().map(serde_json::Map::len), Some(2));
+    assert_eq!(jobs.as_object().map(serde_json::Map::len), Some(3));
+    assert_eq!(jobs["record"]["needs"], "build");
+    assert_eq!(jobs["notes"]["needs"], json!(["build", "record"]));
+    let build_steps = jobs["build"]["steps"].as_array().expect("build steps");
+    assert_actions_are_structural(build_steps);
+    let source_checkout = build_steps
+        .iter()
+        .find(|step| {
+            step["uses"]
+                .as_str()
+                .is_some_and(|value| value.starts_with("actions/checkout@"))
+        })
+        .expect("default source checkout");
+    assert_eq!(
+        source_checkout["with"]["ref"],
+        "${{ github.event.repository.default_branch }}"
+    );
+    assert_eq!(source_checkout["with"]["path"], "source");
+    let build = build_steps
+        .iter()
+        .find(|step| {
+            step["run"]
+                .as_str()
+                .is_some_and(|run| run.contains("cargo build"))
+        })
+        .expect("source build step");
+    let build_script = build["run"].as_str().expect("build script");
+    assert!(
+        build_script
+            .contains("cargo build --locked --release --features full --bin engineering-assurance")
+    );
+    assert!(build_script.contains("tag-receipt-record --help"));
+    assert!(build_script.contains("tag-receipt-note --help"));
+    assert!(build_steps.iter().any(|step| {
+        step["uses"]
+            .as_str()
+            .is_some_and(|value| value.starts_with("actions/upload-artifact@"))
+            && step["with"]["name"] == "tag-receipt-cli"
+    }));
     assert_permission(
         &jobs["record"],
         &serde_json::json!({"contents":"read", "id-token":"write"}),
@@ -433,10 +471,19 @@ fn tag_receipt_workflow_has_the_declared_trigger_jobs_permissions_and_trigger_in
         &serde_json::json!({"contents":"write"}),
         "tag receipt notes",
     );
-    assert_eq!(jobs["notes"]["needs"], "record");
+    assert_eq!(jobs["notes"]["needs"], json!(["build", "record"]));
     for job in ["record", "notes"] {
         let steps = jobs[job]["steps"].as_array().expect("steps");
         assert_actions_are_structural(steps);
+        assert!(
+            steps.iter().any(|step| {
+                step["uses"]
+                    .as_str()
+                    .is_some_and(|value| value.starts_with("actions/download-artifact@"))
+                    && step["with"]["name"] == "tag-receipt-cli"
+            }),
+            "{job} executes the CLI artifact built from checked-out source"
+        );
         assert!(
             steps
                 .iter()
@@ -446,7 +493,8 @@ fn tag_receipt_workflow_has_the_declared_trigger_jobs_permissions_and_trigger_in
             "{job} runs no repository gate, script or package"
         );
     }
-    // The identity-bearing job loads no repository code and runs no agent.
+    // The identity-bearing job consumes the CLI built from the protected
+    // default branch and never checks out tag-controlled source.
     assert_record_job_is_isolated_for_tags(jobs);
     assert!(!format!("{reusable}").to_lowercase().contains("agent-run"));
 
@@ -496,6 +544,32 @@ fn assert_record_job_is_isolated_for_tags(jobs: &Value) {
                 reference.starts_with("actions/checkout@") || reference.starts_with("./")
             })
         }),
-        "the identity-bearing tag receipt record job neither checks out nor loads repository code"
+        "the identity-bearing tag receipt record job does not check out tag-controlled source"
     );
+}
+
+#[trace("TC-1126", "FR-081-AC-1")]
+#[test]
+fn checked_out_source_cli_reports_its_package_version_and_exposes_both_tag_receipt_commands() {
+    let cli = env!("CARGO_BIN_EXE_engineering-assurance");
+    let version = Command::new(cli)
+        .arg("--version")
+        .output()
+        .expect("built source CLI starts");
+    assert!(version.status.success(), "--version: {version:?}");
+    let version = String::from_utf8(version.stdout).expect("version is UTF-8");
+    assert!(
+        version.contains(env!("CARGO_PKG_VERSION")),
+        "CLI version must come from this checked-out package: {version:?}"
+    );
+
+    for subcommand in ["tag-receipt-record", "tag-receipt-note"] {
+        let output = Command::new(cli)
+            .args([subcommand, "--help"])
+            .output()
+            .expect("built source CLI starts");
+        assert!(output.status.success(), "{subcommand} --help: {output:?}");
+        let help = String::from_utf8(output.stdout).expect("help is UTF-8");
+        assert!(help.contains(subcommand), "{subcommand}: {help}");
+    }
 }

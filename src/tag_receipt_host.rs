@@ -199,19 +199,8 @@ impl Protected {
         let (private, base_commit) =
             protected_base(&request.github_repository, &request.base_branch)
                 .ok_or(TagReceiptHostError::Invalid)?;
-        let present = run_host_tool(
-            std::ffi::OsStr::new("git"),
-            &[
-                std::ffi::OsStr::new("-C"),
-                request.repository.as_os_str(),
-                std::ffi::OsStr::new("cat-file"),
-                std::ffi::OsStr::new("-e"),
-                std::ffi::OsStr::new(&format!("{base_commit}:{POLICY_PATH}")),
-            ],
-            None,
-            MAX_POLICY_BYTES,
-        )
-        .is_ok();
+        let present = policy_file_exists(&request.repository, &base_commit)
+            .map_err(|()| TagReceiptHostError::Git)?;
         let policy = if present {
             Some(
                 git_show_base_file(&request.repository, &base_commit, POLICY_PATH)
@@ -237,6 +226,35 @@ impl Protected {
             .map(|selection| selection.public_linear_teams)
             .unwrap_or_default();
         Self::from_policy_bytes(policy.as_deref(), private, public_linear_teams)
+    }
+}
+
+/// Tests whether the protected commit's tree names the policy file. `ls-tree`
+/// exits successfully with empty output for a genuine absence; a missing
+/// commit, unreadable repository or failed Git process remains an error.
+fn policy_file_exists(repository: &Path, commit: &str) -> Result<bool, ()> {
+    let output = run_host_tool(
+        std::ffi::OsStr::new("git"),
+        &[
+            std::ffi::OsStr::new("-C"),
+            repository.as_os_str(),
+            std::ffi::OsStr::new("ls-tree"),
+            std::ffi::OsStr::new("-z"),
+            std::ffi::OsStr::new("--name-only"),
+            std::ffi::OsStr::new("--full-tree"),
+            std::ffi::OsStr::new(commit),
+            std::ffi::OsStr::new("--"),
+            std::ffi::OsStr::new(POLICY_PATH),
+        ],
+        None,
+        MAX_POLICY_BYTES,
+    )?;
+    if output.is_empty() {
+        Ok(false)
+    } else if output.strip_suffix(&[0]) == Some(POLICY_PATH.as_bytes()) {
+        Ok(true)
+    } else {
+        Err(())
     }
 }
 

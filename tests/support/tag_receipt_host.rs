@@ -355,6 +355,49 @@ fn no_prefix_no_member_a_bad_member_and_a_non_utf8_name_end_as_specified() {
 }
 
 #[test]
+#[trace("TC-1127", "FR-081-AC-2")]
+fn protected_policy_lookup_distinguishes_absence_from_git_read_failures() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let repo = repository(directory.path());
+    let base = rev(&repo, "HEAD");
+
+    assert_eq!(
+        policy_file_exists(&repo, &base),
+        Ok(false),
+        "a successful tree lookup with no matching path means absent policy"
+    );
+
+    std::fs::create_dir_all(repo.join(".engineering-assurance")).expect("policy directory");
+    std::fs::write(
+        repo.join(".engineering-assurance/receipt-policy.json"),
+        br#"{"protocol":"engineering-assurance.receipt-policy/v1"}"#,
+    )
+    .expect("policy file");
+    git(
+        &repo,
+        &["add", ".engineering-assurance/receipt-policy.json"],
+    );
+    git(&repo, &["commit", "-q", "-m", "add policy"]);
+    let with_policy = rev(&repo, "HEAD");
+    assert_eq!(
+        policy_file_exists(&repo, &with_policy),
+        Ok(true),
+        "the protected tree names the policy file"
+    );
+
+    assert_eq!(
+        policy_file_exists(&repo, &"0".repeat(40)),
+        Err(()),
+        "a missing protected commit is a Git failure, not absence"
+    );
+    assert_eq!(
+        policy_file_exists(directory.path(), &with_policy),
+        Err(()),
+        "an unreadable repository is a Git failure, not absence"
+    );
+}
+
+#[test]
 #[trace("TC-1116", "FR-081-AC-3")]
 fn pushed_at_is_the_platform_push_time_never_the_tagger_date() {
     let directory = tempfile::tempdir().expect("tempdir");
