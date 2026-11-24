@@ -1,4 +1,4 @@
-.PHONY: syft-preflight syft-integration osv-scanner-integration converter-integration rust-features rust-feature-list lint content-rights-tree test manifest-validate package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-gate release-gate
+.PHONY: real-tool-test syft-preflight syft-integration osv-scanner-integration converter-integration rust-features rust-feature-list lint content-rights-tree test manifest-validate package-audit validate-docs rust-format rust-clippy rust-toolchain rust-tests rust-docs rust-deps rust-audit rust-foundation-gate agent-evals agent-evals-aggregate integration-traceability integration-gate release-gate
 
 EVAL_AGENT ?= codex
 EVAL_RUN ?= canary
@@ -15,6 +15,9 @@ PYTHON ?= python3
 QUIRE ?= quire
 CARGO ?= cargo
 LOCKED_BUILD ?= locked-build.sh
+
+real-tool-test:
+	LOCKED_BUILD="$(LOCKED_BUILD)" CARGO="$(CARGO)" python3 scripts/real_tool_test.py
 
 lint:
 	$(PYTHON) -m ruff check .
@@ -65,7 +68,7 @@ osv-scanner-integration:
 		echo "EA_TEST_OSV_DB must contain osv-scalibr/<ecosystem>/all.zip" >&2; \
 		exit 2; \
 	}
-	CARGO_BUILD_JOBS=2 cargo test --locked --features full --test osv_scanner_producer_cli -- --ignored
+	$(LOCKED_BUILD) "$(CURDIR)/target" $(CARGO) test --locked --features full --test osv_scanner_producer_cli -- --ignored
 
 converter-integration:
 	@case "$$EA_TEST_PANDOC" in /*) test -x "$$EA_TEST_PANDOC" ;; *) false ;; esac || { \

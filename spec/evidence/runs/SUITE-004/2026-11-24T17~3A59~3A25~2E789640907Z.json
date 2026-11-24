@@ -1,0 +1,79 @@
+{
+  "entries": [
+    {
+      "config": {
+        "error": "EA_TEST_SYFT must name an absolute executable file",
+        "execution_state": "not-executed",
+        "tool_version": "unavailable"
+      },
+      "outcome": "error",
+      "symbol": "syft_producer_cli::real_tool_checks",
+      "traceIds": [
+        "FR-038-AC-1",
+        "FR-038-AC-2",
+        "FR-038-AC-7",
+        "FR-038-AC-10",
+        "FR-039-AC-1",
+        "FR-039-AC-2",
+        "FR-039-AC-3",
+        "FR-039-AC-4",
+        "FR-039-AC-8",
+        "FR-039-AC-9"
+      ]
+    },
+    {
+      "config": {
+        "error": "EA_TEST_OSV_SCANNER must name an absolute executable file; EA_TEST_OSV_MIRROR_DATE must be supplied as YYYY-MM-DD; EA_TEST_OSV_DB must name an absolute local database directory",
+        "execution_state": "not-executed",
+        "osv_mirror_date": "not-provided",
+        "tool_version": "unavailable"
+      },
+      "outcome": "error",
+      "symbol": "osv_scanner_producer_cli::real_tool_checks",
+      "traceIds": [
+        "FR-044-AC-1",
+        "FR-044-AC-2",
+        "FR-044-AC-5",
+        "FR-044-AC-8",
+        "FR-044-AC-13",
+        "FR-044-AC-14"
+      ]
+    },
+    {
+      "config": {
+        "error": "gitsign executable is unavailable on PATH",
+        "execution_state": "not-executed",
+        "git_version": "git version 2.34.1",
+        "required_inputs": "FR_040_LIVE_REPOSITORY,FR_040_LIVE_COMMIT,FR_040_LIVE_TAG,FR_040_LIVE_IDENTITY,FR_040_LIVE_ISSUER",
+        "ssh_keygen_version": "OpenSSH_8.9p1 Ubuntu-3ubuntu0.18, OpenSSL 3.0.2 15 Mar 2022",
+        "tool_version": "unavailable"
+      },
+      "outcome": "error",
+      "symbol": "signature_verify_gitsign::tc_292",
+      "traceIds": [
+        "FR-040-AC-15",
+        "FR-040-AC-20"
+      ]
+    },
+    {
+      "config": {
+        "error": "gitsign executable is unavailable on PATH",
+        "execution_state": "not-executed",
+        "git_version": "git version 2.34.1",
+        "required_inputs": "FR_041_LIVE_REPOSITORY,FR_041_LIVE_TAG,FR_041_LIVE_IDENTITY,FR_041_LIVE_ISSUER,FR_041_LIVE_RECORD_ID,FR_041_LIVE_RECORD_DIGEST",
+        "ssh_keygen_version": "OpenSSH_8.9p1 Ubuntu-3ubuntu0.18, OpenSSL 3.0.2 15 Mar 2022",
+        "tool_version": "unavailable"
+      },
+      "outcome": "error",
+      "symbol": "approval_verify_gitsign::tc_1017",
+      "traceIds": [
+        "FR-041-AC-26"
+      ]
+    }
+  ],
+  "evidenceKind": "Integration",
+  "schemaVersion": 1,
+  "suite": "SUITE-004",
+  "timestamp": "2026-11-24T17:59:25.789640907Z",
+  "tool": "engineering-assurance real-tool-test (0.36.8)"
+}
