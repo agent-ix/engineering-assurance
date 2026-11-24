@@ -64,7 +64,7 @@ signature rule (FR-036, FR-037, FR-040 own them), and a persisted log of the tra
   with the member `protocol` equal to `engineering-assurance.approval-trail-result/v1`:
   - `record_id`, `record_digest` and `trust` as requested (the `trust` member of
     FR-041, with `allowed_signers_sha256`, `allowed_signers_commit` for a
-    `<rev>:<path>` source and `ea_version` as FR-041 defines, read once for the
+    `<rev>:<path>` source, `ea_version` and `git_version` as FR-041 defines (a git failure while the allowed-signers `<rev>:<path>` source is read is `approval_trail_repository_unavailable`, so there is no result and no `trust`), read once for the
     whole trail, so every entry is verified against the same bytes, and with
     `gitsign` also `identity_registry_commit` whenever the revision resolved);
   - `ordering`, the string `claimed_at_ascending`;
@@ -199,7 +199,7 @@ throwaway keys generated in the test.
 | FR-043-AC-17 | Every entry carries `object` equal to the id of the verified tag object, and two ref names of one tag object carry the same `object`. | Test |
 | FR-043-AC-18 | In `--format table`, escape, C1 control, bidirectional override and zero-width characters in a tag name or meaning are replaced by `?`. | Test |
 | FR-043-AC-19 | The command writes nothing to the repository and keeps no log or digest of the trail. | Inspection |
-| FR-043-AC-26 | The trail result's `trust` carries `allowed_signers_sha256` and `ea_version` on every result, and `allowed_signers_commit` when the request's `allowed_signers` is a `<rev>:<path>` that resolved; the allowed-signers bytes are read once per trail, so a file changed mid-run changes no entry, and each entry equals the `approval-verify` result against the same bytes. | Test |
+| FR-043-AC-26 | The trail result's `trust` carries `allowed_signers_sha256`, `ea_version` and `git_version` on every result that carries `trust`, and `allowed_signers_commit` when the request's `allowed_signers` is a `<rev>:<path>` that resolved; the allowed-signers bytes are read once per trail, so a file changed mid-run changes no entry, and each entry equals the `approval-verify` result against the same bytes. | Test |
 | FR-043-AC-27 | An `approved` gitsign entry carries the `trusted_at`, `trusted_at_source` and `time_skew`, or the `trusted_at_missing` reason, that `approval-verify` yields for the same tag; an `approved` SSH entry carries `trusted_at_missing` `ssh_signature`; entries other than `approved` carry none of them; and `claimed_at` alone orders the trail whatever `trusted_at` says. | Test |
 
 ## Dependencies

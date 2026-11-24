@@ -86,7 +86,7 @@ signature.
   `release_commit_snapshot_not_added`, `snapshot_path_present_at_baseline`, `baseline_item_absent`, `decision_owner_mismatch`.
 - The `trust` member, on every result with a verdict, the FR-041 `trust` object
   of the run (`allowed_signers`, `allowed_signers_sha256`, `allowed_signers_commit`
-  for a `<rev>:<path>` source, `ea_version`, and the gitsign members when
+  for a `<rev>:<path>` source, `ea_version`, `git_version`, and the gitsign members when
   supplied), so the trust identity is kept even when `approval` is absent.
 - The `approval` member, the unchanged FR-041 result for the tag, whenever the
   record was readable and valid; it is absent, and FR-041 is not run, when the
@@ -185,7 +185,7 @@ signature.
 | FR-047-AC-11 | Static inspection shows no signature, certificate, trailer-parsing or hashing code in the release module (CON-2, CON-3). | Inspection |
 | FR-047-AC-12 | The decision from the FR-041 status and the record checks is exercised without any process, over every combination, and `released` is returned for exactly one. | Property |
 | FR-047-AC-14 | A request whose `gitsign` member carries `principal`, and that otherwise validates, yields `release_verify_gitsign_principal_refused`; an `identity_registry` whose source is `invalid` or whose content is unusable yields `release_verify_identity_registry_invalid`; a git that fails while the registry is read yields `release_verify_git_failed`; each exits 2 with no verdict. | Test |
-| FR-047-AC-15 | Every `release-verify` result with a verdict, `released` or `not_released` and including one with no `approval` member, carries a top-level `trust` equal to the `approval.trust` of the same run when `approval` is present, with `allowed_signers_sha256`, `ea_version` and, for a `<rev>:<path>` source, `allowed_signers_commit`; editing the allowed-signers file after signing changes `allowed_signers_sha256` of an absolute-path request but not that of a `<rev>:<path>` request naming the commit in force at signing. | Test |
+| FR-047-AC-15 | Every `release-verify` result with a verdict, `released` or `not_released` and including one with no `approval` member, carries a top-level `trust` equal to the `approval.trust` of the same run when `approval` is present, with `allowed_signers_sha256`, `ea_version`, `git_version` and, for a `<rev>:<path>` source, `allowed_signers_commit`; editing the allowed-signers file after signing changes `allowed_signers_sha256` of an absolute-path request but not that of a `<rev>:<path>` request naming the commit in force at signing. | Test |
 | FR-047-AC-16 | A `released` result carries the `signed_at`, `signed_at_source` and `trusted_at` or `trusted_at_missing` members of the FR-041 result of the same run, and `time_skew` when both times are present and differ. | Test |
 | FR-047-AC-13 | A git that fails every call yields `release_verify_git_failed` at exit 2 and no verdict, and a replace ref or a graft in the repository changes neither the record read nor the parent compared. | Test |
 

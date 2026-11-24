@@ -88,7 +88,7 @@ signature, is a claim that needs its own evidence.
   `signature_verify_allowed_signers_invalid` and exit with status 2. An
   `allowed_signers` value that is neither an absolute path nor a well-formed
   `<rev>:<path>` address is `signature_verify_request_invalid`.
-- The allowed-signers reading yields `allowed_signers_sha256`, the string
+- The allowed-signers reading SHALL yield `allowed_signers_sha256`, the string
   `sha256:` followed by 64 lowercase hexadecimal digits of the SHA-256 of the
   exact bytes the run used, and, for a `<rev>:<path>` source, `allowed_signers_commit`,
   the resolved full commit id. Both are absent when the reading was
