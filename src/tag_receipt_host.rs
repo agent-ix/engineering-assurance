@@ -642,29 +642,37 @@ fn store_attempts(
             Err(GitError::NotFound) => None,
             Err(GitError::Failed) => return Err(TagReceiptHostError::Git),
         };
-        let note = match add_entry(existing.as_deref(), &request.bundle)? {
-            NoteUpdate::Unchanged => return Ok("already_recorded"),
-            NoteUpdate::Updated(note) => note,
-        };
-        git_with_input(
-            repository,
-            &[
-                "-c",
-                "user.name=engineering-assurance",
-                "-c",
-                "user.email=engineering-assurance@localhost",
-                "notes",
-                "--ref",
-                TAG_RECEIPT_NOTES_REF,
-                "add",
-                "-f",
-                "-F",
-                "-",
-                &request.commit,
-            ],
-            &note,
-        )
-        .map_err(|_| TagReceiptHostError::Git)?;
+        match add_entry(existing.as_deref(), &request.bundle)? {
+            NoteUpdate::Unchanged => {
+                // Held by the remote already, or only by a local note a rejected
+                // push left behind; only the first needs no push.
+                let local = ref_value(repository, TAG_RECEIPT_NOTES_REF);
+                if local.is_some() && local == ref_value(repository, REMOTE_NOTES_REF) {
+                    return Ok("already_recorded");
+                }
+            }
+            NoteUpdate::Updated(note) => {
+                git_with_input(
+                    repository,
+                    &[
+                        "-c",
+                        "user.name=engineering-assurance",
+                        "-c",
+                        "user.email=engineering-assurance@localhost",
+                        "notes",
+                        "--ref",
+                        TAG_RECEIPT_NOTES_REF,
+                        "add",
+                        "-f",
+                        "-F",
+                        "-",
+                        &request.commit,
+                    ],
+                    &note,
+                )
+                .map_err(|_| TagReceiptHostError::Git)?;
+            }
+        }
         if git_ok(repository, &["push", &request.remote, &push]) {
             return Ok("stored");
         }
