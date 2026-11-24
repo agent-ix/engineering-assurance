@@ -302,6 +302,11 @@ path = "tests/signature_verify_cli.rs"
 required-features = ["full"]
 
 [[test]]
+name = "proof_checkpoint_verify_cli"
+path = "tests/proof_checkpoint_verify_cli.rs"
+required-features = ["full"]
+
+[[test]]
 name = "signature_verify_gitsign"
 path = "tests/signature_verify_gitsign.rs"
 required-features = ["full"]

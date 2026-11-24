@@ -25,6 +25,7 @@ mod package_host;
 mod package_install;
 mod process_host;
 mod producer_execute_host;
+mod proof_checkpoint_host;
 mod receipt_host;
 mod release_decision_host;
 mod release_history_host;
@@ -67,6 +68,7 @@ const ONBOARD_REPORT_CAPABILITY: &str = "onboard-report";
 const PACKAGE_AUDIT_CAPABILITY: &str = "package-audit";
 const PACKAGE_LIFECYCLE_CAPABILITY: &str = "package-lifecycle";
 const PRODUCER_EXECUTE_CAPABILITY: &str = "producer-execute";
+const PROOF_CHECKPOINT_VERIFY_CAPABILITY: &str = "proof-checkpoint-verify";
 const RELEASE_HISTORY_CAPABILITY: &str = "release-history";
 const RELEASE_DECISION_CAPABILITY: &str = "release-decision";
 const RELEASE_VERIFY_CAPABILITY: &str = "release-verify";
@@ -148,6 +150,7 @@ fn command() -> Command {
         .subcommand(producer_execute_command())
         .subcommand(scope_footprint_command())
         .subcommand(signature_verify_command())
+        .subcommand(proof_checkpoint_verify_command())
         .subcommand(attestation_verify_command())
         .subcommand(approval_verify_command())
         .subcommand(approval_tag_command())
@@ -229,6 +232,18 @@ fn signature_verify_command() -> Command {
                 .long("request")
                 .value_name("JSON")
                 .help("Signature-verify request document, or - to read it from stdin")
+                .required(true),
+        )
+}
+
+fn proof_checkpoint_verify_command() -> Command {
+    Command::new(PROOF_CHECKPOINT_VERIFY_CAPABILITY)
+        .about("Verify a signed proof-integrity checkpoint against one exact annotated tag object")
+        .arg(
+            Arg::new("request")
+                .long("request")
+                .value_name("JSON")
+                .help("Proof-checkpoint-verify request document, or - to read it from stdin")
                 .required(true),
         )
 }
@@ -499,6 +514,9 @@ fn main() -> ExitCode {
         Some((PRODUCER_EXECUTE_CAPABILITY, arguments)) => run_producer_execute(arguments),
         Some((SCOPE_FOOTPRINT_CAPABILITY, arguments)) => run_scope_footprint(arguments),
         Some((SIGNATURE_VERIFY_CAPABILITY, arguments)) => run_signature_verify(arguments),
+        Some((PROOF_CHECKPOINT_VERIFY_CAPABILITY, arguments)) => {
+            run_proof_checkpoint_verify(arguments)
+        }
         Some((ATTESTATION_VERIFY_CAPABILITY, arguments)) => run_attestation_verify(arguments),
         Some((APPROVAL_VERIFY_CAPABILITY, arguments)) => run_approval_verify(arguments),
         Some((APPROVAL_TAG_CAPABILITY, arguments)) => run_approval_tag(arguments),
@@ -1001,6 +1019,17 @@ fn run_signature_verify(arguments: &ArgMatches) -> ExitCode {
         "signature_verify_request_unreadable",
         |bytes| {
             signature_verify_host::execute(bytes).map_err(|error| (error.code(), error.to_string()))
+        },
+    )
+}
+
+fn run_proof_checkpoint_verify(arguments: &ArgMatches) -> ExitCode {
+    run_request_line(
+        arguments,
+        PROOF_CHECKPOINT_VERIFY_CAPABILITY,
+        "proof_checkpoint_verify_request_unreadable",
+        |bytes| {
+            proof_checkpoint_host::execute(bytes).map_err(|error| (error.code(), error.to_string()))
         },
     )
 }
