@@ -522,6 +522,7 @@ dependencies = [
  "ix-cli-kit",
  "ix-trace-rs",
  "jsonschema",
+ "nix",
  "regex",
  "rustix",
  "serde",
