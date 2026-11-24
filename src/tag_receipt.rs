@@ -474,7 +474,10 @@ pub fn verify_line(line: Option<&Value>, commit: &str, sets: &[SignerSet<'_>]) -
     let mut matched = None;
     'sets: for set in sets {
         for (signer, source) in set.signers {
-            match set.verifier.verify_with_claims(&payload, &bundle_json, signer) {
+            match set
+                .verifier
+                .verify_with_claims(&payload, &bundle_json, signer)
+            {
                 Ok(Some(claims)) if source.matches(&claims) => {
                     matched = Some((claims, source));
                     break 'sets;
@@ -743,12 +746,9 @@ pub fn compare(
 
 fn sort_key(finding: &TagFinding) -> (u8, &str, &str, &str) {
     match finding {
-        TagFinding::MissingTag { receipt, .. } => (
-            0,
-            &receipt.reference,
-            &receipt.tag_object,
-            &receipt.commit,
-        ),
+        TagFinding::MissingTag { receipt, .. } => {
+            (0, &receipt.reference, &receipt.tag_object, &receipt.commit)
+        }
         TagFinding::TagNoReceipt {
             reference,
             current_object,

@@ -137,7 +137,12 @@ fn signers() -> Vec<(WorkflowIdentityPolicy, SourceWorkflowPolicy)> {
     )]
 }
 
-fn verify(bundle: &Value, commit: &str, verifier: &Verifier, list: &[(WorkflowIdentityPolicy, SourceWorkflowPolicy)]) -> Candidate {
+fn verify(
+    bundle: &Value,
+    commit: &str,
+    verifier: &Verifier,
+    list: &[(WorkflowIdentityPolicy, SourceWorkflowPolicy)],
+) -> Candidate {
     verify_line(
         Some(bundle),
         commit,
@@ -167,8 +172,10 @@ fn receipt(name: &str, object: char, commit: char, record_ids: &[&str]) -> TagRe
 }
 
 fn policy(accepted: Value) -> TagReceiptPolicy {
-    TagReceiptPolicy::parse(&json!({"prefixes": ["approve-", "release-"], "accepted_tags": accepted}))
-        .expect("valid policy")
+    TagReceiptPolicy::parse(
+        &json!({"prefixes": ["approve-", "release-"], "accepted_tags": accepted}),
+    )
+    .expect("valid policy")
 }
 
 fn tags(entries: &[(&str, char)]) -> BTreeMap<String, String> {
@@ -239,10 +246,17 @@ fn record_ids_keep_message_order_and_unreadable_trailers_carry_none() {
 #[test]
 #[trace("TC-1104", "FR-081-AC-2")]
 fn the_tag_receipts_member_is_a_closed_object_with_bounds() {
-    let accepted = json!({"ref": "refs/tags/a-1", "tag_object": id('a'), "accepted_by": "p", "reason": "r"});
-    assert!(TagReceiptPolicy::parse(&json!({"prefixes": ["a-"], "accepted_tags": [accepted]})).is_ok());
-    let null_object = json!({"ref": "refs/tags/a-1", "tag_object": null, "accepted_by": "p", "reason": "r"});
-    assert!(TagReceiptPolicy::parse(&json!({"prefixes": ["a-"], "accepted_tags": [null_object]})).is_ok());
+    let accepted =
+        json!({"ref": "refs/tags/a-1", "tag_object": id('a'), "accepted_by": "p", "reason": "r"});
+    assert!(
+        TagReceiptPolicy::parse(&json!({"prefixes": ["a-"], "accepted_tags": [accepted]})).is_ok()
+    );
+    let null_object =
+        json!({"ref": "refs/tags/a-1", "tag_object": null, "accepted_by": "p", "reason": "r"});
+    assert!(
+        TagReceiptPolicy::parse(&json!({"prefixes": ["a-"], "accepted_tags": [null_object]}))
+            .is_ok()
+    );
     let invalid = [
         json!({}),
         json!({"prefixes": []}),
@@ -304,7 +318,12 @@ fn a_receipt_verifies_only_through_a_tag_identity_and_matching_certificate_claim
         claims("refs/heads/main", "push", REPOSITORY),
     ] {
         assert_eq!(
-            reason_of(&verify(&bundle, &id('c'), &Verifier::trusting(other), &list)),
+            reason_of(&verify(
+                &bundle,
+                &id('c'),
+                &Verifier::trusting(other),
+                &list
+            )),
             InvalidReason::UntrustedSigner
         );
     }
@@ -340,7 +359,12 @@ fn a_bad_signature_schema_or_subject_gives_its_own_reason() {
     let mut extra = serde_json::to_value(&good).expect("value");
     extra["predicate"]["extra"] = json!(1);
     assert_eq!(
-        reason_of(&verify(&bundle_of(extra.to_string().as_bytes()), &id('c'), &trusting, &list)),
+        reason_of(&verify(
+            &bundle_of(extra.to_string().as_bytes()),
+            &id('c'),
+            &trusting,
+            &list
+        )),
         InvalidReason::PredicateInvalid
     );
     let mut missing = serde_json::to_value(&good).expect("value");
@@ -349,14 +373,24 @@ fn a_bad_signature_schema_or_subject_gives_its_own_reason() {
         .expect("predicate")
         .remove("pushed_at");
     assert_eq!(
-        reason_of(&verify(&bundle_of(missing.to_string().as_bytes()), &id('c'), &trusting, &list)),
+        reason_of(&verify(
+            &bundle_of(missing.to_string().as_bytes()),
+            &id('c'),
+            &trusting,
+            &list
+        )),
         InvalidReason::PredicateInvalid
     );
 
     let mut other_object = serde_json::to_value(&good).expect("value");
     other_object["predicate"]["tag_object"] = json!(id('b'));
     assert_eq!(
-        reason_of(&verify(&bundle_of(other_object.to_string().as_bytes()), &id('c'), &trusting, &list)),
+        reason_of(&verify(
+            &bundle_of(other_object.to_string().as_bytes()),
+            &id('c'),
+            &trusting,
+            &list
+        )),
         InvalidReason::WrongSubject
     );
     // The note sits on a commit other than the statement's `commit`.
@@ -368,7 +402,12 @@ fn a_bad_signature_schema_or_subject_gives_its_own_reason() {
     let mut other_repository = serde_json::to_value(&good).expect("value");
     other_repository["predicate"]["repository"] = json!("fictional/other");
     assert_eq!(
-        reason_of(&verify(&bundle_of(other_repository.to_string().as_bytes()), &id('c'), &trusting, &list)),
+        reason_of(&verify(
+            &bundle_of(other_repository.to_string().as_bytes()),
+            &id('c'),
+            &trusting,
+            &list
+        )),
         InvalidReason::WrongSubject
     );
     // A line that is not a bundle at all cannot be parsed.
@@ -377,7 +416,12 @@ fn a_bad_signature_schema_or_subject_gives_its_own_reason() {
         InvalidReason::PredicateInvalid
     );
     assert_eq!(
-        reason_of(&verify(&json!({"not": "a bundle"}), &id('c'), &trusting, &list)),
+        reason_of(&verify(
+            &json!({"not": "a bundle"}),
+            &id('c'),
+            &trusting,
+            &list
+        )),
         InvalidReason::PredicateInvalid
     );
 }
@@ -398,7 +442,10 @@ fn an_identical_entry_is_not_doubled_and_a_new_object_adds_one_and_keeps_the_fir
     let NoteUpdate::Updated(two) = add_entry(Some(&note), &resigned).expect("second entry") else {
         panic!("a different object id adds an entry");
     };
-    assert!(two.starts_with(&note), "the earlier entry is never replaced");
+    assert!(
+        two.starts_with(&note),
+        "the earlier entry is never replaced"
+    );
     assert_eq!(note_lines(&two).len(), 2);
     // A different ref on the same commit is its own entry too.
     let other_ref = signed(&statement("refs/tags/approve-2", &id('a'), &id('c')));
@@ -450,17 +497,28 @@ fn each_receipt_is_judged_on_its_own_object_id() {
     ));
     // Re-created as a different object.
     let changed = compare(&[one.clone()], &tags(&[("approve-1", 'b')]), &policy);
-    assert_eq!(changed.len(), 2, "the changed receipt and the unreceipted tag");
+    assert_eq!(
+        changed.len(),
+        2,
+        "the changed receipt and the unreceipted tag"
+    );
     assert!(matches!(
         &changed[0].finding,
         TagFinding::MissingTag { reason: MissingTagReason::TagChanged, current_object: Some(current), .. } if *current == id('b')
     ));
-    assert!(matches!(&changed[1].finding, TagFinding::TagNoReceipt { .. }));
+    assert!(matches!(
+        &changed[1].finding,
+        TagFinding::TagNoReceipt { .. }
+    ));
     // Deleted and pushed again at the identical object id: nothing.
     assert!(compare(&[one.clone()], &tags(&[("approve-1", 'a')]), &policy).is_empty());
     // Two receipts for two objects, only the second current: exactly the first.
     let two = Candidate::Verified(receipt("approve-1", 'b', 'c', &[]));
-    let repeated = compare(&[one.clone(), two.clone()], &tags(&[("approve-1", 'b')]), &policy);
+    let repeated = compare(
+        &[one.clone(), two.clone()],
+        &tags(&[("approve-1", 'b')]),
+        &policy,
+    );
     assert_eq!(findings(&repeated), [(FindingStatus::MissingTag, false)]);
     assert!(matches!(
         &repeated[0].finding,
@@ -469,7 +527,11 @@ fn each_receipt_is_judged_on_its_own_object_id() {
     // Empty receipts and an empty tag set; the order of the receipts is irrelevant.
     assert!(compare(&[], &tags(&[]), &policy).is_empty());
     assert_eq!(
-        compare(&[two.clone(), one.clone()], &tags(&[("approve-1", 'b')]), &policy),
+        compare(
+            &[two.clone(), one.clone()],
+            &tags(&[("approve-1", 'b')]),
+            &policy
+        ),
         repeated
     );
 }
@@ -488,7 +550,9 @@ fn an_invalid_receipt_is_listed_and_never_judged_missing_or_accepted() {
         invalid(InvalidReason::PredicateInvalid),
         invalid(InvalidReason::UntrustedSigner),
     ];
-    let accepting = policy(json!([{"ref": "refs/tags/approve-1", "tag_object": null, "accepted_by": "p", "reason": "r"}]));
+    let accepting = policy(
+        json!([{"ref": "refs/tags/approve-1", "tag_object": null, "accepted_by": "p", "reason": "r"}]),
+    );
     let judged = compare(&candidates, &tags(&[]), &accepting);
     assert_eq!(
         findings(&judged),
@@ -538,7 +602,10 @@ fn an_acceptance_matches_exactly_and_a_null_object_only_a_tag_absent_finding() {
     let accepted = compare(
         &[one.clone()],
         &tags(&[("approve-1", 'b')]),
-        &policy(json!([accept("approve-1", Some('a')), accept("approve-1", Some('b'))])),
+        &policy(json!([
+            accept("approve-1", Some('a')),
+            accept("approve-1", Some('b'))
+        ])),
     );
     assert_eq!(accepted.len(), 2);
     let missing = &accepted[0];
@@ -557,7 +624,11 @@ fn an_acceptance_matches_exactly_and_a_null_object_only_a_tag_absent_finding() {
     );
     assert!(other[0].is_open());
     // A null entry accepts a tag_absent finding ...
-    let null_absent = compare(&[one.clone()], &tags(&[]), &policy(json!([accept("approve-1", None)])));
+    let null_absent = compare(
+        &[one.clone()],
+        &tags(&[]),
+        &policy(json!([accept("approve-1", None)])),
+    );
     assert!(!null_absent[0].is_open());
     // ... and neither a tag_changed nor a tag_no_receipt finding.
     let null_changed = compare(
@@ -579,7 +650,12 @@ fn the_comparison_reads_no_attestation_and_no_attestation_reader_reads_a_receipt
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let read = |name: &str| std::fs::read_to_string(root.join(name)).expect("source");
     let comparison = read("tag_receipt.rs");
-    for forbidden in ["VerificationSummary", "release_attester", "ReleaseAttester", "release::"] {
+    for forbidden in [
+        "VerificationSummary",
+        "release_attester",
+        "ReleaseAttester",
+        "release::",
+    ] {
         assert!(!comparison.contains(forbidden), "{forbidden}");
     }
     for name in ["release.rs", "attestation_verify.rs", "release_history.rs"] {

@@ -378,9 +378,7 @@ impl WorkflowIdentityEntry {
                     && self.event.as_deref() == Some("push")
                     && match (&self.source_ref, &self.source_ref_prefix) {
                         // A change receipt: one exact branch ref (FR-074).
-                        (Some(value), None) => {
-                            value.starts_with("refs/heads/") && valid_ref(value)
-                        }
+                        (Some(value), None) => value.starts_with("refs/heads/") && valid_ref(value),
                         // A tag receipt: a literal tag-ref prefix (FR-081).
                         (None, Some(prefix)) => {
                             prefix.starts_with("refs/tags/") && valid_ref(prefix)

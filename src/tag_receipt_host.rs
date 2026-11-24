@@ -25,8 +25,8 @@ use engineering_assurance::{
     record_sink::{
         config::{SinkConfig, Visibility, resolve_sink_for_repository},
         form::{
-            Hashes, PublicProtocol, PublicRecord, RecordId, RecordKind, Reference,
-            References, Sha256Digest, Subject,
+            Hashes, PublicProtocol, PublicRecord, RecordId, RecordKind, Reference, References,
+            Sha256Digest, Subject,
         },
         leak::{VisibilityLookup, leak_check_statement},
         sink::Signer,
@@ -196,11 +196,9 @@ impl Protected {
     }
 
     fn load(request: &RecordRequest) -> Result<Self, TagReceiptHostError> {
-        let (private, base_commit) = protected_base(
-            &request.github_repository,
-            &request.base_branch,
-        )
-        .ok_or(TagReceiptHostError::Invalid)?;
+        let (private, base_commit) =
+            protected_base(&request.github_repository, &request.base_branch)
+                .ok_or(TagReceiptHostError::Invalid)?;
         let present = run_host_tool(
             std::ffi::OsStr::new("git"),
             &[
@@ -274,7 +272,8 @@ fn parse_record_request(bytes: &[u8]) -> Result<RecordRequest, TagReceiptHostErr
     if bytes.len() > MAX_REQUEST_BYTES {
         return Err(TagReceiptHostError::Invalid);
     }
-    let value: Value = serde_json::from_slice(bytes).map_err(|_| TagReceiptHostError::Unreadable)?;
+    let value: Value =
+        serde_json::from_slice(bytes).map_err(|_| TagReceiptHostError::Unreadable)?;
     let request: RecordRequest =
         serde_json::from_value(value).map_err(|_| TagReceiptHostError::Invalid)?;
     if request.protocol != RECORD_REQUEST_PROTOCOL
@@ -314,7 +313,13 @@ struct ReadTag {
 fn rev_parse(repository: &Path, expression: &str) -> Result<String, TagReceiptHostError> {
     let output = run_git(
         repository,
-        &["rev-parse", "--verify", "--quiet", "--end-of-options", expression],
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            "--end-of-options",
+            expression,
+        ],
     )
     .map_err(|_| TagReceiptHostError::Git)?;
     let id = output
@@ -333,9 +338,11 @@ fn read_tag(repository: &Path, name: &str) -> Result<ReadTag, TagReceiptHostErro
     let (object, trailers) = match load_listed_tag(repository, name, Path::new("/dev/null")) {
         Ok(Some(loaded)) => (
             loaded.id().to_owned(),
-            loaded.trailers().map_or_else(RecordTrailers::unreadable, |parsed| {
-                RecordTrailers::from_values(trailer_values(parsed, RECORD_ID_TRAILER))
-            }),
+            loaded
+                .trailers()
+                .map_or_else(RecordTrailers::unreadable, |parsed| {
+                    RecordTrailers::from_values(trailer_values(parsed, RECORD_ID_TRAILER))
+                }),
         ),
         // A lightweight tag has no message: its object is the commit.
         Ok(None) => (
@@ -508,7 +515,8 @@ pub(crate) fn execute_note(bytes: &[u8]) -> Result<Vec<u8>, TagReceiptHostError>
     if bytes.len() > MAX_REQUEST_BYTES {
         return Err(TagReceiptHostError::Invalid);
     }
-    let value: Value = serde_json::from_slice(bytes).map_err(|_| TagReceiptHostError::Unreadable)?;
+    let value: Value =
+        serde_json::from_slice(bytes).map_err(|_| TagReceiptHostError::Unreadable)?;
     let request: NoteRequest =
         serde_json::from_value(value).map_err(|_| TagReceiptHostError::Invalid)?;
     if request.protocol != NOTE_REQUEST_PROTOCOL
@@ -541,7 +549,13 @@ pub(crate) fn execute_note(bytes: &[u8]) -> Result<Vec<u8>, TagReceiptHostError>
 fn ref_value(repository: &Path, reference: &str) -> Option<String> {
     git_output(
         repository,
-        &["rev-parse", "--verify", "--quiet", "--end-of-options", reference],
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            "--end-of-options",
+            reference,
+        ],
     )
     .ok()
     .and_then(|out| String::from_utf8(out).ok())
@@ -587,10 +601,7 @@ fn store_attempts(
         if let Some(remote) = ref_value(repository, REMOTE_NOTES_REF) {
             match ref_value(repository, TAG_RECEIPT_NOTES_REF) {
                 None => {
-                    if !git_ok(
-                        repository,
-                        &["update-ref", TAG_RECEIPT_NOTES_REF, &remote],
-                    ) {
+                    if !git_ok(repository, &["update-ref", TAG_RECEIPT_NOTES_REF, &remote]) {
                         return Err(TagReceiptHostError::Git);
                     }
                 }
@@ -619,7 +630,13 @@ fn store_attempts(
         }
         let existing = match git_output(
             repository,
-            &["notes", "--ref", TAG_RECEIPT_NOTES_REF, "show", &request.commit],
+            &[
+                "notes",
+                "--ref",
+                TAG_RECEIPT_NOTES_REF,
+                "show",
+                &request.commit,
+            ],
         ) {
             Ok(note) => Some(note),
             Err(GitError::NotFound) => None,
@@ -757,8 +774,11 @@ pub(crate) fn read_candidates(
     repository: &Path,
     trust: &Trust<'_>,
 ) -> Result<Vec<Candidate>, TagReceiptHostError> {
-    let listing = run_git(repository, &["notes", "--ref", TAG_RECEIPT_NOTES_REF, "list"])
-        .map_err(|_| TagReceiptHostError::Git)?;
+    let listing = run_git(
+        repository,
+        &["notes", "--ref", TAG_RECEIPT_NOTES_REF, "list"],
+    )
+    .map_err(|_| TagReceiptHostError::Git)?;
     if !listing.status.success() {
         return Err(TagReceiptHostError::Git);
     }
@@ -795,7 +815,11 @@ pub(crate) fn current_tags(
 ) -> Result<BTreeMap<String, String>, TagReceiptHostError> {
     let output = run_git(
         repository,
-        &["for-each-ref", "--format=%(refname)%00%(objectname)", "refs/tags"],
+        &[
+            "for-each-ref",
+            "--format=%(refname)%00%(objectname)",
+            "refs/tags",
+        ],
     )
     .map_err(|_| TagReceiptHostError::Git)?;
     if !output.status.success() {

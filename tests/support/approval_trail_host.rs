@@ -98,12 +98,7 @@ mod receipts {
         }
     }
 
-    fn trail_for(
-        setup: &Setup,
-        record: &str,
-        accepted: &Value,
-        verifier: FakeVerifier,
-    ) -> Value {
+    fn trail_for(setup: &Setup, record: &str, accepted: &Value, verifier: FakeVerifier) -> Value {
         let root = setup.directory.path();
         std::fs::write(
             root.join("receipt-policy.json"),
@@ -203,7 +198,14 @@ mod receipts {
 
         git(
             &setup.repo,
-            &["tag", "-f", "-a", "-m", &format!("{}\nre-signed", message(RECORD)), "approve-1"],
+            &[
+                "tag",
+                "-f",
+                "-a",
+                "-m",
+                &format!("{}\nre-signed", message(RECORD)),
+                "approve-1",
+            ],
         );
         let resigned = rev(&setup.repo, "refs/tags/approve-1");
         let changed = trail(&setup, RECORD);
@@ -257,7 +259,10 @@ mod receipts {
             .map(|entry| {
                 assert_eq!(entry["status"], "invalid_receipt");
                 assert_eq!(entry["attributed"], false);
-                assert!(entry.get("tag").is_none(), "an unverified receipt names no tag");
+                assert!(
+                    entry.get("tag").is_none(),
+                    "an unverified receipt names no tag"
+                );
                 entry["reason"].as_str().expect("reason")
             })
             .collect();
@@ -348,8 +353,9 @@ mod receipts {
         let from_check: Vec<(String, String, String)> = judged
             .iter()
             .map(|item| {
-                let line = serde_json::to_value(crate::tag_receipt_host::TagFindingLine::from(item))
-                    .expect("line");
+                let line =
+                    serde_json::to_value(crate::tag_receipt_host::TagFindingLine::from(item))
+                        .expect("line");
                 (
                     line["status"].as_str().expect("status").to_owned(),
                     line["reason"].as_str().expect("reason").to_owned(),
@@ -375,7 +381,12 @@ mod receipts {
                 "reason": "retired on purpose"
             })
         };
-        let accepted = trail_for(&setup, RECORD, &json!([entry(Some(&object))]), FakeVerifier::default());
+        let accepted = trail_for(
+            &setup,
+            RECORD,
+            &json!([entry(Some(&object))]),
+            FakeVerifier::default(),
+        );
         let listed = &accepted["entries"][0];
         assert_eq!(listed["status"], "accepted");
         assert_eq!(listed["finding"], "missing_tag");
@@ -394,7 +405,12 @@ mod receipts {
             assert_eq!(result["complete"], false);
         }
         // A null object accepts a tag that is absent.
-        let null = trail_for(&setup, RECORD, &json!([entry(None)]), FakeVerifier::default());
+        let null = trail_for(
+            &setup,
+            RECORD,
+            &json!([entry(None)]),
+            FakeVerifier::default(),
+        );
         assert_eq!(null["entries"][0]["status"], "accepted");
         assert_eq!(null["complete"], true);
 

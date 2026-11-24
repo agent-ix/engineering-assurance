@@ -870,8 +870,13 @@ struct MissingHistoryContext {
 
 fn missing_receipt_findings(
     request: &MissingRequest,
-) -> Result<(Vec<MissingReceipt>, Vec<engineering_assurance::tag_receipt::Judged>), ReceiptHostError>
-{
+) -> Result<
+    (
+        Vec<MissingReceipt>,
+        Vec<engineering_assurance::tag_receipt::Judged>,
+    ),
+    ReceiptHostError,
+> {
     let MissingHistoryContext {
         policy,
         base_commit,
@@ -1512,7 +1517,11 @@ pub(crate) fn gh_api_json(endpoint: &str) -> Result<Value, ()> {
     serde_json::from_slice(&output).map_err(|_| ())
 }
 
-pub(crate) fn git_show_base_file(repository: &Path, commit: &str, path: &str) -> Result<Vec<u8>, ()> {
+pub(crate) fn git_show_base_file(
+    repository: &Path,
+    commit: &str,
+    path: &str,
+) -> Result<Vec<u8>, ()> {
     if !is_full_object_id(commit)
         || !matches!(
             path,
@@ -1626,15 +1635,14 @@ impl ApprovalStatementReader for StatementsNotRetainedReader {
 }
 
 pub(crate) fn missing_result_is_non_failing(bytes: &[u8]) -> bool {
-    serde_json::from_slice::<MissingResultLineOwned>(bytes)
-        .is_ok_and(|result| {
-            result.protocol == MISSING_RESULT_PROTOCOL
-                && result.missing.is_empty()
-                && result
-                    .tag_findings
-                    .iter()
-                    .all(|finding| finding.status == "accepted")
-        })
+    serde_json::from_slice::<MissingResultLineOwned>(bytes).is_ok_and(|result| {
+        result.protocol == MISSING_RESULT_PROTOCOL
+            && result.missing.is_empty()
+            && result
+                .tag_findings
+                .iter()
+                .all(|finding| finding.status == "accepted")
+    })
 }
 
 /// Read or write one receipt note using the fixed notes ref.
@@ -1820,7 +1828,11 @@ pub(crate) fn git_output(repository: &Path, arguments: &[&str]) -> Result<Vec<u8
     }
 }
 
-pub(crate) fn git_with_input(repository: &Path, arguments: &[&str], input: &[u8]) -> Result<(), GitError> {
+pub(crate) fn git_with_input(
+    repository: &Path,
+    arguments: &[&str],
+    input: &[u8],
+) -> Result<(), GitError> {
     let output = git_command(repository, arguments, Some(input))?;
     if output.status.success() {
         Ok(())
@@ -2373,7 +2385,11 @@ mod tests {
         assert!(!missing_result_is_non_failing(&actual_missing));
     }
 
-    fn tag_receipt(name: &str, object: char, commit: char) -> engineering_assurance::tag_receipt::TagReceipt {
+    fn tag_receipt(
+        name: &str,
+        object: char,
+        commit: char,
+    ) -> engineering_assurance::tag_receipt::TagReceipt {
         engineering_assurance::tag_receipt::TagReceipt {
             reference: format!("refs/tags/{name}"),
             tag_object: object.to_string().repeat(40),
@@ -2443,7 +2459,10 @@ mod tests {
         assert_eq!(tag_invalid["kind"], "tag");
         assert_eq!(tag_invalid["status"], "invalid_receipt");
         assert_eq!(tag_invalid["reason"], "signature_invalid");
-        assert!(tag_invalid.get("ref").is_none(), "an untrusted receipt names no ref");
+        assert!(
+            tag_invalid.get("ref").is_none(),
+            "an untrusted receipt names no ref"
+        );
         let tag_missing = &line["tag_findings"][0];
         assert_eq!(tag_missing["status"], "missing_tag");
         assert_eq!(tag_missing["ref"], "refs/tags/approve-2");
@@ -2457,12 +2476,8 @@ mod tests {
             let result = render_missing(&[], &[], &[judged(finding, false)]).unwrap();
             assert!(!missing_result_is_non_failing(&result));
         }
-        let accepted = render_missing(
-            &[],
-            &[],
-            &[judged(missing, true), judged(no_receipt, true)],
-        )
-        .unwrap();
+        let accepted =
+            render_missing(&[], &[], &[judged(missing, true), judged(no_receipt, true)]).unwrap();
         assert!(missing_result_is_non_failing(&accepted));
         let accepted: Value = serde_json::from_slice(&accepted).unwrap();
         assert_eq!(accepted["tag_findings"][0]["status"], "accepted");

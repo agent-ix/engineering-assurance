@@ -134,9 +134,8 @@ fn a_receipt_writer_with_a_source_ref_prefix_is_a_tag_receipt_identity() {
         .as_array_mut()
         .expect("identities")
         .push(tag_entry(".github/workflows/tag-receipt.yml"));
-    let document =
-        WorkflowIdentityDocument::parse(&serde_json::to_vec(&both).expect("bytes"))
-            .expect("one entry of each kind is valid");
+    let document = WorkflowIdentityDocument::parse(&serde_json::to_vec(&both).expect("bytes"))
+        .expect("one entry of each kind is valid");
     let signers = document.tag_receipt_signers(TransparencyRequirement::PublicLog);
     assert_eq!(signers.len(), 1, "only the prefix entry signs tag receipts");
     assert_eq!(

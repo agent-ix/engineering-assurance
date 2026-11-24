@@ -103,7 +103,10 @@ fn forged_tag(repo: &Path, name: &str, message: &[u8]) {
     std::io::Write::write_all(&mut child.stdin.take().expect("stdin"), &object).expect("write");
     let output = child.wait_with_output().expect("output");
     let id = String::from_utf8(output.stdout).expect("utf-8");
-    git(repo, &["update-ref", &format!("refs/tags/{name}"), id.trim()]);
+    git(
+        repo,
+        &["update-ref", &format!("refs/tags/{name}"), id.trim()],
+    );
 }
 
 pub(crate) fn bundle_of(payload: &[u8]) -> Value {
@@ -208,7 +211,12 @@ fn record(
     protected: &Protected,
     signer: &FakeSigner,
 ) -> Result<Value, TagReceiptHostError> {
-    let request = record_request(repo, tag, &rev(repo, &format!("refs/tags/{tag}")), 1_700_000_000);
+    let request = record_request(
+        repo,
+        tag,
+        &rev(repo, &format!("refs/tags/{tag}")),
+        1_700_000_000,
+    );
     record_with(&request, protected, signer, &AllPublic)
         .map(|line| serde_json::from_slice(&line).expect("json line"))
 }
@@ -235,7 +243,8 @@ fn a_prefix_tag_yields_one_signed_statement_for_the_pushed_tag_object() {
         None,
     );
     let signer = FakeSigner::default();
-    let result = record(&repo, "approve-1", &protected(Some(POLICY), true), &signer).expect("receipt");
+    let result =
+        record(&repo, "approve-1", &protected(Some(POLICY), true), &signer).expect("receipt");
     assert_eq!(result["status"], "signed");
     assert_eq!(result["commit"], rev(&repo, "HEAD"));
     let statement = statement_of(&result);
@@ -274,9 +283,17 @@ fn a_prefix_tag_yields_one_signed_statement_for_the_pushed_tag_object() {
     assert_eq!(statement["predicate"]["commit"], rev(&repo, "HEAD"));
     // A lightweight tag's object is the commit itself.
     git(&repo, &["tag", "approve-light"]);
-    let light = record(&repo, "approve-light", &protected(Some(POLICY), true), &signer)
-        .expect("lightweight receipt");
-    assert_eq!(statement_of(&light)["predicate"]["tag_object"], rev(&repo, "HEAD"));
+    let light = record(
+        &repo,
+        "approve-light",
+        &protected(Some(POLICY), true),
+        &signer,
+    )
+    .expect("lightweight receipt");
+    assert_eq!(
+        statement_of(&light)["predicate"]["tag_object"],
+        rev(&repo, "HEAD")
+    );
     assert_eq!(statement_of(&light)["predicate"]["record_ids"], json!([]));
 }
 
@@ -313,13 +330,23 @@ fn no_prefix_no_member_a_bad_member_and_a_non_utf8_name_end_as_specified() {
     // A tag name that is not valid UTF-8 fails the run.
     let mut request = record_request(&repo, "approve-1", &rev(&repo, "refs/tags/approve-1"), 1);
     request.tag_hex = "617070726f76652dff".to_owned();
-    let error = record_with(&request, &protected(Some(POLICY), true), &signer, &AllPublic)
-        .expect_err("not UTF-8");
+    let error = record_with(
+        &request,
+        &protected(Some(POLICY), true),
+        &signer,
+        &AllPublic,
+    )
+    .expect_err("not UTF-8");
     assert_eq!(error.code(), "tag_receipt_ref_name_invalid");
     // A tag object that is not the pushed one is an input mismatch.
     let request = record_request(&repo, "approve-1", &"0".repeat(40), 1);
-    let error = record_with(&request, &protected(Some(POLICY), true), &signer, &AllPublic)
-        .expect_err("mismatch");
+    let error = record_with(
+        &request,
+        &protected(Some(POLICY), true),
+        &signer,
+        &AllPublic,
+    )
+    .expect_err("mismatch");
     assert_eq!(error.code(), "tag_receipt_input_mismatch");
 }
 
@@ -330,7 +357,8 @@ fn pushed_at_is_the_platform_push_time_never_the_tagger_date() {
     let repo = repository(directory.path());
     tag_message(&repo, "approve-1", "m", Some("2099-01-01T00:00:00+0000"));
     let signer = FakeSigner::default();
-    let result = record(&repo, "approve-1", &protected(Some(POLICY), true), &signer).expect("receipt");
+    let result =
+        record(&repo, "approve-1", &protected(Some(POLICY), true), &signer).expect("receipt");
     assert_eq!(
         statement_of(&result)["predicate"]["pushed_at"],
         "2023-11-14T22:13:20Z"
@@ -345,9 +373,9 @@ fn record_ids_are_copied_in_message_order_and_unreadable_trailers_carry_none() {
     let signer = FakeSigner::default();
     let policy = protected(Some(POLICY), true);
     let ids_of = |name: &str| {
-        let predicate = statement_of(&record(&repo, name, &policy, &signer).expect("receipt"))
-            ["predicate"]
-            .clone();
+        let predicate =
+            statement_of(&record(&repo, name, &policy, &signer).expect("receipt"))["predicate"]
+                .clone();
         (
             predicate["trailers_readable"].clone(),
             predicate["record_ids"].clone(),
@@ -359,7 +387,10 @@ fn record_ids_are_copied_in_message_order_and_unreadable_trailers_carry_none() {
         "Approve\n\nApproved-Record-Id: rec-b\nApproved-Record-Id: rec-a",
         None,
     );
-    assert_eq!(ids_of("approve-two"), (json!(true), json!(["rec-b", "rec-a"])));
+    assert_eq!(
+        ids_of("approve-two"),
+        (json!(true), json!(["rec-b", "rec-a"]))
+    );
     tag_message(&repo, "approve-none", "Approve with no trailer", None);
     assert_eq!(ids_of("approve-none"), (json!(true), json!([])));
     forged_tag(&repo, "approve-nul", b"Approved-Record-Id: rec-1\n\0\n");
@@ -404,8 +435,9 @@ fn a_public_write_is_leak_checked_and_a_private_one_never_uses_the_public_log() 
     assert_eq!(error.code(), "tag_receipt_leak_check_refused");
     assert_eq!(signer.public_calls.get() + signer.private_calls.get(), 0);
     // A public ticket team passes the check; the public path signs.
-    let teams = Protected::from_policy_bytes(Some(POLICY.as_bytes()), false, vec!["PRIV".to_owned()])
-        .expect("policy");
+    let teams =
+        Protected::from_policy_bytes(Some(POLICY.as_bytes()), false, vec!["PRIV".to_owned()])
+            .expect("policy");
     record(&repo, "approve-secret", &teams, &signer).expect("a public team passes");
     assert_eq!(signer.public_calls.get(), 1);
     record(&repo, "approve-fine", &public, &signer).expect("an opaque id passes");
@@ -417,7 +449,10 @@ fn a_public_write_is_leak_checked_and_a_private_one_never_uses_the_public_log() 
     let private = protected(Some(POLICY), true);
     let working = FakeSigner::default();
     record(&repo, "approve-secret", &private, &working).expect("private receipt");
-    assert_eq!((working.private_calls.get(), working.public_calls.get()), (1, 0));
+    assert_eq!(
+        (working.private_calls.get(), working.public_calls.get()),
+        (1, 0)
+    );
     let unavailable = FakeSigner {
         fails: true,
         ..FakeSigner::default()
@@ -463,7 +498,10 @@ fn remote_and_clone(root: &Path, name: &str) -> (PathBuf, PathBuf) {
         git(&remote, &["init", "-q", "--bare", "-b", "main"]);
     }
     let clone = root.join(name);
-    git(root, &["clone", "-q", remote.to_str().expect("utf-8"), name]);
+    git(
+        root,
+        &["clone", "-q", remote.to_str().expect("utf-8"), name],
+    );
     if rev_opt(&clone, "HEAD").is_none() {
         git(&clone, &["commit", "-q", "--allow-empty", "-m", "base"]);
         git(&clone, &["push", "-q", "origin", "main"]);
@@ -480,10 +518,12 @@ fn rev_opt(repo: &Path, name: &str) -> Option<String> {
         .env_remove("GIT_DIR")
         .output()
         .expect("git");
-    output
-        .status
-        .success()
-        .then(|| String::from_utf8(output.stdout).expect("utf-8").trim().to_owned())
+    output.status.success().then(|| {
+        String::from_utf8(output.stdout)
+            .expect("utf-8")
+            .trim()
+            .to_owned()
+    })
 }
 
 fn remote_note(remote: &Path, commit: &str) -> Vec<String> {
@@ -513,7 +553,10 @@ fn the_same_object_is_stored_once_and_a_new_object_adds_an_entry_to_the_tag_note
     let commit = rev(&clone, "HEAD");
     let first = statement_bundle("refs/tags/approve-1", &"a".repeat(40), &commit);
     let stored = execute_note(&note_request(&clone, &commit, &first)).expect("stored");
-    assert_eq!(serde_json::from_slice::<Value>(&stored).expect("json")["status"], "stored");
+    assert_eq!(
+        serde_json::from_slice::<Value>(&stored).expect("json")["status"],
+        "stored"
+    );
     let one = remote_note(&remote, &commit);
     assert_eq!(one.len(), 1);
     // Deleted and pushed again at the same object id: one entry.
@@ -565,7 +608,10 @@ fn an_oversized_note_and_six_rejected_pushes_write_nothing() {
     assert_eq!(error.code(), "tag_receipt_note_conflict");
     let rejections = std::fs::read_to_string(remote.join("rejections")).expect("count");
     assert_eq!(rejections.lines().count(), 6);
-    assert!(rev_opt(&remote, TAG_RECEIPT_NOTES_REF).is_none(), "no partial note");
+    assert!(
+        rev_opt(&remote, TAG_RECEIPT_NOTES_REF).is_none(),
+        "no partial note"
+    );
     assert!(
         rev_opt(&clone, TAG_RECEIPT_NOTES_REF).is_none(),
         "no partial local note"
@@ -573,9 +619,20 @@ fn an_oversized_note_and_six_rejected_pushes_write_nothing() {
     std::fs::remove_file(&hook).expect("remove hook");
 
     // A note that would exceed 1 MiB is refused and nothing is written.
-    let filler: String = (0..100_000).map(|index| format!("{{\"filler\":{index}}}\n")).collect();
+    let filler: String = (0..100_000)
+        .map(|index| format!("{{\"filler\":{index}}}\n"))
+        .collect();
     let mut child = Command::new("git")
-        .args(["notes", "--ref", TAG_RECEIPT_NOTES_REF, "add", "-f", "-F", "-", &commit])
+        .args([
+            "notes",
+            "--ref",
+            TAG_RECEIPT_NOTES_REF,
+            "add",
+            "-f",
+            "-F",
+            "-",
+            &commit,
+        ])
         .current_dir(&clone)
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
@@ -641,7 +698,12 @@ fn two_runs_for_two_tags_on_one_commit_both_end_with_their_entries() {
     assert_eq!(
         refs,
         BTreeSet::from(
-            ["refs/tags/approve-0", "refs/tags/approve-1", "refs/tags/approve-2"].map(str::to_owned)
+            [
+                "refs/tags/approve-0",
+                "refs/tags/approve-1",
+                "refs/tags/approve-2"
+            ]
+            .map(str::to_owned)
         )
     );
 }
@@ -689,7 +751,10 @@ impl BundleVerifier for FakeVerifier {
             .unwrap_or("refs/heads/main")
             .to_owned();
         Ok(Some(AuthenticatedWorkflowClaims {
-            source_repository_uri: Some(format!("{}{}github.com/{SOURCE_REPOSITORY}", "https:", "//")),
+            source_repository_uri: Some(format!(
+                "{}{}github.com/{SOURCE_REPOSITORY}",
+                "https:", "//"
+            )),
             build_config_uri: Some(format!(
                 "{}{}github.com/{SOURCE_REPOSITORY}/{SOURCE_WORKFLOW}@{reference}",
                 "https:", "//"
@@ -706,7 +771,8 @@ impl VerifierSource for FakeSource {
     fn attempts(&self) -> Result<Vec<Attempt<'_>>, TagReceiptHostError> {
         Ok(vec![Attempt {
             verifier: &self.0,
-            transparency: engineering_assurance::attestation_signing::TransparencyRequirement::PublicLog,
+            transparency:
+                engineering_assurance::attestation_signing::TransparencyRequirement::PublicLog,
         }])
     }
 }
@@ -717,19 +783,19 @@ pub(crate) fn identities() -> WorkflowIdentityDocument {
 
 pub(crate) fn identities_json() -> Value {
     json!({
-            "protocol": "engineering-assurance.workflow-identities/v1",
-            "identities": [{
-                "role": "receipt_writer",
-                "issuer": concat!("https:", "//token.actions.githubusercontent.com"),
-                "repository": "fictional/engineering-assurance",
-                "workflow_path": ".github/workflows/tag-receipt.yml",
-                "ref": "refs/heads/main",
-                "source_repository": SOURCE_REPOSITORY,
-                "source_workflow_path": SOURCE_WORKFLOW,
-                "event": "push",
-                "source_ref_prefix": "refs/tags/approve-"
-            }]
-        })
+        "protocol": "engineering-assurance.workflow-identities/v1",
+        "identities": [{
+            "role": "receipt_writer",
+            "issuer": concat!("https:", "//token.actions.githubusercontent.com"),
+            "repository": "fictional/engineering-assurance",
+            "workflow_path": ".github/workflows/tag-receipt.yml",
+            "ref": "refs/heads/main",
+            "source_repository": SOURCE_REPOSITORY,
+            "source_workflow_path": SOURCE_WORKFLOW,
+            "event": "push",
+            "source_ref_prefix": "refs/tags/approve-"
+        }]
+    })
 }
 
 pub(crate) fn policy(accepted: &Value) -> TagReceiptPolicy {
@@ -784,7 +850,16 @@ pub(crate) fn add_line(repo: &Path, commit: &str, line: &str) {
     text.push_str(line);
     text.push('\n');
     let mut child = Command::new("git")
-        .args(["notes", "--ref", TAG_RECEIPT_NOTES_REF, "add", "-f", "-F", "-", commit])
+        .args([
+            "notes",
+            "--ref",
+            TAG_RECEIPT_NOTES_REF,
+            "add",
+            "-f",
+            "-F",
+            "-",
+            commit,
+        ])
         .current_dir(repo)
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
@@ -806,11 +881,16 @@ fn findings_of(repo: &Path, accepted: &Value, invalid: &[&Value]) -> Vec<(Findin
         invalid: invalid.iter().map(|bundle| bundle.to_string()).collect(),
         ..FakeVerifier::default()
     };
-    repository_findings(repo, &identities(), &policy(accepted), &FakeSource(verifier))
-        .expect("findings")
-        .iter()
-        .map(|judged| (judged.finding.status(), judged.accepted.is_some()))
-        .collect()
+    repository_findings(
+        repo,
+        &identities(),
+        &policy(accepted),
+        &FakeSource(verifier),
+    )
+    .expect("findings")
+    .iter()
+    .map(|judged| (judged.finding.status(), judged.accepted.is_some()))
+    .collect()
 }
 
 #[test]
@@ -872,7 +952,14 @@ fn a_bad_signature_an_unparsable_line_and_an_unlisted_signer_are_invalid_not_mis
     let directory = tempfile::tempdir().expect("tempdir");
     let repo = repository(directory.path());
     let commit = rev(&repo, "HEAD");
-    let tampered = write_receipt(&repo, "refs/tags/approve-1", &"a".repeat(40), &commit, &[], true);
+    let tampered = write_receipt(
+        &repo,
+        "refs/tags/approve-1",
+        &"a".repeat(40),
+        &commit,
+        &[],
+        true,
+    );
     add_line(&repo, &commit, "this line is not a bundle");
     // The tag the tampered receipt names is absent, yet it is not judged missing.
     let verifier = FakeVerifier {

@@ -455,11 +455,11 @@ fn tag_receipt_workflow_has_the_declared_trigger_jobs_permissions_and_trigger_in
     let check = record_steps[0]["run"].as_str().expect("check step");
     assert!(check.contains("tag_receipt_input_mismatch"));
     assert!(check.contains("$INPUT_TAG\" != \"$TRIGGER_TAG"));
-    assert!(
-        record_steps[1..]
-            .iter()
-            .all(|step| step["run"].as_str().is_none_or(|run| !run.contains("tag_receipt_input_mismatch"))),
-    );
+    assert!(record_steps[1..].iter().all(|step| {
+        step["run"]
+            .as_str()
+            .is_none_or(|run| !run.contains("tag_receipt_input_mismatch"))
+    }),);
     // The tag name, tag object id and push time come from the trigger context.
     let sign = record_steps
         .iter()

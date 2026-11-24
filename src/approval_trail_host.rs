@@ -34,13 +34,13 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::approval_verify_host::{Assessment, GitsignEcho, Trust, assess};
-use crate::tag_receipt_host::{
-    ProductionVerifiers, Trust as TagTrust, VerifierSource, current_tags, read_candidates,
-};
 use crate::signature_verify_host::{
     AllowedSignersSnapshot, GitsignRequest, ListedRef, LoadedGitsign, RegistryFailure,
     capture_allowed_signers, list_tags, load_gitsign, load_listed_tag, validate_gitsign,
     verify_loaded_tag,
+};
+use crate::tag_receipt_host::{
+    ProductionVerifiers, Trust as TagTrust, VerifierSource, current_tags, read_candidates,
 };
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.approval-trail-request/v1";
@@ -540,7 +540,8 @@ fn tag_section(
     source: &dyn VerifierSource,
 ) -> Result<TagSection, ApprovalTrailError> {
     let request = &parsed.request;
-    let trust = TagTrust::new(&context.identities, source).map_err(|_| ApprovalTrailError::Repository)?;
+    let trust =
+        TagTrust::new(&context.identities, source).map_err(|_| ApprovalTrailError::Repository)?;
     let candidates =
         read_candidates(&request.repository, &trust).map_err(|_| ApprovalTrailError::Repository)?;
     let tags = current_tags(&request.repository).map_err(|_| ApprovalTrailError::Repository)?;
