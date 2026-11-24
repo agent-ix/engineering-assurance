@@ -59,8 +59,10 @@ is not trusted. The list also covers tags that predate adoption, such as existin
 
 Shape of the `receipt-missing` output for tags. Every finding of `receipt-missing` carries `kind`, the string `change` for
 a commit finding of FR-077 and `tag` for a finding of this requirement, so a tag `invalid_receipt` is told from a commit
-`invalid_receipt`. A tag finding has `kind` `tag`, `status` (`missing_tag`, `tag_no_receipt`, `invalid_receipt` or
-`accepted`), `ref`, and, as the status allows, `tag_object`, `reason`, `current_object`, `commit`, `finding`, `accepted_by` and
+`invalid_receipt`. A tag finding has `kind` `tag` and `status` (`missing_tag`, `tag_no_receipt`, `invalid_receipt` or
+`accepted`). A `missing_tag` or `tag_no_receipt` finding carries `ref`; an `invalid_receipt` carries only its note
+`commit` and `reason` from the untrusted candidate and has no `ref` or tag name. Findings carry, as the status allows,
+`tag_object`, `current_object`, `commit`, `finding`, `accepted_by` and
 `accepted_reason`. The workflow fails when any finding of `kind` `tag` has a status other than `accepted`, in
 addition to the commit findings of FR-077.
 
@@ -82,6 +84,7 @@ commands (they write nothing; the evidence is the receipt set CI wrote).
 - The tag comparison SHALL judge each receipt on its own object id.
 - The tag comparison SHALL NOT drop an earlier receipt because a later receipt exists for the same ref.
 - The tag comparison SHALL list a receipt that does not verify as `invalid_receipt` with its reason.
+- An `invalid_receipt` finding SHALL carry its note commit and reason and SHALL NOT carry a ref or tag name, because the candidate content is untrusted.
 - The tag comparison SHALL NOT judge a receipt that does not verify as missing.
 - The tag comparison SHALL list each current tag that starts with a policy prefix and has no verified receipt for its current object id as `tag_no_receipt`.
 - The tag comparison SHALL read an absent notes ref as an empty receipt set.
@@ -111,6 +114,7 @@ commands (they write nothing; the evidence is the receipt set CI wrote).
 | FR-082-AC-10 | An `accepted_tags` entry naming a re-signed tag's earlier `ref` and `tag_object` makes that `tag_changed` finding `accepted` with `finding` `missing_tag`, `accepted_by` and `accepted_reason` and leaves the workflow green; an entry with the same ref and another object id matches nothing; a null entry accepts a `tag_absent` finding; no entry accepts an `invalid_receipt`. | Test |
 | FR-082-AC-12 | An unreceipted tag accepted by an entry naming its current object id is `accepted` with `finding` `tag_no_receipt`; after the tag is moved or re-created at another object id the same entry matches nothing and the tag is a `tag_no_receipt` finding again; an entry with a null `tag_object` matches no `tag_no_receipt` and no `tag_changed` finding. | Test |
 | FR-082-AC-11 | A `receipt-missing` result gives every finding `kind`, so a tag `invalid_receipt` has `kind` `tag` and a commit `invalid_receipt` has `kind` `change`, and a tag finding holds the members listed in the description. | Test |
+| FR-082-AC-13 | An `invalid_receipt` tag finding carries the note commit and reason and omits `ref` and tag name; verified `missing_tag` and `tag_no_receipt` findings continue to carry their refs. | Test |
 
 ## Dependencies
 

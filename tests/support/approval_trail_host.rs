@@ -134,6 +134,34 @@ mod receipts {
         trail_for(setup, record, &json!([]), FakeVerifier::default())
     }
 
+    fn trail_without_tag_receipt_policy(setup: &Setup, record: &str) -> Value {
+        let root = setup.directory.path();
+        std::fs::write(
+            root.join("receipt-policy.json"),
+            json!({"protocol": "engineering-assurance.receipt-policy/v1"}).to_string(),
+        )
+        .expect("policy");
+        let request = json!({
+            "protocol": REQUEST_PROTOCOL,
+            "repository": setup.repo.display().to_string(),
+            "record_id": record,
+            "record_digest": "d-1",
+            "allowed_signers": root.join("allowed_signers").display().to_string(),
+            "tag_receipts": {
+                "workflow_identities": root.join("workflow-identities.json").display().to_string(),
+                "receipt_policy": root.join("receipt-policy.json").display().to_string(),
+            },
+        });
+        let line = execute_with(
+            request.to_string().as_bytes(),
+            Format::Json,
+            Duration::from_secs(60),
+            &FakeSource(FakeVerifier::default()),
+        )
+        .expect("a trail");
+        serde_json::from_slice(&line).expect("json")
+    }
+
     fn statuses(result: &Value) -> Vec<String> {
         result["entries"]
             .as_array()
@@ -263,6 +291,10 @@ mod receipts {
                     entry.get("tag").is_none(),
                     "an unverified receipt names no tag"
                 );
+                assert!(
+                    entry.get("ref").is_none(),
+                    "an unverified receipt exposes no untrusted ref"
+                );
                 entry["reason"].as_str().expect("reason")
             })
             .collect();
@@ -310,6 +342,72 @@ mod receipts {
             tags,
             BTreeSet::from(["approve-blind".to_owned(), "approve-other".to_owned()])
         );
+    }
+
+    #[test]
+    #[trace("FR-043-AC-28", "FR-043-AC-30", "FR-082-AC-12")]
+    fn an_unreceipted_policy_tag_for_another_record_is_visible_and_can_be_accepted() {
+        let setup = setup();
+        tag_message(
+            &setup.repo,
+            "approve-other",
+            &message("another-record"),
+            None,
+        );
+        let object = rev(&setup.repo, "refs/tags/approve-other");
+
+        let missing = trail(&setup, RECORD);
+        assert_eq!(missing["entries"].as_array().expect("entries").len(), 1);
+        let finding = &missing["entries"][0];
+        assert_eq!(finding["tag"], "approve-other");
+        assert_eq!(finding["object"], object);
+        assert_eq!(finding["status"], "tag_no_receipt");
+        assert_eq!(finding["tag_receipt"], "none");
+        assert!(finding.get("reason").is_none());
+        assert!(finding.get("commit").is_none());
+        assert_eq!(missing["complete"], false);
+
+        let accepted = trail_for(
+            &setup,
+            RECORD,
+            &json!([{
+                "ref": "refs/tags/approve-other",
+                "tag_object": object,
+                "accepted_by": "alice",
+                "reason": "existing tag predates receipts"
+            }]),
+            FakeVerifier::default(),
+        );
+        let finding = &accepted["entries"][0];
+        assert_eq!(finding["status"], "accepted");
+        assert_eq!(finding["finding"], "tag_no_receipt");
+        assert_eq!(finding["tag_receipt"], "none");
+        assert_eq!(finding["accepted_by"], "alice");
+        assert_eq!(finding["accepted_reason"], "existing tag predates receipts");
+        assert_eq!(accepted["complete"], true);
+    }
+
+    #[test]
+    #[trace("FR-043-AC-32", "FR-082-AC-5")]
+    fn a_policy_without_tag_receipts_is_empty_but_existing_receipts_are_compared() {
+        let setup = setup();
+        write_receipt(
+            &setup.repo,
+            "refs/tags/approve-deleted",
+            &"a".repeat(40),
+            &setup.commit,
+            &[RECORD],
+            true,
+        );
+
+        let result = trail_without_tag_receipt_policy(&setup, RECORD);
+        assert_eq!(result["tag_receipts"]["checked"], true);
+        assert_eq!(result["tag_receipts"]["considered"], 1);
+        assert_eq!(result["entries"].as_array().expect("entries").len(), 1);
+        assert_eq!(result["entries"][0]["status"], "missing_tag");
+        assert_eq!(result["entries"][0]["reason"], "tag_absent");
+        assert_eq!(result["entries"][0]["tag"], "approve-deleted");
+        assert_eq!(result["complete"], false);
     }
 
     #[test]

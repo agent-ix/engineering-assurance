@@ -85,6 +85,9 @@ A note on a public repository is a public write: the workflow runs the leak chec
 [FR-057](./FR-057-fail-closed-pre-publish-leak-check.md) on the text members of the statement first, and a refusal
 fails the run with `tag_receipt_leak_check_refused` and writes no receipt.
 
+A tag receipt verifier does not receive repository visibility, so it tries the public-good trust root with log inclusion
+required first, then the GitHub private-instance trust root with timestamp-only evidence. For each attempt it checks the
+receipt against every `receipt_writer` identity carrying `source_ref_prefix`; the first complete verification succeeds.
 A tag receipt verifies when the signature is valid through the delegated stack ([NFR-010](../non-functional/NFR-010-no-cryptography-of-our-own.md)),
 the signer matches a `receipt_writer` entry of the workflow-identity policy that carries `source_ref_prefix` on every
 member of [FR-064](./FR-064-verify-approval-statement-with-workflow-identity-policy.md), the certificate's source ref

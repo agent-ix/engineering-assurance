@@ -165,7 +165,7 @@ enum ReceiptStateKind {
 /// An entry of a receipt whose tag is absent or changed, or that does not verify.
 #[derive(Serialize)]
 struct FindingEntry {
-    /// `missing_tag`, `invalid_receipt` or `accepted`.
+    /// `missing_tag`, `tag_no_receipt`, `invalid_receipt` or `accepted`.
     status: &'static str,
     /// The status an acceptance replaced.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -176,10 +176,15 @@ struct FindingEntry {
     /// The receipted object id.
     #[serde(skip_serializing_if = "Option::is_none")]
     object: Option<String>,
-    reason: FindingEntryReason,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<FindingEntryReason>,
+    /// `none` for a current prefix-matching tag without a receipt.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tag_receipt: Option<ReceiptStateKind>,
     #[serde(skip_serializing_if = "Option::is_none")]
     current_object: Option<String>,
-    commit: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    commit: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pushed_at: Option<String>,
     /// False only for a receipt whose trailers were not read, and always for an
@@ -219,7 +224,7 @@ impl TrailEntry {
                 claimed_at: None,
                 tag: entry.tag.as_deref(),
                 object: entry.object.as_deref().unwrap_or(""),
-                commit: &entry.commit,
+                commit: entry.commit.as_deref().unwrap_or(""),
             },
         }
     }
@@ -238,8 +243,9 @@ impl FindingEntry {
             Some(_) => ("accepted", Some(judged.finding.status())),
             None => (
                 match judged.finding.status() {
+                    FindingStatus::MissingTag => "missing_tag",
+                    FindingStatus::TagNoReceipt => "tag_no_receipt",
                     FindingStatus::InvalidReceipt => "invalid_receipt",
-                    _ => "missing_tag",
                 },
                 None,
             ),
@@ -260,9 +266,10 @@ impl FindingEntry {
                         .to_owned(),
                 ),
                 object: Some(receipt.tag_object.clone()),
-                reason: FindingEntryReason::Missing(*reason),
+                reason: Some(FindingEntryReason::Missing(*reason)),
+                tag_receipt: None,
                 current_object: current_object.clone(),
-                commit: receipt.commit.clone(),
+                commit: Some(receipt.commit.clone()),
                 pushed_at: Some(receipt.pushed_at.clone()),
                 attributed: receipt.trailers_readable,
                 accepted_by: None,
@@ -273,16 +280,37 @@ impl FindingEntry {
                 finding,
                 tag: None,
                 object: None,
-                reason: FindingEntryReason::Invalid(invalid.reason),
+                reason: Some(FindingEntryReason::Invalid(invalid.reason)),
+                tag_receipt: None,
                 current_object: None,
-                commit: invalid.commit.clone(),
+                commit: Some(invalid.commit.clone()),
                 pushed_at: None,
                 attributed: false,
                 accepted_by: None,
                 accepted_reason: None,
             },
-            // An unreceipted present tag is the `tag_receipt` of its own entry.
-            TagFinding::TagNoReceipt { .. } => unreachable!("filtered by the caller"),
+            TagFinding::TagNoReceipt {
+                reference,
+                current_object,
+            } => Self {
+                status,
+                finding,
+                tag: Some(
+                    reference
+                        .strip_prefix("refs/tags/")
+                        .unwrap_or(reference)
+                        .to_owned(),
+                ),
+                object: Some(current_object.clone()),
+                reason: None,
+                tag_receipt: Some(ReceiptStateKind::None),
+                current_object: None,
+                commit: None,
+                pushed_at: None,
+                attributed: true,
+                accepted_by: None,
+                accepted_reason: None,
+            },
         };
         if let Some(acceptance) = &judged.accepted {
             entry.accepted_by = Some(acceptance.accepted_by.clone());
@@ -587,9 +615,19 @@ fn tag_section(
         out.push(TrailEntry::Tag(Box::new(entry)));
     }
     for finding in &judged {
-        // An unreceipted present tag is the `tag_receipt` of its own entry.
-        if matches!(finding.finding, TagFinding::TagNoReceipt { .. }) {
-            continue;
+        if let TagFinding::TagNoReceipt {
+            reference,
+            current_object,
+        } = &finding.finding
+        {
+            let name = reference.strip_prefix("refs/tags/").unwrap_or(reference);
+            let already_in_approval_entries = out.iter().any(|entry| match entry {
+                TrailEntry::Tag(entry) => entry.tag == name && entry.object == *current_object,
+                TrailEntry::Finding(_) => false,
+            });
+            if already_in_approval_entries {
+                continue;
+            }
         }
         complete &= !finding.is_open();
         out.push(TrailEntry::Finding(FindingEntry::new(finding)));
