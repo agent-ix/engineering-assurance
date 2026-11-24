@@ -871,3 +871,96 @@ fn tc_361_invalid_requests_and_repositories_are_machine_errors() {
         "approval_trail_repository_unavailable"
     );
 }
+
+/// `sha256:` and the lowercase hexadecimal SHA-256 of `bytes`, from `sha256sum`.
+fn sha256_of(bytes: &[u8]) -> String {
+    let mut child = Command::new("sha256sum")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("sha256sum must start");
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(bytes)
+        .expect("input");
+    let output = child.wait_with_output().expect("output");
+    let text = String::from_utf8(output.stdout).expect("utf-8");
+    format!("sha256:{}", text.split_whitespace().next().expect("digest"))
+}
+
+#[test]
+#[trace("TC-1059", "FR-043-AC-26", "FR-043-AC-27")]
+fn tc_1059_the_trail_trust_is_read_once_and_each_entry_carries_the_trusted_time_members() {
+    let fixture = fixture();
+    let repo = fixture.repo();
+    fs::create_dir_all(repo.join("trust")).expect("trust dir");
+    fs::copy(fixture.allowed(), repo.join("trust/allowed_signers")).expect("copy");
+    git(&repo, &["add", "trust/allowed_signers"]);
+    git(&repo, &["commit", "-q", "-m", "mapping in force"]);
+    git(&repo, &["tag", "pin"]);
+    let date = "2026-05-01T09:00:00+0000";
+    signed_tag(&fixture, "a", "v-ok", &good("approved"), date);
+    signed_tag(&fixture, "b", "v-untrusted", &good("approved"), date);
+    let mapping = fs::read(fixture.allowed()).expect("mapping");
+    let commit = git(&repo, &["rev-parse", "pin^{commit}"]).trim().to_owned();
+    let git_version = String::from_utf8(
+        Command::new("git")
+            .arg("--version")
+            .output()
+            .expect("git")
+            .stdout,
+    )
+    .expect("utf-8");
+
+    let mut body = request(&fixture);
+    body["allowed_signers"] = json!("pin:trust/allowed_signers");
+    let result = trail_of(&body);
+    let trust = &result["trust"];
+    assert_eq!(trust["allowed_signers"], "pin:trust/allowed_signers");
+    assert_eq!(trust["allowed_signers_sha256"], sha256_of(&mapping));
+    assert_eq!(trust["allowed_signers_commit"], commit);
+    assert_eq!(trust["ea_version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(trust["git_version"], git_version.trim_end_matches('\n'));
+    let by_path = trail(&fixture);
+    assert!(by_path["trust"].get("allowed_signers_commit").is_none());
+    assert_eq!(
+        by_path["trust"]["allowed_signers_sha256"],
+        trust["allowed_signers_sha256"]
+    );
+
+    let approved = entry(&result, "v-ok");
+    assert_eq!(approved["status"], "approved", "{approved}");
+    assert_eq!(approved["trusted_at_missing"], "ssh_signature");
+    for member in ["trusted_at", "trusted_at_source", "time_skew"] {
+        assert!(approved.get(member).is_none(), "{member}: {approved}");
+    }
+    let untrusted = entry(&result, "v-untrusted");
+    assert_eq!(untrusted["status"], "untrusted_signer", "{untrusted}");
+    for member in [
+        "trusted_at",
+        "trusted_at_source",
+        "trusted_at_missing",
+        "time_skew",
+    ] {
+        assert!(untrusted.get(member).is_none(), "{member}: {untrusted}");
+    }
+
+    // A source that cannot be read is refused or leaves no trail, never a trail
+    // with a partial trust.
+    let mut unresolved = request(&fixture);
+    unresolved["allowed_signers"] = json!("missing-revision:trust/allowed_signers");
+    let output = run_command("approval-trail", unresolved.to_string().as_bytes(), &[]);
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    let error: Value = serde_json::from_slice(&output.stdout).expect("machine error");
+    assert_eq!(error["code"], "approval_trail_allowed_signers_invalid");
+    let plain = fixture.root().join("plain");
+    fs::create_dir(&plain).expect("plain directory");
+    let mut unavailable = body;
+    unavailable["repository"] = json!(plain.display().to_string());
+    let output = run_command("approval-trail", unavailable.to_string().as_bytes(), &[]);
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    let error: Value = serde_json::from_slice(&output.stdout).expect("machine error");
+    assert_eq!(error["code"], "approval_trail_repository_unavailable");
+}

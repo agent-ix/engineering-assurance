@@ -1620,3 +1620,73 @@ fn tc_1048_the_gitsign_inputs_are_refused_with_the_release_codes() {
     assert_eq!(trust["identity_registry"], "registry:registry.json");
     assert_eq!(trust["identity_registry_commit"], registry_commit);
 }
+
+#[test]
+#[trace("TC-1060", "FR-047-AC-15", "FR-047-AC-16")]
+fn tc_1060_every_verdict_keeps_the_trust_identity_of_the_run() {
+    let fixture = fixture();
+    fs::create_dir_all(fixture.repo().join("trust")).expect("trust dir");
+    let mapping = fs::read_to_string(fixture.allowed()).expect("mapping");
+    let pin_commit = commit_files(&fixture, &[("trust/allowed_signers", &mapping)], "mapping");
+    git(&fixture.repo(), None, &["tag", "pin"]);
+    standard(&fixture);
+    let mut committed = request(&fixture, "v1");
+    committed["allowed_signers"] = json!("pin:trust/allowed_signers");
+
+    let released = result_on(&committed, None);
+    assert_eq!(released["status"], "released", "{released}");
+    let trust = &released["trust"];
+    assert_eq!(trust["allowed_signers"], "pin:trust/allowed_signers");
+    assert_eq!(trust["allowed_signers_commit"], pin_commit);
+    assert_eq!(trust["ea_version"], env!("CARGO_PKG_VERSION"));
+    assert!(
+        trust["git_version"]
+            .as_str()
+            .is_some_and(|v| v.starts_with("git version "))
+    );
+    assert!(
+        trust["allowed_signers_sha256"]
+            .as_str()
+            .is_some_and(|d| d.starts_with("sha256:") && d.len() == 7 + 64)
+    );
+    assert_eq!(*trust, released["approval"]["trust"]);
+
+    // The claimed time and the absence of a trusted time are both stated.
+    assert_eq!(released["signed_at_source"], "tagger_date");
+    assert!(released["signed_at"].is_string());
+    assert_eq!(released["trusted_at_missing"], "ssh_signature");
+    for member in ["trusted_at", "trusted_at_source", "time_skew"] {
+        assert!(released.get(member).is_none(), "{member}: {released}");
+    }
+
+    // Editing the allowed-signers file changes the digest of a path request and
+    // not that of the committed source.
+    let by_path_before = verdict(&fixture, "v1");
+    fs::write(fixture.allowed(), format!("{mapping}# edited\n")).expect("edit mapping");
+    let by_path_after = verdict(&fixture, "v1");
+    assert_ne!(
+        by_path_before["trust"]["allowed_signers_sha256"],
+        by_path_after["trust"]["allowed_signers_sha256"]
+    );
+    assert!(
+        by_path_after["trust"]
+            .get("allowed_signers_commit")
+            .is_none()
+    );
+    assert_eq!(result_on(&committed, None)["trust"], released["trust"]);
+
+    // A verdict with no `approval` member still carries the trust.
+    let early = commit_files(&fixture, &[(SNAPSHOT_PATH, "{}\n")], "snapshot only");
+    sign(
+        &fixture,
+        "a",
+        "v-no-record",
+        &early,
+        &message("git-blob:unknown"),
+    );
+    let without = result_on(&request(&fixture, "v-no-record"), None);
+    assert_eq!(without["status"], "not_released", "{without}");
+    assert!(without.get("approval").is_none());
+    assert!(without["trust"]["allowed_signers_sha256"].is_string());
+    assert_eq!(without["trust"]["ea_version"], env!("CARGO_PKG_VERSION"));
+}
