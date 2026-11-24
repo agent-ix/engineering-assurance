@@ -189,7 +189,11 @@ fn protected(policy: Option<&str>, private: bool) -> Protected {
 }
 
 fn hex(text: &str) -> String {
-    text.bytes().map(|byte| format!("{byte:02x}")).collect()
+    use std::fmt::Write as _;
+    text.bytes().fold(String::new(), |mut out, byte| {
+        let _ = write!(out, "{byte:02x}");
+        out
+    })
 }
 
 fn record_request(repo: &Path, tag: &str, object: &str, pushed_at_unix: i64) -> RecordRequest {
@@ -619,9 +623,11 @@ fn an_oversized_note_and_six_rejected_pushes_write_nothing() {
     std::fs::remove_file(&hook).expect("remove hook");
 
     // A note that would exceed 1 MiB is refused and nothing is written.
-    let filler: String = (0..100_000)
-        .map(|index| format!("{{\"filler\":{index}}}\n"))
-        .collect();
+    let filler = (0..100_000).fold(String::new(), |mut out, index| {
+        use std::fmt::Write as _;
+        let _ = writeln!(out, "{{\"filler\":{index}}}");
+        out
+    });
     let mut child = Command::new("git")
         .args([
             "notes",
@@ -878,7 +884,7 @@ pub(crate) fn add_line(repo: &Path, commit: &str, line: &str) {
 
 fn findings_of(repo: &Path, accepted: &Value, invalid: &[&Value]) -> Vec<(FindingStatus, bool)> {
     let verifier = FakeVerifier {
-        invalid: invalid.iter().map(|bundle| bundle.to_string()).collect(),
+        invalid: invalid.iter().map(ToString::to_string).collect(),
         ..FakeVerifier::default()
     };
     repository_findings(

@@ -171,7 +171,7 @@ fn receipt(name: &str, object: char, commit: char, record_ids: &[&str]) -> TagRe
     }
 }
 
-fn policy(accepted: Value) -> TagReceiptPolicy {
+fn policy(accepted: &Value) -> TagReceiptPolicy {
     TagReceiptPolicy::parse(
         &json!({"prefixes": ["approve-", "release-"], "accepted_tags": accepted}),
     )
@@ -481,11 +481,11 @@ fn a_note_over_one_mebibyte_is_refused() {
 #[test]
 #[trace("TC-1109", "FR-082-AC-1", "FR-082-AC-2", "FR-082-AC-3", "FR-082-AC-5")]
 fn each_receipt_is_judged_on_its_own_object_id() {
-    let policy = policy(json!([]));
+    let policy = policy(&json!([]));
     let one = Candidate::Verified(receipt("approve-1", 'a', 'c', &[]));
 
     // Deleted.
-    let deleted = compare(&[one.clone()], &tags(&[]), &policy);
+    let deleted = compare(std::slice::from_ref(&one), &tags(&[]), &policy);
     assert_eq!(findings(&deleted), [(FindingStatus::MissingTag, false)]);
     assert!(matches!(
         &deleted[0].finding,
@@ -496,7 +496,11 @@ fn each_receipt_is_judged_on_its_own_object_id() {
         }
     ));
     // Re-created as a different object.
-    let changed = compare(&[one.clone()], &tags(&[("approve-1", 'b')]), &policy);
+    let changed = compare(
+        std::slice::from_ref(&one),
+        &tags(&[("approve-1", 'b')]),
+        &policy,
+    );
     assert_eq!(
         changed.len(),
         2,
@@ -511,7 +515,14 @@ fn each_receipt_is_judged_on_its_own_object_id() {
         TagFinding::TagNoReceipt { .. }
     ));
     // Deleted and pushed again at the identical object id: nothing.
-    assert!(compare(&[one.clone()], &tags(&[("approve-1", 'a')]), &policy).is_empty());
+    assert!(
+        compare(
+            std::slice::from_ref(&one),
+            &tags(&[("approve-1", 'a')]),
+            &policy
+        )
+        .is_empty()
+    );
     // Two receipts for two objects, only the second current: exactly the first.
     let two = Candidate::Verified(receipt("approve-1", 'b', 'c', &[]));
     let repeated = compare(
@@ -551,7 +562,7 @@ fn an_invalid_receipt_is_listed_and_never_judged_missing_or_accepted() {
         invalid(InvalidReason::UntrustedSigner),
     ];
     let accepting = policy(
-        json!([{"ref": "refs/tags/approve-1", "tag_object": null, "accepted_by": "p", "reason": "r"}]),
+        &json!([{"ref": "refs/tags/approve-1", "tag_object": null, "accepted_by": "p", "reason": "r"}]),
     );
     let judged = compare(&candidates, &tags(&[]), &accepting);
     assert_eq!(
@@ -563,7 +574,7 @@ fn an_invalid_receipt_is_listed_and_never_judged_missing_or_accepted() {
 #[test]
 #[trace("TC-1111", "FR-082-AC-6")]
 fn a_prefix_tag_without_a_receipt_for_its_current_object_is_unreceipted() {
-    let policy = policy(json!([]));
+    let policy = policy(&json!([]));
     let current = tags(&[("approve-1", 'a'), ("release-9", 'a'), ("other-1", 'a')]);
     // The notes ref being absent is an empty receipt set.
     let judged = compare(&[], &current, &policy);
@@ -600,9 +611,9 @@ fn an_acceptance_matches_exactly_and_a_null_object_only_a_tag_absent_finding() {
 
     // A changed tag accepted by its earlier ref and object.
     let accepted = compare(
-        &[one.clone()],
+        std::slice::from_ref(&one),
         &tags(&[("approve-1", 'b')]),
-        &policy(json!([
+        &policy(&json!([
             accept("approve-1", Some('a')),
             accept("approve-1", Some('b'))
         ])),
@@ -618,28 +629,28 @@ fn an_acceptance_matches_exactly_and_a_null_object_only_a_tag_absent_finding() {
 
     // The same ref with another object id matches nothing.
     let other = compare(
-        &[one.clone()],
+        std::slice::from_ref(&one),
         &tags(&[]),
-        &policy(json!([accept("approve-1", Some('b'))])),
+        &policy(&json!([accept("approve-1", Some('b'))])),
     );
     assert!(other[0].is_open());
     // A null entry accepts a tag_absent finding ...
     let null_absent = compare(
-        &[one.clone()],
+        std::slice::from_ref(&one),
         &tags(&[]),
-        &policy(json!([accept("approve-1", None)])),
+        &policy(&json!([accept("approve-1", None)])),
     );
     assert!(!null_absent[0].is_open());
     // ... and neither a tag_changed nor a tag_no_receipt finding.
     let null_changed = compare(
         &[one],
         &tags(&[("approve-1", 'b')]),
-        &policy(json!([accept("approve-1", None)])),
+        &policy(&json!([accept("approve-1", None)])),
     );
     assert_eq!(null_changed.len(), 2);
     assert!(null_changed.iter().all(Judged::is_open));
     // An unreceipted tag accepted at its current object; moved, it is a finding again.
-    let unreceipted = policy(json!([accept("release-1", Some('a'))]));
+    let unreceipted = policy(&json!([accept("release-1", Some('a'))]));
     assert!(!compare(&[], &tags(&[("release-1", 'a')]), &unreceipted)[0].is_open());
     assert!(compare(&[], &tags(&[("release-1", 'b')]), &unreceipted)[0].is_open());
 }

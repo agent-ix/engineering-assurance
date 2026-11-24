@@ -157,14 +157,7 @@ fn command() -> Command {
         .subcommand(receipt_missing_command())
         .subcommand(receipt_verify_command())
         .subcommand(receipt_record_command())
-        .subcommand(tag_receipt_command(
-            TAG_RECEIPT_RECORD_CAPABILITY,
-            "Read one pushed tag and sign its tag receipt",
-        ))
-        .subcommand(tag_receipt_command(
-            TAG_RECEIPT_NOTE_CAPABILITY,
-            "Store a signed tag receipt in the notes ref and push it",
-        ))
+        .subcommands(tag_receipt_commands())
         .subcommand(release_history_command())
         .subcommand(release_decision_command())
         .subcommand(
@@ -297,6 +290,19 @@ fn receipt_verify_command() -> Command {
                 .help("Receipt-verify request document, or - to read it from stdin")
                 .required(true),
         )
+}
+
+fn tag_receipt_commands() -> [Command; 2] {
+    [
+        tag_receipt_command(
+            TAG_RECEIPT_RECORD_CAPABILITY,
+            "Read one pushed tag and sign its tag receipt",
+        ),
+        tag_receipt_command(
+            TAG_RECEIPT_NOTE_CAPABILITY,
+            "Store a signed tag receipt in the notes ref and push it",
+        ),
+    ]
 }
 
 fn tag_receipt_command(name: &'static str, about: &'static str) -> Command {

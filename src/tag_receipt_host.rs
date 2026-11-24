@@ -253,7 +253,7 @@ fn protected_base(github_repository: &str, base_branch: &str) -> Option<(bool, S
         crate::receipt_host::encode_path_segment(base_branch)
     ))
     .ok()?;
-    if branch.get("protected")?.as_bool()? != true {
+    if !branch.get("protected")?.as_bool()? {
         return None;
     }
     let commit = branch.pointer("/commit/sha")?.as_str()?;
@@ -291,14 +291,14 @@ fn parse_record_request(bytes: &[u8]) -> Result<RecordRequest, TagReceiptHostErr
 }
 
 fn decode_hex(text: &str) -> Option<Vec<u8>> {
-    if text.len() % 2 != 0 {
+    if !text.len().is_multiple_of(2) {
         return None;
     }
     text.as_bytes()
         .chunks(2)
         .map(|pair| {
             let digit = |byte: u8| char::from(byte).to_digit(16);
-            Some(u8::try_from(digit(pair[0])? * 16 + digit(pair[1])?).ok()?)
+            u8::try_from(digit(pair[0])? * 16 + digit(pair[1])?).ok()
         })
         .collect()
 }
@@ -741,11 +741,11 @@ impl VerifierSource for ProductionVerifiers {
 
 /// The listed tag receipt identities of a policy, paired with their verifiers.
 pub(crate) struct Trust<'a> {
-    entries: Vec<(
-        &'a dyn BundleVerifier,
-        Vec<(WorkflowIdentityPolicy, SourceWorkflowPolicy)>,
-    )>,
+    entries: Vec<(&'a dyn BundleVerifier, Signers)>,
 }
+
+/// The tag receipt identities of a policy with their caller policies.
+type Signers = Vec<(WorkflowIdentityPolicy, SourceWorkflowPolicy)>;
 
 impl<'a> Trust<'a> {
     pub(crate) fn new(

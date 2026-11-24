@@ -202,7 +202,7 @@ enum FindingEntryReason {
 #[derive(Serialize)]
 #[serde(untagged)]
 enum TrailEntry {
-    Tag(Entry),
+    Tag(Box<Entry>),
     Finding(FindingEntry),
 }
 
@@ -575,7 +575,7 @@ fn tag_section(
         };
         complete &= !state.open;
         entry.receipt = Some(state);
-        out.push(TrailEntry::Tag(entry));
+        out.push(TrailEntry::Tag(Box::new(entry)));
     }
     for finding in &judged {
         // An unreceipted present tag is the `tag_receipt` of its own entry.
@@ -630,7 +630,10 @@ fn execute_with(
     }
     let (mut trail, tag_receipts, tags_complete) = match &parsed.tags {
         None => (
-            entries.into_iter().map(TrailEntry::Tag).collect(),
+            entries
+                .into_iter()
+                .map(|entry| TrailEntry::Tag(Box::new(entry)))
+                .collect(),
             TagReceiptsResult {
                 checked: false,
                 considered: 0,

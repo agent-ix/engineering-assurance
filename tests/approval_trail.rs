@@ -90,7 +90,7 @@ fn tc_351_equal_times_and_tags_order_by_object_then_commit_and_tagless_entries_l
         object,
         commit,
     };
-    let mut keys = vec![
+    let mut keys = [
         entry(None, None, "", "c2"),
         entry(None, Some("t"), "o2", "c1"),
         entry(None, Some("t"), "o1", "c9"),
