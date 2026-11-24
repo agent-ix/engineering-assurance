@@ -298,7 +298,17 @@ fn tc_1022_a_matching_signed_tag_verifies_the_exact_statement_scope_and_object()
     assert_eq!(output["checkpoint"]["statement_digest"]["status"], "match");
     assert_eq!(output["signer"]["principal"], "alice@example.test");
     assert_eq!(output["trust"]["allowed_signers"], json!(fixture.allowed()));
-    assert!(output.get("approved").is_none());
+    for forbidden in [
+        "approved",
+        "role_authorization",
+        "proof_valid",
+        "qualification",
+    ] {
+        assert!(
+            output.get(forbidden).is_none(),
+            "unexpected claim {forbidden}"
+        );
+    }
 }
 
 #[test]
