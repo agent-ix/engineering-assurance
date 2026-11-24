@@ -351,6 +351,7 @@ integrator-package = [
   "dep:thiserror",
 ]
 producer-execution = [
+  "dep:nix",
   "dep:rustix",
   "dep:serde",
   "dep:serde_json",
@@ -616,6 +617,7 @@ flate2 = { version = "1.1", default-features = false, features = ["rust_backend"
 jsonschema = { version = "0.56", default-features = false, optional = true }
 cyclonedx-bom = { version = "0.9", optional = true }
 regex = { version = "1.13", optional = true }
+nix = { version = "0.31", default-features = false, features = ["signal", "term"], optional = true }
 rustix = { version = "1.1", features = ["fs", "process"], optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }

@@ -1544,6 +1544,7 @@ fn capture_process(
             maximum: budget.max_descendants,
         },
         Some(cancellation),
+        Terminal::Detached,
     );
     let KernelCapture {
         conclusion,
@@ -1596,7 +1597,13 @@ fn capture_command(
     budget: KernelBudget,
     descendant_policy: DescendantPolicy,
     cancellation: Option<&CancellationToken>,
+    terminal: Terminal,
 ) -> KernelCapture {
+    if terminal == Terminal::Foreground {
+        // The caller's own standard error: a signer's prompt, URL or code
+        // reaches the person while the run is still going.
+        command.stderr(Stdio::inherit());
+    }
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(error) => {
@@ -1605,16 +1612,27 @@ fn capture_command(
             ));
         }
     };
+    // Held until the function returns, so the previous foreground group comes
+    // back whether the child exits, fails or times out.
+    let _foreground = (terminal == Terminal::Foreground)
+        .then(|| ForegroundGroup::acquire(child.id()))
+        .flatten();
     let Some(stdout) = child.stdout.take() else {
         let status = terminate_group(&mut child, &BTreeSet::new());
         return KernelCapture::without_streams(KernelConclusion::PipeUnavailable("stdout"), status);
     };
-    let Some(stderr) = child.stderr.take() else {
-        let status = terminate_group(&mut child, &BTreeSet::new());
-        return KernelCapture::without_streams(KernelConclusion::PipeUnavailable("stderr"), status);
+    let stderr_reader = match child.stderr.take() {
+        Some(stderr) => bounded_reader(stderr, budget.max_stderr_bytes),
+        None if terminal == Terminal::Foreground => bounded_reader(io::empty(), 0),
+        None => {
+            let status = terminate_group(&mut child, &BTreeSet::new());
+            return KernelCapture::without_streams(
+                KernelConclusion::PipeUnavailable("stderr"),
+                status,
+            );
+        }
     };
     let stdout_reader = bounded_reader(stdout, budget.max_stdout_bytes);
-    let stderr_reader = bounded_reader(stderr, budget.max_stderr_bytes);
     let (conclusion, terminal_status) =
         supervise_child(&mut child, budget.timeout, descendant_policy, cancellation);
     let stdout = match join_reader(stdout_reader) {
@@ -1640,6 +1658,65 @@ fn capture_command(
         terminal_status,
         stdout: Some(stdout),
         stderr: Some(stderr),
+    }
+}
+
+/// Whether a run takes the caller's terminal.
+#[cfg(unix)]
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum Terminal {
+    /// No terminal handling: the child's group is not the foreground group and
+    /// its standard error is captured.
+    Detached,
+    /// The child's group is the controlling terminal's foreground group for the
+    /// run, so that a signer can read `/dev/tty`, and its standard error is the
+    /// caller's own.
+    Foreground,
+}
+
+/// The foreground process group of the controlling terminal, taken for a child
+/// group and given back to the previous one when dropped.
+#[cfg(unix)]
+struct ForegroundGroup {
+    tty: File,
+    previous: nix::unistd::Pid,
+}
+
+#[cfg(unix)]
+impl ForegroundGroup {
+    /// Makes the group of the child `child` the foreground group. `None` when
+    /// the caller has no controlling terminal or the terminal refuses.
+    fn acquire(child: u32) -> Option<Self> {
+        let tty = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/tty")
+            .ok()?;
+        let previous = nix::unistd::tcgetpgrp(&tty).ok()?;
+        let group = nix::unistd::Pid::from_raw(i32::try_from(child).ok()?);
+        Self::set(&tty, group).ok()?;
+        Some(Self { tty, previous })
+    }
+
+    /// `tcsetpgrp` with `SIGTTOU` blocked: a caller outside the foreground group
+    /// is otherwise stopped by it.
+    fn set(tty: &File, group: nix::unistd::Pid) -> nix::Result<()> {
+        use nix::sys::signal::{SigSet, SigmaskHow, Signal, pthread_sigmask};
+        let mut blocked = SigSet::empty();
+        blocked.add(Signal::SIGTTOU);
+        let mut previous_mask = SigSet::empty();
+        pthread_sigmask(SigmaskHow::SIG_BLOCK, Some(&blocked), Some(&mut previous_mask))?;
+        let result = nix::unistd::tcsetpgrp(tty, group);
+        let restored = pthread_sigmask(SigmaskHow::SIG_SETMASK, Some(&previous_mask), None);
+        result.and(restored)
+    }
+}
+
+#[cfg(unix)]
+impl Drop for ForegroundGroup {
+    fn drop(&mut self) {
+        // Nothing to report: the run is over and the terminal stays as it is.
+        let _ = Self::set(&self.tty, self.previous);
     }
 }
 
@@ -2215,6 +2292,38 @@ pub mod __private {
             environment,
             removed_environment,
             None,
+            false,
+            limits,
+        )
+    }
+
+    /// Like [`run_configured`], with the child's process group made the
+    /// foreground group of the caller's controlling terminal for the run and
+    /// the previous foreground group restored when the run ends, however it
+    /// ends, and with the child's standard error passed through to the caller's
+    /// own. The child's standard input stays the null device and its standard
+    /// output stays captured. Without a controlling terminal it runs as
+    /// [`run_configured`] does, with the caller's standard error.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed process-mechanics failure, as [`run_configured`] does.
+    pub fn run_configured_foreground(
+        executable: &OsStr,
+        arguments: &[&OsStr],
+        current_directory: Option<&Path>,
+        environment: &[(&OsStr, &OsStr)],
+        removed_environment: &[&OsStr],
+        limits: ProcessLimits,
+    ) -> Result<CompletedProcess, ProcessError> {
+        run_with_stdin(
+            executable,
+            arguments,
+            current_directory,
+            environment,
+            removed_environment,
+            None,
+            true,
             limits,
         )
     }
@@ -2241,6 +2350,7 @@ pub mod __private {
             environment,
             removed_environment,
             Some(stdin),
+            false,
             limits,
         )
     }
@@ -2252,6 +2362,7 @@ pub mod __private {
         environment: &[(&OsStr, &OsStr)],
         removed_environment: &[&OsStr],
         stdin: Option<std::fs::File>,
+        foreground: bool,
         limits: ProcessLimits,
     ) -> Result<CompletedProcess, ProcessError> {
         #[cfg(unix)]
@@ -2263,6 +2374,7 @@ pub mod __private {
                 environment,
                 removed_environment,
                 stdin,
+                foreground,
                 limits,
             )
         }
@@ -2275,6 +2387,7 @@ pub mod __private {
                 environment,
                 removed_environment,
                 stdin,
+                foreground,
                 limits,
             );
             Err(ProcessError::Unavailable {
@@ -2292,13 +2405,15 @@ pub mod __private {
         environment: &[(&OsStr, &OsStr)],
         removed_environment: &[&OsStr],
         stdin: Option<std::fs::File>,
+        foreground: bool,
         limits: ProcessLimits,
     ) -> Result<CompletedProcess, ProcessError> {
         use std::os::unix::process::CommandExt;
         use std::process::{Command, Stdio};
 
         use super::{
-            DescendantPolicy, KernelBudget, KernelCapture, KernelConclusion, capture_command,
+            DescendantPolicy, KernelBudget, KernelCapture, KernelConclusion, Terminal,
+            capture_command,
         };
 
         let mut command = Command::new(executable);
@@ -2329,6 +2444,11 @@ pub mod __private {
             },
             DescendantPolicy::ProcessGroup,
             None,
+            if foreground {
+                Terminal::Foreground
+            } else {
+                Terminal::Detached
+            },
         );
         match conclusion {
             KernelConclusion::Unavailable(detail) => Err(ProcessError::Unavailable { detail }),

@@ -26,9 +26,9 @@ use std::{
 };
 
 use engineering_assurance::signature_verify::{
-    CommitObservation, GitGrade, GitsignIdentity, GitsignTrust, IDENTITY_REGISTRY_PROTOCOL,
+    CommitObservation, EvidencedGesture, GitGrade, GitsignIdentity, GitsignTrust, IDENTITY_REGISTRY_PROTOCOL,
     IdentityRegistry, PrincipalLookup, Probe, Reason, RegistryEntry, Run, SignatureFormat,
-    SignedAt, SplitTag, SshCheck, TagObservation, TargetKind, TrustSourceAddress, Verdict,
+    SignedAt, SplitTag, SshCheck, Status, TagObservation, TargetKind, TrustSourceAddress, Verdict,
     classify_commit, classify_gitsign, classify_tag, commit_signature_format,
     config_sets_gitsign_key, is_plain_revision, object_message, signed_off_meaning,
     split_tag_object, tagger_signed_at, trailer_values,
@@ -1161,7 +1161,59 @@ impl Git<'_> {
             Some(split) => self.annotated_tag(id, split)?,
             None => TagObservation::NoSignature,
         };
-        Ok(classify_tag(&observation))
+        let verdict = classify_tag(&observation);
+        // FR-084: only an accepted SSH tag signature can evidence a gesture.
+        let principal = verdict.signer.as_ref().and_then(|s| s.principal.as_deref());
+        Ok(match (verdict.status, split, principal) {
+            (Status::SignedValid, Some(split), Some(principal)) => {
+                let evidenced = self.evidenced_gesture(split, principal);
+                verdict.with_gesture(evidenced)
+            }
+            _ => verdict,
+        })
+    }
+
+    /// The gesture one `ssh-keygen -Y verify -vv` run on the tag's own signature
+    /// block shows on standard error (FR-084). The block is passed as extracted
+    /// and never parsed; a run that fails or cannot start evidences nothing.
+    fn evidenced_gesture(&self, split: &SplitTag<'_>, principal: &str) -> EvidencedGesture {
+        let run = || -> Option<EvidencedGesture> {
+            let directory = tempfile::tempdir().ok()?;
+            let signature_path = directory.path().join("signature");
+            let payload_path = directory.path().join("payload");
+            std::fs::write(&signature_path, split.signature).ok()?;
+            std::fs::write(&payload_path, split.payload).ok()?;
+            let stdin = File::open(&payload_path).ok()?;
+            let arguments = [
+                OsStr::new("-Y"),
+                OsStr::new("verify"),
+                OsStr::new("-vv"),
+                OsStr::new("-f"),
+                self.allowed_signers.as_os_str(),
+                OsStr::new("-I"),
+                OsStr::new(principal),
+                OsStr::new("-n"),
+                OsStr::new("git"),
+                OsStr::new("-s"),
+                signature_path.as_os_str(),
+            ];
+            let (executable, path) = resolve_program("ssh-keygen").ok()?;
+            let output = process_host::run_configured_stdin(
+                executable.as_os_str(),
+                &arguments,
+                Some(directory.path()),
+                &[(OsStr::new("PATH"), path.as_os_str())],
+                &[],
+                stdin,
+                limits(),
+            )
+            .ok()?;
+            output
+                .status
+                .success()
+                .then(|| EvidencedGesture::from_verify_stderr(&output.stderr))
+        };
+        run().unwrap_or(EvidencedGesture::None)
     }
 
     /// Whether `revision` names a ref under `refs/tags/`.

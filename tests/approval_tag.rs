@@ -16,7 +16,7 @@ const DIGEST: &str = "sha256:0123abcd";
 #[test]
 #[trace("TC-338", "FR-042-AC-3", "FR-042-AC-12")]
 fn tc_338_the_message_is_a_subject_then_the_three_trailers_read_back_exactly() {
-    let message = compose_message("change-record-17", DIGEST, "reviewed for release");
+    let message = compose_message("change-record-17", DIGEST, "reviewed for release", None);
     let paragraphs: Vec<&str> = message.trim_end_matches('\n').split("\n\n").collect();
     assert_eq!(paragraphs.len(), 2, "{message:?}");
     assert!(!paragraphs[0].contains('\n'), "the subject is one line");
