@@ -122,6 +122,8 @@ same canonical bundle and do not redefine these responsibilities.
   definitions, executions, results, evidence, reports, and decisions.
 - [US-006](./usecase/US-006-hand-off-source-facts-to-an-integrator.md) — hand source
   facts to an integrator without closing the integrator's validation.
+- [US-007](./usecase/US-007-report-a-vulnerability-privately.md) — find a private
+  route to report a vulnerability.
 
 ### Functional Requirements
 
@@ -264,6 +266,7 @@ same canonical bundle and do not redefine these responsibilities.
 - [FR-081](./functional/FR-081-tag-receipt-on-approval-and-release-tag-push.md) — write a signed tag receipt when an approval or release tag is pushed.
 - [FR-082](./functional/FR-082-detect-deleted-and-changed-tags-from-tag-receipts.md) — detect deleted, changed and unreceipted tags by comparing the tag set with the tag receipts.
 - [FR-083](./functional/FR-083-document-the-adoption-rulesets-for-tags-and-the-private-records-branch.md) — document the adoption rulesets that protect tags and the private records branch, and state what cannot be protected.
+- [FR-088](./functional/FR-088-document-private-vulnerability-reporting.md) — document the repository's private vulnerability reporting route.
 
 ### Non-Functional Requirements
 
