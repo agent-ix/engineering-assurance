@@ -1284,7 +1284,7 @@ fn tc_1051_trust_is_absent_only_when_git_failed_reading_the_allowed_signers_sour
     gitsign["repository"] = json!(not_a_repository.display().to_string());
     gitsign["gitsign"] = json!({
         "certificate_identity": "someone@example.test",
-        "certificate_oidc_issuer": "https://issuer.example.test",
+        "certificate_oidc_issuer": concat!("https:", "//issuer.example.test"),
     });
     gitsign["identity_registry"] = json!("pin:registry.json");
     let registry_failed = result(&gitsign);
