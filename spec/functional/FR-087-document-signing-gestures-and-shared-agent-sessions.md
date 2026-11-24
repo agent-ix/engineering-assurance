@@ -19,8 +19,8 @@ Tracked by Linear EA-113. Signing through `approval-tag` is non-interactive by d
 so any process that can reach an unlocked `ssh-agent`, including an AI agent in the same
 session, can sign as a person. The baseline tier (what a GitHub user has with git,
 `ssh-keygen` including security keys, and public Sigstore) offers three per-signature
-gestures. The README SHALL explain them so a person can choose, and a reviewer can read
-the result. The regulated tier (customer integrations through the signer seams of this
+gestures. The README explains them so a person can choose and a reviewer can read the
+result. The regulated tier (customer integrations through the signer seams of this
 tool) reports through those seams and is not described as a gesture of this tool.
 
 The text states facts and the person decides. It cites the public rule a regulated user
@@ -37,6 +37,9 @@ checks, 21 CFR 11.200(a), by section only, and quotes no paywalled standard.
 - The README SHALL state that a key unlocked in an agent whose socket other processes of
   the session can reach lets each such process, including an AI agent, sign without a
   person, and that the result then reports `evidenced` `none`.
+- The README SHALL state that the evidence is the signature's own touch and PIN flags read
+  for a signed tag, that a security key created with `-O no-touch-required` shows `none`,
+  and that a signed commit shows `none`.
 - The README SHALL state that Engineering Assurance assigns no score, class or
   acceptability to a gesture, and that whether a gesture suffices for a rule the person is
   bound by, such as 21 CFR 11.200(a), is that person's decision.

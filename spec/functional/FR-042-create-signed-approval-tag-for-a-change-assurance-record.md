@@ -36,7 +36,7 @@ reads `unverifiable` under `approval-verify`). Unless the request names a `gestu
 ([FR-085](./FR-085-approval-tag-gesture-signing-mode.md)), the signer must be
 non-interactive (an agent-held or unlocked key, or a program that needs no
 terminal): the command gives git no terminal and no passphrase prompt can be
-answered. It adds no cryptography, never pushes, never writes git configuration,
+answered. A request that names a `gesture` gives the signer a terminal and a longer deadline instead. It adds no cryptography, never pushes, never writes git configuration,
 and never replaces a tag; the only ref it deletes is the unsigned tag it has
 just written, as the Behavior states. Who may approve, and which meaning suffices, are not decided here.
 
@@ -156,9 +156,10 @@ or checking a record digest, recognising a stale or wrong digest, deciding who m
   unlike the verification commands, because that configuration is the signing
   configuration; it SHALL remove the repository-selecting and
   configuration-injecting environment variables FR-036 removes.
-- The command SHALL run git through the process host of FR-019 with a 60 second
-  wall-clock timeout and an 8 MiB capture bound, and, unless the request names a `gesture` (FR-085, which sets the terminal and
-  the timeout), the signer SHALL be non-interactive.
+- The command SHALL run git through the process host of FR-019 with an 8 MiB capture
+  bound and, unless the request names a `gesture`, with no terminal and a 60 second
+  wall-clock timeout, so that the signer is non-interactive; a request that names a
+  `gesture` takes the terminal and the deadline of FR-085 instead.
 - The command SHALL pass a tag name, revision and target to git only after the
   option-like and whitespace checks, after `--` or `--end-of-options`.
 - The command SHALL contain no signature, certificate or trailer-parsing code,
