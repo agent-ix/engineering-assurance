@@ -227,10 +227,11 @@ fn checkpoint_message(overrides: &[(&str, &str)]) -> String {
             field.1 = value;
         }
     }
-    fields
+    let trailers = fields
         .iter()
         .map(|(key, value)| format!("{key}: {value}\n"))
-        .collect()
+        .collect::<String>();
+    format!("Proof integrity checkpoint.\n\n{trailers}")
 }
 
 fn request(fixture: &Fixture, tag: &str, object_id: &str) -> Value {
@@ -533,7 +534,10 @@ fn tc_1030_same_name_retarget_is_refused_before_signature_verification() {
             "-s",
             "-f",
             "-m",
-            &checkpoint_message(&[]),
+            &checkpoint_message(&[]).replace(
+                "Proof integrity checkpoint.",
+                "Retargeted proof checkpoint.",
+            ),
             "proof",
         ],
     );
