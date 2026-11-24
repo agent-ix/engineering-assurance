@@ -242,6 +242,46 @@ fn approval(fixture: &Fixture, tag: &str) -> Value {
     value
 }
 
+/// The `tag_receipts` request member over policy files written into the fixture:
+/// one `receipt_writer` identity for tag receipts, the given `prefixes` and
+/// `accepted_tags`.
+fn tag_receipts_member(fixture: &Fixture, prefixes: &[&str], accepted: &Value) -> Value {
+    let identities = json!({
+        "protocol": "engineering-assurance.workflow-identities/v1",
+        "identities": [{
+            "role": "receipt_writer",
+            "issuer": concat!("https:", "//token.actions.githubusercontent.com"),
+            "repository": "fictional/engineering-assurance",
+            "workflow_path": ".github/workflows/tag-receipt.yml",
+            "ref": "refs/heads/main",
+            "source_repository": "fictional/project",
+            "source_workflow_path": ".github/workflows/tag-receipt-push.yml",
+            "event": "push",
+            "source_ref_prefix": "refs/tags/approve-"
+        }]
+    });
+    let policy = json!({
+        "protocol": "engineering-assurance.receipt-policy/v1",
+        "tag_receipts": {"prefixes": prefixes, "accepted_tags": accepted}
+    });
+    let identities_path = fixture.root().join("workflow-identities.json");
+    let policy_path = fixture.root().join("receipt-policy.json");
+    fs::write(&identities_path, identities.to_string()).expect("identities");
+    fs::write(&policy_path, policy.to_string()).expect("policy");
+    json!({
+        "workflow_identities": identities_path.display().to_string(),
+        "receipt_policy": policy_path.display().to_string(),
+    })
+}
+
+/// The trail of a request that carries tag receipts whose policy covers no tag
+/// of the fixture and accepts nothing.
+fn trail_with_tag_receipts(fixture: &Fixture) -> Value {
+    let mut body = request(fixture);
+    body["tag_receipts"] = tag_receipts_member(fixture, &["no-such-prefix-"], &json!([]));
+    trail_of(&body)
+}
+
 fn tags(trail: &Value) -> Vec<String> {
     trail["entries"]
         .as_array()
@@ -279,7 +319,7 @@ fn tc_352_an_approval_and_a_later_revocation_are_listed_in_time_order() {
         &good("approved"),
         "2026-05-01T09:00:00+0000",
     );
-    let result = trail(&fixture);
+    let result = trail_with_tag_receipts(&fixture);
     assert_eq!(tags(&result), ["z-approve", "a-revoke"]);
     for (tag, meaning, at) in [
         ("z-approve", "approved", "2026-05-01T09:00:00Z"),
@@ -437,7 +477,7 @@ fn tc_354_other_records_and_non_approval_tags_are_not_listed() {
         &fixture.repo(),
         &["tag", "-a", "-m", "plain release note", "v-plain"],
     );
-    let result = trail(&fixture);
+    let result = trail_with_tag_receipts(&fixture);
     assert_eq!(tags(&result), ["v-mine"]);
     assert_eq!(result["considered"], 4);
     assert_eq!(result["unreadable"], json!([]));
@@ -952,4 +992,183 @@ fn tc_361_invalid_requests_and_repositories_are_machine_errors() {
         )),
         "approval_trail_repository_unavailable"
     );
+}
+
+/// `sha256:` and the lowercase hexadecimal SHA-256 of `bytes`, from `sha256sum`.
+fn sha256_of(bytes: &[u8]) -> String {
+    let mut child = Command::new("sha256sum")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("sha256sum must start");
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(bytes)
+        .expect("input");
+    let output = child.wait_with_output().expect("output");
+    let text = String::from_utf8(output.stdout).expect("utf-8");
+    format!("sha256:{}", text.split_whitespace().next().expect("digest"))
+}
+
+#[test]
+#[trace("FR-043-AC-26", "FR-043-AC-27")]
+fn the_trail_trust_is_read_once_and_each_entry_carries_the_trusted_time_members() {
+    let fixture = fixture();
+    let repo = fixture.repo();
+    fs::create_dir_all(repo.join("trust")).expect("trust dir");
+    fs::copy(fixture.allowed(), repo.join("trust/allowed_signers")).expect("copy");
+    git(&repo, &["add", "trust/allowed_signers"]);
+    git(&repo, &["commit", "-q", "-m", "mapping in force"]);
+    git(&repo, &["tag", "pin"]);
+    let date = "2026-05-01T09:00:00+0000";
+    signed_tag(&fixture, "a", "v-ok", &good("approved"), date);
+    signed_tag(&fixture, "b", "v-untrusted", &good("approved"), date);
+    let mapping = fs::read(fixture.allowed()).expect("mapping");
+    let commit = git(&repo, &["rev-parse", "pin^{commit}"]).trim().to_owned();
+    let git_version = String::from_utf8(
+        Command::new("git")
+            .arg("--version")
+            .output()
+            .expect("git")
+            .stdout,
+    )
+    .expect("utf-8");
+
+    let mut body = request(&fixture);
+    body["allowed_signers"] = json!("pin:trust/allowed_signers");
+    let result = trail_of(&body);
+    let trust = &result["trust"];
+    assert_eq!(trust["allowed_signers"], "pin:trust/allowed_signers");
+    assert_eq!(trust["allowed_signers_sha256"], sha256_of(&mapping));
+    assert_eq!(trust["allowed_signers_commit"], commit);
+    assert_eq!(trust["ea_version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(trust["git_version"], git_version.trim_end_matches('\n'));
+    let by_path = trail(&fixture);
+    assert!(by_path["trust"].get("allowed_signers_commit").is_none());
+    assert_eq!(
+        by_path["trust"]["allowed_signers_sha256"],
+        trust["allowed_signers_sha256"]
+    );
+
+    let approved = entry(&result, "v-ok");
+    assert_eq!(approved["status"], "approved", "{approved}");
+    assert_eq!(approved["trusted_at_missing"], "ssh_signature");
+    for member in ["trusted_at", "trusted_at_source", "time_skew"] {
+        assert!(approved.get(member).is_none(), "{member}: {approved}");
+    }
+    let untrusted = entry(&result, "v-untrusted");
+    assert_eq!(untrusted["status"], "untrusted_signer", "{untrusted}");
+    for member in [
+        "trusted_at",
+        "trusted_at_source",
+        "trusted_at_missing",
+        "time_skew",
+    ] {
+        assert!(untrusted.get(member).is_none(), "{member}: {untrusted}");
+    }
+
+    // A source that cannot be read is refused or leaves no trail, never a trail
+    // with a partial trust.
+    let mut unresolved = request(&fixture);
+    unresolved["allowed_signers"] = json!("missing-revision:trust/allowed_signers");
+    let output = run_command("approval-trail", unresolved.to_string().as_bytes(), &[]);
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    let error: Value = serde_json::from_slice(&output.stdout).expect("machine error");
+    assert_eq!(error["code"], "approval_trail_allowed_signers_invalid");
+    let plain = fixture.root().join("plain");
+    fs::create_dir(&plain).expect("plain directory");
+    let mut unavailable = body;
+    unavailable["repository"] = json!(plain.display().to_string());
+    let output = run_command("approval-trail", unavailable.to_string().as_bytes(), &[]);
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    let error: Value = serde_json::from_slice(&output.stdout).expect("machine error");
+    assert_eq!(error["code"], "approval_trail_repository_unavailable");
+}
+
+#[test]
+#[trace("TC-1101", "FR-043-AC-24")]
+fn tc_368_a_request_without_tag_receipts_is_checked_false_and_incomplete() {
+    let fixture = fixture();
+    signed_tag(
+        &fixture,
+        "a",
+        "v-mine",
+        &good("approved"),
+        "2026-05-01T09:00:00+0000",
+    );
+    let result = trail(&fixture);
+    assert_eq!(tags(&result), ["v-mine"]);
+    assert_eq!(
+        result["tag_receipts"],
+        json!({"checked": false, "considered": 0})
+    );
+    assert_eq!(result["complete"], false);
+    assert!(result["entries"][0].get("tag_receipt").is_none());
+}
+
+#[test]
+#[trace("TC-1101", "FR-043-AC-24")]
+fn tc_368_a_malformed_tag_receipts_member_is_refused() {
+    let fixture = fixture();
+    let good_member = tag_receipts_member(&fixture, &["approve-"], &json!([]));
+    let mut relative_policy = good_member.clone();
+    relative_policy["receipt_policy"] = json!("receipt-policy.json");
+    let mut relative_identities = good_member.clone();
+    relative_identities["workflow_identities"] = json!("workflow-identities.json");
+    let mut unknown = good_member;
+    unknown["extra"] = json!(1);
+    for (label, member) in [
+        ("relative policy", relative_policy),
+        ("relative identities", relative_identities),
+        ("unknown member", unknown),
+        ("not an object", json!("x")),
+    ] {
+        let mut body = request(&fixture);
+        body["tag_receipts"] = member;
+        let output = run_command("approval-trail", body.to_string().as_bytes(), &[]);
+        assert_eq!(output.status.code(), Some(2), "{label}: {output:?}");
+        let error: Value = serde_json::from_slice(&output.stdout).expect("error json");
+        assert_eq!(error["code"], "approval_trail_request_invalid", "{label}");
+    }
+}
+
+#[test]
+#[trace("TC-1101", "FR-043-AC-28")]
+fn tc_368_an_absent_notes_ref_is_checked_and_each_prefix_tag_is_unreceipted() {
+    let fixture = fixture();
+    let date = "2026-05-01T09:00:00+0000";
+    signed_tag(&fixture, "a", "approve-1", &good("approved"), date);
+    signed_tag(&fixture, "a", "approve-2", &good("approved"), date);
+    let mut body = request(&fixture);
+    body["tag_receipts"] = tag_receipts_member(&fixture, &["approve-"], &json!([]));
+    let result = trail_of(&body);
+    assert_eq!(
+        result["tag_receipts"],
+        json!({"checked": true, "considered": 0})
+    );
+    for tag in ["approve-1", "approve-2"] {
+        assert_eq!(entry(&result, tag)["tag_receipt"], "none", "{tag}");
+    }
+    assert_eq!(result["complete"], false);
+
+    let accepted: Vec<Value> = ["approve-1", "approve-2"]
+        .iter()
+        .map(|tag| {
+            json!({
+                "ref": format!("refs/tags/{tag}"),
+                "tag_object": git(&fixture.repo(), &["rev-parse", &format!("refs/tags/{tag}")]).trim(),
+                "accepted_by": "alice@example.test",
+                "reason": "predates adoption"
+            })
+        })
+        .collect();
+    body["tag_receipts"] = tag_receipts_member(&fixture, &["approve-"], &json!(accepted));
+    let result = trail_of(&body);
+    assert_eq!(result["complete"], true);
+    let listed = entry(&result, "approve-1");
+    assert_eq!(listed["tag_receipt"], "none");
+    assert_eq!(listed["accepted_by"], "alice@example.test");
+    assert_eq!(listed["accepted_reason"], "predates adoption");
 }

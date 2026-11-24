@@ -220,8 +220,13 @@ fn direct_package_nodes(tree: &str) -> BTreeSet<String> {
         .collect()
 }
 
-const NFR_010_ALLOWED_DIRECT_DELEGATES: [&str; 3] =
-    ["sigstore-sign", "sigstore-types", "sigstore-verify"];
+const NFR_010_ALLOWED_DIRECT_DELEGATES: [&str; 5] = [
+    "cms",
+    "der",
+    "sigstore-sign",
+    "sigstore-types",
+    "sigstore-verify",
+];
 
 fn signature_or_crypto_dependency_violations(
     direct_dependencies: &BTreeSet<String>,
@@ -781,10 +786,12 @@ fn audit_signature_adapter_delegation() {
             "engineering_assurance".to_owned(),
             "serde".to_owned(),
             "serde_json".to_owned(),
+            // The SHA-256 digest of the allowed-signers bytes (FR-037-CON-3).
+            "sigstore_verify".to_owned(),
             "tempfile".to_owned(),
             "thiserror".to_owned(),
         ]),
-        "the signature adapter must not import a signature or cryptography crate"
+        "the signature adapter may import no signature or cryptography crate beyond the allowed-signers digest"
     );
     assert!(
         !adapter_audit.direct_process_api,

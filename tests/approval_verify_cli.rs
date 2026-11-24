@@ -356,6 +356,9 @@ fn tc_318_a_digest_differing_by_one_character_is_the_wrong_record() {
     let tampered = status(&fixture, "v-tampered");
     assert_eq!(tampered["status"], "signed_bad", "{tampered}");
     assert_eq!(tampered["binding"]["record_digest"], "mismatch");
+    assert!(tampered.get("approver").is_none(), "{tampered}");
+    assert!(tampered.get("meaning").is_none(), "{tampered}");
+    assert!(tampered.get("signature_kind").is_none(), "{tampered}");
 }
 
 #[test]
@@ -470,6 +473,7 @@ fn tc_321_a_missing_or_blank_meaning_is_not_approved() {
     assert!(missing.get("meaning").is_none());
     assert!(missing.get("approver").is_none());
     assert!(missing.get("gesture").is_none(), "{missing}");
+    assert!(missing.get("signature_kind").is_none());
     let blanks: [(&str, &[&str]); 4] = [
         ("v-empty", &["Signed-off-meaning:"]),
         ("v-spaces", &["Signed-off-meaning:    "]),
@@ -489,6 +493,7 @@ fn tc_321_a_missing_or_blank_meaning_is_not_approved() {
         assert!(blank.get("meaning").is_none(), "{tag}: {blank}");
         assert!(blank.get("approver").is_none(), "{tag}: {blank}");
         assert!(blank.get("gesture").is_none(), "{tag}: {blank}");
+        assert!(blank.get("signature_kind").is_none(), "{tag}: {blank}");
     }
     signed_tag(
         &fixture,
@@ -507,6 +512,7 @@ fn tc_321_a_missing_or_blank_meaning_is_not_approved() {
     assert!(mixed.get("meaning").is_none(), "{mixed}");
     assert!(mixed.get("approver").is_none(), "{mixed}");
     assert!(mixed.get("gesture").is_none(), "{mixed}");
+    assert!(mixed.get("signature_kind").is_none(), "{mixed}");
 }
 
 #[test]
@@ -528,6 +534,9 @@ fn tc_322_bad_unsigned_lightweight_and_unresolved_tags_are_never_approved() {
         bad["binding"],
         json!({"record_id": "match", "record_digest": "match"})
     );
+    assert!(bad.get("approver").is_none(), "{bad}");
+    assert!(bad.get("meaning").is_none(), "{bad}");
+    assert!(bad.get("signature_kind").is_none(), "{bad}");
 
     let plain_message = format!("{}\nSigning-Gesture: agent_confirm", good_message());
     git(&repo, None, &["tag", "-a", "-m", &plain_message, "v-plain"]);
@@ -633,8 +642,8 @@ fn tc_325_the_trust_input_is_echoed_and_names_the_approver() {
     assert_eq!(by_default["status"], "approved");
     assert_eq!(by_default["approver"], "mallory@example.test");
     assert_eq!(
-        by_default["trust"],
-        json!({"allowed_signers": fixture.allowed().display().to_string()})
+        by_default["trust"]["allowed_signers"],
+        json!(fixture.allowed().display().to_string())
     );
     // Another file names a different principal for the same key.
     let other = fixture.root().join("other_signers");
@@ -646,8 +655,12 @@ fn tc_325_the_trust_input_is_echoed_and_names_the_approver() {
     assert_eq!(remapped["status"], "approved");
     assert_eq!(remapped["approver"], "carol@example.test");
     assert_eq!(
-        remapped["trust"],
-        json!({"allowed_signers": other.display().to_string()})
+        remapped["trust"]["allowed_signers"],
+        json!(other.display().to_string())
+    );
+    assert_ne!(
+        remapped["trust"]["allowed_signers_sha256"],
+        by_default["trust"]["allowed_signers_sha256"]
     );
     // The trust input is echoed for statuses other than approved too.
     signed_tag(&fixture, "b", "v-untrusted", &good_message());
@@ -941,8 +954,17 @@ fn tc_335_a_status_other_than_approved_carries_no_signing_time() {
     ] {
         let other = status(&fixture, tag);
         assert_eq!(other["status"], expected, "{other}");
-        assert!(other.get("gesture").is_none(), "{other}");
-        for member in ["signed_at", "signed_at_source", "signed_at_missing"] {
+        for member in [
+            "gesture",
+            "signature_kind",
+            "signed_at",
+            "signed_at_source",
+            "signed_at_missing",
+            "trusted_at",
+            "trusted_at_source",
+            "trusted_at_missing",
+            "time_skew",
+        ] {
             assert!(other.get(member).is_none(), "{tag} {member}: {other}");
         }
     }
@@ -1075,6 +1097,13 @@ fn tc_338_allowed_signers_changes_after_capture_do_not_change_the_verified_trust
 
     assert_eq!(verified["status"], "approved", "{verified}");
     assert_eq!(verified["approver"], ALICE, "{verified}");
+    // The digest is of the bytes the verifier received, not of the file as it
+    // stands after the replacement, and has the documented form.
+    assert_eq!(
+        verified["trust"]["allowed_signers_sha256"],
+        sha256_of(&captured_trust),
+        "{verified}"
+    );
     assert!(
         fs::read_to_string(fixture.allowed())
             .expect("mutated allowed signers")
@@ -1086,4 +1115,306 @@ fn tc_338_allowed_signers_changes_after_capture_do_not_change_the_verified_trust
         captured_trust
     );
     assert_ne!(verified["tag_object_id"], Value::Null);
+}
+
+/// `sha256:` and the lowercase hexadecimal SHA-256 of `bytes`, from `sha256sum`.
+fn sha256_of(bytes: &[u8]) -> String {
+    let mut child = Command::new("sha256sum")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("sha256sum must start");
+    child
+        .stdin
+        .take()
+        .expect("stdin")
+        .write_all(bytes)
+        .expect("input");
+    let output = child.wait_with_output().expect("output");
+    let text = String::from_utf8(output.stdout).expect("utf-8");
+    format!("sha256:{}", text.split_whitespace().next().expect("digest"))
+}
+
+/// What `git --version` prints, without its final newline.
+fn git_version_text() -> String {
+    let output = Command::new("git").arg("--version").output().expect("git");
+    String::from_utf8(output.stdout)
+        .expect("utf-8")
+        .trim_end_matches('\n')
+        .to_owned()
+}
+
+/// Whether the host git judges SSH key validity at the claimed tagger date
+/// (git 2.35 and later).
+fn git_judges_at_tagger_date() -> bool {
+    let text = git_version_text();
+    let mut parts = text
+        .trim_start_matches("git version ")
+        .split(|c: char| !c.is_ascii_digit());
+    let major: u32 = parts.next().and_then(|p| p.parse().ok()).expect("major");
+    let minor: u32 = parts.next().and_then(|p| p.parse().ok()).expect("minor");
+    (major, minor) >= (2, 35)
+}
+
+/// Commits the allowed-signers file at `trust/allowed_signers` and tags that
+/// commit `pin`, so `pin:trust/allowed_signers` names the mapping in force.
+fn pin_allowed_signers(fixture: &Fixture) {
+    let repo = fixture.repo();
+    fs::create_dir_all(repo.join("trust")).expect("trust dir");
+    fs::copy(fixture.allowed(), repo.join("trust/allowed_signers")).expect("copy");
+    git(&repo, None, &["add", "trust/allowed_signers"]);
+    git(&repo, None, &["commit", "-q", "-m", "mapping in force"]);
+    git(&repo, None, &["tag", "pin"]);
+}
+
+#[test]
+#[trace("FR-041-AC-34", "FR-037-AC-24", "FR-037-AC-25")]
+fn a_committed_allowed_signers_source_fixes_the_trust_identity() {
+    let fixture = fixture();
+    pin_allowed_signers(&fixture);
+    signed_tag(&fixture, "a", "v-pinned", &good_message());
+    let pinned = fs::read(fixture.allowed()).expect("mapping bytes");
+    let commit = git(&fixture.repo(), None, &["rev-parse", "pin^{commit}"])
+        .trim()
+        .to_owned();
+    let mut body = request(&fixture, "v-pinned");
+    body["allowed_signers"] = json!("pin:trust/allowed_signers");
+
+    let first = result(&body);
+    assert_eq!(first["status"], "approved", "{first}");
+    assert_eq!(first["approver"], ALICE);
+    let trust = &first["trust"];
+    assert_eq!(trust["allowed_signers"], "pin:trust/allowed_signers");
+    assert_eq!(trust["allowed_signers_commit"], commit);
+    assert_eq!(trust["allowed_signers_sha256"], sha256_of(&pinned));
+    assert_eq!(trust["ea_version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(trust["git_version"], git_version_text());
+
+    // The working-tree copy is edited and the branch moves on; the same
+    // `<rev>:<path>` still names the committed mapping.
+    let repo = fixture.repo();
+    let public = fs::read_to_string(fixture.public("a")).expect("key");
+    fs::write(
+        repo.join("trust/allowed_signers"),
+        format!("carol@example.test {public}"),
+    )
+    .expect("edit working tree");
+    git(&repo, None, &["commit", "-q", "-a", "-m", "remap"]);
+    let again = result(&body);
+    assert_eq!(again["approver"], ALICE, "{again}");
+    assert_eq!(again["trust"], first["trust"]);
+
+    // An absolute-path request against the edited file digests different bytes.
+    fs::write(fixture.allowed(), format!("carol@example.test {public}")).expect("edit file");
+    let by_path = status(&fixture, "v-pinned");
+    assert_eq!(by_path["approver"], "carol@example.test", "{by_path}");
+    assert_ne!(
+        by_path["trust"]["allowed_signers_sha256"],
+        trust["allowed_signers_sha256"]
+    );
+    assert!(by_path["trust"].get("allowed_signers_commit").is_none());
+    let digest = by_path["trust"]["allowed_signers_sha256"]
+        .as_str()
+        .expect("digest");
+    assert_eq!(digest.len(), "sha256:".len() + 64);
+    assert!(digest.starts_with("sha256:"));
+    assert!(
+        digest["sha256:".len()..]
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    );
+}
+
+#[test]
+#[trace("FR-037-AC-24", "FR-041-AC-10")]
+fn a_committed_allowed_signers_source_is_refused_as_the_trust_source_rules_say() {
+    let fixture = fixture();
+    pin_allowed_signers(&fixture);
+    let repo = fixture.repo();
+    fs::write(repo.join("big"), vec![b'#'; 1024 * 1024 + 1]).expect("big");
+    fs::write(repo.join("binary"), [0xff_u8, 0xfe, 0x00]).expect("binary");
+    git(&repo, None, &["add", "big", "binary"]);
+    git(
+        &repo,
+        None,
+        &["commit", "-q", "-m", "oversized and non-UTF-8"],
+    );
+    signed_tag(&fixture, "a", "v-signed", &good_message());
+    for source in [
+        "no-such-revision:trust/allowed_signers",
+        "pin:trust/absent",
+        "pin:big",
+        "pin:binary",
+        "pin:trust",
+    ] {
+        let mut body = request(&fixture, "v-signed");
+        body["allowed_signers"] = json!(source);
+        let output = run_command("approval-verify", body.to_string().as_bytes(), None);
+        assert_eq!(output.status.code(), Some(2), "{source}: {output:?}");
+        let error: Value = serde_json::from_slice(&output.stdout).expect("machine error");
+        assert_eq!(
+            error["code"], "approval_verify_allowed_signers_invalid",
+            "{source}: {error}"
+        );
+    }
+    // Neither an absolute path nor a well-formed address is a request error.
+    for source in [
+        "relative/allowed_signers",
+        "pin:/abs",
+        "pin:a/../b",
+        ":path",
+        "-x:path",
+    ] {
+        let mut body = request(&fixture, "v-signed");
+        body["allowed_signers"] = json!(source);
+        let output = run_command("approval-verify", body.to_string().as_bytes(), None);
+        assert_eq!(output.status.code(), Some(2), "{source}: {output:?}");
+        let error: Value = serde_json::from_slice(&output.stdout).expect("machine error");
+        assert_eq!(error["code"], "approval_verify_request_invalid", "{source}");
+    }
+}
+
+#[test]
+#[trace("FR-041-AC-35")]
+fn trust_is_absent_only_when_git_failed_reading_the_allowed_signers_source() {
+    let fixture = fixture();
+    pin_allowed_signers(&fixture);
+    signed_tag(&fixture, "a", "v-signed", &good_message());
+    let not_a_repository = fixture.root().join("plain");
+    fs::create_dir(&not_a_repository).expect("plain directory");
+
+    // Git cannot answer while the committed source is read: no trust at all.
+    let mut committed = request(&fixture, "v-signed");
+    committed["repository"] = json!(not_a_repository.display().to_string());
+    committed["allowed_signers"] = json!("pin:trust/allowed_signers");
+    let failed = result(&committed);
+    assert_eq!(failed["status"], "unverifiable", "{failed}");
+    assert_eq!(failed["reason"], "repository_unavailable");
+    assert!(failed.get("trust").is_none(), "{failed}");
+    assert!(failed["tag_object_id"].is_null());
+
+    // Every result with a trust carries the digest and both versions, and the
+    // commit exactly when the source was a committed address.
+    let ok = status(&fixture, "v-signed");
+    for member in ["allowed_signers_sha256", "ea_version", "git_version"] {
+        assert!(ok["trust"].get(member).is_some(), "{member}: {ok}");
+    }
+    assert!(ok["trust"].get("allowed_signers_commit").is_none());
+    let mut committed = request(&fixture, "v-signed");
+    committed["allowed_signers"] = json!("pin:trust/allowed_signers");
+    let with_commit = result(&committed);
+    assert!(with_commit["trust"]["allowed_signers_commit"].is_string());
+    let untrusted_tag = {
+        signed_tag(&fixture, "b", "v-untrusted", &good_message());
+        status(&fixture, "v-untrusted")
+    };
+    assert_eq!(untrusted_tag["status"], "untrusted_signer");
+    assert!(
+        untrusted_tag["trust"]
+            .get("allowed_signers_sha256")
+            .is_some()
+    );
+
+    // A registry that git cannot read leaves the rest of the trust in place.
+    let mut gitsign = request(&fixture, "v-signed");
+    gitsign["repository"] = json!(not_a_repository.display().to_string());
+    gitsign["gitsign"] = json!({
+        "certificate_identity": "someone@example.test",
+        "certificate_oidc_issuer": concat!("https:", "//issuer.example.test"),
+    });
+    gitsign["identity_registry"] = json!("pin:registry.json");
+    let registry_failed = result(&gitsign);
+    assert_eq!(
+        registry_failed["status"], "unverifiable",
+        "{registry_failed}"
+    );
+    let trust = &registry_failed["trust"];
+    for member in [
+        "allowed_signers",
+        "allowed_signers_sha256",
+        "ea_version",
+        "git_version",
+        "identity_registry",
+    ] {
+        assert!(trust.get(member).is_some(), "{member}: {registry_failed}");
+    }
+    assert!(trust.get("identity_registry_commit").is_none());
+}
+
+/// The fixture allowed-signers file with a `valid-before` in the past for alice.
+fn expire_alice(fixture: &Fixture) {
+    let public = fs::read_to_string(fixture.public("a")).expect("key");
+    fs::write(
+        fixture.allowed(),
+        format!("{ALICE} valid-before=\"20200101\" {public}"),
+    )
+    .expect("expired mapping");
+}
+
+#[test]
+#[trace("FR-041-AC-36", "FR-041-AC-31", "FR-037-AC-23")]
+fn a_backdated_tag_is_judged_by_the_recorded_git_version() {
+    let fixture = fixture();
+    expire_alice(&fixture);
+    signed_tag_at(
+        &fixture,
+        "a",
+        "v-backdated",
+        &good_message(),
+        "2019-06-01T12:00:00+0000",
+    );
+    let verdict = status(&fixture, "v-backdated");
+    assert_eq!(verdict["trust"]["git_version"], git_version_text());
+    if git_judges_at_tagger_date() {
+        // git 2.35 and later judge the entry at the claimed date.
+        assert_eq!(verdict["status"], "approved", "{verdict}");
+        assert_eq!(verdict["signed_at"], "2019-06-01T12:00:00Z");
+        assert_eq!(verdict["trusted_at_missing"], "ssh_signature");
+        assert!(verdict.get("trusted_at").is_none());
+        assert!(verdict.get("time_skew").is_none());
+    } else {
+        // Earlier git judges the entry at the verification time.
+        assert_eq!(verdict["status"], "untrusted_signer", "{verdict}");
+        assert!(verdict.get("trusted_at_missing").is_none());
+    }
+}
+
+#[test]
+#[trace("FR-041-AC-32")]
+fn a_key_expired_before_signing_and_verification_is_untrusted_on_any_git() {
+    let fixture = fixture();
+    expire_alice(&fixture);
+    signed_tag_at(
+        &fixture,
+        "a",
+        "v-late",
+        &good_message(),
+        "2026-03-04T10:00:00+0000",
+    );
+    let verdict = status(&fixture, "v-late");
+    assert_eq!(verdict["status"], "untrusted_signer", "{verdict}");
+    assert_eq!(verdict["signature"]["signer"]["mapping"], "unmapped");
+}
+
+#[test]
+#[trace("FR-041-AC-27", "FR-043-AC-27")]
+fn an_ssh_approval_has_a_claimed_time_and_no_trusted_time_however_backdated() {
+    let fixture = fixture();
+    signed_tag_at(
+        &fixture,
+        "a",
+        "v-old",
+        &good_message(),
+        "2001-01-01T00:00:00+0000",
+    );
+    signed_tag(&fixture, "a", "v-now", &good_message());
+    for tag in ["v-old", "v-now"] {
+        let approved = status(&fixture, tag);
+        assert_eq!(approved["status"], "approved", "{approved}");
+        assert_eq!(approved["signed_at_source"], "tagger_date");
+        assert_eq!(approved["trusted_at_missing"], "ssh_signature");
+        for member in ["trusted_at", "trusted_at_source", "time_skew"] {
+            assert!(approved.get(member).is_none(), "{tag} {member}: {approved}");
+        }
+    }
 }

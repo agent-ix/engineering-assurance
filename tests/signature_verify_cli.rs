@@ -1456,6 +1456,52 @@ fn the_evidenced_gesture_is_read_from_the_flags_of_the_signature_run() {
     }
 }
 
+/// Commits the allowed-signers file at `trust/allowed` and tags it `pin`.
+fn pin_allowed(fixture: &Fixture) {
+    let repo = fixture.repo();
+    fs::create_dir_all(repo.join("trust")).expect("trust dir");
+    fs::copy(fixture.allowed(), repo.join("trust/allowed")).expect("copy");
+    git(&repo, None, &["add", "trust/allowed"]);
+    git(&repo, None, &["commit", "-q", "-m", "mapping in force"]);
+    git(&repo, None, &["tag", "pin"]);
+}
+
+fn committed_request(fixture: &Fixture, revision: &str, kind: &str, source: &str) -> Value {
+    let mut body = request(fixture, revision, kind);
+    body["allowed_signers"] = json!(source);
+    body
+}
+
+fn error_code(output: &Output) -> String {
+    let value: Value = serde_json::from_slice(&output.stdout).expect("machine error");
+    value["code"].as_str().expect("code").to_owned()
+}
+
+#[test]
+#[trace("FR-037-AC-24", "FR-036-AC-3")]
+fn a_committed_allowed_signers_source_decides_over_the_working_tree() {
+    let fixture = fixture();
+    set_allowed(
+        &fixture,
+        &format!("{PRINCIPAL} {}", public_line(&fixture, "a")),
+    );
+    pin_allowed(&fixture);
+    let id = signed_commit(&fixture, "a", "signed by a");
+    signed_tag(&fixture, "a", "v-valid");
+    // The working-tree copy now names a different key; the committed one rules.
+    fs::write(
+        fixture.repo().join("trust/allowed"),
+        format!("{PRINCIPAL} {}", public_line(&fixture, "b")),
+    )
+    .expect("edit working tree");
+    for (revision, kind) in [(id.as_str(), "commit"), ("v-valid", "tag")] {
+        let body = committed_request(&fixture, revision, kind, "pin:trust/allowed");
+        let committed = verdict(&body);
+        assert_eq!(committed["status"], "signed_valid", "{kind}: {committed}");
+        assert_eq!(committed["signer"]["principal"], PRINCIPAL, "{kind}");
+    }
+}
+
 #[test]
 #[trace("FR-084-AC-6")]
 fn only_a_signed_valid_verdict_carries_a_gesture() {
@@ -1585,4 +1631,131 @@ fn the_run_gets_the_tag_signature_block_byte_for_byte() {
         line.contains(" -I signer@example.invalid -n git -s "),
         "{line}"
     );
+}
+
+#[test]
+#[trace("FR-037-AC-24")]
+fn a_refused_allowed_signers_source_starts_no_verifier() {
+    let fixture = fixture();
+    set_allowed(
+        &fixture,
+        &format!("{PRINCIPAL} {}", public_line(&fixture, "a")),
+    );
+    pin_allowed(&fixture);
+    let repo = fixture.repo();
+    fs::write(repo.join("big"), vec![b'#'; 1024 * 1024 + 1]).expect("big");
+    git(&repo, None, &["add", "big"]);
+    git(&repo, None, &["commit", "-q", "-m", "oversized"]);
+    let id = signed_commit(&fixture, "a", "signed by a");
+    signed_tag(&fixture, "a", "v-valid");
+
+    // A recording `ssh-keygen` and `gitsign` that mark any start; git is real.
+    let bin = path_with(&fixture, "marking-bin", &["git"]);
+    let marker = fixture.root().join("verifier-started");
+    for program in ["ssh-keygen", "gitsign"] {
+        let script = bin.join(program);
+        fs::write(
+            &script,
+            format!("#!/bin/sh\ntouch '{}'\nexit 1\n", marker.display()),
+        )
+        .expect("marker");
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("mode");
+    }
+    for source in [
+        "missing-revision:trust/allowed",
+        "pin:trust/absent",
+        "pin:big",
+        "pin:trust",
+    ] {
+        let body = committed_request(&fixture, &id, "commit", source);
+        let output = run_with(body.to_string().as_bytes(), Some(&bin));
+        assert_eq!(output.status.code(), Some(2), "{source}: {output:?}");
+        assert_eq!(
+            error_code(&output),
+            "signature_verify_allowed_signers_invalid",
+            "{source}"
+        );
+    }
+    for source in ["relative/allowed", "pin:/abs", "pin:trust/../allowed", ":x"] {
+        let body = committed_request(&fixture, "v-valid", "tag", source);
+        let output = run_with(body.to_string().as_bytes(), Some(&bin));
+        assert_eq!(output.status.code(), Some(2), "{source}: {output:?}");
+        assert_eq!(
+            error_code(&output),
+            "signature_verify_request_invalid",
+            "{source}"
+        );
+    }
+    assert!(!marker.exists(), "a refused source started a verifier");
+}
+
+#[test]
+#[trace("FR-037-AC-24")]
+fn a_git_that_cannot_answer_for_a_committed_source_is_unverifiable() {
+    let fixture = fixture();
+    let plain = fixture.root().join("plain");
+    fs::create_dir(&plain).expect("plain directory");
+    let mut body = committed_request(&fixture, "HEAD", "commit", "pin:trust/allowed");
+    body["repository"] = json!(plain.display().to_string());
+    let unverifiable = verdict(&body);
+    assert_eq!(unverifiable["status"], "unverifiable", "{unverifiable}");
+    assert_eq!(unverifiable["reason"], "repository_unavailable");
+    assert!(unverifiable.get("allowed_signers_sha256").is_none());
+}
+
+#[test]
+#[trace("FR-037-AC-23")]
+fn git_2_35_judges_a_backdated_tag_at_the_claimed_date() {
+    let text = String::from_utf8(
+        Command::new("git")
+            .arg("--version")
+            .output()
+            .expect("git")
+            .stdout,
+    )
+    .expect("utf-8");
+    let mut parts = text
+        .trim_start_matches("git version ")
+        .split(|c: char| !c.is_ascii_digit());
+    let major: u32 = parts.next().and_then(|p| p.parse().ok()).expect("major");
+    let minor: u32 = parts.next().and_then(|p| p.parse().ok()).expect("minor");
+    if (major, minor) < (2, 35) {
+        eprintln!("skipped: {text:?} judges key validity at the verification time");
+        return;
+    }
+    let fixture = fixture();
+    set_allowed(
+        &fixture,
+        &format!(
+            "{PRINCIPAL} valid-before=\"20200101\" {}",
+            public_line(&fixture, "a")
+        ),
+    );
+    let public = fixture.public("a");
+    let output = Command::new("git")
+        .args([
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@example.invalid",
+            "-c",
+            "gpg.format=ssh",
+            "-c",
+            &format!("user.signingkey={}", public.display()),
+            "tag",
+            "-s",
+            "-m",
+            "backdated",
+            "v-backdated",
+        ])
+        .current_dir(fixture.repo())
+        .env("GIT_CONFIG_NOSYSTEM", "1")
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_COMMITTER_DATE", "2019-06-01T12:00:00+0000")
+        .env_remove("GIT_DIR")
+        .output()
+        .expect("git tag");
+    assert!(output.status.success(), "{output:?}");
+    let backdated = status(&fixture, "v-backdated", "tag");
+    assert_eq!(backdated["status"], "signed_valid", "{backdated}");
 }

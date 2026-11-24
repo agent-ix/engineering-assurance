@@ -1,0 +1,170 @@
+name: Tag receipt
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the default source branch
+        uses: actions/checkout@v4
+        with:
+          repository: agent-ix/engineering-assurance
+          ref: main
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain-file: source/rust-toolchain.toml
+
+      - name: Build and check the tag receipt CLI
+        working-directory: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --locked --release --features full --bin engineering-assurance
+          cli="$GITHUB_WORKSPACE/source/target/release/engineering-assurance"
+          "$cli" --version
+          "$cli" tag-receipt-record --help >/dev/null
+          "$cli" tag-receipt-note --help >/dev/null
+
+      - name: Upload the checked-out-source CLI
+        uses: actions/upload-artifact@v4
+        with:
+          name: tag-receipt-cli
+          path: source/target/release/engineering-assurance
+          if-no-files-found: error
+
+  record:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check the tag input against the trigger
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          TRIGGER_TAG: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != "push" || "$REF_TYPE" != "tag" || "$INPUT_TAG" != "$TRIGGER_TAG" ]]; then
+            echo "::error::tag_receipt_input_mismatch"
+            exit 1
+          fi
+
+      - name: Download the checked-out-source CLI
+        uses: actions/download-artifact@v4
+        with:
+          name: tag-receipt-cli
+          path: ${{ runner.temp }}/ea-tooling
+
+      - name: Make the checked-out-source CLI executable
+        shell: bash
+        run: chmod 0755 "$RUNNER_TEMP/ea-tooling/engineering-assurance"
+
+      - name: Read the pushed tag and sign its receipt with the source-built CLI
+        shell: bash
+        env:
+          EA_CLI: ${{ runner.temp }}/ea-tooling/engineering-assurance
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          TAG_NAME: ${{ github.ref_name }}
+          TAG_OBJECT: ${{ github.event.after }}
+          PUSHED_AT_UNIX: ${{ github.event.repository.pushed_at }}
+        run: |
+          set -euo pipefail
+          # Repository objects are read as data: a bare repository holding the
+          # protected base branch and pushed tag are read as data. The binary
+          # was built in the separate job from the default-branch source; no
+          # source from the pushed tag is checked out or executed here.
+          gh auth setup-git
+          git init --bare "$RUNNER_TEMP/tag-repository.git"
+          git -C "$RUNNER_TEMP/tag-repository.git" fetch --depth=1 --no-tags \
+            "$GITHUB_SERVER_URL/$REPOSITORY" \
+            "+refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH" \
+            "+refs/tags/$TAG_NAME:refs/tags/$TAG_NAME"
+          tag_hex="$(printf '%s' "$TAG_NAME" | od -An -v -tx1 | tr -d ' \n')"
+          request="$(jq -n \
+            --arg repository "$RUNNER_TEMP/tag-repository.git" \
+            --arg github_repository "$REPOSITORY" \
+            --arg base_branch "$DEFAULT_BRANCH" \
+            --arg tag_hex "$tag_hex" \
+            --arg tag_object "$TAG_OBJECT" \
+            --argjson pushed_at_unix "$PUSHED_AT_UNIX" \
+            '{protocol:"engineering-assurance.tag-receipt-record-request/v1",repository:$repository,github_repository:$github_repository,base_branch:$base_branch,tag_hex:$tag_hex,tag_object:$tag_object,pushed_at_unix:$pushed_at_unix}')"
+          "$EA_CLI" tag-receipt-record --request "$request" > "$RUNNER_TEMP/tag-receipt-result.json"
+
+      - name: Upload the signed tag receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: tag-receipt-signed-data
+          path: ${{ runner.temp }}/tag-receipt-result.json
+          if-no-files-found: error
+
+  notes:
+    needs: [build, record]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download the signed tag receipt
+        uses: actions/download-artifact@v4
+        with:
+          name: tag-receipt-signed-data
+          path: ${{ runner.temp }}/tag-receipt-signed-data
+
+      - name: Download the checked-out-source CLI
+        uses: actions/download-artifact@v4
+        with:
+          name: tag-receipt-cli
+          path: ${{ runner.temp }}/ea-tooling
+
+      - name: Make the checked-out-source CLI executable
+        shell: bash
+        run: chmod 0755 "$RUNNER_TEMP/ea-tooling/engineering-assurance"
+
+      - name: Check out the pushed tag for note storage
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Store the signed tag receipt in Git notes
+        shell: bash
+        env:
+          EA_CLI: ${{ runner.temp }}/ea-tooling/engineering-assurance
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          result="$RUNNER_TEMP/tag-receipt-signed-data/tag-receipt-result.json"
+          if [[ ! -s "$result" ]]; then
+            echo "::error::tag_receipt_result_missing"
+            exit 1
+          fi
+          if [[ "$(jq -r '.status' "$result")" != "signed" ]]; then
+            exit 0
+          fi
+          gh auth setup-git
+          request="$(jq -c \
+            --arg repository "$PWD" \
+            '{protocol:"engineering-assurance.tag-receipt-note-request/v1",repository:$repository,remote:"origin",commit:.commit,bundle:.bundle}' "$result")"
+          "$EA_CLI" tag-receipt-note --request "$request"

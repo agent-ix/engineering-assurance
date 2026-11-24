@@ -431,6 +431,7 @@ fn tc_333_a_time_is_reported_only_on_approved_and_a_missing_one_is_explicit() {
             "signature_kind": "ssh",
             "signed_at": "2026-03-04T04:30:00Z",
             "signed_at_source": "tagger_date",
+            "trusted_at_missing": "ssh_signature",
         })
     );
     assert_eq!(
@@ -440,6 +441,7 @@ fn tc_333_a_time_is_reported_only_on_approved_and_a_missing_one_is_explicit() {
             "meaning": ["reviewed", "released"],
             "signature_kind": "ssh",
             "signed_at_missing": "tagger_date_unreadable",
+            "trusted_at_missing": "ssh_signature",
         })
     );
     // Every other status carries no approval members, so no time.

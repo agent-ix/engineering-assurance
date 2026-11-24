@@ -8,6 +8,7 @@
 mod agent_evals_host;
 mod agent_evals_provider;
 mod approval_gate_host;
+mod approval_rekor;
 mod approval_tag_host;
 mod approval_trail_host;
 mod approval_verify_host;
@@ -30,6 +31,7 @@ mod release_history_host;
 mod release_host;
 mod scope_footprint_host;
 mod signature_verify_host;
+mod tag_receipt_host;
 mod workflow_host;
 
 use std::{
@@ -72,6 +74,8 @@ const RECEIPT_NOTE_CAPABILITY: &str = "receipt-note";
 const RECEIPT_MISSING_CAPABILITY: &str = "receipt-missing";
 const RECEIPT_VERIFY_CAPABILITY: &str = "receipt-verify";
 const RECEIPT_RECORD_CAPABILITY: &str = "receipt-record";
+const TAG_RECEIPT_RECORD_CAPABILITY: &str = "tag-receipt-record";
+const TAG_RECEIPT_NOTE_CAPABILITY: &str = "tag-receipt-note";
 const SCOPE_FOOTPRINT_CAPABILITY: &str = "scope-footprint";
 const SIGNATURE_VERIFY_CAPABILITY: &str = "signature-verify";
 const WORKFLOW_INVARIANTS_CAPABILITY: &str = "workflow-invariants";
@@ -154,6 +158,7 @@ fn command() -> Command {
         .subcommand(receipt_missing_command())
         .subcommand(receipt_verify_command())
         .subcommand(receipt_record_command())
+        .subcommands(tag_receipt_commands())
         .subcommand(release_history_command())
         .subcommand(release_decision_command())
         .subcommand(
@@ -286,6 +291,29 @@ fn receipt_verify_command() -> Command {
                 .help("Receipt-verify request document, or - to read it from stdin")
                 .required(true),
         )
+}
+
+fn tag_receipt_commands() -> [Command; 2] {
+    [
+        tag_receipt_command(
+            TAG_RECEIPT_RECORD_CAPABILITY,
+            "Read one pushed tag and sign its tag receipt",
+        ),
+        tag_receipt_command(
+            TAG_RECEIPT_NOTE_CAPABILITY,
+            "Store a signed tag receipt in the notes ref and push it",
+        ),
+    ]
+}
+
+fn tag_receipt_command(name: &'static str, about: &'static str) -> Command {
+    Command::new(name).about(about).arg(
+        Arg::new("request")
+            .long("request")
+            .value_name("JSON")
+            .help("Request document, or - to read it from stdin")
+            .required(true),
+    )
 }
 
 fn receipt_record_command() -> Command {
@@ -481,6 +509,8 @@ fn main() -> ExitCode {
         Some((RECEIPT_MISSING_CAPABILITY, arguments)) => run_receipt_missing(arguments),
         Some((RECEIPT_VERIFY_CAPABILITY, arguments)) => run_receipt_verify(arguments),
         Some((RECEIPT_RECORD_CAPABILITY, arguments)) => run_receipt_record(arguments),
+        Some((TAG_RECEIPT_RECORD_CAPABILITY, arguments)) => run_tag_receipt_record(arguments),
+        Some((TAG_RECEIPT_NOTE_CAPABILITY, arguments)) => run_tag_receipt_note(arguments),
         Some((RELEASE_HISTORY_CAPABILITY, arguments)) => run_release_history(arguments),
         Some((RELEASE_DECISION_CAPABILITY, arguments)) => run_release_decision(arguments),
         Some((WORKFLOW_INVARIANTS_CAPABILITY, _)) => run_workflow_invariants(),
@@ -1056,6 +1086,29 @@ fn run_receipt_record(arguments: &ArgMatches) -> ExitCode {
         "receipt_record_request_unreadable",
         |bytes| {
             receipt_host::execute_record(bytes).map_err(|error| (error.code(), error.to_string()))
+        },
+    )
+}
+
+fn run_tag_receipt_record(arguments: &ArgMatches) -> ExitCode {
+    run_request_line(
+        arguments,
+        TAG_RECEIPT_RECORD_CAPABILITY,
+        "tag_receipt_request_unreadable",
+        |bytes| {
+            tag_receipt_host::execute_record(bytes)
+                .map_err(|error| (error.code(), error.to_string()))
+        },
+    )
+}
+
+fn run_tag_receipt_note(arguments: &ArgMatches) -> ExitCode {
+    run_request_line(
+        arguments,
+        TAG_RECEIPT_NOTE_CAPABILITY,
+        "tag_receipt_request_unreadable",
+        |bytes| {
+            tag_receipt_host::execute_note(bytes).map_err(|error| (error.code(), error.to_string()))
         },
     )
 }
