@@ -268,7 +268,8 @@ mod tests {
     use base64::{Engine, engine::general_purpose::STANDARD};
     use der::asn1::OctetString;
     use serde_json::Value;
-    use sigstore_types::Bundle;
+
+    const STRUCTURAL_CHECKPOINT: &str = "test-log - test-key-id\n1\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n\n— test-log AQIDBAUG\n";
 
     #[test]
     #[ix_trace_rs::trace("FR-041-AC-28")]
@@ -294,7 +295,7 @@ mod tests {
                 root_hash: vec![1],
                 tree_size: 1,
                 hashes: Vec::new(),
-                checkpoint: b"checkpoint".to_vec(),
+                checkpoint: STRUCTURAL_CHECKPOINT.as_bytes().to_vec(),
             }),
             canonicalized_body: Some(vec![1]),
         };
@@ -329,7 +330,7 @@ mod tests {
                 root_hash: vec![1],
                 tree_size: 1,
                 hashes: Vec::new(),
-                checkpoint: b"untrusted checkpoint".to_vec(),
+                checkpoint: STRUCTURAL_CHECKPOINT.as_bytes().to_vec(),
             }),
             canonicalized_body: Some(vec![1]),
         };
