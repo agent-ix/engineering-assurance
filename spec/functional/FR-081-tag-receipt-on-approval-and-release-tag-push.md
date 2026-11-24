@@ -85,6 +85,9 @@ A note on a public repository is a public write: the workflow runs the leak chec
 [FR-057](./FR-057-fail-closed-pre-publish-leak-check.md) on the text members of the statement first, and a refusal
 fails the run with `tag_receipt_leak_check_refused` and writes no receipt.
 
+A tag receipt verifier does not receive repository visibility, so it tries the public-good trust root with log inclusion
+required first, then the GitHub private-instance trust root with timestamp-only evidence. For each attempt it checks the
+receipt against every `receipt_writer` identity carrying `source_ref_prefix`; the first complete verification succeeds.
 A tag receipt verifies when the signature is valid through the delegated stack ([NFR-010](../non-functional/NFR-010-no-cryptography-of-our-own.md)),
 the signer matches a `receipt_writer` entry of the workflow-identity policy that carries `source_ref_prefix` on every
 member of [FR-064](./FR-064-verify-approval-statement-with-workflow-identity-policy.md), the certificate's source ref
@@ -93,7 +96,9 @@ the subject digest equals `tag_object`, `repository` equals the `source_reposito
 the note. Anything else is an `invalid_receipt` with one reason of `signature_invalid`, `untrusted_signer`,
 `predicate_invalid` or `wrong_subject`. A change receipt is verified only against the `receipt_writer` entry with
 `source_ref`, so a tag receipt is never accepted as a change receipt and a change receipt is never accepted as a tag
-receipt.
+receipt. [FR-043](./FR-043-approval-trail-of-a-change-assurance-record.md) and
+[FR-082](./FR-082-detect-deleted-and-changed-tags-from-tag-receipts.md) read and verify stored tag receipt notes only
+when the receipt policy contains `tag_receipts`; a missing policy member disables those reads, including for older notes.
 
 Out of scope: verifying or interpreting the tag's own signature or meaning, protecting any ref (the documentation
 requirement of [FR-083](./FR-083-document-the-adoption-rulesets-for-tags-and-the-private-records-branch.md) covers it), changing the
@@ -123,6 +128,7 @@ change receipt of FR-074, and the release attestation (FR-066, FR-067), which th
 - The tag receipt verifier SHALL return `untrusted_signer` unless the signer matches a `receipt_writer` entry with `source_ref_prefix` and the certificate source ref equals the statement `ref`.
 - The tag receipt verifier SHALL return `wrong_subject` when the subject, `ref`, `tag_object`, `commit` or the `repository` (against the matched entry's `source_repository`) disagree.
 - The tag receipt verifier SHALL return `predicate_invalid` when the statement breaks its closed schema.
+- A consumer SHALL read and verify stored tag receipt notes only when the receipt policy contains `tag_receipts`.
 - The change receipt verifier SHALL NOT accept a tag receipt.
 - The tag receipt verifier SHALL NOT accept a change receipt.
 - The tag receipt workflow SHALL NOT interpret a tag's meaning, signature or trailers beyond copying the trailer values.

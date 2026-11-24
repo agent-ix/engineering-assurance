@@ -15,8 +15,9 @@ use std::{
     process::{Command, Output, Stdio},
 };
 
+use engineering_assurance::signature_verify::tagger_signed_at;
 use ix_trace_rs::trace;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 const IDENTITY: &str = "alice@example.test";
 const ISSUER: &str = concat!("https:", "//issuer.example.test");
@@ -276,21 +277,40 @@ fn result_on(fixture: &Fixture, request: &Value, path: &Path) -> Value {
 }
 
 #[test]
-#[ignore = "needs real gitsign v0.18.0, available Sigstore trust services and a public approval tag named by FR_041_LIVE_*"]
-#[trace("TC-1017", "TC-1018", "TC-1019", "TC-1020", "FR-041-AC-26")]
+#[ignore = "needs real gitsign v0.18.0, available Sigstore trust services and a public offline-Rekor approval tag named by FR_041_LIVE_*"]
+#[trace(
+    "TC-1017",
+    "TC-1018",
+    "TC-1019",
+    "TC-1020",
+    "FR-041-AC-26",
+    "FR-041-AC-28",
+    "FR-041-AC-29"
+)]
 fn tc_1017_real_gitsign_verifies_and_binds_a_public_approval_tag() {
-    let (Ok(repository), Ok(tag), Ok(identity), Ok(issuer), Ok(record_id), Ok(record_digest)) = (
+    let (
+        Ok(repository),
+        Ok(tag),
+        Ok(identity),
+        Ok(issuer),
+        Ok(record_id),
+        Ok(record_digest),
+        Ok(trusted_at),
+    ) = (
         std::env::var("FR_041_LIVE_REPOSITORY"),
         std::env::var("FR_041_LIVE_TAG"),
         std::env::var("FR_041_LIVE_IDENTITY"),
         std::env::var("FR_041_LIVE_ISSUER"),
         std::env::var("FR_041_LIVE_RECORD_ID"),
         std::env::var("FR_041_LIVE_RECORD_DIGEST"),
-    ) else {
+        std::env::var("FR_041_LIVE_TRUSTED_AT"),
+    )
+    else {
         panic!(
-            "UNAVAILABLE: set FR_041_LIVE_REPOSITORY, _TAG, _IDENTITY, _ISSUER, _RECORD_ID and _RECORD_DIGEST; this is not live interoperability evidence"
+            "UNAVAILABLE: set FR_041_LIVE_REPOSITORY, _TAG, _IDENTITY, _ISSUER, _RECORD_ID, _RECORD_DIGEST and _TRUSTED_AT for a public offline-Rekor approval tag; this is not live interoperability evidence"
         );
     };
+    utc_epoch(&trusted_at);
     let version = Command::new("gitsign")
         .arg("--version")
         .output()
@@ -298,8 +318,13 @@ fn tc_1017_real_gitsign_verifies_and_binds_a_public_approval_tag() {
             panic!("LIVE_CASE=UNAVAILABLE gitsign_not_started error={error}; no approval interoperability pass recorded")
         });
     let version_text = String::from_utf8_lossy(&version.stdout).into_owned();
-    assert!(version.status.success(), "gitsign --version: {version:?}");
-    assert_gitsign_018_version(&version_text);
+    if !version.status.success() || !is_gitsign_018_version(&version_text) {
+        panic!(
+            "LIVE_CASE=UNAVAILABLE expected real gitsign v0.18.0, got status={:?} version={:?}; no approval interoperability pass recorded",
+            version.status.code(),
+            version_text.trim()
+        );
+    }
 
     let live = tempfile::tempdir().expect("live checkout");
     let live_repository = live.path().join("repository");
@@ -307,8 +332,16 @@ fn tc_1017_real_gitsign_verifies_and_binds_a_public_approval_tag() {
         .args(["clone", "--no-hardlinks", "--no-checkout", &repository])
         .arg(&live_repository)
         .output()
-        .expect("clone public live repository");
-    assert!(clone.status.success(), "git clone: {clone:?}");
+        .unwrap_or_else(|error| {
+            panic!(
+                "LIVE_CASE=UNAVAILABLE git clone could not start: {error}; no live pass recorded"
+            )
+        });
+    if !clone.status.success() {
+        panic!(
+            "LIVE_CASE=UNAVAILABLE public repository clone failed: {clone:?}; no live pass recorded"
+        );
+    }
     let tag_ref = format!("refs/tags/{tag}");
     let original_id = resolve_tag_object(&live_repository, &tag_ref);
     eprintln!(
@@ -323,6 +356,7 @@ fn tc_1017_real_gitsign_verifies_and_binds_a_public_approval_tag() {
         record_digest,
         identity,
         issuer,
+        trusted_at,
         path: std::env::var_os("PATH").expect("PATH"),
     };
     let fixture = fixture();
@@ -346,6 +380,7 @@ struct LiveApproval {
     record_digest: String,
     identity: String,
     issuer: String,
+    trusted_at: String,
     path: std::ffi::OsString,
 }
 
@@ -374,7 +409,7 @@ impl LiveApproval {
     }
 }
 
-fn assert_gitsign_018_version(version: &str) {
+fn is_gitsign_018_version(version: &str) -> bool {
     let token = version
         .lines()
         .next()
@@ -382,14 +417,40 @@ fn assert_gitsign_018_version(version: &str) {
         .split_whitespace()
         .last()
         .unwrap_or_default();
-    assert!(
-        matches!(token, "v0.18.0" | "0.18.0"),
-        "expected exact gitsign v0.18.0 version token, got {version:?}"
+    matches!(token, "v0.18.0" | "0.18.0")
+}
+
+fn utc_epoch(value: &str) -> i64 {
+    let parsed = time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339)
+        .expect("expected trusted time must be RFC 3339");
+    let format = time::format_description::parse_borrowed::<2>(
+        "[year]-[month]-[day]T[hour]:[minute]:[second]Z",
+    )
+    .expect("fixed UTC format is valid");
+    assert_eq!(
+        parsed.format(&format).expect("trusted time formats as UTC"),
+        value,
+        "FR_041_LIVE_TRUSTED_AT must be a whole-second UTC instant ending in Z"
     );
+    parsed.unix_timestamp()
 }
 
 fn resolve_tag_object(repository: &Path, tag_ref: &str) -> String {
-    git(repository, &["rev-parse", &format!("{tag_ref}^{{tag}}")])
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repository)
+        .args(["rev-parse", &format!("{tag_ref}^{{tag}}")])
+        .output()
+        .unwrap_or_else(|error| {
+            panic!("LIVE_CASE=UNAVAILABLE tag-object resolution could not start: {error}; no live pass recorded")
+        });
+    if !output.status.success() {
+        panic!(
+            "LIVE_CASE=UNAVAILABLE named public tag is not an annotated tag object: {output:?}; no live pass recorded"
+        );
+    }
+    String::from_utf8(output.stdout)
+        .expect("tag object id is UTF-8")
         .trim()
         .to_owned()
 }
@@ -411,6 +472,43 @@ fn assert_live_approval(fixture: &Fixture, live: &LiveApproval, original_id: &st
         accepted["signature"]["signature_kind"], "gitsign",
         "{accepted}"
     );
+    let Some(actual_trusted_at) = accepted.get("trusted_at").and_then(Value::as_str) else {
+        let missing = accepted
+            .get("trusted_at_missing")
+            .and_then(Value::as_str)
+            .unwrap_or("not_reported");
+        eprintln!(
+            "LIVE_CASE=UNAVAILABLE reason=trusted_time_missing trusted_at_missing={missing}; no trusted-time interoperability pass recorded"
+        );
+        panic!(
+            "UNAVAILABLE: the tag did not yield a verified transparency-log time; no AC-28/AC-29 live pass recorded"
+        );
+    };
+    assert_eq!(actual_trusted_at, live.trusted_at, "{accepted}");
+    assert_eq!(
+        accepted["trusted_at_source"], "transparency_log",
+        "{accepted}"
+    );
+    assert!(accepted.get("trusted_at_missing").is_none(), "{accepted}");
+
+    let tag_object = git(&live.repository, &["cat-file", "tag", original_id]);
+    let expected_signed_at = tagger_signed_at(tag_object.as_bytes())
+        .expect("live tag object must carry a readable tagger date");
+    assert_eq!(
+        accepted["signed_at"],
+        expected_signed_at.as_str(),
+        "{accepted}"
+    );
+    assert_eq!(accepted["signed_at_source"], "tagger_date", "{accepted}");
+    assert!(accepted.get("signed_at_missing").is_none(), "{accepted}");
+    let skew = utc_epoch(expected_signed_at.as_str())
+        .checked_sub(utc_epoch(&live.trusted_at))
+        .expect("signed-minus-trusted time skew fits i64");
+    if skew == 0 {
+        assert!(accepted.get("time_skew").is_none(), "{accepted}");
+    } else {
+        assert_eq!(accepted["time_skew"], skew, "{accepted}");
+    }
 }
 
 fn assert_live_identity_mismatches(fixture: &Fixture, live: &LiveApproval) {
@@ -782,8 +880,8 @@ fn tc_337_an_approval_with_no_readable_tagger_date_reports_the_time_missing() {
 
 #[test]
 #[trace("TC-1011", "FR-041-AC-25")]
-fn tc_1011_the_registry_captured_before_verification_survives_a_moved_branch_and_an_edited_worktree()
- {
+fn tc_1011_the_registry_captured_before_verification_survives_a_moved_branch_and_an_edited_worktree(
+) {
     let fixture = fixture();
     forged_tag(&fixture, "v-cms", &good_message(), CMS_BLOCK);
     let repo = fixture.repo();

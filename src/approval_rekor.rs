@@ -8,12 +8,12 @@
 //! artifact hashing, signature checks, inclusion checks and certificate
 //! validity are delegated to `sigstore-verify`.
 
-use base64::{Engine, engine::general_purpose::STANDARD};
+use base64::{engine::general_purpose::STANDARD, Engine};
 use cms::{
     content_info::ContentInfo,
     signed_data::{SignedData, SignerIdentifier},
 };
-use der::{Decode, Encode, asn1::OctetString};
+use der::{asn1::OctetString, Decode, Encode};
 use prost::Message;
 use serde_json::json;
 use sigstore_types::Bundle;
@@ -21,6 +21,7 @@ use sigstore_types::Bundle;
 const CMS_BEGIN: &str = "-----BEGIN SIGNED MESSAGE-----";
 const CMS_END: &str = "-----END SIGNED MESSAGE-----";
 const REKOR_ENTRY_OID: &str = "1.3.6.1.4.1.57264.3.1";
+const DER_SET_OF_TAG: u8 = 0x31;
 
 /// The result of reading the embedded entry in a CMS signature block.
 pub(crate) enum EmbeddedEntry {
@@ -99,9 +100,14 @@ pub(crate) fn extract(tag_object: &[u8]) -> EmbeddedEntry {
     let Some(signer_certificate) = signer_certificate else {
         return EmbeddedEntry::Invalid;
     };
+    // SignedAttributes is a SET OF. Its standalone DER is the artifact
+    // sigstore-verify hashes; the CMS field's implicit context tag is not.
     let Ok(artifact) = signed_attrs.to_der() else {
         return EmbeddedEntry::Invalid;
     };
+    if artifact.first() != Some(&DER_SET_OF_TAG) {
+        return EmbeddedEntry::Invalid;
+    }
     let signature = bundle_signature(&signer.signature);
     let Some(bundle) = bundle(&entry, &signer_certificate, &signature) else {
         return EmbeddedEntry::Invalid;
@@ -267,8 +273,8 @@ struct RekorInclusionProof {
     reason = "in a test, a panic IS the failure report; the production lints stand"
 )]
 mod tests {
-    use super::{EmbeddedEntry, bundle_signature, extract, verify_with_policy};
-    use base64::{Engine, engine::general_purpose::STANDARD};
+    use super::{bundle_signature, extract, verify_with_policy, EmbeddedEntry, DER_SET_OF_TAG};
+    use base64::{engine::general_purpose::STANDARD, Engine};
     use der::asn1::OctetString;
     use ix_trace_rs::trace;
     use serde_json::json;
@@ -367,6 +373,11 @@ mod tests {
         let EmbeddedEntry::Bundle { artifact, bundle } = extract(VERIFIED_TAG) else {
             panic!("fixture must yield a bundle from CMS extraction");
         };
+        assert_eq!(
+            artifact.first(),
+            Some(&DER_SET_OF_TAG),
+            "the artifact is the universal DER SET OF signed attributes"
+        );
 
         assert_eq!(
             verify_fixture(&bundle, &artifact).unwrap_or_else(|error| panic!("{error}")),
@@ -395,8 +406,8 @@ mod tests {
             panic!("fixture must yield a bundle from CMS extraction");
         };
         let changed = mutate_bundle(&bundle, |value| {
-            let encoded = value["verificationMaterial"]["tlogEntries"][0]
-                ["inclusionPromise"]["signedEntryTimestamp"]
+            let encoded = value["verificationMaterial"]["tlogEntries"][0]["inclusionPromise"]
+                ["signedEntryTimestamp"]
                 .as_str()
                 .expect("fixture SET is base64");
             let mut signature = STANDARD
@@ -405,8 +416,8 @@ mod tests {
             if let Some(first) = signature.first_mut() {
                 *first ^= 1;
             }
-            value["verificationMaterial"]["tlogEntries"][0]["inclusionPromise"]["signedEntryTimestamp"] =
-                json!(STANDARD.encode(signature));
+            value["verificationMaterial"]["tlogEntries"][0]["inclusionPromise"]
+                ["signedEntryTimestamp"] = json!(STANDARD.encode(signature));
         });
 
         assert_rejected(verify_fixture(&changed, &artifact));

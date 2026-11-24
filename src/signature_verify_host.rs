@@ -701,6 +701,22 @@ pub(crate) fn load_listed_tag(
     .load_listed(name)
 }
 
+/// Loads one exact tag ref, retaining its immutable object and parsed trailers
+/// so another host command can check the expected object id before delegating
+/// signature verification.
+pub(crate) fn load_tag_ref(
+    repository: &Path,
+    name: &str,
+    allowed_signers: &Path,
+) -> Result<Option<LoadedTag>, Reason> {
+    Git {
+        repository,
+        allowed_signers: allowed_signers.to_path_buf(),
+        gitsign: None,
+    }
+    .load(&format!("refs/tags/{name}"))
+}
+
 /// Runs git in `repository` with the isolation the verification uses, for
 /// object reads that decide nothing about a signature.
 pub(crate) fn run_git(repository: &Path, arguments: &[&str]) -> Result<CompletedProcess, Reason> {
