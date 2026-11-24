@@ -70,7 +70,7 @@ struct Request {
     repository: PathBuf,
     revision: String,
     kind: TargetKind,
-    allowed_signers: PathBuf,
+    allowed_signers: String,
     gitsign: Option<GitsignRequest>,
     identity_registry: Option<String>,
     trailer_keys: Option<Vec<String>>,
@@ -296,12 +296,11 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, SignatureVerifyError> {
     let request: Request =
         serde_json::from_value(value).map_err(|_| SignatureVerifyError::Invalid)?;
     let trailer_keys = request.trailer_keys.as_deref();
-    if request.protocol != REQUEST_PROTOCOL
-        || !request.repository.is_absolute()
-        || !request.allowed_signers.is_absolute()
-    {
+    if request.protocol != REQUEST_PROTOCOL || !request.repository.is_absolute() {
         return Err(SignatureVerifyError::Invalid);
     }
+    let source = AllowedSignersSource::parse(&request.allowed_signers)
+        .ok_or(SignatureVerifyError::Invalid)?;
     if !is_plain_revision(&request.revision) {
         return Err(SignatureVerifyError::Revision);
     }
@@ -315,7 +314,15 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, SignatureVerifyError> {
             SignatureVerifyError::GitsignPrincipal,
         )
     })?;
-    let allowed_signers = capture_allowed_signers(&request.allowed_signers)?;
+    let allowed_signers = match capture_allowed_signers(&request.repository, &source) {
+        Ok(snapshot) => snapshot,
+        Err(CaptureFailure::Invalid) => return Err(SignatureVerifyError::AllowedSigners),
+        // Git could not answer: a verdict, and no verifier is started.
+        Err(CaptureFailure::Git(reason)) => {
+            let verdict = Verdict::unverifiable(request.kind, reason);
+            return encode_line(&verdict, None);
+        }
+    };
     let gitsign = match input
         .map(|input| load_gitsign(&request.repository, input))
         .transpose()
@@ -409,37 +416,101 @@ fn requested_trailers(
     )
 }
 
-/// Refuses an allowed-signers file git should not be given: one that is not a
-/// regular file, is over 1 MiB, cannot be read, or is not UTF-8. The grammar of
-/// the file is git's and `ssh-keygen`'s to read.
-pub(crate) fn capture_allowed_signers(
-    path: &Path,
-) -> Result<AllowedSignersSnapshot, SignatureVerifyError> {
-    snapshot_allowed_signers(path).map_err(|()| SignatureVerifyError::AllowedSigners)
+/// Where the allowed-signers bytes of a request come from (FR-037).
+pub(crate) enum AllowedSignersSource {
+    /// An absolute file path, read once.
+    File(PathBuf),
+    /// A `<rev>:<path>` trust source, read from a committed revision.
+    Committed(TrustSourceAddress),
 }
 
-fn read_allowed_signers(path: &Path) -> Result<Vec<u8>, SignatureVerifyError> {
-    let invalid = |_| SignatureVerifyError::AllowedSigners;
-    // The type is checked before the open: opening a FIFO would block.
-    let before = std::fs::metadata(path).map_err(invalid)?;
-    if !before.is_file() || before.len() > MAX_ALLOWED_SIGNERS_BYTES {
-        return Err(SignatureVerifyError::AllowedSigners);
+impl AllowedSignersSource {
+    /// The source `value` names: an absolute path when it begins with `/`, a
+    /// well-formed `<rev>:<path>` address otherwise; `None` for anything else.
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        if value.starts_with('/') {
+            Some(Self::File(PathBuf::from(value)))
+        } else {
+            TrustSourceAddress::parse(value).map(Self::Committed)
+        }
     }
-    let file = File::open(path).map_err(invalid)?;
-    let metadata = file.metadata().map_err(invalid)?;
+}
+
+/// Why the allowed-signers source could not be captured.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum CaptureFailure {
+    /// The source is `invalid` (FR-037): not a readable regular UTF-8 file of
+    /// at most 1 MiB, or a committed source that is absent or unusable.
+    Invalid,
+    /// Git could not answer (FR-037): the FR-036 reason for the failure.
+    Git(Reason),
+}
+
+/// Reads the allowed-signers source once, before git is started on the target,
+/// digests exactly the bytes read, and writes them to a private temporary file
+/// that is the only allowed-signers file `git` and `ssh-keygen` are given
+/// (FR-037). A file git should not be given is refused here: not a regular
+/// file, over 1 MiB, unreadable, or not UTF-8. The grammar of the content is
+/// git's and `ssh-keygen`'s to read.
+pub(crate) fn capture_allowed_signers(
+    repository: &Path,
+    source: &AllowedSignersSource,
+) -> Result<AllowedSignersSnapshot, CaptureFailure> {
+    let (bytes, commit) = match source {
+        AllowedSignersSource::File(path) => (
+            read_allowed_signers(path).ok_or(CaptureFailure::Invalid)?,
+            None,
+        ),
+        AllowedSignersSource::Committed(address) => {
+            let git = Git {
+                repository,
+                allowed_signers: PathBuf::from("/dev/null"),
+                gitsign: None,
+            };
+            let (commit, content) =
+                git.read_trust_source(address)
+                    .map_err(|failure| match failure {
+                        RegistryFailure::Invalid => CaptureFailure::Invalid,
+                        RegistryFailure::Git(reason) => CaptureFailure::Git(reason),
+                    })?;
+            (content.into_bytes(), Some(commit))
+        }
+    };
+    let directory = tempfile::tempdir().map_err(|_| CaptureFailure::Invalid)?;
+    let path = directory.path().join("allowed_signers");
+    std::fs::write(&path, &bytes).map_err(|_| CaptureFailure::Invalid)?;
+    Ok(AllowedSignersSnapshot {
+        sha256: format!(
+            "sha256:{}",
+            sigstore_verify::crypto::sha256(&bytes).to_hex()
+        ),
+        commit,
+        _directory: directory,
+        path,
+    })
+}
+
+fn read_allowed_signers(path: &Path) -> Option<Vec<u8>> {
+    // The type is checked before the open: opening a FIFO would block.
+    let before = std::fs::metadata(path).ok()?;
+    if !before.is_file() || before.len() > MAX_ALLOWED_SIGNERS_BYTES {
+        return None;
+    }
+    let file = File::open(path).ok()?;
+    let metadata = file.metadata().ok()?;
     if !metadata.is_file() || metadata.len() > MAX_ALLOWED_SIGNERS_BYTES {
-        return Err(SignatureVerifyError::AllowedSigners);
+        return None;
     }
     let mut bytes = Vec::new();
     file.take(MAX_ALLOWED_SIGNERS_BYTES + 1)
         .read_to_end(&mut bytes)
-        .map_err(invalid)?;
+        .ok()?;
     if u64::try_from(bytes.len()).map_or(true, |len| len > MAX_ALLOWED_SIGNERS_BYTES)
         || std::str::from_utf8(&bytes).is_err()
     {
-        return Err(SignatureVerifyError::AllowedSigners);
+        return None;
     }
-    Ok(bytes)
+    Some(bytes)
 }
 
 /// Maps a process-mechanics failure to the reason it makes the object
@@ -467,6 +538,9 @@ pub(crate) struct CheckedTag {
     pub(crate) tagger_signed_at: Option<SignedAt>,
     /// Immutable annotated tag object whose message and signature were checked.
     pub(crate) tag_object_id: Option<String>,
+    /// The immutable object bytes from which the signature and trailers were
+    /// checked, retained for FR-041's Rekor extraction.
+    pub(crate) tag_object: Option<Vec<u8>>,
 }
 
 impl CheckedTag {
@@ -478,6 +552,7 @@ impl CheckedTag {
             trailers: None,
             tagger_signed_at: None,
             tag_object_id: None,
+            tag_object: None,
         }
     }
 }
@@ -498,20 +573,37 @@ pub(crate) fn check_tag(
     .tag_checked(revision)
 }
 
+/// The allowed-signers bytes of one run, held as the private file the verifiers
+/// are given, with the identity of what that file holds.
 pub(crate) struct AllowedSignersSnapshot {
     _directory: tempfile::TempDir,
     pub(crate) path: PathBuf,
+    sha256: String,
+    commit: Option<String>,
 }
 
-fn snapshot_allowed_signers(path: &Path) -> Result<AllowedSignersSnapshot, ()> {
-    let bytes = read_allowed_signers(path).map_err(|_| ())?;
-    let directory = tempfile::tempdir().map_err(|_| ())?;
-    let path = directory.path().join("allowed_signers");
-    std::fs::write(&path, bytes).map_err(|_| ())?;
-    Ok(AllowedSignersSnapshot {
-        _directory: directory,
-        path,
-    })
+impl AllowedSignersSnapshot {
+    /// `sha256:` and 64 lowercase hexadecimal digits of the bytes the run used.
+    pub(crate) fn sha256(&self) -> &str {
+        &self.sha256
+    }
+
+    /// The full commit id a `<rev>:<path>` source resolved to; `None` for a file.
+    pub(crate) fn commit(&self) -> Option<&str> {
+        self.commit.as_deref()
+    }
+}
+
+/// What `git --version` printed for the git a run used, as printed without its
+/// final newline; `None` when git could not answer.
+pub(crate) fn git_version(repository: &Path) -> Option<String> {
+    let output = run_git(repository, &["--version"]).ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8(output.stdout).ok()?;
+    let text = text.strip_suffix('\n').unwrap_or(&text);
+    (!text.is_empty()).then(|| text.to_owned())
 }
 
 /// The refs under `refs/tags`, as `git for-each-ref` lists them.
@@ -1067,6 +1159,7 @@ impl Git<'_> {
             trailers: None,
             tagger_signed_at: None,
             tag_object_id: None,
+            tag_object: None,
         };
         match self.load(revision) {
             Ok(Some(loaded)) => self.verify_loaded(loaded),
@@ -1128,6 +1221,7 @@ impl Git<'_> {
             trailers,
             tagger_signed_at: tagger_signed_at(payload),
             tag_object_id: Some(id),
+            tag_object: Some(object),
         }
     }
 

@@ -33,11 +33,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::approval_verify_host::{Assessment, GitsignEcho, Trust, assess};
+use crate::approval_verify_host::{Assessment, GitsignEcho, Trust, TrustReading, assess};
 use crate::signature_verify_host::{
-    AllowedSignersSnapshot, GitsignRequest, ListedRef, LoadedGitsign, RegistryFailure,
-    capture_allowed_signers, list_tags, load_gitsign, load_listed_tag, validate_gitsign,
-    verify_loaded_tag,
+    AllowedSignersSnapshot, AllowedSignersSource, CaptureFailure, GitsignRequest, ListedRef,
+    LoadedGitsign, RegistryFailure, capture_allowed_signers, git_version, list_tags, load_gitsign,
+    load_listed_tag, validate_gitsign, verify_loaded_tag,
 };
 use crate::tag_receipt_host::{
     ProductionVerifiers, Trust as TagTrust, VerifierSource, current_tags, read_candidates,
@@ -64,7 +64,7 @@ struct Request {
     repository: PathBuf,
     record_id: String,
     record_digest: String,
-    allowed_signers: PathBuf,
+    allowed_signers: String,
     tag_receipts: Option<TagReceiptsRequest>,
     gitsign: Option<GitsignRequest>,
     identity_registry: Option<String>,
@@ -396,6 +396,7 @@ struct Parsed {
     request: Request,
     gitsign: Option<LoadedGitsign>,
     allowed_signers: AllowedSignersSnapshot,
+    git_version: Option<String>,
     tags: Option<TagContext>,
 }
 
@@ -405,12 +406,13 @@ fn parse(bytes: &[u8]) -> Result<Parsed, ApprovalTrailError> {
         serde_json::from_value(value).map_err(|_| ApprovalTrailError::Invalid)?;
     if request.protocol != REQUEST_PROTOCOL
         || !request.repository.is_absolute()
-        || !request.allowed_signers.is_absolute()
         || !is_record_value(&request.record_id)
         || !is_record_value(&request.record_digest)
     {
         return Err(ApprovalTrailError::Invalid);
     }
+    let source =
+        AllowedSignersSource::parse(&request.allowed_signers).ok_or(ApprovalTrailError::Invalid)?;
     let input = validate_gitsign(
         request.gitsign.as_ref(),
         request.identity_registry.as_deref(),
@@ -421,8 +423,13 @@ fn parse(bytes: &[u8]) -> Result<Parsed, ApprovalTrailError> {
             ApprovalTrailError::GitsignPrincipal,
         )
     })?;
-    let allowed_signers = capture_allowed_signers(&request.allowed_signers)
-        .map_err(|_| ApprovalTrailError::AllowedSigners)?;
+    // Git failing while the allowed-signers source is read is the repository
+    // being unavailable, so there is no result and no trust.
+    let allowed_signers =
+        capture_allowed_signers(&request.repository, &source).map_err(|failure| match failure {
+            CaptureFailure::Invalid => ApprovalTrailError::AllowedSigners,
+            CaptureFailure::Git(_) => ApprovalTrailError::Repository,
+        })?;
     // Git failing while the registry is read is the repository being unavailable.
     let gitsign = input
         .map(|input| load_gitsign(&request.repository, input))
@@ -431,6 +438,7 @@ fn parse(bytes: &[u8]) -> Result<Parsed, ApprovalTrailError> {
             RegistryFailure::Invalid => ApprovalTrailError::IdentityRegistry,
             RegistryFailure::Git(_) => ApprovalTrailError::Repository,
         })?;
+    let git_version = git_version(&request.repository);
     let tags = request
         .tag_receipts
         .as_ref()
@@ -440,6 +448,7 @@ fn parse(bytes: &[u8]) -> Result<Parsed, ApprovalTrailError> {
         request,
         gitsign,
         allowed_signers,
+        git_version,
         tags,
     })
 }
@@ -497,7 +506,7 @@ fn examine(parsed: &Parsed, listed: &ListedRef) -> Examined {
         tag: name.to_owned(),
         object,
         claimed_at: checked.tagger_signed_at.clone(),
-        assessment: assess(checked, &request.record_id, &request.record_digest),
+        assessment: assess(&checked, &request.record_id, &request.record_digest),
         receipt: None,
     }))
 }
@@ -658,7 +667,11 @@ fn execute_with(
         record_id: &request.record_id,
         record_digest: &request.record_digest,
         trust: Trust::new(
-            &request.allowed_signers,
+            TrustReading {
+                requested: &request.allowed_signers,
+                snapshot: &parsed.allowed_signers,
+                git_version: parsed.git_version.as_deref(),
+            },
             GitsignEcho::new(
                 request.gitsign.as_ref(),
                 request.identity_registry.as_deref(),

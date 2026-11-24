@@ -15,7 +15,7 @@
 
 use std::path::{Path, PathBuf};
 
-use engineering_assurance::approval_verify::{Approval, ApprovalStatus, SigningTime};
+use engineering_assurance::approval_verify::{Approval, ApprovalStatus, SigningTime, TrustedTime};
 use engineering_assurance::release::{
     BaselineState, Changes, Check, Facts, Reason, frontmatter, is_repository_path, reasons,
 };
@@ -24,11 +24,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::approval_verify_host::{GitsignEcho, ResultLine as ApprovalLine};
+use crate::approval_verify_host::{GitsignEcho, ResultLine as ApprovalLine, Trust, TrustReading};
 use crate::process_host::CompletedProcess;
 use crate::signature_verify_host::{
-    AllowedSignersSnapshot, GitsignRequest, LoadedGitsign, RegistryFailure,
-    capture_allowed_signers, load_gitsign, run_git, validate_gitsign,
+    AllowedSignersSource, CaptureFailure, GitsignRequest, LoadedGitsign, RegistryFailure,
+    capture_allowed_signers, git_version, load_gitsign, run_git, validate_gitsign,
 };
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.release-verify-request/v1";
@@ -293,7 +293,7 @@ struct Request {
     repository: PathBuf,
     tag: String,
     record_path: String,
-    allowed_signers: PathBuf,
+    allowed_signers: String,
     gitsign: Option<GitsignRequest>,
     identity_registry: Option<String>,
 }
@@ -375,6 +375,8 @@ struct DecisionInfo<'a> {
     meaning: &'a [String],
     #[serde(flatten)]
     signing_time: &'a SigningTime,
+    #[serde(flatten)]
+    trusted_time: &'a TrustedTime,
 }
 
 #[derive(Serialize)]
@@ -382,6 +384,8 @@ struct ResultLine<'a> {
     protocol: &'static str,
     status: Status,
     tag: &'a str,
+    /// The trust of the run, kept on every verdict, including one with no `approval`.
+    trust: Trust<'a>,
     reasons: Vec<Reason>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     absent_items: Vec<String>,
@@ -398,11 +402,12 @@ struct ResultLine<'a> {
 }
 
 impl<'a> ResultLine<'a> {
-    fn not_released(tag: &'a str, reasons: Vec<Reason>) -> Self {
+    fn not_released(tag: &'a str, trust: Trust<'a>, reasons: Vec<Reason>) -> Self {
         Self {
             protocol: RESULT_PROTOCOL,
             status: Status::NotReleased,
             tag,
+            trust,
             reasons,
             absent_items: Vec::new(),
             approval: None,
@@ -442,6 +447,7 @@ impl<'a> ResultLine<'a> {
             approver: &approved.approver,
             meaning: &approved.meaning,
             signing_time: &approved.signing_time,
+            trusted_time: &approved.trusted_time,
         });
         self.accepted_anomalies = Some(&record.accepted_anomalies);
     }
@@ -454,13 +460,14 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ReleaseVerifyError> {
         serde_json::from_value(value).map_err(|_| ReleaseVerifyError::Invalid)?;
     if request.protocol != REQUEST_PROTOCOL
         || !request.repository.is_absolute()
-        || !request.allowed_signers.is_absolute()
         || !is_plain_revision(&request.tag)
         || !is_repository_path(&request.record_path)
         || request.record_path.starts_with('-')
     {
         return Err(ReleaseVerifyError::Invalid);
     }
+    let source =
+        AllowedSignersSource::parse(&request.allowed_signers).ok_or(ReleaseVerifyError::Invalid)?;
     let input = validate_gitsign(
         request.gitsign.as_ref(),
         request.identity_registry.as_deref(),
@@ -471,8 +478,17 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ReleaseVerifyError> {
             ReleaseVerifyError::GitsignPrincipal,
         )
     })?;
-    let allowed_signers = capture_allowed_signers(&request.allowed_signers)
-        .map_err(|_| ReleaseVerifyError::AllowedSigners)?;
+    let allowed_signers =
+        capture_allowed_signers(&request.repository, &source).map_err(|failure| match failure {
+            CaptureFailure::Invalid => ReleaseVerifyError::AllowedSigners,
+            CaptureFailure::Git(_) => ReleaseVerifyError::GitFailed,
+        })?;
+    let git_version = git_version(&request.repository);
+    let reading = TrustReading {
+        requested: &request.allowed_signers,
+        snapshot: &allowed_signers,
+        git_version: git_version.as_deref(),
+    };
     let gitsign = input
         .map(|input| load_gitsign(&request.repository, input))
         .transpose()
@@ -480,7 +496,7 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ReleaseVerifyError> {
             RegistryFailure::Invalid => ReleaseVerifyError::IdentityRegistry,
             RegistryFailure::Git(_) => ReleaseVerifyError::GitFailed,
         })?;
-    let mut line = match verify(&request, &allowed_signers, gitsign.as_ref()) {
+    let mut line = match verify(&request, reading, gitsign.as_ref()) {
         Ok(line) => line,
         Err(VerifyError::Git) => return Err(ReleaseVerifyError::GitFailed),
         Err(VerifyError::Encoding) => return Err(ReleaseVerifyError::ResultEncoding),
@@ -615,9 +631,14 @@ fn commit_shape(
 
 fn verify(
     request: &Request,
-    allowed_signers: &AllowedSignersSnapshot,
+    reading: TrustReading<'_>,
     gitsign: Option<&LoadedGitsign>,
 ) -> Result<Vec<u8>, VerifyError> {
+    let echo = GitsignEcho::new(
+        request.gitsign.as_ref(),
+        request.identity_registry.as_deref(),
+    );
+    let trust = Trust::new(reading, echo, gitsign);
     let repository = request.repository.as_path();
     let tag = request
         .tag
@@ -625,11 +646,11 @@ fn verify(
         .unwrap_or(&request.tag);
     let Some(release_commit) = commit_of(repository, &request.tag)? else {
         let reasons = vec![Reason::Check(Check::RecordUnreadable)];
-        return encode(&ResultLine::not_released(tag, reasons));
+        return encode(&ResultLine::not_released(tag, trust, reasons));
     };
     let early = |check| {
         let reasons = vec![Reason::Check(check)];
-        encode(&ResultLine::not_released(tag, reasons))
+        encode(&ResultLine::not_released(tag, trust, reasons))
     };
     let Some(record_object) = object_at(repository, &release_commit, &request.record_path)? else {
         return early(Check::RecordUnreadable);
@@ -648,12 +669,8 @@ fn verify(
         repository,
         &request.tag,
         (&record.id, &digest),
-        &request.allowed_signers,
-        allowed_signers,
-        GitsignEcho::new(
-            request.gitsign.as_ref(),
-            request.identity_registry.as_deref(),
-        ),
+        reading,
+        echo,
         gitsign,
     );
     let status = approval.assessment().status();
@@ -690,7 +707,7 @@ fn verify(
         })
         .unwrap_or_default();
     let released = failed.is_empty() && status == ApprovalStatus::Approved;
-    let mut result = ResultLine::not_released(tag, failed);
+    let mut result = ResultLine::not_released(tag, trust, failed);
     result.absent_items = absent_items;
     if released && let (Some(approved), Some(resolution)) = (approved.as_ref(), resolution.as_ref())
     {

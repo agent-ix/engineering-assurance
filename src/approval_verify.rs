@@ -167,6 +167,62 @@ impl SigningTime {
     }
 }
 
+/// Why an `approved` result has no trusted time.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TrustedAtMissing {
+    /// An SSH signature has no transparency-log entry, so no trusted time.
+    SshSignature,
+    /// A gitsign signature with no embedded transparency-log entry.
+    NoLogEntry,
+    /// An embedded gitsign transparency-log entry did not verify into a
+    /// trusted time.
+    LogEntryUnverified,
+}
+
+/// Why a trusted time is missing, or the time independently attested by Rekor.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum TrustedTime {
+    /// A UTC instant attested by a verified transparency-log entry.
+    Known {
+        /// The verified Rekor integrated time, formatted in UTC.
+        trusted_at: String,
+        /// The source of the trusted time.
+        trusted_at_source: TrustedAtSource,
+        /// Signed time minus trusted time, in seconds, when they differ.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        time_skew: Option<i64>,
+    },
+    /// No trusted time can be reported.
+    Missing {
+        /// Why the trusted time is unavailable.
+        trusted_at_missing: TrustedAtMissing,
+    },
+}
+
+/// The trusted time source.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TrustedAtSource {
+    /// Rekor transparency log.
+    TransparencyLog,
+}
+
+/// The trusted time of an approval: the explicit statement that none is
+/// obtainable. It is never read from the local clock, the tagger date or an
+/// unverified log entry.
+impl TrustedTime {
+    const fn of(kind: SignatureKind) -> Self {
+        Self::Missing {
+            trusted_at_missing: match kind {
+                SignatureKind::Ssh => TrustedAtMissing::SshSignature,
+                SignatureKind::Gitsign => TrustedAtMissing::LogEntryUnverified,
+            },
+        }
+    }
+}
+
 /// The members only an `approved` result carries.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Approval {
@@ -179,6 +235,9 @@ pub struct Approval {
     /// When the approval was signed, or why that is not known.
     #[serde(flatten)]
     pub signing_time: SigningTime,
+    /// The time an independent transparency log attested, or why there is none.
+    #[serde(flatten)]
+    pub trusted_time: TrustedTime,
 }
 
 /// What the status decision yields.
@@ -275,6 +334,7 @@ fn decide_valid(
                 meaning: meaning.values.clone(),
                 signature_kind,
                 signing_time: SigningTime::from_tagger(tagger_signed_at),
+                trusted_time: TrustedTime::of(signature_kind),
             }),
             ..Decision::status(ApprovalStatus::Approved)
         },
