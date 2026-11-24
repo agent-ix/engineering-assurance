@@ -251,10 +251,10 @@ checking, manifest validation, and qualification assertions to Rust.
   the GDPR and both AI Act clause sets. The FDA guidance links in this
   table are exact source references; the pack specs declare no separate FDA
   legal-notice URL.
-  The EU GMP Annex 11 clause set SHALL cite the Commission legal-notice URL
-  (`commission.europa.eu/legal-notice_en`) as its rights-attribution reference
-  and the Annex 11 PDF as its source; both are admitted only at that set's member
-  paths.
+  The EU GMP Annex 11 clause set SHALL cite the Annex 11 PDF in
+  `source.officialUrl` and `rights.attribution`, and the Commission legal-notice
+  URL (`commission.europa.eu/legal-notice_en`) in `rights.licence`; both are
+  admitted only at that set's member paths.
   For the MDCG clause set, `source.officialUrl` SHALL contain the PDF source
   URL, and `rights.attribution` SHALL contain both the PDF URL and its listing
   URL. The PDF is authored by the Medical Device Coordination Group and is not
