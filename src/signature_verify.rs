@@ -508,9 +508,7 @@ impl EvidencedGesture {
             .lines()
             .find_map(|line| flags_of(line.trim_end_matches('\r')));
         match flags {
-            Some(flags)
-                if flags & FLAG_USER_PRESENT != 0 && flags & FLAG_USER_VERIFIED != 0 =>
-            {
+            Some(flags) if flags & FLAG_USER_PRESENT != 0 && flags & FLAG_USER_VERIFIED != 0 => {
                 Self::DeviceTouchAndPin
             }
             Some(flags) if flags & FLAG_USER_PRESENT != 0 => Self::DeviceTouch,

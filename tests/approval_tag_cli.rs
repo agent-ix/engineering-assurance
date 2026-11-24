@@ -882,7 +882,10 @@ fn tc_1149_a_request_without_gesture_keeps_three_trailers_and_declares_none() {
     let approved = verified(&fixture, "approve-17", false);
     assert_eq!(approved["status"], "approved", "{approved}");
     assert_eq!(approved["gesture"], json!({"declared": "none"}));
-    assert_eq!(approved["signature"]["gesture"], json!({"evidenced": "none"}));
+    assert_eq!(
+        approved["signature"]["gesture"],
+        json!({"evidenced": "none"})
+    );
 }
 
 #[test]
@@ -892,7 +895,10 @@ fn tc_1150_a_declared_gesture_is_copied_verbatim_and_never_changes_the_status() 
     fixture.ssh_config("a");
     created(&fixture, &tag_request(&fixture, "plain-17", "reviewed"));
     let plain = verified(&fixture, "plain-17", false);
-    let result = created(&fixture, &gesture_request(&fixture, "touch-17", "device_touch"));
+    let result = created(
+        &fixture,
+        &gesture_request(&fixture, "touch-17", "device_touch"),
+    );
     assert_eq!(result["gesture"], "device_touch");
     assert_eq!(
         tag_message(&fixture, "touch-17"),
@@ -903,7 +909,10 @@ fn tc_1150_a_declared_gesture_is_copied_verbatim_and_never_changes_the_status() 
     let touched = verified(&fixture, "touch-17", false);
     assert_eq!(touched["status"], "approved", "{touched}");
     assert_eq!(touched["gesture"], json!({"declared": "device_touch"}));
-    assert_eq!(touched["signature"]["gesture"], json!({"evidenced": "none"}));
+    assert_eq!(
+        touched["signature"]["gesture"],
+        json!({"evidenced": "none"})
+    );
     for member in ["status", "approver", "meaning", "signature_kind"] {
         assert_eq!(touched[member], plain[member], "{member}");
     }
@@ -1052,7 +1061,11 @@ fn tc_1153_an_unrecognized_or_repeated_declaration_is_unrecognized_and_other_sta
     for tag in ["other", "repeated"] {
         let result = verified(&fixture, tag, false);
         assert_eq!(result["status"], "approved", "{result}");
-        assert_eq!(result["gesture"], json!({"declared": "unrecognized"}), "{tag}");
+        assert_eq!(
+            result["gesture"],
+            json!({"declared": "unrecognized"}),
+            "{tag}"
+        );
     }
     let wrong = verified(&fixture, "wrong-record", false);
     assert_eq!(wrong["status"], "wrong_record", "{wrong}");
@@ -1099,7 +1112,10 @@ fn tc_1154_an_oidc_interactive_declaration_through_the_gitsign_stand_in_is_decla
     let approved = verified(&fixture, "approve-17", true);
     assert_eq!(approved["status"], "approved", "{approved}");
     assert_eq!(approved["gesture"], json!({"declared": "oidc_interactive"}));
-    assert_eq!(approved["signature"]["gesture"], json!({"evidenced": "none"}));
+    assert_eq!(
+        approved["signature"]["gesture"],
+        json!({"evidenced": "none"})
+    );
 }
 
 /// A real `ssh-agent` on a socket in the fixture, killed on drop.
@@ -1199,11 +1215,18 @@ fn tc_1155_ssh_add_c_confirms_each_signature_and_a_denial_creates_no_tag() {
         assert_eq!(output.status.code(), Some(0), "{output:?}");
     }
     let calls = fs::read_to_string(&log).expect("askpass log");
-    assert_eq!(calls.lines().count(), 2, "one confirmation per signature: {calls:?}");
+    assert_eq!(
+        calls.lines().count(),
+        2,
+        "one confirmation per signature: {calls:?}"
+    );
     let approved = verified(&fixture, "approve-1", false);
     assert_eq!(approved["status"], "approved", "{approved}");
     assert_eq!(approved["gesture"], json!({"declared": "agent_confirm"}));
-    assert_eq!(approved["signature"]["gesture"], json!({"evidenced": "none"}));
+    assert_eq!(
+        approved["signature"]["gesture"],
+        json!({"evidenced": "none"})
+    );
 
     fs::write(fixture.root().join("askpass.deny"), "").expect("deny");
     let before = refs(&fixture);
@@ -1213,7 +1236,10 @@ fn tc_1155_ssh_add_c_confirms_each_signature_and_a_denial_creates_no_tag() {
     assert_eq!(error["code"], "approval_tag_create_failed", "{error}");
     assert_eq!(refs(&fixture), before, "no ref may change");
     assert_eq!(
-        fs::read_to_string(&log).expect("askpass log").lines().count(),
+        fs::read_to_string(&log)
+            .expect("askpass log")
+            .lines()
+            .count(),
         3
     );
 }
@@ -1327,7 +1353,9 @@ fn approval_tag_under_pty(fixture: &Fixture, request: &Value, typed: &str) -> Pt
     let signer_group = fs::read_to_string(fixture.bin().join("groups"))
         .ok()
         .map(|text| {
-            let mut parts = text.split_whitespace().map(|p| p.parse::<i32>().expect("number"));
+            let mut parts = text
+                .split_whitespace()
+                .map(|p| p.parse::<i32>().expect("number"));
             (parts.next().expect("pgrp"), parts.next().expect("tpgid"))
         });
     PtyRun {
@@ -1367,7 +1395,10 @@ fn tc_1156_a_signer_reads_the_terminal_in_the_foreground_and_the_group_is_restor
     assert_eq!(run.answer.as_deref(), Some("typed-by-the-person"));
     // The signer was not stopped by SIGTTIN: its group was the foreground group.
     let (signer, foreground) = run.signer_group.expect("signer groups");
-    assert_eq!(signer, foreground, "git's group is the terminal's foreground");
+    assert_eq!(
+        signer, foreground,
+        "git's group is the terminal's foreground"
+    );
     assert_ne!(signer, run.before);
     // Standard output is exactly one created line holding the declaration.
     assert!(run.stdout.ends_with('\n') && run.stdout.matches('\n').count() == 1);
@@ -1376,7 +1407,10 @@ fn tc_1156_a_signer_reads_the_terminal_in_the_foreground_and_the_group_is_restor
     assert_eq!(line["gesture"], "oidc_interactive");
     // The previous foreground group is back and git's group is gone.
     assert_eq!(run.after, run.before);
-    assert!(!process_group_exists(signer), "git's group must not outlive the run");
+    assert!(
+        !process_group_exists(signer),
+        "git's group must not outlive the run"
+    );
     assert!(tags(&fixture).contains("approve-17"));
 }
 

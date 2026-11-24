@@ -151,7 +151,11 @@ fn tc_1159_a_declared_gesture_is_the_fourth_trailer_and_reads_back() {
         "reviewed",
         Some(SigningGesture::AgentConfirm),
     );
-    let trailers = message.trim_end_matches('\n').split("\n\n").nth(1).expect("trailers");
+    let trailers = message
+        .trim_end_matches('\n')
+        .split("\n\n")
+        .nth(1)
+        .expect("trailers");
     let names: Vec<&str> = trailers
         .lines()
         .filter_map(|line| line.split_once(':').map(|(name, _)| name))

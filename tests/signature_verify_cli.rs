@@ -1521,17 +1521,17 @@ fn tc_1146_gesture_is_the_only_member_added_to_a_signed_valid_result() {
     let fixture = fixture();
     plain_commit(&fixture, "base");
     signed_tag(&fixture, "a", "v1");
-    let mut touched = gesture_of(&fixture, "v1", "tag", Some(&security_key_path(&fixture, "01")));
+    let mut touched = gesture_of(
+        &fixture,
+        "v1",
+        "tag",
+        Some(&security_key_path(&fixture, "01")),
+    );
     assert_eq!(touched["gesture"], json!({"evidenced": "device_touch"}));
     let mut plain = status(&fixture, "v1", "tag");
     assert_eq!(touched["status"], "signed_valid");
     let members = |value: &Value| -> Vec<String> {
-        let mut names: Vec<String> = value
-            .as_object()
-            .expect("object")
-            .keys()
-            .cloned()
-            .collect();
+        let mut names: Vec<String> = value.as_object().expect("object").keys().cloned().collect();
         names.sort();
         names
     };

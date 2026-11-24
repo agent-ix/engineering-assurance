@@ -26,12 +26,12 @@ use std::{
 };
 
 use engineering_assurance::signature_verify::{
-    CommitObservation, EvidencedGesture, GitGrade, GitsignIdentity, GitsignTrust, IDENTITY_REGISTRY_PROTOCOL,
-    IdentityRegistry, PrincipalLookup, Probe, Reason, RegistryEntry, Run, SignatureFormat,
-    SignedAt, SplitTag, SshCheck, Status, TagObservation, TargetKind, TrustSourceAddress, Verdict,
-    classify_commit, classify_gitsign, classify_tag, commit_signature_format,
-    config_sets_gitsign_key, is_plain_revision, object_message, signed_off_meaning,
-    split_tag_object, tagger_signed_at, trailer_values,
+    CommitObservation, EvidencedGesture, GitGrade, GitsignIdentity, GitsignTrust,
+    IDENTITY_REGISTRY_PROTOCOL, IdentityRegistry, PrincipalLookup, Probe, Reason, RegistryEntry,
+    Run, SignatureFormat, SignedAt, SplitTag, SshCheck, Status, TagObservation, TargetKind,
+    TrustSourceAddress, Verdict, classify_commit, classify_gitsign, classify_tag,
+    commit_signature_format, config_sets_gitsign_key, is_plain_revision, object_message,
+    signed_off_meaning, split_tag_object, tagger_signed_at, trailer_values,
 };
 use serde::{Deserialize, Deserializer, Serialize, de::IgnoredAny};
 use thiserror::Error;
