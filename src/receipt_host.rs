@@ -2372,4 +2372,103 @@ mod tests {
         assert!(missing_result_is_non_failing(&failed_only));
         assert!(!missing_result_is_non_failing(&actual_missing));
     }
+
+    fn tag_receipt(name: &str, object: char, commit: char) -> engineering_assurance::tag_receipt::TagReceipt {
+        engineering_assurance::tag_receipt::TagReceipt {
+            reference: format!("refs/tags/{name}"),
+            tag_object: object.to_string().repeat(40),
+            commit: commit.to_string().repeat(40),
+            pushed_at: "2026-11-20T10:00:00Z".to_owned(),
+            trailers_readable: true,
+            record_ids: Vec::new(),
+        }
+    }
+
+    fn judged(
+        finding: engineering_assurance::tag_receipt::TagFinding,
+        accepted: bool,
+    ) -> engineering_assurance::tag_receipt::Judged {
+        engineering_assurance::tag_receipt::Judged {
+            finding,
+            accepted: accepted.then(|| engineering_assurance::tag_receipt::Acceptance {
+                accepted_by: "alice".to_owned(),
+                accepted_reason: "reviewed".to_owned(),
+            }),
+        }
+    }
+
+    #[test]
+    #[trace("TC-1133", "FR-082-AC-7", "FR-082-AC-11")]
+    fn tag_findings_carry_kind_tag_and_fail_the_check_unless_accepted() {
+        use engineering_assurance::tag_receipt::{
+            InvalidReason, InvalidReceipt, MissingTagReason, TagFinding,
+        };
+        let no_receipt = TagFinding::TagNoReceipt {
+            reference: "refs/tags/approve-1".to_owned(),
+            current_object: "a".repeat(40),
+        };
+        let missing = TagFinding::MissingTag {
+            receipt: tag_receipt("approve-2", 'b', 'c'),
+            reason: MissingTagReason::TagChanged,
+            current_object: Some("d".repeat(40)),
+        };
+        let invalid = TagFinding::InvalidReceipt(InvalidReceipt {
+            commit: "c".repeat(40),
+            reason: InvalidReason::SignatureInvalid,
+        });
+        let change = [MissingReceipt {
+            commit: "e".repeat(40),
+            reason: engineering_assurance::receipt::MissingReceiptReason::InvalidReceipt,
+        }];
+
+        // An empty finding list leaves the check green; a commit finding of
+        // `kind` `change` and a tag finding of `kind` `tag` are told apart.
+        let empty = render_missing(&[], &[], &[]).unwrap();
+        assert!(missing_result_is_non_failing(&empty));
+        let line: Value = serde_json::from_slice(
+            &render_missing(
+                &change,
+                &[],
+                &[
+                    judged(missing.clone(), false),
+                    judged(invalid.clone(), false),
+                ],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(line["missing"][0]["kind"], "change");
+        assert_eq!(line["missing"][0]["reason"], "invalid_receipt");
+        let tag_invalid = &line["tag_findings"][1];
+        assert_eq!(tag_invalid["kind"], "tag");
+        assert_eq!(tag_invalid["status"], "invalid_receipt");
+        assert_eq!(tag_invalid["reason"], "signature_invalid");
+        assert!(tag_invalid.get("ref").is_none(), "an untrusted receipt names no ref");
+        let tag_missing = &line["tag_findings"][0];
+        assert_eq!(tag_missing["status"], "missing_tag");
+        assert_eq!(tag_missing["ref"], "refs/tags/approve-2");
+        assert_eq!(tag_missing["tag_object"], "b".repeat(40));
+        assert_eq!(tag_missing["reason"], "tag_changed");
+        assert_eq!(tag_missing["current_object"], "d".repeat(40));
+        assert_eq!(tag_missing["commit"], "c".repeat(40));
+
+        // Each of the three tag statuses fails the check; an accepted one does not.
+        for finding in [no_receipt.clone(), missing.clone(), invalid] {
+            let result = render_missing(&[], &[], &[judged(finding, false)]).unwrap();
+            assert!(!missing_result_is_non_failing(&result));
+        }
+        let accepted = render_missing(
+            &[],
+            &[],
+            &[judged(missing, true), judged(no_receipt, true)],
+        )
+        .unwrap();
+        assert!(missing_result_is_non_failing(&accepted));
+        let accepted: Value = serde_json::from_slice(&accepted).unwrap();
+        assert_eq!(accepted["tag_findings"][0]["status"], "accepted");
+        assert_eq!(accepted["tag_findings"][0]["finding"], "missing_tag");
+        assert_eq!(accepted["tag_findings"][0]["accepted_by"], "alice");
+        assert_eq!(accepted["tag_findings"][0]["accepted_reason"], "reviewed");
+        assert_eq!(accepted["tag_findings"][1]["finding"], "tag_no_receipt");
+    }
 }

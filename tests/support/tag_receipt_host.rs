@@ -653,8 +653,11 @@ fn two_runs_for_two_tags_on_one_commit_both_end_with_their_entries() {
 /// Certificate claims for the statement a bundle carries, as the identity
 /// policy of `identities` expects them; the signature of the bundles in
 /// `invalid` does not verify.
+#[derive(Default)]
 pub(crate) struct FakeVerifier {
     pub(crate) invalid: BTreeSet<String>,
+    /// Bundles that verify cryptographically but were signed by an unlisted identity.
+    pub(crate) untrusted: BTreeSet<String>,
 }
 
 impl BundleVerifier for FakeVerifier {
@@ -666,6 +669,8 @@ impl BundleVerifier for FakeVerifier {
     ) -> Result<(), VerificationFailure> {
         if self.invalid.contains(bundle_json) {
             Err(VerificationFailure::InvalidSignature)
+        } else if self.untrusted.contains(bundle_json) {
+            Err(VerificationFailure::UntrustedSigner)
         } else {
             Ok(())
         }
@@ -707,8 +712,11 @@ impl VerifierSource for FakeSource {
 }
 
 pub(crate) fn identities() -> WorkflowIdentityDocument {
-    WorkflowIdentityDocument::parse(
-        json!({
+    WorkflowIdentityDocument::parse(identities_json().to_string().as_bytes()).expect("identities")
+}
+
+pub(crate) fn identities_json() -> Value {
+    json!({
             "protocol": "engineering-assurance.workflow-identities/v1",
             "identities": [{
                 "role": "receipt_writer",
@@ -722,10 +730,6 @@ pub(crate) fn identities() -> WorkflowIdentityDocument {
                 "source_ref_prefix": "refs/tags/approve-"
             }]
         })
-        .to_string()
-        .as_bytes(),
-    )
-    .expect("identities")
 }
 
 pub(crate) fn policy(accepted: &Value) -> TagReceiptPolicy {
@@ -800,6 +804,7 @@ pub(crate) fn add_line(repo: &Path, commit: &str, line: &str) {
 fn findings_of(repo: &Path, accepted: &Value, invalid: &[&Value]) -> Vec<(FindingStatus, bool)> {
     let verifier = FakeVerifier {
         invalid: invalid.iter().map(|bundle| bundle.to_string()).collect(),
+        ..FakeVerifier::default()
     };
     repository_findings(repo, &identities(), &policy(accepted), &FakeSource(verifier))
         .expect("findings")
@@ -840,9 +845,7 @@ fn the_repository_comparison_finds_a_deleted_changed_and_unreceipted_tag() {
         &repo,
         &identities(),
         &policy(&json!([])),
-        &FakeSource(FakeVerifier {
-            invalid: BTreeSet::new(),
-        }),
+        &FakeSource(FakeVerifier::default()),
     )
     .expect("findings");
     assert_eq!(changed.len(), 2);
@@ -874,6 +877,7 @@ fn a_bad_signature_an_unparsable_line_and_an_unlisted_signer_are_invalid_not_mis
     // The tag the tampered receipt names is absent, yet it is not judged missing.
     let verifier = FakeVerifier {
         invalid: BTreeSet::from([tampered.to_string()]),
+        ..FakeVerifier::default()
     };
     let judged = repository_findings(
         &repo,
@@ -912,9 +916,7 @@ fn a_bad_signature_an_unparsable_line_and_an_unlisted_signer_are_invalid_not_mis
         &repo,
         &none,
         &policy(&json!([])),
-        &FakeSource(FakeVerifier {
-            invalid: BTreeSet::new(),
-        }),
+        &FakeSource(FakeVerifier::default()),
     )
     .expect("findings");
     assert!(judged.iter().any(|item| matches!(
