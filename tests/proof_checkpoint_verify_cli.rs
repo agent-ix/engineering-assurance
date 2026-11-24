@@ -290,7 +290,13 @@ fn result(output: Output) -> Value {
 }
 
 #[test]
-#[trace("TC-1022", "FR-080-AC-1", "FR-080-CON-3", "FR-080-AC-8")]
+#[trace(
+    "TC-1022",
+    "FR-080-AC-1",
+    "FR-080-CON-2",
+    "FR-080-CON-3",
+    "FR-080-AC-8"
+)]
 fn tc_1022_a_matching_signed_tag_verifies_the_exact_statement_scope_and_object() {
     let fixture = fixture();
     let object_id = signed_tag(&fixture, "proof", &checkpoint_message(&[]));
@@ -378,7 +384,7 @@ fn tc_1024_absent_and_repeated_trailers_are_classified_without_verifying() {
 }
 
 #[test]
-#[trace("TC-1026", "FR-080-AC-5")]
+#[trace("TC-1026", "TC-1031", "FR-080-AC-5", "FR-080-AC-9")]
 fn tc_1026_untrusted_bad_unsigned_and_unavailable_verifier_never_verify() {
     let fixture = fixture();
     let untrusted_id = signed_tag(&fixture, "untrusted", &checkpoint_message(&[]));
@@ -569,23 +575,101 @@ fn tc_1030_same_name_retarget_is_refused_before_signature_verification() {
     let path =
         std::env::join_paths(std::iter::once(bin).chain(std::env::split_paths(&original_path)))
             .expect("joined PATH");
-    let output = result(run_request_with_path(
-        &request(&fixture, "proof", &pinned),
-        Some(Path::new(&path)),
-    ));
-    assert_eq!(output["status"], "wrong_checkpoint");
-    assert_eq!(output["tag_object_id"], replacement);
-    assert_eq!(output["checkpoint"]["tag_object_id"], "mismatch");
-    assert_eq!(
-        output["signature"]["reason"],
-        "expected_tag_object_id_mismatch"
+    let assert_mismatch = |path: Option<&Path>| {
+        let current = git(&fixture, &["rev-parse", "refs/tags/proof"]);
+        assert_ne!(current, pinned, "each control points at another object");
+        let output = result(run_request_with_path(
+            &request(&fixture, "proof", &pinned),
+            path,
+        ));
+        assert_eq!(output["status"], "wrong_checkpoint");
+        assert_eq!(output["tag_object_id"], current);
+        assert_eq!(output["checkpoint"]["tag_object_id"], "mismatch");
+        assert_eq!(
+            output["signature"]["reason"],
+            "expected_tag_object_id_mismatch"
+        );
+        assert_eq!(output["signature"]["delegated"], false);
+        assert!(output["signer"].is_null());
+        assert!(
+            !marker.exists(),
+            "mismatched object must not start ssh-keygen"
+        );
+    };
+    assert_mismatch(Some(Path::new(&path)));
+
+    let message_path = fixture.root().join("retarget-message");
+    let retarget_message = checkpoint_message(&[]).replace(
+        "Proof integrity checkpoint.",
+        "Retargeted proof checkpoint.",
     );
-    assert_eq!(output["signature"]["delegated"], false);
-    assert!(output["signer"].is_null());
-    assert!(
-        !marker.exists(),
-        "mismatched object must not start ssh-keygen"
+    fs::write(&message_path, retarget_message).expect("retarget message");
+    git(
+        &fixture,
+        &[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.test",
+            "tag",
+            "-a",
+            "-f",
+            "-F",
+            message_path.to_str().expect("message path"),
+            "proof",
+        ],
     );
+    assert_mismatch(Some(Path::new(&path)));
+
+    let trusted = fs::read_to_string(fixture.key().with_extension("pub")).expect("public key");
+    let sign_current_tag = || {
+        git(
+            &fixture,
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.test",
+                "-c",
+                "gpg.format=ssh",
+                "-c",
+                &format!("user.signingkey={}", fixture.key().display()),
+                "tag",
+                "-s",
+                "-f",
+                "-F",
+                message_path.to_str().expect("message path"),
+                "proof",
+            ],
+        );
+    };
+    sign_current_tag();
+    fs::write(fixture.allowed(), "").expect("remove signer trust");
+    assert_mismatch(Some(Path::new(&path)));
+    fs::write(fixture.allowed(), format!("alice@example.test {trusted}"))
+        .expect("restore signer trust");
+
+    sign_current_tag();
+    let signed = git(&fixture, &["rev-parse", "refs/tags/proof"]);
+    let mut bad_object = git(&fixture, &["cat-file", "tag", &signed]);
+    bad_object = bad_object.replace("Proof-Record-Id: record-42", "Proof-Record-Id: changed");
+    let bad_id = git_input(
+        &fixture,
+        &["hash-object", "-t", "tag", "-w", "--stdin"],
+        Some(bad_object.as_bytes()),
+    );
+    git(&fixture, &["update-ref", "refs/tags/proof", &bad_id]);
+    assert_mismatch(Some(Path::new(&path)));
+
+    let no_verifier = fixture.root().join("git-only");
+    fs::create_dir(&no_verifier).expect("git-only directory");
+    let git_path = std::env::split_paths(&std::env::var_os("PATH").expect("PATH"))
+        .map(|directory| directory.join("git"))
+        .find(|path| path.is_file())
+        .expect("git on PATH");
+    std::os::unix::fs::symlink(git_path, no_verifier.join("git")).expect("git symlink");
+    sign_current_tag();
+    assert_mismatch(Some(&no_verifier));
 }
 
 #[test]
