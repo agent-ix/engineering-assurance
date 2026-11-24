@@ -922,4 +922,4 @@ impl From<&Judged> for TagFindingLine {
 // Child-process test setup lives outside `src` so the production capability scan
 // does not classify it as a production host capability.
 #[path = "../tests/support/tag_receipt_host.rs"]
-mod tests;
+pub(crate) mod tests;

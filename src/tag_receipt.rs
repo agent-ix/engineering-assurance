@@ -469,7 +469,8 @@ pub fn verify_line(line: Option<&Value>, commit: &str, sets: &[SignerSet<'_>]) -
     let Some((payload, bundle_json)) = line.and_then(bundle_payload) else {
         return invalid(InvalidReason::PredicateInvalid);
     };
-    let mut saw_untrusted = false;
+    // With no listed identity nothing can have signed it: the signer is untrusted.
+    let mut saw_untrusted = sets.iter().all(|set| set.signers.is_empty());
     let mut matched = None;
     'sets: for set in sets {
         for (signer, source) in set.signers {
