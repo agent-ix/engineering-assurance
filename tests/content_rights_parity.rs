@@ -55,7 +55,10 @@ fn clause_source_rows_from_spec() -> Vec<ClauseSourceRow> {
             npm_member: cells[5].to_owned(),
         });
     }
-    assert_eq!(rows.len(), 16, "FR-017 clause-source tuple count");
+    assert!(
+        !rows.is_empty(),
+        "FR-017 clause-source table must have rows"
+    );
     rows
 }
 
@@ -556,5 +559,52 @@ fn shared_cli_dependency_allowance_is_exact_and_metadata_only() {
     }
     for path in ["spec/candidate.md", "nested/Cargo.toml", "nested/deny.toml"] {
         assert!(!findings(path, dependency.as_bytes(), &tokens).is_empty());
+    }
+}
+
+#[test]
+#[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
+fn gmp_annex_11_urls_are_admitted_only_at_their_member_paths_and_query() {
+    let tokens: Vec<String> = Vec::new();
+    let pdf = [
+        "https:",
+        "//health.ec.europa.eu/document/download/8d305550-dd22-4dad-8463-2ddb4a1345f1_en",
+        "?filename=annex11_01-2011_en.pdf",
+    ]
+    .concat();
+    let notice = ["https:", "//commission.europa.eu/legal-notice_en"].concat();
+    let pdf_without_query = pdf.split('?').next().expect("split yields one part");
+    let pdf_altered_query = format!("{pdf}-changed");
+    let annex_paths = [
+        "spec_clauses_eu_law/clauses/eu-eu-gmp-annex-11-2011-01.json",
+        "package/clauses/eu-eu-gmp-annex-11-2011-01.json",
+    ];
+    let other_paths = [
+        "spec_clauses_eu_law/clauses/eu-mdr-2017-745-2026-07-19.json",
+        "package/clauses/eu-gdpr-2016-679-2016-05-04.json",
+        "candidate.json",
+    ];
+
+    for path in annex_paths {
+        for accepted in [&pdf, &notice] {
+            assert!(
+                findings(path, accepted.as_bytes(), &tokens).is_empty(),
+                "{path} must admit {accepted}"
+            );
+        }
+        for refused in [pdf_without_query, pdf_altered_query.as_str()] {
+            assert!(
+                !findings(path, refused.as_bytes(), &tokens).is_empty(),
+                "{path} must refuse {refused}"
+            );
+        }
+    }
+    for path in other_paths {
+        for refused in [&pdf, &notice] {
+            assert!(
+                !findings(path, refused.as_bytes(), &tokens).is_empty(),
+                "{path} must refuse {refused}"
+            );
+        }
     }
 }

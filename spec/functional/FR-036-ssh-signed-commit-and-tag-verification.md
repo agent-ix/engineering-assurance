@@ -50,8 +50,9 @@ of "the signature" describe SSH signatures unless FR-040 is named.
 - For the `signature-verify` command, one request document
   `engineering-assurance.signature-verify-request/v1` with the members
   `protocol`, `repository` (absolute directory path), `revision`, `kind`
-  (`commit` or `tag`) and `allowed_signers` (absolute file path, required;
-  see FR-037) and the optional `trailer_keys` (see FR-037).
+  (`commit` or `tag`) and `allowed_signers` (required: an absolute file
+  path, or a `<rev>:<path>` trust source read from a committed revision; see
+  FR-037) and the optional `trailer_keys` (see FR-037).
 
 ## Outputs
 
@@ -103,8 +104,9 @@ of "the signature" describe SSH signatures unless FR-040 is named.
 ## Behavior
 
 - The command SHALL run `git verify-commit` for kind `commit` and
-  `git verify-tag` for kind `tag`, with `gpg.ssh.allowedSignersFile` set to the
-  request's file.
+  `git verify-tag` for kind `tag`, with `gpg.ssh.allowedSignersFile` set to a private
+  file written from the allowed-signers bytes FR-037 reads once for the run
+  (the request's file, or the committed content of its `<rev>:<path>`).
 - For kind `commit`, the command SHALL resolve the caller's `revision` exactly
   once to the canonical full id of its commit object before classifying its
   signature.
@@ -193,7 +195,7 @@ of "the signature" describe SSH signatures unless FR-040 is named.
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
 | FR-036-CON-1 | An SSH-signature result SHALL NOT be `signed_valid` unless git itself reported the signature accepted for a key the allowed-signers file names, being grade `G` for a commit and `git verify-tag` exit 0 for a tag. | Safety | Test |
-| FR-036-CON-2 | The implementation SHALL contain no signature-parsing or cryptographic code. | Architecture | Inspection |
+| FR-036-CON-2 | The implementation SHALL contain no signature-parsing or cryptographic code, other than the SHA-256 content digest of trust-input bytes that FR-037-CON-3 allows. | Architecture | Inspection |
 
 ## Acceptance Criteria
 
@@ -210,7 +212,7 @@ of "the signature" describe SSH signatures unless FR-040 is named.
 | FR-036-AC-9 | The classifier maps the commit grade codes `G`, `U`, `B`, `N` and `E`, the codes `X`, `Y` and `R`, an unrecognized code, and a header that is neither SSH nor X.509 (CMS) to the statuses and reasons above, and maps each tag outcome (no signature block, `git verify-tag` exit 0, delegated check success, delegated check failure) to its status, all from captured outcomes without running git or `ssh-keygen`. | Test |
 | FR-036-AC-10 | An OpenPGP-signed commit and an OpenPGP-signed annotated tag each yield `unverifiable` with reason `unsupported_signature_format`. An X.509 (CMS) signature never yields that reason; FR-040 handles it. | Test |
 | FR-036-AC-11 | When `git verify-tag` exits nonzero on a signed tag and `ssh-keygen` cannot start, the verdict is `unverifiable` with reason `ssh_keygen_not_started`; a tag with no signature block or with a non-SSH signature block does not need `ssh-keygen`. | Test |
-| FR-036-AC-12 | The `signature-verify` feature and the binary add no crate dependency that performs signature verification or cryptography; the only verifying programs invoked are git and `ssh-keygen`, plus `gitsign` for FR-040. | Test (TC-653) |
+| FR-036-AC-12 | The `signature-verify` feature and the binary add no crate dependency that performs signature verification or cryptography, other than the digest FR-037-CON-3 allows; the only verifying programs invoked are git and `ssh-keygen`, plus `gitsign` for FR-040. | Test (TC-653) |
 | FR-036-AC-13 | A commit request using an object-id revision and a request using a symbolic alias for that same commit each return the same full commit object id in `verified_commit_id`; all later commit verifier calls and the `%G?` lookup use that id, not the caller's alias. | Test |
 | FR-036-AC-14 | Every tag verdict has `verified_commit_id: null`, including an annotated tag (whose verified object is a tag object) and a lightweight tag (`unsigned`/`lightweight_tag`); the existing FR-040 tag-name invocation remains unchanged. | Test |
 | FR-036-AC-15 | Every commit verdict after successful resolution, including `signed_valid`, `signed_untrusted`, `signed_bad`, `unsigned` and post-resolution `unverifiable`, carries the exact resolved commit id; an unresolved/wrong-kind revision, unavailable repository or git, or resolution timeout/output-bound failure carries `null`; machine errors carry no result member. | Test |
