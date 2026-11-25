@@ -95,6 +95,32 @@ fn request_schemas_accept_their_contract_shapes_and_refuse_unknown_members() {
         assert_eq!(sample["protocol"], protocol, "{command}");
         assert!(validator.is_valid(&sample), "{command}: {sample}");
 
+        if command == "release-verify" {
+            let mut missing_identity_registry = sample.clone();
+            missing_identity_registry
+                .as_object_mut()
+                .expect("request is an object")
+                .remove("identity_registry");
+            assert!(
+                !validator.is_valid(&missing_identity_registry),
+                "release-verify accepted gitsign without identity_registry"
+            );
+
+            let mut missing_gitsign = sample.clone();
+            missing_gitsign
+                .as_object_mut()
+                .expect("request is an object")
+                .remove("gitsign");
+            assert!(
+                !validator.is_valid(&missing_gitsign),
+                "release-verify accepted identity_registry without gitsign"
+            );
+            assert!(
+                validator.is_valid(&sample),
+                "release-verify rejected the paired gitsign and identity_registry"
+            );
+        }
+
         let mut unknown = sample;
         unknown["unexpected_member"] = json!(true);
         assert!(

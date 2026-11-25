@@ -22,5 +22,15 @@
     },
     "identity_registry": { "type": ["string", "null"] }
   },
+  "allOf": [
+    {
+      "if": { "properties": { "gitsign": { "type": "object" } }, "required": ["gitsign"] },
+      "then": { "properties": { "identity_registry": { "type": "string" } }, "required": ["identity_registry"] }
+    },
+    {
+      "if": { "properties": { "identity_registry": { "type": "string" } }, "required": ["identity_registry"] },
+      "then": { "properties": { "gitsign": { "type": "object" } }, "required": ["gitsign"] }
+    }
+  ],
   "required": ["protocol", "repository", "tag", "record_path", "allowed_signers"]
 }
