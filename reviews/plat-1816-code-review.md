@@ -55,3 +55,10 @@ The same `assert_producer` implementation is added in all four changed CLI test 
 - `cargo fmt --check`: failed on formatting differences in three unchanged files; no changed file was among those diffs.
 - Coder-reported focused evidence: compile check passed; four CLI targets 134/134; focused Clippy passed with six baseline lint classes allowed; content-rights-tree passed with 841 entries and no findings.
 - Strict Clippy was reported as exit 101 with six warnings attributed to existing lint classes, including an unchanged warning site in `src/approval_verify_host.rs`; changed lines add producer threading only. No full Clippy/test/package suite was run by this reviewer.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | The repeated assertions now use the single helper in `tests/support/producer_identity.rs`. |
+| FND-002 | fixed | `build.rs` now watches every currently tracked path in addition to Git HEAD and its ref. |

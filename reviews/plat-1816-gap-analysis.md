@@ -72,3 +72,13 @@ The matrix reports 19 stale evidence entries and 907 undischarged entries. The b
 ### FND-005 — medium
 
 The CLI assertions compare `ea_source_revision` against `option_env!("EA_SOURCE_REVISION")`, while the implementation serializes that same compile-time value. If build metadata is absent or points at the wrong commit, both sides agree and the test passes. The claimed clean-tree focused check is useful run evidence but is not a committed independent oracle for the criterion.
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | deferred | This is an unchanged repository-wide matrix baseline, outside PLAT-1816; the current matrix still reports 88 untagged criteria. |
+| FND-002 | deferred | This is an unchanged repository-wide matrix baseline, outside PLAT-1816; the current matrix still reports 18 ignored-only criteria. |
+| FND-003 | fixed | The four added test annotations now carry only their valid FR criteria; `quire coverage` no longer reports TC-1200 through TC-1203. |
+| FND-004 | deferred | The 19 stale evidence records remain an unchanged repository-wide baseline, outside PLAT-1816. |
+| FND-005 | fixed | The test oracle derives expected source identity from Git status and HEAD independently of `EA_SOURCE_REVISION`; the clean-HEAD focused run passed. |
