@@ -150,6 +150,7 @@ enum WorkflowName {
     MeasurementPromotion,
     ChangeAssurance,
     ReleaseDecision,
+    FeatureRiskRating,
 }
 
 impl WorkflowName {
@@ -163,6 +164,7 @@ impl WorkflowName {
             }
             Self::ChangeAssurance => &["decision_ready->approved", "decision_ready->rejected"],
             Self::ReleaseDecision => &["decision_ready->released", "decision_ready->rejected"],
+            Self::FeatureRiskRating => &["decision_ready->recorded", "decision_ready->abandoned"],
         }
     }
 }
@@ -177,6 +179,7 @@ impl FromStr for WorkflowName {
             "measurement-promotion" => Ok(Self::MeasurementPromotion),
             "change-assurance" => Ok(Self::ChangeAssurance),
             "release-decision" => Ok(Self::ReleaseDecision),
+            "feature-risk-rating" => Ok(Self::FeatureRiskRating),
             _ => Err(()),
         }
     }

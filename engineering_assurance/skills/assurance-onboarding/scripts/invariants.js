@@ -54,6 +54,10 @@ const terminalKeys = {
     "decision_ready->released",
     "decision_ready->rejected",
   ],
+  "feature-risk-rating": [
+    "decision_ready->recorded",
+    "decision_ready->abandoned",
+  ],
 };
 
 const terminalGates = ({ instance }) => {
