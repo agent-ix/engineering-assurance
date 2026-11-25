@@ -15,6 +15,9 @@ use std::{
 use ix_trace_rs::trace;
 use serde_json::{Value, json};
 
+#[path = "support/producer_identity.rs"]
+mod producer_identity;
+
 struct Fixture {
     dir: tempfile::TempDir,
 }
@@ -240,6 +243,7 @@ fn verdict_with(request: &Value, path: Option<&Path>) -> Value {
         value["protocol"],
         "engineering-assurance.signature-verify-result/v1"
     );
+    producer_identity::assert_producer(&value);
     value
 }
 
@@ -335,6 +339,19 @@ fn tc_251_unsigned_commit_and_tag_are_unsigned() {
     let tag = status(&fixture, "v-plain", "tag");
     assert_eq!(tag["status"], "unsigned");
     assert!(tag.get("reason").is_none());
+}
+
+#[test]
+#[trace("FR-036-AC-16")]
+fn tc_1200_unsigned_and_unverifiable_verdicts_carry_producer_identity() {
+    let fixture = fixture();
+    let commit = plain_commit(&fixture, "unsigned");
+    let unsigned = status(&fixture, &commit, "commit");
+    assert_eq!(unsigned["status"], "unsigned");
+
+    let unresolved = status(&fixture, "no-such-revision", "commit");
+    assert_eq!(unresolved["status"], "unverifiable");
+    assert_eq!(unresolved["reason"], "revision_unresolved");
 }
 
 #[test]

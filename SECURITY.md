@@ -1,5 +1,5 @@
 # Security Policy
 
-If you believe you have found a security vulnerability in Engineering Assurance, report it privately through [GitHub Security Advisories](https://github.com/agent-ix/engineering-assurance/security/advisories/new).
+If you believe you have found a security vulnerability in Engineering Assurance, use the repository Security tab and choose Report a vulnerability.
 
 Please do not disclose vulnerabilities through public issues, discussions, or pull requests.

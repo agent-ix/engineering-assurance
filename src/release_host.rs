@@ -26,6 +26,7 @@ use thiserror::Error;
 
 use crate::approval_verify_host::{GitsignEcho, ResultLine as ApprovalLine, Trust, TrustReading};
 use crate::process_host::CompletedProcess;
+use crate::producer_identity::ProducerIdentity;
 use crate::signature_verify_host::{
     AllowedSignersSource, CaptureFailure, GitsignRequest, LoadedGitsign, RegistryFailure,
     capture_allowed_signers, git_version, load_gitsign, run_git, validate_gitsign,
@@ -382,6 +383,8 @@ struct DecisionInfo<'a> {
 #[derive(Serialize)]
 struct ResultLine<'a> {
     protocol: &'static str,
+    #[serde(flatten)]
+    producer: ProducerIdentity,
     status: Status,
     tag: &'a str,
     /// The trust of the run, kept on every verdict, including one with no `approval`.
@@ -402,12 +405,18 @@ struct ResultLine<'a> {
 }
 
 impl<'a> ResultLine<'a> {
-    fn not_released(tag: &'a str, trust: Trust<'a>, reasons: Vec<Reason>) -> Self {
+    fn not_released(
+        tag: &'a str,
+        trust: Trust<'a>,
+        reasons: Vec<Reason>,
+        producer: ProducerIdentity,
+    ) -> Self {
         Self {
             protocol: RESULT_PROTOCOL,
             status: Status::NotReleased,
             tag,
             trust,
+            producer,
             reasons,
             absent_items: Vec::new(),
             approval: None,
@@ -455,6 +464,7 @@ impl<'a> ResultLine<'a> {
 
 /// Runs one request document and returns the result line.
 pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ReleaseVerifyError> {
+    let producer = ProducerIdentity::sample().ok_or(ReleaseVerifyError::ResultEncoding)?;
     let value: Value = serde_json::from_slice(bytes).map_err(|_| ReleaseVerifyError::Unreadable)?;
     let request: Request =
         serde_json::from_value(value).map_err(|_| ReleaseVerifyError::Invalid)?;
@@ -496,7 +506,7 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ReleaseVerifyError> {
             RegistryFailure::Invalid => ReleaseVerifyError::IdentityRegistry,
             RegistryFailure::Git(_) => ReleaseVerifyError::GitFailed,
         })?;
-    let mut line = match verify(&request, reading, gitsign.as_ref()) {
+    let mut line = match verify(&request, reading, gitsign.as_ref(), producer) {
         Ok(line) => line,
         Err(VerifyError::Git) => return Err(ReleaseVerifyError::GitFailed),
         Err(VerifyError::Encoding) => return Err(ReleaseVerifyError::ResultEncoding),
@@ -633,6 +643,7 @@ fn verify(
     request: &Request,
     reading: TrustReading<'_>,
     gitsign: Option<&LoadedGitsign>,
+    producer: ProducerIdentity,
 ) -> Result<Vec<u8>, VerifyError> {
     let echo = GitsignEcho::new(
         request.gitsign.as_ref(),
@@ -646,11 +657,16 @@ fn verify(
         .unwrap_or(&request.tag);
     let Some(release_commit) = commit_of(repository, &request.tag)? else {
         let reasons = vec![Reason::Check(Check::RecordUnreadable)];
-        return encode(&ResultLine::not_released(tag, trust, reasons));
+        return encode(&ResultLine::not_released(tag, trust, reasons, producer));
     };
     let early = |check| {
         let reasons = vec![Reason::Check(check)];
-        encode(&ResultLine::not_released(tag, trust, reasons))
+        encode(&ResultLine::not_released(
+            tag,
+            trust,
+            reasons,
+            producer.clone(),
+        ))
     };
     let Some(record_object) = object_at(repository, &release_commit, &request.record_path)? else {
         return early(Check::RecordUnreadable);
@@ -672,6 +688,7 @@ fn verify(
         reading,
         echo,
         gitsign,
+        producer.clone(),
     );
     let status = approval.assessment().status();
     let approved = approval.assessment().approval().cloned();
@@ -707,7 +724,7 @@ fn verify(
         })
         .unwrap_or_default();
     let released = failed.is_empty() && status == ApprovalStatus::Approved;
-    let mut result = ResultLine::not_released(tag, trust, failed);
+    let mut result = ResultLine::not_released(tag, trust, failed, producer);
     result.absent_items = absent_items;
     if released && let (Some(approved), Some(resolution)) = (approved.as_ref(), resolution.as_ref())
     {

@@ -84,6 +84,15 @@ signature.
   `baseline_commit_unknown`, `baseline_file_absent`, `baseline_file_invalid`,
   `release_commit_not_child_of_baseline`, `release_commit_changes_other_paths`, `release_commit_record_not_added`,
   `release_commit_snapshot_not_added`, `snapshot_path_present_at_baseline`, `baseline_item_absent`, `decision_owner_mismatch`.
+- Every result with a verdict carries `ea_version`, `ea_source_revision`,
+  `generated_at` and `generated_at_source`, with the meanings and formats
+  defined by [FR-036](./FR-036-ssh-signed-commit-and-tag-verification.md).
+  `generated_at` is sampled once for the release-verify
+  invocation from the host clock, including when `approval` is absent; it is
+  not a signing or trusted time. When `approval` is present, its producer
+  fields carry the same values as the enclosing result. These fields are
+  additive and do not change the `engineering-assurance.release-verify-result/v1`
+  protocol value.
 - The `trust` member, on every result with a verdict, the FR-041 `trust` object
   of the run (`allowed_signers`, `allowed_signers_sha256`, `allowed_signers_commit`
   for a `<rev>:<path>` source, `ea_version`, `git_version`, and the gitsign members when
@@ -110,6 +119,11 @@ signature.
 
 - The command SHALL read the release record from the commit the tag peels to,
   with git object access.
+- The command SHALL capture `generated_at` once when the `release-verify`
+  invocation starts.
+- The command SHALL use that value and producer identity for the nested
+  `approval` result when it runs FR-041.
+- The command SHALL NOT use that value as `signed_at` or `trusted_at`.
 - The command SHALL NOT read the working tree.
 - If git cannot answer while the identity registry is read (FR-037), then the
   command SHALL write `release_verify_git_failed` and exit 2.
@@ -187,6 +201,7 @@ signature.
 | FR-047-AC-14 | A request whose `gitsign` member carries `principal`, and that otherwise validates, yields `release_verify_gitsign_principal_refused`; an `identity_registry` whose source is `invalid` or whose content is unusable yields `release_verify_identity_registry_invalid`; a git that fails while the registry is read yields `release_verify_git_failed`; each exits 2 with no verdict. | Test |
 | FR-047-AC-15 | Every `release-verify` result with a verdict, `released` or `not_released` and including one with no `approval` member, carries a top-level `trust` equal to the `approval.trust` of the same run when `approval` is present, with `allowed_signers_sha256`, `ea_version`, `git_version` and, for a `<rev>:<path>` source, `allowed_signers_commit`; editing the allowed-signers file after signing changes `allowed_signers_sha256` of an absolute-path request but not that of a `<rev>:<path>` request naming the commit in force at signing. | Test |
 | FR-047-AC-16 | A `released` result carries the `signed_at`, `signed_at_source` and `trusted_at` or `trusted_at_missing` members of the FR-041 result of the same run, and `time_skew` when both times are present and differ. | Test |
+| FR-047-AC-17 | Every `released` or `not_released` verdict, including a verdict without `approval`, carries the executable's `ea_version`, build-embedded `ea_source_revision` (or `null` when unavailable), and one UTC `generated_at` value with source `host_clock`; when `trust` is present top-level `ea_version` equals `trust.ea_version`, and when `approval` is present its producer fields are identical; none of these fields is treated as signing or trusted time. | Test |
 | FR-047-AC-13 | A git that fails every call yields `release_verify_git_failed` at exit 2 and no verdict, and a replace ref or a graft in the repository changes neither the record read nor the parent compared. | Test |
 
 ## Dependencies

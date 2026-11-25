@@ -37,6 +37,7 @@ use serde::{Deserialize, Deserializer, Serialize, de::IgnoredAny};
 use thiserror::Error;
 
 use crate::process_host::{self, CompletedProcess, ProcessError, ProcessLimits};
+use crate::producer_identity::ProducerIdentity;
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.signature-verify-request/v1";
 const RESULT_PROTOCOL: &str = "engineering-assurance.signature-verify-result/v1";
@@ -231,6 +232,8 @@ fn parse_registry(content: &str) -> Option<IdentityRegistry> {
 struct ResultLine<'a> {
     protocol: &'static str,
     #[serde(flatten)]
+    producer: ProducerIdentity,
+    #[serde(flatten)]
     verdict: &'a Verdict,
     #[serde(skip_serializing_if = "Option::is_none")]
     trailers: Option<BTreeMap<String, Vec<String>>>,
@@ -290,6 +293,7 @@ impl SignatureVerifyError {
 
 /// Runs one request document and returns the result line.
 pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, SignatureVerifyError> {
+    let producer = ProducerIdentity::sample().ok_or(SignatureVerifyError::ResultEncoding)?;
     let value: serde_json::Value =
         serde_json::from_slice(bytes).map_err(|_| SignatureVerifyError::Unreadable)?;
     validate_trailer_keys(value.get("trailer_keys"))?;
@@ -320,7 +324,7 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, SignatureVerifyError> {
         // Git could not answer: a verdict, and no verifier is started.
         Err(CaptureFailure::Git(reason)) => {
             let verdict = Verdict::unverifiable(request.kind, reason);
-            return encode_line(&verdict, None);
+            return encode_line(&verdict, None, producer);
         }
     };
     let gitsign = match input
@@ -332,7 +336,7 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, SignatureVerifyError> {
         // Git could not answer: a verdict, and no verifier is started.
         Err(RegistryFailure::Git(reason)) => {
             let verdict = Verdict::unverifiable(request.kind, reason);
-            return encode_line(&verdict, None);
+            return encode_line(&verdict, None, producer);
         }
     };
     let git = Git {
@@ -351,15 +355,17 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, SignatureVerifyError> {
         }
     };
     let trailers = requested_trailers(checked.trailers.as_deref(), trailer_keys);
-    encode_line(&checked.verdict, trailers)
+    encode_line(&checked.verdict, trailers, producer)
 }
 
 fn encode_line(
     verdict: &Verdict,
     trailers: Option<BTreeMap<String, Vec<String>>>,
+    producer: ProducerIdentity,
 ) -> Result<Vec<u8>, SignatureVerifyError> {
     let mut line = serde_json::to_vec(&ResultLine {
         protocol: RESULT_PROTOCOL,
+        producer,
         verdict,
         trailers,
     })

@@ -85,6 +85,17 @@ of "the signature" describe SSH signatures unless FR-040 is named.
   `repository_unavailable`, `revision_unresolved`, `timeout`,
   `output_exceeded`, `signature_unchecked` (grade `E`),
   `ssh_keygen_not_started`, `unsupported_signature_format`, `unrecognized_output`.
+- Every verdict also carries `ea_version` (the running executable's Cargo
+  package version), `ea_source_revision` (the full commit id of the Engineering
+  Assurance source used to build the executable, or JSON `null` when the build
+  did not embed a source commit; a non-null value is 40 or 64 lowercase ASCII
+  hexadecimal digits), `generated_at` (a UTC instant in the form
+  `YYYY-MM-DDTHH:MM:SSZ`), and `generated_at_source` with the value
+  `host_clock`. `ea_source_revision` identifies the producer build; it is not
+  the requested or verified object id. `generated_at` is an observation of the
+  host wall clock and is not signed, independently attested, or evidence that
+  the clock is accurate. These producer fields are additive and do not change
+  the `engineering-assurance.signature-verify-result/v1` protocol value.
 - The command writes one line of JSON to stdout, the verdict with the member
   `protocol` equal to `engineering-assurance.signature-verify-result/v1`, and
   exits with status 0 for every status, as FR-029 does for every closed state.
@@ -107,6 +118,18 @@ of "the signature" describe SSH signatures unless FR-040 is named.
   `git verify-tag` for kind `tag`, with `gpg.ssh.allowedSignersFile` set to a private
   file written from the allowed-signers bytes FR-037 reads once for the run
   (the request's file, or the committed content of its `<rev>:<path>`).
+- The command SHALL sample the UTC host clock once when the
+  `signature-verify` invocation starts.
+- The command SHALL set `generated_at` on every verdict to that one sampled
+  value.
+- The command SHALL NOT use `generated_at` as a signing or trusted time or
+  claim that the value was independently verified.
+- The executable SHALL report its Cargo package version as `ea_version`.
+- The executable SHALL report the full commit id embedded for the Engineering
+  Assurance source used to build it as `ea_source_revision`, or JSON `null`
+  when the build has no embedded source commit.
+- The executable SHALL NOT infer `ea_source_revision` from the repository
+  being verified, the executable path, or a version string.
 - For kind `commit`, the command SHALL resolve the caller's `revision` exactly
   once to the canonical full id of its commit object before classifying its
   signature.
@@ -216,6 +239,7 @@ of "the signature" describe SSH signatures unless FR-040 is named.
 | FR-036-AC-13 | A commit request using an object-id revision and a request using a symbolic alias for that same commit each return the same full commit object id in `verified_commit_id`; all later commit verifier calls and the `%G?` lookup use that id, not the caller's alias. | Test |
 | FR-036-AC-14 | Every tag verdict has `verified_commit_id: null`, including an annotated tag (whose verified object is a tag object) and a lightweight tag (`unsigned`/`lightweight_tag`); the existing FR-040 tag-name invocation remains unchanged. | Test |
 | FR-036-AC-15 | Every commit verdict after successful resolution, including `signed_valid`, `signed_untrusted`, `signed_bad`, `unsigned` and post-resolution `unverifiable`, carries the exact resolved commit id; an unresolved/wrong-kind revision, unavailable repository or git, or resolution timeout/output-bound failure carries `null`; machine errors carry no result member. | Test |
+| FR-036-AC-16 | Every verdict for both commit and tag requests, including `unsigned` and `unverifiable`, carries the running package version, the build-embedded Engineering Assurance source commit or `null` when unavailable, and one UTC `generated_at` value with source `host_clock`; all verdicts produced by one invocation share that value, which is not used as signing or trusted time. | Test |
 
 ## Dependencies
 

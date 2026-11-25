@@ -91,6 +91,15 @@ signature rule (FR-036, FR-037, FR-040 own them), and any log or store that the 
 
 - With `--format json`, one line of JSON on stdout and exit status 0, the result
   with the member `protocol` equal to `engineering-assurance.approval-trail-result/v1`:
+  - `ea_version`, `ea_source_revision`, `generated_at` and
+    `generated_at_source`, with the meanings and formats defined by
+    [FR-036](./FR-036-ssh-signed-commit-and-tag-verification.md).
+    These producer fields appear on every trail result, including an empty or
+    incomplete trail; `generated_at` is one host-clock claim sampled for the
+    trail invocation, not a signing or trusted time. These fields are additive
+    and do not change the `engineering-assurance.approval-trail-result/v1`
+    protocol value. Every entry also carries
+    these fields with the same values as the enclosing trail result.
   - `record_id`, `record_digest` and `trust` as requested (the `trust` member of
     FR-041, with `allowed_signers_sha256`, `allowed_signers_commit` for a
     `<rev>:<path>` source, `ea_version` and `git_version` as FR-041 defines (a git failure while the allowed-signers `<rev>:<path>` source is read is `approval_trail_repository_unavailable`, so there is no result and no `trust`), read once for the
@@ -120,7 +129,8 @@ signature rule (FR-036, FR-037, FR-040 own them), and any log or store that the 
   ref names can be told from independent approvals), `claimed_at` (a UTC instant
   `YYYY-MM-DDTHH:MM:SSZ`, absent when the tagger date is unreadable) and every other
   member of the FR-041 result for that tag except `protocol`, `record_id`,
-  `record_digest` and `trust`: `status`, `reason`, `signature`, `binding` and, on
+  `record_digest` and `trust`, including `ea_version`, `ea_source_revision`,
+  `generated_at` and `generated_at_source`: `status`, `reason`, `signature`, `binding` and, on
   `approved`, `approver`, `meaning`, `signature_kind` and the signing times of FR-041
   (`signed_at` or `signed_at_missing`, `trusted_at` with `trusted_at_source`
   or `trusted_at_missing`, and `time_skew`).
@@ -149,6 +159,11 @@ signature rule (FR-036, FR-037, FR-040 own them), and any log or store that the 
 
 ## Behavior
 
+- The command SHALL capture `generated_at` once when the `approval-trail`
+  invocation starts.
+- The command SHALL use that value and producer identity for the trail result
+  and every entry it evaluates.
+- The command SHALL NOT use that value as `signed_at` or `trusted_at`.
 - The command SHALL list tags with `git for-each-ref` over `refs/tags` using the
   format `%(refname)%00%(objecttype)` and no message text, and SHALL examine them in
   the byte order of the ref name, which is git's listing order.
@@ -230,7 +245,7 @@ throwaway keys generated in the test.
 | FR-043-AC-1 | Two validly signed approvals of one record, one with meaning `approved` and a later one with meaning `revoked`, are both listed oldest first by `claimed_at`, each `approved` with its approver, meaning and signing time, whatever the order the tags were created or named in. | Test |
 | FR-043-AC-2 | A tag with a bad signature, a tag signed by an unmapped key, a tag with a different digest and a tag without `Signed-off-meaning`, all naming the record, are listed with `signed_bad`, `untrusted_signer`, `wrong_record` and `meaning_missing`, and none is dropped. | Test |
 | FR-043-AC-3 | Tags naming a different record are excluded; lightweight tags and annotated tags without an `Approved-Record-Id` trailer are not listed. | Test |
-| FR-043-AC-4 | Each entry equals the `approval-verify` result for the same tag, request and trust input, less `protocol`, `record_id`, `record_digest` and `trust`, and plus `claimed_at` and `object`. | Test |
+| FR-043-AC-4 | Each entry equals the `approval-verify` result for the same tag, request and trust input, less `protocol`, `record_id`, `record_digest`, `trust` and `generated_at`, and plus `claimed_at` and `object`; its `ea_version`, `ea_source_revision` and `generated_at_source` match the `approval-verify` result, while `generated_at` matches the enclosing trail result. | Test |
 | FR-043-AC-5 | Entries are ordered by `claimed_at` ascending; entries without a readable tagger date follow, ordered by tag name in byte order, as do equal times; `claimed_at` is reported on entries of every status. | Test |
 | FR-043-AC-6 | More than 10000 refs under `refs/tags` yields `truncated` true with `truncation` `tag_limit` and `considered` 10000; a trail within the bound yields `truncated` false and no `truncation`. | Test |
 | FR-043-AC-7 | A tag named `--help`, one named like a revision expression and one with characters such as `'`, `"`, `$` and `;` are listed correctly, executed nothing and altered no other entry. | Test |
@@ -246,7 +261,7 @@ throwaway keys generated in the test.
 | FR-043-AC-17 | Every entry carries `object` equal to the id of the verified tag object, and two ref names of one tag object carry the same `object`. | Test |
 | FR-043-AC-18 | In `--format table`, escape, C1 control, bidirectional override and zero-width characters in a tag name or meaning are replaced by `?`. | Test |
 | FR-043-AC-19 | The command writes nothing to the repository and keeps no log or digest of the trail. | Inspection |
-| FR-043-AC-26 | The trail result's `trust` carries `allowed_signers_sha256`, `ea_version` and `git_version` on every result that carries `trust`, and `allowed_signers_commit` when the request's `allowed_signers` is a `<rev>:<path>` that resolved; the allowed-signers bytes are read once per trail, so a file changed mid-run changes no entry, and each entry equals the `approval-verify` result against the same bytes. | Test |
+| FR-043-AC-26 | The trail result and every entry carry `ea_version`, `ea_source_revision`, `generated_at` and `generated_at_source`; all entries share the trail's `generated_at`, including an empty or incomplete trail. When result `trust` is present, top-level `ea_version` equals `trust.ea_version`; `trust` carries `allowed_signers_sha256`, `ea_version` and `git_version`, and `allowed_signers_commit` when the request's `allowed_signers` is a `<rev>:<path>` that resolved. The allowed-signers bytes are read once per trail, so a file changed mid-run changes no entry, and each entry's trust equals the `approval-verify` result against the same bytes. | Test |
 | FR-043-AC-27 | An `approved` gitsign entry carries the `trusted_at`, `trusted_at_source` and `time_skew`, or the `trusted_at_missing` reason, that `approval-verify` yields for the same tag; an `approved` SSH entry carries `trusted_at_missing` `ssh_signature`; entries other than `approved` carry none of them; and `claimed_at` alone orders the trail whatever `trusted_at` says. | Test |
 | FR-043-AC-20 | A fixture record with a verified tag receipt whose tag has been deleted yields an entry with the status `missing_tag`, reason `tag_absent`, the receipted object id, and `complete` false; the entry is never `approved`. | Test |
 | FR-043-AC-21 | A tag deleted and pushed again at the identical object id yields its normal entry with `tag_receipt` `verified`, no `missing_tag` entry, and `complete` true when nothing else is open; the same tag re-signed yields its new entry with `tag_receipt` `none` and a `missing_tag` entry with reason `tag_changed` and `current_object` for the earlier receipt. | Test |

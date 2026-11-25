@@ -16,6 +16,9 @@ use std::{
 use ix_trace_rs::trace;
 use serde_json::{Value, json};
 
+#[path = "support/producer_identity.rs"]
+mod producer_identity;
+
 const RECORD_ID: &str = "change-record-17";
 const DIGEST: &str = "sha256:0123456789abcdef";
 const REQUEST_PROTOCOL: &str = "engineering-assurance.approval-trail-request/v1";
@@ -214,6 +217,11 @@ fn trail_of(request: &Value) -> Value {
     );
     let value: Value = serde_json::from_str(text).expect("json line");
     assert_eq!(value["protocol"], RESULT_PROTOCOL);
+    producer_identity::assert_producer(&value);
+    for entry in value["entries"].as_array().expect("entries") {
+        producer_identity::assert_producer(entry);
+        assert_eq!(entry["generated_at"], value["generated_at"]);
+    }
     value
 }
 
@@ -298,6 +306,15 @@ fn entry<'a>(trail: &'a Value, tag: &str) -> &'a Value {
         .iter()
         .find(|e| e["tag"] == tag)
         .unwrap_or_else(|| panic!("{tag} not listed: {trail}"))
+}
+
+#[test]
+#[trace("FR-043-AC-26")]
+fn tc_1202_empty_trail_carries_producer_identity() {
+    let fixture = fixture();
+    let result = trail(&fixture);
+    assert!(result["entries"].as_array().expect("entries").is_empty());
+    producer_identity::assert_producer(&result);
 }
 
 #[test]
@@ -528,6 +545,19 @@ fn tc_355_each_entry_is_the_approval_verify_result_for_its_tag() {
             .as_object_mut()
             .expect("approval result")
             .remove("tag_object_id");
+        let verified_generated_at = verified
+            .as_object_mut()
+            .expect("approval result")
+            .remove("generated_at");
+        assert_eq!(
+            listed
+                .as_object_mut()
+                .expect("trail entry")
+                .remove("generated_at"),
+            Some(result["generated_at"].clone()),
+            "trail entry shares the invocation timestamp"
+        );
+        assert!(verified_generated_at.is_some());
         assert_eq!(listed, verified, "{tag}");
         assert_eq!(claimed, Some(json!("2026-05-01T17:00:00Z")), "{tag}");
     }
