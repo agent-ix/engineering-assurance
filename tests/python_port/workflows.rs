@@ -207,9 +207,10 @@ fn ix_flow_can_load_every_definition() {
 fn pilot_and_canonical_workflows_are_equivalent() {
     let pilot = definitions();
     let mut canonical = load_definitions(&canonical().join("workflows"));
-    // `release-decision` was promoted after the pilot path was frozen; the
+    // These workflows were promoted after the pilot path was frozen; the
     // pilot keeps exactly the workflows it had before promotion.
     assert!(canonical.remove("release-decision").is_some());
+    assert!(canonical.remove("feature-risk-rating").is_some());
     assert_eq!(names(&pilot), expected_names());
     assert_eq!(canonical, pilot);
 }

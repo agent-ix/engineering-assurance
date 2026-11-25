@@ -1,0 +1,38 @@
+name: feature-risk-rating
+version: 0.1.0
+description: Present a proposed feature risk rating to its named decision owner.
+initialPhase: capture
+phases:
+  - { name: capture }
+  - { name: proposal_ready }
+  - { name: decision_ready }
+  - { name: recorded, terminal: true }
+  - { name: abandoned, terminal: true }
+transitions:
+  - from: capture
+    to: proposal_ready
+    invariants: ["interview.complete:rating"]
+    defaultGate: auto
+  - from: proposal_ready
+    to: decision_ready
+    invariants: ["shared.terminal_gates"]
+    defaultGate: auto
+  - { from: decision_ready, to: recorded, invariants: [], defaultGate: hitl }
+  - { from: decision_ready, to: abandoned, invariants: [], defaultGate: hitl }
+itemSchemas:
+  run_binding:
+    required: [id, repository_id, workflow, workflow_version, decision_boundary, decision_owner]
+  rating_request: {}
+  rating_proposal:
+    required: [id, repository, unrated_features, draft, draft_status]
+  rating_outcome:
+    required: [id, status, document, record_path, commit_command]
+linkSchemas: {}
+interviews:
+  rating:
+    itemType: rating_request
+    completenessRule: all_required
+    questions:
+      - { key: repository, prompt: "Which repository holds the feature specifications?", type: text, required: true }
+      - { key: decision_owner, prompt: "Who is responsible for this intended use?", type: text, required: true }
+      - { key: fr_ids, prompt: "Which unrated FRs are in scope?", type: text, required: true }

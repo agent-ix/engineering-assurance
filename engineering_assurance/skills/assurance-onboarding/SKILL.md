@@ -191,7 +191,10 @@ Use the definitions under `workflows/`:
 - `change-assurance` for a bounded change decision; and
 - `release-decision` for a named person's release or reject decision, driven
   through `engineering-assurance release-decision` (the person's signed tag, not
-  the workflow, is the release).
+  the workflow, is the release); and
+- `feature-risk-rating` for a named person's feature-risk decision, driven
+  through `engineering-assurance feature-risk-rating` (the workflow drafts the
+  rating; the person's signed commit is the acceptance).
 
 Run them through ix-flow and preserve its state for resume. Terminal transitions
 remain named human decisions; never acknowledge or override those gates.

@@ -71,6 +71,8 @@ pub enum WorkflowKind {
     ChangeAssurance,
     /// A named person's decision to release one Baseline.
     ReleaseDecision,
+    /// A named person's acceptance of a feature risk rating.
+    FeatureRiskRating,
 }
 
 impl WorkflowKind {
@@ -80,12 +82,13 @@ impl WorkflowKind {
     /// workflows exist, and they used to agree by each carrying its own list.
     /// One list means a workflow cannot be promoted into the bundle without
     /// also becoming bindable, or bound without also being discoverable.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::ArchitectureEvaluation,
         Self::AssuranceIntake,
         Self::ChangeAssurance,
         Self::MeasurementPromotion,
         Self::ReleaseDecision,
+        Self::FeatureRiskRating,
     ];
 
     /// Return the canonical ix-flow definition name.
@@ -97,6 +100,7 @@ impl WorkflowKind {
             Self::MeasurementPromotion => "measurement-promotion",
             Self::ChangeAssurance => "change-assurance",
             Self::ReleaseDecision => "release-decision",
+            Self::FeatureRiskRating => "feature-risk-rating",
         }
     }
 
@@ -111,8 +115,8 @@ impl WorkflowKind {
         }
     }
 
-    /// The terminal phases of the workflow: the one its positive choice selects
-    /// (`accept`, or `release` for `release-decision`), then the rejecting one.
+    /// The terminal phases of the workflow: the one its positive choice selects,
+    /// then the rejecting one.
     #[must_use]
     pub const fn terminal_phases(self) -> [&'static str; 2] {
         match self {
@@ -120,6 +124,7 @@ impl WorkflowKind {
             Self::MeasurementPromotion => ["promoted", "not_promoted"],
             Self::ChangeAssurance => ["approved", "rejected"],
             Self::ReleaseDecision => ["released", "rejected"],
+            Self::FeatureRiskRating => ["recorded", "abandoned"],
         }
     }
 

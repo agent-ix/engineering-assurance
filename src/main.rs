@@ -15,6 +15,7 @@ mod approval_verify_host;
 mod attestation_verify_host;
 mod content_rights_host;
 mod evaluation_report_host;
+mod feature_risk_rating_host;
 mod integration_evidence_host;
 mod manifest_host;
 mod onboard_report;
@@ -72,6 +73,8 @@ const PRODUCER_EXECUTE_CAPABILITY: &str = "producer-execute";
 const PROOF_CHECKPOINT_VERIFY_CAPABILITY: &str = "proof-checkpoint-verify";
 const RELEASE_HISTORY_CAPABILITY: &str = "release-history";
 const RELEASE_DECISION_CAPABILITY: &str = "release-decision";
+const FEATURE_RISK_RATING_CAPABILITY: &str = "feature-risk-rating";
+const RATING_ACCEPTANCE_CAPABILITY: &str = "rating-acceptance";
 const RELEASE_VERIFY_CAPABILITY: &str = "release-verify";
 const RECEIPT_NOTE_CAPABILITY: &str = "receipt-note";
 const RECEIPT_MISSING_CAPABILITY: &str = "receipt-missing";
@@ -165,6 +168,8 @@ fn command() -> Command {
         .subcommands(tag_receipt_commands())
         .subcommand(release_history_command())
         .subcommand(release_decision_command())
+        .subcommand(feature_risk_rating_command())
+        .subcommand(rating_acceptance_command())
         .subcommand(
             Command::new(WORKFLOW_INVARIANTS_CAPABILITY)
                 .about("Evaluate a closed workflow projection against named invariants"),
@@ -382,6 +387,30 @@ fn release_decision_command() -> Command {
         )
 }
 
+fn feature_risk_rating_command() -> Command {
+    Command::new(FEATURE_RISK_RATING_CAPABILITY)
+        .about("Present a feature risk rating to its named human decision owner")
+        .arg(
+            Arg::new("request")
+                .long("request")
+                .value_name("JSON")
+                .help("Feature-risk-rating request document, or - to read it from stdin")
+                .required(true),
+        )
+}
+
+fn rating_acceptance_command() -> Command {
+    Command::new(RATING_ACCEPTANCE_CAPABILITY)
+        .about("Check feature risk rating commits through signature-verify")
+        .arg(
+            Arg::new("request")
+                .long("request")
+                .value_name("JSON")
+                .help("Rating-acceptance request document, or - to read it from stdin")
+                .required(true),
+        )
+}
+
 fn release_verify_command() -> Command {
     Command::new(RELEASE_VERIFY_CAPABILITY)
         .about("Report whether a signed annotated tag is a named person's release of one Baseline")
@@ -532,6 +561,8 @@ fn main() -> ExitCode {
         Some((TAG_RECEIPT_NOTE_CAPABILITY, arguments)) => run_tag_receipt_note(arguments),
         Some((RELEASE_HISTORY_CAPABILITY, arguments)) => run_release_history(arguments),
         Some((RELEASE_DECISION_CAPABILITY, arguments)) => run_release_decision(arguments),
+        Some((FEATURE_RISK_RATING_CAPABILITY, arguments)) => run_feature_risk_rating(arguments),
+        Some((RATING_ACCEPTANCE_CAPABILITY, arguments)) => run_rating_acceptance(arguments),
         Some((WORKFLOW_INVARIANTS_CAPABILITY, _)) => run_workflow_invariants(),
         Some((WORKFLOW_HOST_CAPABILITY, _)) => run_workflow_host(),
         Some((PACKAGE_LIFECYCLE_CAPABILITY, arguments)) => run_package_lifecycle(arguments),
@@ -1205,6 +1236,60 @@ fn run_release_decision(arguments: &ArgMatches) -> ExitCode {
             release_decision_host::execute(bytes).map_err(|error| (error.code(), error.to_string()))
         },
     )
+}
+
+fn run_feature_risk_rating(arguments: &ArgMatches) -> ExitCode {
+    run_request_line(
+        arguments,
+        FEATURE_RISK_RATING_CAPABILITY,
+        "feature_risk_rating_request_invalid",
+        |bytes| {
+            feature_risk_rating_host::execute_workflow(bytes)
+                .map_err(|error| (error.code(), error.to_string()))
+        },
+    )
+}
+
+fn run_rating_acceptance(arguments: &ArgMatches) -> ExitCode {
+    let Some(request) = arguments.get_one::<String>("request") else {
+        return emit_error(
+            RATING_ACCEPTANCE_CAPABILITY,
+            "rating_acceptance_request_invalid",
+            "rating-acceptance requires --request",
+        );
+    };
+    let bytes = if request == "-" {
+        match read_stdin(
+            RATING_ACCEPTANCE_CAPABILITY,
+            "rating_acceptance_request_invalid",
+        ) {
+            Ok(bytes) => bytes,
+            Err(exit_code) => return exit_code,
+        }
+    } else if request.len() > MAX_STDIN_BYTES {
+        return emit_error(
+            RATING_ACCEPTANCE_CAPABILITY,
+            "rating_acceptance_request_invalid",
+            "rating-acceptance request exceeds the input limit",
+        );
+    } else {
+        request.clone().into_bytes()
+    };
+    match feature_risk_rating_host::execute_acceptance(&bytes) {
+        Ok((line, complete)) => match ix_cli_kit::streams::write_primary_stdout(&line) {
+            Ok(()) if complete => ExitCode::SUCCESS,
+            Ok(()) => ExitCode::from(1),
+            Err(error) => {
+                eprintln!("failed to write rating-acceptance output: {error}");
+                ExitCode::from(2)
+            }
+        },
+        Err(error) => emit_error(
+            RATING_ACCEPTANCE_CAPABILITY,
+            error.code(),
+            &error.to_string(),
+        ),
+    }
 }
 
 fn run_approval_trail(arguments: &ArgMatches) -> ExitCode {

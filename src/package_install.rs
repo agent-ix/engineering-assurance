@@ -22,12 +22,13 @@ use crate::package_archive::{
 
 const CANONICAL_SKILL: &str = "engineering_assurance/skills/assurance-onboarding";
 const CANONICAL_SKILLS: &str = "engineering_assurance/skills";
-const WORKFLOWS: [&str; 5] = [
+const WORKFLOWS: [&str; 6] = [
     "architecture-evaluation",
     "assurance-intake",
     "change-assurance",
     "measurement-promotion",
     "release-decision",
+    "feature-risk-rating",
 ];
 /// The workflows the pilot path kept when it was frozen; `release-decision` was
 /// promoted after and has no pilot copy.
