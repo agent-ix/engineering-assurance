@@ -40,3 +40,22 @@ Reviewed PR #315 at frozen head `437d3a0372a1ef3f62496048a744786c0ef4d79f` again
 ## Methods
 
 Rust review was folded into code-review. Focused source and diff inspection plus Quire trace matrix were used. `cargo fmt`, clippy, and broader Rust gates were not rerun; coder reports clippy's unchanged-file failures and the PR body records focused checks.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-004 | medium | The exact-request test is tagged to FR-036-AC-8, which requires malformed or unreadable inbound requests to return a machine error; this test instead asserts the outgoing request's five-member shape. The matrix therefore falsely credits AC-8. | src/feature_risk_rating_host.rs:1297-1349 |
+| FND-005 | medium | The uncommitted rating-file test is tagged to FR-036-AC-15, which requires signature-verifier commit-id results; the test only asserts the acceptance failure reason `not_committed`. | tests/feature_risk_rating_cli.rs:316-324 |
+| FND-006 | medium | FR-037-AC-1 requires successful SSH verification to report the mapped principal. The mapped-principal-mismatch and rated_by-validation tests instead test acceptance policy/input validation, so their bindings falsely credit AC-1. | src/feature_risk_rating_host.rs:1153-1209; tests/feature_risk_rating_cli.rs:300-313 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | Risk-rating tests no longer carry the local `FR-027-AC-*` tags; local FR-027 atomic-publish criteria are no longer credited by these tests. |
+| FND-002 | fixed | Added focused tests for exact five-member request serialization, unavailable verifier, timeout, nonzero exit, and malformed stdout. |
+| FND-003 | still-open | `rustfmt --check src/feature_risk_rating_host.rs` still fails with import-order diffs at lines 15, 23 and 1087. |
+| FND-004 | still-open | The exact-request test remains tagged `FR-036-AC-8` despite exercising outgoing request serialization, not malformed inbound request behavior. |
+| FND-005 | still-open | The test remains tagged `FR-036-AC-15` but does not assert the verified commit id or a signature-verifier verdict. |
+| FND-006 | still-open | Tests for acceptance principal matching and rated_by input validation remain tagged `FR-037-AC-1`; they do not establish the criterion's successful signature-verification output. |

@@ -299,7 +299,6 @@ fn valid_signature_without_a_mapped_signer_has_exact_reason() {
 
 #[test]
 /// PLAT-1448 FR‑021 / FR‑027 AC-4: a different mapped principal is refused.
-#[trace("FR-037-AC-1")]
 fn mapped_signer_with_the_wrong_principal_has_exact_reason() {
     let fixture = fixture();
     rating_file(&fixture);
@@ -315,7 +314,6 @@ fn mapped_signer_with_the_wrong_principal_has_exact_reason() {
 
 #[test]
 /// PLAT-1448 FR‑021 / FR‑027: an uncommitted rating cannot be accepted.
-#[trace("FR-014-AC-2", "FR-036-AC-15")]
 fn uncommitted_rating_file_has_exact_reason() {
     let fixture = fixture();
     rating_file(&fixture);

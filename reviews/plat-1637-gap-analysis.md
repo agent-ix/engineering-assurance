@@ -33,3 +33,21 @@ Compared the changed workflow and verifier against PLAT-1637, FR-021, linked FR-
 ## Method Limits
 
 No semantic review or whole-suite test was run. `cargo check`, focused tests, and workflow parity results are taken from the PR's recorded evidence. Plan completion was not assessed because no plan artifact was supplied.
+
+## New findings (disposition pass 1)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-003 | medium | The exact-request test is tagged to FR-036-AC-8, which requires malformed or unreadable inbound requests to return a machine error; it instead asserts outgoing request shape, falsely crediting AC-8. | src/feature_risk_rating_host.rs:1297-1349 |
+| FND-004 | medium | The uncommitted rating-file test is tagged to FR-036-AC-15, which requires signature-verifier commit-id results; it only asserts the `not_committed` acceptance reason. | tests/feature_risk_rating_cli.rs:316-324 |
+| FND-005 | medium | FR-037-AC-1 requires successful SSH verification to report the mapped principal; mapped-principal-mismatch and rated_by-validation tests instead exercise acceptance policy/input validation, falsely crediting AC-1. | src/feature_risk_rating_host.rs:1153-1209; tests/feature_risk_rating_cli.rs:300-313 |
+
+## Dispositions
+
+| FND | outcome | reason |
+| --- | --- | --- |
+| FND-001 | fixed | New rating tests no longer bind to local `FR-027-AC-*`; computed matrix no longer credits atomic-publish criteria with rating tests. |
+| FND-002 | fixed | New focused tests exercise exact request members and unavailable, timeout, nonzero, and malformed-output verifier outcomes. |
+| FND-003 | still-open | The exact-request test remains tagged to FR-036-AC-8, which does not specify outgoing request shape. |
+| FND-004 | still-open | The uncommitted-file acceptance test remains tagged to FR-036-AC-15 without asserting that criterion's commit-id result. |
+| FND-005 | still-open | The two acceptance/input-policy tests remain tagged to FR-037-AC-1 without asserting mapped signature output. |

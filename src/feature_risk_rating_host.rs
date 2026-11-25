@@ -1154,7 +1154,6 @@ mod tests {
 
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027 AC-4: a different mapped principal is refused.
-    #[trace("FR-037-AC-1")]
     fn different_mapped_principal_has_the_principal_mismatch_reason() {
         let mut response = valid_response();
         response["signer"]["principal"] = json!("bob@example.test");
@@ -1198,7 +1197,7 @@ mod tests {
 
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027: workflow requires a mapped human principal.
-    #[trace("FR-037-AC-1", "FR-037-CON-1")]
+    #[trace("FR-014-AC-3")]
     fn workflow_rejects_empty_and_unmapped_rated_by_values() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let path = directory.path().join("allowed_signers");
@@ -1295,7 +1294,6 @@ mod tests {
     #[cfg(unix)]
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027 request-contract obligation: pass exactly the declared request members.
-    #[trace("FR-036-AC-8")]
     fn verifier_process_receives_exact_five_member_signature_request() {
         let (directory, repository, allowed_signers) = process_fixture();
         let captured = directory.path().join("captured-request.json");
