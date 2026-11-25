@@ -99,7 +99,7 @@ package-audit:
 	CARGO_BUILD_JOBS=2 cargo run --locked --quiet --features full -- package-audit --root .
 
 validate-docs:
-	$(QUIRE) validate --scope "$(CURDIR)" "spec/**/*.md" "plan/**/*.md" "reviews/**/*.md"
+	$(QUIRE) validate --scope "$(CURDIR)" "spec/**/*.md" "plan/**/*.md" "reviews/**/*.md" --severity trace:feature-without-risk-rating=error
 
 rust-format:
 	$(CARGO) fmt -- --check
