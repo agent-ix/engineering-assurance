@@ -60,3 +60,4 @@ No semantic review or whole-suite test was run. `cargo check`, focused tests, an
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-006 | medium | The terminal gate is attributed to `decision_owner`, while signature acceptance is bound to draft `rated_by`; no check requires the same identity, so one person can approve a rating signed by another. This conflicts with the ticket's same-person acceptance/signing flow. | src/feature_risk_rating_host.rs:360-379; src/feature_risk_rating_host.rs:963-965 |
+| FND-006 | fixed | Present and decide both require the bound decision owner to match the rating's signed principal. |

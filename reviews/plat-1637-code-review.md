@@ -69,3 +69,5 @@ Rust review was folded into code-review. Focused source and diff inspection plus
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
 | FND-007 | medium | The workflow binds the human-gate approver to `decision_owner` and separately validates the signature principal against draft `rated_by`, but never requires these identities to match. The workflow can therefore record one person's approval for a rating signed by another person, contrary to the ticket's same-person acceptance/signing flow. | src/feature_risk_rating_host.rs:360-379; src/feature_risk_rating_host.rs:963-965 |
+| FND-003 | fixed | Rust imports now follow `rustfmt`; `rustfmt --check src/feature_risk_rating_host.rs` passes. |
+| FND-007 | fixed | Present validates `decision_owner` against `rated_by`, and decide validates it again against the stored draft. |
