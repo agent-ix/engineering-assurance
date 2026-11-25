@@ -13,6 +13,7 @@ MANIFEST_SCHEMA_ROOT ?=
 MANIFEST_REGISTRY_ROOT ?=
 PYTHON ?= python3
 QUIRE ?= quire
+QUIRE_MODULE_ARGS ?=
 CARGO ?= cargo
 LOCKED_BUILD ?= locked-build.sh
 
@@ -98,8 +99,11 @@ manifest-validate:
 package-audit:
 	CARGO_BUILD_JOBS=2 cargo run --locked --quiet --features full -- package-audit --root .
 
+# Repeat --module <path> in QUIRE_MODULE_ARGS to use an isolated module set;
+# explicit module paths replace discovery and do not alter shared installs.
 validate-docs:
-	$(QUIRE) validate --scope "$(CURDIR)" "spec/**/*.md" "plan/**/*.md" "reviews/**/*.md" --severity trace:feature-without-risk-rating=error
+	$(QUIRE) validate $(QUIRE_MODULE_ARGS) --scope "$(CURDIR)" "spec/**/*.md" "plan/**/*.md" "reviews/**/*.md"
+	$(QUIRE) validate $(QUIRE_MODULE_ARGS) --scope "$(CURDIR)" --okf --severity trace:feature-without-risk-rating=error
 
 rust-format:
 	$(CARGO) fmt -- --check
