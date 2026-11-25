@@ -32,6 +32,8 @@ relationships:
     type: rates_feature
   - target: "ix://agent-ix/engineering-assurance/FR-088"
     type: rates_feature
+  - target: "ix://agent-ix/engineering-assurance/FR-089"
+    type: rates_feature
 ---
 # Engineering Assurance proposed not-high process-risk supplier assessment
 
@@ -51,6 +53,7 @@ relationships:
 | FR-083 | Adopters could believe tag or private-record protections cover notes refs that the organization rulesets cannot protect. | Inspect the adoption guide for the exact tag and private-record branch patterns, deletion/update restrictions, and explicit notes-ref limits; confirm no command or workflow claims to apply or inspect a ruleset. |
 | FR-087 | Readers could mistake a caller-declared gesture for device evidence or miss the documented limit of a shared agent session. | Inspect README for all four gesture names, whether each is declared or evidenced, and the shared-session limit; assert the document contains no paywalled standard designator. |
 | FR-088 | A vulnerability reporter could be sent to a public channel or given response/security promises the maintainers have not adopted. | Inspect SECURITY.md for a direct private GitHub reporting link, an explicit exclusion of public issues/discussions/PRs, and absence of time, version, safe-harbor, severity, or disclosure promises. |
+| FR-089 | A published request schema could differ from the command's actual closed request contract, misleading callers about fields or validation boundaries. | Compare each emitted schema with the command's request type and validate required, optional, enumerated, nullable, and closed-object behavior; exercise invalid schema-option combinations and confirm no request runs. |
 
 ## Rationale
 
@@ -74,3 +77,4 @@ These features primarily provide discovery, packaging, compatibility, migration,
 | Inspect the adoption guide for the exact tag and private-record branch patterns, deletion/update restrictions, and explicit notes-ref limits; confirm no command or workflow claims to apply or inspect a ruleset. | FR-083-AC-1–4 |
 | Inspect README for all four gesture names, whether each is declared or evidenced, and the shared-session limit; assert the document contains no paywalled standard designator. | FR-087-AC-1–5 |
 | Inspect SECURITY.md for a direct private GitHub reporting link, an explicit exclusion of public issues/discussions/PRs, and absence of time, version, safe-harbor, severity, or disclosure promises. | FR-088-AC-1–3 |
+| Compare each emitted schema with the command's request type and validate required, optional, enumerated, nullable, and closed-object behavior; exercise invalid schema-option combinations and confirm no request runs. | FR-089-AC-1–5 |
