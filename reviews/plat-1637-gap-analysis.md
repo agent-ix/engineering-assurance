@@ -51,3 +51,12 @@ No semantic review or whole-suite test was run. `cargo check`, focused tests, an
 | FND-003 | still-open | The exact-request test remains tagged to FR-036-AC-8, which does not specify outgoing request shape. |
 | FND-004 | still-open | The uncommitted-file acceptance test remains tagged to FR-036-AC-15 without asserting that criterion's commit-id result. |
 | FND-005 | still-open | The two acceptance/input-policy tests remain tagged to FR-037-AC-1 without asserting mapped signature output. |
+| FND-003 | fixed | The outgoing request-shape test no longer has the wrong FR-036-AC-8 trace tag. |
+| FND-004 | fixed | The uncommitted-file test no longer has the wrong FR-036-AC-15 trace tag. |
+| FND-005 | fixed | The acceptance-policy tests no longer carry the wrong FR-037-AC-1 trace tag. |
+
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-006 | medium | The terminal gate is attributed to `decision_owner`, while signature acceptance is bound to draft `rated_by`; no check requires the same identity, so one person can approve a rating signed by another. This conflicts with the ticket's same-person acceptance/signing flow. | src/feature_risk_rating_host.rs:360-379; src/feature_risk_rating_host.rs:963-965 |

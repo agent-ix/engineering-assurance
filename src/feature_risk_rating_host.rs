@@ -15,12 +15,12 @@ use engineering_assurance::{
     release::frontmatter,
     structured_yaml::parse_unambiguous_yaml_json,
     workflow::{
-        DecisionChoice, DecisionEvent, REQUEST_PROTOCOL as HOST_PROTOCOL, WorkflowBinding,
-        WorkflowHostOutcome, WorkflowHostRequest, WorkflowOperation, WorkflowSnapshot,
+        DecisionChoice, DecisionEvent, WorkflowBinding, WorkflowHostOutcome, WorkflowHostRequest,
+        WorkflowOperation, WorkflowSnapshot, REQUEST_PROTOCOL as HOST_PROTOCOL,
     },
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use thiserror::Error;
 
 use crate::{
@@ -232,6 +232,10 @@ fn validate_workflow_request(request: &WorkflowRequest) -> Result<(), FeatureRis
                 return Err(invalid_request("present does not take a choice"));
             }
             validate_draft_fields(request)?;
+            validate_decision_owner(
+                &request.decision_owner,
+                request.rated_by.as_deref().unwrap_or_default(),
+            )?;
         }
         Operation::Decide => {
             if request.choice.is_none() {
@@ -306,6 +310,18 @@ fn validate_draft_fields(request: &WorkflowRequest) -> Result<(), FeatureRiskRat
             || ids.iter().collect::<BTreeSet<_>>().len() != ids.len()
     }) {
         return Err(invalid_request("fr_ids must be unique FR-NNN identifiers"));
+    }
+    Ok(())
+}
+
+fn validate_decision_owner(
+    decision_owner: &str,
+    rated_by: &str,
+) -> Result<(), FeatureRiskRatingError> {
+    if decision_owner != rated_by {
+        return Err(invalid_request(
+            "decision_owner must equal the rating's rated_by principal",
+        ));
     }
     Ok(())
 }
@@ -431,6 +447,15 @@ fn decide(
     request: &WorkflowRequest,
     mut run: BoundRun,
 ) -> Result<WorkflowOutput, FeatureRiskRatingError> {
+    let proposal = run
+        .items("rating_proposal")?
+        .first()
+        .cloned()
+        .ok_or_else(|| invalid_request("rating proposal is missing; present first"))?;
+    let draft: RatingDraft = serde_json::from_value(proposal["draft"].clone())
+        .map_err(|_| invalid_request("stored rating draft is malformed"))?;
+    validate_decision_owner(&request.decision_owner, &draft.rated_by)?;
+
     let choice = match request.choice {
         Some(Choice::Accept) => DecisionChoice::Accept,
         Some(Choice::Reject) => DecisionChoice::Reject,
@@ -447,13 +472,6 @@ fn decide(
         });
     }
     let document = if choice == DecisionChoice::Accept {
-        let proposal = run
-            .items("rating_proposal")?
-            .first()
-            .cloned()
-            .ok_or_else(|| invalid_request("rating proposal is missing; present first"))?;
-        let draft: RatingDraft = serde_json::from_value(proposal["draft"].clone())
-            .map_err(|_| invalid_request("stored rating draft is malformed"))?;
         let accepted_ids = draft.fr_ids.as_slice();
         let proposed_ids: BTreeSet<&str> = proposal["unrated_features"]
             .as_array()
@@ -1087,10 +1105,11 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        ACCEPTANCE_MEANING, SIGNATURE_REQUEST_PROTOCOL, SIGNATURE_RESULT_PROTOCOL,
-        classify_signature_response, valid_rating_path, validate_rated_by,
-        validation_unrated_features, verify_rating_commit_with_executable,
-        verify_rating_commit_with_executable_and_timeout,
+        classify_signature_response, valid_rating_path, validate_decision_owner, validate_rated_by,
+        validate_workflow_request, validation_unrated_features,
+        verify_rating_commit_with_executable, verify_rating_commit_with_executable_and_timeout,
+        WorkflowRequest, ACCEPTANCE_MEANING, SIGNATURE_REQUEST_PROTOCOL, SIGNATURE_RESULT_PROTOCOL,
+        WORKFLOW_REQUEST_PROTOCOL,
     };
 
     fn valid_response() -> serde_json::Value {
@@ -1206,6 +1225,39 @@ mod tests {
         assert!(validate_rated_by("", &allowed_signers).is_err());
         assert!(validate_rated_by("bob@example.test", &allowed_signers).is_err());
         assert!(validate_rated_by("alice@example.test", &allowed_signers).is_ok());
+    }
+
+    #[test]
+    /// PLAT-1448 FR‑021 / FR‑027: the human gate owner must be the rated signer.
+    #[trace("FR-014-AC-3")]
+    fn workflow_rejects_decision_owner_different_from_rated_by() {
+        let request: WorkflowRequest = serde_json::from_value(json!({
+            "protocol": WORKFLOW_REQUEST_PROTOCOL,
+            "operation": "present",
+            "state_dir": "/tmp/flow-state",
+            "skill_root": "/tmp/skill",
+            "ix_flow_executable": "ix-flow",
+            "run_id": "rating-1",
+            "decision_owner": "bob@example.test",
+            "repository": "/tmp/repository",
+            "repository_id": "agent-ix/engineering-assurance",
+            "quire_executable": "/usr/bin/quire",
+            "allowed_signers": "/tmp/allowed_signers",
+            "rating_id": "FRR-001",
+            "rating_path": "spec/validation/FRR-001.md",
+            "rating": "high_process_risk",
+            "rated_by": "alice@example.test",
+            "intended_use": "test",
+            "fr_ids": ["FR-001"],
+            "rationale": "test rationale",
+            "assurance_activities": "test activity"
+        }))
+        .expect("workflow request");
+
+        let error = validate_workflow_request(&request).expect_err("owner mismatch refused");
+        assert!(error.to_string().contains("decision_owner must equal"));
+        assert!(validate_decision_owner("bob@example.test", "alice@example.test").is_err());
+        assert!(validate_decision_owner("alice@example.test", "alice@example.test").is_ok());
     }
 
     #[cfg(unix)]

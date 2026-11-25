@@ -59,3 +59,13 @@ Rust review was folded into code-review. Focused source and diff inspection plus
 | FND-004 | still-open | The exact-request test remains tagged `FR-036-AC-8` despite exercising outgoing request serialization, not malformed inbound request behavior. |
 | FND-005 | still-open | The test remains tagged `FR-036-AC-15` but does not assert the verified commit id or a signature-verifier verdict. |
 | FND-006 | still-open | Tests for acceptance principal matching and rated_by input validation remain tagged `FR-037-AC-1`; they do not establish the criterion's successful signature-verification output. |
+| FND-003 | still-open | `rustfmt --check src/feature_risk_rating_host.rs` still reports import-order diffs at lines 15, 23 and 1087. |
+| FND-004 | fixed | The request-shape test no longer carries the incorrect FR-036-AC-8 trace tag. |
+| FND-005 | fixed | The uncommitted-file test no longer carries the incorrect FR-036-AC-15 trace tag. |
+| FND-006 | fixed | The acceptance-policy tests no longer carry the incorrect FR-037-AC-1 trace tag. |
+
+## New findings (disposition pass 2)
+
+| ID | Severity | Summary | Refs |
+| --- | --- | --- | --- |
+| FND-007 | medium | The workflow binds the human-gate approver to `decision_owner` and separately validates the signature principal against draft `rated_by`, but never requires these identities to match. The workflow can therefore record one person's approval for a rating signed by another person, contrary to the ticket's same-person acceptance/signing flow. | src/feature_risk_rating_host.rs:360-379; src/feature_risk_rating_host.rs:963-965 |
