@@ -13,6 +13,9 @@ release; it records and verifies a named person's signed release decision. The
 decision owner remains responsible for the boundary, claims, exceptions,
 evidence sufficiency, and terminal decision.
 
+For the intended use, a baseline getting-started path, and known limitations,
+see [the regulated assurance path](docs/regulated-assurance-path.md).
+
 ## Setup
 
 If this plugin is uninitialized or a command fails, follow the [plugin setup guide](setup.md) for its required CLIs, configuration, and local diagnosis.
@@ -278,9 +281,11 @@ quire validate --scope . 'spec/**/*.md'
 
 ## Native CLI reference
 
-The native CLI is primarily an automation boundary. Every stdin/stdout
-protocol is versioned and documented by the schemas under
-`engineering_assurance/schemas/`.
+The native CLI is primarily an automation boundary. Its versioned request and
+result protocols are described by their owning requirements. Only
+`producer-execute` currently publishes request and result JSON Schemas through
+`--schema request` and `--schema result`; other request commands do not accept
+`--schema`.
 
 | Command group | Purpose |
 | --- | --- |

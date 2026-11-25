@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:agent-ix:engineering-assurance:release-decision-request:v1",
+  "title": "Engineering Assurance release-decision request",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "protocol": { "const": "engineering-assurance.release-decision-request/v1" },
+    "operation": { "enum": ["present", "decide"] },
+    "state_dir": { "type": "string" },
+    "skill_root": { "type": "string" },
+    "ix_flow_executable": { "type": "string" },
+    "run_id": { "type": "string" },
+    "decision_owner": { "type": "string" },
+    "repository": { "type": "string" },
+    "baseline_path": { "type": "string" },
+    "baseline_commit": { "type": "string" },
+    "snapshot_path": { "type": "string" },
+    "release_id": { "type": ["string", "null"] },
+    "record_path": { "type": ["string", "null"] },
+    "evidence_status": { "type": ["string", "null"] },
+    "soup_report": { "type": ["string", "null"] },
+    "anomalies": { "type": ["string", "null"] },
+    "risk_summary": { "type": ["string", "null"] },
+    "overall_evaluation": { "type": ["string", "null"] },
+    "risk_review": { "type": ["string", "null"] },
+    "snapshot_file": { "type": ["string", "null"] },
+    "choice": { "enum": ["release", "reject", null] },
+    "accepted_anomalies": { "type": ["array", "null"], "items": { "type": "string" } },
+    "meaning": { "type": ["string", "null"] }
+  },
+  "required": ["protocol", "operation", "state_dir", "skill_root", "ix_flow_executable", "run_id", "decision_owner", "repository", "baseline_path", "baseline_commit", "snapshot_path"],
+  "allOf": [
+    {
+      "if": { "properties": { "operation": { "const": "present" } }, "required": ["operation"] },
+      "then": {
+        "required": ["release_id", "record_path"],
+        "properties": { "release_id": { "type": "string" }, "record_path": { "type": "string" }, "choice": { "type": "null" }, "accepted_anomalies": { "type": "null" }, "meaning": { "type": "null" } }
+      }
+    },
+    {
+      "if": { "properties": { "operation": { "const": "decide" } }, "required": ["operation"] },
+      "then": {
+        "properties": {
+          "release_id": { "type": "null" },
+          "record_path": { "type": "null" },
+          "evidence_status": { "type": "null" },
+          "soup_report": { "type": "null" },
+          "anomalies": { "type": "null" },
+          "risk_summary": { "type": "null" },
+          "overall_evaluation": { "type": "null" },
+          "risk_review": { "type": "null" },
+          "snapshot_file": { "type": "null" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "choice": { "const": "release" } }, "required": ["choice"] },
+            "then": { "required": ["meaning"], "properties": { "meaning": { "type": "string" } } },
+            "else": { "properties": { "accepted_anomalies": { "type": "null" }, "meaning": { "type": "null" } } }
+          }
+        ]
+      }
+    }
+  ]
+}

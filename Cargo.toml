@@ -282,6 +282,11 @@ path = "tests/release_verify_cli.rs"
 required-features = ["full"]
 
 [[test]]
+name = "request_schema_cli"
+path = "tests/request_schema_cli.rs"
+required-features = ["full"]
+
+[[test]]
 name = "approval_verify_cli"
 path = "tests/approval_verify_cli.rs"
 required-features = ["full"]
