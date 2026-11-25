@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Agent-IX
 
-//! Process-boundary acceptance tests for signed feature risk ratings (FR-027).
+//! Process-boundary acceptance tests for signed feature risk ratings.
+//!
+//! External acceptance contract: PLAT-1448 FR‑021 and its linked FR‑027 ACs.
+//! Local trace attributes name the Engineering Assurance signature and CLI
+//! requirements exercised by these tests; the external requirement is not a
+//! local `FR‑027`, which identifies atomic publish in this repository.
 
 use std::{
     fs,
@@ -170,7 +175,9 @@ fn verify_head(fixture: &Fixture) -> Value {
 }
 
 #[test]
-#[trace("FR-027-AC-1", "FR-027-AC-3")]
+/// PLAT-1448 FR‑021 / FR‑027 AC-1: a mapped signed commit with the required meaning is accepted.
+/// PLAT-1448 FR‑021 / FR‑027 AC-10: a later unsigned edit invalidates acceptance.
+#[trace("FR-036-AC-1", "FR-036-AC-2", "FR-037-AC-1", "FR-037-AC-5")]
 fn signed_rating_is_accepted_and_a_later_worktree_edit_invalidates_it() {
     let fixture = fixture();
     let path = rating_file(&fixture);
@@ -213,7 +220,8 @@ fn signed_rating_is_accepted_and_a_later_worktree_edit_invalidates_it() {
 }
 
 #[test]
-#[trace("FR-027-AC-2")]
+/// PLAT-1448 FR‑021 / FR‑027 AC-5: missing acceptance meaning is refused.
+#[trace("FR-037-AC-6")]
 fn signed_rating_without_acceptance_meaning_has_exact_reason() {
     let fixture = fixture();
     rating_file(&fixture);
@@ -227,7 +235,8 @@ fn signed_rating_without_acceptance_meaning_has_exact_reason() {
 }
 
 #[test]
-#[trace("FR-027-AC-2")]
+/// PLAT-1448 FR‑021 / FR‑027 AC-2: unsigned rating commits are refused.
+#[trace("FR-036-AC-2")]
 fn unsigned_rating_commit_has_exact_reason() {
     let fixture = fixture();
     rating_file(&fixture);
@@ -248,7 +257,29 @@ fn unsigned_rating_commit_has_exact_reason() {
 }
 
 #[test]
-#[trace("FR-027-AC-2")]
+/// PLAT-1448 FR‑021 / FR‑027 allowed-signers obligation: invalid trust input is never accepted.
+#[trace("FR-037-AC-3", "FR-014-AC-3")]
+fn missing_or_malformed_allowed_signers_fails_closed() {
+    for malformed in [false, true] {
+        let fixture = fixture();
+        rating_file(&fixture);
+        commit_rating(&fixture, true);
+        let allowed_signers = fixture.allowed_signers();
+        fs::remove_file(&allowed_signers).expect("remove allowed-signers file");
+        if malformed {
+            fs::create_dir(&allowed_signers).expect("malformed allowed-signers directory");
+        }
+
+        let (output, result) = acceptance(&fixture);
+        assert_eq!(output.status.code(), Some(1), "{output:?}");
+        assert_eq!(result["results"][0]["status"], "not_accepted", "{result}");
+        assert_eq!(result["results"][0]["reason"], "unverifiable", "{result}");
+    }
+}
+
+#[test]
+/// PLAT-1448 FR‑021 / FR‑027 AC-3: an unmapped signer is refused.
+#[trace("FR-036-AC-3", "FR-037-AC-2")]
 fn valid_signature_without_a_mapped_signer_has_exact_reason() {
     let fixture = fixture();
     rating_file(&fixture);
@@ -267,7 +298,8 @@ fn valid_signature_without_a_mapped_signer_has_exact_reason() {
 }
 
 #[test]
-#[trace("FR-027-AC-2")]
+/// PLAT-1448 FR‑021 / FR‑027 AC-4: a different mapped principal is refused.
+#[trace("FR-037-AC-1")]
 fn mapped_signer_with_the_wrong_principal_has_exact_reason() {
     let fixture = fixture();
     rating_file(&fixture);
@@ -282,7 +314,8 @@ fn mapped_signer_with_the_wrong_principal_has_exact_reason() {
 }
 
 #[test]
-#[trace("FR-027-AC-2")]
+/// PLAT-1448 FR‑021 / FR‑027: an uncommitted rating cannot be accepted.
+#[trace("FR-014-AC-2", "FR-036-AC-15")]
 fn uncommitted_rating_file_has_exact_reason() {
     let fixture = fixture();
     rating_file(&fixture);

@@ -865,6 +865,24 @@ fn verify_rating_commit_with_executable(
     rated_by: &str,
     executable: &Path,
 ) -> Option<&'static str> {
+    verify_rating_commit_with_executable_and_timeout(
+        repository,
+        revision,
+        allowed_signers,
+        rated_by,
+        executable,
+        PROCESS_TIMEOUT,
+    )
+}
+
+fn verify_rating_commit_with_executable_and_timeout(
+    repository: &Path,
+    revision: &str,
+    allowed_signers: &Path,
+    rated_by: &str,
+    executable: &Path,
+    timeout: Duration,
+) -> Option<&'static str> {
     let request = json!({
         "protocol": SIGNATURE_REQUEST_PROTOCOL,
         "repository": repository,
@@ -902,7 +920,7 @@ fn verify_rating_commit_with_executable(
         &removed,
         request_file,
         ProcessLimits {
-            timeout: PROCESS_TIMEOUT,
+            timeout,
             max_output_bytes: MAX_OUTPUT_BYTES,
         },
     ) else {
@@ -1069,8 +1087,10 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        ACCEPTANCE_MEANING, SIGNATURE_RESULT_PROTOCOL, classify_signature_response,
-        valid_rating_path, validate_rated_by, validation_unrated_features,
+        ACCEPTANCE_MEANING, SIGNATURE_REQUEST_PROTOCOL, SIGNATURE_RESULT_PROTOCOL,
+        classify_signature_response, valid_rating_path, validate_rated_by,
+        validation_unrated_features, verify_rating_commit_with_executable,
+        verify_rating_commit_with_executable_and_timeout,
     };
 
     fn valid_response() -> serde_json::Value {
@@ -1087,7 +1107,8 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-027-AC-1")]
+    /// PLAT-1448 FR‑021 / FR‑027 AC-1: the mapped signed commit is accepted.
+    #[trace("FR-036-AC-1", "FR-037-AC-1", "FR-037-AC-5")]
     fn mapped_signed_commit_with_acceptance_meaning_is_accepted() {
         assert_eq!(
             classify_signature_response(&valid_response(), "alice@example.test"),
@@ -1096,7 +1117,8 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-027-AC-2")]
+    /// PLAT-1448 FR‑021 / FR‑027 AC-2: unsigned signatures are refused.
+    #[trace("FR-036-AC-2", "FR-037-AC-7")]
     fn unsigned_commit_has_the_unsigned_reason() {
         let mut response = valid_response();
         response["status"] = json!("unsigned");
@@ -1107,7 +1129,8 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-027-AC-2")]
+    /// PLAT-1448 FR‑021 / FR‑027: bad signatures are refused.
+    #[trace("FR-036-AC-3", "FR-037-AC-7")]
     fn invalid_signature_has_the_signature_bad_reason() {
         let mut response = valid_response();
         response["status"] = json!("signed_bad");
@@ -1118,7 +1141,8 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-027-AC-2")]
+    /// PLAT-1448 FR‑021 / FR‑027 AC-3: unmapped signatures are refused.
+    #[trace("FR-036-AC-3", "FR-037-AC-2")]
     fn unmapped_signer_has_the_signer_unmapped_reason() {
         let mut response = valid_response();
         response["signer"]["mapping"] = json!("unmapped");
@@ -1129,7 +1153,8 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-027-AC-2")]
+    /// PLAT-1448 FR‑021 / FR‑027 AC-4: a different mapped principal is refused.
+    #[trace("FR-037-AC-1")]
     fn different_mapped_principal_has_the_principal_mismatch_reason() {
         let mut response = valid_response();
         response["signer"]["principal"] = json!("bob@example.test");
@@ -1140,7 +1165,8 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-027-AC-2")]
+    /// PLAT-1448 FR‑021 / FR‑027 AC-5: absent meaning is refused.
+    #[trace("FR-037-AC-6")]
     fn missing_acceptance_meaning_has_the_meaning_missing_reason() {
         let mut response = valid_response();
         response["signed_off_meaning"]["presence"] = json!("missing");
@@ -1151,7 +1177,8 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-027-AC-10")]
+    /// PLAT-1448 FR‑021 / FR‑027: malformed verifier output fails closed.
+    #[trace("FR-014-AC-3", "FR-019-AC-3")]
     fn malformed_verifier_response_is_unverifiable() {
         assert_eq!(
             classify_signature_response(&json!({}), "alice@example.test"),
@@ -1160,7 +1187,8 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-027-AC-4")]
+    /// PLAT-1448 FR‑021 / FR‑027: rating paths are constrained to validation records.
+    #[trace("FR-014-AC-3")]
     fn rating_paths_are_confined_to_validation_markdown() {
         assert!(valid_rating_path("spec/validation/FRR-001.md"));
         assert!(!valid_rating_path("spec/functional/FRR-001.md"));
@@ -1169,7 +1197,8 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-027-AC-4")]
+    /// PLAT-1448 FR‑021 / FR‑027: workflow requires a mapped human principal.
+    #[trace("FR-037-AC-1", "FR-037-CON-1")]
     fn workflow_rejects_empty_and_unmapped_rated_by_values() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let path = directory.path().join("allowed_signers");
@@ -1182,7 +1211,8 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    #[trace("FR-027-AC-5")]
+    /// PLAT-1448 FR‑021 / FR‑027: report only the validator's unrated features.
+    #[trace("FR-014-AC-2")]
     fn workflow_uses_exactly_the_validator_unrated_feature_list() {
         use std::os::unix::fs::PermissionsExt;
 
@@ -1229,6 +1259,179 @@ mod tests {
                 json!({"id": "FR-001", "path": "spec/functional/FR-001.md"}),
                 json!({"id": "FR-002", "path": "spec/functional/FR-002.md"}),
             ]
+        );
+    }
+
+    #[cfg(unix)]
+    fn make_verifier(directory: &std::path::Path, name: &str, script: &str) -> std::path::PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+
+        let executable = directory.join(name);
+        std::fs::write(&executable, script).expect("verifier fixture");
+        let mut permissions = std::fs::metadata(&executable)
+            .expect("verifier metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&executable, permissions).expect("verifier executable");
+        executable
+    }
+
+    #[cfg(unix)]
+    fn shell_quote(path: &std::path::Path) -> String {
+        format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
+    }
+
+    #[cfg(unix)]
+    fn process_fixture() -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf) {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let repository = directory.path().join("repository");
+        let allowed_signers = directory.path().join("allowed_signers");
+        std::fs::create_dir(&repository).expect("repository directory");
+        std::fs::write(&allowed_signers, "alice@example.test ssh-ed25519 AAAA\n")
+            .expect("allowed-signers fixture");
+        (directory, repository, allowed_signers)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    /// PLAT-1448 FR‑021 / FR‑027 request-contract obligation: pass exactly the declared request members.
+    #[trace("FR-036-AC-8")]
+    fn verifier_process_receives_exact_five_member_signature_request() {
+        let (directory, repository, allowed_signers) = process_fixture();
+        let captured = directory.path().join("captured-request.json");
+        let response = serde_json::to_string(&valid_response()).expect("response JSON");
+        let executable = make_verifier(
+            directory.path(),
+            "signature-verify",
+            &format!(
+                "#!/bin/sh\n[ \"$1\" = signature-verify ] || exit 91\n[ \"$2\" = --request ] || exit 92\n[ \"$3\" = - ] || exit 93\ncat > {}\nprintf '%s\\n' '{}'\n",
+                shell_quote(&captured),
+                response
+            ),
+        );
+
+        assert_eq!(
+            verify_rating_commit_with_executable(
+                &repository,
+                "deadbeef",
+                &allowed_signers,
+                "alice@example.test",
+                &executable,
+            ),
+            None
+        );
+        let request: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(captured).expect("captured request"))
+                .expect("signature request JSON");
+        let mut keys: Vec<_> = request
+            .as_object()
+            .expect("object request")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "allowed_signers",
+                "kind",
+                "protocol",
+                "repository",
+                "revision"
+            ]
+        );
+        assert_eq!(request["protocol"], SIGNATURE_REQUEST_PROTOCOL);
+        assert_eq!(request["repository"], repository.to_string_lossy().as_ref());
+        assert_eq!(request["revision"], "deadbeef");
+        assert_eq!(request["kind"], "commit");
+        assert_eq!(
+            request["allowed_signers"],
+            allowed_signers.to_string_lossy().as_ref()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    /// PLAT-1448 FR‑021 / FR‑027 process-start obligation: an unavailable verifier fails closed.
+    #[trace("FR-019-AC-3", "FR-036-AC-5")]
+    fn unavailable_verifier_process_is_unverifiable() {
+        let (directory, repository, allowed_signers) = process_fixture();
+        let executable = directory.path().join("missing-verifier");
+        assert_eq!(
+            verify_rating_commit_with_executable(
+                &repository,
+                "deadbeef",
+                &allowed_signers,
+                "alice@example.test",
+                &executable,
+            ),
+            Some("unverifiable")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    /// PLAT-1448 FR‑021 / FR‑027 timeout obligation: a timed-out verifier fails closed.
+    #[trace("FR-019-AC-3")]
+    fn verifier_timeout_is_unverifiable() {
+        use std::time::Duration;
+
+        let (directory, repository, allowed_signers) = process_fixture();
+        let executable =
+            make_verifier(directory.path(), "timeout-verifier", "#!/bin/sh\nsleep 1\n");
+        assert_eq!(
+            verify_rating_commit_with_executable_and_timeout(
+                &repository,
+                "deadbeef",
+                &allowed_signers,
+                "alice@example.test",
+                &executable,
+                Duration::from_millis(250),
+            ),
+            Some("unverifiable")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    /// PLAT-1448 FR‑021 / FR‑027 failed-process obligation: a non-zero verifier exit fails closed.
+    #[trace("FR-019-AC-3")]
+    fn verifier_nonzero_exit_is_unverifiable() {
+        let (directory, repository, allowed_signers) = process_fixture();
+        let executable =
+            make_verifier(directory.path(), "failing-verifier", "#!/bin/sh\nexit 17\n");
+        assert_eq!(
+            verify_rating_commit_with_executable(
+                &repository,
+                "deadbeef",
+                &allowed_signers,
+                "alice@example.test",
+                &executable,
+            ),
+            Some("unverifiable")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    /// PLAT-1448 FR‑021 / FR‑027 malformed-output obligation: invalid stdout fails closed.
+    #[trace("FR-014-AC-3", "FR-019-AC-3")]
+    fn malformed_verifier_stdout_is_unverifiable() {
+        let (directory, repository, allowed_signers) = process_fixture();
+        let executable = make_verifier(
+            directory.path(),
+            "malformed-verifier",
+            "#!/bin/sh\nprintf '%s\\n' not-json\n",
+        );
+        assert_eq!(
+            verify_rating_commit_with_executable(
+                &repository,
+                "deadbeef",
+                &allowed_signers,
+                "alice@example.test",
+                &executable,
+            ),
+            Some("unverifiable")
         );
     }
 }
