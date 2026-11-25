@@ -102,8 +102,8 @@ package-audit:
 # Repeat --module <path> in QUIRE_MODULE_ARGS to use an isolated module set;
 # explicit module paths replace discovery and do not alter shared installs.
 validate-docs:
-	$(QUIRE) validate $(QUIRE_MODULE_ARGS) --scope "$(CURDIR)" "spec/**/*.md" "plan/**/*.md" "reviews/**/*.md"
 	$(QUIRE) validate $(QUIRE_MODULE_ARGS) --scope "$(CURDIR)" --okf --severity trace:feature-without-risk-rating=error
+	$(QUIRE) validate $(QUIRE_MODULE_ARGS) --scope "$(CURDIR)" "spec/**/*.md" "plan/**/*.md" "reviews/**/*.md"
 
 rust-format:
 	$(CARGO) fmt -- --check
