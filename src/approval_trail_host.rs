@@ -34,6 +34,7 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::approval_verify_host::{Assessment, GitsignEcho, Trust, TrustReading, assess};
+use crate::producer_identity::ProducerIdentity;
 use crate::signature_verify_host::{
     AllowedSignersSnapshot, AllowedSignersSource, CaptureFailure, GitsignRequest, ListedRef,
     LoadedGitsign, RegistryFailure, capture_allowed_signers, git_version, list_tags, load_gitsign,
@@ -133,6 +134,8 @@ struct Entry {
     /// The id of the tag object verified, so copies of one object under several
     /// ref names can be told apart from independent approvals.
     object: String,
+    #[serde(flatten)]
+    producer: ProducerIdentity,
     /// The tagger date the tag claims; the signer's own claim on any status.
     #[serde(skip_serializing_if = "Option::is_none")]
     claimed_at: Option<SignedAt>,
@@ -168,6 +171,8 @@ enum ReceiptStateKind {
 /// An entry of a receipt whose tag is absent or changed, or that does not verify.
 #[derive(Serialize)]
 struct FindingEntry {
+    #[serde(flatten)]
+    producer: ProducerIdentity,
     /// `missing_tag`, `tag_no_receipt`, `invalid_receipt` or `accepted`.
     status: &'static str,
     /// The status an acceptance replaced.
@@ -211,7 +216,7 @@ enum FindingEntryReason {
 #[serde(untagged)]
 enum TrailEntry {
     Tag(Box<Entry>),
-    Finding(FindingEntry),
+    Finding(Box<FindingEntry>),
 }
 
 impl TrailEntry {
@@ -241,7 +246,7 @@ impl TrailEntry {
 }
 
 impl FindingEntry {
-    fn new(judged: &Judged) -> Self {
+    fn new(judged: &Judged, producer: &ProducerIdentity) -> Self {
         let (status, finding) = match &judged.accepted {
             Some(_) => ("accepted", Some(judged.finding.status())),
             None => (
@@ -259,6 +264,7 @@ impl FindingEntry {
                 reason,
                 current_object,
             } => Self {
+                producer: producer.clone(),
                 status,
                 finding,
                 tag: Some(
@@ -279,6 +285,7 @@ impl FindingEntry {
                 accepted_reason: None,
             },
             TagFinding::InvalidReceipt(invalid) => Self {
+                producer: producer.clone(),
                 status,
                 finding,
                 tag: None,
@@ -296,6 +303,7 @@ impl FindingEntry {
                 reference,
                 current_object,
             } => Self {
+                producer: producer.clone(),
                 status,
                 finding,
                 tag: Some(
@@ -360,6 +368,8 @@ impl Unreadable {
 #[derive(Serialize)]
 struct ResultLine<'a> {
     protocol: &'static str,
+    #[serde(flatten)]
+    producer: ProducerIdentity,
     record_id: &'a str,
     record_digest: &'a str,
     trust: Trust<'a>,
@@ -429,9 +439,10 @@ struct Parsed {
     allowed_signers: AllowedSignersSnapshot,
     git_version: Option<String>,
     tags: Option<TagContext>,
+    producer: ProducerIdentity,
 }
 
-fn parse(bytes: &[u8]) -> Result<Parsed, ApprovalTrailError> {
+fn parse(bytes: &[u8], producer: ProducerIdentity) -> Result<Parsed, ApprovalTrailError> {
     let value: Value = serde_json::from_slice(bytes).map_err(|_| ApprovalTrailError::Unreadable)?;
     let request: Request =
         serde_json::from_value(value).map_err(|_| ApprovalTrailError::Invalid)?;
@@ -481,6 +492,7 @@ fn parse(bytes: &[u8]) -> Result<Parsed, ApprovalTrailError> {
         allowed_signers,
         git_version,
         tags,
+        producer,
     })
 }
 
@@ -536,6 +548,7 @@ fn examine(parsed: &Parsed, listed: &ListedRef) -> Examined {
     Examined::Entry(Box::new(Entry {
         tag: name.to_owned(),
         object,
+        producer: parsed.producer.clone(),
         claimed_at: checked.tagger_signed_at.clone(),
         assessment: assess(&checked, &request.record_id, &request.record_digest),
         receipt: None,
@@ -578,6 +591,7 @@ fn tag_section(
     context: &TagContext,
     entries: Vec<Entry>,
     source: &dyn VerifierSource,
+    producer: &ProducerIdentity,
 ) -> Result<TagSection, ApprovalTrailError> {
     let request = &parsed.request;
     let identities = context
@@ -635,7 +649,9 @@ fn tag_section(
             }
         }
         complete &= !finding.is_open();
-        out.push(TrailEntry::Finding(FindingEntry::new(finding)));
+        out.push(TrailEntry::Finding(Box::new(FindingEntry::new(
+            finding, producer,
+        ))));
     }
     Ok(TagSection {
         entries: out,
@@ -651,7 +667,8 @@ fn execute_with(
     total_time: Duration,
     verifiers: &dyn VerifierSource,
 ) -> Result<Vec<u8>, ApprovalTrailError> {
-    let parsed = parse(bytes)?;
+    let producer = ProducerIdentity::sample().ok_or(ApprovalTrailError::ResultEncoding)?;
+    let parsed = parse(bytes, producer)?;
     let request = &parsed.request;
     let listing = list_tags(
         &request.repository,
@@ -704,7 +721,7 @@ fn execute_with(
             true,
         ),
         Some(context) => {
-            let section = tag_section(&parsed, context, entries, verifiers)?;
+            let section = tag_section(&parsed, context, entries, verifiers, &parsed.producer)?;
             (
                 section.entries,
                 TagReceiptsResult {
@@ -718,6 +735,7 @@ fn execute_with(
     trail.sort_by(|left, right| compare(&left.key(), &right.key()));
     let result = ResultLine {
         protocol: RESULT_PROTOCOL,
+        producer: parsed.producer.clone(),
         record_id: &request.record_id,
         record_digest: &request.record_digest,
         trust: Trust::new(

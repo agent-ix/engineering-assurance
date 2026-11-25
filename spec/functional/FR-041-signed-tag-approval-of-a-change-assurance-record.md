@@ -64,7 +64,8 @@ already-verified signature, without Engineering Assurance adding payload
 binding logic. The command writes no verification code of its own, and reports
 `trusted_at` only when the library's verification of that bundle succeeds. It
 never reads `integratedTime` without
-that verification, never reads the local clock for a time, and never runs
+  that verification, never reads the local clock for `signed_at` or
+  `trusted_at`, and never runs
 `gitsign` or reads `gitsign` output text for a time. An SSH signature has no
 transparency-log entry, so an SSH approval has no baseline trusted time; a
 signer-independent time for SSH needs a timestamp-authority token (RFC 3161),
@@ -109,6 +110,13 @@ carried by commits, merge commits or notes.
 - One line of JSON on stdout, the result with the member `protocol` equal to
   `engineering-assurance.approval-verify-result/v1`, and exit status 0 for every
   status, as FR-036 does. The members are:
+  - `ea_version`, `ea_source_revision`, `generated_at` and
+    `generated_at_source`, with the meanings and formats defined by
+    [FR-036](./FR-036-ssh-signed-commit-and-tag-verification.md).
+    These producer fields are present on every result with a verdict,
+    including results without `trust`; the host-clock value is a claim and is
+    not a signing or trusted time. They are additive and do not change the
+    `engineering-assurance.approval-verify-result/v1` protocol value.
   - `status`, one of `approved`, `wrong_record`, `untrusted_signer`,
     `meaning_missing`, `signed_bad`, `unsigned`, `unverifiable`;
   - `tag`, the tag name the command resolved; `tag_object_id`, the canonical
@@ -127,8 +135,9 @@ carried by commits, merge commits or notes.
     be reproduced; absent when git could not answer `--version`). `trust` is
     present on every result except one where git failed while the
     allowed-signers `<rev>:<path>` source was read (FR-037 `git_failed`): that
-    result is `unverifiable`, carries no `trust` member at all, and so no
-    `ea_version`, digest or commit. Inside a present `trust`, a registry
+    result is `unverifiable` and carries no `trust` member, so it has no trust
+    input digest or resolved trust-source commit. The top-level producer
+    fields remain present. Inside a present `trust`, a registry
     `git_failed` leaves only `identity_registry_commit` absent (FR-040); and, when the request had one, `gitsign`
     (`certificate_identity` and `certificate_oidc_issuer`), `identity_registry`
     (the request's `<rev>:<path>` value) and `identity_registry_commit` (the full
@@ -138,7 +147,9 @@ carried by commits, merge commits or notes.
     reason, or `trailer_unreadable` when a validly signed tag's message could not
     be read;
   - `signature`, the FR-036 verdict for the tag exactly as FR-036, FR-037 and
-    FR-040 define it, without a second `protocol` member;
+    FR-040 define it, without a second `protocol` member or the FR-036
+    result-level producer fields, which appear once at the approval result's
+    top level;
   - on `approved` only: `approver`, the `principal` of the FR-037 signer;
     `meaning`, the array of `Signed-off-meaning` values in order;
     `signature_kind`, `ssh` or `gitsign` as FR-040 defines it; and the signing
@@ -196,6 +207,11 @@ carried by commits, merge commits or notes.
   verification of FR-036, FR-037 and FR-040 with kind `tag`, the request's
   `tag` as the revision, and the request's `allowed_signers`, `gitsign` and `identity_registry`,
   and SHALL NOT restate, relax or re-implement any rule they define.
+- The command SHALL capture `generated_at` once when the
+  `approval-verify` invocation starts.
+- The command SHALL use the same `generated_at` and producer identity as the
+  nested signature verification.
+- The command SHALL NOT read the local clock for `signed_at` or `trusted_at`.
 - The command SHALL resolve an annotated tag once to its canonical full object
   id and SHALL read the tag message, tagger line and signature bytes from that
   immutable object. Its signature-verifier observation SHALL be for that same
@@ -378,6 +394,7 @@ criteria use real signatures from throwaway keys generated in the test.
 | FR-041-AC-34 | With `allowed_signers` `<rev>:<path>`, the `approved` result's `trust` carries `allowed_signers` as requested, `allowed_signers_commit` equal to the full commit id the revision resolved to, `allowed_signers_sha256` equal to an independent SHA-256 of that committed blob, and `ea_version` equal to the running executable's version. After the working-tree file is edited and the branch moved, a re-run with the same `<rev>:<path>` (the revision held fixed by a tag) yields the same approver, digest and commit, while an absolute-path request against the edited file yields a different `allowed_signers_sha256`. | Test |
 | FR-041-AC-35 | Every `approval-verify` result that has a `trust` member carries `trust.allowed_signers_sha256`, `trust.ea_version` and `trust.git_version`; `allowed_signers_commit` is present exactly when the source was a `<rev>:<path>` that resolved; a git failure while the allowed-signers `<rev>:<path>` source is read yields `unverifiable` with no `trust` member at all, and a registry `git_failed` yields `unverifiable` with `trust` present and only `identity_registry_commit` absent. | Test |
 | FR-041-AC-36 | `trust.git_version` equals the version `git --version` prints for the git the run used, and the same SSH tag, backdated before a past `valid-before`, shows `approved` with a `git_version` of 2.35 or later and `untrusted_signer` with an earlier one, so the recorded version explains the difference. | Test |
+| FR-041-AC-37 | Every `approval-verify` verdict, including one whose trust inputs cannot be read and one whose status is not `approved`, carries the running `ea_version`, the build's `ea_source_revision` (or `null` when absent), and a UTC host-clock `generated_at` sampled once for the invocation with source `host_clock`; when `trust` is present, top-level `ea_version` equals `trust.ea_version`; the nested `signature` omits duplicate producer fields, and no producer field is presented as signing or trusted time. | Test |
 
 ## Dependencies
 

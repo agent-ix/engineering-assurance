@@ -25,6 +25,7 @@ mod package_host;
 mod package_install;
 mod process_host;
 mod producer_execute_host;
+mod producer_identity;
 mod proof_checkpoint_host;
 mod receipt_host;
 mod release_decision_host;

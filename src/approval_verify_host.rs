@@ -22,6 +22,7 @@ use engineering_assurance::signature_verify::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::producer_identity::ProducerIdentity;
 use crate::signature_verify_host::{
     AllowedSignersSnapshot, AllowedSignersSource, CaptureFailure, CheckedTag, GitsignInput,
     GitsignRequest, LoadedGitsign, RegistryFailure, capture_allowed_signers, check_tag,
@@ -180,6 +181,8 @@ pub(crate) struct ResultLine<'a> {
     tag: &'a str,
     record_id: &'a str,
     record_digest: &'a str,
+    #[serde(flatten)]
+    producer: ProducerIdentity,
     /// Absent only when git failed while the allowed-signers `<rev>:<path>`
     /// source was read, so no digest, commit or versions were established.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -198,6 +201,7 @@ impl<'a> ResultLine<'a> {
         reading: TrustReading<'a>,
         echo: GitsignEcho<'a>,
         loaded: Option<&'a LoadedGitsign>,
+        producer: ProducerIdentity,
     ) -> Self {
         let checked = check_tag(repository, tag, reading.snapshot, loaded);
         Self::from_checked(
@@ -205,6 +209,7 @@ impl<'a> ResultLine<'a> {
             tag,
             record,
             Some(Trust::new(reading, echo, loaded)),
+            producer,
         )
     }
 
@@ -214,6 +219,7 @@ impl<'a> ResultLine<'a> {
         tag: &'a str,
         record: (&'a str, &'a str),
         trust: Option<Trust<'a>>,
+        producer: ProducerIdentity,
     ) -> Self {
         Self::from_checked_with_trusted_root(
             checked,
@@ -221,6 +227,7 @@ impl<'a> ResultLine<'a> {
             record,
             trust,
             sigstore_verify::trust_root::SIGSTORE_PRODUCTION_TRUSTED_ROOT,
+            producer,
         )
     }
 
@@ -232,6 +239,7 @@ impl<'a> ResultLine<'a> {
         record: (&'a str, &'a str),
         trust: Option<Trust<'a>>,
         trusted_root_json: &str,
+        producer: ProducerIdentity,
     ) -> Self {
         let (record_id, record_digest) = record;
         let mut assessment = assess(&checked, record_id, record_digest);
@@ -273,6 +281,7 @@ impl<'a> ResultLine<'a> {
             tag: tag.strip_prefix("refs/tags/").unwrap_or(tag),
             record_id,
             record_digest,
+            producer,
             trust,
             tag_object_id: checked.tag_object_id.clone(),
             assessment,
@@ -422,6 +431,7 @@ fn load_registry(
 
 /// Runs one request document and returns the result line.
 pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalVerifyError> {
+    let producer = ProducerIdentity::sample().ok_or(ApprovalVerifyError::ResultEncoding)?;
     let value: serde_json::Value =
         serde_json::from_slice(bytes).map_err(|_| ApprovalVerifyError::Unreadable)?;
     let request: Request =
@@ -453,8 +463,13 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalVerifyError> {
         // Git could not answer while the source was read: no verifier starts,
         // and no trust identity was established.
         Err(CaptureFailure::Git(reason)) => {
-            let result =
-                ResultLine::from_checked(CheckedTag::unread(reason), &request.tag, record, None);
+            let result = ResultLine::from_checked(
+                CheckedTag::unread(reason),
+                &request.tag,
+                record,
+                None,
+                producer,
+            );
             return encode(&result);
         }
     };
@@ -477,6 +492,7 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalVerifyError> {
             reading,
             echo,
             loaded.as_ref(),
+            producer.clone(),
         ),
         // Git could not answer while the registry was read: no verifier starts.
         Registry::GitFailed(reason) => ResultLine::from_checked(
@@ -484,6 +500,7 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalVerifyError> {
             &request.tag,
             record,
             Some(Trust::new(reading, echo, None)),
+            producer,
         ),
     };
     encode(&result)

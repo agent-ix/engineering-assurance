@@ -465,7 +465,45 @@ fn result_on(request: &Value, path: Option<&Path>) -> Value {
     );
     let value: Value = serde_json::from_str(text).expect("json line");
     assert_eq!(value["protocol"], RESULT_PROTOCOL);
+    assert_producer(&value);
+    if let Some(approval) = value.get("approval") {
+        for member in [
+            "ea_version",
+            "ea_source_revision",
+            "generated_at",
+            "generated_at_source",
+        ] {
+            assert_eq!(approval[member], value[member], "{member}: {value}");
+        }
+    }
     value
+}
+
+fn assert_producer(result: &Value) {
+    assert_eq!(result["ea_version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(
+        result["ea_source_revision"],
+        option_env!("EA_SOURCE_REVISION")
+            .filter(|revision| !revision.is_empty())
+            .map_or(Value::Null, |revision| json!(revision))
+    );
+    assert_eq!(result["generated_at_source"], "host_clock");
+    let generated_at = result["generated_at"].as_str().expect("generated_at");
+    assert_eq!(generated_at.len(), 20, "{generated_at}");
+    assert!(generated_at.ends_with('Z'), "{generated_at}");
+    assert!(
+        generated_at
+            .bytes()
+            .enumerate()
+            .all(|(index, byte)| match index {
+                4 | 7 => byte == b'-',
+                10 => byte == b'T',
+                13 | 16 => byte == b':',
+                19 => byte == b'Z',
+                _ => byte.is_ascii_digit(),
+            }),
+        "{generated_at}"
+    );
 }
 
 fn verdict(fixture: &Fixture, tag: &str) -> Value {
@@ -488,6 +526,16 @@ fn assert_not_released(result: &Value, expected: &[&str]) {
     for member in ["release", "baseline", "approver", "meaning", "signed_at"] {
         assert!(result.get(member).is_none(), "{member}: {result}");
     }
+}
+
+#[test]
+#[trace("TC-1203", "FR-047-AC-17")]
+fn tc_1203_not_released_result_without_approval_carries_producer_identity() {
+    let fixture = fixture();
+    let result = result_on(&request(&fixture, "no-such-release-tag"), None);
+    assert_eq!(result["status"], "not_released");
+    assert!(result.get("approval").is_none());
+    assert_producer(&result);
 }
 
 /// Rewrites a tag object's bytes with `edit` and points the tag name at it.
@@ -1283,7 +1331,7 @@ fn tc_427_a_baseline_with_more_than_1024_items_is_invalid() {
 }
 
 #[test]
-#[trace("TC-408", "FR-047-AC-10")]
+#[trace("TC-408", "FR-047-AC-10", "FR-047-AC-17")]
 fn tc_408_the_approval_member_equals_the_approval_verify_output() {
     let fixture = fixture();
     let (_, release) = standard(&fixture);
@@ -1299,8 +1347,18 @@ fn tc_408_the_approval_member_equals_the_approval_verify_output() {
     });
     let output = run_command("approval-verify", approval.to_string().as_bytes(), None);
     assert_eq!(output.status.code(), Some(0), "{output:?}");
-    let expected: Value = serde_json::from_slice(&output.stdout).expect("json");
-    assert_eq!(result["approval"], expected);
+    let mut expected: Value = serde_json::from_slice(&output.stdout).expect("json");
+    let mut embedded = result["approval"].clone();
+    assert_eq!(embedded["generated_at"], result["generated_at"]);
+    expected
+        .as_object_mut()
+        .expect("approval result")
+        .remove("generated_at");
+    embedded
+        .as_object_mut()
+        .expect("embedded approval")
+        .remove("generated_at");
+    assert_eq!(embedded, expected);
 }
 
 #[test]
@@ -1471,7 +1529,7 @@ fn tc_411_a_snapshot_that_is_not_json_does_not_change_the_verdict_or_the_members
 fn tc_412_the_result_is_complete_and_the_same_without_any_other_tool_on_the_path() {
     let fixture = fixture();
     standard(&fixture);
-    let with_path = verdict(&fixture, "v1");
+    let mut with_path = verdict(&fixture, "v1");
     // A path that holds only git and ssh-keygen: no Quoin or Quire executable.
     let bin = fixture.root().join("only-git");
     fs::create_dir(&bin).expect("bin");
@@ -1483,7 +1541,17 @@ fn tc_412_the_result_is_complete_and_the_same_without_any_other_tool_on_the_path
             .expect("tool on the machine");
         std::os::unix::fs::symlink(found, bin.join(tool)).expect("symlink");
     }
-    let restricted = result_on(&request(&fixture, "v1"), Some(&bin));
+    let mut restricted = result_on(&request(&fixture, "v1"), Some(&bin));
+    for result in [&mut with_path, &mut restricted] {
+        result
+            .as_object_mut()
+            .expect("release result")
+            .remove("generated_at");
+        result["approval"]
+            .as_object_mut()
+            .expect("approval result")
+            .remove("generated_at");
+    }
     assert_eq!(restricted, with_path);
     for member in [
         "status",

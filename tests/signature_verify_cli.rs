@@ -240,7 +240,35 @@ fn verdict_with(request: &Value, path: Option<&Path>) -> Value {
         value["protocol"],
         "engineering-assurance.signature-verify-result/v1"
     );
+    assert_producer(&value);
     value
+}
+
+fn assert_producer(result: &Value) {
+    assert_eq!(result["ea_version"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(
+        result["ea_source_revision"],
+        option_env!("EA_SOURCE_REVISION")
+            .filter(|revision| !revision.is_empty())
+            .map_or(Value::Null, |revision| json!(revision))
+    );
+    assert_eq!(result["generated_at_source"], "host_clock");
+    let generated_at = result["generated_at"].as_str().expect("generated_at");
+    assert_eq!(generated_at.len(), 20, "{generated_at}");
+    assert!(generated_at.ends_with('Z'), "{generated_at}");
+    assert!(
+        generated_at
+            .bytes()
+            .enumerate()
+            .all(|(index, byte)| match index {
+                4 | 7 => byte == b'-',
+                10 => byte == b'T',
+                13 | 16 => byte == b':',
+                19 => byte == b'Z',
+                _ => byte.is_ascii_digit(),
+            }),
+        "{generated_at}"
+    );
 }
 
 fn verdict(request: &Value) -> Value {
@@ -335,6 +363,19 @@ fn tc_251_unsigned_commit_and_tag_are_unsigned() {
     let tag = status(&fixture, "v-plain", "tag");
     assert_eq!(tag["status"], "unsigned");
     assert!(tag.get("reason").is_none());
+}
+
+#[test]
+#[trace("TC-1200", "FR-036-AC-16")]
+fn tc_1200_unsigned_and_unverifiable_verdicts_carry_producer_identity() {
+    let fixture = fixture();
+    let commit = plain_commit(&fixture, "unsigned");
+    let unsigned = status(&fixture, &commit, "commit");
+    assert_eq!(unsigned["status"], "unsigned");
+
+    let unresolved = status(&fixture, "no-such-revision", "commit");
+    assert_eq!(unresolved["status"], "unverifiable");
+    assert_eq!(unresolved["reason"], "revision_unresolved");
 }
 
 #[test]
