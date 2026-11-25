@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:agent-ix:engineering-assurance:release-verify-request:v1",
+  "title": "Engineering Assurance release-verify request",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "protocol": { "const": "engineering-assurance.release-verify-request/v1" },
+    "repository": { "type": "string" },
+    "tag": { "type": "string" },
+    "record_path": { "type": "string" },
+    "allowed_signers": { "type": "string" },
+    "gitsign": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "certificate_identity": { "type": "string" },
+        "certificate_oidc_issuer": { "type": "string" },
+        "principal": {}
+      },
+      "required": ["certificate_identity", "certificate_oidc_issuer"]
+    },
+    "identity_registry": { "type": ["string", "null"] }
+  },
+  "required": ["protocol", "repository", "tag", "record_path", "allowed_signers"]
+}

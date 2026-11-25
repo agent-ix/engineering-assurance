@@ -99,19 +99,26 @@ release commit meet its checks. The result records the person's decision.
 
 ## Request schemas
 
-The native `engineering-assurance` CLI publishes a request and result JSON
-Schema only for `producer-execute`:
+The native `engineering-assurance` CLI publishes request schemas for the
+release and approval commands below. Each command prints its own closed request
+contract to standard output; `--schema request` does not execute a request.
+Use these commands to inspect the fields before preparing JSON:
 
 ```sh
+engineering-assurance release-history --schema request
+engineering-assurance release-decision --schema request
+engineering-assurance release-verify --schema request
+engineering-assurance approval-tag --schema request
 engineering-assurance producer-execute --schema request
 engineering-assurance producer-execute --schema result
 ```
 
-Other commands that accept `--request` take JSON text as the argument or `-` to
-read JSON from standard input. They do not support `--schema`. For those
-commands, use the request contract documented with the command's owning
-requirement. A path supplied as the `--request` value is treated as JSON text,
-not opened as a file.
+For each of the four release and approval commands, submit JSON text with
+`--request '<json>'` or pass `--request -` to read JSON from standard input.
+The schema and request options cannot be combined. The `--request` value is
+JSON text; a path is not opened as a file. Other commands that accept
+`--request` do not publish a schema and use the request contract in their
+owning requirement.
 
 Quoin's `evidence export-test-result` requires a caller-supplied subject. Pass
 the required JSON subject array with `--subject`.

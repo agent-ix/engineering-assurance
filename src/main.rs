@@ -32,6 +32,7 @@ mod receipt_host;
 mod release_decision_host;
 mod release_history_host;
 mod release_host;
+mod request_schemas;
 mod scope_footprint_host;
 mod signature_verify_host;
 mod tag_receipt_host;
@@ -364,13 +365,7 @@ fn approval_gate_command() -> Command {
 fn approval_tag_command() -> Command {
     Command::new(APPROVAL_TAG_CAPABILITY)
         .about("Write one signed annotated approval tag for a change-assurance record")
-        .arg(
-            Arg::new("request")
-                .long("request")
-                .value_name("JSON")
-                .help("Approval-tag request document, or - to read it from stdin")
-                .required(true),
-        )
+        .args(request_schema_args("Approval-tag request document"))
 }
 
 fn release_decision_command() -> Command {
@@ -378,13 +373,7 @@ fn release_decision_command() -> Command {
         .about(
             "Present a release candidate to its decision owner and record their release or reject",
         )
-        .arg(
-            Arg::new("request")
-                .long("request")
-                .value_name("JSON")
-                .help("Release-decision request document, or - to read it from stdin")
-                .required(true),
-        )
+        .args(request_schema_args("Release-decision request document"))
 }
 
 fn feature_risk_rating_command() -> Command {
@@ -414,25 +403,29 @@ fn rating_acceptance_command() -> Command {
 fn release_verify_command() -> Command {
     Command::new(RELEASE_VERIFY_CAPABILITY)
         .about("Report whether a signed annotated tag is a named person's release of one Baseline")
-        .arg(
-            Arg::new("request")
-                .long("request")
-                .value_name("JSON")
-                .help("Release-verify request document, or - to read it from stdin")
-                .required(true),
-        )
+        .args(request_schema_args("Release-verify request document"))
 }
 
 fn release_history_command() -> Command {
     Command::new(RELEASE_HISTORY_CAPABILITY)
         .about("List the change-assurance records merged since the previous release")
-        .arg(
-            Arg::new("request")
-                .long("request")
-                .value_name("JSON")
-                .help("Release-history request document, or - to read it from stdin")
-                .required(true),
-        )
+        .args(request_schema_args("Release-history request document"))
+}
+
+fn request_schema_args(request_help: &'static str) -> [Arg; 2] {
+    [
+        Arg::new("request")
+            .long("request")
+            .value_name("JSON")
+            .help(format!("{request_help}, or - to read it from stdin"))
+            .required_unless_present("schema")
+            .conflicts_with("schema"),
+        Arg::new("schema")
+            .long("schema")
+            .value_name("KIND")
+            .value_parser(["request"])
+            .help("Print the published request JSON Schema"),
+    ]
 }
 
 fn approval_trail_command() -> Command {
@@ -1186,8 +1179,9 @@ fn run_approval_verify(arguments: &ArgMatches) -> ExitCode {
 }
 
 fn run_approval_tag(arguments: &ArgMatches) -> ExitCode {
-    run_request_line(
+    run_request_schema_line(
         arguments,
+        APPROVAL_TAG_CAPABILITY,
         APPROVAL_TAG_CAPABILITY,
         "approval_tag_request_unreadable",
         |bytes| {
@@ -1208,8 +1202,9 @@ fn run_approval_gate(arguments: &ArgMatches) -> ExitCode {
 }
 
 fn run_release_verify(arguments: &ArgMatches) -> ExitCode {
-    run_request_line(
+    run_request_schema_line(
         arguments,
+        RELEASE_VERIFY_CAPABILITY,
         RELEASE_VERIFY_CAPABILITY,
         "release_verify_request_unreadable",
         |bytes| release_host::execute(bytes).map_err(|error| (error.code(), error.to_string())),
@@ -1217,8 +1212,9 @@ fn run_release_verify(arguments: &ArgMatches) -> ExitCode {
 }
 
 fn run_release_history(arguments: &ArgMatches) -> ExitCode {
-    run_request_line(
+    run_request_schema_line(
         arguments,
+        RELEASE_HISTORY_CAPABILITY,
         RELEASE_HISTORY_CAPABILITY,
         "release_history_request_unreadable",
         |bytes| {
@@ -1228,8 +1224,9 @@ fn run_release_history(arguments: &ArgMatches) -> ExitCode {
 }
 
 fn run_release_decision(arguments: &ArgMatches) -> ExitCode {
-    run_request_line(
+    run_request_schema_line(
         arguments,
+        RELEASE_DECISION_CAPABILITY,
         RELEASE_DECISION_CAPABILITY,
         "release_decision_request_invalid",
         |bytes| {
@@ -1348,6 +1345,32 @@ fn run_request_line(
         },
         Err((code, message)) => emit_error(capability, code, &message),
     }
+}
+
+fn run_request_schema_line(
+    arguments: &ArgMatches,
+    command: &'static str,
+    capability: &'static str,
+    unreadable_code: &str,
+    execute: impl FnOnce(&[u8]) -> Result<Vec<u8>, (&'static str, String)>,
+) -> ExitCode {
+    if arguments.get_one::<String>("schema").is_some() {
+        let Some(schema) = request_schemas::for_command(command) else {
+            return emit_error(
+                capability,
+                unreadable_code,
+                "request schema is unavailable for this command",
+            );
+        };
+        return match ix_cli_kit::streams::write_primary_stdout(schema) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("failed to write {capability} request schema: {error}");
+                ExitCode::from(2)
+            }
+        };
+    }
+    run_request_line(arguments, capability, unreadable_code, execute)
 }
 
 fn run_onboarding() -> ExitCode {

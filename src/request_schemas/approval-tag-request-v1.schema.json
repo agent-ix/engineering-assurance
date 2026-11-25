@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:agent-ix:engineering-assurance:approval-tag-request:v1",
+  "title": "Engineering Assurance approval-tag request",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "protocol": { "const": "engineering-assurance.approval-tag-request/v1" },
+    "repository": { "type": "string" },
+    "tag": { "type": "string" },
+    "revision": { "type": "string" },
+    "record": { "type": "string" },
+    "record_id": { "type": "string" },
+    "record_digest": { "type": "string" },
+    "meaning": { "type": "string" },
+    "gesture": { "enum": ["device_touch", "agent_confirm", "oidc_interactive"] }
+  },
+  "required": ["protocol", "repository", "tag", "record", "record_id", "record_digest", "meaning"]
+}

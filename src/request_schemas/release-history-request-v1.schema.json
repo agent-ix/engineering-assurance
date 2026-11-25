@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "urn:agent-ix:engineering-assurance:release-history-request:v1",
+  "title": "Engineering Assurance release-history request",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "protocol": { "const": "engineering-assurance.release-history-request/v1" },
+    "repository": { "type": "string" },
+    "baseline_commit": { "type": "string" },
+    "previous_release_tag": { "type": ["string", "null"] },
+    "records_dir": { "type": "string" }
+  },
+  "required": ["protocol", "repository", "baseline_commit", "previous_release_tag", "records_dir"]
+}

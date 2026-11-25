@@ -267,6 +267,7 @@ same canonical bundle and do not redefine these responsibilities.
 - [FR-082](./functional/FR-082-detect-deleted-and-changed-tags-from-tag-receipts.md) — detect deleted, changed and unreceipted tags by comparing the tag set with the tag receipts.
 - [FR-083](./functional/FR-083-document-the-adoption-rulesets-for-tags-and-the-private-records-branch.md) — document the adoption rulesets that protect tags and the private records branch, and state what cannot be protected.
 - [FR-088](./functional/FR-088-document-private-vulnerability-reporting.md) — document the repository's private vulnerability reporting route.
+- [FR-089](./functional/FR-089-publish-release-and-approval-request-schemas.md) — publish request schemas for release and approval commands.
 
 ### Non-Functional Requirements
 
