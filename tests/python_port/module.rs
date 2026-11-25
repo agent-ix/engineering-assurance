@@ -293,12 +293,7 @@ fn launches_program(value: &Value) -> bool {
 }
 
 #[test]
-#[trace(
-    "TC-115",
-    "StR-003-VC-5",
-    "FR-017-AC-4",
-    "FR-017-CON-2"
-)]
+#[trace("TC-115", "StR-003-VC-5", "FR-017-AC-4", "FR-017-CON-2")]
 fn host_configuration_is_declarative_or_dispatches_to_the_native_cli() {
     let repository = root();
 
