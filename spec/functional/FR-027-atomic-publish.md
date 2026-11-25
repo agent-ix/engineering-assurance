@@ -72,7 +72,6 @@ publish that never replaces an existing file.
 | --- | --- | --- |
 | FR-027-AC-1 | Publishing to an absent destination creates it with exactly the given bytes and leaves no sidecar in the directory. | Test (TC-206) |
 | FR-027-AC-2 | Publishing over an identical existing file succeeds; over a different file, a directory or a symbolic link it returns the typed collision with the destination unchanged; a destination that appears before the commit step is handled the same way; the sidecar is removed in every case. | Test (TC-207) |
-
 | FR-027-AC-4 | A successful publish reports `Written` when it created the destination and `AlreadyPresent` when the destination already held identical bytes, and the collision error is unchanged for differing bytes. | Test (TC-211) |
 | FR-027-AC-5 | A successful publish flushes the sidecar and the parent directory, on both the written and the already-present path, and is available on Unix and Windows with the same no-replace behavior. | Test (TC-212) |
 
