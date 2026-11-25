@@ -37,24 +37,6 @@ relationships:
 ---
 # Engineering Assurance proposed not-high process-risk supplier assessment
 
-## Feature assessments
-
-| Requirement |
-|---|
-| FR-001 |
-| FR-002 |
-| FR-003 |
-| FR-006 |
-| FR-007 |
-| FR-013 |
-| FR-014 |
-| FR-018 |
-| FR-028 |
-| FR-083 |
-| FR-087 |
-| FR-088 |
-| FR-089 |
-
 ## Rationale
 
 This is a proposed supplier-side rating for IU-001. The named human assigned to review and accept it is Peter Krenesky. The record is unsigned and unaccepted pending his decision through the signed-commit workflow. No score or product-safety classification is assigned.
