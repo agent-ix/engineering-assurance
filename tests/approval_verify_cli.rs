@@ -20,6 +20,9 @@ use ix_trace_rs::trace;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
+#[path = "support/producer_identity.rs"]
+mod producer_identity;
+
 const RECORD_ID: &str = "change-record-17";
 const DIGEST: &str = "sha256:0123456789abcdef";
 const REQUEST_PROTOCOL: &str = "engineering-assurance.approval-verify-request/v1";
@@ -210,7 +213,7 @@ fn result_on(request: &Value, path: Option<&Path>) -> Value {
     );
     let value: Value = serde_json::from_str(text).expect("json line");
     assert_eq!(value["protocol"], RESULT_PROTOCOL);
-    assert_producer(&value);
+    producer_identity::assert_producer(&value);
     for member in [
         "ea_version",
         "ea_source_revision",
@@ -223,33 +226,6 @@ fn result_on(request: &Value, path: Option<&Path>) -> Value {
         );
     }
     value
-}
-
-fn assert_producer(result: &Value) {
-    assert_eq!(result["ea_version"], env!("CARGO_PKG_VERSION"));
-    assert_eq!(
-        result["ea_source_revision"],
-        option_env!("EA_SOURCE_REVISION")
-            .filter(|revision| !revision.is_empty())
-            .map_or(Value::Null, |revision| json!(revision))
-    );
-    assert_eq!(result["generated_at_source"], "host_clock");
-    let generated_at = result["generated_at"].as_str().expect("generated_at");
-    assert_eq!(generated_at.len(), 20, "{generated_at}");
-    assert!(generated_at.ends_with('Z'), "{generated_at}");
-    assert!(
-        generated_at
-            .bytes()
-            .enumerate()
-            .all(|(index, byte)| match index {
-                4 | 7 => byte == b'-',
-                10 => byte == b'T',
-                13 | 16 => byte == b':',
-                19 => byte == b'Z',
-                _ => byte.is_ascii_digit(),
-            }),
-        "{generated_at}"
-    );
 }
 
 fn result(request: &Value) -> Value {
@@ -750,7 +726,7 @@ fn tc_326_a_message_git_cannot_read_is_unverifiable_not_a_wrong_record() {
 }
 
 #[test]
-#[trace("TC-1201", "FR-041-AC-37")]
+#[trace("FR-041-AC-37")]
 fn tc_1201_result_without_trust_inputs_still_carries_producer_identity() {
     let fixture = fixture();
     pin_allowed_signers(&fixture);
@@ -764,7 +740,7 @@ fn tc_1201_result_without_trust_inputs_still_carries_producer_identity() {
     let result = result(&body);
     assert_eq!(result["status"], "unverifiable");
     assert!(result.get("trust").is_none());
-    assert_producer(&result);
+    producer_identity::assert_producer(&result);
 }
 
 #[test]

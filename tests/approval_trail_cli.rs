@@ -16,6 +16,9 @@ use std::{
 use ix_trace_rs::trace;
 use serde_json::{Value, json};
 
+#[path = "support/producer_identity.rs"]
+mod producer_identity;
+
 const RECORD_ID: &str = "change-record-17";
 const DIGEST: &str = "sha256:0123456789abcdef";
 const REQUEST_PROTOCOL: &str = "engineering-assurance.approval-trail-request/v1";
@@ -214,39 +217,12 @@ fn trail_of(request: &Value) -> Value {
     );
     let value: Value = serde_json::from_str(text).expect("json line");
     assert_eq!(value["protocol"], RESULT_PROTOCOL);
-    assert_producer(&value);
+    producer_identity::assert_producer(&value);
     for entry in value["entries"].as_array().expect("entries") {
-        assert_producer(entry);
+        producer_identity::assert_producer(entry);
         assert_eq!(entry["generated_at"], value["generated_at"]);
     }
     value
-}
-
-fn assert_producer(result: &Value) {
-    assert_eq!(result["ea_version"], env!("CARGO_PKG_VERSION"));
-    assert_eq!(
-        result["ea_source_revision"],
-        option_env!("EA_SOURCE_REVISION")
-            .filter(|revision| !revision.is_empty())
-            .map_or(Value::Null, |revision| json!(revision))
-    );
-    assert_eq!(result["generated_at_source"], "host_clock");
-    let generated_at = result["generated_at"].as_str().expect("generated_at");
-    assert_eq!(generated_at.len(), 20, "{generated_at}");
-    assert!(generated_at.ends_with('Z'), "{generated_at}");
-    assert!(
-        generated_at
-            .bytes()
-            .enumerate()
-            .all(|(index, byte)| match index {
-                4 | 7 => byte == b'-',
-                10 => byte == b'T',
-                13 | 16 => byte == b':',
-                19 => byte == b'Z',
-                _ => byte.is_ascii_digit(),
-            }),
-        "{generated_at}"
-    );
 }
 
 fn trail(fixture: &Fixture) -> Value {
@@ -333,12 +309,12 @@ fn entry<'a>(trail: &'a Value, tag: &str) -> &'a Value {
 }
 
 #[test]
-#[trace("TC-1202", "FR-043-AC-26")]
+#[trace("FR-043-AC-26")]
 fn tc_1202_empty_trail_carries_producer_identity() {
     let fixture = fixture();
     let result = trail(&fixture);
     assert!(result["entries"].as_array().expect("entries").is_empty());
-    assert_producer(&result);
+    producer_identity::assert_producer(&result);
 }
 
 #[test]

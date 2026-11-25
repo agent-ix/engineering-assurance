@@ -6,6 +6,11 @@
 use std::process::Command;
 
 fn main() {
+    if let Some(tracked_files) = git_output(&["ls-files"]) {
+        for path in tracked_files.lines().filter(|path| !path.is_empty()) {
+            println!("cargo:rerun-if-changed={path}");
+        }
+    }
     if let Some(head) = git_output(&["rev-parse", "--git-path", "HEAD"]) {
         println!("cargo:rerun-if-changed={head}");
     }
