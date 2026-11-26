@@ -20,7 +20,10 @@ use cms::{
     content_info::ContentInfo,
     signed_data::{SignedData, SignerInfos},
 };
-use der::{Decode, Encode, asn1::Any};
+use der::{
+    Decode, Encode,
+    asn1::{Any, SetOfVec},
+};
 use engineering_assurance::signature_verify::tagger_signed_at;
 use ix_trace_rs::trace;
 use serde_json::{Value, json};
@@ -140,7 +143,8 @@ fn cms_block_without_rekor_entry() -> String {
     let mut signers: Vec<_> = signed_data.signer_infos.0.iter().cloned().collect();
     let signer = signers.first_mut().expect("offline fixture has one signer");
     signer.unsigned_attrs = None;
-    signed_data.signer_infos = SignerInfos::try_from(signers).expect("one signer remains");
+    signed_data.signer_infos =
+        SignerInfos::from(SetOfVec::try_from(signers).expect("one signer remains"));
     content_info.content = Any::encode_from(&signed_data).expect("SignedData re-encodes");
     let encoded = STANDARD.encode(content_info.to_der().expect("CMS re-encodes"));
     format!("-----BEGIN SIGNED MESSAGE-----\n{encoded}\n-----END SIGNED MESSAGE-----\n")
