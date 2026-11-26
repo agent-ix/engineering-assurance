@@ -2187,20 +2187,22 @@ mod tests {
             let original: ReceiptBundleSet =
                 serde_json::from_value(bundle_value()).expect("fixture receipt bundles");
             let original_bytes = original.encode_note().expect("fixture note bytes");
-            git_with_input(
-                repository,
-                &[
-                    "notes",
-                    "--ref",
-                    RECEIPT_NOTES_REF,
-                    "add",
-                    "-F",
-                    "-",
-                    &commit,
-                ],
-                &original_bytes,
-            )
-            .expect("initial verified receipt note is written");
+            assert!(
+                git_with_input(
+                    repository,
+                    &[
+                        "notes",
+                        "--ref",
+                        RECEIPT_NOTES_REF,
+                        "add",
+                        "-F",
+                        "-",
+                        &commit,
+                    ],
+                    &original_bytes,
+                )
+                .is_ok()
+            );
 
             let skipped =
                 store_note_bytes(repository, &commit, b"replacement note\n", |_| Ok(status))
