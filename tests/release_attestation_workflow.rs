@@ -312,6 +312,32 @@ fn nonempty_invalid_evidence_is_refused_before_the_role_source_failure() {
 }
 
 #[cfg(unix)]
+#[trace("TC-681", "FR-069-AC-3")]
+#[test]
+fn reusable_workflow_invokes_only_the_quoin_export_contract_for_evidence() {
+    let workflow = reusable_workflow();
+    let verify_steps = workflow["jobs"]["verify"]["steps"]
+        .as_array()
+        .expect("verify steps");
+    let quoin_runs = verify_steps
+        .iter()
+        .filter_map(|step| step["run"].as_str())
+        .filter(|run| run.contains("$QUOIN_CLI") || run.contains("quoin evidence"))
+        .collect::<Vec<_>>();
+
+    assert_eq!(quoin_runs.len(), 1, "one Quoin evidence command is allowed");
+    assert!(quoin_runs[0].contains("$QUOIN_CLI\" evidence export-test-result"));
+    assert!(quoin_runs[0].contains("--evidence-dir \"$EVIDENCE_DIR\""));
+    assert!(!quoin_runs[0].contains("--git"));
+    assert!(!quoin_runs[0].contains("--network"));
+
+    let attest_steps = workflow["jobs"]["attest"]["steps"]
+        .as_array()
+        .expect("attest steps");
+    assert!(attest_steps.iter().all(|step| step.get("run").is_none()));
+}
+
+#[cfg(unix)]
 #[trace("TC-553", "FR-069-AC-1", "FR-069-AC-4")]
 #[test]
 fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting() {
