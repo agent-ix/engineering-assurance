@@ -16,8 +16,10 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
+    fs,
     io::Read,
-    path::PathBuf,
+    path::{Path, PathBuf},
+    process::Command,
 };
 
 use cap_std::{ambient_authority, fs::Dir};
@@ -49,7 +51,11 @@ impl BundleRoot {
     /// Open this repository's root through a confined directory handle.
     fn open() -> Self {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let directory = Dir::open_ambient_dir(&root, ambient_authority())
+        Self::open_at(&root)
+    }
+
+    fn open_at(root: &Path) -> Self {
+        let directory = Dir::open_ambient_dir(root, ambient_authority())
             .expect("the repository root must be openable as a confined directory");
         Self { directory }
     }
@@ -190,6 +196,53 @@ fn resolve_bundle(bundle: &BundleRoot) -> Vec<ResolvedSkill> {
         .collect()
 }
 
+fn discovery_bundle_paths() -> Vec<String> {
+    let mut paths = HOST_SURFACES
+        .iter()
+        .map(|surface| surface.manifest.to_owned())
+        .collect::<BTreeSet<_>>();
+    paths.insert(CANONICAL_SKILL_FILE.to_owned());
+    for workflow in expected_workflows() {
+        paths.insert(format!(
+            "{CANONICAL_WORKFLOWS_DIRECTORY}/{workflow}/{WORKFLOW_DEFINITION_NAME}"
+        ));
+    }
+    paths.into_iter().collect()
+}
+
+fn install_local_discovery_source(root: &Path, destination: &Path) {
+    for relative in discovery_bundle_paths() {
+        let source = root.join(&relative);
+        let target = destination.join(&relative);
+        fs::create_dir_all(target.parent().expect("bundle file has a parent"))
+            .expect("local-source parent can be created");
+        fs::copy(&source, &target).unwrap_or_else(|error| {
+            panic!(
+                "cannot copy local discovery source {}: {error}",
+                source.display()
+            )
+        });
+    }
+}
+
+fn install_repository_discovery_source(root: &Path, destination: &Path) {
+    let mut command = Command::new("git");
+    command.args(["archive", "--format=tar", "HEAD"]);
+    command.args(discovery_bundle_paths());
+    let output = command
+        .current_dir(root)
+        .output()
+        .expect("git archive must start");
+    assert!(
+        output.status.success(),
+        "git archive failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    tar::Archive::new(output.stdout.as_slice())
+        .unpack(destination)
+        .expect("repository-source files can be extracted");
+}
+
 #[trace("TC-009", "FR-002-AC-1", "TC-010", "FR-002-AC-2", "US-002-EX-1")]
 #[test]
 fn tc_009_the_bundle_owns_one_skill_that_every_supported_host_resolves() {
@@ -322,6 +375,57 @@ fn tc_038_supported_hosts_install_the_same_canonical_bytes() {
                 surface.manifest
             );
         }
+    }
+}
+
+#[trace("TC-1063", "NFR-001-M-1", "NFR-001-M-2")]
+#[test]
+fn tc_1063_local_and_repository_source_installs_resolve_all_hosts_identically() {
+    let source_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let local = tempfile::tempdir().expect("local-source install root");
+    let repository = tempfile::tempdir().expect("repository-source install root");
+    install_local_discovery_source(&source_root, local.path());
+    install_repository_discovery_source(&source_root, repository.path());
+
+    let bundles = [
+        BundleRoot::open_at(local.path()),
+        BundleRoot::open_at(repository.path()),
+    ];
+    let mut skill_bytes = BTreeSet::new();
+    let mut workflow_bytes = BTreeMap::<String, BTreeSet<Vec<u8>>>::new();
+    for bundle in &bundles {
+        let resolved = resolve_bundle(bundle);
+        assert_eq!(resolved.len(), HOST_SURFACES.len());
+        let canonical = bundle.read(CANONICAL_SKILL_FILE);
+        skill_bytes.insert(canonical.clone());
+        for entry in resolved {
+            assert_eq!(
+                bundle.read(&entry.skill_file),
+                canonical,
+                "{} resolves the canonical skill from this source",
+                entry.surface
+            );
+            for workflow in expected_workflows() {
+                let path = format!(
+                    "{}/workflows/{workflow}/{WORKFLOW_DEFINITION_NAME}",
+                    entry.skill_source,
+                );
+                workflow_bytes
+                    .entry(workflow)
+                    .or_default()
+                    .insert(bundle.read(&path));
+            }
+        }
+    }
+
+    assert_eq!(
+        skill_bytes.len(),
+        1,
+        "both sources install identical skill bytes"
+    );
+    assert_eq!(workflow_bytes.len(), 5);
+    for (workflow, bytes) in workflow_bytes {
+        assert_eq!(bytes.len(), 1, "{workflow} differs across source or host");
     }
 }
 
