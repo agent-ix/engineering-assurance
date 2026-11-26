@@ -592,7 +592,7 @@ mod tests {
     impl ApprovalStatementReader for SinkStore {}
 
     #[derive(Default)]
-    struct SinkLog(Cell<u32>);
+    struct SinkLog(Cell<u32>, RefCell<Vec<PublicRecord>>);
 
     impl PublicLogClient for SinkLog {
         fn send(
@@ -601,6 +601,7 @@ mod tests {
             _entry: &crate::record_sink::sink::CheckedEntry,
         ) -> Result<(), LogRejected> {
             self.0.set(self.0.get() + 1);
+            self.1.borrow_mut().push(entry.record().clone());
             Ok(())
         }
     }
@@ -1271,10 +1272,10 @@ mod tests {
 
         assert_eq!(written.len(), 3);
         assert_eq!(store.private.borrow().len(), 3);
-        assert_eq!(store.public.borrow().len(), 3);
+        assert!(store.public.borrow().is_empty());
         assert_eq!(log.0.get(), 3);
         let private_records = store.private.borrow();
-        let public_records = store.public.borrow();
+        let public_records = log.1.borrow();
         for (private, public) in private_records.iter().zip(public_records.iter()) {
             assert_eq!(public.kind, RecordKind::Approval);
             assert_eq!(public.record_id, private.record_id);
