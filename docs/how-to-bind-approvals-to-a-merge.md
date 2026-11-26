@@ -29,11 +29,11 @@ Load the role policy, submitted reviews, account types, and approver names from 
    };
    use engineering_assurance::record_sink::sink::RecordSink;
 
-   fn write_for_source_state(
+   fn write_for_source_state<'a>(
        sink: &dyn RecordSink,
        signer: &dyn ApprovalStatementSigner,
-       mut request: ApprovalStatementWriteRequest<'_>,
-       state: PullRequestState<'_>,
+       mut request: ApprovalStatementWriteRequest<'a>,
+       state: PullRequestState<'a>,
    ) -> Result<Vec<WrittenApprovalStatement>, StatementWriteError> {
        request.pull_request = state;
        let (_, statements) = write_approval_statements(sink, signer, request)?;
