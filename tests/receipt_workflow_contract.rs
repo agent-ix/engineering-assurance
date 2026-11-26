@@ -669,6 +669,123 @@ fn receipt_workflow_jobs_have_exact_permissions_and_keep_code_out_of_record_job(
     assert_receipt_policy_and_suite();
 }
 
+#[trace("TC-592", "FR-075-AC-3")]
+#[test]
+fn failed_receipt_run_does_not_write_to_the_default_branch() {
+    let workflow = workflow("change-receipt.yml");
+    let jobs = &workflow["jobs"];
+    let gate_text = assert_gate_job_boundary(jobs);
+    assert_gate_failure_exports_data_before_failing(&gate_text, jobs);
+    assert_record_job_is_isolated(jobs);
+    assert_eq!(jobs["record"]["if"], "always()");
+
+    let note_steps = jobs["notes"]["steps"].as_array().expect("notes steps");
+    let note_writer = note_steps
+        .iter()
+        .find(|step| {
+            step["run"]
+                .as_str()
+                .is_some_and(|run| run.contains("receipt-note --request"))
+        })
+        .expect("receipt notes writer");
+    let note_script = note_writer["run"].as_str().expect("notes script");
+    assert!(note_script.contains("refs/notes/assurance-receipts"));
+    assert!(!note_script.contains("refs/heads/"));
+    assert!(!note_script.contains("git reset"));
+    assert!(!note_script.contains("git checkout"));
+}
+
+#[trace("TC-593", "FR-075-AC-4")]
+#[test]
+fn receipt_gates_read_the_policy_from_the_protected_base_checkout() {
+    let workflow = workflow("change-receipt.yml");
+    let jobs = &workflow["jobs"];
+    let gate_steps = jobs["gates"]["steps"].as_array().expect("gate steps");
+    let checkout = gate_steps
+        .iter()
+        .find(|step| step["name"] == "Check out the protected branch policy as data")
+        .expect("protected base checkout");
+    assert_eq!(
+        checkout["with"]["ref"],
+        "${{ github.event.repository.default_branch }}"
+    );
+    assert_eq!(checkout["with"]["path"], "protected-base");
+    let run = gate_steps
+        .iter()
+        .find(|step| {
+            step["run"].as_str().is_some_and(|script| {
+                script.contains("receipt-policy.json") && script.contains("producer-execute")
+            })
+        })
+        .expect("gate runner reads receipt policy")["run"]
+        .as_str()
+        .expect("gate runner script");
+    assert!(run.contains("protected / \".engineering-assurance/receipt-policy.json\""));
+    assert!(!run.contains("source / \".engineering-assurance/receipt-policy.json\""));
+}
+
+#[trace("TC-594", "FR-075-AC-5")]
+#[test]
+fn commits_before_adoption_skip_receipt_record_and_note_jobs() {
+    let workflow = workflow("change-receipt.yml");
+    let jobs = &workflow["jobs"];
+    assert!(
+        jobs["gates"]["outputs"]["skip_before_adoption"]
+            .as_str()
+            .is_some_and(|value| value.contains("adoption-boundary.outputs.skip"))
+    );
+    let steps = jobs["gates"]["steps"].as_array().expect("gate steps");
+    let boundary = steps
+        .iter()
+        .find(|step| step["id"] == "adoption-boundary")
+        .expect("adoption boundary check");
+    let script = boundary["run"].as_str().expect("adoption script");
+    assert!(script.contains("receipt-policy.json"));
+    assert!(script.contains("git -C \"$SOURCE_DIR\" merge-base --is-ancestor"));
+    assert!(script.contains("skip=true"));
+    assert!(
+        steps
+            .iter()
+            .filter(|step| step["id"] != "adoption-boundary"
+                && step["name"] != "Check the pushed commit input"
+                && step["name"] != "Check out the pushed commit as gate input"
+                && step["name"] != "Check out the protected branch policy as data")
+            .all(|step| {
+                step["if"]
+                    .as_str()
+                    .is_some_and(|condition| condition.contains("adoption-boundary.outputs.skip"))
+            })
+    );
+    assert!(
+        jobs["record"]["if"]
+            .as_str()
+            .is_some_and(|condition| condition.contains("skip_before_adoption != 'true'"))
+    );
+    assert!(
+        jobs["notes"]["if"]
+            .as_str()
+            .is_some_and(|condition| condition.contains("needs.record.result == 'success'"))
+    );
+
+    let missing = workflow("missing-receipt-check.yml");
+    let checker = missing["jobs"]["check"]["steps"]
+        .as_array()
+        .expect("missing receipt steps")
+        .iter()
+        .find(|step| {
+            step["run"]
+                .as_str()
+                .is_some_and(|script| script.contains("receipt-missing"))
+        })
+        .expect("missing receipt invocation");
+    assert!(
+        checker["run"]
+            .as_str()
+            .expect("missing receipt script")
+            .contains("receipt-missing --request")
+    );
+}
+
 #[trace("TC-559", "FR-070-AC-3")]
 #[test]
 fn action_reference_structure_rejects_missing_or_malformed_components() {

@@ -395,6 +395,40 @@ fn test_result(failed: bool) -> Value {
     })
 }
 
+fn statements_for_input(
+    subject: &ExpectedReceiptSubject,
+    receipt_input: Option<&ReceiptInput>,
+) -> engineering_assurance::receipt_record::ReceiptStatements {
+    let gate_results = ReceiptGateResults {
+        protocol: RECEIPT_GATE_RESULTS_PROTOCOL.to_owned(),
+        commit: COMMIT.to_owned(),
+        results: vec![ReceiptGateResult {
+            name: "focused".to_owned(),
+            exit_code: 0,
+        }],
+    };
+    build_receipt_statements(ReceiptRecordInput {
+        subject,
+        gate_results: &gate_results,
+        expected_gate_names: &["focused"],
+        test_result: &test_result(false),
+        receipt_input,
+        role_policy: &role_policy(),
+        approvals: approvals(),
+        record_id: record_id(),
+        created_at: "2026-11-14T12:00:00Z",
+        verifier_id: concat!(
+            "https:",
+            "//github.com/fictional/project/.github/workflows/change-receipt.yml@refs/heads/main"
+        ),
+        policy_uri: concat!(
+            "https:",
+            "//github.com/fictional/project/blob/main/.engineering-assurance/approval-policy.json"
+        ),
+    })
+    .expect("receipt statements are valid")
+}
+
 fn subject() -> ExpectedReceiptSubject {
     ExpectedReceiptSubject {
         repository: REPO.to_owned(),
@@ -527,7 +561,7 @@ fn statement_payload(bundle: &Value) -> Vec<u8> {
     envelope.payload.as_ref().to_vec()
 }
 
-#[trace("TC-583", "FR-074-AC-1")]
+#[trace("TC-583", "FR-074-AC-1", "FR-076-AC-5")]
 #[test]
 fn passing_input_produces_three_public_log_signed_statements_with_linked_summary() {
     let subject = subject();
@@ -537,34 +571,7 @@ fn passing_input_produces_three_public_log_signed_statements_with_linked_summary
     assert_eq!(parsed_input, retained_input);
     assert!(ReceiptInput::parse(&retained_bytes, "fictional/project#18").is_err());
     assert!(ReceiptInput::parse(&vec![b' '; 8 * 1024 * 1024 + 1], PR).is_err());
-    let gate_results = ReceiptGateResults {
-        protocol: RECEIPT_GATE_RESULTS_PROTOCOL.to_owned(),
-        commit: COMMIT.to_owned(),
-        results: vec![ReceiptGateResult {
-            name: "focused".to_owned(),
-            exit_code: 0,
-        }],
-    };
-    let statements = build_receipt_statements(ReceiptRecordInput {
-        subject: &subject,
-        gate_results: &gate_results,
-        expected_gate_names: &["focused"],
-        test_result: &test_result(false),
-        receipt_input: Some(&parsed_input),
-        role_policy: &role_policy(),
-        approvals: approvals(),
-        record_id: record_id(),
-        created_at: "2026-11-14T12:00:00Z",
-        verifier_id: concat!(
-            "https:",
-            "//github.com/fictional/project/.github/workflows/change-receipt.yml@refs/heads/main"
-        ),
-        policy_uri: concat!(
-            "https:",
-            "//github.com/fictional/project/blob/main/.engineering-assurance/approval-policy.json"
-        ),
-    })
-    .expect("statements");
+    let statements = statements_for_input(&subject, Some(&parsed_input));
     assert_eq!(statements.status, Status::Passed);
     let change: Value = serde_json::from_slice(&statements.change_record).expect("change record");
     let test_digest = format!(
@@ -581,7 +588,8 @@ fn passing_input_produces_three_public_log_signed_statements_with_linked_summary
         Some(test_digest.as_str())
     );
 
-    let (result, events, private_record_count) = publish_public_receipt(&subject, statements);
+    let (result, events, private_records, public_records) =
+        publish_public_receipt(&subject, statements);
     assert_eq!(result.status, Status::Passed);
     assert!(result.bundles.change_record.is_object());
     assert!(result.bundles.test_result.is_object());
@@ -597,7 +605,49 @@ fn passing_input_produces_three_public_log_signed_statements_with_linked_summary
             "log-send",
         ]
     );
-    assert_eq!(private_record_count, 1);
+    assert_eq!(private_records.len(), 1);
+    assert_eq!(public_records.len(), 1);
+    let public = &public_records[0];
+    let private = &private_records[0];
+    assert_eq!(
+        public.kind,
+        engineering_assurance::record_sink::form::RecordKind::ChangeRecord
+    );
+    assert_eq!(public.record_id, private.record_id);
+    assert_eq!(
+        public.hashes.subject_commit.as_ref().map(|id| id.as_str()),
+        Some(COMMIT)
+    );
+    let summary_bytes = statement_payload(&result.bundles.summary);
+    let summary_statement: Value =
+        serde_json::from_slice(&summary_bytes).expect("summary statement");
+    let summary_digest = format!(
+        "sha256:{}",
+        sigstore_verify::crypto::sha256(
+            &serde_json_canonicalizer::to_vec(&summary_statement).expect("canonical summary")
+        )
+        .to_hex()
+    );
+    assert_eq!(
+        public
+            .hashes
+            .statement
+            .as_ref()
+            .map(|digest| digest.as_str()),
+        Some(summary_digest.as_str())
+    );
+    assert_eq!(
+        public.verdicts.change_record,
+        Some(engineering_assurance::record_sink::form::Verdict::Recorded)
+    );
+    assert!(public.timestamps.created.is_some());
+    assert!(public.timestamps.signed.is_some());
+    assert!(public.timestamps.published.is_some());
+    assert_eq!(
+        private.ticket_text.as_deref(),
+        Some("Fictional receipt input")
+    );
+    assert!(private.change_record.is_some());
     assert!(
         result
             .bundles
@@ -613,7 +663,28 @@ fn publish_public_receipt(
 ) -> (
     engineering_assurance::receipt_record::ReceiptRecordResult,
     Vec<&'static str>,
-    usize,
+    Vec<PrivateRecord>,
+    Vec<PublicRecord>,
+) {
+    let (result, events, private, public) =
+        publish_public_receipt_for_teams(subject, statements, vec!["EA".to_owned()]);
+    (
+        result.expect("public receipt is published"),
+        events,
+        private,
+        public,
+    )
+}
+
+fn publish_public_receipt_for_teams(
+    subject: &ExpectedReceiptSubject,
+    statements: engineering_assurance::receipt_record::ReceiptStatements,
+    public_linear_teams: Vec<String>,
+) -> (
+    Result<engineering_assurance::receipt_record::ReceiptRecordResult, ReceiptRecordError>,
+    Vec<&'static str>,
+    Vec<PrivateRecord>,
+    Vec<PublicRecord>,
 ) {
     let events = Rc::new(RefCell::new(Vec::new()));
     let store = Store::default();
@@ -622,7 +693,7 @@ fn publish_public_receipt(
         source: SelectionSource::Configured,
         public_log_endpoint: Some(concat!("https:", "//log.example.test/api/v1").to_owned()),
         private_store_destination: Some("fictional/records".to_owned()),
-        public_linear_teams: vec!["EA".to_owned()],
+        public_linear_teams,
     };
     let (signer, verifier) = TestSigner::new(events.clone(), &workflow_identity(REPO));
     let lookup = Lookup(Visibility::Public);
@@ -648,12 +719,48 @@ fn publish_public_receipt(
             created_at: "2026-11-14T12:00:00Z",
         },
         statements,
-    )
-    .expect("signed receipt");
+    );
     assert_eq!(store.events.borrow()[0], "private-prepare");
     let events = events.borrow().clone();
-    let private_record_count = store.private.borrow().len();
-    (result, events, private_record_count)
+    let private_records = store.private.borrow().clone();
+    let public_records = store.public.borrow().clone();
+    (result, events, private_records, public_records)
+}
+
+#[trace("TC-600", "FR-076-AC-4")]
+#[test]
+fn a_private_ticket_reference_is_retained_but_refused_before_publication() {
+    let subject = subject();
+    let mut private_input = input();
+    private_input.ticket.as_mut().expect("fixture ticket").id = "SECRET-42".to_owned();
+    let statements = statements_for_input(&subject, Some(&private_input));
+
+    let (result, events, private_records, public_records) =
+        publish_public_receipt_for_teams(&subject, statements, vec!["EA".to_owned()]);
+
+    assert_eq!(
+        result,
+        Err(ReceiptRecordError::Sink(
+            ErrorCode::PublicSinkPrivateReference
+        ))
+    );
+    assert_eq!(private_records.len(), 1);
+    assert_eq!(public_records.len(), 0);
+    assert_eq!(
+        private_records[0].ticket_text.as_deref(),
+        Some("Fictional receipt input")
+    );
+    assert_eq!(
+        private_records[0]
+            .change_record
+            .as_ref()
+            .and_then(|record| record.pointer("/predicate/ticket/id"))
+            .and_then(Value::as_str),
+        Some("SECRET-42")
+    );
+    assert!(!events.contains(&"log-send"));
+    assert!(!events.contains(&"public-record-sign"));
+    assert!(!events.contains(&"public-statement-sign"));
 }
 
 fn assert_receipt_summary_links(
@@ -973,7 +1080,7 @@ fn private_receipt_signer_failure_never_calls_the_public_log() {
     assert!(!events.borrow().contains(&"public-record-sign"));
 }
 
-#[trace("FR-074-AC-7")]
+#[trace("FR-074-AC-7", "FR-075-AC-7")]
 #[test]
 fn public_private_store_and_none_sinks_are_refused_before_retention() {
     let subject = subject();
@@ -1035,7 +1142,7 @@ fn public_private_store_and_none_sinks_are_refused_before_retention() {
     }
 }
 
-#[trace("TC-585", "FR-074-AC-3")]
+#[trace("TC-585", "FR-074-AC-3", "FR-075-AC-2")]
 #[test]
 fn absent_receipt_input_and_approvals_yield_a_failed_record() {
     let subject = subject();
@@ -1054,7 +1161,7 @@ fn absent_receipt_input_and_approvals_yield_a_failed_record() {
         test_result: &test_result(false),
         receipt_input: None,
         role_policy: &role_policy(),
-        approvals: vec![],
+        approvals: approvals(),
         record_id: record_id(),
         created_at: "2026-11-14T12:00:00Z",
         verifier_id: concat!(
@@ -1074,7 +1181,7 @@ fn absent_receipt_input_and_approvals_yield_a_failed_record() {
         .and_then(Value::as_array)
         .expect("failures");
     assert!(failures.contains(&json!("contract_missing")));
-    assert!(failures.contains(&json!("approvals_incomplete")));
+    assert!(!failures.contains(&json!("approvals_incomplete")));
     let published = publish_private_receipt(&subject, statements);
     assert_eq!(published.status, Status::Failed);
 
@@ -1100,6 +1207,15 @@ fn absent_receipt_input_and_approvals_yield_a_failed_record() {
         ),
     })
     .expect("direct push still produces a failed receipt");
+    let direct_change: Value =
+        serde_json::from_slice(&direct_statements.change_record).expect("direct change record");
+    assert_eq!(direct_statements.status, Status::Failed);
+    assert!(
+        direct_change
+            .pointer("/predicate/failures")
+            .and_then(Value::as_array)
+            .is_some_and(|failures| failures.contains(&json!("approvals_incomplete")))
+    );
     let direct_result = publish_private_receipt(&direct_push, direct_statements);
     assert_eq!(direct_result.status, Status::Failed);
 }
