@@ -579,6 +579,57 @@ mod tests {
         assert!(serde_json::from_value::<VerificationSummaryStatement>(extra).is_err());
     }
 
+    #[test]
+    #[trace("TC-531", "FR-066-AC-2")]
+    fn tc_531_summary_with_a_fifth_input_predicate_is_rejected() {
+        let expected = expected();
+        let mut value = summary_json(&expected.input_digests);
+        value["predicate"]["inputAttestations"]
+            .as_array_mut()
+            .expect("summary input attestations")
+            .push(json!({
+                "uri": VERIFICATION_SUMMARY_PREDICATE,
+                "digest": {"sha256": "e".repeat(64)}
+            }));
+        let statement: VerificationSummaryStatement =
+            serde_json::from_value(value).expect("closed summary schema remains valid");
+
+        assert_eq!(
+            validate_summary(&statement.predicate, &expected),
+            Err(AttestationVerificationError::SummaryInvalid)
+        );
+    }
+
+    #[test]
+    #[trace("TC-534", "FR-066-AC-5")]
+    fn tc_534_changed_artifact_bytes_change_the_expected_subject_digest() {
+        let original = expected();
+        let statement: StatementV1 = serde_json::from_value(json!({
+            "_type": crate::attestation_signing::STATEMENT_V1_TYPE,
+            "subject": [{
+                "name": "release.tar.gz",
+                "digest": {"sha256": "a".repeat(64)}
+            }],
+            "predicateType": PROVENANCE_PREDICATE,
+            "predicate": {}
+        }))
+        .expect("provenance statement fixture");
+
+        assert_eq!(check_artifact_subjects(&statement, &original.artifacts), Ok(()));
+
+        let changed = ExpectedRelease {
+            artifacts: vec![ArtifactSubject {
+                name: "release.tar.gz".to_owned(),
+                sha256: "f".repeat(64),
+            }],
+            ..original
+        };
+        assert_eq!(
+            check_artifact_subjects(&statement, &changed.artifacts),
+            Err(AttestationVerificationError::WrongSubject)
+        );
+    }
+
     fn sha256_canonical_bytes_for_test(canonical: &[u8]) -> String {
         sigstore_verify::crypto::sha256(canonical).to_hex()
     }
