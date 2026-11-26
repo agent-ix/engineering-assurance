@@ -162,6 +162,8 @@ fn assert_receipt_policy_and_suite() {
     assert_eq!(policy["gates"].as_array().map(Vec::len), Some(1));
     assert_eq!(policy["gates"][0]["name"], "receipt-workflow-contract");
     assert_eq!(policy["gates"][0]["argv"][0], "cargo");
+    assert_eq!(policy["gates"][0]["argv"][1], "test");
+    assert_eq!(policy["gates"][0]["argv"][2], "--locked");
     let gate_command = policy["gates"][0]["argv"]
         .as_array()
         .expect("receipt gate argv")
@@ -324,6 +326,11 @@ fn receipt_workflow_jobs_have_exact_permissions_and_keep_code_out_of_record_job(
     assert!(
         gate_text.contains("\"--request\", req_path.read_text()"),
         "producer-execute receives the serialized request content, not its path"
+    );
+    assert!(
+        gate_text.contains("[\"rustup\", \"which\", \"cargo\"]")
+            && gate_text.contains("RUSTUP_TOOLCHAIN"),
+        "producer-execute receives the real Cargo binary, not the Rustup proxy"
     );
     assert_gate_failure_exports_data_before_failing(&gate_text, jobs);
     assert!(

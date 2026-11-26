@@ -141,6 +141,12 @@ jobs:
               if any(not isinstance(arg, str) or not arg for arg in argv):
                   raise SystemExit("receipt_policy_invalid")
               executable = shutil.which(argv[0])
+              rustup_toolchain = None
+              if argv[0] == "cargo":
+                  executable = subprocess.run(["rustup", "which", "cargo"], cwd=source,
+                                              check=True, capture_output=True, text=True).stdout.strip()
+                  rustup_toolchain = subprocess.run(["rustup", "show", "active-toolchain"], cwd=source,
+                                                    check=True, capture_output=True, text=True).stdout.split()[0]
               if executable is None:
                   outcomes.append({"name": name, "exitCode": 127})
                   failed = True
@@ -156,8 +162,9 @@ jobs:
                   "procedure": "direct",
                   "capabilityRoot": str(source.resolve()),
                   "arguments": [{"kind": "literal", "value": arg} for arg in argv[1:]],
-                  "environment": {key: os.environ[key] for key in ("PATH", "HOME", "CARGO_HOME", "RUSTUP_HOME")
-                                  if key in os.environ},
+                  "environment": {**{key: os.environ[key] for key in ("PATH", "HOME", "CARGO_HOME", "RUSTUP_HOME")
+                                     if key in os.environ},
+                                  **({"RUSTUP_TOOLCHAIN": rustup_toolchain} if rustup_toolchain else {})},
                   "inputs": [], "stdin": {"kind": "null"}, "outputs": [],
                   "containment": {"profile": "process-group-v1", "contract":
                                   {"kind": "engineering-assurance.receipt-gate-containment", "version": "1"}},
