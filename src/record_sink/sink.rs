@@ -12,13 +12,15 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "attestation-verify")]
 use crate::attestation_signing::{BundleVerifier, SourceWorkflowPolicy, WorkflowIdentityPolicy};
 
-use super::config::{ErrorCode, SinkKind, SinkSelection, valid_repository};
+use super::config::{ErrorCode, SinkKind, SinkSelection, Visibility, valid_repository};
 #[cfg(feature = "receipt-record")]
 use super::form::Sha256Digest;
 use super::form::{PrivateRecord, PublicRecord, Record, RecordId, Signature};
 #[cfg(feature = "attestation-verify")]
 use super::leak::PublicStatementProof;
-use super::leak::{CheckRefusal, Offending, PublicPathProof, VisibilityLookup, leak_check};
+use super::leak::{
+    CheckRefusal, LookupFailed, Offending, PublicPathProof, VisibilityLookup, leak_check,
+};
 
 /// The only protocol literal of a publish result.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -683,6 +685,14 @@ impl<'a> SinkLayer<'a> {
     #[must_use]
     pub const fn sink_kind(&self) -> SinkKind {
         self.selection.sink
+    }
+
+    #[cfg(feature = "receipt-record")]
+    pub(crate) fn repository_visibility(
+        &self,
+        repository: &str,
+    ) -> Result<Visibility, LookupFailed> {
+        self.public_log.ports.lookup.repo_visibility(repository)
     }
 
     /// Publishes a record and signs its associated canonical statements using

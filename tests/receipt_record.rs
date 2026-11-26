@@ -474,7 +474,7 @@ fn publish_private_receipt_with_evidence(
         ..Store::default()
     };
     let (signer, verifier) = TestSigner::new(events.clone(), &workflow_identity(REPO));
-    let lookup = Lookup(Visibility::Public);
+    let lookup = Lookup(Visibility::Private);
     let log = Log(Rc::clone(&events));
     let selection = SinkSelection {
         sink: SinkKind::PrivateStore,
@@ -890,7 +890,7 @@ fn failed_gate_is_recorded_with_failed_summary() {
     );
 }
 
-#[trace("FR-074-AC-5")]
+#[trace("FR-074-AC-5", "FR-074-AC-6")]
 #[test]
 fn private_store_retains_full_private_form_before_signing_passed_and_failed_receipts() {
     let subject = subject();
@@ -975,19 +975,36 @@ fn private_receipt_signer_failure_never_calls_the_public_log() {
 
 #[trace("FR-074-AC-7")]
 #[test]
-fn no_sink_fails_before_retention_for_public_and_private_repositories() {
+fn public_private_store_and_none_sinks_are_refused_before_retention() {
     let subject = subject();
-    for visibility in [Visibility::Public, Visibility::Private] {
+    for (visibility, sink, expected_error) in [
+        (
+            Visibility::Public,
+            SinkKind::PrivateStore,
+            ReceiptRecordError::PublicLogRequired,
+        ),
+        (
+            Visibility::Public,
+            SinkKind::None,
+            ReceiptRecordError::PrivateStoreRequired,
+        ),
+        (
+            Visibility::Private,
+            SinkKind::None,
+            ReceiptRecordError::PrivateStoreRequired,
+        ),
+    ] {
         let store = Store::default();
         let events = Rc::new(RefCell::new(Vec::new()));
         let (signer, verifier) = TestSigner::new(events.clone(), &workflow_identity(REPO));
         let lookup = Lookup(visibility);
         let log = Log(Rc::clone(&events));
         let selection = SinkSelection {
-            sink: SinkKind::None,
+            sink,
             source: SelectionSource::Configured,
             public_log_endpoint: None,
-            private_store_destination: None,
+            private_store_destination: (sink != SinkKind::None)
+                .then(|| "fictional/records".to_owned()),
             public_linear_teams: vec![],
         };
         let ports = engineering_assurance::record_sink::sink::Ports {
@@ -1012,7 +1029,7 @@ fn no_sink_fails_before_retention_for_public_and_private_repositories() {
             receipt_statements_for_gate(&subject, 0),
         );
 
-        assert_eq!(result, Err(ReceiptRecordError::PrivateStoreRequired));
+        assert_eq!(result, Err(expected_error));
         assert!(store.private.borrow().is_empty());
         assert!(events.borrow().is_empty());
     }
