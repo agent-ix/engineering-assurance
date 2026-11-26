@@ -292,7 +292,7 @@ pub struct ReceiptPublishContext<'a> {
 ///
 /// Returns a typed error when retention, signing, identity verification, or
 /// sink publication fails.
-#[implements("FR-074-AC-7")]
+#[implements("FR-074-AC-7", "FR-076-AC-5")]
 pub fn publish_receipt(
     layer: &SinkLayer<'_>,
     context: &ReceiptPublishContext<'_>,
@@ -313,7 +313,7 @@ pub fn publish_receipt(
             .map_err(|_| ReceiptRecordError::Construction)?;
     let digest = format!(
         "sha256:{}",
-        sigstore_verify::crypto::sha256(&statements.change_record).to_hex()
+        sigstore_verify::crypto::sha256(&statements.summary).to_hex()
     );
     let ticket_ref = statement
         .predicate
