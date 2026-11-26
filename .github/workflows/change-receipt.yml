@@ -172,7 +172,7 @@ jobs:
               }
               req_path = temp / "producer-request.json"
               req_path.write_text(json.dumps(request, separators=(",", ":")))
-              completed = subprocess.run([os.environ["EA_CLI"], "producer-execute", "--request", str(req_path)],
+              completed = subprocess.run([os.environ["EA_CLI"], "producer-execute", "--request", req_path.read_text()],
                                          cwd=source, check=False, capture_output=True, text=True)
               if completed.returncode != 0:
                   outcomes.append({"name": name, "exitCode": 125})
