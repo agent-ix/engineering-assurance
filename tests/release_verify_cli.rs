@@ -22,7 +22,7 @@ use engineering_assurance::{
     },
     approval_statement_writer::{
         ApprovalStatementSigner, ApprovalStatementWriteRequest, MergedPullRequest,
-        StatementSigningError, write_approval_statements,
+        PullRequestState, StatementSigningError, write_approval_statements,
     },
     attestation_signing::{
         BundleVerifier, TransparencyRequirement, VerificationFailure, WorkflowIdentityPolicy,
@@ -383,7 +383,7 @@ fn verified_approval_statement_fixture(head_commit: &str) -> String {
         &FixtureRecordSink,
         &FixtureStatementSigner,
         ApprovalStatementWriteRequest {
-            merged,
+            pull_request: PullRequestState::Merged(merged),
             policy: &policy,
             approvals: &[approval],
             account_types: &account_types,
