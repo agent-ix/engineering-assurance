@@ -379,21 +379,26 @@ fn action_reference_structure_rejects_missing_or_malformed_components() {
     }
 }
 
-#[trace("TC-991", "FR-070-AC-1")]
+#[trace("TC-991", "FR-070-AC-16")]
 #[test]
-fn push_caller_and_missing_check_have_the_declared_triggers_and_permissions() {
-    let caller = workflow("receipt.yml");
-    assert_eq!(caller["on"].as_object().map(serde_json::Map::len), Some(1));
-    assert_eq!(caller["on"]["push"]["branches"][0], "main");
-    let receipt = &caller["jobs"]["receipt"];
-    assert_eq!(receipt["uses"], "./.github/workflows/change-receipt.yml");
-    assert_eq!(receipt["with"]["commit"], "${{ github.sha }}");
-    assert_permission(
-        receipt,
-        &serde_json::json!({"contents":"write", "id-token":"write"}),
-        "receipt caller",
+fn main_receipt_caller_is_absent_and_missing_check_is_declared() {
+    let policy_root = repository_root().join(".engineering-assurance");
+    for policy in [
+        "workflow-identities.json",
+        "approval-policy.json",
+        "sinks.json",
+    ] {
+        assert!(
+            !policy_root.join(policy).exists(),
+            "test assumes protected receipt policy `{policy}` is not configured"
+        );
+    }
+    assert!(
+        !repository_root()
+            .join(".github/workflows/receipt.yml")
+            .exists(),
+        "main receipt caller stays disabled until protected receipt policies are configured"
     );
-
     let check = workflow("missing-receipt-check.yml");
     assert_eq!(check["on"].as_object().map(serde_json::Map::len), Some(2));
     assert!(check["on"].get("schedule").is_some());
