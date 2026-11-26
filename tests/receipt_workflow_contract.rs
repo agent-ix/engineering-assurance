@@ -145,7 +145,10 @@ fn assert_gate_failure_exports_data_before_failing(gate_text: &str, jobs: &Value
                 step["uses"]
                     .as_str()
                     .is_some_and(|value| value.starts_with("actions/upload-artifact@"))
-                    && step["if"] == "always()"
+                    && step["if"].as_str().is_some_and(|condition| {
+                        condition.contains("always()")
+                            && condition.contains("adoption-boundary.outputs.skip != 'true'")
+                    })
             }))
     );
 }
