@@ -50,6 +50,12 @@ pub enum ErrorCode {
     SignatureInvalid,
     /// The bundle's signed payload is not the canonical bytes of the public form.
     SignaturePayloadMismatch,
+    /// A public release attestation resolved to a sink other than `public_log`.
+    ReleaseAttestationPublicLogRequired,
+    /// A private release-attestation signing instance could not sign the record.
+    ReleaseAttestationPrivateSigningUnavailable,
+    /// A release attestation resolved to `none` and cannot be retained.
+    ReleaseAttestationPrivateStoreRequired,
 }
 
 impl ErrorCode {
@@ -73,6 +79,13 @@ impl ErrorCode {
             Self::SigningFailed => "signing_failed",
             Self::SignatureInvalid => "signature_invalid",
             Self::SignaturePayloadMismatch => "signature_payload_mismatch",
+            Self::ReleaseAttestationPublicLogRequired => "release_attestation_public_log_required",
+            Self::ReleaseAttestationPrivateSigningUnavailable => {
+                "release_attestation_private_signing_unavailable"
+            }
+            Self::ReleaseAttestationPrivateStoreRequired => {
+                "release_attestation_private_store_required"
+            }
         }
     }
 }
