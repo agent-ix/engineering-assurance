@@ -598,7 +598,7 @@ mod tests {
         fn send(
             &self,
             _endpoint: &str,
-            _entry: &crate::record_sink::sink::CheckedEntry,
+            entry: &crate::record_sink::sink::CheckedEntry,
         ) -> Result<(), LogRejected> {
             self.0.set(self.0.get() + 1);
             self.1.borrow_mut().push(entry.record().clone());
