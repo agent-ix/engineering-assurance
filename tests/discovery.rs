@@ -407,7 +407,7 @@ fn tc_1063_local_and_repository_source_installs_resolve_all_hosts_identically() 
             );
             for workflow in expected_workflows() {
                 let path = format!(
-                    "{}/workflows/{workflow}/{WORKFLOW_DEFINITION_NAME}",
+                    "{}/{CANONICAL_SKILL_NAME}/workflows/{workflow}/{WORKFLOW_DEFINITION_NAME}",
                     entry.skill_source,
                 );
                 workflow_bytes
@@ -423,7 +423,7 @@ fn tc_1063_local_and_repository_source_installs_resolve_all_hosts_identically() 
         1,
         "both sources install identical skill bytes"
     );
-    assert_eq!(workflow_bytes.len(), 5);
+    assert_eq!(workflow_bytes.len(), expected_workflows().len());
     for (workflow, bytes) in workflow_bytes {
         assert_eq!(bytes.len(), 1, "{workflow} differs across source or host");
     }
