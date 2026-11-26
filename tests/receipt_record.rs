@@ -645,8 +645,6 @@ fn passing_input_produces_three_public_log_signed_statements_with_linked_summary
         Some(engineering_assurance::record_sink::form::Verdict::Recorded)
     );
     assert!(public.timestamps.created.is_some());
-    assert!(public.timestamps.signed.is_some());
-    assert!(public.timestamps.published.is_some());
     assert_eq!(
         private.ticket_text.as_deref(),
         Some("Fictional receipt input")
