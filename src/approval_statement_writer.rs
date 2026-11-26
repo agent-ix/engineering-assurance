@@ -1279,10 +1279,11 @@ mod tests {
         for (private, public) in private_records.iter().zip(public_records.iter()) {
             assert_eq!(public.kind, RecordKind::Approval);
             assert_eq!(public.record_id, private.record_id);
-            let statement = private
+            let stored = private
                 .statement
                 .as_ref()
                 .expect("private statement retained");
+            let statement = &stored["statement"];
             let canonical =
                 serde_json_canonicalizer::to_vec(statement).expect("full statement canonicalizes");
             let digest = format!(
