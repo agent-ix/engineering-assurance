@@ -326,6 +326,21 @@ fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting(
         .find(|step| step["name"] == "Validate the retained evidence store with the Quoin exporter")
         .expect("Quoin exporter step exists");
     let script = export["run"].as_str().expect("export script");
+    let attest_steps = workflow["jobs"]["attest"]["steps"]
+        .as_array()
+        .expect("attest steps");
+    let attest_test_result = attest_steps
+        .iter()
+        .find(|step| step["name"] == "Attest Quoin test result")
+        .expect("Test Result attestation step exists");
+    assert_eq!(
+        attest_test_result["with"]["predicate-type"],
+        engineering_assurance::attestation_verify::TEST_RESULT_PREDICATE
+    );
+    assert_eq!(
+        attest_test_result["with"]["predicate-path"],
+        "attestation-inputs/test-result.json"
+    );
 
     let root = tempfile::tempdir().expect("temporary workflow root");
     let workspace = root.path().join("workspace");
