@@ -5,6 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use ix_trace_rs::implements;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use thiserror::Error;
@@ -18,7 +19,7 @@ use crate::{
     change_record::{AgentSession, ReviewKind, ReviewVerdict, Ticket},
     receipt::ExpectedReceiptSubject,
     record_sink::{
-        config::{ErrorCode, SinkKind},
+        config::{ErrorCode, SinkKind, Visibility},
         form::{
             GitObjectId, Hashes, PublicProtocol, PublicRecord, Record, RecordId, RecordKind,
             Reference, References, Subject, Timestamp, Timestamps, Verdict, Verdicts,
@@ -291,6 +292,7 @@ pub struct ReceiptPublishContext<'a> {
 ///
 /// Returns a typed error when retention, signing, identity verification, or
 /// sink publication fails.
+#[implements("FR-074-AC-7")]
 pub fn publish_receipt(
     layer: &SinkLayer<'_>,
     context: &ReceiptPublishContext<'_>,
@@ -298,6 +300,11 @@ pub fn publish_receipt(
 ) -> Result<ReceiptRecordResult, ReceiptRecordError> {
     if layer.sink_kind() == SinkKind::None {
         return Err(ReceiptRecordError::PrivateStoreRequired);
+    }
+    if layer.sink_kind() == SinkKind::PrivateStore
+        && layer.repository_visibility(&context.subject.repository) == Ok(Visibility::Public)
+    {
+        return Err(ReceiptRecordError::PublicLogRequired);
     }
     let created =
         Timestamp::try_from(context.created_at).map_err(|_| ReceiptRecordError::Construction)?;
