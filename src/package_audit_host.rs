@@ -805,6 +805,9 @@ mod tests {
     fn built_packages_match_allowlists_and_load_every_installed_workflow() {
         let root = selected_root(Path::new(env!("CARGO_MANIFEST_DIR")))
             .expect("repository root is package-auditable");
+        let ix_flow = std::env::var_os("IX_FLOW_BIN")
+            .filter(|path| !path.is_empty())
+            .unwrap_or_else(|| "ix-flow".into());
         let output = Builder::new()
             .prefix("engineering-assurance-package-membership-test-")
             .tempdir()
@@ -862,7 +865,7 @@ mod tests {
         for (source_index, workflow_root) in installed_workflow_roots.iter().enumerate() {
             let state = output.path().join(format!("ix-flow-state-{source_index}"));
             for workflow in expected_workflows {
-                let result = std::process::Command::new("ix-flow")
+                let result = std::process::Command::new(&ix_flow)
                     .args(["run", workflow, "--path"])
                     .arg(
                         workflow_root
