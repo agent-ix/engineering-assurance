@@ -619,7 +619,11 @@ fn passing_input_produces_three_public_log_signed_statements_with_linked_summary
     );
     assert_eq!(public.record_id, private.record_id);
     assert_eq!(
-        public.hashes.subject_commit.as_ref().map(|id| id.as_str()),
+        public
+            .hashes
+            .subject_commit
+            .as_ref()
+            .map(engineering_assurance::record_sink::form::GitObjectId::as_str),
         Some(COMMIT)
     );
     let summary_bytes = statement_payload(&result.bundles.summary);
@@ -637,7 +641,7 @@ fn passing_input_produces_three_public_log_signed_statements_with_linked_summary
             .hashes
             .statement
             .as_ref()
-            .map(|digest| digest.as_str()),
+            .map(engineering_assurance::record_sink::form::Sha256Digest::as_str),
         Some(summary_digest.as_str())
     );
     assert_eq!(
