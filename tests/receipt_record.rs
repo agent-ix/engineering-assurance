@@ -49,6 +49,7 @@ const TREE: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 #[derive(Default)]
 struct Store {
     events: RefCell<Vec<&'static str>>,
+    order: Option<Rc<RefCell<Vec<&'static str>>>>,
     private: RefCell<Vec<PrivateRecord>>,
     public: RefCell<Vec<PublicRecord>>,
 }
@@ -58,6 +59,9 @@ impl ApprovalStatementReader for Store {}
 impl PrivateStore for Store {
     fn write_private(&self, _destination: &str, private: &PrivateRecord) -> Result<(), StoreError> {
         self.events.borrow_mut().push("private-write");
+        if let Some(order) = &self.order {
+            order.borrow_mut().push("private-write");
+        }
         self.private.borrow_mut().push(private.clone());
         Ok(())
     }
@@ -70,6 +74,9 @@ impl PrivateStore for Store {
         _sink: SinkKind,
     ) -> Result<StorePreparation, StoreError> {
         self.events.borrow_mut().push("private-prepare");
+        if let Some(order) = &self.order {
+            order.borrow_mut().push("private-prepare");
+        }
         self.private.borrow_mut().push(private.clone());
         Ok(StorePreparation::NewRecord)
     }
@@ -92,11 +99,11 @@ impl PrivateStore for Store {
     }
 }
 
-struct Lookup;
+struct Lookup(Visibility);
 
 impl VisibilityLookup for Lookup {
     fn repo_visibility(&self, _repo: &str) -> Result<Visibility, LookupFailed> {
-        Ok(Visibility::Public)
+        Ok(self.0)
     }
 }
 
@@ -115,6 +122,7 @@ struct TestSigner {
     events: Rc<RefCell<Vec<&'static str>>>,
     identity: String,
     identities: IdentityRegistry,
+    private_signing_fails: bool,
 }
 
 struct TestVerifier {
@@ -163,6 +171,7 @@ impl TestSigner {
                 events,
                 identity: identity.to_owned(),
                 identities: Rc::clone(&identities),
+                private_signing_fails: false,
             },
             TestVerifier {
                 identities,
@@ -203,6 +212,11 @@ impl TestSigner {
 
         let bundle = self.bundle(payload, kind)?;
         Ok(base64::engine::general_purpose::STANDARD.encode(bundle.as_bytes()))
+    }
+
+    fn with_private_signing_failure(mut self) -> Self {
+        self.private_signing_fails = true;
+        self
     }
 }
 
@@ -272,10 +286,18 @@ impl Signer for TestSigner {
     }
 
     fn sign_without_public_log(&self, bytes: &[u8]) -> Result<String, SigningFailed> {
+        if self.private_signing_fails {
+            self.events.borrow_mut().push("private-sign");
+            return Err(SigningFailed);
+        }
         self.bundle(bytes, "private-sign")
     }
 
     fn sign_record_without_public_log(&self, bytes: &[u8]) -> Result<String, SigningFailed> {
+        if self.private_signing_fails {
+            self.events.borrow_mut().push("private-record-sign");
+            return Err(SigningFailed);
+        }
         self.record_bundle(bytes, "private-record-sign")
     }
 
@@ -397,14 +419,62 @@ fn record_id() -> RecordId {
     RecordId::from_random_bytes([9; 16])
 }
 
+fn receipt_statements_for_gate(
+    subject: &ExpectedReceiptSubject,
+    exit_code: i32,
+) -> engineering_assurance::receipt_record::ReceiptStatements {
+    let gate_results = ReceiptGateResults {
+        protocol: RECEIPT_GATE_RESULTS_PROTOCOL.to_owned(),
+        commit: COMMIT.to_owned(),
+        results: vec![ReceiptGateResult {
+            name: "focused".to_owned(),
+            exit_code,
+        }],
+    };
+    build_receipt_statements(ReceiptRecordInput {
+        subject,
+        gate_results: &gate_results,
+        expected_gate_names: &["focused"],
+        test_result: &test_result(false),
+        receipt_input: Some(&input()),
+        role_policy: &role_policy(),
+        approvals: approvals(),
+        record_id: record_id(),
+        created_at: "2026-11-14T12:00:00Z",
+        verifier_id: concat!(
+            "https:",
+            "//github.com/fictional/project/.github/workflows/change-receipt.yml@refs/heads/main"
+        ),
+        policy_uri: concat!(
+            "https:",
+            "//github.com/fictional/project/blob/main/.engineering-assurance/approval-policy.json"
+        ),
+    })
+    .expect("receipt statements")
+}
+
 fn publish_private_receipt(
     subject: &ExpectedReceiptSubject,
     statements: engineering_assurance::receipt_record::ReceiptStatements,
 ) -> engineering_assurance::receipt_record::ReceiptRecordResult {
-    let store = Store::default();
+    publish_private_receipt_with_evidence(subject, statements).0
+}
+
+fn publish_private_receipt_with_evidence(
+    subject: &ExpectedReceiptSubject,
+    statements: engineering_assurance::receipt_record::ReceiptStatements,
+) -> (
+    engineering_assurance::receipt_record::ReceiptRecordResult,
+    Vec<PrivateRecord>,
+    Vec<&'static str>,
+) {
     let events = Rc::new(RefCell::new(Vec::new()));
+    let store = Store {
+        order: Some(Rc::clone(&events)),
+        ..Store::default()
+    };
     let (signer, verifier) = TestSigner::new(events.clone(), &workflow_identity(REPO));
-    let lookup = Lookup;
+    let lookup = Lookup(Visibility::Public);
     let log = Log(Rc::clone(&events));
     let selection = SinkSelection {
         sink: SinkKind::PrivateStore,
@@ -441,7 +511,11 @@ fn publish_private_receipt(
     assert!(events.borrow().contains(&"private-sign"));
     assert!(events.borrow().contains(&"private-record-sign"));
     assert!(events.borrow().iter().all(|event| *event != "log-send"));
-    result
+    (
+        result,
+        store.private.borrow().clone(),
+        events.borrow().clone(),
+    )
 }
 
 fn statement_payload(bundle: &Value) -> Vec<u8> {
@@ -551,7 +625,7 @@ fn publish_public_receipt(
         public_linear_teams: vec!["EA".to_owned()],
     };
     let (signer, verifier) = TestSigner::new(events.clone(), &workflow_identity(REPO));
-    let lookup = Lookup;
+    let lookup = Lookup(Visibility::Public);
     let log = Log(Rc::clone(&events));
     let ports = engineering_assurance::record_sink::sink::Ports {
         store: &store,
@@ -656,7 +730,7 @@ fn receipt_publication_refuses_a_valid_signature_from_the_wrong_workflow_identit
     );
     let signer_policy = receipt_signer_policy(REPO, TransparencyRequirement::PublicLog);
     let source_policy = receipt_source_policy();
-    let lookup = Lookup;
+    let lookup = Lookup(Visibility::Public);
     let log = Log(Rc::clone(&events));
     let selection = SinkSelection {
         sink: SinkKind::PublicLog,
@@ -814,6 +888,134 @@ fn failed_gate_is_recorded_with_failed_summary() {
         summary.pointer("/predicate/verificationResult"),
         Some(&json!("FAILED"))
     );
+}
+
+#[trace("FR-074-AC-5")]
+#[test]
+fn private_store_retains_full_private_form_before_signing_passed_and_failed_receipts() {
+    let subject = subject();
+    for (exit_code, expected_status) in [(0, Status::Passed), (1, Status::Failed)] {
+        let (result, private_records, order) = publish_private_receipt_with_evidence(
+            &subject,
+            receipt_statements_for_gate(&subject, exit_code),
+        );
+        assert_eq!(result.status, expected_status);
+        assert_eq!(private_records.len(), 1);
+        assert_eq!(
+            private_records[0].ticket_text.as_deref(),
+            Some("Fictional receipt input")
+        );
+        assert_eq!(
+            private_records[0].model_names.as_deref(),
+            Some(["fixture-model".to_owned()].as_slice())
+        );
+        assert!(private_records[0].change_record.is_some());
+        assert!(private_records[0].agent_bom.is_some());
+        assert_eq!(order.first(), Some(&"private-prepare"));
+        assert!(
+            order.iter().position(|event| *event == "private-prepare")
+                < order.iter().position(|event| *event == "private-sign")
+        );
+    }
+}
+
+#[trace("FR-074-AC-6")]
+#[test]
+fn private_receipt_signer_failure_never_calls_the_public_log() {
+    let subject = subject();
+    let statements = receipt_statements_for_gate(&subject, 0);
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let store = Store {
+        order: Some(Rc::clone(&events)),
+        ..Store::default()
+    };
+    let (signer, verifier) = TestSigner::new(events.clone(), &workflow_identity(REPO));
+    let signer = signer.with_private_signing_failure();
+    let lookup = Lookup(Visibility::Private);
+    let log = Log(Rc::clone(&events));
+    let selection = SinkSelection {
+        sink: SinkKind::PrivateStore,
+        source: SelectionSource::Configured,
+        public_log_endpoint: None,
+        private_store_destination: Some("fictional/records".to_owned()),
+        public_linear_teams: vec![],
+    };
+    let ports = engineering_assurance::record_sink::sink::Ports {
+        store: &store,
+        lookup: &lookup,
+        signer: &signer,
+        client: &log,
+    };
+    let layer = SinkLayer::new(&selection, REPO, ports);
+    let signer_policy = receipt_signer_policy(REPO, TransparencyRequirement::TimestampOnly);
+    let source_policy = receipt_source_policy();
+    let result = publish_receipt(
+        &layer,
+        &ReceiptPublishContext {
+            verifier: &verifier,
+            signer_policy: &signer_policy,
+            source_policy: &source_policy,
+            subject: &subject,
+            record_id: &record_id(),
+            created_at: "2026-11-14T12:00:00Z",
+        },
+        statements,
+    );
+
+    assert_eq!(result, Err(ReceiptRecordError::PrivateSigningUnavailable));
+    assert_eq!(store.private.borrow().len(), 1);
+    assert_eq!(
+        store.private.borrow()[0].ticket_text.as_deref(),
+        Some("Fictional receipt input")
+    );
+    assert_eq!(events.borrow().first(), Some(&"private-prepare"));
+    assert!(!events.borrow().contains(&"log-send"));
+    assert!(!events.borrow().contains(&"public-record-sign"));
+}
+
+#[trace("FR-074-AC-7")]
+#[test]
+fn no_sink_fails_before_retention_for_public_and_private_repositories() {
+    let subject = subject();
+    for visibility in [Visibility::Public, Visibility::Private] {
+        let store = Store::default();
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let (signer, verifier) = TestSigner::new(events.clone(), &workflow_identity(REPO));
+        let lookup = Lookup(visibility);
+        let log = Log(Rc::clone(&events));
+        let selection = SinkSelection {
+            sink: SinkKind::None,
+            source: SelectionSource::Configured,
+            public_log_endpoint: None,
+            private_store_destination: None,
+            public_linear_teams: vec![],
+        };
+        let ports = engineering_assurance::record_sink::sink::Ports {
+            store: &store,
+            lookup: &lookup,
+            signer: &signer,
+            client: &log,
+        };
+        let layer = SinkLayer::new(&selection, REPO, ports);
+        let signer_policy = receipt_signer_policy(REPO, TransparencyRequirement::TimestampOnly);
+        let source_policy = receipt_source_policy();
+        let result = publish_receipt(
+            &layer,
+            &ReceiptPublishContext {
+                verifier: &verifier,
+                signer_policy: &signer_policy,
+                source_policy: &source_policy,
+                subject: &subject,
+                record_id: &record_id(),
+                created_at: "2026-11-14T12:00:00Z",
+            },
+            receipt_statements_for_gate(&subject, 0),
+        );
+
+        assert_eq!(result, Err(ReceiptRecordError::PrivateStoreRequired));
+        assert!(store.private.borrow().is_empty());
+        assert!(events.borrow().is_empty());
+    }
 }
 
 #[trace("TC-585", "FR-074-AC-3")]
