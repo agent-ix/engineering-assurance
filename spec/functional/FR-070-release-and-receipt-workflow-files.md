@@ -31,8 +31,9 @@ Tracked by Linear EA-97. This requirement describes the Engineering Assurance re
 | `.github/workflows/tag-receipt.yml` | `workflow_call`, input `tag` (string) | `record` | `contents: read`, `id-token: write` | Engineering Assurance tooling only; no repository code: reads the receipt policy and the tag object, signs the tag receipt ([FR-081](./FR-081-tag-receipt-on-approval-and-release-tag-push.md)) |
 | same | same | `notes` | `contents: write` | Engineering Assurance tooling only: fetch, merge and push the notes ref `refs/notes/assurance-tag-receipts` |
 | `.github/workflows/missing-receipt-check.yml` | `schedule`, `workflow_dispatch` | `check` | `contents: read` | `receipt-missing` ([FR-077](./FR-077-missing-receipt-check.md)) |
-| `.github/workflows/receipt.yml` | `push` to the default branch | `receipt` | calls `change-receipt.yml` with `contents: write`, `id-token: write` | the reusable workflow |
 | `.github/workflows/tag-receipt-push.yml` | `push` of tags (`tags: ['**']`; the policy prefixes are applied inside the reusable workflow) | `receipt` | calls `tag-receipt.yml` with `contents: write`, `id-token: write` | the reusable workflow |
+
+Engineering Assurance does not install a main-branch caller for `change-receipt.yml`: its protected receipt configuration does not yet provide the workflow identities, approval policy and sink configuration required to record a receipt. The reusable workflow remains available to adopters that supply those protected inputs. The retired caller is covered by FR-070-AC-16.
 
 A repository that adopts the features adds its own callers. `ci.yml` is unchanged. The approval review gate workflow and the main-branch ruleset belong to [FR-065](./FR-065-workflow-roles-and-relation-to-signed-release-tags.md) and the EA-109 work; this specification does not define them.
 
@@ -117,6 +118,7 @@ Values that an outside party can influence (tag and branch names, commit message
 | FR-070-AC-13 | A YAML-parsing integration test confirms every caller passes an exact published `@agent-ix/quoin` version in `quoin_tooling_tag`, maps it through `env`, explicitly sets `NPMJS_REGISTRY` to the HTTPS registry origin with host `registry.npmjs.org`, and installs exactly that version with `npm install --ignore-scripts --registry="$NPMJS_REGISTRY" "@agent-ix/quoin@$QUOIN_TOOLING_TAG"`; no `run` value interpolates the workflow input, and the job uses neither ambient npm registry configuration, `latest`, nor a caller-built binary. | Test |
 | FR-070-AC-15 | The receipt workflow passes serialized JSON request content to `producer-execute --request`; it does not pass the temporary request file path as the request value. | Test |
 | FR-070-AC-14 | Engineering Assurance's tests parse its checked-in `.github/workflows/tag-receipt.yml` and confirm its trigger, jobs and per-job permissions match the table; a run whose `tag` input is not the triggering tag fails with `tag_receipt_input_mismatch` before any signing step; the tag name, tag object id and push time come from the trigger context. | Test |
+| FR-070-AC-16 | While Engineering Assurance lacks protected workflow identities, approval policy and sink configuration, it has no `.github/workflows/receipt.yml` main-branch caller; the reusable `change-receipt.yml` remains available to adopters with those protected inputs. | Test |
 
 ## Dependencies
 
