@@ -85,6 +85,36 @@ fn json(output: &Output) -> Value {
 }
 
 #[test]
+#[trace("FR-079-AC-4")]
+fn full_tree_check_accepts_the_attestation_predicates() {
+    let repository = TestRepository::new("attestation-predicates");
+    let approval = ["https:", "//schemas.agent-ix.ai/attestation/approval/v1"].concat();
+    let change_record = [
+        "https:",
+        "//schemas.agent-ix.ai/attestation/change-record/v1",
+    ]
+    .concat();
+    repository.write("predicates.md", format!("{approval}\n").as_bytes());
+    repository.write(
+        "src/predicates.rs",
+        format!("const CHANGE_RECORD: &str = \"{change_record}\";\n").as_bytes(),
+    );
+    repository.add("predicates.md");
+    repository.add("src/predicates.rs");
+
+    let output = run(repository.path(), None);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "full tree check must admit the organization's attestation predicate URIs: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result = json(&output);
+    assert_eq!(result["outcome"], "accepted");
+    assert_eq!(result["findings"].as_array().map(Vec::len), Some(0));
+}
+
+#[test]
 #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
 fn tc_111_git_population_inspects_tracked_untracked_and_links_but_not_ignored_files() {
     let repository = TestRepository::new("population");

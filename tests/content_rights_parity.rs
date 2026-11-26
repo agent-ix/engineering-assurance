@@ -215,6 +215,69 @@ fn unapproved_url_findings_keep_line_numbers() {
 }
 
 #[test]
+#[trace("FR-079-AC-1")]
+fn attestation_predicate_uris_are_allowed_in_markdown_and_rust() {
+    let tokens: Vec<String> = Vec::new();
+    let approval = ["https:", "//schemas.agent-ix.ai/attestation/approval/v1"].concat();
+    let change_record = [
+        "https:",
+        "//schemas.agent-ix.ai/attestation/change-record/v1",
+    ]
+    .concat();
+
+    for path in ["approval.md", "src/predicate.rs"] {
+        let text = format!("{approval}\n{change_record}\n");
+        assert!(
+            findings(path, text.as_bytes(), &tokens).is_empty(),
+            "the organization predicate URIs must be allowed in {path}"
+        );
+    }
+}
+
+#[test]
+#[trace("FR-079-AC-2")]
+fn attestation_schema_allowlist_rejects_lookalike_hosts() {
+    let tokens: Vec<String> = Vec::new();
+    let subdomain = [
+        "https:",
+        "//schemas.agent-ix.ai.attacker.invalid/attestation/approval/v1",
+    ]
+    .concat();
+    let credential = [
+        "https:",
+        "//schemas.agent-ix.ai@attacker.invalid/attestation/approval/v1",
+    ]
+    .concat();
+
+    for url in [subdomain, credential] {
+        let observed = findings("candidate.md", url.as_bytes(), &tokens);
+        assert_eq!(observed.len(), 1, "lookalike URL must be refused: {url}");
+        assert_eq!(
+            observed[0].category,
+            ContentRightsCategory::UnapprovedExternalUrl,
+            "lookalike URL must be refused by the external URL rule: {url}"
+        );
+    }
+}
+
+#[test]
+#[trace("FR-079-AC-3")]
+fn attestation_schema_allowlist_requires_https_and_attestation_path() {
+    let tokens: Vec<String> = Vec::new();
+    let other_path = ["https:", "//schemas.agent-ix.ai/other/approval/v1"].concat();
+    let insecure = ["http:", "//schemas.agent-ix.ai/attestation/approval/v1"].concat();
+
+    for url in [other_path, insecure] {
+        let observed = findings("candidate.md", url.as_bytes(), &tokens);
+        assert_eq!(observed.len(), 1, "URL must be refused: {url}");
+        assert_eq!(
+            observed[0].category,
+            ContentRightsCategory::UnapprovedExternalUrl
+        );
+    }
+}
+
+#[test]
 #[trace("TC-119", "FR-017-AC-5", "FR-017-CON-3")]
 fn removed_onboarding_script_path_has_no_url_exemption() {
     // The retired JavaScript path must no longer have a special exemption.

@@ -417,10 +417,10 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-078 | FR-078-AC-5 | TC-615 | 🚧 Specified |
 | FR-078 | FR-078-AC-6 | TC-616 | 🚧 Specified |
 | FR-078 | FR-078-AC-7 | TC-617 | 🚧 Specified |
-| FR-079 | FR-079-AC-1 | TC-618 | 🚧 Specified |
-| FR-079 | FR-079-AC-2 | TC-619 | 🚧 Specified |
-| FR-079 | FR-079-AC-3 | TC-620 | 🚧 Specified |
-| FR-079 | FR-079-AC-4 | TC-621 | 🚧 Specified |
+| FR-079 | FR-079-AC-1 | TC-618 | ✅ Complete |
+| FR-079 | FR-079-AC-2 | TC-619 | ✅ Complete |
+| FR-079 | FR-079-AC-3 | TC-620 | ✅ Complete |
+| FR-079 | FR-079-AC-4 | TC-621 | ✅ Complete |
 
 ### Non-Functional Requirement Coverage
 
@@ -1000,10 +1000,10 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-615 | A missing note, an unparsable note, an unreadable trust root and an unreadable policy yield `unverifiable` with `note_absent`, `note_unreadable`, `trust_root_unreadable` and `policy_unreadable`, and a result with another ... | Integration | P0 | FR-078-AC-5 | 🚧 |
 | TC-616 | A role policy changed on the pushed branch does not change the policy used | Integration | P0 | FR-078-AC-6 | 🚧 |
 | TC-617 | A note holding two complete groups for one commit, with the lines in any order, verifies as the group of the verified summary with the latest `timeVerified`, each group being a summary plus the two statements its input digests ... | Integration | P0 | FR-078-AC-7 | 🚧 |
-| TC-618 | The two literal predicate URIs pass the check in a Markdown file and in a Rust source file | Integration | P0 | FR-079-AC-1 | 🚧 |
-| TC-619 | A lookalike host (the admitted host as a subdomain of another domain, or followed by a credential separator) is rejected with the unapproved external URL finding | Integration | P0 | FR-079-AC-2 | 🚧 |
-| TC-620 | The same host with the path `/other/` and with the `http` scheme is rejected | Integration | P0 | FR-079-AC-3 | 🚧 |
-| TC-621 | The full tree check passes on a tree that contains the literal URIs | Integration | P0 | FR-079-AC-4 | 🚧 |
+| TC-618 | The two literal predicate URIs pass the check in a Markdown file and in a Rust source file | Integration | P0 | FR-079-AC-1 | ✅ `cargo test --locked --features content-rights -j 4 --test content_rights_parity attestation -- --test-threads=4` (3 passed; covers TC-618–TC-620) |
+| TC-619 | A lookalike host (the admitted host as a subdomain of another domain, or followed by a credential separator) is rejected with the unapproved external URL finding | Integration | P0 | FR-079-AC-2 | ✅ Included in the TC-618 focused parity command (3 passed) |
+| TC-620 | The same host with the path `/other/` and with the `http` scheme is rejected | Integration | P0 | FR-079-AC-3 | ✅ Included in the TC-618 focused parity command (3 passed) |
+| TC-621 | The full tree check passes on a tree that contains the literal URIs | Integration | P0 | FR-079-AC-4 | ✅ `cargo test --locked --features full -j 4 --test content_rights_tree_cli full_tree_check_accepts_the_attestation_predicates -- --test-threads=4` (1 passed) |
 | TC-622 | The EA signing-permission jobs contain no agent/model step, checkout, local action, or repository `run` command | Static | P0 | NFR-011-AC-1, NFR-011-AC-2 | ✅ `tests/release_attestation_workflow.rs` parses both EA release workflows |
 | TC-623 | The EA signing job uses the pinned GitHub `actions/attest` action with `id-token: write` and supplies no alternate signer identity or credential | Static | P0 | NFR-011-AC-3 | ✅ `tests/release_attestation_workflow.rs` parses the reusable signing job |
 | TC-624 | Publishing with each implementation returns `published`, `published` and `discarded` with the record's id and the closed result members; the public-log publish leaves the full private form in the private store and sends only the trimmed public form | Unit | P0 | FR-054-AC-1 | ✅ `tests/record_sink.rs` passing |

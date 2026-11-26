@@ -8,6 +8,7 @@
 
 use std::{fmt, sync::LazyLock};
 
+use ix_trace_rs::implements;
 use regex::Regex;
 use serde::Serialize;
 use thiserror::Error;
@@ -642,8 +643,13 @@ fn parse_official_clause_source_rules(
     (!rules.is_empty()).then_some(rules)
 }
 
+#[implements("FR-079-AC-1")]
+#[implements("FR-079-AC-2")]
+#[implements("FR-079-AC-3")]
+#[implements("FR-079-AC-4")]
 fn url_is_allowed(path: &str, url: &str) -> bool {
     let schema_prefix = concat!("http:", "//json-schema.org/draft-07/schema#");
+    let attestation_schema_prefix = concat!("https:", "//schemas.agent-ix.ai/attestation/");
     let cargo_registry = concat!("https:", "//github.com/rust-lang/crates.io-index");
     let discord_badge = concat!(
         "https:",
@@ -719,6 +725,7 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
     ]
     .contains(&url);
     url.starts_with(schema_prefix)
+        || url.starts_with(attestation_schema_prefix)
         || campaign_schema && campaign_schema_url
         || campaign_license && campaign_license_url
         || cargo_manifest && url == cargo_registry
