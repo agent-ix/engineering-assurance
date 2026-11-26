@@ -1118,7 +1118,7 @@ mod tests {
         );
     }
 
-    #[trace("TC-971", "FR-065-AC-9")]
+    #[trace("TC-971", "FR-065-AC-9", "FR-058-AC-9")]
     #[test]
     fn private_repository_approval_records_stay_off_public_log() {
         let policy = role_policy();
