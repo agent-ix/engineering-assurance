@@ -12,6 +12,8 @@ relationships:
     type: rates_feature
   - target: "ix://agent-ix/engineering-assurance/FR-009"
     type: rates_feature
+  - target: "ix://agent-ix/engineering-assurance/FR-016"
+    type: rates_feature
   - target: "ix://agent-ix/engineering-assurance/FR-023"
     type: rates_feature
   - target: "ix://agent-ix/engineering-assurance/FR-025"
@@ -38,7 +40,11 @@ relationships:
     type: rates_feature
   - target: "ix://agent-ix/engineering-assurance/FR-051"
     type: rates_feature
+  - target: "ix://agent-ix/engineering-assurance/FR-053"
+    type: rates_feature
   - target: "ix://agent-ix/engineering-assurance/FR-058"
+    type: rates_feature
+  - target: "ix://agent-ix/engineering-assurance/FR-059"
     type: rates_feature
   - target: "ix://agent-ix/engineering-assurance/FR-060"
     type: rates_feature
@@ -95,6 +101,7 @@ The listed features can affect whether engineering evidence is complete, correct
 | --- | --- |
 | FR-005 | a workflow can report a terminal human decision without the required human decision. |
 | FR-009 | an evidence record can convert a producer failure or absent provenance into apparent successful evidence. |
+| FR-016 | onboarding and workflow-invariant evaluation can emit a successful typed or accepted result despite a broken repository binding or invalid ix-flow chain. |
 | FR-023 | claim validation can accept a supported assurance claim without its required evidence references. |
 | FR-025 | measurement promotion can accept a result that the required typed checker did not support. |
 | FR-032 | change-scope verification can report a candidate within scope when its footprint exceeds the declaration. |
@@ -108,7 +115,9 @@ The listed features can affect whether engineering evidence is complete, correct
 | FR-048 | a release workflow can record a terminal accepted decision without the human gate's accepted action. |
 | FR-049 | release verification can report a release accepted when its baseline or approval evidence is invalid. |
 | FR-051 | release verification can pass when the required evidence snapshot is absent from the release commit. |
+| FR-053 | release verification can report `released` when attestations exist but the release lacks a valid named-person signed tag. |
 | FR-058 | a change-approval statement can bind approval to the wrong pull request or merge commit. |
+| FR-059 | the GitHub review adapter can return an approval for an edited, dismissed, superseded, or ineligible review that no eligible person gave for the required role and meaning. |
 | FR-060 | approval binding can accept a pull-request head other than the one that merged. |
 | FR-061 | role-policy verification can count one person's signature for multiple distinct required roles. |
 | FR-062 | role-policy verification can accept an AI agent identity as a required human approver. |
@@ -136,6 +145,7 @@ The listed features can affect whether engineering evidence is complete, correct
 |---|---|
 | Interrupt and resume each supported workflow, checking completed phases and next action; reuse the id with changed repository, workflow version, or boundary and assert refusal without state mutation; test explicit accept and reject choices. | FR-005-AC-1–7 |
 | Round-trip valid producer tuples and definition versions, then exercise each non-success state; verify projected values cite source record and field path and never claim a copied authority. | FR-009-AC-1–4 |
+| Run existing, absent, conflicting, malformed, unavailable, unjustified, and incomplete onboarding fixtures; break one binding and assert fail-closed status and agreement with the retained reference. | FR-016-AC-1–5 |
 | Validate a supported claim with one valid ix:// reference, then remove it, empty the list, duplicate it, and use a non-ix URI; assert each unsupported shape is refused. | FR-023-AC-1–3 |
 | Submit typed checker fixtures for each policy mode and stage; assert only the permitted result advances and verify retired historical profiles remain readable while active profiles require the current schema version. | FR-025-AC-1–8 |
 | Compare exact-file and directory-prefix scopes against fixture change footprints; add an uncovered path and assert incomplete, then submit unreadable, malformed, invalid-scope, and option-like revisions and assert no Git process starts. | FR-032-AC-1–7 |
@@ -149,7 +159,9 @@ The listed features can affect whether engineering evidence is complete, correct
 | Interrupt and resume release-decision fixtures; exercise accept, reject, missing decision, changed repository, changed boundary, and stale state, asserting only the explicit named-person action is terminal. | FR-048-AC-1–20 |
 | Compare the emitted release-verification result with the declared Quoin input contract; inspect that the record is passed as data and no Quoin schema or record copy exists in this repository. | FR-049-AC-1–4 |
 | Verify a release commit with exactly the record and snapshot against its Baseline; remove or alter the snapshot path and assert refusal, and inspect that snapshot members are never parsed. | FR-051-AC-1–9 |
+| Compare a release with an unsigned tag and present attestations against a valid signed release with attestations removed; assert only the signed tag determines released status. | FR-053-AC-1–3 |
 | Create fixture approval statements and compare every predicate member with the approval source; recompute canonical JSON bytes and signature input, then vary the reviewed head and merged commit. | FR-058-AC-1–10 |
+| Feed approved-review fixtures with valid and invalid meaning/Role lines and account mappings; verify the resulting source-neutral approval fields and assert labels alone never create a role. | FR-059-AC-1–10 |
 | Use fixture pull requests merged by squash and rebase; assert head_commit is the reviewed head and merged_commit is only the resulting merge/rebased tip. | FR-060-AC-1–6 |
 | Evaluate a three-role policy with three eligible individuals, then reuse one individual across roles or list an ineligible role; assert satisfied only for distinct eligible people. | FR-061-AC-1–13 |
 | Submit otherwise-valid APPROVED reviews from bot/agent accounts and assert no approval or statement is produced; generate approval sets and assert zero roles are covered by agents. | FR-062-AC-1–5 |

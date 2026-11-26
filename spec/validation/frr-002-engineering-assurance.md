@@ -28,8 +28,6 @@ relationships:
     type: rates_feature
   - target: "ix://agent-ix/engineering-assurance/FR-015"
     type: rates_feature
-  - target: "ix://agent-ix/engineering-assurance/FR-016"
-    type: rates_feature
   - target: "ix://agent-ix/engineering-assurance/FR-017"
     type: rates_feature
   - target: "ix://agent-ix/engineering-assurance/FR-018"
@@ -76,8 +74,6 @@ relationships:
     type: rates_feature
   - target: "ix://agent-ix/engineering-assurance/FR-052"
     type: rates_feature
-  - target: "ix://agent-ix/engineering-assurance/FR-053"
-    type: rates_feature
   - target: "ix://agent-ix/engineering-assurance/FR-054"
     type: rates_feature
   - target: "ix://agent-ix/engineering-assurance/FR-055"
@@ -85,8 +81,6 @@ relationships:
   - target: "ix://agent-ix/engineering-assurance/FR-056"
     type: rates_feature
   - target: "ix://agent-ix/engineering-assurance/FR-057"
-    type: rates_feature
-  - target: "ix://agent-ix/engineering-assurance/FR-059"
     type: rates_feature
   - target: "ix://agent-ix/engineering-assurance/FR-070"
     type: rates_feature
@@ -137,7 +131,6 @@ Under IU-001, the features in this record are proposed not-high because their ow
 | Run fixtures for observed, unavailable, not-computed, and not-applicable producers; compare the complete producer tuple and command outcome, then assert zero, duplicate, or conflicting states are rejected. | FR-004-AC-1–7 |
 | Validate that each semantic concept has one authoritative owner and link direction; inspect the contract for forbidden runner, shell execution, evidence persistence, and human-decision inference capabilities. | FR-008-AC-1–4 |
 | Run focused fictional fixtures including integers beyond i64/u64 and compare canonical outputs and identities; inspect shipped source for copied portable-contract, persisted-evidence, or foreign-language executable logic. | FR-015-AC-1–5 |
-| Run existing, absent, conflicting, malformed, unavailable, unjustified, and incomplete onboarding fixtures; break one binding and assert fail-closed status and agreement with the retained reference. | FR-016-AC-1–5 |
 | Execute every required host/scenario cell and compare success/failure outputs; submit integration-evidence fixtures with multiple failing conditions and assert all are returned with condition code, document, and line. | FR-017-AC-1–10 |
 | Run synthetic producers through the library boundary and assert one execution, exact executable/argv identity, bounded evidence, timing, provenance, retained artifact, and the declared timeout/output-limit errors. | FR-019-AC-1–13 |
 | Validate plans for each supported direction with absent, numeric, and required bounds; assert target-without-bound and unknown fields fail, then compile the default-off measurement consumer. | FR-020-AC-1–4 |
@@ -159,12 +152,10 @@ Under IU-001, the features in this record are proposed not-high because their ow
 | Build Baseline fixtures with exact path sets and commit ids; modify, omit, duplicate, or misname an item and assert schema and commit-tree checks reject the mismatch. | FR-046-AC-1–6 |
 | Inspect README and master spec for the named-person signed release decision statement and ensure each says the tool records/verifies the person’s choice rather than making it. | FR-050-AC-1–4 |
 | Construct a first-parent history with records added on selected commits; compare the ordered record list and adding commit, then test previous-tag, shallow-history, deleted-path, overflow, and non-UTF-8 failures. | FR-052-AC-1–17 |
-| Compare a release with an unsigned tag and present attestations against a valid signed release with attestations removed; assert only the signed tag determines released status. | FR-053-AC-1–3 |
 | Publish the same valid record through public_log, private_store, and none; assert published/discarded results and minimal public bytes, then race same-id preparations and verify one winner with no accepted incomplete marker. | FR-054-AC-1–18 |
 | Resolve public and private repository fixtures with private-store-only and explicit configurations; verify default source and sink, then alter destination case and assert refusal before writing private data. | FR-055-AC-1–10 |
 | Serialize a record containing ticket text, criteria text, and model names; assert none appear in public bytes and all remain in the private bytes, including exact approval statement/signature fields. | FR-056-AC-1–11 |
 | Submit records referencing private, public, and unknown repositories; assert the exact private/unknown offender list, refusal status, and zero public-log calls. | FR-057-AC-1–11 |
-| Feed approved-review fixtures with valid and invalid meaning/Role lines and account mappings; verify the resulting source-neutral approval fields and assert labels alone never create a role. | FR-059-AC-1–10 |
 | Parse each checked-in release-attestation, change-receipt, and tag-receipt workflow; compare triggers, jobs, files, and per-job permissions with the declared policy and mutate a forbidden input. | FR-070-AC-1–14 |
 | Publish public/private release fixtures through each sink; inspect trimmed public bytes and full private storage, then assert refused releases stay private and not_released outcomes publish nothing. | FR-071-AC-1–6 |
 | Build a fixture change with ticket, criteria, reviews, and three roles; verify the exact predicate fields/status and recompute every document and artifact digest from canonical/raw bytes. | FR-072-AC-1–7 |
