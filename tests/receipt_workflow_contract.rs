@@ -379,7 +379,7 @@ fn action_reference_structure_rejects_missing_or_malformed_components() {
     }
 }
 
-#[trace("TC-991", "FR-070-AC-1", "FR-070-AC-16")]
+#[trace("TC-991", "FR-070-AC-16")]
 #[test]
 fn main_receipt_caller_is_absent_and_missing_check_is_declared() {
     let policy_root = repository_root().join(".engineering-assurance");
@@ -394,7 +394,9 @@ fn main_receipt_caller_is_absent_and_missing_check_is_declared() {
         );
     }
     assert!(
-        !repository_root().join(".github/workflows/receipt.yml").exists(),
+        !repository_root()
+            .join(".github/workflows/receipt.yml")
+            .exists(),
         "main receipt caller stays disabled until protected receipt policies are configured"
     );
     let check = workflow("missing-receipt-check.yml");
