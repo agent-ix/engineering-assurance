@@ -1427,6 +1427,43 @@ fn tc_410_attestation_files_neither_make_nor_unmake_a_release() {
 }
 
 #[test]
+#[trace("TC-533", "FR-066-AC-4")]
+fn tc_533_release_verdict_is_identical_with_the_four_attestation_files_present_or_removed() {
+    let fixture = fixture();
+    standard(&fixture);
+    let baseline = verdict(&fixture, "v1");
+    assert_eq!(baseline["status"], "released", "{baseline}");
+
+    let statements = [
+        "provenance.json",
+        "sbom.cdx.json",
+        "test-result.json",
+        "verification-summary.json",
+    ];
+    let attestations = fixture.repo().join("attestations");
+    fs::create_dir_all(&attestations).expect("attestation directory");
+    for (index, name) in statements.iter().enumerate() {
+        fs::write(
+            attestations.join(name),
+            format!("{{\"statement\":{index}}}\n"),
+        )
+        .expect("attestation statement fixture");
+    }
+    assert_eq!(
+        verdict(&fixture, "v1"),
+        baseline,
+        "the four attestation files do not change the release verdict"
+    );
+
+    fs::remove_dir_all(&attestations).expect("remove attestation statements");
+    assert_eq!(
+        verdict(&fixture, "v1"),
+        baseline,
+        "removing the four attestation files does not change the release verdict"
+    );
+}
+
+#[test]
 #[trace("TC-967", "FR-065-AC-2")]
 fn release_verify_refuses_an_approval_statement_request_member() {
     let fixture = fixture();
