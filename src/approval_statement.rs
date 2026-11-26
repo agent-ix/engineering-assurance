@@ -881,7 +881,12 @@ mod tests {
         let retained = statement("1", "public-store-bundle");
         let review_approval =
             approval_from_statement(&retained.statement_bytes, LOOKUP).expect("review approval");
-        let account_types = BTreeMap::from([(review_approval.account.clone(), AccountType::Human)]);
+        let account_types = policy
+            .individuals
+            .values()
+            .flatten()
+            .map(|account| (account.clone(), AccountType::Human))
+            .collect();
         let review_verdict = approval_gate::evaluate(&policy, &[review_approval], &account_types);
         assert_eq!(review_verdict.status, approval_gate::GateStatus::Satisfied);
         let reader = reader_for(vec![(LOOKUP.merged_pull_request, retained.clone())]);
