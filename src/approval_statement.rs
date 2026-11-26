@@ -849,7 +849,7 @@ mod tests {
         );
     }
 
-    #[trace("TC-957", "FR-064-AC-19", "FR-064-AC-12")]
+    #[trace("TC-957", "FR-064-AC-19")]
     #[test]
     fn retained_publish_refusal_is_not_verified_or_counted() {
         let mut refused = statement("1", "must-not-verify");
