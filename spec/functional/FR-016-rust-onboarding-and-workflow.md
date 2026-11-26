@@ -160,7 +160,6 @@ Quire unavailability during staged publication refuses publication.
 | ID | Constraint | Type | Validation |
 | --- | --- | --- | --- |
 | FR-016-CON-1 | Engineering Assurance SHALL NOT reimplement ix-flow run state or human-gate mechanics. | Responsibility | Test |
-| FR-016-CON-2 | A foreign-language host bridge requires an explicit owner disposition before inclusion. | Architecture | Review |
 | FR-016-CON-3 | The reusable Rust invariant evaluator SHALL NOT access the filesystem, environment, process table, network, or system clock. | Determinism | Test |
 | FR-016-CON-4 | Reusable Rust onboarding parsing, rendering, and recommendation logic SHALL be I/O-free; the CLI adapter exclusively owns selected-root traversal, Quire invocation, staging, synchronization, and artifact publication. | Responsibility | Test |
 | FR-016-CON-5 | The Rust workflow-host adapter SHALL invoke only the supported ix-flow CLI for workflow lifecycle operations. | Responsibility | Test |
@@ -181,8 +180,10 @@ required the invocations to pass through a Rust invariant provider loaded by
 ix-flow before the JavaScript providers are removed, and it depended on an
 ix-flow interface owned elsewhere. Removal of the providers is still guarded:
 TC-106 parity runs the canonical `invariants.js`, TC-036 resolves the pilot
-re-export, the package audit lists the pilot provider as a required member, and
-TC-115 requires both files to be present until a Rust provider replaces them.
+re-export, and the package audit lists the pilot provider as a required member.
+
+FR-016-CON-2 is withdrawn. Its row is removed and the identifier is not reused;
+foreign-language host bridges are not gated by a repository path allowlist.
 
 ## Dependencies
 

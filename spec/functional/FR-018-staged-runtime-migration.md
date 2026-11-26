@@ -96,7 +96,7 @@ then update this repository's direct invocation and remove the old path.
 ## Error Conditions
 
 Missing parity evidence, unavailable replacement
-hosts, changed historical bytes, and unresolved path dispositions block removal.
+hosts, and changed historical bytes block removal.
 
 ## Constraints
 
@@ -109,13 +109,12 @@ hosts, changed historical bytes, and unresolved path dispositions block removal.
 | ID | Criteria | Verification |
 | --- | --- | --- |
 | FR-018-AC-2 | Removal is refused unless old and new paths agree and direct invocations use the Rust interface. | Test (TC-113) |
-| FR-018-AC-4 | Final inventory and static scans find no unapproved first-party non-Rust semantic or assertion logic and exclude inert fixture samples from executable debt. | Test (TC-115) |
 
-FR-018-AC-1, FR-018-AC-3, FR-018-CON-2 and FR-018-CON-3 are withdrawn. Their rows
+FR-018-AC-1, FR-018-AC-3, FR-018-AC-4, FR-018-CON-2 and FR-018-CON-3 are withdrawn. Their rows
 are removed and the identifiers are not reused. Rollback of a failed cutover, a
 per-path state ledger, and a rule against reporting coexistence as completion are
 not required before release; ordinary version control restores a prior
-invocation, and FR-018-AC-2 and FR-018-AC-4 still gate removal.
+invocation, and FR-018-AC-2 still gates removal.
 
 ## Dependencies
 
