@@ -1177,7 +1177,7 @@ mod tests {
         let ids = [4_u8, 5, 6].map(|byte| RecordId::from_random_bytes([byte; 16]));
 
         let private_store = SinkStore::default();
-        let private_log = SinkLog::default();
+        let private_public_log_client = SinkLog::default();
         let private_lookup =
             SinkVisibility(BTreeMap::from([(REPOSITORY.into(), Visibility::Private)]));
         let private_record_signer = RecordSigner::default();
@@ -1192,7 +1192,7 @@ mod tests {
             store: &private_store,
             lookup: &private_lookup,
             signer: &private_record_signer,
-            client: &private_log,
+            client: &private_public_log_client,
         };
         let private_sink = SinkLayer::new(&private_selection, REPOSITORY, private_ports);
         let (_, private_written) = write_approval_statements(
@@ -1213,6 +1213,7 @@ mod tests {
             },
         )
         .unwrap();
+        assert_eq!(private_sink.sink_kind(), SinkKind::PrivateStore);
         assert!(
             private_written
                 .iter()
@@ -1220,7 +1221,11 @@ mod tests {
         );
         assert_eq!(private_store.private.borrow().len(), 3);
         assert_eq!(private_store.public.borrow().len(), 3);
-        assert_eq!(private_log.0.get(), 0);
+        assert_eq!(
+            private_public_log_client.0.get(),
+            0,
+            "PublicLogClient::send must not be called for the resolved private-store sink"
+        );
         assert_eq!(private_record_signer.public_calls.get(), 0);
     }
 
