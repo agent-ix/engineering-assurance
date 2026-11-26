@@ -727,8 +727,8 @@ fn receipt_gates_read_the_policy_from_the_protected_base_checkout() {
 #[trace("TC-594", "FR-075-AC-5")]
 #[test]
 fn commits_before_adoption_skip_receipt_record_and_note_jobs() {
-    let workflow = workflow("change-receipt.yml");
-    let jobs = &workflow["jobs"];
+    let receipt_workflow = workflow("change-receipt.yml");
+    let jobs = &receipt_workflow["jobs"];
     assert!(
         jobs["gates"]["outputs"]["skip_before_adoption"]
             .as_str()
