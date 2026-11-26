@@ -801,8 +801,8 @@ mod tests {
     }
 
     #[test]
-    #[trace("TC-1062", "NFR-003-M-1", "NFR-003-M-2")]
-    fn built_wheel_and_npm_archives_equal_their_explicit_member_allowlists() {
+    #[trace("TC-1062", "NFR-003-M-1", "NFR-003-M-2", "NFR-003-M-3")]
+    fn built_packages_match_allowlists_and_load_every_installed_workflow() {
         let root = selected_root(Path::new(env!("CARGO_MANIFEST_DIR")))
             .expect("repository root is package-auditable");
         let output = Builder::new()
@@ -836,6 +836,58 @@ mod tests {
             npm_observed, npm_expected,
             "the npm archive must contain every allowlisted member and no other member"
         );
+
+        let wheel_install = output.path().join("wheel-install");
+        install_wheel(&root, &wheel_path, &wheel_install, output.path())
+            .expect("wheel installs without network access");
+        let npm_install = output.path().join("npm-install");
+        install_npm(&root, &npm_path, &npm_install, output.path())
+            .expect("npm archive installs without network access");
+        let npm_root = npm_install
+            .join("node_modules")
+            .join("@agent-ix")
+            .join("engineering-assurance");
+        let installed_workflow_roots = [
+            wheel_install.join("engineering_assurance/skills/assurance-onboarding/workflows"),
+            npm_root.join("engineering_assurance/skills/assurance-onboarding/workflows"),
+        ];
+        let expected_workflows = [
+            "architecture-evaluation",
+            "assurance-intake",
+            "change-assurance",
+            "feature-risk-rating",
+            "measurement-promotion",
+            "release-decision",
+        ];
+        for (source_index, workflow_root) in installed_workflow_roots.iter().enumerate() {
+            let state = output.path().join(format!("ix-flow-state-{source_index}"));
+            for workflow in expected_workflows {
+                let result = std::process::Command::new("ix-flow")
+                    .args(["run", workflow, "--path"])
+                    .arg(
+                        workflow_root
+                            .parent()
+                            .expect("workflow root has a skill root"),
+                    )
+                    .args([
+                        "--id",
+                        &format!("package-{source_index}-{workflow}"),
+                        "--state-dir",
+                    ])
+                    .arg(state.join(workflow))
+                    .arg("--json")
+                    .output()
+                    .expect("ix-flow is required to verify installed workflow definitions");
+                assert!(
+                    result.status.success(),
+                    "{workflow} from installed package {source_index} must load: {}",
+                    String::from_utf8_lossy(&result.stderr)
+                );
+                let payload: serde_json::Value = serde_json::from_slice(&result.stdout)
+                    .expect("ix-flow must return JSON for an installed workflow");
+                assert_eq!(payload["data"]["defName"], workflow);
+            }
+        }
     }
 
     #[test]
