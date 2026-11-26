@@ -282,7 +282,7 @@ fn adversarial_receipt_gate_cannot_read_signing_tokens_or_use_signer() {
     );
 }
 
-#[trace("TC-560", "TC-563", "FR-070-AC-4", "FR-070-AC-7")]
+#[trace("TC-560", "TC-563", "FR-070-AC-4", "FR-070-AC-7", "FR-070-AC-15")]
 #[test]
 fn receipt_workflow_jobs_have_exact_permissions_and_keep_code_out_of_record_job() {
     let workflow = workflow("change-receipt.yml");
@@ -321,6 +321,10 @@ fn receipt_workflow_jobs_have_exact_permissions_and_keep_code_out_of_record_job(
     assert!(!format!("{workflow}").contains("statements_not_retained"));
 
     let gate_text = assert_gate_job_boundary(jobs);
+    assert!(
+        gate_text.contains("\"--request\", req_path.read_text()"),
+        "producer-execute receives the serialized request content, not its path"
+    );
     assert_gate_failure_exports_data_before_failing(&gate_text, jobs);
     assert!(
         jobs["record"]["if"]
