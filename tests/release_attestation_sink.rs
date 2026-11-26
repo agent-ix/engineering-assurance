@@ -7,11 +7,11 @@ use std::{cell::RefCell, collections::BTreeSet};
 
 use engineering_assurance::record_sink::{
     config::{ErrorCode, SelectionSource, SinkKind, SinkSelection, Visibility},
-    form::{PrivateRecord, PublicRecord, Record, RecordId, RecordKind, Reference, References},
-    leak::{CheckedEntry, LookupFailed, VisibilityLookup},
+    form::{PrivateRecord, PublicRecord, Record, RecordId, Reference, References},
+    leak::{LookupFailed, VisibilityLookup},
     sink::{
-        ApprovalStatementReader, LogRejected, Ports, PrivateStore, PublicLogClient, Signer,
-        SigningFailed, SinkLayer, StoreError,
+        ApprovalStatementReader, CheckedEntry, LogRejected, Ports, PrivateStore, PublicLogClient,
+        Signer, SigningFailed, SinkLayer, StoreError,
     },
 };
 use engineering_assurance::release_attestation_record::{
@@ -132,7 +132,7 @@ fn record(references: References) -> Record {
     .expect("valid release-attestation record")
 }
 
-fn with_sink<T>(
+fn with_sink(
     kind: SinkKind,
     visibility: Visibility,
     private_signing_fails: bool,
