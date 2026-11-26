@@ -6,6 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use ix_trace_rs::implements;
 use serde_json::{Value, json};
 use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
@@ -66,6 +67,17 @@ pub struct MergedPullRequest<'a> {
     pub merged_commit: &'a str,
 }
 
+/// The source-reported lifecycle state of a pull request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PullRequestState<'a> {
+    /// The pull request is still open.
+    Open,
+    /// The pull request was closed without merging.
+    Closed,
+    /// The source reports a completed merge and its immutable commits.
+    Merged(MergedPullRequest<'a>),
+}
+
 /// One statement handed to the configured sink and the result it returned.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WrittenApprovalStatement {
@@ -84,6 +96,9 @@ pub struct WrittenApprovalStatement {
 /// A refusal before all selected approval statements have been handed to the sink.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum StatementWriteError {
+    /// The source reports that the pull request has not merged.
+    #[error("approval statements require a merged pull request")]
+    NotMerged,
     /// Policy evaluation could not safely select approvals.
     #[error("approval policy or source is unavailable")]
     GateUnavailable(GateErrorCode),
@@ -107,8 +122,8 @@ pub enum StatementWriteError {
 /// Inputs that determine the approval statements written for one merged pull request.
 #[derive(Clone, Copy)]
 pub struct ApprovalStatementWriteRequest<'a> {
-    /// Merge metadata shared by every selected approval.
-    pub merged: MergedPullRequest<'a>,
+    /// Source lifecycle state and, after a merge, its immutable metadata.
+    pub pull_request: PullRequestState<'a>,
     /// Required roles and eligible people used by the review gate.
     pub policy: &'a RolePolicy,
     /// Reviews to evaluate, including reviews that may not match the current head.
@@ -132,22 +147,27 @@ pub struct ApprovalStatementWriteRequest<'a> {
 ///
 /// # Errors
 ///
+/// Returns before signing or publishing if the pull request has not merged.
 /// Returns before publishing if policy evaluation is unavailable, merge or
 /// approval metadata is invalid, the IDs do not match the selected approvals,
 /// statement encoding fails, or signing fails.
+#[implements("FR-060-AC-2", "FR-060-AC-4", "FR-060-AC-5", "FR-060-AC-6")]
 pub fn write_approval_statements(
     sink: &dyn RecordSink,
     signer: &dyn ApprovalStatementSigner,
     request: ApprovalStatementWriteRequest<'_>,
 ) -> Result<(GateResult, Vec<WrittenApprovalStatement>), StatementWriteError> {
     let ApprovalStatementWriteRequest {
-        merged,
+        pull_request,
         policy,
         approvals,
         account_types,
         approver_names,
         record_ids,
     } = request;
+    let PullRequestState::Merged(merged) = pull_request else {
+        return Err(StatementWriteError::NotMerged);
+    };
     validate_merge(merged)?;
     let merged_approvals: Vec<_> = approvals
         .iter()
@@ -322,6 +342,7 @@ fn valid_role_name(value: &str) -> bool {
         })
 }
 
+#[implements("FR-060-AC-2", "FR-060-AC-6")]
 fn build_statement(
     approval: &Approval,
     approver_name: &str,
@@ -404,6 +425,7 @@ mod tests {
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet},
         fmt::Write as _,
+        process::Command,
     };
 
     use ix_trace_rs::trace;
@@ -432,6 +454,47 @@ mod tests {
     const PULL_REQUEST: &str = "agent-ix/approval-fixture#41";
     const HEAD: &str = "1111111111111111111111111111111111111111";
     const MERGED: &str = "2222222222222222222222222222222222222222";
+
+    struct GitFixture(tempfile::TempDir);
+
+    impl GitFixture {
+        fn new() -> Self {
+            let fixture = Self(tempfile::tempdir().unwrap());
+            fixture.git(&["init", "--quiet"]);
+            fixture
+        }
+
+        fn git(&self, args: &[&str]) -> String {
+            let output = Command::new("git")
+                .current_dir(self.0.path())
+                .env("GIT_CONFIG_NOSYSTEM", "1")
+                .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                .env("GIT_AUTHOR_NAME", "Fixture Author")
+                .env("GIT_AUTHOR_EMAIL", "author@example.test")
+                .env("GIT_COMMITTER_NAME", "Fixture Committer")
+                .env("GIT_COMMITTER_EMAIL", "committer@example.test")
+                .env("GIT_AUTHOR_DATE", "2026-11-14T18:00:00Z")
+                .env("GIT_COMMITTER_DATE", "2026-11-14T18:00:00Z")
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "git {args:?}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8(output.stdout).unwrap().trim().to_owned()
+        }
+
+        fn commit(&self, parents: &[&str], message: &str) -> String {
+            let tree = self.git(&["mktree"]);
+            let mut args = vec!["commit-tree", &tree, "-m", message];
+            for parent in parents {
+                args.extend(["-p", parent]);
+            }
+            self.git(&args)
+        }
+    }
 
     fn hex_encode(bytes: &[u8]) -> String {
         let mut encoded = String::with_capacity(bytes.len() * 2);
@@ -655,6 +718,191 @@ mod tests {
         }
     }
 
+    fn write_fixture_reviews(
+        sink: &CaptureSink,
+        merged: MergedPullRequest<'_>,
+        reviews: &[Approval],
+        record_ids: &[RecordId],
+    ) -> (GateResult, Vec<WrittenApprovalStatement>) {
+        write_approval_statements(
+            sink,
+            &FixtureSigner,
+            ApprovalStatementWriteRequest {
+                pull_request: PullRequestState::Merged(merged),
+                policy: &role_policy(),
+                approvals: reviews,
+                account_types: &account_types(),
+                approver_names: &display_names(),
+                record_ids,
+            },
+        )
+        .unwrap()
+    }
+
+    #[test]
+    #[trace("FR-060-AC-2")]
+    fn merge_commit_statements_name_the_source_merge_and_reviewed_head() {
+        let git = GitFixture::new();
+        let base = git.commit(&[], "base");
+        let head = git.commit(&[&base], "reviewed head");
+        let merged = git.commit(&[&base, &head], "merge pull request");
+        assert_eq!(git.git(&["rev-parse", &format!("{merged}^2")]), head);
+        let reviews: Vec<_> = approvals()
+            .into_iter()
+            .map(|mut approval| {
+                approval.commit.clone_from(&head);
+                approval
+            })
+            .collect();
+        let sink = CaptureSink::default();
+        let ids = [1_u8, 2, 3].map(|byte| RecordId::from_random_bytes([byte; 16]));
+        let (_, statements) = write_fixture_reviews(
+            &sink,
+            MergedPullRequest {
+                repository: REPOSITORY,
+                pull_request: PULL_REQUEST,
+                head_commit: &head,
+                merged_commit: &merged,
+            },
+            &reviews,
+            &ids,
+        );
+        assert_eq!(statements.len(), 3);
+        assert_eq!(sink.0.borrow().len(), 3);
+        for statement in statements {
+            let value: Value = serde_json::from_slice(&statement.statement_bytes).unwrap();
+            assert_eq!(value["subject"][0]["digest"]["gitCommit"], merged);
+            assert_eq!(value["predicate"]["merged_commit"], merged);
+            assert_eq!(value["predicate"]["head_commit"], head);
+        }
+    }
+
+    #[test]
+    #[trace("FR-060-AC-4")]
+    fn open_and_closed_pull_requests_are_refused_before_signing_or_publishing() {
+        struct CountingSigner(Cell<usize>);
+        impl ApprovalStatementSigner for CountingSigner {
+            fn sign_statement(&self, _: &[u8]) -> Result<String, StatementSigningError> {
+                self.0.set(self.0.get() + 1);
+                Err(StatementSigningError)
+            }
+        }
+        for state in [PullRequestState::Open, PullRequestState::Closed] {
+            let sink = CaptureSink::default();
+            let signer = CountingSigner(Cell::new(0));
+            let ids = [1_u8, 2, 3].map(|byte| RecordId::from_random_bytes([byte; 16]));
+            let result = write_approval_statements(
+                &sink,
+                &signer,
+                ApprovalStatementWriteRequest {
+                    pull_request: state,
+                    policy: &role_policy(),
+                    approvals: &approvals(),
+                    account_types: &account_types(),
+                    approver_names: &display_names(),
+                    record_ids: &ids,
+                },
+            );
+            assert_eq!(result, Err(StatementWriteError::NotMerged), "{state:?}");
+            assert_eq!(signer.0.get(), 0, "{state:?} must not be signed");
+            assert!(
+                sink.0.borrow().is_empty(),
+                "{state:?} must not be published"
+            );
+        }
+    }
+
+    #[test]
+    #[trace("FR-060-AC-5")]
+    fn an_identical_tree_does_not_make_a_different_review_head_count() {
+        let git = GitFixture::new();
+        let base = git.commit(&[], "base");
+        let reviewed = git.commit(&[&base], "reviewed head");
+        let pushed = git.commit(&[&base], "head pushed after review");
+        let squash = git.commit(&[&base], "squash result");
+        assert_ne!(reviewed, pushed);
+        assert_eq!(
+            git.git(&["rev-parse", &format!("{reviewed}^{{tree}}")]),
+            git.git(&["rev-parse", &format!("{squash}^{{tree}}")])
+        );
+        let reviews: Vec<_> = approvals()
+            .into_iter()
+            .map(|mut approval| {
+                approval.commit.clone_from(&reviewed);
+                approval
+            })
+            .collect();
+        let sink = CaptureSink::default();
+        let (verdict, statements) = write_fixture_reviews(
+            &sink,
+            MergedPullRequest {
+                repository: REPOSITORY,
+                pull_request: PULL_REQUEST,
+                head_commit: &pushed,
+                merged_commit: &squash,
+            },
+            &reviews,
+            &[],
+        );
+        assert_eq!(verdict.status, approval_gate::GateStatus::Unsatisfied);
+        assert!(statements.is_empty());
+        assert!(sink.0.borrow().is_empty());
+    }
+
+    #[test]
+    #[trace("FR-060-AC-6")]
+    fn a_three_commit_rebase_writes_subjects_for_the_rebased_tip_only() {
+        let git = GitFixture::new();
+        let base = git.commit(&[], "base");
+        let original_one = git.commit(&[&base], "first change");
+        let original_two = git.commit(&[&original_one], "second change");
+        let head = git.commit(&[&original_two], "third change");
+        let advanced_base = git.commit(&[&base], "base advanced");
+        let rebased_one = git.commit(&[&advanced_base], "first change");
+        let rebased_two = git.commit(&[&rebased_one], "second change");
+        let rebased_tip = git.commit(&[&rebased_two], "third change");
+        assert_ne!(head, rebased_tip);
+        assert_eq!(
+            git.git(&[
+                "rev-list",
+                "--count",
+                &format!("{advanced_base}..{rebased_tip}")
+            ]),
+            "3"
+        );
+        let reviews: Vec<_> = approvals()
+            .into_iter()
+            .map(|mut approval| {
+                approval.commit.clone_from(&head);
+                approval
+            })
+            .collect();
+        let sink = CaptureSink::default();
+        let ids = [1_u8, 2, 3].map(|byte| RecordId::from_random_bytes([byte; 16]));
+        let (_, statements) = write_fixture_reviews(
+            &sink,
+            MergedPullRequest {
+                repository: REPOSITORY,
+                pull_request: PULL_REQUEST,
+                head_commit: &head,
+                merged_commit: &rebased_tip,
+            },
+            &reviews,
+            &ids,
+        );
+        assert_eq!(statements.len(), 3);
+        assert_eq!(sink.0.borrow().len(), 3);
+        for statement in statements {
+            let value: Value = serde_json::from_slice(&statement.statement_bytes).unwrap();
+            let subject = &value["subject"][0]["digest"]["gitCommit"];
+            assert_eq!(subject, &rebased_tip);
+            assert_ne!(subject, &rebased_one);
+            assert_ne!(subject, &rebased_two);
+            assert_eq!(value["predicate"]["merged_commit"], rebased_tip);
+            assert_eq!(value["predicate"]["head_commit"], head);
+        }
+    }
+
     #[trace(
         "TC-969",
         "FR-058-AC-1",
@@ -677,12 +925,12 @@ mod tests {
             &sink,
             &FixtureSigner,
             ApprovalStatementWriteRequest {
-                merged: MergedPullRequest {
+                pull_request: PullRequestState::Merged(MergedPullRequest {
                     repository: REPOSITORY,
                     pull_request: PULL_REQUEST,
                     head_commit: HEAD,
                     merged_commit: MERGED,
-                },
+                }),
                 policy: &policy,
                 approvals: &approvals,
                 account_types: &types,
@@ -777,12 +1025,12 @@ mod tests {
             &sink,
             &FixtureSigner,
             ApprovalStatementWriteRequest {
-                merged: MergedPullRequest {
+                pull_request: PullRequestState::Merged(MergedPullRequest {
                     repository: REPOSITORY,
                     pull_request: PULL_REQUEST,
                     head_commit: HEAD,
                     merged_commit: MERGED,
-                },
+                }),
                 policy: &policy,
                 approvals: &review_set,
                 account_types: &types,
@@ -810,12 +1058,12 @@ mod tests {
             &sink,
             &FixtureSigner,
             ApprovalStatementWriteRequest {
-                merged: MergedPullRequest {
+                pull_request: PullRequestState::Merged(MergedPullRequest {
                     repository: REPOSITORY,
                     pull_request: PULL_REQUEST,
                     head_commit: HEAD,
                     merged_commit: MERGED,
-                },
+                }),
                 policy: &policy,
                 approvals: &review_set,
                 account_types: &types,
@@ -903,12 +1151,12 @@ mod tests {
             &private_sink,
             &signer,
             ApprovalStatementWriteRequest {
-                merged: MergedPullRequest {
+                pull_request: PullRequestState::Merged(MergedPullRequest {
                     repository: REPOSITORY,
                     pull_request: PULL_REQUEST,
                     head_commit: HEAD,
                     merged_commit: MERGED,
-                },
+                }),
                 policy: &policy,
                 approvals: &approvals,
                 account_types: &types,
@@ -966,12 +1214,12 @@ mod tests {
             &public_sink,
             &signer,
             ApprovalStatementWriteRequest {
-                merged: MergedPullRequest {
+                pull_request: PullRequestState::Merged(MergedPullRequest {
                     repository: public_repo,
                     pull_request: "acme/secret#41",
                     head_commit: HEAD,
                     merged_commit: MERGED,
-                },
+                }),
                 policy: &policy,
                 approvals: &[private_repository_approval],
                 account_types: &types,

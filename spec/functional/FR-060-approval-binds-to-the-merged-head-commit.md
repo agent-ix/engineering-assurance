@@ -29,6 +29,10 @@ resolves it through the pull request reference.
 The head at merge, the merge-result commit and the merge method are read from the source when the pull request is
 closed as merged. An approval for a pull request that is not merged produces no statement.
 
+The statement-writer request carries the source's pull-request lifecycle state: open, closed without merging, or
+merged. Only the merged state carries merge-result metadata. An open or closed request is refused with the typed
+`NotMerged` error before evaluating approvals, signing a statement, or publishing a record.
+
 ## Behavior
 
 - The statement writer SHALL compare the approval's commit with the pull request head commit at merge.
@@ -47,9 +51,12 @@ closed as merged. An approval for a pull request that is not merged produces no 
 | FR-060-AC-1 | A review on the head commit that merged, with the pull request merged by squash, yields a statement whose `merged_commit` is the squash commit and whose `head_commit` is the reviewed commit. | Test |
 | FR-060-AC-2 | The same outcome holds for a merge commit, with the merge commit as `merged_commit`. | Test |
 | FR-060-AC-3 | A review on an earlier head, followed by a new push and a merge, yields no statement for that review. | Test |
-| FR-060-AC-4 | A review on a pull request that is closed without merging, or still open, yields no statement. | Test |
+| FR-060-AC-4 | A review on a pull request that is closed without merging, or still open, yields `NotMerged` and no statement, signing call, or sink call. | Test |
 | FR-060-AC-5 | A squash commit with a tree identical to the reviewed head's tree but a review on a different head commit yields no statement. | Test |
 | FR-060-AC-6 | A three-commit pull request merged by rebase yields statements whose `merged_commit` is the rebased tip only, and none for the other two rebased commits. | Test |
+
+> **CR-007 note:** The writer request explicitly carries the source lifecycle state so an unmerged request can be
+> refused before signing. Its earlier merged-only input could not express either negative case in AC-4.
 
 ## Dependencies
 
