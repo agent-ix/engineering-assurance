@@ -226,6 +226,9 @@ jobs:
             exit "$quoin_status"
           fi
 
+          mkdir -p attestation-inputs
+          cp -- "$TEST_RESULT_OUTPUT" attestation-inputs/test-result.json
+
       - name: Refuse without a trusted approval-statement source
         shell: bash
         run: |

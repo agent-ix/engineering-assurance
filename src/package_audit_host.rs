@@ -801,6 +801,99 @@ mod tests {
     }
 
     #[test]
+    #[trace("TC-1062", "NFR-003-M-1", "NFR-003-M-2", "NFR-003-M-3")]
+    fn built_packages_match_allowlists_and_load_every_installed_workflow() {
+        let root = selected_root(Path::new(env!("CARGO_MANIFEST_DIR")))
+            .expect("repository root is package-auditable");
+        let ix_flow = std::env::var_os("IX_FLOW_BIN")
+            .filter(|path| !path.is_empty())
+            .unwrap_or_else(|| "ix-flow".into());
+        let output = Builder::new()
+            .prefix("engineering-assurance-package-membership-test-")
+            .tempdir()
+            .expect("temporary package output directory");
+
+        build_wheel(&root, output.path()).expect("wheel builds");
+        let wheel_path = select_archive(output.path(), "whl").expect("one wheel exists");
+        let wheel = package_archive::read_wheel(&wheel_path).expect("wheel is readable");
+        let wheel_expected = wheel_allowlist(&root, &wheel).expect("wheel allowlist is valid");
+        let wheel_observed = wheel.names().into_iter().collect::<BTreeSet<_>>();
+        assert_eq!(
+            wheel_observed,
+            wheel_expected.into_iter().collect(),
+            "the wheel must contain every allowlisted member and no other member"
+        );
+
+        let npm_report = build_npm(&root, output.path()).expect("npm archive builds");
+        let npm_expected = npm_allowlist(&root).expect("npm allowlist is valid");
+        let npm_path = select_archive(output.path(), "tgz").expect("one npm archive exists");
+        let npm = package_archive::read_npm(&npm_path).expect("npm archive is readable");
+        let npm_expected = npm_expected.into_iter().collect::<BTreeSet<_>>();
+        let npm_report = npm_report.into_iter().collect::<BTreeSet<_>>();
+        let npm_observed = npm.names().into_iter().collect::<BTreeSet<_>>();
+        assert_eq!(
+            npm_report, npm_expected,
+            "npm pack must report every allowlisted member and no other member"
+        );
+        assert_eq!(
+            npm_observed, npm_expected,
+            "the npm archive must contain every allowlisted member and no other member"
+        );
+
+        let wheel_install = output.path().join("wheel-install");
+        install_wheel(&root, &wheel_path, &wheel_install, output.path())
+            .expect("wheel installs without network access");
+        let npm_install = output.path().join("npm-install");
+        install_npm(&root, &npm_path, &npm_install, output.path())
+            .expect("npm archive installs without network access");
+        let npm_root = npm_install
+            .join("node_modules")
+            .join("@agent-ix")
+            .join("engineering-assurance");
+        let installed_workflow_roots = [
+            wheel_install.join("engineering_assurance/skills/assurance-onboarding/workflows"),
+            npm_root.join("engineering_assurance/skills/assurance-onboarding/workflows"),
+        ];
+        let expected_workflows = [
+            "architecture-evaluation",
+            "assurance-intake",
+            "change-assurance",
+            "feature-risk-rating",
+            "measurement-promotion",
+            "release-decision",
+        ];
+        for (source_index, workflow_root) in installed_workflow_roots.iter().enumerate() {
+            let state = output.path().join(format!("ix-flow-state-{source_index}"));
+            for workflow in expected_workflows {
+                let result = std::process::Command::new(&ix_flow)
+                    .args(["run", workflow, "--path"])
+                    .arg(
+                        workflow_root
+                            .parent()
+                            .expect("workflow root has a skill root"),
+                    )
+                    .args([
+                        "--id",
+                        &format!("package-{source_index}-{workflow}"),
+                        "--state-dir",
+                    ])
+                    .arg(state.join(workflow))
+                    .arg("--json")
+                    .output()
+                    .expect("ix-flow is required to verify installed workflow definitions");
+                assert!(
+                    result.status.success(),
+                    "{workflow} from installed package {source_index} must load: {}",
+                    String::from_utf8_lossy(&result.stderr)
+                );
+                let payload: serde_json::Value = serde_json::from_slice(&result.stdout)
+                    .expect("ix-flow must return JSON for an installed workflow");
+                assert_eq!(payload["data"]["defName"], workflow);
+            }
+        }
+    }
+
+    #[test]
     #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
     fn npm_report_requires_exactly_one_result() {
         assert_eq!(

@@ -51,7 +51,7 @@
 //! | `package-membership` | `package_membership` | | `serde`, `thiserror` |
 //! | `producer-execution` | `producer_execution` | | `rustix`, `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
 //! | `private-git-store` | `producer_execution::private_git_store` | `producer-execution`, `record-sink`, `attestation-verify` | |
-//! | `record-sink` | `record_sink` | | `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
+//! | `record-sink` | `record_sink`, `release_attestation_record` | | `serde`, `serde_json`, `serde_json_canonicalizer`, `thiserror` |
 //! | `release` | `release` | `approval-verify` | `serde` |
 //! | `release-history` | `release_history` | | |
 //! | `receipt` | `receipt`, `tag_receipt` | `attestation-verify`, `change-record` | `serde`, `serde_json`, `serde_json_canonicalizer`, `time`, `thiserror` |
@@ -130,6 +130,8 @@ pub mod receipt_record;
 pub mod record_sink;
 #[cfg(feature = "release")]
 pub mod release;
+#[cfg(feature = "record-sink")]
+pub mod release_attestation_record;
 #[cfg(feature = "release-history")]
 pub mod release_history;
 #[cfg(feature = "scope-footprint")]

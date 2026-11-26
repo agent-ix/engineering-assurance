@@ -1022,7 +1022,7 @@ fn tc_335_a_status_other_than_approved_carries_no_signing_time() {
 }
 
 #[test]
-#[trace("TC-1008", "FR-041-AC-22")]
+#[trace("TC-1008", "FR-041-AC-22", "FR-041-CON-4")]
 fn tc_336_approval_reports_the_exact_annotated_tag_object() {
     let fixture = fixture();
     signed_tag(&fixture, "a", "v-bound", &good_message());
@@ -1037,11 +1037,16 @@ fn tc_336_approval_reports_the_exact_annotated_tag_object() {
 }
 
 #[test]
-#[trace("TC-1009", "FR-041-AC-23", "FR-041-AC-24")]
+#[trace("TC-1009", "FR-041-AC-23", "FR-041-AC-24", "FR-041-CON-4")]
 fn tc_337_moving_the_tag_ref_after_message_read_keeps_verification_on_the_loaded_object() {
     let fixture = fixture();
     signed_tag(&fixture, "a", "v-race", &good_message());
-    signed_tag(&fixture, "b", "v-replacement", &good_message());
+    let replacement_message = approval(&[
+        "Approved-Record-Id: replacement-record",
+        &format!("Approved-Record-Digest: {DIGEST}"),
+        "Signed-off-meaning: replacement",
+    ]);
+    signed_tag(&fixture, "b", "v-replacement", &replacement_message);
     let original = git(&fixture.repo(), None, &["rev-parse", "v-race^{tag}"])
         .trim()
         .to_owned();
@@ -1050,6 +1055,7 @@ fn tc_337_moving_the_tag_ref_after_message_read_keeps_verification_on_the_loaded
         .to_owned();
     let shim = fixture.root().join("race-bin");
     fs::create_dir(&shim).expect("race bin");
+    let verified_object = fixture.root().join("verified-tag-object");
     let real_git_path = std::env::split_paths(&std::env::var_os("PATH").expect("PATH"))
         .map(|dir| dir.join("git"))
         .find(|candidate| candidate.is_file())
@@ -1060,7 +1066,8 @@ fn tc_337_moving_the_tag_ref_after_message_read_keeps_verification_on_the_loaded
         .find(|candidate| candidate.is_file())
         .expect("ssh-keygen");
     let wrapper = format!(
-        "#!/bin/sh\nfor a in \"$@\"; do\n  if [ \"$a\" = verify-tag ]; then\n    {real_git} -C '{}' update-ref refs/tags/v-race '{replacement}'\n  fi\ndone\nexec {real_git} \"$@\"\n",
+        "#!/bin/sh\nverify_tag=0\nlast=\nfor a in \"$@\"; do\n  if [ \"$a\" = verify-tag ]; then verify_tag=1; fi\n  last=$a\ndone\nif [ \"$verify_tag\" = 1 ]; then\n  printf '%s\\n' \"$last\" > '{}'\n  {real_git} -C '{}' update-ref refs/tags/v-race '{replacement}'\nfi\nexec {real_git} \"$@\"\n",
+        verified_object.display(),
         fixture.repo().display(),
     );
     fs::write(shim.join("git"), wrapper).expect("git wrapper");
@@ -1072,6 +1079,13 @@ fn tc_337_moving_the_tag_ref_after_message_read_keeps_verification_on_the_loaded
 
     assert_eq!(verified["status"], "approved", "{verified}");
     assert_eq!(verified["tag_object_id"], original, "{verified}");
+    assert_eq!(
+        fs::read_to_string(&verified_object)
+            .expect("signature verification input was captured")
+            .trim(),
+        original,
+        "signature verification receives the same immutable annotated tag object"
+    );
     assert_eq!(
         git(&fixture.repo(), None, &["rev-parse", "refs/tags/v-race"]).trim(),
         replacement

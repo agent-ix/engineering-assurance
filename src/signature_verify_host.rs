@@ -33,6 +33,7 @@ use engineering_assurance::signature_verify::{
     commit_signature_format, config_sets_gitsign_key, is_plain_revision, object_message,
     signed_off_meaning, split_tag_object, tagger_signed_at, trailer_values,
 };
+use ix_trace_rs::implements;
 use serde::{Deserialize, Deserializer, Serialize, de::IgnoredAny};
 use thiserror::Error;
 
@@ -458,6 +459,7 @@ pub(crate) enum CaptureFailure {
 /// (FR-037). A file git should not be given is refused here: not a regular
 /// file, over 1 MiB, unreadable, or not UTF-8. The grammar of the content is
 /// git's and `ssh-keygen`'s to read.
+#[implements("FR-037-CON-3")]
 pub(crate) fn capture_allowed_signers(
     repository: &Path,
     source: &AllowedSignersSource,
@@ -485,11 +487,10 @@ pub(crate) fn capture_allowed_signers(
     let directory = tempfile::tempdir().map_err(|_| CaptureFailure::Invalid)?;
     let path = directory.path().join("allowed_signers");
     std::fs::write(&path, &bytes).map_err(|_| CaptureFailure::Invalid)?;
+    let sha256 = sigstore_verify::crypto::sha256(&bytes);
+    let sha256 = format!("sha256:{}", sha256.to_hex());
     Ok(AllowedSignersSnapshot {
-        sha256: format!(
-            "sha256:{}",
-            sigstore_verify::crypto::sha256(&bytes).to_hex()
-        ),
+        sha256,
         commit,
         _directory: directory,
         path,

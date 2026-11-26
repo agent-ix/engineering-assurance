@@ -790,7 +790,7 @@ mod tests {
         assert_eq!(result.role_verdict.assignments[0].individual, "alice");
     }
 
-    #[trace("TC-955", "FR-064-AC-17")]
+    #[trace("TC-955", "FR-064-AC-17", "FR-064-AC-7", "FR-064-AC-11")]
     #[test]
     fn no_exact_retained_match_is_unverifiable_and_does_not_satisfy_a_role() {
         let reader = reader_for(vec![(
@@ -822,7 +822,7 @@ mod tests {
         assert!(verifier.calls.borrow().is_empty());
     }
 
-    #[trace("TC-956", "FR-064-AC-18")]
+    #[trace("TC-956", "FR-064-AC-18", "FR-064-AC-7")]
     #[test]
     fn private_store_read_failure_is_unverifiable() {
         let reader = FixtureReader {
@@ -872,6 +872,58 @@ mod tests {
             approval_gate::GateStatus::Unsatisfied
         );
         assert!(verifier.calls.borrow().is_empty());
+    }
+
+    #[trace("TC-601", "FR-064-AC-11")]
+    #[test]
+    fn public_store_statements_verify_while_none_sink_is_unverifiable() {
+        let policy = role_policy();
+        let retained = statement("1", "public-store-bundle");
+        let review_approval =
+            approval_from_statement(&retained.statement_bytes, LOOKUP).expect("review approval");
+        let account_types = policy
+            .individuals
+            .values()
+            .flatten()
+            .map(|account| (account.clone(), AccountType::Human))
+            .collect();
+        let review_verdict = approval_gate::evaluate(&policy, &[review_approval], &account_types);
+        assert_eq!(review_verdict.status, approval_gate::GateStatus::Satisfied);
+        let reader = reader_for(vec![(LOOKUP.merged_pull_request, retained.clone())]);
+        let verifier = FixtureVerifier {
+            expected: vec![(
+                retained.statement_bytes.clone(),
+                retained.signature_bundle.clone(),
+                Ok(()),
+            )],
+            ..FixtureVerifier::default()
+        };
+        let public_result = verify_approval_statements(
+            &reader,
+            "private-store-public-repository",
+            LOOKUP,
+            &identity_policy(),
+            &policy,
+            &verifier,
+        );
+        assert_eq!(public_result.status, ApprovalStatementStatus::Verified);
+        assert_eq!(public_result.role_verdict, review_verdict);
+
+        let none_reader = reader_for(Vec::new());
+        let none_result = verify_approval_statements(
+            &none_reader,
+            "none-sink",
+            LOOKUP,
+            &identity_policy(),
+            &policy,
+            &verifier,
+        );
+        assert_eq!(none_result.status, ApprovalStatementStatus::Unverifiable);
+        assert_eq!(
+            none_result.reason,
+            Some(ApprovalStatementReason::StatementsNotRetained)
+        );
+        assert_eq!(review_verdict.status, approval_gate::GateStatus::Satisfied);
     }
 
     #[trace("TC-958", "FR-064-AC-20")]

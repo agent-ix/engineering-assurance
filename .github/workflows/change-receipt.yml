@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+    outputs:
+      skip_before_adoption: ${{ steps.adoption-boundary.outputs.skip }}
     steps:
       - name: Check the pushed commit input
         shell: bash
@@ -45,12 +47,47 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Check the protected receipt adoption boundary
+        id: adoption-boundary
+        shell: bash
+        env:
+          INPUT_COMMIT: ${{ inputs.commit }}
+          SOURCE_DIR: ${{ github.workspace }}/source
+          PROTECTED_BASE_DIR: ${{ github.workspace }}/protected-base
+        run: |
+          set -euo pipefail
+          adopted_at="$(python3 - "$PROTECTED_BASE_DIR/.engineering-assurance/receipt-policy.json" <<'PY'
+          import json, sys
+          from pathlib import Path
+          policy = json.loads(Path(sys.argv[1]).read_text())
+          value = policy.get("adopted_at")
+          if not isinstance(value, str) or not value:
+              raise SystemExit("receipt_policy_invalid")
+          print(value)
+          PY
+          )"
+          if git -C "$SOURCE_DIR" merge-base --is-ancestor "$INPUT_COMMIT" "$adopted_at"; then
+            if [[ "$INPUT_COMMIT" != "$adopted_at" ]]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          else
+            result=$?
+            if [[ "$result" -ne 1 ]]; then
+              echo "::error::receipt_adoption_boundary_unreadable"
+              exit "$result"
+            fi
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
       - name: Install Rust toolchain
+        if: steps.adoption-boundary.outputs.skip != 'true'
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain-file: source/rust-toolchain.toml
 
       - name: Download published Engineering Assurance tooling
+        if: steps.adoption-boundary.outputs.skip != 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -65,6 +102,7 @@ jobs:
           "$RUNNER_TEMP/ea-tooling/engineering-assurance" --version
 
       - name: Install published Quoin 0.32.0
+        if: steps.adoption-boundary.outputs.skip != 'true'
         working-directory: ${{ runner.temp }}
         shell: bash
         env:
@@ -79,6 +117,7 @@ jobs:
           node_modules/.bin/quoin module ensure-defaults
 
       - name: Run protected gates through producer-execute and retain Quoin evidence
+        if: steps.adoption-boundary.outputs.skip != 'true'
         id: receipt-gates
         shell: bash
         env:
@@ -265,7 +304,7 @@ jobs:
           fi
 
       - name: Upload receipt gate data and retained evidence store
-        if: always()
+        if: always() && steps.adoption-boundary.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: receipt-gate-data
@@ -276,7 +315,7 @@ jobs:
 
   record:
     needs: gates
-    if: always()
+    if: always() && needs.gates.outputs.skip_before_adoption != 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -352,7 +391,7 @@ jobs:
 
   notes:
     needs: record
-    if: always()
+    if: always() && needs.record.result == 'success'
     runs-on: ubuntu-24.04
     permissions:
       contents: write

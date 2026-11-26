@@ -377,13 +377,32 @@ fn fixture_request(root: &Path, script: &str) -> Value {
     osv_request(root, &executable, "fixture", &db)
 }
 
-#[trace("TC-900", "FR-044-AC-6")]
+#[trace("TC-900", "FR-044-AC-6", "NFR-006-AC-4")]
 #[test]
 fn tc_9001_request_matches_the_published_osv_scanner_definition() {
     let root = workspace(br#"{"bomFormat":"CycloneDX","components":[]}"#);
     let db = root.path().join("db");
     let request = osv_request(root.path(), Path::new("/opt/osv-scanner"), "2.0.0", &db);
     assert_valid_request(&request);
+    let published_schema = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
+        .args(["producer-execute", "--schema", "request"])
+        .output()
+        .expect("producer-execute schema command must start");
+    assert_eq!(
+        published_schema.status.code(),
+        Some(0),
+        "producer-execute --schema request must succeed: {}",
+        String::from_utf8_lossy(&published_schema.stderr)
+    );
+    let schema: Value =
+        serde_json::from_slice(&published_schema.stdout).expect("published schema must be JSON");
+    let validator = jsonschema::options()
+        .build(&schema)
+        .expect("published producer-execute schema must compile");
+    assert!(
+        validator.is_valid(&request),
+        "OSV-Scanner request must satisfy the CLI-published schema: {request}"
+    );
     let base = fs::canonicalize(root.path())
         .expect("root")
         .display()

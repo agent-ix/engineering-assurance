@@ -2178,6 +2178,48 @@ mod tests {
         );
     }
 
+    #[trace("TC-603", "FR-076-AC-7")]
+    #[test]
+    fn verified_and_verified_failed_receipt_reruns_leave_the_existing_note_unchanged() {
+        for status in [ReceiptStatus::Verified, ReceiptStatus::VerifiedFailed] {
+            let (directory, commit) = fixture_repo();
+            let repository = directory.path();
+            let original: ReceiptBundleSet =
+                serde_json::from_value(bundle_value()).expect("fixture receipt bundles");
+            let original_bytes = original.encode_note().expect("fixture note bytes");
+            assert!(
+                git_with_input(
+                    repository,
+                    &[
+                        "notes",
+                        "--ref",
+                        RECEIPT_NOTES_REF,
+                        "add",
+                        "-F",
+                        "-",
+                        &commit,
+                    ],
+                    &original_bytes,
+                )
+                .is_ok()
+            );
+
+            let skipped =
+                store_note_bytes(repository, &commit, b"replacement note\n", |_| Ok(status))
+                    .expect("verified receipt retry is skipped");
+
+            assert!(skipped, "{status:?} receipt must be idempotent");
+            let current = test_git_str(
+                repository,
+                &["notes", "--ref", RECEIPT_NOTES_REF, "show", &commit],
+            );
+            assert_eq!(
+                current.stdout, original_bytes,
+                "{status:?} note remains unchanged"
+            );
+        }
+    }
+
     #[trace("TC-598", "FR-076-AC-2")]
     #[test]
     fn refuses_oversized_note_without_writing_anything() {
@@ -2282,21 +2324,20 @@ mod tests {
         assert_eq!(unreadable["reason"], "note_unreadable");
     }
 
-    #[trace("TC-616", "FR-078-AC-6")]
+    #[trace("TC-616", "FR-078-AC-6", "FR-064-AC-8")]
     #[test]
     fn protected_policy_reads_use_the_explicit_base_commit() {
         let (directory, _) = fixture_repo();
         let repository = directory.path();
         let policy_path = repository.join(".engineering-assurance/approval-policy.json");
+        let identities_path = repository.join(".engineering-assurance/workflow-identities.json");
         fs::create_dir_all(policy_path.parent().unwrap()).unwrap();
         fs::write(&policy_path, "protected policy\n").unwrap();
+        fs::write(&identities_path, "protected workflow identities\n").unwrap();
         assert!(
-            test_git_str(
-                repository,
-                &["add", ".engineering-assurance/approval-policy.json"]
-            )
-            .status
-            .success()
+            test_git_str(repository, &["add", ".engineering-assurance"])
+                .status
+                .success()
         );
         assert!(
             test_git_str(repository, &["commit", "-qm", "protected policy"])
@@ -2309,13 +2350,11 @@ mod tests {
             .trim()
             .to_owned();
         fs::write(&policy_path, "branch policy\n").unwrap();
+        fs::write(&identities_path, "branch workflow identities\n").unwrap();
         assert!(
-            test_git_str(
-                repository,
-                &["add", ".engineering-assurance/approval-policy.json"]
-            )
-            .status
-            .success()
+            test_git_str(repository, &["add", ".engineering-assurance"])
+                .status
+                .success()
         );
         assert!(
             test_git_str(repository, &["commit", "-qm", "branch policy"])
@@ -2344,6 +2383,24 @@ mod tests {
             )
             .unwrap(),
             b"branch policy\n"
+        );
+        assert_eq!(
+            git_show_base_file(
+                repository,
+                &base_commit,
+                ".engineering-assurance/workflow-identities.json"
+            )
+            .unwrap(),
+            b"protected workflow identities\n"
+        );
+        assert_eq!(
+            git_show_base_file(
+                repository,
+                &branch_commit,
+                ".engineering-assurance/workflow-identities.json"
+            )
+            .unwrap(),
+            b"branch workflow identities\n"
         );
     }
 

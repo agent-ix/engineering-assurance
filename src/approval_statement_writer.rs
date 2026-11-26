@@ -432,6 +432,7 @@ mod tests {
 
     use super::*;
     use crate::{
+        approval_gate::{ApprovalSource, GitHubReviewAdapter, ReviewSnapshot, ReviewState},
         approval_statement::{
             ApprovalStatementLookup, ApprovalStatementPublishOutcome, ApprovalStatementReadError,
             ApprovalStatementStatus, RetainedApprovalStatement, verify_approval_statements,
@@ -591,15 +592,16 @@ mod tests {
     impl ApprovalStatementReader for SinkStore {}
 
     #[derive(Default)]
-    struct SinkLog(Cell<u32>);
+    struct SinkLog(Cell<u32>, RefCell<Vec<PublicRecord>>);
 
     impl PublicLogClient for SinkLog {
         fn send(
             &self,
             _endpoint: &str,
-            _entry: &crate::record_sink::sink::CheckedEntry,
+            entry: &crate::record_sink::sink::CheckedEntry,
         ) -> Result<(), LogRejected> {
             self.0.set(self.0.get() + 1);
+            self.1.borrow_mut().push(entry.record().clone());
             Ok(())
         }
     }
@@ -1005,6 +1007,52 @@ mod tests {
         assert_eq!(result.role_verdict, before_merge);
     }
 
+    #[trace("TC-587", "FR-058-AC-6")]
+    #[test]
+    fn review_without_either_required_marker_yields_no_statement() {
+        for body in [
+            "Reviewed the change.\nRole: developer",
+            "Reviewed the change.\nSigned-off-meaning: acceptable",
+        ] {
+            let policy = role_policy();
+            let reviews = [ReviewSnapshot {
+                review_id: 1,
+                account: account("101"),
+                account_type: AccountType::Human,
+                state: ReviewState::Approved,
+                submitted_body: body.to_owned(),
+                body_edited: false,
+                submitted_at: "2026-11-14T10:00:00Z".to_owned(),
+                commit: HEAD.to_owned(),
+                pull_request: PULL_REQUEST.to_owned(),
+            }];
+            let normalized = GitHubReviewAdapter.approvals(&policy, &reviews, HEAD);
+            assert!(normalized.is_empty(), "invalid marker set accepted: {body}");
+            let sink = CaptureSink::default();
+            let signer = FixtureSigner;
+            let (_, written) = write_approval_statements(
+                &sink,
+                &signer,
+                ApprovalStatementWriteRequest {
+                    pull_request: PullRequestState::Merged(MergedPullRequest {
+                        repository: REPOSITORY,
+                        pull_request: PULL_REQUEST,
+                        head_commit: HEAD,
+                        merged_commit: MERGED,
+                    }),
+                    policy: &policy,
+                    approvals: &normalized,
+                    account_types: &account_types(),
+                    approver_names: &display_names(),
+                    record_ids: &[],
+                },
+            )
+            .expect("invalid review markers yield an empty statement set");
+            assert!(written.is_empty());
+            assert!(sink.0.borrow().is_empty());
+        }
+    }
+
     #[trace("TC-969", "FR-065-AC-7")]
     #[test]
     fn stale_head_approval_is_omitted_from_post_merge_statements() {
@@ -1118,7 +1166,7 @@ mod tests {
         );
     }
 
-    #[trace("TC-971", "FR-065-AC-9")]
+    #[trace("TC-971", "FR-065-AC-9", "FR-058-AC-9")]
     #[test]
     fn private_repository_approval_records_stay_off_public_log() {
         let policy = role_policy();
@@ -1174,6 +1222,88 @@ mod tests {
         assert_eq!(private_store.public.borrow().len(), 3);
         assert_eq!(private_log.0.get(), 0);
         assert_eq!(private_record_signer.public_calls.get(), 0);
+    }
+
+    #[trace("TC-588", "FR-058-AC-8")]
+    #[test]
+    fn public_approval_record_contains_only_the_statement_digest() {
+        let policy = role_policy();
+        let reviews = approvals();
+        let types = account_types();
+        let names = display_names();
+        let ids = [11_u8, 12, 13].map(|byte| RecordId::from_random_bytes([byte; 16]));
+        let store = SinkStore::default();
+        let log = SinkLog::default();
+        let lookup = SinkVisibility(BTreeMap::from([(REPOSITORY.into(), Visibility::Public)]));
+        let record_signer = RecordSigner::default();
+        let selection = SinkSelection {
+            sink: SinkKind::PublicLog,
+            source: SelectionSource::Configured,
+            public_log_endpoint: Some(concat!("https:", "//transparency.invalid").into()),
+            private_store_destination: Some("agent-ix/approval-records".into()),
+            public_linear_teams: Vec::new(),
+        };
+        let ports = Ports {
+            store: &store,
+            lookup: &lookup,
+            signer: &record_signer,
+            client: &log,
+        };
+        let sink = SinkLayer::new(&selection, REPOSITORY, ports);
+
+        let (_, written) = write_approval_statements(
+            &sink,
+            &FixtureSigner,
+            ApprovalStatementWriteRequest {
+                pull_request: PullRequestState::Merged(MergedPullRequest {
+                    repository: REPOSITORY,
+                    pull_request: PULL_REQUEST,
+                    head_commit: HEAD,
+                    merged_commit: MERGED,
+                }),
+                policy: &policy,
+                approvals: &reviews,
+                account_types: &types,
+                approver_names: &names,
+                record_ids: &ids,
+            },
+        )
+        .expect("public approval statements are written");
+
+        assert_eq!(written.len(), 3);
+        assert_eq!(store.private.borrow().len(), 3);
+        assert!(store.public.borrow().is_empty());
+        assert_eq!(log.0.get(), 3);
+        let private_records = store.private.borrow();
+        let public_records = log.1.borrow();
+        for (private, public) in private_records.iter().zip(public_records.iter()) {
+            assert_eq!(public.kind, RecordKind::Approval);
+            assert_eq!(public.record_id, private.record_id);
+            let stored = private
+                .statement
+                .as_ref()
+                .expect("private statement retained");
+            let statement = &stored["statement"];
+            let canonical =
+                serde_json_canonicalizer::to_vec(statement).expect("full statement canonicalizes");
+            let digest = format!(
+                "sha256:{}",
+                sigstore_verify::crypto::sha256(&canonical).to_hex()
+            );
+            assert_eq!(
+                public.hashes.statement.as_ref().map(|value| value.as_str()),
+                Some(digest.as_str())
+            );
+            let public_text = serde_json::to_string(public).expect("public record serializes");
+            let private_text = serde_json::to_string(private).expect("private record serializes");
+            for member in ["approver", "approver_name", "pull_request", "meaning"] {
+                let value = statement["predicate"][member]
+                    .as_str()
+                    .expect("private approval member is text");
+                assert!(private_text.contains(value));
+                assert!(!public_text.contains(value));
+            }
+        }
     }
 
     #[trace("TC-971", "FR-065-AC-9")]

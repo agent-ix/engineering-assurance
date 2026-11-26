@@ -211,7 +211,7 @@ fn reusable_workflow_downloads_named_release_and_evidence_artifacts_without_an_e
 }
 
 #[cfg(unix)]
-#[trace("TC-667", "FR-070-AC-11")]
+#[trace("TC-667", "FR-070-AC-11", "FR-070-AC-10")]
 #[test]
 fn nonempty_invalid_evidence_is_refused_before_the_role_source_failure() {
     use std::os::unix::fs::PermissionsExt;
@@ -239,9 +239,11 @@ fn nonempty_invalid_evidence_is_refused_before_the_role_source_failure() {
         .expect("Quoin evidence validation script");
 
     let root = tempfile::tempdir().expect("temporary workflow root");
+    let workspace = root.path().join("workspace");
     let runner_temp = root.path().join("runner-temp");
-    let artifacts = root.path().join("release-artifacts");
-    let evidence = root.path().join("release-evidence");
+    let artifacts = workspace.join("release-artifacts");
+    let evidence = workspace.join("release-evidence");
+    fs::create_dir_all(&workspace).expect("workflow workspace");
     fs::create_dir_all(&runner_temp).expect("runner temp directory");
     fs::create_dir_all(&artifacts).expect("release artifact directory");
     fs::write(artifacts.join("release.tar.gz"), b"release artifact")
@@ -264,6 +266,7 @@ fn nonempty_invalid_evidence_is_refused_before_the_role_source_failure() {
 
     let output = Command::new("bash")
         .args(["-euo", "pipefail", "-c", script])
+        .current_dir(&workspace)
         .env("RUNNER_TEMP", &runner_temp)
         .env("QUOIN_CLI", &fake_quoin)
         .env("QUOIN_ARGS_CAPTURE", &args_capture)
@@ -305,6 +308,104 @@ fn nonempty_invalid_evidence_is_refused_before_the_role_source_failure() {
     assert_eq!(
         subject[0]["digest"]["sha256"].as_str().map(str::len),
         Some(64)
+    );
+}
+
+#[cfg(unix)]
+#[trace("TC-553", "FR-069-AC-1", "FR-069-AC-4", "FR-070-AC-10")]
+#[test]
+fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let workflow = reusable_workflow();
+    let verify_steps = workflow["jobs"]["verify"]["steps"]
+        .as_array()
+        .expect("verify steps");
+    let export = verify_steps
+        .iter()
+        .find(|step| step["name"] == "Validate the retained evidence store with the Quoin exporter")
+        .expect("Quoin exporter step exists");
+    let script = export["run"].as_str().expect("export script");
+    assert_eq!(export["env"]["EVIDENCE_DIR"], "release-evidence");
+    assert_eq!(export["env"]["RELEASE_ARTIFACTS_DIR"], "release-artifacts");
+    assert!(script.contains("--subject \"$subject_path\""));
+    assert!(script.contains("--evidence-dir \"$EVIDENCE_DIR\""));
+    assert!(script.contains("--output \"$TEST_RESULT_OUTPUT\""));
+    let attest_steps = workflow["jobs"]["attest"]["steps"]
+        .as_array()
+        .expect("attest steps");
+    assert!(attest_steps.iter().all(|step| {
+        step["run"].as_str().is_none_or(|run| !run.contains("quoin"))
+    }));
+    assert!(workflow["on"]["workflow_call"]["inputs"]
+        .get("test_result")
+        .is_none());
+    let attest_test_result = attest_steps
+        .iter()
+        .find(|step| step["name"] == "Attest Quoin test result")
+        .expect("Test Result attestation step exists");
+    assert_eq!(
+        attest_test_result["with"]["predicate-type"],
+        engineering_assurance::attestation_verify::TEST_RESULT_PREDICATE
+    );
+    assert_eq!(
+        attest_test_result["with"]["predicate-path"],
+        "attestation-inputs/test-result.json"
+    );
+
+    let root = tempfile::tempdir().expect("temporary workflow root");
+    let workspace = root.path().join("workspace");
+    let runner_temp = root.path().join("runner-temp");
+    let artifacts = workspace.join("release-artifacts");
+    let evidence = workspace.join("release-evidence");
+    fs::create_dir_all(&workspace).expect("workflow workspace");
+    fs::create_dir_all(&runner_temp).expect("runner temp directory");
+    fs::create_dir_all(&artifacts).expect("release artifact directory");
+    fs::write(artifacts.join("release.tar.gz"), b"fixture release").expect("release artifact");
+    fs::create_dir_all(evidence.join("runs/suite")).expect("evidence run directory");
+    fs::write(evidence.join("bindings.json"), "{}\n").expect("valid evidence bindings");
+
+    let expected = concat!(
+        r#"{"_type":"https:"#,
+        r#"//in-toto.io/Statement/v1","predicateType":"https:"#,
+        r#"//in-toto.io/attestation/test-result/v0.1","subject":[{"name":"release.tar.gz","digest":{"sha256":"fixture"}}],"predicate":{"result":"FAILED","failedTests":[{"name":"retained-check","result":"FAILED"}]}}"#
+    );
+    let fixture_result = root.path().join("fixture-test-result.json");
+    fs::write(&fixture_result, expected.as_bytes()).expect("Quoin result fixture");
+    let fake_quoin = root.path().join("quoin");
+    fs::write(
+        &fake_quoin,
+        "#!/bin/bash\nset -euo pipefail\nwhile (($#)); do\n  if [[ \"$1\" == --output ]]; then shift; output=$1; fi\n  shift\ndone\ncp -- \"$FIXTURE_TEST_RESULT\" \"$output\"\n",
+    )
+    .expect("fake Quoin exporter");
+    let mut permissions = fs::metadata(&fake_quoin)
+        .expect("fake Quoin metadata")
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&fake_quoin, permissions).expect("make fake Quoin executable");
+
+    let output = Command::new("bash")
+        .args(["-euo", "pipefail", "-c", script])
+        .current_dir(&workspace)
+        .env("RUNNER_TEMP", &runner_temp)
+        .env("QUOIN_CLI", &fake_quoin)
+        .env("FIXTURE_TEST_RESULT", &fixture_result)
+        .env("RELEASE_ARTIFACTS_DIR", &artifacts)
+        .env("EVIDENCE_DIR", &evidence)
+        .env("TEST_RESULT_OUTPUT", runner_temp.join("test-result.json"))
+        .output()
+        .expect("run the production workflow step");
+    assert!(
+        output.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        fs::read(workspace.join("attestation-inputs/test-result.json"))
+            .expect("attestation input exists"),
+        expected.as_bytes(),
+        "the failed Quoin result is retained byte for byte for signing"
     );
 }
 

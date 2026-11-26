@@ -537,6 +537,76 @@ struct ChildProgramUse {
     paths: Vec<Vec<String>>,
 }
 
+#[derive(Default)]
+struct AllowedSignersDigestCalls {
+    inputs_are_bytes: Vec<bool>,
+}
+
+impl<'ast> Visit<'ast> for AllowedSignersDigestCalls {
+    fn visit_expr_call(&mut self, call: &'ast syn::ExprCall) {
+        let is_allowed_signers_digest = match call.func.as_ref() {
+            syn::Expr::Path(function) => {
+                let segments = function
+                    .path
+                    .segments
+                    .iter()
+                    .map(|segment| segment.ident.to_string())
+                    .collect::<Vec<_>>();
+                segments.len() == 3
+                    && segments[0] == "sigstore_verify"
+                    && segments[1] == "crypto"
+                    && segments[2] == "sha256"
+            }
+            _ => false,
+        };
+        if is_allowed_signers_digest {
+            self.inputs_are_bytes.push(matches!(
+                call.args.first(),
+                Some(syn::Expr::Reference(reference))
+                    if matches!(reference.expr.as_ref(), syn::Expr::Path(value) if value.path.is_ident("bytes"))
+            ));
+        }
+        syn::visit::visit_expr_call(self, call);
+    }
+}
+
+#[trace("TC-1060", "FR-037-CON-3")]
+#[test]
+fn tc_1060_allowed_signers_digest_is_computed_once_for_the_shared_snapshot() {
+    let source = repository_source("src/signature_verify_host.rs");
+    let syntax = syn::parse_file(&source).expect("signature adapter parses");
+    let capture = syntax
+        .items
+        .iter()
+        .find_map(|item| match item {
+            Item::Fn(function) if function.sig.ident == "capture_allowed_signers" => {
+                Some(function)
+            }
+            _ => None,
+        })
+        .expect("the shared trust-input reader exists");
+    let mut calls = AllowedSignersDigestCalls::default();
+    calls.visit_block(&capture.block);
+    assert_eq!(calls.inputs_are_bytes, [true]);
+
+    let snapshot = syntax
+        .items
+        .iter()
+        .find_map(|item| match item {
+            Item::Struct(structure) if structure.ident == "AllowedSignersSnapshot" => {
+                Some(structure)
+            }
+            _ => None,
+        })
+        .expect("one shared trust-input snapshot exists");
+    let digest_fields = snapshot
+        .fields
+        .iter()
+        .filter(|field| field.ident.as_ref().is_some_and(|name| name == "sha256"))
+        .count();
+    assert_eq!(digest_fields, 1, "the snapshot holds one allowed-signers digest");
+}
+
 impl<'ast> Visit<'ast> for ChildProgramUse {
     fn visit_item_use(&mut self, item: &'ast syn::ItemUse) {
         self.found |= use_tree_imports_child_program(&item.tree, &mut Vec::new());

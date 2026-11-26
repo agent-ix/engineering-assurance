@@ -15,15 +15,25 @@ use std::{
     process::{Command, Output, Stdio},
 };
 
+use base64::{Engine, engine::general_purpose::STANDARD};
+use cms::{
+    content_info::ContentInfo,
+    signed_data::{SignedData, SignerInfos},
+};
+use der::{
+    Decode, Encode,
+    asn1::{Any, SetOfVec},
+};
 use engineering_assurance::signature_verify::tagger_signed_at;
 use ix_trace_rs::trace;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 const IDENTITY: &str = "alice@example.test";
 const ISSUER: &str = concat!("https:", "//issuer.example.test");
 const OTHER_ISSUER: &str = concat!("https:", "//other.example.test");
 const PRINCIPAL: &str = "Alice Example";
 const CMS_BLOCK: &str = "-----BEGIN SIGNED MESSAGE-----\nAAAA\n-----END SIGNED MESSAGE-----\n";
+const REKOR_TAG_OBJECT: &[u8] = include_bytes!("fixtures/approval-rekor/tag-object.txt");
 const RECORD_ID: &str = "change-record-17";
 const DIGEST: &str = "sha256:0123456789abcdef";
 /// The committed identity registry every gitsign request names.
@@ -110,6 +120,34 @@ fn git(repo: &Path, arguments: &[&str]) -> String {
     let mut all = vec!["-c", "user.name=t", "-c", "user.email=t@example.test"];
     all.extend_from_slice(arguments);
     String::from_utf8(run_program(repo, "git", &all, None)).expect("utf-8")
+}
+
+/// A readable CMS block with signed attributes and certificate but no Rekor
+/// unsigned attribute, derived from the offline fixture.
+fn cms_block_without_rekor_entry() -> String {
+    let split = engineering_assurance::signature_verify::split_tag_object(REKOR_TAG_OBJECT)
+        .expect("offline fixture is an annotated CMS tag");
+    let armor = std::str::from_utf8(split.signature).expect("CMS armor is UTF-8");
+    let mut lines = armor.lines();
+    assert_eq!(lines.next(), Some("-----BEGIN SIGNED MESSAGE-----"));
+    let encoded = lines
+        .take_while(|line| *line != "-----END SIGNED MESSAGE-----")
+        .collect::<String>();
+    let mut content_info =
+        ContentInfo::from_der(&STANDARD.decode(encoded).expect("offline fixture base64"))
+            .expect("offline fixture CMS parses");
+    let mut signed_data: SignedData = content_info
+        .content
+        .decode_as()
+        .expect("offline fixture contains SignedData");
+    let mut signers: Vec<_> = signed_data.signer_infos.0.iter().cloned().collect();
+    let signer = signers.first_mut().expect("offline fixture has one signer");
+    signer.unsigned_attrs = None;
+    signed_data.signer_infos =
+        SignerInfos::from(SetOfVec::try_from(signers).expect("one signer remains"));
+    content_info.content = Any::encode_from(&signed_data).expect("SignedData re-encodes");
+    let encoded = STANDARD.encode(content_info.to_der().expect("CMS re-encodes"));
+    format!("-----BEGIN SIGNED MESSAGE-----\n{encoded}\n-----END SIGNED MESSAGE-----\n")
 }
 
 fn which(program: &str) -> PathBuf {
@@ -856,6 +894,30 @@ fn tc_336_a_gitsign_tag_reports_its_tagger_date_and_gitsign_never_changes_the_st
 }
 
 #[test]
+#[trace("TC-1049", "FR-041-AC-30", "FR-041-CON-5")]
+fn gitsign_tag_without_rekor_entry_uses_tagger_date_and_has_no_trusted_time() {
+    let fixture = fixture();
+    let cms_block = cms_block_without_rekor_entry();
+    forged_tag_with_tagger(
+        &fixture,
+        "v-no-rekor-entry",
+        Some("t <t@example.test> 1700000000 -0700"),
+        &good_message(),
+        &cms_block,
+    );
+
+    let approved = result(&fixture, &request(&fixture, "v-no-rekor-entry", true));
+
+    assert_eq!(approved["status"], "approved", "{approved}");
+    assert_eq!(approved["signed_at"], "2023-11-14T22:13:20Z", "{approved}");
+    assert_eq!(approved["signed_at_source"], "tagger_date", "{approved}");
+    assert_eq!(approved["trusted_at_missing"], "no_log_entry", "{approved}");
+    for member in ["trusted_at", "trusted_at_source", "time_skew"] {
+        assert!(approved.get(member).is_none(), "{member}: {approved}");
+    }
+}
+
+#[test]
 #[trace("TC-337", "FR-041-AC-18", "FR-041-CON-3")]
 fn tc_337_an_approval_with_no_readable_tagger_date_reports_the_time_missing() {
     let fixture = fixture();
@@ -880,8 +942,8 @@ fn tc_337_an_approval_with_no_readable_tagger_date_reports_the_time_missing() {
 
 #[test]
 #[trace("TC-1011", "FR-041-AC-25")]
-fn tc_1011_the_registry_captured_before_verification_survives_a_moved_branch_and_an_edited_worktree(
-) {
+fn tc_1011_the_registry_captured_before_verification_survives_a_moved_branch_and_an_edited_worktree()
+ {
     let fixture = fixture();
     forged_tag(&fixture, "v-cms", &good_message(), CMS_BLOCK);
     let repo = fixture.repo();

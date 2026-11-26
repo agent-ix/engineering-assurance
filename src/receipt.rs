@@ -1820,7 +1820,7 @@ mod tests {
         assert!(!is_valid_verify_result(&misplaced));
     }
 
-    #[trace("TC-608", "TC-610", "FR-077-AC-5", "FR-077-AC-7")]
+    #[trace("TC-608", "TC-610", "FR-075-AC-5", "FR-077-AC-5", "FR-077-AC-7")]
     #[test]
     fn missing_receipts_use_platform_push_time_and_first_parent_cutoff() {
         let history = [

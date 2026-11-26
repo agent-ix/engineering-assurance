@@ -320,3 +320,19 @@ fn tc_112_make_dispatch_is_declarative_rust_invocation() {
     assert!(!makefile.contains("scripts/check_content_rights.py --tree"));
     assert_eq!(makefile.matches("content-rights-tree --root .").count(), 1);
 }
+
+#[test]
+#[trace("TC-1061", "FR-087-AC-5")]
+fn tc_1061_repository_content_rights_check_rejects_paywalled_designators_in_readme() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let output = run(root, None);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "the checked-in README must pass the content-rights check: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result = json(&output);
+    assert_eq!(result["outcome"], "accepted");
+    assert_eq!(result["findings"].as_array().map(Vec::len), Some(0));
+}
