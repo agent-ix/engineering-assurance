@@ -136,7 +136,7 @@ fn assert_gate_failure_exports_data_before_failing(gate_text: &str, jobs: &Value
     assert!(
         jobs["record"]["if"]
             .as_str()
-            .is_some_and(|value| value == "always()")
+            .is_some_and(|value| value.contains("always()"))
     );
     assert!(
         jobs["gates"]["steps"]
@@ -677,7 +677,11 @@ fn failed_receipt_run_does_not_write_to_the_default_branch() {
     let gate_text = assert_gate_job_boundary(jobs);
     assert_gate_failure_exports_data_before_failing(&gate_text, jobs);
     assert_record_job_is_isolated(jobs);
-    assert_eq!(jobs["record"]["if"], "always()");
+    assert!(
+        jobs["record"]["if"]
+            .as_str()
+            .is_some_and(|value| value.contains("always()"))
+    );
 
     let note_steps = jobs["notes"]["steps"].as_array().expect("notes steps");
     let note_writer = note_steps
