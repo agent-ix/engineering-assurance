@@ -801,6 +801,44 @@ mod tests {
     }
 
     #[test]
+    #[trace("TC-1062", "NFR-003-M-1", "NFR-003-M-2")]
+    fn built_wheel_and_npm_archives_equal_their_explicit_member_allowlists() {
+        let root = selected_root(Path::new(env!("CARGO_MANIFEST_DIR")))
+            .expect("repository root is package-auditable");
+        let output = Builder::new()
+            .prefix("engineering-assurance-package-membership-test-")
+            .tempdir()
+            .expect("temporary package output directory");
+
+        build_wheel(&root, output.path()).expect("wheel builds");
+        let wheel_path = select_archive(output.path(), "whl").expect("one wheel exists");
+        let wheel = package_archive::read_wheel(&wheel_path).expect("wheel is readable");
+        let wheel_expected = wheel_allowlist(&root, &wheel).expect("wheel allowlist is valid");
+        let wheel_observed = wheel.names().into_iter().collect::<BTreeSet<_>>();
+        assert_eq!(
+            wheel_observed,
+            wheel_expected.into_iter().collect(),
+            "the wheel must contain every allowlisted member and no other member"
+        );
+
+        let npm_report = build_npm(&root, output.path()).expect("npm archive builds");
+        let npm_expected = npm_allowlist(&root).expect("npm allowlist is valid");
+        let npm_path = select_archive(output.path(), "tgz").expect("one npm archive exists");
+        let npm = package_archive::read_npm(&npm_path).expect("npm archive is readable");
+        let npm_expected = npm_expected.into_iter().collect::<BTreeSet<_>>();
+        let npm_report = npm_report.into_iter().collect::<BTreeSet<_>>();
+        let npm_observed = npm.names().into_iter().collect::<BTreeSet<_>>();
+        assert_eq!(
+            npm_report, npm_expected,
+            "npm pack must report every allowlisted member and no other member"
+        );
+        assert_eq!(
+            npm_observed, npm_expected,
+            "the npm archive must contain every allowlisted member and no other member"
+        );
+    }
+
+    #[test]
     #[trace("TC-111", "FR-017-AC-3", "FR-017-CON-3")]
     fn npm_report_requires_exactly_one_result() {
         assert_eq!(
