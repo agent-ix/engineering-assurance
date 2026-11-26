@@ -299,6 +299,14 @@ fn create_notes_fixture(root: &Path) -> (std::path::PathBuf, std::path::PathBuf)
             .expect("bare git init starts")
             .success()
     );
+    assert!(
+        Command::new("git")
+            .arg(format!("--git-dir={}", remote.display()))
+            .args(["symbolic-ref", "HEAD", "refs/heads/main"])
+            .status()
+            .expect("bare remote HEAD is set")
+            .success()
+    );
     let checkout = root.join("checkout");
     fs::create_dir_all(&checkout).expect("checkout directory is created");
     assert!(
