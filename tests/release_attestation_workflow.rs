@@ -312,7 +312,7 @@ fn nonempty_invalid_evidence_is_refused_before_the_role_source_failure() {
 }
 
 #[cfg(unix)]
-#[trace("TC-553", "FR-069-AC-1")]
+#[trace("TC-553", "FR-069-AC-1", "FR-069-AC-4")]
 #[test]
 fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting() {
     use std::os::unix::fs::PermissionsExt;
@@ -326,9 +326,20 @@ fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting(
         .find(|step| step["name"] == "Validate the retained evidence store with the Quoin exporter")
         .expect("Quoin exporter step exists");
     let script = export["run"].as_str().expect("export script");
+    assert_eq!(export["env"]["EVIDENCE_DIR"], "release-evidence");
+    assert_eq!(export["env"]["RELEASE_ARTIFACTS_DIR"], "release-artifacts");
+    assert!(script.contains("--subject \"$subject_path\""));
+    assert!(script.contains("--evidence-dir \"$EVIDENCE_DIR\""));
+    assert!(script.contains("--output \"$TEST_RESULT_OUTPUT\""));
     let attest_steps = workflow["jobs"]["attest"]["steps"]
         .as_array()
         .expect("attest steps");
+    assert!(attest_steps.iter().all(|step| {
+        step["run"].as_str().is_none_or(|run| !run.contains("quoin"))
+    }));
+    assert!(workflow["on"]["workflow_call"]["inputs"]
+        .get("test_result")
+        .is_none());
     let attest_test_result = attest_steps
         .iter()
         .find(|step| step["name"] == "Attest Quoin test result")
