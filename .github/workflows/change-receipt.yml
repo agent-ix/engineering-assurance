@@ -402,7 +402,7 @@ jobs:
           fi
           gh auth setup-git
           merged_pull_request="$(jq -r '.merged_pull_request' "$context")"
-          request="$(jq -c \
+          request="$(jq -c -n \
             --arg repository "$PWD" \
             --arg commit "$INPUT_COMMIT" \
             --arg github_repository "$REPOSITORY" \
@@ -411,9 +411,9 @@ jobs:
             --argjson bundles "$(jq -c '.bundles' "$result")" \
             '{protocol:"engineering-assurance.receipt-note-request/v1",operation:"store",repository:$repository,commit:$commit,bundles:$bundles,verification:{github_repository:$github_repository,base_branch:$base_branch,merged_pull_request:$merged_pull_request,receipt_signer_repository:"agent-ix/engineering-assurance",receipt_signer_workflow_path:".github/workflows/change-receipt.yml",receipt_signer_ref:"refs/heads/main",approval_signer_repository:"agent-ix/engineering-assurance",approval_signer_workflow_path:".github/workflows/review-gate.yml",approval_signer_ref:"refs/heads/main"}}')"
           "$EA_CLI" receipt-note --request "$request"
-          for attempt in 1 2 3 4 5; do
+          for attempt in 1 2 3 4 5 6; do
             git fetch origin refs/notes/assurance-receipts:refs/notes/assurance-receipts || true
-            git notes --ref=refs/notes/assurance-receipts merge -s cat_sort_uniq || true
+            git notes --ref=refs/notes/assurance-receipts merge -s cat_sort_uniq FETCH_HEAD || true
             if git push origin refs/notes/assurance-receipts; then exit 0; fi
           done
           echo "::error::receipt_note_conflict"
