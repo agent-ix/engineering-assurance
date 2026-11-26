@@ -18,4 +18,4 @@ Reviewed SUITE-004 and the requirements governing Engineering Assurance's eviden
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
-| FND-001 | medium | Update FR-070-AC-11 to distinguish the new local SUITE-004 test-run store from the release-attestation store and tag-attestation caller that remain absent; as written, it asserts there is no retained evidence store after this PR adds retained run records. | spec/functional/FR-070-release-and-receipt-workflow-files.md:115; spec/evidence/runs/SUITE-004/2026-11-24T17~3A59~3A25~2E789640907Z.json |
+| FND-001 | medium | Update FR-070-AC-11 to distinguish the new local SUITE-004 test-run store from the release-attestation store and tag-attestation caller that remain absent; as written, it asserts there is no retained evidence store after this PR adds retained run records. | spec/functional/FR-070-release-and-receipt-workflow-files.md:115; spec/evidence/runs/SUITE-004/2026-11-24T17~3A59~3A25~2E789Z.json |

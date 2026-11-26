@@ -25,4 +25,4 @@ Plan completion: not assessed. Ran quoin matrix --repo . --json: 95 requirements
 
 | ID | Severity | Summary | Refs |
 | --- | --- | --- | --- |
-| FND-001 | medium | SUITE-004 run entries are not bound to their trace criteria, so the matrix and evidence audit cannot associate a future passing execution with the 18 real-tool criteria. | spec/evidence/bindings.json:2; spec/evidence/runs/SUITE-004/2026-11-24T17~3A59~3A25~2E789640907Z.json |
+| FND-001 | medium | SUITE-004 run entries are not bound to their trace criteria, so the matrix and evidence audit cannot associate a future passing execution with the 18 real-tool criteria. | spec/evidence/bindings.json:2; spec/evidence/runs/SUITE-004/2026-11-24T17~3A59~3A25~2E789Z.json |

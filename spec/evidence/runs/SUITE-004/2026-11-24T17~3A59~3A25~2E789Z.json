@@ -74,6 +74,6 @@
   "evidenceKind": "Integration",
   "schemaVersion": 1,
   "suite": "SUITE-004",
-  "timestamp": "2026-11-24T17:59:25.789640907Z",
+  "timestamp": "2026-11-24T17:59:25.789Z",
   "tool": "engineering-assurance real-tool-test (0.36.8)"
 }
