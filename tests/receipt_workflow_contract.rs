@@ -241,6 +241,326 @@ fn producer_request(root: &Path, path: &Path, marker: &Path, policy: &Value) -> 
 }
 
 #[cfg(unix)]
+fn git_at(root: &Path, arguments: &[&str]) -> std::process::Output {
+    Command::new("git")
+        .args(arguments)
+        .current_dir(root)
+        .output()
+        .expect("git starts")
+}
+
+#[cfg(unix)]
+fn git_text_at(root: &Path, arguments: &[&str]) -> String {
+    let output = git_at(root, arguments);
+    assert!(
+        output.status.success(),
+        "git {arguments:?}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout)
+        .expect("git output is UTF-8")
+        .trim()
+        .to_owned()
+}
+
+#[cfg(unix)]
+fn git_executable_path() -> std::path::PathBuf {
+    std::env::split_paths(&std::env::var_os("PATH").expect("test PATH exists"))
+        .map(|directory| directory.join("git"))
+        .find(|path| path.is_file())
+        .expect("git executable is on PATH")
+}
+
+#[cfg(unix)]
+fn configure_fixture_repo(repository: &Path) {
+    git_text_at(repository, &["config", "user.name", "Receipt Fixture"]);
+    git_text_at(
+        repository,
+        &["config", "user.email", "receipt@example.invalid"],
+    );
+}
+
+#[cfg(unix)]
+fn commit_fixture_file(repository: &Path, name: &str, contents: &str, message: &str) -> String {
+    fs::write(repository.join(name), contents).expect("fixture file writes");
+    git_text_at(repository, &["add", name]);
+    git_text_at(repository, &["commit", "-qm", message]);
+    git_text_at(repository, &["rev-parse", "HEAD"])
+}
+
+#[cfg(unix)]
+fn create_notes_fixture(root: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
+    let remote = root.join("remote.git");
+    assert!(
+        Command::new("git")
+            .args(["init", "--bare", "-q"])
+            .arg(&remote)
+            .status()
+            .expect("bare git init starts")
+            .success()
+    );
+    let checkout = root.join("checkout");
+    fs::create_dir_all(&checkout).expect("checkout directory is created");
+    assert!(
+        git_at(&checkout, &["init", "-q"]).status.success(),
+        "fixture repository initializes"
+    );
+    configure_fixture_repo(&checkout);
+    commit_fixture_file(&checkout, "base.txt", "base\n", "base");
+    git_text_at(&checkout, &["branch", "-M", "main"]);
+    git_text_at(
+        &checkout,
+        &[
+            "remote",
+            "add",
+            "origin",
+            remote.to_str().expect("remote path UTF-8"),
+        ],
+    );
+    git_text_at(&checkout, &["push", "-u", "origin", "main"]);
+    (remote, checkout)
+}
+
+#[cfg(unix)]
+fn receipt_notes_workflow_script() -> String {
+    let receipt_workflow = workflow("change-receipt.yml");
+    let steps = receipt_workflow["jobs"]["notes"]["steps"]
+        .as_array()
+        .expect("notes job steps");
+    steps
+        .iter()
+        .find(|step| step["name"] == "Store the signed receipt in Git notes")
+        .and_then(|step| step["run"].as_str())
+        .expect("notes store script")
+        .to_owned()
+}
+
+#[cfg(unix)]
+fn prepare_notes_runner(root: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
+    let runner_temp = root.join("runner-temp");
+    let artifacts = runner_temp.join("receipt-signed-data");
+    let bin = root.join("bin");
+    fs::create_dir_all(&artifacts).expect("receipt artifacts directory");
+    fs::create_dir_all(&bin).expect("fixture bin directory");
+    fs::write(
+        artifacts.join("receipt-result.json"),
+        r#"{"bundles":{"change_record":{},"test_result":{},"summary":{}}}"#,
+    )
+    .expect("receipt result artifact");
+    fs::write(
+        artifacts.join("receipt-context.json"),
+        r#"{"merged_pull_request":"fictional/project#17"}"#,
+    )
+    .expect("receipt context artifact");
+    write_executable(
+        &bin.join("gh"),
+        "#!/bin/sh\nset -eu\n[ \"$1\" = auth ] && [ \"$2\" = setup-git ]\n",
+    );
+    write_executable(
+        &bin.join("receipt-note-cli"),
+        "#!/bin/sh\nset -eu\nrequest=\"$3\"\ncommit=$(printf '%s' \"$request\" | jq -r '.commit')\nnote=\"$RUNNER_TEMP/receipt-note.txt\"\nprintf '{\\\"bundle\\\":\\\"change:%s\\\"}\\n{\\\"bundle\\\":\\\"test:%s\\\"}\\n{\\\"bundle\\\":\\\"summary:%s\\\"}\\n' \"$commit\" \"$commit\" \"$commit\" > \"$note\"\ngit notes --ref=refs/notes/assurance-receipts add -f -F \"$note\" \"$commit\"\n",
+    );
+    (runner_temp, bin)
+}
+
+#[cfg(unix)]
+fn run_receipt_notes_job(
+    script: &str,
+    repository: &Path,
+    runner_temp: &Path,
+    bin: &Path,
+    commit: &str,
+    reject_count_file: &Path,
+    extra_path: Option<&Path>,
+    barrier: Option<(&Path, &Path)>,
+) -> std::process::Output {
+    let mut paths = Vec::new();
+    if let Some(extra_path) = extra_path {
+        paths.push(extra_path.display().to_string());
+    }
+    paths.push(bin.display().to_string());
+    paths.push("/usr/bin:/bin".to_owned());
+    let mut command = Command::new("/bin/bash");
+    command
+        .args(["-c", script])
+        .current_dir(repository)
+        .env("PATH", paths.join(":"))
+        .env("EA_CLI", bin.join("receipt-note-cli"))
+        .env("RUNNER_TEMP", runner_temp)
+        .env("INPUT_COMMIT", commit)
+        .env("REPOSITORY", "fictional/project")
+        .env("DEFAULT_BRANCH", "main")
+        .env("GH_TOKEN", "fixture-token")
+        .env("REJECTION_COUNT_FILE", reject_count_file);
+    if let Some((barrier_ready, barrier_peer)) = barrier {
+        command
+            .env("BARRIER_READY", barrier_ready)
+            .env("BARRIER_PEER", barrier_peer)
+            .env("REAL_GIT", git_executable_path());
+    }
+    command.output().expect("receipt notes job starts")
+}
+
+#[cfg(unix)]
+#[trace("FR-076-AC-3")]
+#[test]
+fn receipt_note_jobs_merge_stale_pushes_and_fail_after_six_rejections() {
+    let script = receipt_notes_workflow_script();
+
+    let concurrent_root = tempfile::tempdir().expect("concurrent receipt fixture");
+    let (remote, _seed) = create_notes_fixture(concurrent_root.path());
+    let checkout_a = concurrent_root.path().join("checkout-a");
+    assert!(
+        Command::new("git")
+            .args(["clone", "-q"])
+            .arg(&remote)
+            .arg(&checkout_a)
+            .status()
+            .expect("first git clone starts")
+            .success()
+    );
+    configure_fixture_repo(&checkout_a);
+    let commit_a = commit_fixture_file(&checkout_a, "change-a.txt", "a\n", "change a");
+    git_text_at(&checkout_a, &["push", "origin", "main"]);
+    let checkout_b = concurrent_root.path().join("checkout-b");
+    assert!(
+        Command::new("git")
+            .args(["clone", "-q"])
+            .arg(&remote)
+            .arg(&checkout_b)
+            .status()
+            .expect("second git clone starts")
+            .success()
+    );
+    configure_fixture_repo(&checkout_b);
+    let commit_b = commit_fixture_file(&checkout_b, "change-b.txt", "b\n", "change b");
+    git_text_at(&checkout_b, &["push", "origin", "main"]);
+    let (runner_temp_a, bin_a) = prepare_notes_runner(&concurrent_root.path().join("run-a"));
+    let count_a = concurrent_root.path().join("pushes-a.txt");
+    let (runner_temp_b, bin_b) = prepare_notes_runner(&concurrent_root.path().join("run-b"));
+    let count_b = concurrent_root.path().join("pushes-b.txt");
+    let barrier = concurrent_root.path().join("push-barrier");
+    fs::create_dir(&barrier).expect("push barrier directory");
+    let ready_a = barrier.join("a-ready");
+    let ready_b = barrier.join("b-ready");
+    let git_wrapper_a = concurrent_root.path().join("git-wrapper-a");
+    let git_wrapper_b = concurrent_root.path().join("git-wrapper-b");
+    fs::create_dir(&git_wrapper_a).expect("first git wrapper directory");
+    fs::create_dir(&git_wrapper_b).expect("second git wrapper directory");
+    let barrier_git = "#!/bin/sh\nset -eu\nif [ \"${1-}\" = push ]; then\n  : > \"$BARRIER_READY\"\n  count=0\n  while [ ! -e \"$BARRIER_PEER\" ]; do\n    count=$((count + 1))\n    if [ \"$count\" -ge 500 ]; then exit 80; fi\n    sleep 0.01\n  done\nfi\nexec \"$REAL_GIT\" \"$@\"\n";
+    write_executable(&git_wrapper_a.join("git"), barrier_git);
+    write_executable(&git_wrapper_b.join("git"), barrier_git);
+    let script_a = script.clone();
+    let checkout_a_thread = checkout_a.clone();
+    let runner_temp_a_thread = runner_temp_a.clone();
+    let bin_a_thread = bin_a.clone();
+    let count_a_thread = count_a.clone();
+    let wrapper_a_thread = git_wrapper_a.clone();
+    let ready_a_thread = ready_a.clone();
+    let ready_b_thread = ready_b.clone();
+    let commit_a_thread = commit_a.clone();
+    let run_a_thread = std::thread::spawn(move || {
+        run_receipt_notes_job(
+            &script_a,
+            &checkout_a_thread,
+            &runner_temp_a_thread,
+            &bin_a_thread,
+            &commit_a_thread,
+            &count_a_thread,
+            Some(&wrapper_a_thread),
+            Some((&ready_a_thread, &ready_b_thread)),
+        )
+    });
+    let script_b = script.clone();
+    let count_b_thread = count_b.clone();
+    let wrapper_b_thread = git_wrapper_b.clone();
+    let ready_b_thread = ready_b.clone();
+    let ready_a_thread = ready_a.clone();
+    let commit_b_thread = commit_b.clone();
+    let run_b_thread = std::thread::spawn(move || {
+        run_receipt_notes_job(
+            &script_b,
+            &checkout_b,
+            &runner_temp_b,
+            &bin_b,
+            &commit_b_thread,
+            &count_b_thread,
+            Some(&wrapper_b_thread),
+            Some((&ready_b_thread, &ready_a_thread)),
+        )
+    });
+    let run_a = run_a_thread.join().expect("first notes job joins");
+    assert!(
+        run_a.status.success(),
+        "first note job failed with {:?}: stdout={} stderr={}",
+        run_a.status.code(),
+        String::from_utf8_lossy(&run_a.stdout),
+        String::from_utf8_lossy(&run_a.stderr)
+    );
+    let run_b = run_b_thread.join().expect("second notes job joins");
+    assert!(
+        run_b.status.success(),
+        "stale note job did not recover: {}",
+        String::from_utf8_lossy(&run_b.stderr)
+    );
+    let remote_notes = Command::new("git")
+        .arg(format!("--git-dir={}", remote.display()))
+        .args(["notes", "--ref=refs/notes/assurance-receipts", "list"])
+        .output()
+        .expect("remote notes list runs");
+    assert!(remote_notes.status.success());
+    let note_objects = String::from_utf8(remote_notes.stdout).expect("notes output is UTF-8");
+    assert!(note_objects.lines().any(|line| line.ends_with(&commit_a)));
+    assert!(note_objects.lines().any(|line| line.ends_with(&commit_b)));
+
+    let rejected_root = tempfile::tempdir().expect("rejected receipt fixture");
+    let (rejected_remote, rejected_checkout) = create_notes_fixture(rejected_root.path());
+    let rejected_commit = commit_fixture_file(
+        &rejected_checkout,
+        "change.txt",
+        "rejected\n",
+        "rejected change",
+    );
+    git_text_at(&rejected_checkout, &["push", "origin", "main"]);
+    let rejection_count = rejected_root.path().join("rejections.txt");
+    write_executable(
+        &rejected_remote.join("hooks/pre-receive"),
+        "#!/bin/sh\nset -eu\nprintf 'rejected\\n' >> \"$REJECTION_COUNT_FILE\"\nexit 1\n",
+    );
+    let (runner_temp, bin) = prepare_notes_runner(&rejected_root.path().join("run"));
+    let run = run_receipt_notes_job(
+        &script,
+        &rejected_checkout,
+        &runner_temp,
+        &bin,
+        &rejected_commit,
+        &rejection_count,
+        None,
+        None,
+    );
+    assert_eq!(run.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&run.stdout).contains("receipt_note_conflict"));
+    assert_eq!(
+        fs::read_to_string(rejection_count).unwrap().lines().count(),
+        6
+    );
+    let remote_notes_ref = Command::new("git")
+        .arg(format!("--git-dir={}", rejected_remote.display()))
+        .args([
+            "show-ref",
+            "--verify",
+            "--quiet",
+            "refs/notes/assurance-receipts",
+        ])
+        .status()
+        .expect("remote note ref check runs");
+    assert!(
+        !remote_notes_ref.success(),
+        "rejected receipt leaves no remote note"
+    );
+}
+
+#[cfg(unix)]
 #[trace("TC-595", "FR-075-AC-6")]
 #[test]
 fn adversarial_receipt_gate_cannot_read_signing_tokens_or_use_signer() {
