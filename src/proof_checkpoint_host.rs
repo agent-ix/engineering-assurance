@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use engineering_assurance::signature_verify::{
     Mapping, Reason, Status as SignatureStatus, TargetKind, Verdict, classify_tag, trailer_values,
 };
+use ix_trace_rs::implements;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use thiserror::Error;
@@ -99,6 +100,7 @@ impl ProofCheckpointError {
 }
 
 /// Executes one closed request and returns its single JSON result line.
+#[implements("FR-080-AC-9")]
 pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ProofCheckpointError> {
     let value: Value =
         serde_json::from_slice(bytes).map_err(|_| ProofCheckpointError::Unreadable)?;

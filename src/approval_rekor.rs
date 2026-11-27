@@ -14,6 +14,7 @@ use cms::{
     signed_data::{SignedData, SignerIdentifier},
 };
 use der::{Decode, Encode, asn1::OctetString};
+use ix_trace_rs::implements;
 use prost::Message;
 use serde_json::json;
 use sigstore_types::Bundle;
@@ -38,6 +39,7 @@ pub(crate) enum EmbeddedEntry {
 
 /// Extract the signed-attributes DER, signer certificate, signature, and
 /// optional Rekor entry from an armored CMS block.
+#[implements("FR-041-AC-28")]
 pub(crate) fn extract(tag_object: &[u8]) -> EmbeddedEntry {
     let Some(split) = engineering_assurance::signature_verify::split_tag_object(tag_object) else {
         return EmbeddedEntry::Invalid;
@@ -124,6 +126,7 @@ pub(crate) fn extract(tag_object: &[u8]) -> EmbeddedEntry {
 
 /// Verify the extracted entry and return only its library-authenticated
 /// integrated time.
+#[implements("FR-041-AC-29")]
 pub(crate) fn verify(bundle: &Bundle, artifact: &[u8], trusted_root_json: &str) -> Option<i64> {
     verify_with_policy(
         bundle,

@@ -19,6 +19,7 @@ use engineering_assurance::approval_verify::{
 use engineering_assurance::signature_verify::{
     Reason, SignatureKind, SignedAt, Status, Verdict, is_plain_revision, trailer_values,
 };
+use ix_trace_rs::implements;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -194,6 +195,7 @@ pub(crate) struct ResultLine<'a> {
 
 impl<'a> ResultLine<'a> {
     /// Verifies `tag` of `repository` against the record and the trust input.
+    #[implements("FR-041-AC-28")]
     pub(crate) fn verify(
         repository: &Path,
         tag: &'a str,

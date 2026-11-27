@@ -12,6 +12,7 @@
 use std::collections::BTreeMap;
 
 use serde::Deserialize;
+use ix_trace_rs::implements;
 
 use crate::record_sink::sink::ApprovalStatementReader;
 
@@ -96,6 +97,7 @@ struct ApprovalPredicate {
 
 /// Read all exact matches, verify each statement, and evaluate only the
 /// verified approvals against the supplied FR-061 role policy.
+#[implements("FR-064-AC-12")]
 #[must_use]
 pub fn verify_approval_statements(
     reader: &dyn ApprovalStatementReader,
