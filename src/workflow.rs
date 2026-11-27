@@ -58,7 +58,7 @@ impl fmt::Display for DecisionChoice {
     }
 }
 
-/// One of the five canonical Engineering Assurance workflows.
+/// One of the six canonical Engineering Assurance workflows.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WorkflowKind {
     /// Bounded assurance-profile intake.

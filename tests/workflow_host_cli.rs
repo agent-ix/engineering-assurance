@@ -387,7 +387,11 @@ fn tc_027_every_canonical_terminal_transition_is_human_gated() {
     // passes over an empty or renamed workflows directory, which is the exact
     // condition that would leave a terminal transition ungated and unnoticed.
     let workflows = expected_workflows();
-    assert_eq!(workflows.len(), 5, "the promoted set must not be empty");
+    assert_eq!(
+        workflows.len(),
+        6,
+        "the promoted set must contain six workflows"
+    );
     let root = skill_root().join("workflows");
 
     for workflow in &workflows {

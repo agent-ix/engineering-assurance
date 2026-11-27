@@ -4,7 +4,7 @@
 
 Engineering Assurance is the Agent IX assurance module for making engineering
 decisions explicit, reviewable, and owned by a person. It gives a coding agent
-one canonical onboarding skill and four resumable workflows for deciding what
+one canonical onboarding skill and six resumable workflows for deciding what
 assurance work a repository actually needs.
 
 It is deliberately not a compliance oracle. Engineering Assurance does not
