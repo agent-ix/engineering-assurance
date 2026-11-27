@@ -19,6 +19,7 @@ use engineering_assurance::{
         WorkflowOperation, WorkflowSnapshot, REQUEST_PROTOCOL as HOST_PROTOCOL,
     },
 };
+use ix_trace_rs::implements;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use thiserror::Error;
@@ -726,6 +727,7 @@ fn collect_rating_files(
     Ok(())
 }
 
+#[implements("FR-027-AC-14")]
 fn evaluate_rating_file(
     repository: &Path,
     path: &Path,
@@ -755,10 +757,22 @@ fn evaluate_rating_file(
         .and_then(|data| data.get("rated_by"))
         .and_then(Value::as_str)
         .map(str::to_owned);
+    let rating_status = frontmatter
+        .as_ref()
+        .and_then(|data| data.get("status"))
+        .and_then(Value::as_str);
     let (commit, reason) = match latest_commit(repository, relative) {
         Ok(Some(commit)) => match path_is_dirty(repository, relative) {
             Err(_) => (Some(commit), Some("unverifiable")),
             Ok(true) => (Some(commit), Some("not_committed")),
+            Ok(false) if rating_status != Some("accepted") => (
+                Some(commit),
+                Some(if rating_status == Some("proposed") {
+                    "status_proposed"
+                } else {
+                    "status_not_accepted"
+                }),
+            ),
             Ok(false) if rated_by.as_deref().is_none_or(str::is_empty) => {
                 (Some(commit), Some("unverifiable"))
             }

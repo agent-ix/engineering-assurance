@@ -15,7 +15,7 @@ use std::{
 };
 
 use ix_trace_rs::trace;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 struct Fixture {
     root: tempfile::TempDir,
@@ -121,7 +121,7 @@ fn rating_file(fixture: &Fixture) -> PathBuf {
     let path = fixture.repo().join("spec/validation/FRR-001.md");
     fs::write(
         &path,
-        "---\nid: FRR-001\ntype: FeatureRiskRating\nrated_by: alice@example.test\n---\n\n# Rating\n",
+        "---\nid: FRR-001\ntype: FeatureRiskRating\nstatus: accepted\nrated_by: alice@example.test\n---\n\n# Rating\n",
     )
     .expect("rating document");
     path
@@ -195,7 +195,7 @@ fn signed_rating_is_accepted_and_a_later_worktree_edit_invalidates_it() {
 
     fs::write(
         &path,
-        "---\nid: FRR-001\ntype: FeatureRiskRating\nrated_by: alice@example.test\n---\n\n# Rating\n\nChanged after the signed commit.\n",
+        "---\nid: FRR-001\ntype: FeatureRiskRating\nstatus: accepted\nrated_by: alice@example.test\n---\n\n# Rating\n\nChanged after the signed commit.\n",
     )
     .expect("later unsigned edit");
     let (invalidated, result) = acceptance(&fixture);
