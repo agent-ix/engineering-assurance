@@ -203,9 +203,7 @@ fn resolved(root: &Path, feature: &str) -> (BTreeSet<String>, bool) {
 }
 
 /// For every feature (not just `source-audit`): its normal-dependency graph
-/// resolves none of the binary-only crates (only `full` may), except Sigstore's
-/// `reqwest` and `sigstore-tuf` paths need `flate2` and `tempfile` for the
-/// `attestation-signing` capability; and
+/// resolves none of the binary-only or host-runtime crates (only `full` may); and
 /// `serde_json/arbitrary_precision` is on exactly for the features that imply
 /// `exact-numbers`, so a stray `dep:zip` or a dropped `exact-numbers` fails
 /// here rather than in a consumer's build.
@@ -225,13 +223,11 @@ fn tc_196_every_feature_graph_is_minimal_and_exact_numbers_is_exact() {
                     "feature {feature} must not resolve {banned}: {crates:?}"
                 );
             }
-            if feature != "attestation-signing" {
-                for dependency in SIGSTORE_RUNTIME_CRATES {
-                    assert!(
-                        !crates.contains(dependency),
-                        "feature {feature} must not resolve {dependency}: {crates:?}"
-                    );
-                }
+            for dependency in SIGSTORE_RUNTIME_CRATES {
+                assert!(
+                    !crates.contains(dependency),
+                    "feature {feature} must not resolve {dependency}: {crates:?}"
+                );
             }
         }
         let want_exact = EXACT_NUMBERS.contains(&feature.as_str());

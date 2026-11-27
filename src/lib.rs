@@ -58,7 +58,7 @@
 //! | `scope-footprint` | `scope_footprint` | `content-rights` | `serde`, `thiserror` |
 //! | `semantics` | `semantics` | `claim-strength`, `exact-numbers` | `serde`, `serde_json`, `thiserror` |
 //! | `signature-verify` | `signature_verify` | | `serde` |
-//! | `attestation-signing` | `attestation_signing`; with `approval-gate`, `approval_statement`, `approval_statement_writer` | `attestation-verify`, `record-sink` | `serde`, `serde_json`, `serde_json_canonicalizer`, `sigstore-sign`, `sigstore-types`, `sigstore-verify`, `thiserror`, `time`, `tokio` |
+//! | `attestation-signing` | `attestation_signing`; with `approval-gate`, `approval_statement` | `attestation-verify`, `record-sink` | `serde`, `serde_json`, `serde_json_canonicalizer`, `sigstore-types`, `sigstore-verify`, `thiserror`, `time` |
 //! | `attestation-verify` | `attestation_signing`, `attestation_verify`; with `approval-gate`, `approval_statement` | | `serde`, `serde_json`, `serde_json_canonicalizer`, `sigstore-types`, `sigstore-verify`, `thiserror` |
 //! | `source-audit` | `source_audit` | | `serde`, `syn`, `thiserror` |
 //! | `structured-yaml` | `structured_yaml` | | `serde_json`, `yaml_serde` |
@@ -66,7 +66,7 @@
 //! | `workflow-invariants` | `workflow_invariants` | | `serde`, `serde_json`, `thiserror`, `time` |
 //! | `campaign` | `campaign` (source-tree verification Unix only) | `measurement`, `producer-execution` | the generated campaign crate |
 //! | `exact-numbers` | none (opt-in) | | `serde_json/arbitrary_precision` |
-//! | `full` | all of the above, plus the binary | every feature above | `clap`, `cap-std`, `tar`, `zip`, `flate2`, `tempfile` |
+//! | `full` | all of the above, plus the binary and Sigstore signing adapter | every feature above | `clap`, `cap-std`, `sigstore-sign`, `tar`, `flate2`, `tempfile`, `tokio`, `zip` |
 
 #![forbid(unsafe_code)]
 
@@ -74,7 +74,7 @@
 pub mod approval_gate;
 #[cfg(all(feature = "approval-gate", feature = "attestation-verify"))]
 pub mod approval_statement;
-#[cfg(all(feature = "approval-gate", feature = "attestation-signing"))]
+#[cfg(all(feature = "approval-gate", feature = "full"))]
 pub mod approval_statement_writer;
 #[cfg(feature = "approval-tag")]
 pub mod approval_tag;

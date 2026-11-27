@@ -19,7 +19,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 use std::{
     collections::btree_map::Entry,
     future::Future,
@@ -27,18 +27,18 @@ use std::{
     thread,
 };
 
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sigstore_verify::VerificationPolicy;
 
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 use crate::record_sink::leak::{PublicPathProof, PublicStatementProof};
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 use crate::record_sink::sink::{Signer, SigningFailed as SinkSigningFailed};
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 use sigstore_sign::{SigningContext, SigstoreInstance};
 
 /// The in-toto Statement v1 type URI.
@@ -711,7 +711,7 @@ pub fn verify_statement_with_source(
     Ok(VerificationStatus::Verified)
 }
 
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 async fn sign_after_ambient_oidc<T, Detect, Start, Sign>(
     detect: Detect,
     start_signing: Start,
@@ -727,7 +727,7 @@ where
     start_signing(token).await
 }
 
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 async fn detect_ambient_oidc() -> Result<Option<sigstore_sign::oidc::IdentityToken>, SigningFailure>
 {
     sigstore_sign::oidc::IdentityToken::detect_ambient()
@@ -745,7 +745,7 @@ async fn detect_ambient_oidc() -> Result<Option<sigstore_sign::oidc::IdentityTok
 ///
 /// Returns `AmbientOidcUnavailable` if no ambient token is available, or
 /// `SigningFailed` when the delegated Sigstore signer fails.
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 pub async fn sign_statement_without_public_log(
     canonical_statement: &[u8],
 ) -> Result<String, SigningFailure> {
@@ -761,12 +761,12 @@ pub async fn sign_statement_without_public_log(
 ///
 /// Returns [`SigningFailure::AmbientOidcUnavailable`] when the workflow has no
 /// ambient identity, or [`SigningFailure::SigningFailed`] when Sigstore fails.
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 pub fn sign_statement_bytes(canonical_statement: &[u8]) -> Result<String, SigningFailure> {
     let payload = canonical_statement.to_vec();
     run_signing_thread(move || async move { sign_statement_without_public_log(&payload).await })
 }
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 async fn sign_statement_without_public_log_with<Detect>(
     canonical_statement: &[u8],
     detect: Detect,
@@ -797,12 +797,12 @@ where
 ///
 /// Returns `AmbientOidcUnavailable` if no ambient token is available, or
 /// `SigningFailed` when the delegated Sigstore signer fails.
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 async fn sign_public_payload(payload: &[u8]) -> Result<String, SigningFailure> {
     sign_public_payload_with(payload, detect_ambient_oidc()).await
 }
 
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 async fn sign_public_payload_with<Detect>(
     payload: &[u8],
     detect: Detect,
@@ -824,12 +824,12 @@ where
     .await
 }
 
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 async fn sign_private_payload(payload: &[u8]) -> Result<String, SigningFailure> {
     sign_private_payload_with(payload, detect_ambient_oidc()).await
 }
 
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 async fn sign_private_payload_with<Detect>(
     payload: &[u8],
     detect: Detect,
@@ -855,28 +855,28 @@ where
 ///
 /// `signed_payload` returns only payloads signed by this instance and keeps a
 /// bounded, one-shot cache so blob bundles need not duplicate artifact bytes.
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 pub struct SigstoreSigner {
     pending_payloads: Mutex<BTreeMap<String, Vec<u8>>>,
     backend: Arc<dyn SigningBackend>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 enum SigningPath {
     PublicLog,
     NoPublicLog,
 }
 
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 trait SigningBackend: Send + Sync {
     fn sign(&self, payload: &[u8], signing_path: SigningPath) -> Result<String, SigningFailure>;
 }
 
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 struct SigstoreSigningBackend;
 
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 impl SigningBackend for SigstoreSigningBackend {
     fn sign(&self, payload: &[u8], signing_path: SigningPath) -> Result<String, SigningFailure> {
         let payload = payload.to_vec();
@@ -889,7 +889,7 @@ impl SigningBackend for SigstoreSigningBackend {
     }
 }
 
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 impl SigstoreSigner {
     /// Construct a signer whose operations use ambient keyless OIDC.
     #[must_use]
@@ -960,14 +960,14 @@ impl SigstoreSigner {
     }
 }
 
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 impl Default for SigstoreSigner {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 impl Signer for SigstoreSigner {
     fn sign_for_public_log(
         &self,
@@ -1008,7 +1008,7 @@ impl Signer for SigstoreSigner {
     }
 }
 
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 fn run_signing_thread<T, Build, Work>(build: Build) -> Result<T, SigningFailure>
 where
     T: Send + 'static,
@@ -1060,7 +1060,7 @@ pub enum VerificationFailure {
 
 /// Signing failed with a stable reason.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 pub enum SigningFailure {
     /// No ambient OIDC identity token is available.
     #[error("ambient_oidc_unavailable")]
@@ -1106,7 +1106,7 @@ impl VerificationFailure {
     }
 }
 
-#[cfg(feature = "attestation-signing")]
+#[cfg(feature = "full")]
 impl SigningFailure {
     /// The stable machine-readable code for this failure.
     #[must_use]
@@ -1152,7 +1152,7 @@ impl StatementEncodingError {
     }
 }
 
-#[cfg(all(test, feature = "attestation-signing"))]
+#[cfg(all(test, feature = "full"))]
 mod tests {
     use super::*;
     use std::collections::BTreeSet;

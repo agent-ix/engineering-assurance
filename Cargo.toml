@@ -249,7 +249,7 @@ required-features = ["record-sink"]
 [[test]]
 name = "attestation_signing_live"
 path = "tests/attestation_signing_live.rs"
-required-features = ["attestation-signing"]
+required-features = ["full"]
 
 [[test]]
 name = "release"
@@ -574,9 +574,7 @@ attestation-signing = [
   "attestation-verify",
   "record-sink",
   "dep:base64",
-  "dep:sigstore-sign",
   "dep:time",
-  "dep:tokio",
 ]
 # Opt-in, and never part of `default`: turns on `serde_json/arbitrary_precision`. Cargo unifies features
 # across the whole dependency graph, so enabling this in one crate changes
@@ -586,8 +584,8 @@ attestation-signing = [
 # Capabilities whose code depends on exact numbers enable it themselves.
 exact-numbers = ["serde_json/arbitrary_precision"]
 # `full` is every capability plus what only the `engineering-assurance` binary
-# and its `*_host` modules use (clap, cap-std, tar, zip, flate2, tempfile),
-# plus `exact-numbers`.
+# and its `*_host` modules use (including the Sigstore signing client and its
+# network runtime), plus `exact-numbers`.
 full = [
   "approval-gate",
   "approval-tag",
@@ -634,8 +632,10 @@ full = [
   "dep:ix-cli-kit",
   "dep:prost",
   "dep:flate2",
+  "dep:sigstore-sign",
   "dep:tar",
   "dep:tempfile",
+  "dep:tokio",
   "dep:zip",
 ]
 
