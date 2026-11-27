@@ -52,7 +52,7 @@ syft-preflight:
 	echo "Syft integration preflight accepted $$version"
 
 syft-integration: syft-preflight
-	$(LOCKED_BUILD) "$(CURDIR)/target/syft-integration" $(CARGO) test --locked --features full --test syft_producer_cli -- --ignored
+	$(LOCKED_BUILD) "$(CURDIR)/target/syft-integration" $(CARGO) test --locked --features full,real-tool-tests -j 4 --test syft_producer_cli -- --test-threads=4
 
 osv-scanner-integration:
 	@case "$$EA_TEST_OSV_SCANNER" in /*) test -f "$$EA_TEST_OSV_SCANNER" && test -x "$$EA_TEST_OSV_SCANNER" ;; *) false ;; esac || { \
@@ -69,7 +69,7 @@ osv-scanner-integration:
 		echo "EA_TEST_OSV_DB must contain osv-scalibr/<ecosystem>/all.zip" >&2; \
 		exit 2; \
 	}
-	$(LOCKED_BUILD) "$(CURDIR)/target" $(CARGO) test --locked --features full --test osv_scanner_producer_cli -- --ignored
+	$(LOCKED_BUILD) "$(CURDIR)/target" $(CARGO) test --locked --features full,real-tool-tests -j 4 --test osv_scanner_producer_cli -- --test-threads=4
 
 converter-integration:
 	@case "$$EA_TEST_PANDOC" in /*) test -x "$$EA_TEST_PANDOC" ;; *) false ;; esac || { \

@@ -431,7 +431,7 @@ fn fixture_request(root: &Path, arguments: &[&str]) -> Value {
 
 #[trace("TC-300", "FR-038-AC-1", "FR-038-AC-10", "FR-039-AC-1", "FR-039-AC-9")]
 #[test]
-#[ignore = "needs EA_TEST_SYFT"]
+#[cfg(feature = "real-tool-tests")]
 fn tc_300_rust_fixture_yields_declared_component_count() {
     let sbom = sbom_for_source(&[("Cargo.toml", CARGO_TOML), ("Cargo.lock", CARGO_LOCK)]);
     assert_fixture(&sbom, 3, "pkg:cargo/");
@@ -439,7 +439,7 @@ fn tc_300_rust_fixture_yields_declared_component_count() {
 
 #[trace("TC-301", "FR-038-AC-10", "FR-039-AC-2", "FR-039-AC-9")]
 #[test]
-#[ignore = "needs EA_TEST_SYFT"]
+#[cfg(feature = "real-tool-tests")]
 fn tc_301_npm_fixture_yields_declared_component_count() {
     let sbom = sbom_for_source(&[
         ("package.json", NPM_PACKAGE),
@@ -450,7 +450,7 @@ fn tc_301_npm_fixture_yields_declared_component_count() {
 
 #[trace("TC-377", "FR-038-AC-10", "FR-039-AC-8", "FR-039-AC-9")]
 #[test]
-#[ignore = "needs EA_TEST_SYFT"]
+#[cfg(feature = "real-tool-tests")]
 fn tc_377_licence_fixture_components_carry_the_expected_licences() {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/licence-npm");
     let lock = fs::read_to_string(fixture.join("scan/package-lock.json")).expect("lock");
@@ -492,7 +492,7 @@ fn tc_377_licence_fixture_components_carry_the_expected_licences() {
 
 #[trace("TC-302", "FR-038-AC-10", "FR-039-AC-3", "FR-039-AC-9")]
 #[test]
-#[ignore = "needs EA_TEST_SYFT"]
+#[cfg(feature = "real-tool-tests")]
 fn tc_302_python_fixture_yields_declared_component_count() {
     let sbom = sbom_for_source(&[("requirements.txt", REQUIREMENTS)]);
     assert_fixture(&sbom, 3, "pkg:pypi/");
@@ -500,7 +500,7 @@ fn tc_302_python_fixture_yields_declared_component_count() {
 
 #[trace("TC-303", "FR-038-AC-2", "FR-038-AC-10", "FR-039-AC-4", "FR-039-AC-9")]
 #[test]
-#[ignore = "needs EA_TEST_SYFT"]
+#[cfg(feature = "real-tool-tests")]
 fn tc_303_container_archive_yields_declared_component_count() {
     let syft = syft();
     let root = workspace(&[]);
@@ -526,7 +526,7 @@ fn tc_303_container_archive_yields_declared_component_count() {
 
 #[trace("TC-304", "FR-038-AC-7", "FR-038-AC-10", "FR-039-AC-9")]
 #[test]
-#[ignore = "needs EA_TEST_SYFT"]
+#[cfg(feature = "real-tool-tests")]
 fn tc_304_scan_ignores_planted_configuration_and_earlier_output() {
     let syft = syft();
     let planted = "exclude:\n  - \"**\"\n";

@@ -362,6 +362,9 @@ required-features = ["full"]
 # builds only the test targets that need no capability; the rest declare
 # `required-features`.
 default = []
+# Real external-tool tests are compiled only for the explicit `real-tool-tests`
+# lane, where pinned executables and local inputs are required.
+real-tool-tests = []
 # FR-027: atomic no-replace publish. A filesystem module, so like
 # `producer-execution` it is exempt from the FR-014-AC-4 I/O-freedom audit. The
 # publisher needs `thiserror` and `rustix` (O_NOFOLLOW).

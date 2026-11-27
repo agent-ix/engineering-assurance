@@ -3,9 +3,10 @@
 
 //! The OSV-Scanner producer request run through `producer-execute`.
 //!
-//! Scanner and database dependent cases are ignored by default and run only in
-//! `make osv-scanner-integration`. Fixture scanner cases exercise executor
-//! states; they do not create advisory evidence.
+//! Real scanner cases compile only with the `real-tool-tests` feature and run
+//! through `make real-tool-test` with the pinned scanner and local database.
+//! Fixture scanner cases exercise executor states; they do not create advisory
+//! evidence.
 
 use std::{
     ffi::OsString,
@@ -475,13 +476,7 @@ fn tc_9001_request_matches_the_published_osv_scanner_definition() {
 }
 
 #[cfg(target_os = "linux")]
-#[trace(
-    "TC-901",
-    "FR-044-AC-3",
-    "FR-044-AC-4",
-    "FR-044-AC-7",
-    "FR-044-AC-13"
-)]
+#[trace("TC-901", "FR-044-AC-3", "FR-044-AC-4", "FR-044-AC-7", "FR-044-AC-13")]
 #[test]
 fn tc_9002_incomplete_fixture_scan_refuses_reports_and_preserves_completed_fixture() {
     let root = workspace(br#"{"bomFormat":"CycloneDX","components":[]}"#);
@@ -621,7 +616,7 @@ fn tc_9004_integration_lane_refuses_missing_scanner_or_database() {
 
 #[trace("TC-904", "FR-044-AC-13", "FR-044-AC-14")]
 #[test]
-#[ignore = "needs EA_TEST_OSV_SCANNER and EA_TEST_OSV_DB; fixture outcomes are not compliance evidence"]
+#[cfg(feature = "real-tool-tests")]
 fn tc_9005_scans_the_debian_sbom_fixture_for_its_expected_advisory() {
     let scanner = scanner();
     let supplied_database = database();
@@ -681,7 +676,7 @@ fn tc_9005_scans_the_debian_sbom_fixture_for_its_expected_advisory() {
 
 #[trace("TC-905", "FR-044-AC-5")]
 #[test]
-#[ignore = "needs EA_TEST_OSV_SCANNER; intentionally uses an empty local database"]
+#[cfg(feature = "real-tool-tests")]
 fn tc_9006_real_scanner_refuses_an_empty_database_without_a_report() {
     let scanner = scanner();
     let root = workspace(&debian_sbom());
@@ -710,7 +705,7 @@ fn tc_9006_real_scanner_refuses_an_empty_database_without_a_report() {
 
 #[trace("TC-906", "FR-044-AC-8")]
 #[test]
-#[ignore = "needs EA_TEST_OSV_SCANNER and EA_TEST_OSV_DB; network namespace blocks scanner networking"]
+#[cfg(feature = "real-tool-tests")]
 fn tc_9007_real_scanner_completes_with_network_disabled() {
     let scanner = scanner();
     let supplied_database = database();
@@ -803,7 +798,7 @@ fn tc_9008_scanner_reads_the_retained_sbom_after_the_upstream_source_changes() {
 
 #[trace("TC-908", "FR-044-AC-1")]
 #[test]
-#[ignore = "needs EA_TEST_OSV_SCANNER and EA_TEST_OSV_DB; fixture matches are not compliance evidence"]
+#[cfg(feature = "real-tool-tests")]
 fn tc_9009_scans_the_syft_generated_npm_sbom_for_its_expected_advisory() {
     let scanner = scanner();
     let supplied_database = database();
@@ -813,7 +808,7 @@ fn tc_9009_scans_the_syft_generated_npm_sbom_for_its_expected_advisory() {
 
 #[trace("TC-909", "FR-044-AC-2")]
 #[test]
-#[ignore = "needs EA_TEST_OSV_SCANNER and EA_TEST_OSV_DB; fixture matches are not compliance evidence"]
+#[cfg(feature = "real-tool-tests")]
 fn tc_9010_scans_the_syft_generated_pypi_sbom_for_its_expected_advisory() {
     let scanner = scanner();
     let supplied_database = database();
@@ -823,7 +818,7 @@ fn tc_9010_scans_the_syft_generated_pypi_sbom_for_its_expected_advisory() {
 
 #[trace("TC-910", "FR-044-AC-2")]
 #[test]
-#[ignore = "needs EA_TEST_OSV_SCANNER and EA_TEST_OSV_DB; fixture matches are not compliance evidence"]
+#[cfg(feature = "real-tool-tests")]
 fn tc_9011_scans_the_syft_generated_go_sbom_for_its_expected_advisory() {
     let scanner = scanner();
     let supplied_database = database();

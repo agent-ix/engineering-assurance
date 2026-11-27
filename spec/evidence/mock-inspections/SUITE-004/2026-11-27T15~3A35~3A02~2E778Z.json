@@ -1,0 +1,188 @@
+{
+  "injections": [
+    {
+      "injects": [
+        "FakeVerifier::default"
+      ],
+      "line": 286,
+      "path": "tests/support/approval_trail_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "receipts_that_do_not_verify_are_listed_as_invalid_receipt_and_never_dropped"
+    },
+    {
+      "injects": [
+        "FakeVerifier::default"
+      ],
+      "line": 386,
+      "path": "tests/support/approval_trail_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "an_unreceipted_policy_tag_for_another_record_is_visible_and_can_be_accepted"
+    },
+    {
+      "injects": [
+        "FakeVerifier::default"
+      ],
+      "line": 417,
+      "path": "tests/support/approval_trail_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "a_policy_without_tag_receipts_skips_existing_receipt_notes"
+    },
+    {
+      "injects": [
+        "FakeVerifier::default"
+      ],
+      "line": 483,
+      "path": "tests/support/approval_trail_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "receipt_verification_uses_both_roots_and_each_tag_receipt_identity"
+    },
+    {
+      "injects": [
+        "FakeVerifier::default"
+      ],
+      "line": 536,
+      "path": "tests/support/approval_trail_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "the_trail_and_the_repository_check_list_the_same_findings_for_the_same_inputs"
+    },
+    {
+      "injects": [
+        "FakeVerifier::default"
+      ],
+      "line": 593,
+      "path": "tests/support/approval_trail_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "an_accepted_missing_tag_is_listed_accepted_and_does_not_make_the_trail_incomplete"
+    },
+    {
+      "injects": [
+        "FakeVerifier::default"
+      ],
+      "line": 608,
+      "path": "tests/support/approval_trail_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "an_accepted_missing_tag_is_listed_accepted_and_does_not_make_the_trail_incomplete"
+    },
+    {
+      "injects": [
+        "FakeVerifier::default"
+      ],
+      "line": 617,
+      "path": "tests/support/approval_trail_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "an_accepted_missing_tag_is_listed_accepted_and_does_not_make_the_trail_incomplete"
+    },
+    {
+      "injects": [
+        "FakeVerifier::default"
+      ],
+      "line": 633,
+      "path": "tests/support/approval_trail_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "an_accepted_missing_tag_is_listed_accepted_and_does_not_make_the_trail_incomplete"
+    },
+    {
+      "injects": [
+        "FakeSigner::default"
+      ],
+      "line": 250,
+      "path": "tests/support/tag_receipt_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "a_prefix_tag_yields_one_signed_statement_for_the_pushed_tag_object"
+    },
+    {
+      "injects": [
+        "FakeSigner::default"
+      ],
+      "line": 312,
+      "path": "tests/support/tag_receipt_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "no_prefix_no_member_a_bad_member_and_a_non_utf8_name_end_as_specified"
+    },
+    {
+      "injects": [
+        "FakeSigner::default"
+      ],
+      "line": 407,
+      "path": "tests/support/tag_receipt_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "pushed_at_is_the_platform_push_time_never_the_tagger_date"
+    },
+    {
+      "injects": [
+        "FakeSigner::default"
+      ],
+      "line": 421,
+      "path": "tests/support/tag_receipt_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "record_ids_are_copied_in_message_order_and_unreadable_trailers_carry_none"
+    },
+    {
+      "injects": [
+        "FakeSigner::default"
+      ],
+      "line": 480,
+      "path": "tests/support/tag_receipt_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "a_public_write_is_leak_checked_and_a_private_one_never_uses_the_public_log"
+    },
+    {
+      "injects": [
+        "FakeSigner::default"
+      ],
+      "line": 498,
+      "path": "tests/support/tag_receipt_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "a_public_write_is_leak_checked_and_a_private_one_never_uses_the_public_log"
+    },
+    {
+      "injects": [
+        "FakeSigner::default"
+      ],
+      "line": 506,
+      "path": "tests/support/tag_receipt_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "a_public_write_is_leak_checked_and_a_private_one_never_uses_the_public_log"
+    },
+    {
+      "injects": [
+        "FakeVerifier::default"
+      ],
+      "line": 989,
+      "path": "tests/support/tag_receipt_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "the_repository_comparison_finds_a_deleted_changed_and_unreceipted_tag"
+    },
+    {
+      "injects": [
+        "FakeVerifier::default"
+      ],
+      "line": 1028,
+      "path": "tests/support/tag_receipt_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "a_bad_signature_an_unparsable_line_and_an_unlisted_signer_are_invalid_not_missing"
+    },
+    {
+      "injects": [
+        "FakeVerifier::default"
+      ],
+      "line": 1067,
+      "path": "tests/support/tag_receipt_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "a_bad_signature_an_unparsable_line_and_an_unlisted_signer_are_invalid_not_missing"
+    },
+    {
+      "injects": [
+        "FakeVerifier::default"
+      ],
+      "line": 1103,
+      "path": "tests/support/tag_receipt_host.rs",
+      "suite": "SUITE-004",
+      "symbol": "an_invalid_tag_finding_has_commit_and_reason_but_no_ref_or_tag"
+    }
+  ],
+  "schemaVersion": 1,
+  "suite": "SUITE-004",
+  "timestamp": "2026-11-27T15:35:02.778Z",
+  "tool": "quoin mock-inspection 0.31.1"
+}
