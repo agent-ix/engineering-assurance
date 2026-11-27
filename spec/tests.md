@@ -302,7 +302,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-064 | FR-064-AC-16 | TC-954 | ✅ `src/approval_statement.rs` exact tuple lookup verifies every retained match using its bytes and bundle |
 | FR-064 | FR-064-AC-17 | TC-955 | ✅ `src/approval_statement.rs` no exact match returns `statements_not_retained` |
 | FR-064 | FR-064-AC-18 | TC-956 | ✅ `src/approval_statement.rs` read failure returns `input_unreadable` |
-| FR-064 | FR-064-AC-19 | TC-957 | ✅ `src/approval_statement.rs` refused statement is not verified or counted |
+| FR-064 | FR-064-AC-12, FR-064-AC-19 | TC-957 | ✅ `src/approval_statement.rs` refused statement is not verified or counted |
 | FR-064 | FR-064-AC-20 | TC-954, TC-958 | ✅ `src/approval_statement.rs` aggregate status and reason use fixed precedence; only verified statements count toward roles |
 | FR-064 | FR-064-AC-13 | TC-518 | 🚧 Specified |
 | FR-064 | FR-064-AC-14 | TC-1002 | ✅ `tests/receipt_record.rs` verifies a trusted default-branch source ref and rejects a tag source ref |
@@ -322,14 +322,14 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-066 | FR-066-AC-1 | TC-530 | 🚧 Specified |
 | FR-066 | FR-066-AC-2 | TC-531 | 🚧 Specified |
 | FR-066 | FR-066-AC-3 | TC-532 | 🚧 Specified |
-| FR-066 | FR-066-AC-4 | TC-533 | 🚧 Specified |
+| FR-066 | FR-066-AC-4 | TC-533 | ✅ `tests/release_verify_cli.rs::tc_533_release_verdict_is_identical_with_the_four_attestation_files_present_or_removed` passed (1/1) |
 | FR-066 | FR-066-AC-5 | TC-534 | 🚧 Specified |
 | FR-066 | FR-066-AC-6 | TC-535 | 🚧 Specified |
 | FR-066 | FR-066-AC-7 | TC-536 | 🚧 Specified |
-| FR-066 | FR-066-AC-8 | TC-658 | 🚧 Opt-in public-good Sigstore test intentionally not run |
+| FR-066 | FR-066-AC-8 | TC-658, TC-660 | ✅ `src/attestation_signing.rs` verifies matching and mismatching SHA-256 subjects; TC-658 remains opt-in |
 | FR-067 | FR-067-AC-1 | TC-537 | 🚧 Specified |
 | FR-067 | FR-067-AC-2 | TC-538 | 🚧 Specified |
-| FR-067 | FR-067-AC-3 | TC-539 | 🚧 Specified |
+| FR-067 | FR-067-AC-3 | TC-539 | ✅ `tests/release_attestation_fr067.rs::release_verification_reads_allowed_signers_from_the_protected_base` passing |
 | FR-067 | FR-067-AC-4 | TC-540 | 🚧 Specified |
 | FR-067 | FR-067-AC-5 | TC-541 | 🚧 Specified |
 | FR-067 | FR-067-AC-6 | TC-542 | 🚧 Specified |
@@ -387,7 +387,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-074 | FR-074-AC-5 | TC-587 | 🚧 Specified |
 | FR-074 | FR-074-AC-6 | TC-588 | 🚧 Specified |
 | FR-074 | FR-074-AC-7 | TC-589 | 🚧 Specified |
-| FR-075 | FR-075-AC-1 | TC-590 | 🚧 Full receipt workflow production remains open |
+| FR-075 | FR-075-AC-1 | TC-590 | ✅ `tests/receipt_record.rs::squash_merged_pull_request_with_three_covering_approvals_passes_on_merge_commit` passing; full workflow production remains open |
 | FR-075 | FR-075-AC-8 | TC-999 | ✅ `src/producer_execution/private_git_store.rs` verifies immutable input retention and exact repository/PR-keyed lookup |
 | FR-075 | FR-075-AC-9 | TC-1000 | ✅ `tests/receipt_record_host_cli.rs` exercises protected base policy, gate evidence and private-store retention through the CLI before a fail-closed signer refusal |
 | FR-075 | FR-075-AC-2 | TC-591 | 🚧 Specified |
@@ -909,13 +909,13 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-530 | A fixture release with two artifact files yields exactly four statements; the first three have the two files as subjects at their SHA-256 digests, and the summary has the two files and the release commit | Integration | P0 | FR-066-AC-1 | 🚧 |
 | TC-531 | A statement set containing a fifth predicate type is rejected by the set validation | Integration | P0 | FR-066-AC-2 | 🚧 |
 | TC-532 | The SBOM statement document equals the CycloneDX document that the Syft stand-in produced through the executor, byte for byte, and no other SBOM tool is invoked | Integration | P0 | FR-066-AC-3 | 🚧 |
-| TC-533 | The `release-verify` result for the fixture release is identical with the four statements present and with them removed (FR-053) | Integration | P0 | FR-066-AC-4 | 🚧 |
+| TC-533 | The `release-verify` result for the fixture release is identical with the four statements present and with them removed (FR-053) | Integration | P0 | FR-066-AC-4 | ✅ `cargo test --locked --features full -j 4 --test release_verify_cli tc_533_release_verdict_is_identical_with_the_four_attestation_files_present_or_removed -- --exact --test-threads=4` (1 passed) |
 | TC-534 | Changing one artifact file after attestation makes the verification of every statement fail on the subject digest, and a digest supplied by the caller in place of the computed one is ignored | Integration | P0 | FR-066-AC-5 | 🚧 |
 | TC-535 | No statement of the set contains the bytes of the snapshot file of the fixture release commit | Integration | P0 | FR-066-AC-6 | 🚧 |
 | TC-536 | Static inspection shows the reusable workflow has no build step and receives the artifact files only as a downloaded workflow artifact | Static | P0 | FR-066-AC-7 | 🚧 |
 | TC-537 | A fixture release with a tag signed by the record's decision owner, a squash-merged release pull request and a satisfied role evaluation yields the full attestation set | Integration | P0 | FR-067-AC-1 | 🚧 |
 | TC-538 | The same release with an unsigned tag, a tag signed by an unmapped key, or a tag whose `Approved-Record-Digest` differs yields no statement and a failed workflow run reporting the `release-verify` status | Integration | P0 | FR-067-AC-2 | 🚧 |
-| TC-539 | A release whose allowed-signers file is changed on the tag's commit but not on the protected base branch is verified against the base branch's file | Integration | P0 | FR-067-AC-3 | 🚧 |
+| TC-539 | A release whose allowed-signers file is changed on the tag's commit but not on the protected base branch is verified against the base branch's file | Integration | P0 | FR-067-AC-3 | ✅ `tests/release_attestation_fr067.rs` passing |
 | TC-540 | A release with a valid tag and a policy of three roles with two covered yields nothing and names the missing role; a policy that lists an unstaffed role yields `approval_role_unstaffed` naming it | Integration | P0 | FR-067-AC-4 | 🚧 |
 | TC-541 | A tag pushed before the statement writer ran yields `release_roles_statements_pending`; after the statements exist the same run succeeds | Integration | P0 | FR-067-AC-5 | 🚧 |
 | TC-542 | A tag on a commit pushed directly, and a tag on a rebased commit that is not the tip, yield `release_roles_no_pull_request` | Integration | P0 | FR-067-AC-6 | 🚧 |
@@ -972,7 +972,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-587 | The private store holds the full private form for the fixture change before the statements are signed, and holds it also for the failed receipt | Integration | P0 | FR-074-AC-5 | 🚧 |
 | TC-588 | A private repository's receipt, including a run with the private signing stand-in unavailable, makes zero calls to the stand-in public transparency log, and the unavailable run fails with `receipt_private_signing_unavailable` | Integration | P0 | FR-074-AC-6 | 🚧 |
 | TC-589 | A public repository configured `private_store` fails with `receipt_public_log_required`; a public and a private repository on `none` each fail with `receipt_private_store_required` and no other code; the stand-in public log ... | Integration | P0 | FR-074-AC-7 | 🚧 |
-| TC-590 | A fixture squash-merged pull request with three covering approval statements and a receipt input yields a passed receipt on the merge commit | Integration | P0 | FR-075-AC-1 | 🚧 |
+| TC-590 | A fixture squash-merged pull request with three covering approval statements and a receipt input yields a passed receipt on the merge commit | Integration | P0 | FR-075-AC-1 | ✅ `tests/receipt_record.rs` passing |
 | TC-591 | A push with no pull request yields a failed receipt with `approvals_incomplete`, and a pull request with no receipt input yields a failed receipt with `contract_missing` | Integration | P0 | FR-075-AC-2 | 🚧 |
 | TC-592 | A gate that exits non-zero yields a failed receipt, and the default branch ref is unchanged by the failed run | Integration | P0 | FR-075-AC-3 | 🚧 |
 | TC-593 | A receipt policy on the pushed branch that differs from the protected base branch's does not change the gates that run | Integration | P0 | FR-075-AC-4 | 🚧 |
@@ -1087,7 +1087,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-654 | Source inspection of the signature classifier and binary adapters finds no in-tree signature parsing or cryptographic implementation | Static | P0 | FR-036-CON-2 | 🚧 Inspection not yet completed |
 | TC-658 | `tests/attestation_signing_live.rs` verifies a generic in-toto statement with a matching `sha256` artifact digest as `verified` and a differing expected digest as `wrong_subject` using the public-good Sigstore verifier | Integration | P0 | FR-066-AC-8 | 🚧 Opt-in public-good test intentionally not run in this lane |
 | TC-659 | A stand-in verifier rejects every valid, policy-mismatched, byte-tampered, and wrong-subject fixture before subject comparison; every case remains `signature_invalid` | Unit | P0 | FR-064-AC-3, NFR-010-AC-2 | ✅ `src/attestation_signing.rs` passing |
-| TC-660 | A statement signed by the policy-listed fixture identity is verified; a different repository/workflow identity yields `untrusted_signer`, a changed payload yields `signature_invalid`, and mismatching commit/tree digests yield `wrong_subject` | Unit | P0 | FR-064-AC-2, FR-064-AC-3, FR-064-AC-4, FR-068-AC-3 | ✅ `src/attestation_signing.rs` passes generic signer identity checks; summary-specific acceptance remains open |
+| TC-660 | A statement signed by the policy-listed fixture identity is verified for matching commit, tree, and SHA-256 artifact subjects; a different repository/workflow identity yields `untrusted_signer`, a changed payload yields `signature_invalid`, and mismatching subjects yield `wrong_subject` | Unit | P0 | FR-064-AC-2, FR-064-AC-3, FR-064-AC-4, FR-066-AC-8, FR-068-AC-3 | ✅ `src/attestation_signing.rs` passes generic signer and SHA-256 subject checks; summary-specific acceptance remains open |
 | TC-661 | The fixture approval statement has exactly the closed predicate member set and approval predicate type, names its repository and merged commit, and canonicalizes as plain in-toto Statement v1 JSON | Unit | P0 | FR-058-AC-1 | ✅ `src/attestation_signing.rs` passing |
 | TC-662 | The `untrusted_signer`, `signature_invalid`, and `wrong_subject` failure variants round-trip through their stable machine-readable codes | Unit | P0 | FR-064-AC-2, FR-064-AC-3, FR-064-AC-4 | ✅ `src/attestation_signing.rs` passing |
 | TC-663 | Both EA-105 signer methods fail with `ambient_oidc_unavailable` before starting Sigstore when no CI OIDC identity is available | Unit | P0 | FR-058-AC-7 | ✅ `src/attestation_signing.rs` passing |
@@ -1106,7 +1106,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-954 | An exact repository, merged pull-request and merged-commit lookup verifies every retained match with its exact bytes and bundle; a verified and an untrusted result aggregate to `untrusted_signer`, while only the verified approval satisfies the role | Unit | P0 | FR-064-AC-16, FR-064-AC-20 | ✅ `src/approval_statement.rs` passing |
 | TC-955 | A private-store query with no exact retained match returns `unverifiable` with `statements_not_retained` and leaves the role unsatisfied | Unit | P0 | FR-064-AC-17 | ✅ `src/approval_statement.rs` passing |
 | TC-956 | A failed private-store lookup returns `unverifiable` with `input_unreadable` and leaves the role unsatisfied | Unit | P0 | FR-064-AC-18 | ✅ `src/approval_statement.rs` passing |
-| TC-957 | A retained statement whose sink outcome was refused returns `unverifiable` with `publish_refused`, is not sent to the verifier, and does not satisfy the role | Unit | P0 | FR-064-AC-19 | ✅ `src/approval_statement.rs` passing |
+| TC-957 | A retained statement whose sink outcome was refused returns `unverifiable` with `publish_refused`, is not sent to the verifier, and does not satisfy the role | Unit | P0 | FR-064-AC-12, FR-064-AC-19 | ✅ `src/approval_statement.rs` passing |
 | TC-958 | A mixed verified/untrusted statement set uses status precedence; multiple unverifiable reasons use `input_unreadable`, then `publish_refused`, then `statements_not_retained` | Unit | P0 | FR-064-AC-20 | ✅ `src/approval_statement.rs` passing |
 | TC-959 | An authenticated approval statement with an extra predicate member or a different predicate type returns `predicate_invalid`; the open predicate is rejected | Unit | P0 | FR-058-AC-2, FR-064-AC-5 | ✅ `src/approval_statement.rs` passing |
 | TC-960 | Three verified statements from distinct individuals satisfy three roles; when one statement is untrusted, the aggregate is `untrusted_signer` and its role remains missing | Unit | P0 | FR-064-AC-1, FR-064-AC-10 | ✅ `src/approval_statement.rs` passing |
@@ -1179,7 +1179,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-952 | `matching_reassigns_earlier_role_to_find_full_coverage` | Unit | P0 | FR-061-AC-10 | 🚧 Specified; implementation and trace tag await merge of the EA-110 code branch |
 | TC-953 | `missing_role_is_the_smallest_maximum_matching_complement` | Unit | P0 | FR-061-AC-11, FR-061-AC-12 | 🚧 Specified; implementation and trace tag await merge of the EA-110 code branch |
 | TC-900 | The OSV-Scanner request validates and carries the defined arguments, environment, input, output, containment and exit policy | Unit | P0 | FR-044-AC-6 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
-| TC-901 | A nonexistent scanner is unavailable; fixture exits 127/128 fail, exit 1 completes, missing output and timeout withhold the report, and stale output is removed | Integration | P0 | FR-044-AC-3, FR-044-AC-4, FR-044-AC-7 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
+| TC-901 | A nonexistent scanner is unavailable; fixture exits 127/128 fail, exit 1 completes with its captured report preserved but not interpreted as clean, missing output and timeout withhold the report, and stale output is removed | Integration | P0 | FR-044-AC-3, FR-044-AC-4, FR-044-AC-7, FR-044-AC-13 | ✅ `tests/osv_scanner_producer_cli.rs::tc_9002_incomplete_fixture_scan_refuses_reports_and_preserves_completed_fixture` passed through locked-build on the candidate |
 | TC-902 | A caller mirror without `all.zip`, or with a Wolfi archive, is rejected | Unit | P0 | FR-044-AC-12 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
 | TC-903 | `make osv-scanner-integration` refuses missing, relative or invalid scanner/database paths and names the missing variable | Unit | P0 | FR-044-CON-1, FR-044-AC-9 | ✅ `tests/osv_scanner_producer_cli.rs` passing |
 | TC-904 | The offline scanner report associates the expected Debian advisory with the fixture's exact libwebp name, version and purl | Integration | P0 | FR-044-AC-13, FR-044-AC-14 | ✅ Opt-in lane passed with supplied Debian mirror; DSA id and upstream CVE IDs matched; ignored by default |
