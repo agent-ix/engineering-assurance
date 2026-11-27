@@ -116,7 +116,7 @@ fn tc_129_cli_writes_the_retained_artifact_and_reports_incomplete_matrix() {
         .expect("evaluation aggregate command must terminate");
 
     assert_eq!(output.status.code(), Some(1));
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, [] as [u8; 0]);
     let stdout = String::from_utf8(output.stdout).expect("stdout must be UTF-8");
     assert!(stdout.contains("evaluation aggregate: 1/7 complete"));
     let artifact: Value = serde_json::from_slice(

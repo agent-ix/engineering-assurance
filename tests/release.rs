@@ -172,7 +172,10 @@ fn tc_418_each_failed_fact_gives_its_own_reason_and_no_other() {
         },
         snapshot_present_at_baseline: Some(false),
     };
-    assert!(reasons(&passing).is_empty());
+    assert_eq!(
+        reasons(&passing),
+        [] as [engineering_assurance::release::Reason; 0]
+    );
     let with_changes = |changes: Changes| Facts { changes, ..passing };
     let with_baseline = |baseline| Facts {
         baseline,

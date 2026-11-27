@@ -1056,9 +1056,18 @@ mod tests {
             "Signed-off-meaning: yes\nRole: developer",
             "head",
         );
-        assert!(github_approvals(&policy, &[listed_agent], "head").is_empty());
-        assert!(github_approvals(&policy, &[ineligible_role], "head").is_empty());
-        assert!(github_approvals(&policy, &[unknown_individual], "head").is_empty());
+        assert_eq!(
+            github_approvals(&policy, &[listed_agent], "head"),
+            [] as [crate::approval_gate::Approval; 0]
+        );
+        assert_eq!(
+            github_approvals(&policy, &[ineligible_role], "head"),
+            [] as [crate::approval_gate::Approval; 0]
+        );
+        assert_eq!(
+            github_approvals(&policy, &[unknown_individual], "head"),
+            [] as [crate::approval_gate::Approval; 0]
+        );
     }
 
     #[test]
@@ -1072,7 +1081,10 @@ mod tests {
             "head",
         );
         unknown.account_type = AccountType::Unknown;
-        assert!(github_approvals(&policy(), &[unknown], "head").is_empty());
+        assert_eq!(
+            github_approvals(&policy(), &[unknown], "head"),
+            [] as [crate::approval_gate::Approval; 0]
+        );
     }
 
     #[test]
@@ -1115,8 +1127,14 @@ mod tests {
             "head",
         );
 
-        assert!(github_approvals(&policy, &[approval.clone(), changes.clone()], "head").is_empty());
-        assert!(github_approvals(&policy, &[approval.clone(), dismissed], "head").is_empty());
+        assert_eq!(
+            github_approvals(&policy, &[approval.clone(), changes.clone()], "head"),
+            [] as [crate::approval_gate::Approval; 0]
+        );
+        assert_eq!(
+            github_approvals(&policy, &[approval.clone(), dismissed], "head"),
+            [] as [crate::approval_gate::Approval; 0]
+        );
         assert_eq!(
             github_approvals(&policy, &[approval.clone(), commented], "head").len(),
             1
@@ -1141,7 +1159,10 @@ mod tests {
         edited_to_add.submitted_body =
             "Signed-off-meaning: added later\nRole: developer".to_owned();
         edited_to_add.body_edited = true;
-        assert!(github_approvals(&policy, &[edited_to_add], "head").is_empty());
+        assert_eq!(
+            github_approvals(&policy, &[edited_to_add], "head"),
+            [] as [crate::approval_gate::Approval; 0]
+        );
 
         let mut edited_to_remove = review(
             2,
@@ -1152,7 +1173,10 @@ mod tests {
         );
         edited_to_remove.submitted_body = "edited body no longer has markers".to_owned();
         edited_to_remove.body_edited = true;
-        assert!(github_approvals(&policy, &[edited_to_remove], "head").is_empty());
+        assert_eq!(
+            github_approvals(&policy, &[edited_to_remove], "head"),
+            [] as [crate::approval_gate::Approval; 0]
+        );
 
         let fresh = review(
             3,
@@ -1209,7 +1233,10 @@ mod tests {
             "head",
         );
         other_source.account.source = "other-tracker".to_owned();
-        assert!(github_approvals(&policy(), &[other_source], "head").is_empty());
+        assert_eq!(
+            github_approvals(&policy(), &[other_source], "head"),
+            [] as [crate::approval_gate::Approval; 0]
+        );
     }
 
     #[test]

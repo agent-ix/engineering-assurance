@@ -273,7 +273,7 @@ fn tc_274_trailer_output_yields_present_values_in_order_or_missing() {
     for text in ["", "Signed-off-by: A\n", "Signed-off-meaning-x: v\n"] {
         let missing = signed_off_meaning(text);
         assert_eq!(missing.presence, Presence::Missing, "{text:?}");
-        assert!(missing.values.is_empty());
+        assert_eq!(missing.values, [] as [std::string::String; 0]);
     }
 }
 
@@ -431,11 +431,11 @@ fn tc_293_gitsign_outcomes_map_to_statuses_mismatches_and_reasons() {
     // No identity or a repository `gitsign.*` key: nothing is run, never valid.
     let (missing, asked) = gitsign(None, false, &[(Probe::Exact, Run::Exit(0))]);
     assert_eq!(missing.reason, Some(Reason::GitsignIdentityMissing));
-    assert!(asked.is_empty());
+    assert_eq!(asked, [] as [Probe; 0]);
     let (configured, asked) = gitsign(Some(&id), true, &[(Probe::Exact, Run::Exit(0))]);
     assert_eq!(configured.status, Status::Unverifiable);
     assert_eq!(configured.reason, Some(Reason::GitsignRepositoryConfig));
-    assert!(asked.is_empty());
+    assert_eq!(asked, [] as [Probe; 0]);
 }
 
 #[test]

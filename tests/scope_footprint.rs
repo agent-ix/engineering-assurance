@@ -40,7 +40,7 @@ fn tc_232_exact_entries_and_directory_prefixes_cover_the_change() {
     )
     .expect("valid inputs");
     assert_eq!(verdict.status, ScopeStatus::Complete);
-    assert!(verdict.uncovered_paths.is_empty());
+    assert_eq!(verdict.uncovered_paths, [] as [std::string::String; 0]);
     assert!(verdict.footprint_available);
     assert!(!verdict.truncated);
     // An empty change under an empty declaration is complete too.
@@ -81,7 +81,7 @@ fn tc_234_unobserved_footprints_are_incomplete_never_complete() {
     assert_eq!(none.status, ScopeStatus::Incomplete);
     assert!(!none.footprint_available);
     assert!(!none.truncated);
-    assert!(none.uncovered_paths.is_empty());
+    assert_eq!(none.uncovered_paths, [] as [std::string::String; 0]);
     let empty_cut = verify_scope(&[], &observed(&[], true)).expect("valid");
     assert_eq!(empty_cut.status, ScopeStatus::Incomplete);
 }
@@ -156,7 +156,7 @@ fn tc_236_unused_scope_is_reported_without_changing_the_status() {
     // A nested entry under a used one is still unused unless a path reaches it.
     // Over-declaration is not knowable from a partial or missing footprint.
     let cut = verify_scope(&strings(&["docs"]), &observed(&["src/a/x.rs"], true)).expect("valid");
-    assert!(cut.unused_scope.is_empty());
+    assert_eq!(cut.unused_scope, [] as [std::string::String; 0]);
     let nested = verify_scope(&strings(&["src", "src/a"]), &observed(&["src/b.rs"], false))
         .expect("valid inputs");
     assert_eq!(nested.unused_scope, strings(&["src/a"]));
@@ -386,7 +386,7 @@ fn tc_238_invalid_requests_yield_machine_errors_and_exit_two() {
         assert_eq!(error["protocol"], "engineering-assurance.error/v1");
         assert_eq!(error["capability"], "scope-footprint");
         assert_eq!(error["code"], code);
-        assert!(!output.stderr.is_empty());
+        assert_ne!(output.stderr, [] as [u8; 0]);
     }
     assert!(
         !marker.exists(),

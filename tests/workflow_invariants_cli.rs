@@ -55,7 +55,7 @@ fn observation_request() -> Value {
 fn tc_106_cli_emits_one_ordered_versioned_result() {
     let output = run(&observation_request());
     assert!(output.status.success());
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, [] as [u8; 0]);
     assert_eq!(output.stdout.last(), Some(&b'\n'));
     assert!(!output.stdout[..output.stdout.len() - 1].contains(&b'\n'));
     let result: Value = serde_json::from_slice(&output.stdout).expect("stdout must be JSON");
@@ -73,7 +73,7 @@ fn tc_106_cli_refuses_malformed_requests_as_machine_errors() {
     for encoded in [b"{not-json".to_vec(), vec![b' '; 8 * 1024 * 1024 + 1]] {
         let output = run_bytes(&encoded);
         assert_eq!(output.status.code(), Some(2));
-        assert!(!output.stderr.is_empty());
+        assert_ne!(output.stderr, [] as [u8; 0]);
         let result: Value = serde_json::from_slice(&output.stdout).expect("stdout must be JSON");
         assert_eq!(result["protocol"], "engineering-assurance.error/v1");
         assert_eq!(result["capability"], "workflow-invariants");

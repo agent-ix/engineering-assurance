@@ -1678,7 +1678,7 @@ fn tc_651_signing_is_delegated_and_record_sink_has_only_its_declared_dependencie
             "verification_bundle"
         ]
     );
-    assert!(boundary.implementations.is_empty());
+    assert_eq!(boundary.implementations, [] as [std::string::String; 0]);
     assert!(boundary.port_is_trait_object);
     let calls: BTreeSet<_> = boundary.calls.into_iter().collect();
     assert_eq!(

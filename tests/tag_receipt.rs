@@ -515,13 +515,13 @@ fn each_receipt_is_judged_on_its_own_object_id() {
         TagFinding::TagNoReceipt { .. }
     ));
     // Deleted and pushed again at the identical object id: nothing.
-    assert!(
+    assert_eq!(
         compare(
             std::slice::from_ref(&one),
             &tags(&[("approve-1", 'a')]),
             &policy
-        )
-        .is_empty()
+        ),
+        [] as [engineering_assurance::tag_receipt::Judged; 0]
     );
     // Two receipts for two objects, only the second current: exactly the first.
     let two = Candidate::Verified(receipt("approve-1", 'b', 'c', &[]));
@@ -536,7 +536,10 @@ fn each_receipt_is_judged_on_its_own_object_id() {
         TagFinding::MissingTag { receipt, reason: MissingTagReason::TagChanged, .. } if receipt.tag_object == id('a')
     ));
     // Empty receipts and an empty tag set; the order of the receipts is irrelevant.
-    assert!(compare(&[], &tags(&[]), &policy).is_empty());
+    assert_eq!(
+        compare(&[], &tags(&[]), &policy),
+        [] as [engineering_assurance::tag_receipt::Judged; 0]
+    );
     assert_eq!(
         compare(
             &[two.clone(), one.clone()],

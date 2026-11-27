@@ -313,7 +313,10 @@ fn entry<'a>(trail: &'a Value, tag: &str) -> &'a Value {
 fn tc_1202_empty_trail_carries_producer_identity() {
     let fixture = fixture();
     let result = trail(&fixture);
-    assert!(result["entries"].as_array().expect("entries").is_empty());
+    assert_eq!(
+        result["entries"].as_array().expect("entries").as_slice(),
+        [] as [Value; 0]
+    );
     producer_identity::assert_producer(&result);
 }
 
@@ -991,7 +994,7 @@ fn tc_361_invalid_requests_and_repositories_are_machine_errors() {
         assert_eq!(error["protocol"], "engineering-assurance.error/v1");
         assert_eq!(error["capability"], "approval-trail");
         assert_eq!(error["code"], "approval_trail_request_invalid", "{label}");
-        assert!(!output.stderr.is_empty());
+        assert_ne!(output.stderr, [] as [u8; 0]);
     }
     let code = |output: Output| {
         assert_eq!(output.status.code(), Some(2), "{output:?}");

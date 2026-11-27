@@ -97,7 +97,10 @@ fn predicate_has_exact_public_shape_and_excludes_private_text() {
     assert!(predicate.approvals.iter().all(|approval| {
         approval.verdict == ApprovalVerdict::Covered && approval.statement_digest.is_some()
     }));
-    assert!(predicate.failures.is_empty());
+    assert_eq!(
+        predicate.failures,
+        [] as [engineering_assurance::change_record::Failure; 0]
+    );
     assert_eq!(value.as_object().expect("object").len(), 11);
     let bytes = serde_json::to_vec(&predicate).expect("public bytes");
     for private in [

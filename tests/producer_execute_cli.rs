@@ -98,7 +98,7 @@ fn result_line(output: &Output) -> Value {
 
 fn error_code(output: &Output) -> String {
     assert_eq!(output.status.code(), Some(2));
-    assert!(!output.stderr.is_empty());
+    assert_ne!(output.stderr, [] as [u8; 0]);
     let value: Value = serde_json::from_slice(&output.stdout).expect("machine error on stdout");
     assert_eq!(value["protocol"], "engineering-assurance.error/v1");
     assert_eq!(value["capability"], "producer-execute");

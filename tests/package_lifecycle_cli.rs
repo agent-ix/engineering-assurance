@@ -364,7 +364,7 @@ fn tc_111_publication_refusal_is_unconditional_and_machine_readable() {
 
     let hook = run(&["package-lifecycle", "refuse-publication", "--npm-hook"]);
     assert_eq!(hook.status.code(), Some(1));
-    assert!(hook.stdout.is_empty());
+    assert_eq!(hook.stdout, [] as [u8; 0]);
     assert!(String::from_utf8_lossy(&hook.stderr).contains("publication is disabled"));
 }
 
@@ -374,13 +374,13 @@ fn tc_111_npm_hook_mode_preserves_the_package_managers_stdout() {
     let fixture = complete_fixture("hook-mode");
     let staged = lifecycle_hook(fixture.path(), "stage");
     assert!(staged.status.success());
-    assert!(staged.stdout.is_empty());
-    assert!(staged.stderr.is_empty());
+    assert_eq!(staged.stdout, [] as [u8; 0]);
+    assert_eq!(staged.stderr, [] as [u8; 0]);
 
     let cleaned = lifecycle_hook(fixture.path(), "clean");
     assert!(cleaned.status.success());
-    assert!(cleaned.stdout.is_empty());
-    assert!(cleaned.stderr.is_empty());
+    assert_eq!(cleaned.stdout, [] as [u8; 0]);
+    assert_eq!(cleaned.stderr, [] as [u8; 0]);
 }
 
 #[test]

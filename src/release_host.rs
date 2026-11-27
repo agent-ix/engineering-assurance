@@ -20,6 +20,7 @@ use engineering_assurance::release::{
     BaselineState, Changes, Check, Facts, Reason, frontmatter, is_repository_path, reasons,
 };
 use engineering_assurance::signature_verify::is_plain_revision;
+use ix_trace_rs::implements;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
@@ -639,6 +640,7 @@ fn commit_shape(
     })
 }
 
+#[implements("FR-047-AC-5")]
 fn verify(
     request: &Request,
     reading: TrustReading<'_>,
@@ -712,17 +714,14 @@ fn verify(
         snapshot_present_at_baseline: shape.snapshot_present_at_baseline,
     };
     let failed = reasons(&facts);
-    let absent_items = resolution
-        .as_ref()
-        .map(|resolved| {
-            resolved
-                .items
-                .iter()
-                .filter(|item| !item.present)
-                .map(|item| item.path.clone())
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
+    let absent_items = resolution.as_ref().map_or_default(|resolved| {
+        resolved
+            .items
+            .iter()
+            .filter(|item| !item.present)
+            .map(|item| item.path.clone())
+            .collect::<Vec<_>>()
+    });
     let released = failed.is_empty() && status == ApprovalStatus::Approved;
     let mut result = ResultLine::not_released(tag, trust, failed, producer);
     result.absent_items = absent_items;

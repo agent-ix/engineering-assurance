@@ -296,7 +296,10 @@ fn tc_314_trailer_values_match_the_token_case_insensitively_and_trim_ascii_only(
         ["abc def"]
     );
     assert_eq!(trailer_values(parsed, "Empty"), [""]);
-    assert!(trailer_values(parsed, "Absent").is_empty());
+    assert_eq!(
+        trailer_values(parsed, "Absent"),
+        [] as [std::string::String; 0]
+    );
     // Only ASCII whitespace is trimmed: a no-break space stays in the value.
     assert_eq!(trailer_values("K: v\u{a0}\n", "K"), ["v\u{a0}"]);
     assert_eq!(trailer_values("K:\t v \n", "K"), ["v"]);

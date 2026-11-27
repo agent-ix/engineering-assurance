@@ -13,6 +13,7 @@
 
 use std::collections::BTreeMap;
 
+use ix_trace_rs::implements;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
@@ -560,9 +561,10 @@ fn entry_key(bundle: &Value) -> Option<(String, String)> {
 /// [`TagReceiptError::NoteInvalid`] when `bundle` is not a bundle of a tag
 /// receipt statement, [`TagReceiptError::NoteTooLarge`] when the result would
 /// exceed 1 MiB.
+#[implements("FR-081-AC-5", "FR-081-AC-6")]
 pub fn add_entry(existing: Option<&[u8]>, bundle: &Value) -> Result<NoteUpdate, TagReceiptError> {
     let key = entry_key(bundle).ok_or(TagReceiptError::NoteInvalid)?;
-    let mut note = existing.map(<[u8]>::to_vec).unwrap_or_default();
+    let mut note = existing.map_or_default(<[u8]>::to_vec);
     if note.len() > MAX_TAG_RECEIPT_NOTE_BYTES {
         return Err(TagReceiptError::NoteTooLarge);
     }

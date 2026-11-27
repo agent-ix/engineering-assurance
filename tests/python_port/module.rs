@@ -213,7 +213,7 @@ fn every_schema_uses_the_forms_of_the_dialect_it_declares() {
     // `dependentRequired` are 2019-09+. A file that mixes them validates
     // differently under different consumers.
     let paths = glob_ext(&package_root().join("schemas"), "json");
-    assert!(!paths.is_empty());
+    assert_ne!(paths, [] as [std::path::PathBuf; 0]);
     let mut seen: BTreeSet<&str> = BTreeSet::new();
     for path in paths {
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
@@ -432,7 +432,10 @@ fn ground_truth_kind_is_required_only_for_gate_stage() {
 
     let missing = gate(None);
     assert_eq!(missing, [required_msg("ground_truth_kind")]);
-    assert!(plan_errors(json!({"stage": "baseline"})).is_empty());
+    assert_eq!(
+        plan_errors(json!({"stage": "baseline"})),
+        [] as [std::string::String; 0]
+    );
 
     for refused in ["vibes-based", "Mechanical", ""] {
         assert!(!gate(Some(refused)).is_empty(), "{refused} at gate");
@@ -448,18 +451,36 @@ fn objective_is_optional_and_target_requires_a_bound() {
     assert!(!strs(&contract["required"]).contains(&"objective"));
     let errors = |objective: Value| plan_errors(json!({"objective": objective}));
 
-    assert!(plan_errors(json!({})).is_empty());
+    assert_eq!(plan_errors(json!({})), [] as [std::string::String; 0]);
     for direction in ["higher", "lower", "zero"] {
-        assert!(errors(json!({"direction": direction})).is_empty());
-        assert!(errors(json!({"direction": direction, "bound": 0.95})).is_empty());
+        assert_eq!(
+            errors(json!({"direction": direction})),
+            [] as [std::string::String; 0]
+        );
+        assert_eq!(
+            errors(json!({"direction": direction, "bound": 0.95})),
+            [] as [std::string::String; 0]
+        );
     }
-    assert!(errors(json!({"direction": "target", "bound": 250})).is_empty());
+    assert_eq!(
+        errors(json!({"direction": "target", "bound": 250})),
+        [] as [std::string::String; 0]
+    );
 
     assert!(errors(json!({"direction": "target"})).contains(&required_msg("bound")));
-    assert!(!errors(json!({"direction": "sideways"})).is_empty());
-    assert!(!errors(json!({"bound": 1})).is_empty());
-    assert!(!errors(json!({"direction": "target", "bound": "250"})).is_empty());
-    assert!(!errors(json!({"direction": "higher", "epoch": 2})).is_empty());
+    assert_ne!(
+        errors(json!({"direction": "sideways"})),
+        [] as [std::string::String; 0]
+    );
+    assert_ne!(errors(json!({"bound": 1})), [] as [std::string::String; 0]);
+    assert_ne!(
+        errors(json!({"direction": "target", "bound": "250"})),
+        [] as [std::string::String; 0]
+    );
+    assert_ne!(
+        errors(json!({"direction": "higher", "epoch": 2})),
+        [] as [std::string::String; 0]
+    );
 }
 
 #[test]
@@ -468,7 +489,10 @@ fn measurement_plan_skeleton_shows_a_valid_objective() {
     let skeleton = frontmatter(&skeleton_path("MeasurementPlan.md"));
     let direction = skeleton["objective"]["direction"].as_str().unwrap();
     assert!(["higher", "lower", "zero", "target"].contains(&direction));
-    assert!(schema_errors(&plan_validator(), &skeleton).is_empty());
+    assert_eq!(
+        schema_errors(&plan_validator(), &skeleton),
+        [] as [std::string::String; 0]
+    );
 }
 
 #[test]
@@ -493,22 +517,49 @@ fn objective_steering_fields_are_optional_advisory_and_range_checked() {
     };
 
     // No steering fields at all, and every field present together.
-    assert!(errors(json!({})).is_empty());
-    assert!(errors(json!({"weight": 1.0, "value_half_life": 30, "budget": 50})).is_empty());
+    assert_eq!(errors(json!({})), [] as [std::string::String; 0]);
+    assert_eq!(
+        errors(json!({"weight": 1.0, "value_half_life": 30, "budget": 50})),
+        [] as [std::string::String; 0]
+    );
     // Each field independently, including the advisory-only edge cases named
     // by PLAT-967: weight and budget may be exactly zero.
-    assert!(errors(json!({"weight": 0})).is_empty());
-    assert!(errors(json!({"weight": 2.5})).is_empty());
-    assert!(errors(json!({"budget": 0})).is_empty());
-    assert!(errors(json!({"budget": 1000})).is_empty());
-    assert!(errors(json!({"value_half_life": 0.001})).is_empty());
-    assert!(errors(json!({"value_half_life": 365})).is_empty());
+    assert_eq!(errors(json!({"weight": 0})), [] as [std::string::String; 0]);
+    assert_eq!(
+        errors(json!({"weight": 2.5})),
+        [] as [std::string::String; 0]
+    );
+    assert_eq!(errors(json!({"budget": 0})), [] as [std::string::String; 0]);
+    assert_eq!(
+        errors(json!({"budget": 1000})),
+        [] as [std::string::String; 0]
+    );
+    assert_eq!(
+        errors(json!({"value_half_life": 0.001})),
+        [] as [std::string::String; 0]
+    );
+    assert_eq!(
+        errors(json!({"value_half_life": 365})),
+        [] as [std::string::String; 0]
+    );
 
     // Negative weight, negative budget, and a non-positive half-life are rejected.
-    assert!(!errors(json!({"weight": -0.01})).is_empty());
-    assert!(!errors(json!({"budget": -1})).is_empty());
-    assert!(!errors(json!({"value_half_life": 0})).is_empty());
-    assert!(!errors(json!({"value_half_life": -1})).is_empty());
+    assert_ne!(
+        errors(json!({"weight": -0.01})),
+        [] as [std::string::String; 0]
+    );
+    assert_ne!(
+        errors(json!({"budget": -1})),
+        [] as [std::string::String; 0]
+    );
+    assert_ne!(
+        errors(json!({"value_half_life": 0})),
+        [] as [std::string::String; 0]
+    );
+    assert_ne!(
+        errors(json!({"value_half_life": -1})),
+        [] as [std::string::String; 0]
+    );
 
     // Non-numeric values are rejected for every field.
     for field in ["weight", "value_half_life", "budget"] {
@@ -522,9 +573,9 @@ fn objective_steering_fields_are_optional_advisory_and_range_checked() {
 #[trace("TC-244", "FR-033-AC-1")]
 fn cross_profile_comparison_is_an_optional_boolean() {
     let errors = |value: Value| plan_errors(json!({ "cross_profile_comparison": value }));
-    assert!(plan_errors(json!({})).is_empty());
-    assert!(errors(json!(true)).is_empty());
-    assert!(errors(json!(false)).is_empty());
+    assert_eq!(plan_errors(json!({})), [] as [std::string::String; 0]);
+    assert_eq!(errors(json!(true)), [] as [std::string::String; 0]);
+    assert_eq!(errors(json!(false)), [] as [std::string::String; 0]);
     for bad in [
         json!("true"),
         json!(1),
@@ -540,7 +591,7 @@ fn cross_profile_comparison_is_an_optional_boolean() {
 #[trace("TC-246", "FR-034-AC-1")]
 fn paired_run_is_an_optional_closed_relation_object() {
     let errors = |value: Value| plan_errors(json!({ "paired_run": value }));
-    assert!(plan_errors(json!({})).is_empty());
+    assert_eq!(plan_errors(json!({})), [] as [std::string::String; 0]);
     for ok in [
         json!({ "relation": "equal" }),
         json!({ "relation": "not_worse" }),
@@ -573,7 +624,7 @@ fn paired_run_is_an_optional_closed_relation_object() {
 #[trace("TC-247", "FR-035-AC-1")]
 fn population_set_and_exemption_are_optional_closed_declarations() {
     let errors = |over: Value| statistical_design_errors(None, over);
-    assert!(errors(json!({})).is_empty());
+    assert_eq!(errors(json!({})), [] as [std::string::String; 0]);
     for ok in [
         json!({ "population_set": { "ids": ["a"] } }),
         json!({ "population_set": { "ids": ["a", "b"] } }),
@@ -609,7 +660,10 @@ fn measurement_plan_skeleton_shows_the_steering_fields() {
     assert!(objective["weight"].as_f64().unwrap() > 0.0);
     assert!(objective["value_half_life"].as_f64().unwrap() > 0.0);
     assert!(objective["budget"].as_f64().unwrap() >= 0.0);
-    assert!(schema_errors(&plan_validator(), &skeleton).is_empty());
+    assert_eq!(
+        schema_errors(&plan_validator(), &skeleton),
+        [] as [std::string::String; 0]
+    );
     let body = read(&skeleton_path("MeasurementPlan.md"));
     assert!(body.contains("## Steering Fields"));
     assert!(body.to_lowercase().contains("advisory only"));
@@ -667,34 +721,46 @@ fn decision_rule_is_a_closed_comparator_with_exactly_one_reference() {
     assert_eq!(interval_level["exclusiveMaximum"], 1);
 
     for comparator in ["gt", "ge", "lt", "le", "eq"] {
-        assert!(dr(json!({"comparator": comparator, "threshold": 0})).is_empty());
+        assert_eq!(
+            dr(json!({"comparator": comparator, "threshold": 0})),
+            [] as [std::string::String; 0]
+        );
     }
-    assert!(dr(json!({"comparator": "eq", "baseline": "prior-collection"})).is_empty());
+    assert_eq!(
+        dr(json!({"comparator": "eq", "baseline": "prior-collection"})),
+        [] as [std::string::String; 0]
+    );
     for baseline in [
         "constant-predictor",
         "prior-collection",
         "best-seen",
         "external-reference",
     ] {
-        assert!(dr(json!({"comparator": "gt", "baseline": baseline})).is_empty());
-        assert!(dr(json!({"comparator": "ge", "baseline": baseline, "margin": -0.01})).is_empty());
+        assert_eq!(
+            dr(json!({"comparator": "gt", "baseline": baseline})),
+            [] as [std::string::String; 0]
+        );
+        assert_eq!(
+            dr(json!({"comparator": "ge", "baseline": baseline, "margin": -0.01})),
+            [] as [std::string::String; 0]
+        );
     }
 
     for comparator in ["gt", "ge", "lt", "le"] {
-        assert!(
-            dr(json!({"comparator": comparator, "threshold": 1, "interval_level": 0.95}))
-                .is_empty()
+        assert_eq!(
+            dr(json!({"comparator": comparator, "threshold": 1, "interval_level": 0.95})),
+            [] as [std::string::String; 0]
         );
     }
-    assert!(
+    assert_eq!(
         dr(json!({
             "comparator": "le",
             "baseline": "prior-collection",
             "margin": -0.05,
             "margin_mode": "relative",
             "interval_level": 0.9,
-        }))
-        .is_empty()
+        })),
+        [] as [std::string::String; 0]
     );
 
     let refused = [
@@ -767,7 +833,10 @@ fn decision_rule_is_a_closed_comparator_with_exactly_one_reference() {
     for (case, rule) in refused {
         assert!(!dr(rule).is_empty(), "{case}");
     }
-    assert!(!dr(json!("escalate when low")).is_empty());
+    assert_ne!(
+        dr(json!("escalate when low")),
+        [] as [std::string::String; 0]
+    );
 
     // JSON Schema has no finiteness keyword: a YAML `.inf` threshold passes the
     // schema, and only the Rust DecisionRule refuses it (FR-021). serde_json
@@ -779,7 +848,10 @@ fn decision_rule_is_a_closed_comparator_with_exactly_one_reference() {
     for bound in ["minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"] {
         assert!(threshold.get(bound).is_none(), "threshold has {bound}");
     }
-    assert!(dr(json!({"comparator": "ge", "threshold": f64::MAX})).is_empty());
+    assert_eq!(
+        dr(json!({"comparator": "ge", "threshold": f64::MAX})),
+        [] as [std::string::String; 0]
+    );
 
     let without_metric =
         minimal_measurement_plan(json!({"statistical_design": statistical_design(json!({}))}));
@@ -891,9 +963,11 @@ fn decision_rule_agrees_with_objective_direction_and_estimator() {
 
     let constant = json!({"comparator": "gt", "baseline": "constant-predictor", "margin": 0.05});
     let families = json!(["a", "b"]);
-    assert!(
-        sd(json!({"estimator": "proportion", "decision_rule": constant, "answer_families": families}))
-            .is_empty()
+    assert_eq!(
+        sd(
+            json!({"estimator": "proportion", "decision_rule": constant, "answer_families": families})
+        ),
+        [] as [std::string::String; 0]
     );
     for estimator in ["count", "mean", "median", "ratio"] {
         assert!(
@@ -930,29 +1004,32 @@ fn decision_rule_external_reference_baseline_has_no_estimator_restriction() {
             "{estimator}"
         );
     }
-    assert!(dr(json!({"comparator": "eq", "baseline": "external-reference"})).is_empty());
-    assert!(
-        !dr(json!({"comparator": "eq", "baseline": "external-reference", "margin": 0.1}))
-            .is_empty()
+    assert_eq!(
+        dr(json!({"comparator": "eq", "baseline": "external-reference"})),
+        [] as [std::string::String; 0]
+    );
+    assert_ne!(
+        dr(json!({"comparator": "eq", "baseline": "external-reference", "margin": 0.1})),
+        [] as [std::string::String; 0]
     );
     let lower = || Some(json!({"direction": "lower"}));
-    assert!(
+    assert_eq!(
         statistical_design_errors(
             lower(),
             json!({"decision_rule": {"comparator": "le", "baseline": "external-reference"}})
-        )
-        .is_empty()
+        ),
+        [] as [std::string::String; 0]
     );
-    assert!(
-        !statistical_design_errors(
+    assert_ne!(
+        statistical_design_errors(
             lower(),
             json!({"decision_rule": {"comparator": "ge", "baseline": "external-reference"}})
-        )
-        .is_empty()
+        ),
+        [] as [std::string::String; 0]
     );
-    assert!(
-        dr(json!({"comparator": "ge", "baseline": "external-reference", "margin": 0.02}))
-            .is_empty()
+    assert_eq!(
+        dr(json!({"comparator": "ge", "baseline": "external-reference", "margin": 0.02})),
+        [] as [std::string::String; 0]
     );
 }
 
@@ -966,7 +1043,10 @@ fn estimator_is_a_closed_vocabulary() {
         json!(["proportion", "count", "mean", "median", "ratio"])
     );
     for estimator in ["proportion", "count", "mean", "median", "ratio"] {
-        assert!(sd(json!({"estimator": estimator})).is_empty());
+        assert_eq!(
+            sd(json!({"estimator": estimator})),
+            [] as [std::string::String; 0]
+        );
     }
     for refused in [
         json!("retained-result proportion"),
@@ -1004,7 +1084,10 @@ fn measurement_plan_skeleton_shows_a_structured_decision_rule() {
     // evaluated threshold.
     assert_eq!(skeleton["objective"]["direction"], "higher");
     assert_eq!(skeleton["objective"]["bound"], 0.995);
-    assert!(schema_errors(&plan_validator(), &skeleton).is_empty());
+    assert_eq!(
+        schema_errors(&plan_validator(), &skeleton),
+        [] as [std::string::String; 0]
+    );
 }
 
 fn apparatus_cases() -> Value {
@@ -1035,8 +1118,11 @@ fn protected_apparatus_is_a_unique_list_of_safe_relative_paths() {
     let accepted = case_paths(&cases, "accepted");
     let refused = case_paths(&cases, "refused");
     assert!(!accepted.is_empty() && !refused.is_empty());
-    assert!(plan_errors(json!({})).is_empty());
-    assert!(plan_errors(json!({"protected_apparatus": accepted})).is_empty());
+    assert_eq!(plan_errors(json!({})), [] as [std::string::String; 0]);
+    assert_eq!(
+        plan_errors(json!({"protected_apparatus": accepted})),
+        [] as [std::string::String; 0]
+    );
     for path in &accepted {
         assert!(
             plan_errors(json!({"protected_apparatus": [path]})).is_empty(),
@@ -1049,10 +1135,22 @@ fn protected_apparatus_is_a_unique_list_of_safe_relative_paths() {
             "{path:?}"
         );
     }
-    assert!(!plan_errors(json!({"protected_apparatus": []})).is_empty());
-    assert!(!plan_errors(json!({"protected_apparatus": ["a.json", "a.json"]})).is_empty());
-    assert!(!plan_errors(json!({"protected_apparatus": "corpus/*.json"})).is_empty());
-    assert!(!plan_errors(json!({"protected_apparatus": [7]})).is_empty());
+    assert_ne!(
+        plan_errors(json!({"protected_apparatus": []})),
+        [] as [std::string::String; 0]
+    );
+    assert_ne!(
+        plan_errors(json!({"protected_apparatus": ["a.json", "a.json"]})),
+        [] as [std::string::String; 0]
+    );
+    assert_ne!(
+        plan_errors(json!({"protected_apparatus": "corpus/*.json"})),
+        [] as [std::string::String; 0]
+    );
+    assert_ne!(
+        plan_errors(json!({"protected_apparatus": [7]})),
+        [] as [std::string::String; 0]
+    );
 }
 
 #[test]
@@ -1144,12 +1242,12 @@ fn procedure_and_apparatus_edit_plans_require_protected_apparatus() {
     let gate = json!({"stage": "gate", "ground_truth_kind": "mechanical"});
     let missing = required_msg("protected_apparatus");
 
-    assert!(
+    assert_eq!(
         plan_errors(merged(
             json!({"negative_controls": [control]}),
             gate.clone()
-        ))
-        .is_empty()
+        )),
+        [] as [std::string::String; 0]
     );
     assert!(
         plan_errors(merged(
@@ -1158,12 +1256,12 @@ fn procedure_and_apparatus_edit_plans_require_protected_apparatus() {
         ))
         .contains(&missing)
     );
-    assert!(
+    assert_eq!(
         plan_errors(merged(
             json!({"negative_controls": [control], "protected_apparatus": ["evals/**"]}),
             gate.clone()
-        ))
-        .is_empty()
+        )),
+        [] as [std::string::String; 0]
     );
     // An apparatus-edit control needs a protected list at every stage.
     for stage in ["observe", "baseline", "trend", "gate"] {
@@ -1193,7 +1291,10 @@ fn procedure_and_apparatus_edit_plans_require_protected_apparatus() {
         );
     }
     // Other kinds below gate stage do not require it.
-    assert!(plan_errors(json!({"negative_controls": [control]})).is_empty());
+    assert_eq!(
+        plan_errors(json!({"negative_controls": [control]})),
+        [] as [std::string::String; 0]
+    );
 }
 
 #[test]
@@ -1208,13 +1309,16 @@ fn measurement_plan_skeleton_shows_apparatus_and_negative_controls() {
     let controls = skeleton["negative_controls"]
         .as_array()
         .expect("negative_controls");
-    assert!(!controls.is_empty());
+    assert_ne!(controls.as_slice(), [] as [Value; 0]);
     let mut kinds: BTreeSet<&str> = controls
         .iter()
         .map(|c| c["kind"].as_str().unwrap())
         .collect();
     assert!(kinds.contains("apparatus-edit"));
-    assert!(schema_errors(&plan_validator(), &skeleton).is_empty());
+    assert_eq!(
+        schema_errors(&plan_validator(), &skeleton),
+        [] as [std::string::String; 0]
+    );
     let body = read(&skeleton_path("MeasurementPlan.md"));
     assert!(body.contains("## Protected Apparatus"));
     assert!(body.contains("## Negative Controls"));
@@ -1252,13 +1356,19 @@ fn supported_claim_must_reference_evidence() {
     );
 
     let with = argument_with_top_claim(json!({"status": "supported", "evidence_refs": [evidence]}));
-    assert!(schema_errors(&v, &with).is_empty());
+    assert_eq!(schema_errors(&v, &with), [] as [std::string::String; 0]);
 
     for status in ["open", "challenged", "rejected"] {
-        assert!(schema_errors(&v, &argument_with_top_claim(json!({"status": status}))).is_empty());
+        assert_eq!(
+            schema_errors(&v, &argument_with_top_claim(json!({"status": status}))),
+            [] as [std::string::String; 0]
+        );
         let with_refs =
             argument_with_top_claim(json!({"status": status, "evidence_refs": [evidence]}));
-        assert!(schema_errors(&v, &with_refs).is_empty());
+        assert_eq!(
+            schema_errors(&v, &with_refs),
+            [] as [std::string::String; 0]
+        );
     }
 
     let bad_refs = [
@@ -1707,7 +1817,7 @@ fn quire_accepts_every_skeleton_without_diagnostics() {
     let stderr = String::from_utf8_lossy(&completed.stderr);
     assert!(completed.status.success(), "{stderr}");
     let diagnostics: Vec<&str> = stderr.lines().collect();
-    assert!(!diagnostics.is_empty());
+    assert_ne!(diagnostics, [] as [&str; 0]);
     assert!(
         diagnostics
             .iter()
@@ -1769,7 +1879,7 @@ fn review_by_date_time_is_enforced_by_the_pattern_alone() {
     // this proves the pattern carries the check.
     let v = validator(&schema("assurance-argument-frontmatter.schema"));
     let mut document = frontmatter(&skeleton_path("AssuranceArgument.md"));
-    assert!(schema_errors(&v, &document).is_empty());
+    assert_eq!(schema_errors(&v, &document), [] as [std::string::String; 0]);
     let cases = [
         ("2030-01-01T00:00:00Z", true),
         ("2028-02-29T00:00:00+02:00", true),

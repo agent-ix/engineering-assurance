@@ -963,7 +963,10 @@ fn the_repository_comparison_finds_a_deleted_changed_and_unreceipted_tag() {
     let object = rev(&repo, "refs/tags/approve-1");
     write_receipt(&repo, "refs/tags/approve-1", &object, &commit, &[], true);
     // A tag that gained its receipt is not listed by the next run.
-    assert!(findings_of(&repo, &json!([]), &[]).is_empty());
+    assert_eq!(
+        findings_of(&repo, &json!([]), &[]),
+        [] as [(engineering_assurance::tag_receipt::FindingStatus, bool); 0]
+    );
     // Deleted.
     git(&repo, &["tag", "-d", "approve-1"]);
     assert_eq!(
@@ -972,7 +975,10 @@ fn the_repository_comparison_finds_a_deleted_changed_and_unreceipted_tag() {
     );
     // Pushed again at the identical object id: no finding.
     git(&repo, &["update-ref", "refs/tags/approve-1", &object]);
-    assert!(findings_of(&repo, &json!([]), &[]).is_empty());
+    assert_eq!(
+        findings_of(&repo, &json!([]), &[]),
+        [] as [(engineering_assurance::tag_receipt::FindingStatus, bool); 0]
+    );
     // Re-created as a different tag object: the earlier receipt is changed and
     // the new object is unreceipted.
     tag_message_force(&repo, "approve-1", "another message");

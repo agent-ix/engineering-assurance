@@ -377,7 +377,10 @@ fn tc_176_output_tree_absent_after_execution_fails_only_when_required() {
         result.state,
         ProducerExecutionState::Completed { .. }
     ));
-    assert!(result.artifacts.is_empty());
+    assert_eq!(
+        result.artifacts,
+        [] as [engineering_assurance::producer_execution::OutputArtifact; 0]
+    );
 }
 
 #[test]
@@ -476,7 +479,10 @@ fn tc_124_rejected_exit_does_not_expose_written_output_artifact() {
             .and_then(|process| process.terminal_status),
         Some(TerminalStatus::ExitCode(7))
     );
-    assert!(result.artifacts.is_empty());
+    assert_eq!(
+        result.artifacts,
+        [] as [engineering_assurance::producer_execution::OutputArtifact; 0]
+    );
     assert_eq!(
         fs::read(root.path().join("report.json")).expect("diagnostic output remains on disk"),
         b"unaccepted output"
@@ -496,7 +502,10 @@ fn tc_122_stale_declared_output_is_removed_and_not_observed() {
             reason: ExecutionFailure::OutputArtifact
         }
     ));
-    assert!(result.artifacts.is_empty());
+    assert_eq!(
+        result.artifacts,
+        [] as [engineering_assurance::producer_execution::OutputArtifact; 0]
+    );
     assert!(!root.path().join("report.json").exists());
 }
 
@@ -553,7 +562,10 @@ fn tc_122_symlink_at_declared_output_is_removed_and_target_untouched() {
         result.state,
         ProducerExecutionState::Completed { .. }
     ));
-    assert!(result.artifacts.is_empty());
+    assert_eq!(
+        result.artifacts,
+        [] as [engineering_assurance::producer_execution::OutputArtifact; 0]
+    );
     assert!(
         fs::symlink_metadata(root.path().join("report.json")).is_err(),
         "the link itself is removed"
@@ -595,7 +607,10 @@ fn tc_122_stale_nested_declared_output_is_removed_and_not_observed() {
             reason: ExecutionFailure::OutputArtifact
         }
     ));
-    assert!(result.artifacts.is_empty());
+    assert_eq!(
+        result.artifacts,
+        [] as [engineering_assurance::producer_execution::OutputArtifact; 0]
+    );
     assert!(!root.path().join("target/coverage.json").exists());
 }
 
@@ -610,7 +625,10 @@ fn tc_122_nested_declared_output_with_missing_parent_is_skipped() {
         result.state,
         ProducerExecutionState::Completed { .. }
     ));
-    assert!(result.artifacts.is_empty());
+    assert_eq!(
+        result.artifacts,
+        [] as [engineering_assurance::producer_execution::OutputArtifact; 0]
+    );
     assert!(!root.path().join("target").exists());
 }
 
@@ -1098,8 +1116,8 @@ fn tc_125_timeout_kills_observed_nested_process_group_and_joins_both_readers() {
         evidence.terminal_status.is_some(),
         "direct child must have a reaped terminal status"
     );
-    assert!(evidence.stdout.bytes.is_empty());
-    assert!(evidence.stderr.bytes.is_empty());
+    assert_eq!(evidence.stdout.bytes, [] as [u8; 0]);
+    assert_eq!(evidence.stderr.bytes, [] as [u8; 0]);
     assert!(
         !fixture_pid_is_live(&producer_pid),
         "direct child must be reaped"

@@ -487,13 +487,19 @@ fn tc_9002_failed_or_incomplete_fixture_scan_never_retains_report() {
     let mut request = osv_request(root.path(), &missing, "fixture", &root.path().join("db"));
     let value = result(&request);
     assert_eq!(value["state"]["kind"], "unavailable", "{value}");
-    assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
+    assert_eq!(
+        value["artifacts"].as_array().expect("artifacts").as_slice(),
+        [] as [Value; 0]
+    );
 
     request = fixture_request(root.path(), "exit 127");
     fs::write(root.path().join(REPORT_PATH), b"stale report").expect("stale report");
     let value = result(&request);
     assert_eq!(value["state"]["kind"], "failed", "{value}");
-    assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
+    assert_eq!(
+        value["artifacts"].as_array().expect("artifacts").as_slice(),
+        [] as [Value; 0]
+    );
     assert!(
         !root.path().join(REPORT_PATH).exists(),
         "stale output must be removed"
@@ -508,7 +514,10 @@ fn tc_9002_failed_or_incomplete_fixture_scan_never_retains_report() {
         value["state"]["kind"], "failed",
         "success without required report: {value}"
     );
-    assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
+    assert_eq!(
+        value["artifacts"].as_array().expect("artifacts").as_slice(),
+        [] as [Value; 0]
+    );
 
     request = fixture_request(
         root.path(),
@@ -526,7 +535,10 @@ fn tc_9002_failed_or_incomplete_fixture_scan_never_retains_report() {
     request["budget"]["timeoutMillis"] = json!(1000);
     let value = result(&request);
     assert_eq!(value["state"]["kind"], "timed_out", "{value}");
-    assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
+    assert_eq!(
+        value["artifacts"].as_array().expect("artifacts").as_slice(),
+        [] as [Value; 0]
+    );
 }
 
 #[trace("TC-902", "FR-044-AC-12")]

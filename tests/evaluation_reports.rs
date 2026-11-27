@@ -131,7 +131,10 @@ fn tc_129_decodes_one_retained_success_into_a_typed_envelope() {
     );
     assert_eq!(envelope.host, EvaluationHost::Codex);
     assert_eq!(envelope.scenario, EvaluationScenario::ExistingProfile);
-    assert!(envelope.errors().is_empty());
+    assert_eq!(
+        envelope.errors(),
+        [] as [engineering_assurance::evaluation::EnvelopeFailure; 0]
+    );
 
     let mut empty_model = report(true);
     empty_model["model"] = json!("");

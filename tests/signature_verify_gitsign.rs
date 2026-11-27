@@ -446,10 +446,9 @@ fn tc_293_gitsign_uses_an_isolated_config_snapshot_when_repository_config_change
     );
     let cwd = PathBuf::from(&fixture.lines("cwd", 1)[0]);
     assert_ne!(cwd, repository);
-    assert!(
-        fs::read_to_string(fixture.bin().join("snapshot-gitsign-config"))
-            .expect("snapshot config")
-            .is_empty()
+    assert_eq!(
+        fs::read_to_string(fixture.bin().join("snapshot-gitsign-config")).expect("snapshot config"),
+        ""
     );
 }
 

@@ -847,7 +847,10 @@ mod tests {
             &[],
         );
         assert_eq!(verdict.status, approval_gate::GateStatus::Unsatisfied);
-        assert!(statements.is_empty());
+        assert_eq!(
+            statements,
+            [] as [crate::approval_statement_writer::WrittenApprovalStatement; 0]
+        );
         assert!(sink.0.borrow().is_empty());
     }
 
@@ -1048,7 +1051,10 @@ mod tests {
                 },
             )
             .expect("invalid review markers yield an empty statement set");
-            assert!(written.is_empty());
+            assert_eq!(
+                written,
+                [] as [crate::approval_statement_writer::WrittenApprovalStatement; 0]
+            );
             assert!(sink.0.borrow().is_empty());
         }
     }
@@ -1386,11 +1392,11 @@ mod tests {
     #[trace("TC-117", "NFR-005-AC-2")]
     fn fixture_reader_uses_exact_approval_query_contract() {
         let reader = Reader::default();
-        assert!(
+        assert_eq!(
             reader
                 .lookup_approval_statements("store", lookup())
-                .unwrap()
-                .is_empty()
+                .unwrap(),
+            [] as [crate::record_sink::sink::RetainedApprovalStatement; 0]
         );
     }
 }
