@@ -475,9 +475,15 @@ fn tc_9001_request_matches_the_published_osv_scanner_definition() {
 }
 
 #[cfg(target_os = "linux")]
-#[trace("TC-901", "FR-044-AC-3", "FR-044-AC-4", "FR-044-AC-7")]
+#[trace(
+    "TC-901",
+    "FR-044-AC-3",
+    "FR-044-AC-4",
+    "FR-044-AC-7",
+    "FR-044-AC-13"
+)]
 #[test]
-fn tc_9002_failed_or_incomplete_fixture_scan_never_retains_report() {
+fn tc_9002_incomplete_fixture_scan_refuses_reports_and_preserves_completed_fixture() {
     let root = workspace(br#"{"bomFormat":"CycloneDX","components":[]}"#);
     let missing = root.path().join("missing-osv-scanner");
     assert!(
@@ -500,7 +506,9 @@ fn tc_9002_failed_or_incomplete_fixture_scan_never_retains_report() {
     );
 
     request = fixture_request(root.path(), "exit 128");
-    assert_eq!(result(&request)["state"]["kind"], "failed");
+    let value = result(&request);
+    assert_eq!(value["state"]["kind"], "failed", "{value}");
+    assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
 
     request = fixture_request(root.path(), "exit 0");
     let value = result(&request);
@@ -518,6 +526,12 @@ fn tc_9002_failed_or_incomplete_fixture_scan_never_retains_report() {
     assert_eq!(value["state"]["kind"], "completed", "{value}");
     assert_eq!(value["state"]["observation"]["exitCode"], 1, "{value}");
     assert_eq!(value["artifacts"][0]["role"], "advisory-report");
+    let report_bytes = fs::read(root.path().join(REPORT_PATH)).expect("retained report");
+    assert_eq!(report_bytes, b"{\"results\":[]}\n");
+    let report: Value = serde_json::from_slice(&report_bytes).expect("captured scanner report");
+    assert_eq!(report["results"], json!([]));
+    // The fixture demonstrates producer retention only; this test does not
+    // interpret an empty result as a clean scan.
 
     request = fixture_request(
         root.path(),
