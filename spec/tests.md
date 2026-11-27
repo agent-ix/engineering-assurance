@@ -322,7 +322,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-066 | FR-066-AC-1 | TC-530 | 🚧 Specified |
 | FR-066 | FR-066-AC-2 | TC-531 | 🚧 Specified |
 | FR-066 | FR-066-AC-3 | TC-532 | 🚧 Specified |
-| FR-066 | FR-066-AC-4 | TC-533 | 🚧 Specified |
+| FR-066 | FR-066-AC-4 | TC-533 | ✅ `tests/release_verify_cli.rs::tc_533_release_verdict_is_identical_with_the_four_attestation_files_present_or_removed` passed (1/1) |
 | FR-066 | FR-066-AC-5 | TC-534 | 🚧 Specified |
 | FR-066 | FR-066-AC-6 | TC-535 | 🚧 Specified |
 | FR-066 | FR-066-AC-7 | TC-536 | 🚧 Specified |
@@ -909,7 +909,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-530 | A fixture release with two artifact files yields exactly four statements; the first three have the two files as subjects at their SHA-256 digests, and the summary has the two files and the release commit | Integration | P0 | FR-066-AC-1 | 🚧 |
 | TC-531 | A statement set containing a fifth predicate type is rejected by the set validation | Integration | P0 | FR-066-AC-2 | 🚧 |
 | TC-532 | The SBOM statement document equals the CycloneDX document that the Syft stand-in produced through the executor, byte for byte, and no other SBOM tool is invoked | Integration | P0 | FR-066-AC-3 | 🚧 |
-| TC-533 | The `release-verify` result for the fixture release is identical with the four statements present and with them removed (FR-053) | Integration | P0 | FR-066-AC-4 | 🚧 |
+| TC-533 | The `release-verify` result for the fixture release is identical with the four statements present and with them removed (FR-053) | Integration | P0 | FR-066-AC-4 | ✅ `cargo test --locked --features full -j 4 --test release_verify_cli tc_533_release_verdict_is_identical_with_the_four_attestation_files_present_or_removed -- --exact --test-threads=4` (1 passed) |
 | TC-534 | Changing one artifact file after attestation makes the verification of every statement fail on the subject digest, and a digest supplied by the caller in place of the computed one is ignored | Integration | P0 | FR-066-AC-5 | 🚧 |
 | TC-535 | No statement of the set contains the bytes of the snapshot file of the fixture release commit | Integration | P0 | FR-066-AC-6 | 🚧 |
 | TC-536 | Static inspection shows the reusable workflow has no build step and receives the artifact files only as a downloaded workflow artifact | Static | P0 | FR-066-AC-7 | 🚧 |
