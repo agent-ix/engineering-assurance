@@ -322,6 +322,14 @@ struct Patterns {
     url: Regex,
 }
 
+struct PolicyContext<'a> {
+    path: &'a str,
+    folded_tokens: &'a [String],
+    semantic_checks: bool,
+    patterns: &'a Patterns,
+    registry: &'a TestToolDownloadRegistry,
+}
+
 impl Patterns {
     fn compile() -> Result<Self, regex::Error> {
         Ok(Self {
@@ -578,21 +586,18 @@ fn inspect_text_lines(
     patterns: &Patterns,
     registry: &TestToolDownloadRegistry,
 ) -> Vec<ContentRightsFinding> {
-    let semantic_checks = !SEMANTIC_POLICY_FILES.contains(&path);
+    let context = PolicyContext {
+        path,
+        folded_tokens,
+        semantic_checks: !SEMANTIC_POLICY_FILES.contains(&path),
+        patterns,
+        registry,
+    };
     let mut findings = Vec::new();
     for (index, line) in LogicalLines::new(text).enumerate() {
         let line_number = index.saturating_add(1);
         append_location_findings(&mut findings, path, line_number, line, patterns);
-        append_policy_findings(
-            &mut findings,
-            path,
-            line_number,
-            line,
-            folded_tokens,
-            semantic_checks,
-            patterns,
-            registry,
-        );
+        append_policy_findings(&mut findings, line_number, line, &context);
     }
     sort_findings(&mut findings);
     findings
@@ -642,57 +647,55 @@ fn append_location_findings(
 
 fn append_policy_findings(
     findings: &mut Vec<ContentRightsFinding>,
-    path: &str,
     line_number: usize,
     line: &str,
-    folded_tokens: &[String],
-    semantic_checks: bool,
-    patterns: &Patterns,
-    registry: &TestToolDownloadRegistry,
+    context: &PolicyContext<'_>,
 ) {
-    let generated_duration_label = path == "campaign/generated/rust/src/support.rs"
+    let generated_duration_label = context.path == "campaign/generated/rust/src/support.rs"
         && line.trim() == concat!("\"an ISO ", "8601 duration\",");
-    if patterns.external_identifier.is_match(line) && !generated_duration_label {
+    if context.patterns.external_identifier.is_match(line) && !generated_duration_label {
         findings.push(finding(
-            path,
+            context.path,
             line_number,
             ContentRightsCategory::ExternalPublicationIdentifier,
         ));
     }
-    if semantic_checks {
-        for (category, pattern) in &patterns.semantic {
+    if context.semantic_checks {
+        for (category, pattern) in &context.patterns.semantic {
             if pattern.is_match(line) {
-                findings.push(finding(path, line_number, *category));
+                findings.push(finding(context.path, line_number, *category));
             }
         }
     }
-    if !is_license_path(path)
-        && patterns
+    if !is_license_path(context.path)
+        && context
+            .patterns
             .url
             .find_iter(line)
-            .any(|matched| !url_is_allowed(path, line, matched.as_str(), registry))
+            .any(|matched| !url_is_allowed(context.path, line, matched.as_str(), context.registry))
     {
         findings.push(finding(
-            path,
+            context.path,
             line_number,
             ContentRightsCategory::UnapprovedExternalUrl,
         ));
     }
     if contains_encoded_payload(line) {
         findings.push(finding(
-            path,
+            context.path,
             line_number,
             ContentRightsCategory::EncodedPayload,
         ));
     }
-    if !folded_tokens.is_empty() {
+    if !context.folded_tokens.is_empty() {
         let folded_line = line.case_fold().collect::<String>();
-        if folded_tokens
+        if context
+            .folded_tokens
             .iter()
             .any(|token| folded_line.contains(token))
         {
             findings.push(finding(
-                path,
+                context.path,
                 line_number,
                 ContentRightsCategory::ProtectedLocalToken,
             ));

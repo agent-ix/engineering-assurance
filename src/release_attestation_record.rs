@@ -79,6 +79,7 @@ pub fn build_release_attestation_record(
     "FR-071-AC-5",
     "FR-071-AC-6"
 )]
+#[must_use]
 pub fn publish_release_attestation(
     sink: &SinkLayer<'_>,
     visibility: Visibility,

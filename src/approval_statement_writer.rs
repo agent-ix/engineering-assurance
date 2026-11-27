@@ -1302,7 +1302,11 @@ mod tests {
                 sigstore_verify::crypto::sha256(&canonical).to_hex()
             );
             assert_eq!(
-                public.hashes.statement.as_ref().map(|value| value.as_str()),
+                public
+                    .hashes
+                    .statement
+                    .as_ref()
+                    .map(super::super::record_sink::form::Sha256Digest::as_str),
                 Some(digest.as_str())
             );
             let public_text = serde_json::to_string(public).expect("public record serializes");

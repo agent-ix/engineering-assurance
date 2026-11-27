@@ -297,6 +297,10 @@ fn pinned_test_tool_registry_is_closed_and_versioned_to_its_release_asset() {
         .is_err()
     );
 
+    assert_unreviewed_registry_mutations_are_rejected(&original);
+}
+
+fn assert_unreviewed_registry_mutations_are_rejected(original: &serde_json::Value) {
     for (member, value) in [
         (
             "source_url",

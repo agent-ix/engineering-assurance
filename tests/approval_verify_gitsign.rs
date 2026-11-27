@@ -356,13 +356,12 @@ fn tc_1017_real_gitsign_verifies_and_binds_a_public_approval_tag() {
             panic!("LIVE_CASE=UNAVAILABLE gitsign_not_started error={error}; no approval interoperability pass recorded")
         });
     let version_text = String::from_utf8_lossy(&version.stdout).into_owned();
-    if !version.status.success() || !is_gitsign_018_version(&version_text) {
-        panic!(
-            "LIVE_CASE=UNAVAILABLE expected real gitsign v0.18.0, got status={:?} version={:?}; no approval interoperability pass recorded",
-            version.status.code(),
-            version_text.trim()
-        );
-    }
+    assert!(
+        version.status.success() && is_gitsign_018_version(&version_text),
+        "LIVE_CASE=UNAVAILABLE expected real gitsign v0.18.0, got status={:?} version={:?}; no approval interoperability pass recorded",
+        version.status.code(),
+        version_text.trim()
+    );
 
     let live = tempfile::tempdir().expect("live checkout");
     let live_repository = live.path().join("repository");
@@ -375,11 +374,10 @@ fn tc_1017_real_gitsign_verifies_and_binds_a_public_approval_tag() {
                 "LIVE_CASE=UNAVAILABLE git clone could not start: {error}; no live pass recorded"
             )
         });
-    if !clone.status.success() {
-        panic!(
-            "LIVE_CASE=UNAVAILABLE public repository clone failed: {clone:?}; no live pass recorded"
-        );
-    }
+    assert!(
+        clone.status.success(),
+        "LIVE_CASE=UNAVAILABLE public repository clone failed: {clone:?}; no live pass recorded"
+    );
     let tag_ref = format!("refs/tags/{tag}");
     let original_id = resolve_tag_object(&live_repository, &tag_ref);
     eprintln!(
@@ -482,11 +480,10 @@ fn resolve_tag_object(repository: &Path, tag_ref: &str) -> String {
         .unwrap_or_else(|error| {
             panic!("LIVE_CASE=UNAVAILABLE tag-object resolution could not start: {error}; no live pass recorded")
         });
-    if !output.status.success() {
-        panic!(
-            "LIVE_CASE=UNAVAILABLE named public tag is not an annotated tag object: {output:?}; no live pass recorded"
-        );
-    }
+    assert!(
+        output.status.success(),
+        "LIVE_CASE=UNAVAILABLE named public tag is not an annotated tag object: {output:?}; no live pass recorded"
+    );
     String::from_utf8(output.stdout)
         .expect("tag object id is UTF-8")
         .trim()

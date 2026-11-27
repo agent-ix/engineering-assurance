@@ -73,10 +73,10 @@ struct TestSigner {
 }
 
 impl TestSigner {
-    fn bundle(&self, bytes: &[u8], call: &'static str) -> Result<String, SigningFailed> {
+    fn bundle(&self, bytes: &[u8], call: &'static str) -> String {
         self.calls.borrow_mut().push(call);
         *self.signed_payload.borrow_mut() = Some(bytes.to_vec());
-        Ok("c2ln".to_owned())
+        "c2ln".to_owned()
     }
 }
 
@@ -85,14 +85,14 @@ impl Signer for TestSigner {
         &self,
         proof: &engineering_assurance::record_sink::leak::PublicPathProof<'_>,
     ) -> Result<String, SigningFailed> {
-        self.bundle(proof.signed_bytes(), "public")
+        Ok(self.bundle(proof.signed_bytes(), "public"))
     }
 
     fn sign_statement_for_public_log(
         &self,
         proof: &engineering_assurance::record_sink::leak::PublicStatementProof<'_>,
     ) -> Result<String, SigningFailed> {
-        self.bundle(proof.statement_bytes(), "public-statement")
+        Ok(self.bundle(proof.statement_bytes(), "public-statement"))
     }
 
     fn sign_without_public_log(&self, bytes: &[u8]) -> Result<String, SigningFailed> {
@@ -100,7 +100,7 @@ impl Signer for TestSigner {
             self.calls.borrow_mut().push("private-failed");
             return Err(SigningFailed);
         }
-        self.bundle(bytes, "private")
+        Ok(self.bundle(bytes, "private"))
     }
 
     fn sign_record_without_public_log(&self, bytes: &[u8]) -> Result<String, SigningFailed> {
@@ -108,7 +108,7 @@ impl Signer for TestSigner {
             self.calls.borrow_mut().push("private-failed");
             return Err(SigningFailed);
         }
-        self.bundle(bytes, "private-record")
+        Ok(self.bundle(bytes, "private-record"))
     }
 
     fn signed_payload(&self, _: &str) -> Result<Vec<u8>, SigningFailed> {
