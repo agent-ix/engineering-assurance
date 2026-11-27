@@ -158,9 +158,6 @@ fn tc_190_an_empty_derivation_fails_and_dry_run_lists_every_feature() {
 /// Crates only `full` (the binary) may resolve.
 const BINARY_ONLY_CRATES: [&str; 4] = ["cap-std", "clap", "tar", "zip"];
 const SIGSTORE_RUNTIME_CRATES: [&str; 2] = ["flate2", "tempfile"];
-// receipt-record composes attestation-signing, so it has the same runtime
-// dependency allowance even though it does not name that capability directly.
-const SIGSTORE_RUNTIME_FEATURES: [&str; 2] = ["attestation-signing", "receipt-record"];
 
 /// Features whose code needs `serde_json/arbitrary_precision`, measured by
 /// running `evidence_parity` and `semantics_parity` with and without it:
@@ -206,9 +203,7 @@ fn resolved(root: &Path, feature: &str) -> (BTreeSet<String>, bool) {
 }
 
 /// For every feature (not just `source-audit`): its normal-dependency graph
-/// resolves none of the binary-only crates (only `full` may), except Sigstore's
-/// `reqwest` and `sigstore-tuf` paths need `flate2` and `tempfile` for any
-/// feature that enables `attestation-signing`; and
+/// resolves none of the binary-only or host-runtime crates (only `full` may); and
 /// `serde_json/arbitrary_precision` is on exactly for the features that imply
 /// `exact-numbers`, so a stray `dep:zip` or a dropped `exact-numbers` fails
 /// here rather than in a consumer's build.
@@ -228,13 +223,11 @@ fn tc_196_every_feature_graph_is_minimal_and_exact_numbers_is_exact() {
                     "feature {feature} must not resolve {banned}: {crates:?}"
                 );
             }
-            if !SIGSTORE_RUNTIME_FEATURES.contains(&feature.as_str()) {
-                for dependency in SIGSTORE_RUNTIME_CRATES {
-                    assert!(
-                        !crates.contains(dependency),
-                        "feature {feature} must not resolve {dependency}: {crates:?}"
-                    );
-                }
+            for dependency in SIGSTORE_RUNTIME_CRATES {
+                assert!(
+                    !crates.contains(dependency),
+                    "feature {feature} must not resolve {dependency}: {crates:?}"
+                );
             }
         }
         let want_exact = EXACT_NUMBERS.contains(&feature.as_str());
