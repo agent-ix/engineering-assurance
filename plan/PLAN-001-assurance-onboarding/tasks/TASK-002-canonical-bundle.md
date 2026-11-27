@@ -22,9 +22,9 @@ relationships:
 
 ## Scope
 
-Create one repository-owned `assurance-onboarding` skill, promote the four pilot
-workflow definitions to canonical paths, expose them through thin manifests for
-all four supported hosts, and retain the exact pilot compatibility surface.
+Create one repository-owned `assurance-onboarding` skill, expose the six
+canonical workflow definitions through thin manifests for all four supported
+hosts, and retain the exact four-workflow pilot compatibility surface.
 
 ## TDD Work
 
@@ -36,6 +36,6 @@ all four supported hosts, and retain the exact pilot compatibility surface.
 
 ## Exit Criteria
 
-- Every supported host resolves the same skill and exactly four workflows.
+- Every supported host resolves the same skill and exactly six workflows.
 - Missing, extra, duplicate, or escaping host/workflow entries fail closed.
 - Compatibility invocations still load while documentation leads with canonical use.

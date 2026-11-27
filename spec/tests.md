@@ -473,7 +473,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-008 | Inventory separates all required collections | Unit | P1 | FR-001-AC-5 | ✅ |
 | TC-009 | Exactly one canonical onboarding skill exists | Static | P0 | FR-002-AC-1 | ✅ |
 | TC-010 | Four host surfaces resolve one canonical skill | Integration | P0 | FR-002-AC-2 | ✅ |
-| TC-011 | Canonical skill exposes exactly five workflows | Integration | P0 | FR-002-AC-3 | ✅ |
+| TC-011 | Canonical skill exposes exactly six workflows | Integration | P0 | FR-002-AC-3 | ✅ |
 | TC-012 | Behavioral text in a host manifest is rejected | Static | P1 | FR-002-AC-4 | ✅ |
 | TC-013 | Missing or escaping canonical target is rejected | Unit | P0 | FR-002-AC-5 | ✅ |
 | TC-014 | Wheel includes explicit module and onboarding members | Integration | P0 | FR-003-AC-1 | ✅ |
@@ -1330,7 +1330,7 @@ INT-006 is withdrawn with FR-016-AC-4. Its row is removed and the identifier is 
 | TC-047 | INT-003 | Human acceptance | Named owner acceptance action | One attributed acceptance terminal event | P0 |
 | TC-048 | INT-003 | Run identity mismatch | Existing id with changed binding | Refused with both runs unchanged | P0 |
 | TC-010 | INT-004 | Host discovery permutations | Two sources by four hosts | Same canonical skill | P0 |
-| TC-011 | INT-004 | Workflow discovery | Canonical skill | Exactly five workflow definitions | P0 |
+| TC-011 | INT-004 | Workflow discovery | Canonical skill | Exactly six workflow definitions | P0 |
 | TC-107 | INT-008 | Run lifecycle and human gates | Versioned Rust provider and fictional runs | Existing ix-flow state behavior is preserved | P0 |
 | TC-109 | INT-007 | Complete declared-host evaluation | Seven scenarios on every declared host | One valid result cell per declared cell, with explicit decisions | P0 |
 | TC-110 | INT-007 | Invalid or incomplete evaluation | Missing and malformed host results | Aggregate gate remains withheld | P0 |

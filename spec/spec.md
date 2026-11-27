@@ -40,8 +40,10 @@ defines their shared scope and indexes them.
 
 - A canonical `assurance-onboarding` skill and workflow bundle owned by this
   repository.
-- Promotion of the existing `assurance-intake`, `architecture-evaluation`,
-  `measurement-promotion`, and `change-assurance` pilots into that bundle.
+- Canonical definitions for `assurance-intake`, `architecture-evaluation`,
+  `measurement-promotion`, `change-assurance`, `release-decision`, and
+  `feature-risk-rating`, with the four original pilot definitions retained for
+  compatibility.
 - Thin discovery manifests for Claude Code, Codex, opencode, and GitHub Copilot.
 - Local-source and repository-source installation, package membership, and
   preservation of the module-root contract already consumed by Quire.
