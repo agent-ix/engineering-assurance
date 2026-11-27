@@ -717,6 +717,10 @@ fn tc_383_an_unsigned_annotated_tag_is_unsigned() {
     let result = verdict(&fixture, "v1");
     assert_not_released(&result, &["unsigned"]);
     assert_eq!(result["approval"]["status"], "unsigned");
+    assert!(
+        result.get("release").is_none(),
+        "unsigned tags yield no release statement"
+    );
     assert_workflow_rejects_release_verdict(&result);
 }
 
@@ -756,6 +760,10 @@ fn tc_386_a_good_signature_by_an_unmapped_key_is_an_untrusted_signer() {
     let result = verdict(&fixture, "v1");
     assert_not_released(&result, &["untrusted_signer"]);
     assert_eq!(result["approval"]["status"], "untrusted_signer");
+    assert!(
+        result.get("release").is_none(),
+        "untrusted tags yield no release statement"
+    );
     assert_workflow_rejects_release_verdict(&result);
 }
 
