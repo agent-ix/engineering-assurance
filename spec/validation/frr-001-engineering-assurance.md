@@ -86,6 +86,10 @@ relationships:
     type: rates_feature
   - target: "ix://agent-ix/engineering-assurance/FR-086"
     type: rates_feature
+  - target: "ix://agent-ix/engineering-assurance/FR-090"
+    type: rates_feature
+  - target: "ix://agent-ix/engineering-assurance/FR-091"
+    type: rates_feature
 ---
 # Engineering Assurance proposed high process-risk supplier assessment
 
@@ -138,6 +142,8 @@ The listed features can affect whether engineering evidence is complete, correct
 | FR-084 | signature-gesture reporting can state a person intended approval when the signature evidences a different gesture. |
 | FR-085 | approval-tag creation can encode an approval gesture the signer did not select. |
 | FR-086 | approval verification/trail can report the wrong gesture as the signer's evidenced action. |
+| FR-090 | rating verification can accept a proposed record as a human-accepted decision. |
+| FR-091 | a modified source, checksum, license, owner, purpose, or consumer entry can permit an unreviewed test binary to produce evidence treated as valid. |
 
 ## Assurance activities
 

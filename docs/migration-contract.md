@@ -45,6 +45,8 @@ read at `origin/main`.
 | `scripts/kani_mutations.rs` | filament-contract-codegen | **KEEP** | Applies each declared codegen mutant in a scratch tree and requires its owning Kani proof to reject it within bounded time. This is the codegen mutation oracle, parallel to runtime's Kani mutation oracle. |
 | `measure_footprint.py` | runtime | **KEEP** | Runtime-owned producer for its governed footprint and panic-relocation measurement. |
 | `run_feature_matrix.py` | runtime | **KEEP** | Runtime-owned feature and compilation matrix over its public crate surface. |
+| `real_tool_test.py` | filament-analyze | **KEEP** | Domain-specific runner selects and runs ten real-solver cases, checks configured solver identity and version, and records normalized pass/fail/error entries to Quoin; it is not generic local retention. |
+| `validate-feature-risk-ratings.sh` | filament-analyze | **KEEP** | Domain validation binds feature-risk artifacts to explicit Quire modules and a trace severity; Quire owns parsing and validation, and the script stores no evidence. |
 | `check_upstream_pins.py` | codegen | **DELETE** | Checks declared IR/runtime revisions against the dependencies and generated manifests the repository ships. Recorded revisions are removed together with their checks; dependency versions live only in the package manager manifests and lockfiles. |
 | `check_default_dependencies.py` | tl-syntax | **KEEP** | Syntax-owned no-std dependency and feature-boundary qualification. |
 | `check_spec_id_uniqueness.py`, `test_check_spec_id_uniqueness.py` | tl-syntax | **KEEP** | Syntax-owned requirement-identity check and its regression test. |
