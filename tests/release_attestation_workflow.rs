@@ -414,7 +414,7 @@ fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting(
 }
 
 #[cfg(unix)]
-#[trace("TC-670")]
+#[trace("TC-670", "FR-069-AC-4")]
 #[test]
 fn tc_670_missing_or_mismatched_quoin_export_is_rejected_before_handoff() {
     use std::os::unix::fs::PermissionsExt;
