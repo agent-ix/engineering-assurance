@@ -431,17 +431,11 @@ fn tc_293_gitsign_outcomes_map_to_statuses_mismatches_and_reasons() {
     // No identity or a repository `gitsign.*` key: nothing is run, never valid.
     let (missing, asked) = gitsign(None, false, &[(Probe::Exact, Run::Exit(0))]);
     assert_eq!(missing.reason, Some(Reason::GitsignIdentityMissing));
-    assert_eq!(
-        asked,
-        [] as [engineering_assurance::signature_verify::Probe; 0]
-    );
+    assert_eq!(asked, [] as [Probe; 0]);
     let (configured, asked) = gitsign(Some(&id), true, &[(Probe::Exact, Run::Exit(0))]);
     assert_eq!(configured.status, Status::Unverifiable);
     assert_eq!(configured.reason, Some(Reason::GitsignRepositoryConfig));
-    assert_eq!(
-        asked,
-        [] as [engineering_assurance::signature_verify::Probe; 0]
-    );
+    assert_eq!(asked, [] as [Probe; 0]);
 }
 
 #[test]
