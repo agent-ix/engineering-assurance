@@ -666,7 +666,7 @@ fn passing_input_produces_three_public_log_signed_statements_with_linked_summary
     );
 }
 
-#[trace("FR-075-AC-1")]
+#[trace("TC-590", "FR-075-AC-1")]
 #[test]
 fn squash_merged_pull_request_with_three_covering_approvals_passes_on_merge_commit() {
     fn git_text(repository: &Path, args: &[&str]) -> String {

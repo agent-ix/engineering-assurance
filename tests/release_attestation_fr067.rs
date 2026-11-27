@@ -53,7 +53,7 @@ fn release_verify_script() -> String {
         .to_owned()
 }
 
-#[trace("FR-067-AC-3")]
+#[trace("TC-539", "FR-067-AC-3")]
 #[test]
 fn release_verification_reads_allowed_signers_from_the_protected_base() {
     let temp = tempfile::tempdir().expect("temporary directory");
