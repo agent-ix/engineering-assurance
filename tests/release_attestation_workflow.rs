@@ -414,9 +414,9 @@ fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting(
 }
 
 #[cfg(unix)]
-#[trace("TC-670", "FR-069-AC-2")]
+#[trace("TC-670")]
 #[test]
-fn tc_670_missing_or_mismatched_quoin_export_stops_before_attestation() {
+fn tc_670_missing_or_mismatched_quoin_export_is_rejected_before_handoff() {
     use std::os::unix::fs::PermissionsExt;
 
     let workflow = reusable_workflow();
