@@ -579,7 +579,7 @@ fn tc_380_a_signed_release_of_a_present_baseline_is_released() {
 }
 
 #[test]
-#[trace("TC-381", "FR-047-AC-2")]
+#[trace("TC-381", "FR-047-AC-2", "FR-067-AC-2")]
 fn tc_381_a_record_edited_after_the_message_was_composed_is_the_wrong_record() {
     let fixture = fixture();
     let baseline = commit_baseline(&fixture, &[]);
@@ -618,7 +618,7 @@ fn tc_382_a_mapped_signer_who_is_not_the_decision_owner_does_not_release() {
 }
 
 #[test]
-#[trace("TC-383", "FR-047-AC-4")]
+#[trace("TC-383", "FR-047-AC-4", "FR-067-AC-2")]
 fn tc_383_an_unsigned_annotated_tag_is_unsigned() {
     let fixture = fixture();
     let baseline = commit_baseline(&fixture, &[]);
@@ -660,7 +660,7 @@ fn tc_385_a_tag_edited_after_signing_is_signed_bad() {
 }
 
 #[test]
-#[trace("TC-386", "FR-047-AC-4")]
+#[trace("TC-386", "FR-047-AC-4", "FR-067-AC-2")]
 fn tc_386_a_good_signature_by_an_unmapped_key_is_an_untrusted_signer() {
     let fixture = fixture();
     let baseline = commit_baseline(&fixture, &[]);
