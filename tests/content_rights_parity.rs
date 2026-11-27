@@ -5,6 +5,7 @@
 
 use engineering_assurance::content_rights::{
     ContentEntryKind, ContentRightsCategory, ContentRightsFinding, inspect_content,
+    validate_test_tool_download_registry,
 };
 use ix_trace_rs::trace;
 
@@ -15,6 +16,9 @@ fn findings(path: &str, bytes: &[u8], tokens: &[String]) -> Vec<ContentRightsFin
 
 const FR_017_SPEC: &str =
     include_str!("../spec/functional/FR-017-rust-evaluation-and-qualification.md");
+const TEST_TOOL_REGISTRY: &str = include_str!("../spec/test-tool-downloads.json");
+const SYFT_INSTALLER: &str = include_str!("../scripts/install-test-syft.sh");
+const TEST_TOOL_GUIDE: &str = include_str!("../docs/installing-pinned-test-tools.md");
 
 #[derive(Debug)]
 struct ClauseSourceRow {
@@ -211,6 +215,169 @@ fn unapproved_url_findings_keep_line_numbers() {
             (2, ContentRightsCategory::UnapprovedExternalUrl),
         ]
     );
+}
+
+#[test]
+#[trace("TC-1051", "FR-091-AC-1")]
+fn pinned_test_tool_registry_is_closed_and_versioned_to_its_release_asset() {
+    let original = serde_json::from_str::<serde_json::Value>(TEST_TOOL_REGISTRY)
+        .expect("test tool registry JSON");
+    validate_test_tool_download_registry(TEST_TOOL_REGISTRY.as_bytes())
+        .expect("reviewed Syft pin must validate");
+
+    let mut missing = original.clone();
+    missing["entries"][0]
+        .as_object_mut()
+        .expect("entry object")
+        .remove("rights_owner");
+    assert!(
+        validate_test_tool_download_registry(
+            &serde_json::to_vec(&missing).expect("missing-field mutant")
+        )
+        .is_err()
+    );
+
+    let mut unknown = original.clone();
+    unknown["entries"][0]["unreviewed"] = serde_json::json!(true);
+    assert!(
+        validate_test_tool_download_registry(
+            &serde_json::to_vec(&unknown).expect("unknown-field mutant")
+        )
+        .is_err()
+    );
+
+    let mut duplicate = original.clone();
+    let entry = duplicate["entries"][0].clone();
+    duplicate["entries"]
+        .as_array_mut()
+        .expect("registry entries")
+        .push(entry);
+    assert!(
+        validate_test_tool_download_registry(
+            &serde_json::to_vec(&duplicate).expect("duplicate-entry mutant")
+        )
+        .is_err()
+    );
+
+    let unregistered_url = [
+        "https:",
+        "//github.com/anchore/syft/releases/download/v1.57.2/syft_1.57.2_linux_amd64.tar.gz",
+    ]
+    .concat();
+    let mut malformed_version = original.clone();
+    malformed_version["entries"][0]["version"] = serde_json::json!("latest");
+    assert!(
+        validate_test_tool_download_registry(
+            &serde_json::to_vec(&malformed_version).expect("malformed-version mutant")
+        )
+        .is_err()
+    );
+    for (member, value) in [
+        ("version", serde_json::json!("1.57.2")),
+        ("source_url", serde_json::json!(unregistered_url)),
+        (
+            "artifact_sha256",
+            serde_json::json!("BF52519EB57F675D47C07D43213CB6DFF6449F3D6D1147FF6701ED91F44EEF0C"),
+        ),
+    ] {
+        let mut changed = original.clone();
+        changed["entries"][0][member] = value;
+        assert!(
+            validate_test_tool_download_registry(
+                &serde_json::to_vec(&changed).expect("pin mutant")
+            )
+            .is_err()
+        );
+    }
+}
+
+#[test]
+#[trace("TC-1052", "FR-091-AC-2")]
+fn registered_download_urls_require_the_exact_path_version_and_digest() {
+    let registry = serde_json::from_str::<serde_json::Value>(TEST_TOOL_REGISTRY)
+        .expect("test tool registry JSON");
+    let entry = &registry["entries"][0];
+    let url = entry["source_url"].as_str().expect("source URL");
+    let digest = entry["artifact_sha256"].as_str().expect("artifact digest");
+    let pin_line = format!("download {url} sha256:{digest}");
+    assert!(
+        findings("scripts/install-test-syft.sh", pin_line.as_bytes(), &[]).is_empty(),
+        "the exact registered URL and digest are admitted at the consumer path"
+    );
+
+    let changed_digest = format!("download {url} sha256:{}", "0".repeat(64));
+    assert!(
+        findings(
+            "scripts/install-test-syft.sh",
+            changed_digest.as_bytes(),
+            &[]
+        )
+        .iter()
+        .any(|finding| finding.category == ContentRightsCategory::UnapprovedExternalUrl),
+        "a changed checksum is not admitted"
+    );
+    let changed_version = url.replace("1.57.1", "1.57.2");
+    let changed_release = format!("download {changed_version} sha256:{digest}");
+    assert!(
+        findings(
+            "scripts/install-test-syft.sh",
+            changed_release.as_bytes(),
+            &[]
+        )
+        .iter()
+        .any(|finding| finding.category == ContentRightsCategory::UnapprovedExternalUrl),
+        "an unregistered version is not admitted"
+    );
+    assert!(
+        findings("tests/unlisted-installer.sh", pin_line.as_bytes(), &[])
+            .iter()
+            .any(|finding| finding.category == ContentRightsCategory::UnapprovedExternalUrl),
+        "a registered URL is not admitted at an unlisted path"
+    );
+    assert!(
+        findings(
+            "spec/test-tool-downloads.json",
+            TEST_TOOL_REGISTRY.as_bytes(),
+            &[]
+        )
+        .is_empty(),
+        "the exact validated registry may name its source URL"
+    );
+    let changed_registry = TEST_TOOL_REGISTRY.replace(digest, &"0".repeat(64));
+    assert!(
+        findings(
+            "spec/test-tool-downloads.json",
+            changed_registry.as_bytes(),
+            &[]
+        )
+        .iter()
+        .any(|finding| finding.category == ContentRightsCategory::UnapprovedExternalUrl),
+        "the checked source registry rejects an altered digest"
+    );
+}
+
+#[test]
+#[trace("TC-1053", "FR-091-AC-3")]
+fn syft_installer_reads_the_registry_and_checks_the_archive_before_installing() {
+    let version_read = SYFT_INSTALLER.find("entry[\"version\"]");
+    let url_read = SYFT_INSTALLER.find("entry[\"source_url\"]");
+    let digest_read = SYFT_INSTALLER.find("entry[\"artifact_sha256\"]");
+    let download = SYFT_INSTALLER.find("curl --fail");
+    let checksum = SYFT_INSTALLER.find("sha256sum --check");
+    let extraction = SYFT_INSTALLER.find("tar -xzf");
+    let install = SYFT_INSTALLER.find("install -m 0755");
+    assert!(version_read.is_some() && url_read.is_some() && digest_read.is_some());
+    assert!(download.is_some() && checksum.is_some() && extraction.is_some() && install.is_some());
+    assert!(
+        checksum < extraction,
+        "digest verification precedes archive extraction"
+    );
+    assert!(
+        extraction < install,
+        "only the verified Syft binary is installed"
+    );
+    assert!(TEST_TOOL_GUIDE.contains("scripts/install-test-syft.sh"));
+    assert!(TEST_TOOL_GUIDE.contains("EA_TEST_SYFT"));
 }
 
 #[test]

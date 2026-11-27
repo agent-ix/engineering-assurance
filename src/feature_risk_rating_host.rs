@@ -15,13 +15,13 @@ use engineering_assurance::{
     release::frontmatter,
     structured_yaml::parse_unambiguous_yaml_json,
     workflow::{
-        DecisionChoice, DecisionEvent, WorkflowBinding, WorkflowHostOutcome, WorkflowHostRequest,
-        WorkflowOperation, WorkflowSnapshot, REQUEST_PROTOCOL as HOST_PROTOCOL,
+        DecisionChoice, DecisionEvent, REQUEST_PROTOCOL as HOST_PROTOCOL, WorkflowBinding,
+        WorkflowHostOutcome, WorkflowHostRequest, WorkflowOperation, WorkflowSnapshot,
     },
 };
 use ix_trace_rs::implements;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use thiserror::Error;
 
 use crate::{
@@ -727,7 +727,7 @@ fn collect_rating_files(
     Ok(())
 }
 
-#[implements("FR-027-AC-14")]
+#[implements("FR-090-AC-1")]
 fn evaluate_rating_file(
     repository: &Path,
     path: &Path,
@@ -1118,11 +1118,11 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        classify_signature_response, valid_rating_path, validate_decision_owner, validate_rated_by,
-        validate_workflow_request, validation_unrated_features,
-        verify_rating_commit_with_executable, verify_rating_commit_with_executable_and_timeout,
-        WorkflowRequest, ACCEPTANCE_MEANING, SIGNATURE_REQUEST_PROTOCOL, SIGNATURE_RESULT_PROTOCOL,
-        WORKFLOW_REQUEST_PROTOCOL,
+        ACCEPTANCE_MEANING, SIGNATURE_REQUEST_PROTOCOL, SIGNATURE_RESULT_PROTOCOL,
+        WORKFLOW_REQUEST_PROTOCOL, WorkflowRequest, classify_signature_response, valid_rating_path,
+        validate_decision_owner, validate_rated_by, validate_workflow_request,
+        validation_unrated_features, verify_rating_commit_with_executable,
+        verify_rating_commit_with_executable_and_timeout,
     };
 
     fn valid_response() -> serde_json::Value {
