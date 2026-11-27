@@ -242,6 +242,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-037 | FR-037-AC-16 | TC-1005 | ✅ Body-only text is not returned as a trailer |
 | FR-037 | FR-037-AC-17 | TC-1007 | ✅ Exact requested keys, including the 64-byte key, are returned |
 | FR-037 | FR-037-AC-18 | TC-1007 | ✅ Trailer-key validation precedes allowed-signers validation |
+| FR-090 | FR-090-AC-1 | TC-1050 | ✅ `tests/feature_risk_rating_cli.rs` signed proposed rating is refused while accepted rating remains accepted |
 | FR-033 | FR-033-AC-1 | TC-244 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
 | FR-034 | FR-034-AC-1 | TC-246 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
 | FR-035 | FR-035-AC-1 | TC-247 | ✅ `tests/python_port/module.rs` schema accept/refuse cases passing |
@@ -302,7 +303,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-064 | FR-064-AC-16 | TC-954 | ✅ `src/approval_statement.rs` exact tuple lookup verifies every retained match using its bytes and bundle |
 | FR-064 | FR-064-AC-17 | TC-955 | ✅ `src/approval_statement.rs` no exact match returns `statements_not_retained` |
 | FR-064 | FR-064-AC-18 | TC-956 | ✅ `src/approval_statement.rs` read failure returns `input_unreadable` |
-| FR-064 | FR-064-AC-12, FR-064-AC-19 | TC-957 | ✅ `src/approval_statement.rs` refused statement is not verified or counted |
+| FR-064 | FR-064-AC-12, FR-064-AC-19 | TC-957 | ✅ `src/approval_statement.rs` refused statement returns an internal `ApprovalStatementResult` with `Unverifiable` and `PublishRefused`, is not verified, and does not count toward a role |
 | FR-064 | FR-064-AC-20 | TC-954, TC-958 | ✅ `src/approval_statement.rs` aggregate status and reason use fixed precedence; only verified statements count toward roles |
 | FR-064 | FR-064-AC-13 | TC-518 | 🚧 Specified |
 | FR-064 | FR-064-AC-14 | TC-1002 | ✅ `tests/receipt_record.rs` verifies a trusted default-branch source ref and rejects a tag source ref |
@@ -421,6 +422,9 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-079 | FR-079-AC-2 | TC-619 | ✅ Complete |
 | FR-079 | FR-079-AC-3 | TC-620 | ✅ Complete |
 | FR-079 | FR-079-AC-4 | TC-621 | ✅ Complete |
+| FR-091 | FR-091-AC-1 | TC-1051 | ✅ Closed pinned test-tool registry validation |
+| FR-091 | FR-091-AC-2 | TC-1052 | ✅ Exact source URL, registered consumer path, and checksum admission |
+| FR-091 | FR-091-AC-3 | TC-1053 | ✅ Registry-backed Syft install and checksum-before-extraction |
 
 ### Non-Functional Requirement Coverage
 
@@ -1069,6 +1073,10 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-1047 | Every verdict for a request with `gitsign` whose registry revision resolved carries `identity_registry_commit` equal to the resolved full commit id, and none otherwise | Integration | P0 | FR-040-AC-31 | 🚧 |
 | TC-1048 | `release-verify` refuses a `principal` and an unusable identity registry with its own codes, and a git failure while the registry is read with `release_verify_git_failed` | Integration | P0 | FR-047-AC-14 | 🚧 |
 | TC-1049 | A stand-in gitsign approval with a valid CMS block containing no Rekor entry reports `no_log_entry`, no trusted-time members, and the normalized tagger date as `signed_at` | Integration | P0 | FR-041-AC-30, FR-041-CON-5 | 🚧 `tests/approval_verify_gitsign.rs` |
+| TC-1050 | A signed `proposed` feature-risk rating carries a valid signer and acceptance meaning but returns `not_accepted/status_proposed`; a signed `accepted` control returns `accepted` | Integration | P0 | FR-090-AC-1 | ✅ `tests/feature_risk_rating_cli.rs` |
+| TC-1051 | The pinned test-tool registry accepts its exact reviewed Syft entry and refuses missing/unknown fields, extra entries, and valid-shaped changes to repository, version/URL, asset URL, digest, license, rights owner, purpose or consumer path | Unit | P0 | FR-091-AC-1 | ✅ `tests/content_rights_parity.rs` |
+| TC-1052 | The rights classifier admits the exact registered download URL with its digest only at the listed consumer path; altered digest, unregistered release version, altered registry, and unlisted path are refused | Unit | P0 | FR-091-AC-2 | ✅ `tests/content_rights_parity.rs` |
+| TC-1053 | The supported-tool installer rejects a registry that differs from the independently reviewed entry, reads version, source URL, and digest from it, verifies the archive before extraction, and installs only the Syft executable | Static | P0 | FR-091-AC-3 | ✅ `tests/content_rights_parity.rs` |
 | TC-639 | Changing only the private form leaves the public form's signed bytes and signature unchanged | Unit | P0 | FR-056-AC-5 | ✅ `tests/record_sink.rs` passing |
 | TC-640 | Over generated strings a public member accepts a string only when it matches its grammar | Property | P0 | FR-056-AC-6 | ✅ `tests/record_sink.rs` passing |
 | TC-641 | An approval statement published as a record has the statement digest in the public form and its meaning, approver and pull request only in the private form | Unit | P0 | FR-056-AC-7 | ✅ `tests/record_sink.rs` passing |
@@ -1106,7 +1114,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-954 | An exact repository, merged pull-request and merged-commit lookup verifies every retained match with its exact bytes and bundle; a verified and an untrusted result aggregate to `untrusted_signer`, while only the verified approval satisfies the role | Unit | P0 | FR-064-AC-16, FR-064-AC-20 | ✅ `src/approval_statement.rs` passing |
 | TC-955 | A private-store query with no exact retained match returns `unverifiable` with `statements_not_retained` and leaves the role unsatisfied | Unit | P0 | FR-064-AC-17 | ✅ `src/approval_statement.rs` passing |
 | TC-956 | A failed private-store lookup returns `unverifiable` with `input_unreadable` and leaves the role unsatisfied | Unit | P0 | FR-064-AC-18 | ✅ `src/approval_statement.rs` passing |
-| TC-957 | A retained statement whose sink outcome was refused returns `unverifiable` with `publish_refused`, is not sent to the verifier, and does not satisfy the role | Unit | P0 | FR-064-AC-12, FR-064-AC-19 | ✅ `src/approval_statement.rs` passing |
+| TC-957 | A retained statement whose sink outcome was refused returns an `ApprovalStatementResult` with `Unverifiable` and `PublishRefused`, is not sent to the verifier, and does not satisfy the role | Unit | P0 | FR-064-AC-12, FR-064-AC-19 | ✅ `src/approval_statement.rs` passing |
 | TC-958 | A mixed verified/untrusted statement set uses status precedence; multiple unverifiable reasons use `input_unreadable`, then `publish_refused`, then `statements_not_retained` | Unit | P0 | FR-064-AC-20 | ✅ `src/approval_statement.rs` passing |
 | TC-959 | An authenticated approval statement with an extra predicate member or a different predicate type returns `predicate_invalid`; the open predicate is rejected | Unit | P0 | FR-058-AC-2, FR-064-AC-5 | ✅ `src/approval_statement.rs` passing |
 | TC-960 | Three verified statements from distinct individuals satisfy three roles; when one statement is untrusted, the aggregate is `untrusted_signer` and its role remains missing | Unit | P0 | FR-064-AC-1, FR-064-AC-10 | ✅ `src/approval_statement.rs` passing |

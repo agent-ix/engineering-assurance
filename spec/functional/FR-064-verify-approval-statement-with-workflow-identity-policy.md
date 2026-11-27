@@ -46,12 +46,10 @@ source ref is a pull request ref, or any ref other than the listed one, matches 
 pull request branch cannot sign a trusted statement. A statement signed by any other identity is
 `untrusted_signer`.
 
-The verification command reports one line of JSON, `engineering-assurance.approval-verify-statement-result/v1`, with
-`status` one of `verified`, `untrusted_signer`, `signature_invalid`, `wrong_subject`, `predicate_invalid` or
-`unverifiable`, and, only when `status` is `unverifiable`, `reason` (one of `statements_not_retained`,
-`publish_refused`, `input_unreadable`); the schema is closed and has no other member besides `protocol`, `status` and
-`reason`; for a set of statements it reports the aggregate status defined by FR-064-AC-20 and the role verdict of
-FR-061. It adds no cryptography
+The statement verifier is an internal Rust API used by the receipt-record path; it does not expose a separate command
+or JSON result protocol. Its `ApprovalStatementResult` carries the aggregate status, an optional reason present only
+for `unverifiable`, and the FR-061 role verdict. For a set of statements it reports the aggregate status defined by
+FR-064-AC-20. It adds no cryptography
 ([NFR-010](../non-functional/NFR-010-no-cryptography-of-our-own.md)).
 
 The verifier reads the full statements from the private store ([FR-054](./FR-054-record-sink-interface-and-implementations.md)),
@@ -141,7 +139,7 @@ Out of scope: the git-signature `approval-verify` command of
 | FR-064-AC-9 | The same workflow path signed at a pull request ref (`refs/pull/N/merge`) yields `untrusted_signer`, and a policy entry with a wildcard or unknown member is refused as invalid. | Test |
 | FR-064-AC-10 | Statements for three roles from three individuals, all `verified`, yield the role verdict `satisfied`; with one statement `untrusted_signer`, the verdict is `unsatisfied` naming that role. | Test |
 | FR-064-AC-11 | Statements published for a repository on the public sink are read from the private store and verify; for a repository on `none`, verification returns `unverifiable` with `statements_not_retained` while the review gate still returns its verdict. | Test |
-| FR-064-AC-12 | A matching retained statement whose publish outcome is `refused` yields `unverifiable` with reason `publish_refused`. | Test |
+| FR-064-AC-12 | A matching retained statement whose publish outcome is `refused` yields an `ApprovalStatementResult` with status `Unverifiable`, reason `PublishRefused`, and an unsatisfied role verdict; the refused statement is not sent to the verifier. | Unit Test (TC-957) |
 | FR-064-AC-13 | A release statement signed by the `release_attester` workflow called from a tag push `refs/tags/v1.2.0` of the listed source repository verifies against an entry with `source_ref_prefix` `refs/tags/v`; the same signature from a pull request ref, a branch ref, another source repository or an unlisted signer ref yields `untrusted_signer`. | Test |
 | FR-064-AC-14 | A change receipt signed by the `receipt_writer` workflow called from the listed source repository's default branch ref verifies against an entry with `source_ref`; the same signature from a tag ref, checked as a change receipt, yields `untrusted_signer`. | Test |
 | FR-064-AC-15 | A release or receipt signed through the listed reusable workflow by a caller workflow at another path in the source repository, or from a run whose trigger event is `schedule`, `workflow_dispatch`, `issue_comment` or `pull_request_target`, yields `untrusted_signer`; an entry for these roles without `source_workflow_path` or `event`, or with an `event` other than `push`, is refused as invalid. | Test |

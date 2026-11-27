@@ -15,7 +15,7 @@ use std::{
 };
 
 use ix_trace_rs::trace;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 struct Fixture {
     root: tempfile::TempDir,
@@ -177,7 +177,13 @@ fn verify_head(fixture: &Fixture) -> Value {
 #[test]
 /// PLAT-1448 FR‑021 / FR‑027 AC-1: a mapped signed commit with the required meaning is accepted.
 /// PLAT-1448 FR‑021 / FR‑027 AC-10: a later unsigned edit invalidates acceptance.
-#[trace("FR-036-AC-1", "FR-036-AC-2", "FR-037-AC-1", "FR-037-AC-5")]
+#[trace(
+    "FR-036-AC-1",
+    "FR-036-AC-2",
+    "FR-037-AC-1",
+    "FR-037-AC-5",
+    "FR-090-AC-1"
+)]
 fn signed_rating_is_accepted_and_a_later_worktree_edit_invalidates_it() {
     let fixture = fixture();
     let path = rating_file(&fixture);
@@ -217,6 +223,34 @@ fn signed_rating_is_accepted_and_a_later_worktree_edit_invalidates_it() {
     let (unsigned_edit, result) = acceptance(&fixture);
     assert_eq!(unsigned_edit.status.code(), Some(1), "{unsigned_edit:?}");
     assert_eq!(result["results"][0]["reason"], "unsigned", "{result}");
+}
+
+#[test]
+/// FR-090-AC-1: a valid signer and acceptance trailer cannot accept a proposed rating.
+#[trace("FR-090-AC-1")]
+fn signed_proposed_rating_is_not_accepted() {
+    let fixture = fixture();
+    let path = rating_file(&fixture);
+    let proposed = fs::read_to_string(&path)
+        .expect("accepted fixture rating")
+        .replace("status: accepted", "status: proposed");
+    fs::write(&path, proposed).expect("proposed rating");
+    commit_rating(&fixture, true);
+
+    let verified = verify_head(&fixture);
+    assert_eq!(verified["status"], "signed_valid", "{verified}");
+    assert_eq!(
+        verified["signer"]["principal"], "alice@example.test",
+        "{verified}"
+    );
+
+    let (output, result) = acceptance(&fixture);
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert_eq!(result["results"][0]["status"], "not_accepted", "{result}");
+    assert_eq!(
+        result["results"][0]["reason"], "status_proposed",
+        "{result}"
+    );
 }
 
 #[test]

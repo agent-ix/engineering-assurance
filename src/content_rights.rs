@@ -10,7 +10,7 @@ use std::{fmt, sync::LazyLock};
 
 use ix_trace_rs::implements;
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use unicode_casefold::UnicodeCaseFold;
 
@@ -54,6 +54,48 @@ const SEMANTIC_POLICY_FILES: &[&str] = &[
 
 const FR_017_SPEC: &str =
     include_str!("../spec/functional/FR-017-rust-evaluation-and-qualification.md");
+const TEST_TOOL_DOWNLOAD_REGISTRY_PATH: &str = "spec/test-tool-downloads.json";
+const TEST_TOOL_DOWNLOAD_REGISTRY_JSON: &str = include_str!("../spec/test-tool-downloads.json");
+const TEST_TOOL_DOWNLOAD_REGISTRY_PROTOCOL: &str =
+    "engineering-assurance.test-tool-download-registry/v1";
+const APPROVED_SYFT_ID: &str = "syft-linux-amd64";
+const APPROVED_SYFT_REPOSITORY: &str = "anchore/syft";
+const APPROVED_SYFT_VERSION: &str = "1.57.1";
+const APPROVED_SYFT_URL: &str = concat!(
+    "https:",
+    "//github.com/anchore/syft/releases/download/v1.57.1/syft_1.57.1_linux_amd64.tar.gz"
+);
+const APPROVED_SYFT_SHA256: &str =
+    "bf52519eb57f675d47c07d43213cb6dff6449f3d6d1147ff6701ed91f44eef0c";
+const APPROVED_SYFT_LICENSE: &str = "Apache-2.0";
+const APPROVED_SYFT_RIGHTS_OWNER: &str = "Anchore";
+const APPROVED_SYFT_PURPOSE: &str =
+    "Run the Syft producer conformance tests for FR-038 and FR-039.";
+const APPROVED_SYFT_CONSUMER_PATH: &str = "scripts/install-test-syft.sh";
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TestToolDownloadRegistry {
+    protocol: String,
+    entries: Vec<TestToolDownloadEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TestToolDownloadEntry {
+    id: String,
+    source_repository: String,
+    version: String,
+    source_url: String,
+    artifact_sha256: String,
+    license: String,
+    rights_owner: String,
+    purpose: String,
+    consumer_paths: Vec<String>,
+}
+
+static TEST_TOOL_DOWNLOAD_REGISTRY: LazyLock<Result<TestToolDownloadRegistry, ContentRightsError>> =
+    LazyLock::new(|| parse_test_tool_download_registry(TEST_TOOL_DOWNLOAD_REGISTRY_JSON.as_bytes()));
 
 #[derive(Debug)]
 struct OfficialClauseSourceRule {
@@ -173,6 +215,9 @@ pub enum ContentRightsError {
     /// One repository-owned regular expression failed to compile.
     #[error("content-rights policy pattern is invalid")]
     InvalidPolicyPattern,
+    /// The repository-owned pinned test-tool registry is malformed.
+    #[error("test-tool download registry is invalid")]
+    InvalidTestToolDownloadRegistry,
     /// A closed content-rights result could not be serialized.
     #[error("content-rights result serialization failed: {0}")]
     Serialization(serde_json::Error),
@@ -184,6 +229,7 @@ impl ContentRightsError {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::InvalidPolicyPattern => "content_rights_policy_invalid",
+            Self::InvalidTestToolDownloadRegistry => "test_tool_download_registry_invalid",
             Self::Serialization(_) => "content_rights_result_serialization_failed",
         }
     }
@@ -325,6 +371,7 @@ static PATTERNS: LazyLock<Result<Patterns, regex::Error>> = LazyLock::new(Patter
 ///
 /// Returns [`ContentRightsError::InvalidPolicyPattern`] if a built-in policy
 /// expression cannot initialize.
+#[implements("FR-091-AC-2")]
 pub fn inspect_content(
     path: &str,
     kind: ContentEntryKind,
@@ -351,6 +398,19 @@ pub fn inspect_content(
             ContentRightsCategory::NonUtf8Content,
         )]);
     };
+    let registry = TEST_TOOL_DOWNLOAD_REGISTRY
+        .as_ref()
+        .map_err(|_| ContentRightsError::InvalidTestToolDownloadRegistry)?;
+    if path == TEST_TOOL_DOWNLOAD_REGISTRY_PATH
+        && (bytes != TEST_TOOL_DOWNLOAD_REGISTRY_JSON.as_bytes()
+            || validate_test_tool_download_registry(bytes).is_err())
+    {
+        return Ok(vec![finding(
+            path,
+            0,
+            ContentRightsCategory::UnapprovedExternalUrl,
+        )]);
+    }
     let lfs_pointer = concat!("version ", "https:", "//git-lfs.github.com/spec/v1");
     if text.starts_with(lfs_pointer) {
         return Ok(vec![finding(path, 1, ContentRightsCategory::GitLfsPointer)]);
@@ -361,7 +421,121 @@ pub fn inspect_content(
         .filter(|token| !token.trim().is_empty())
         .map(|token| token.case_fold().collect::<String>())
         .collect::<Vec<_>>();
-    Ok(inspect_text_lines(path, text, &folded_tokens, patterns))
+    Ok(inspect_text_lines(
+        path,
+        text,
+        &folded_tokens,
+        patterns,
+        registry,
+    ))
+}
+
+/// Validate one candidate pinned test-tool registry against its closed shape.
+///
+/// # Errors
+///
+/// Returns [`ContentRightsError::InvalidTestToolDownloadRegistry`] when the
+/// document is malformed, incomplete, duplicated, or contains an unpinned
+/// source URL.
+#[implements("FR-091-AC-1")]
+pub fn validate_test_tool_download_registry(bytes: &[u8]) -> Result<(), ContentRightsError> {
+    parse_test_tool_download_registry(bytes).map(|_| ())
+}
+
+fn parse_test_tool_download_registry(
+    bytes: &[u8],
+) -> Result<TestToolDownloadRegistry, ContentRightsError> {
+    let registry: TestToolDownloadRegistry = serde_json::from_slice(bytes)
+        .map_err(|_| ContentRightsError::InvalidTestToolDownloadRegistry)?;
+    if registry.protocol != TEST_TOOL_DOWNLOAD_REGISTRY_PROTOCOL || registry.entries.len() != 1 {
+        return Err(ContentRightsError::InvalidTestToolDownloadRegistry);
+    }
+    let entry = &registry.entries[0];
+    if entry.id != APPROVED_SYFT_ID
+        || entry.source_repository != APPROVED_SYFT_REPOSITORY
+        || entry.version != APPROVED_SYFT_VERSION
+        || entry.source_url != APPROVED_SYFT_URL
+        || entry.artifact_sha256 != APPROVED_SYFT_SHA256
+        || entry.license != APPROVED_SYFT_LICENSE
+        || entry.rights_owner != APPROVED_SYFT_RIGHTS_OWNER
+        || entry.purpose != APPROVED_SYFT_PURPOSE
+        || entry.consumer_paths.len() != 1
+        || entry.consumer_paths[0] != APPROVED_SYFT_CONSUMER_PATH
+    {
+        return Err(ContentRightsError::InvalidTestToolDownloadRegistry);
+    }
+    let mut ids = std::collections::BTreeSet::new();
+    let mut urls = std::collections::BTreeSet::new();
+    for entry in &registry.entries {
+        let repository_parts = entry.source_repository.split('/').collect::<Vec<_>>();
+        let valid_repository = repository_parts.len() == 2
+            && repository_parts.iter().all(|part| {
+                !part.is_empty()
+                    && part.bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_')
+                    })
+            });
+        let version_parts = entry.version.split('.').collect::<Vec<_>>();
+        let valid_version = version_parts.len() == 3
+            && version_parts
+                .iter()
+                .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()));
+        let valid_license = !entry.license.is_empty()
+            && entry
+                .license
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'+' | b'-'));
+        let valid_digest = entry.artifact_sha256.len() == 64
+            && entry
+                .artifact_sha256
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
+        let scheme = concat!("https", ":");
+        let expected_prefix = format!(
+            "{scheme}//github.com/{}/releases/download/v{}/",
+            entry.source_repository, entry.version
+        );
+        let valid_url = entry
+            .source_url
+            .strip_prefix(&expected_prefix)
+            .is_some_and(|asset| {
+                !asset.is_empty()
+                    && !asset.contains('/')
+                    && !asset.contains(['?', '#', '\\', '\n', '\r'])
+            });
+        let valid_paths = !entry.consumer_paths.is_empty()
+            && entry
+                .consumer_paths
+                .iter()
+                .all(|path| is_normalized_relative_path(path));
+        if entry.id.is_empty()
+            || !entry
+                .id
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+            || !valid_repository
+            || !valid_version
+            || !valid_digest
+            || !valid_url
+            || !valid_license
+            || entry.rights_owner.trim().is_empty()
+            || entry.purpose.trim().is_empty()
+            || !valid_paths
+            || !ids.insert(entry.id.as_str())
+            || !urls.insert(entry.source_url.as_str())
+        {
+            return Err(ContentRightsError::InvalidTestToolDownloadRegistry);
+        }
+        let mut unique_paths = std::collections::BTreeSet::new();
+        if entry
+            .consumer_paths
+            .iter()
+            .any(|path| !unique_paths.insert(path.as_str()))
+        {
+            return Err(ContentRightsError::InvalidTestToolDownloadRegistry);
+        }
+    }
+    Ok(registry)
 }
 
 /// Split a protected-token environment value with the retained logical-line
@@ -402,6 +576,7 @@ fn inspect_text_lines(
     text: &str,
     folded_tokens: &[String],
     patterns: &Patterns,
+    registry: &TestToolDownloadRegistry,
 ) -> Vec<ContentRightsFinding> {
     let semantic_checks = !SEMANTIC_POLICY_FILES.contains(&path);
     let mut findings = Vec::new();
@@ -416,6 +591,7 @@ fn inspect_text_lines(
             folded_tokens,
             semantic_checks,
             patterns,
+            registry,
         );
     }
     sort_findings(&mut findings);
@@ -472,6 +648,7 @@ fn append_policy_findings(
     folded_tokens: &[String],
     semantic_checks: bool,
     patterns: &Patterns,
+    registry: &TestToolDownloadRegistry,
 ) {
     let generated_duration_label = path == "campaign/generated/rust/src/support.rs"
         && line.trim() == concat!("\"an ISO ", "8601 duration\",");
@@ -493,7 +670,7 @@ fn append_policy_findings(
         && patterns
             .url
             .find_iter(line)
-            .any(|matched| !url_is_allowed(path, matched.as_str()))
+            .any(|matched| !url_is_allowed(path, line, matched.as_str(), registry))
     {
         findings.push(finding(
             path,
@@ -647,7 +824,8 @@ fn parse_official_clause_source_rules(
 #[implements("FR-079-AC-2")]
 #[implements("FR-079-AC-3")]
 #[implements("FR-079-AC-4")]
-fn url_is_allowed(path: &str, url: &str) -> bool {
+#[implements("FR-091-AC-2")]
+fn url_is_allowed(path: &str, line: &str, url: &str, registry: &TestToolDownloadRegistry) -> bool {
     let schema_prefix = concat!("http:", "//json-schema.org/draft-07/schema#");
     let attestation_schema_prefix = concat!("https:", "//schemas.agent-ix.ai/attestation/");
     let cargo_registry = concat!("https:", "//github.com/rust-lang/crates.io-index");
@@ -724,6 +902,12 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         concat!("https:", "//www.gnu.org/licenses/why-not-lgpl.html"),
     ]
     .contains(&url);
+    let registered_test_tool_download = registry.entries.iter().any(|entry| {
+        url == entry.source_url
+            && (path == TEST_TOOL_DOWNLOAD_REGISTRY_PATH
+                || entry.consumer_paths.iter().any(|consumer| consumer == path)
+                    && line.contains(&entry.artifact_sha256))
+    });
     url.starts_with(schema_prefix)
         || url.starts_with(attestation_schema_prefix)
         || campaign_schema && campaign_schema_url
@@ -732,6 +916,7 @@ fn url_is_allowed(path: &str, url: &str) -> bool {
         || cargo_manifest && is_approved_dependency_url
         || project_metadata && (url == discord_badge || url == discord_invite)
         || project_metadata && (url == agent_ix_bare || url.starts_with(agent_ix_org_prefix))
+        || registered_test_tool_download
         || OFFICIAL_CLAUSE_SOURCE_RULES.as_ref().is_some_and(|rules| {
             rules.iter().any(|rule| {
                 (path == rule.wheel_member || path == rule.npm_member) && url == rule.url

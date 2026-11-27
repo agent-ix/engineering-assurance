@@ -8,12 +8,12 @@
 //! artifact hashing, signature checks, inclusion checks and certificate
 //! validity are delegated to `sigstore-verify`.
 
-use base64::{engine::general_purpose::STANDARD, Engine};
+use base64::{Engine, engine::general_purpose::STANDARD};
 use cms::{
     content_info::ContentInfo,
     signed_data::{SignedData, SignerIdentifier},
 };
-use der::{asn1::OctetString, Decode, Encode};
+use der::{Decode, Encode, asn1::OctetString};
 use prost::Message;
 use serde_json::json;
 use sigstore_types::Bundle;
@@ -273,8 +273,8 @@ struct RekorInclusionProof {
     reason = "in a test, a panic IS the failure report; the production lints stand"
 )]
 mod tests {
-    use super::{bundle_signature, extract, verify_with_policy, EmbeddedEntry, DER_SET_OF_TAG};
-    use base64::{engine::general_purpose::STANDARD, Engine};
+    use super::{DER_SET_OF_TAG, EmbeddedEntry, bundle_signature, extract, verify_with_policy};
+    use base64::{Engine, engine::general_purpose::STANDARD};
     use der::asn1::OctetString;
     use ix_trace_rs::trace;
     use serde_json::json;
@@ -416,8 +416,8 @@ mod tests {
             if let Some(first) = signature.first_mut() {
                 *first ^= 1;
             }
-            value["verificationMaterial"]["tlogEntries"][0]["inclusionPromise"]
-                ["signedEntryTimestamp"] = json!(STANDARD.encode(signature));
+            value["verificationMaterial"]["tlogEntries"][0]["inclusionPromise"]["signedEntryTimestamp"] =
+                json!(STANDARD.encode(signature));
         });
 
         assert_rejected(verify_fixture(&changed, &artifact));
