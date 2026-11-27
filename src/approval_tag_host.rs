@@ -536,7 +536,7 @@ mod tests {
     use ix_trace_rs::trace;
     use serde_json::json;
 
-    use super::{execute, SigningRun};
+    use super::{SigningRun, execute};
 
     const RESTORE_FIXTURE: &str = "EA113_RESTORE_FIXTURE";
     const RESTORE_SIGNER_RAN: &str = "EA113_RESTORE_SIGNER_RAN";

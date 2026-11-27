@@ -785,8 +785,7 @@ fn squash_merged_pull_request_with_three_covering_approvals_passes_on_merge_comm
         "//github.com/fictional/project/.github/workflows/review-gate.yml@refs/heads/main"
     );
     let approval_events = Rc::new(RefCell::new(Vec::new()));
-    let (approval_signer, approval_verifier) =
-        TestSigner::new(approval_events, approval_identity);
+    let (approval_signer, approval_verifier) = TestSigner::new(approval_events, approval_identity);
     let retained_approvals = role_approvals
         .iter()
         .map(|(role, individual)| {
@@ -833,7 +832,10 @@ fn squash_merged_pull_request_with_three_covering_approvals_passes_on_merge_comm
             &self,
             _destination: &str,
             lookup: ApprovalStatementLookup<'_>,
-        ) -> Result<Vec<RetainedApprovalStatement>, engineering_assurance::approval_statement::ApprovalStatementReadError> {
+        ) -> Result<
+            Vec<RetainedApprovalStatement>,
+            engineering_assurance::approval_statement::ApprovalStatementReadError,
+        > {
             if lookup.repository == REPO
                 && lookup.merged_pull_request == self.pull_request
                 && lookup.merged_commit == self.commit

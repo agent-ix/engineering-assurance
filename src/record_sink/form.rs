@@ -201,23 +201,33 @@ pub fn split_linear_issue(text: &str) -> Option<(&str, &str)> {
 
 text_newtype!(
     /// A lowercase canonical UUID string naming one record.
-    RecordId, "record_id", is_uuid
+    RecordId,
+    "record_id",
+    is_uuid
 );
 text_newtype!(
     /// `sha256:` followed by 64 lowercase hexadecimal characters.
-    Sha256Digest, "hashes", is_sha256
+    Sha256Digest,
+    "hashes",
+    is_sha256
 );
 text_newtype!(
     /// A git object id: 40 or 64 lowercase hexadecimal characters.
-    GitObjectId, "hashes.subject_commit", is_git_object_id
+    GitObjectId,
+    "hashes.subject_commit",
+    is_git_object_id
 );
 text_newtype!(
     /// A UTC instant of the form `YYYY-MM-DDTHH:MM:SSZ`.
-    Timestamp, "timestamps", is_timestamp
+    Timestamp,
+    "timestamps",
+    is_timestamp
 );
 text_newtype!(
     /// A signature bundle in standard padded base64, at most 16384 characters.
-    Signature, "signature", is_base64_bundle
+    Signature,
+    "signature",
+    is_base64_bundle
 );
 
 impl RecordId {
