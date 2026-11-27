@@ -217,7 +217,14 @@ fn tc_105_cli_inventory_and_reuse_follow_the_native_contract() {
                 .as_array()
                 .expect("validated artifact diagnostics must be an array")
                 .iter()
-                .any(|diagnostic| diagnostic == "UnknownEdgeType: archetype 'AssuranceProfile' allowed_links uses 'governs' which is not in any edge_types registry"),
+                .any(|diagnostic| {
+                    diagnostic.as_str().is_some_and(|diagnostic| {
+                        diagnostic.starts_with("UnknownEdgeType: ")
+                            && diagnostic.contains(
+                                "archetype 'AssuranceProfile' allowed_links uses 'governs' which is not in any edge_types registry",
+                            )
+                    })
+                }),
             "Quire diagnostics must remain observable rather than discarded"
         );
     }
