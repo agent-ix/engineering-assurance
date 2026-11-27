@@ -315,7 +315,7 @@ fn tc_1202_empty_trail_carries_producer_identity() {
     let result = trail(&fixture);
     assert_eq!(
         result["entries"].as_array().expect("entries").as_slice(),
-        []
+        [] as [Value; 0]
     );
     producer_identity::assert_producer(&result);
 }

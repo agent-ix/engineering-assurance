@@ -229,7 +229,7 @@ fn tc_370_missing_converter_is_unavailable_without_a_document() {
         assert_eq!(value["state"]["kind"], "unavailable", "{value}");
         assert_eq!(
             value["artifacts"].as_array().expect("artifacts").as_slice(),
-            []
+            [] as [Value; 0]
         );
         assert_eq!(value["producer"]["name"], step.name());
         assert_eq!(
@@ -246,7 +246,7 @@ fn tc_370_missing_converter_is_unavailable_without_a_document() {
     assert_eq!(value["state"]["kind"], "refused", "{value}");
     assert_eq!(
         value["artifacts"].as_array().expect("artifacts").as_slice(),
-        []
+        [] as [Value; 0]
     );
 }
 
@@ -270,7 +270,7 @@ fn tc_371_converter_failure_is_failed_and_carries_its_stderr() {
     );
     assert_eq!(
         value["artifacts"].as_array().expect("artifacts").as_slice(),
-        []
+        [] as [Value; 0]
     );
     let stderr: Vec<u8> = value["process"]["stderr"]["bytes"]
         .as_array()
@@ -295,7 +295,7 @@ fn tc_372_exit_zero_without_the_required_output_is_failed() {
     assert_eq!(value["state"]["kind"], "failed", "{value}");
     assert_eq!(
         value["artifacts"].as_array().expect("artifacts").as_slice(),
-        []
+        [] as [Value; 0]
     );
 }
 

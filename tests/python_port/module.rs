@@ -1309,7 +1309,7 @@ fn measurement_plan_skeleton_shows_apparatus_and_negative_controls() {
     let controls = skeleton["negative_controls"]
         .as_array()
         .expect("negative_controls");
-    assert_ne!(controls.as_slice(), []);
+    assert_ne!(controls.as_slice(), [] as [Value; 0]);
     let mut kinds: BTreeSet<&str> = controls
         .iter()
         .map(|c| c["kind"].as_str().unwrap())

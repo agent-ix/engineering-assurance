@@ -565,7 +565,7 @@ fn tc_305_missing_executable_is_unavailable_without_an_sbom() {
     assert_eq!(value["state"]["kind"], "unavailable", "{value}");
     assert_eq!(
         value["artifacts"].as_array().expect("artifacts").as_slice(),
-        []
+        [] as [Value; 0]
     );
 }
 
@@ -580,7 +580,7 @@ fn tc_306_failed_and_timed_out_runs_carry_no_sbom() {
     assert_eq!(value["state"]["kind"], "failed", "{value}");
     assert_eq!(
         value["artifacts"].as_array().expect("artifacts").as_slice(),
-        []
+        [] as [Value; 0]
     );
 
     let mut slow = fixture_request(root.path(), &["wait", "60000"]);
@@ -589,7 +589,7 @@ fn tc_306_failed_and_timed_out_runs_carry_no_sbom() {
     assert_eq!(value["state"]["kind"], "timed_out", "{value}");
     assert_eq!(
         value["artifacts"].as_array().expect("artifacts").as_slice(),
-        []
+        [] as [Value; 0]
     );
 
     let missing_output = fixture_request(root.path(), &["touch", "out/not-sbom.cdx.json"]);
@@ -597,7 +597,7 @@ fn tc_306_failed_and_timed_out_runs_carry_no_sbom() {
     assert_eq!(value["state"]["kind"], "failed", "{value}");
     assert_eq!(
         value["artifacts"].as_array().expect("artifacts").as_slice(),
-        []
+        [] as [Value; 0]
     );
 }
 
@@ -611,7 +611,7 @@ fn tc_307_stale_sbom_is_absent_from_a_failed_result() {
     assert_eq!(value["state"]["kind"], "failed", "{value}");
     assert_eq!(
         value["artifacts"].as_array().expect("artifacts").as_slice(),
-        []
+        [] as [Value; 0]
     );
     assert!(
         !root.path().join(SBOM_PATH).exists(),

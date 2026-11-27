@@ -489,7 +489,7 @@ fn tc_9002_failed_or_incomplete_fixture_scan_never_retains_report() {
     assert_eq!(value["state"]["kind"], "unavailable", "{value}");
     assert_eq!(
         value["artifacts"].as_array().expect("artifacts").as_slice(),
-        []
+        [] as [Value; 0]
     );
 
     request = fixture_request(root.path(), "exit 127");
@@ -498,7 +498,7 @@ fn tc_9002_failed_or_incomplete_fixture_scan_never_retains_report() {
     assert_eq!(value["state"]["kind"], "failed", "{value}");
     assert_eq!(
         value["artifacts"].as_array().expect("artifacts").as_slice(),
-        []
+        [] as [Value; 0]
     );
     assert!(
         !root.path().join(REPORT_PATH).exists(),
@@ -516,7 +516,7 @@ fn tc_9002_failed_or_incomplete_fixture_scan_never_retains_report() {
     );
     assert_eq!(
         value["artifacts"].as_array().expect("artifacts").as_slice(),
-        []
+        [] as [Value; 0]
     );
 
     request = fixture_request(
@@ -537,7 +537,7 @@ fn tc_9002_failed_or_incomplete_fixture_scan_never_retains_report() {
     assert_eq!(value["state"]["kind"], "timed_out", "{value}");
     assert_eq!(
         value["artifacts"].as_array().expect("artifacts").as_slice(),
-        []
+        [] as [Value; 0]
     );
 }
 
