@@ -1,0 +1,83 @@
+{
+  "entries": [
+    {
+      "config": {
+        "error": "required live-test input FR_041_LIVE_REPOSITORY is unavailable",
+        "execution_state": "not-executed",
+        "git_version": "git version 2.34.1",
+        "required_inputs": "FR_041_LIVE_REPOSITORY,FR_041_LIVE_TAG,FR_041_LIVE_IDENTITY,FR_041_LIVE_ISSUER,FR_041_LIVE_RECORD_ID,FR_041_LIVE_RECORD_DIGEST",
+        "ssh_keygen_version": "OpenSSH_8.9p1 Ubuntu-3ubuntu0.18, OpenSSL 3.0.2 15 Mar 2022",
+        "tool_version": "gitsign version v0.18.0"
+      },
+      "outcome": "error",
+      "symbol": "approval_verify_gitsign::tc_1017",
+      "traceIds": [
+        "FR-041-AC-26"
+      ]
+    },
+    {
+      "config": {
+        "execution_state": "executed",
+        "supported_version": "1.57.1",
+        "tool_version": "syft 1.57.1"
+      },
+      "outcome": "pass",
+      "symbol": "syft_producer_cli::real_tool_checks",
+      "traceIds": [
+        "FR-038-AC-1",
+        "FR-038-AC-2",
+        "FR-038-AC-7",
+        "FR-038-AC-10",
+        "FR-039-AC-1",
+        "FR-039-AC-2",
+        "FR-039-AC-3",
+        "FR-039-AC-4",
+        "FR-039-AC-8",
+        "FR-039-AC-9"
+      ]
+    },
+    {
+      "config": {
+        "execution_state": "executed",
+        "osv_mirror_date": "2026-11-27",
+        "tool_version": "osv-scanner version: 2.7.1"
+      },
+      "outcome": "pass",
+      "symbol": "osv_scanner_producer_cli::real_tool_checks",
+      "traceIds": [
+        "FR-044-AC-1",
+        "FR-044-AC-2",
+        "FR-044-AC-5",
+        "FR-044-AC-8",
+        "FR-044-AC-13",
+        "FR-044-AC-14"
+      ]
+    },
+    {
+      "config": {
+        "commit": "f8c4e283096b88490cb3f3c577a4fba624aac90b",
+        "execution_state": "executed",
+        "git_version": "git version 2.34.1",
+        "identity": "john.torakis@gmail.com",
+        "issuer_id": "GitHub OAuth OIDC issuer",
+        "repository_id": "operatorequals/gitsign-action",
+        "ssh_keygen_version": "OpenSSH_8.9p1 Ubuntu-3ubuntu0.18, OpenSSL 3.0.2 15 Mar 2022",
+        "tag": "v0.2.0",
+        "tag_object": "463a0f8e1d7d06e6aa40f4975a0344d8fa627fe5",
+        "tool_version": "gitsign version v0.18.0",
+        "trust_service": "public Sigstore trust services; test returned signed_valid"
+      },
+      "outcome": "pass",
+      "symbol": "signature_verify_gitsign::tc_292",
+      "traceIds": [
+        "FR-040-AC-15",
+        "FR-040-AC-20"
+      ]
+    }
+  ],
+  "evidenceKind": "Integration",
+  "schemaVersion": 1,
+  "suite": "SUITE-004",
+  "timestamp": "2026-11-27T15:44:35.250Z",
+  "tool": "engineering-assurance real-tool-test (quoin 0.37.0, syft 1.57.1, osv-scanner 2.7.1, gitsign v0.18.0)"
+}

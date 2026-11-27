@@ -146,8 +146,9 @@ jobs:
             --arg allowed_signers "$allowed_signers" \
             '{protocol:"engineering-assurance.release-verify-request/v1",repository:$repository,tag:$tag,record_path:$record_path,allowed_signers:$allowed_signers}')"
           result="$("$RUNNER_TEMP/ea-tooling/engineering-assurance" release-verify --request "$request")"
-          if ! jq -e '.status == "released"' <<<"$result" >/dev/null; then
-            echo "::error::release_verify_not_released"
+          status="$(jq -r '.status // "unknown"' <<<"$result")"
+          if [[ "$status" != "released" ]]; then
+            echo "::error::release_verify_status=$status"
             exit 1
           fi
 

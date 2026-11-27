@@ -504,6 +504,90 @@ fn assert_not_released(result: &Value, expected: &[&str]) {
     }
 }
 
+fn assert_workflow_rejects_release_verdict(result: &Value) {
+    let temp = tempfile::tempdir().expect("temporary directory");
+    let protected_base = temp.path().join("protected-base");
+    fs::create_dir(&protected_base).expect("protected-base directory");
+    git(&protected_base, None, &["init", "-q"]);
+    fs::write(protected_base.join("allowed_signers"), "fixture signer\n")
+        .expect("protected policy");
+    git(&protected_base, None, &["add", "allowed_signers"]);
+    git(
+        &protected_base,
+        None,
+        &["commit", "-q", "-m", "protected policy"],
+    );
+
+    let runner_temp = temp.path().join("runner-temp");
+    let tooling = runner_temp.join("ea-tooling");
+    fs::create_dir_all(&tooling).expect("tooling directory");
+    let executable = tooling.join("engineering-assurance");
+    fs::write(
+        &executable,
+        "#!/bin/sh\ncat \"$RUNNER_TEMP/release-verify-result.json\"\n",
+    )
+    .expect("fixture release verifier");
+    let mut permissions = fs::metadata(&executable)
+        .expect("fixture verifier metadata")
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&executable, permissions).expect("fixture verifier executable");
+    fs::write(
+        runner_temp.join("release-verify-result.json"),
+        serde_json::to_vec(result).expect("serialize release verification result"),
+    )
+    .expect("write fixture release verifier result");
+
+    let workflow_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows/release-attestation.yml");
+    let workflow_bytes = fs::read(workflow_path).expect("release-attestation workflow exists");
+    let workflow: Value = yaml_serde::from_slice(&workflow_bytes).expect("workflow parses");
+    let steps = workflow["jobs"]["verify"]["steps"]
+        .as_array()
+        .expect("verify steps");
+    let verify_index = steps
+        .iter()
+        .position(|step| step["name"] == "Verify the signed release tag against protected policy")
+        .expect("release verification step");
+    let upload_index = steps
+        .iter()
+        .position(|step| step["name"] == "Upload verified attestation inputs")
+        .expect("attestation input upload step");
+    assert!(
+        verify_index < upload_index,
+        "verification precedes input upload"
+    );
+    assert_eq!(workflow["jobs"]["attest"]["needs"], "verify");
+
+    let script = steps[verify_index]["run"]
+        .as_str()
+        .expect("release verification script");
+    let output = Command::new("bash")
+        .args(["-euo", "pipefail", "-c", script])
+        .current_dir(temp.path())
+        .env("RUNNER_TEMP", &runner_temp)
+        .env("INPUT_TAG", "v1.2.3")
+        .env("RECORD_PATH", "release/REL-1.md")
+        .env("ALLOWED_SIGNERS_PATH", "allowed_signers")
+        .env("GITHUB_WORKSPACE", temp.path())
+        .output()
+        .expect("release verification workflow step starts");
+    assert_eq!(output.status.code(), Some(1));
+    let rendered = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        rendered.contains("::error::release_verify_status=not_released"),
+        "workflow reports the failed release-verify status: {rendered}"
+    );
+    assert!(
+        !temp.path().join("attestation-inputs").exists(),
+        "failed verification creates no attestation input directory"
+    );
+}
+
 #[test]
 #[trace("FR-047-AC-17")]
 fn tc_1203_not_released_result_without_approval_carries_producer_identity() {
@@ -579,7 +663,7 @@ fn tc_380_a_signed_release_of_a_present_baseline_is_released() {
 }
 
 #[test]
-#[trace("TC-381", "FR-047-AC-2")]
+#[trace("TC-381", "FR-047-AC-2", "FR-067-AC-2")]
 fn tc_381_a_record_edited_after_the_message_was_composed_is_the_wrong_record() {
     let fixture = fixture();
     let baseline = commit_baseline(&fixture, &[]);
@@ -600,6 +684,7 @@ fn tc_381_a_record_edited_after_the_message_was_composed_is_the_wrong_record() {
     assert_eq!(result["approval"]["status"], "wrong_record");
     assert_eq!(result["approval"]["binding"]["record_digest"], "mismatch");
     assert!(result.get("release").is_none());
+    assert_workflow_rejects_release_verdict(&result);
 }
 
 #[test]
@@ -618,7 +703,7 @@ fn tc_382_a_mapped_signer_who_is_not_the_decision_owner_does_not_release() {
 }
 
 #[test]
-#[trace("TC-383", "FR-047-AC-4")]
+#[trace("TC-383", "FR-047-AC-4", "FR-067-AC-2")]
 fn tc_383_an_unsigned_annotated_tag_is_unsigned() {
     let fixture = fixture();
     let baseline = commit_baseline(&fixture, &[]);
@@ -632,6 +717,11 @@ fn tc_383_an_unsigned_annotated_tag_is_unsigned() {
     let result = verdict(&fixture, "v1");
     assert_not_released(&result, &["unsigned"]);
     assert_eq!(result["approval"]["status"], "unsigned");
+    assert!(
+        result.get("release").is_none(),
+        "unsigned tags yield no release statement"
+    );
+    assert_workflow_rejects_release_verdict(&result);
 }
 
 #[test]
@@ -660,7 +750,7 @@ fn tc_385_a_tag_edited_after_signing_is_signed_bad() {
 }
 
 #[test]
-#[trace("TC-386", "FR-047-AC-4")]
+#[trace("TC-386", "FR-047-AC-4", "FR-067-AC-2")]
 fn tc_386_a_good_signature_by_an_unmapped_key_is_an_untrusted_signer() {
     let fixture = fixture();
     let baseline = commit_baseline(&fixture, &[]);
@@ -670,6 +760,11 @@ fn tc_386_a_good_signature_by_an_unmapped_key_is_an_untrusted_signer() {
     let result = verdict(&fixture, "v1");
     assert_not_released(&result, &["untrusted_signer"]);
     assert_eq!(result["approval"]["status"], "untrusted_signer");
+    assert!(
+        result.get("release").is_none(),
+        "untrusted tags yield no release statement"
+    );
+    assert_workflow_rejects_release_verdict(&result);
 }
 
 #[test]

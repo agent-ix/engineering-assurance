@@ -46,8 +46,7 @@ fn release_verify_script() -> String {
     steps
         .iter()
         .find(|step| step["name"] == "Verify the signed release tag against protected policy")
-        .expect("release-verify workflow step")
-        ["run"]
+        .expect("release-verify workflow step")["run"]
         .as_str()
         .expect("release-verify script")
         .to_owned()
@@ -61,7 +60,10 @@ fn release_verification_reads_allowed_signers_from_the_protected_base() {
     fs::create_dir(&protected_base).expect("protected-base directory");
     git(&protected_base, &["init", "-q"]);
     git(&protected_base, &["config", "user.name", "Fixture"]);
-    git(&protected_base, &["config", "user.email", "fixture@example.test"]);
+    git(
+        &protected_base,
+        &["config", "user.email", "fixture@example.test"],
+    );
     fs::write(protected_base.join("allowed_signers"), "protected signer\n")
         .expect("protected policy");
     git(&protected_base, &["add", "allowed_signers"]);
@@ -70,8 +72,7 @@ fn release_verification_reads_allowed_signers_from_the_protected_base() {
     let source = temp.path().join("source");
     fs::create_dir(&source).expect("source directory");
     git(&source, &["init", "-q"]);
-    fs::write(source.join("allowed_signers"), "tag-commit signer\n")
-        .expect("tag policy");
+    fs::write(source.join("allowed_signers"), "tag-commit signer\n").expect("tag policy");
     assert_eq!(
         fs::read(source.join("allowed_signers")).expect("tag policy contents"),
         b"tag-commit signer\n"

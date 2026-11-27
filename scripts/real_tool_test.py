@@ -216,7 +216,17 @@ def main() -> int:
             print("LOCKED_BUILD must name the locked-build.sh admission wrapper", file=sys.stderr)
             return 2
         cargo = os.environ.get("CARGO", "cargo")
-        command = [locked_build, str(root / "target"), cargo, "test", "--locked", "--features", "full"]
+        command = [
+            locked_build,
+            str(root / "target"),
+            cargo,
+            "test",
+            "--locked",
+            "--features",
+            "full,real-tool-tests",
+            "-j",
+            "4",
+        ]
         test_symbols = {
             "syft_producer_cli": ("syft_producer_cli::real_tool_checks", TRACE_IDS["syft"], syft_config),
             "osv_scanner_producer_cli": ("osv_scanner_producer_cli::real_tool_checks", TRACE_IDS["osv-scanner"], scanner_config),
@@ -226,7 +236,7 @@ def main() -> int:
         for _, test_name in available:
             command.extend(["--test", test_name])
         command.append("--")
-        command.append("--ignored")
+        command.append("--test-threads=4")
         print("Focused command: " + " ".join(command), flush=True)
         log = tempfile.NamedTemporaryFile(prefix="ea-real-tool-test-", suffix=".log", delete=False)
         log_path = Path(log.name)

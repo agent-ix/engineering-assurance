@@ -1171,7 +1171,7 @@ fn tc_299_a_relative_path_entry_never_supplies_git_or_ssh_keygen_on_the_ssh_path
 }
 
 #[test]
-#[ignore = "needs the real gitsign, network access and a public gitsign-signed commit and tag named by FR_040_LIVE_*"]
+#[cfg(feature = "real-tool-tests")]
 #[trace(
     "TC-292",
     "TC-1013",
