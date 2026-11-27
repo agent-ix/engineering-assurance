@@ -6,6 +6,9 @@
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
+    fs,
+    path::Path,
+    process::Command,
     rc::Rc,
 };
 
@@ -32,9 +35,9 @@ use engineering_assurance::{
         form::{PrivateRecord, PublicRecord, RecordId},
         leak::{LookupFailed, PublicPathProof, PublicStatementProof, VisibilityLookup},
         sink::{
-            ApprovalStatementPublishOutcome, ApprovalStatementReader, CheckedEntry, LogRejected,
-            PrivateStore, PublicLogClient, Signer, SigningFailed, SinkLayer, StoreError,
-            StorePreparation,
+            ApprovalStatementLookup, ApprovalStatementPublishOutcome, ApprovalStatementReader,
+            CheckedEntry, LogRejected, PrivateStore, PublicLogClient, RetainedApprovalStatement,
+            Signer, SigningFailed, SinkLayer, StoreError, StorePreparation,
         },
     },
 };
@@ -660,6 +663,278 @@ fn passing_input_produces_three_public_log_signed_statements_with_linked_summary
             .encode_note()
             .expect("three receipt bundles encode as a note")
             .ends_with(b"\n")
+    );
+}
+
+#[trace("FR-075-AC-1")]
+#[test]
+fn squash_merged_pull_request_with_three_covering_approvals_passes_on_merge_commit() {
+    fn git_text(repository: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(repository)
+            .args(args)
+            .output()
+            .expect("git starts");
+        assert!(
+            output.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout)
+            .expect("git output is UTF-8")
+            .trim()
+            .to_owned()
+    }
+
+    let temp = tempfile::tempdir().expect("temporary fixture");
+    let repository = temp.path().join("project");
+    fs::create_dir(&repository).expect("fixture repository directory");
+    assert!(
+        Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&repository)
+            .status()
+            .expect("git init")
+            .success()
+    );
+    git_text(&repository, &["config", "user.name", "Receipt Fixture"]);
+    git_text(
+        &repository,
+        &["config", "user.email", "receipt@example.invalid"],
+    );
+    fs::write(repository.join("release.txt"), "base release\n").expect("base file");
+    git_text(&repository, &["add", "release.txt"]);
+    git_text(&repository, &["commit", "-qm", "base release"]);
+    git_text(&repository, &["branch", "-M", "main"]);
+    git_text(&repository, &["switch", "-qc", "feature/receipt-fixture"]);
+    fs::write(repository.join("release.txt"), "squash-merged release\n").expect("feature file");
+    git_text(&repository, &["commit", "-qam", "release change"]);
+    git_text(&repository, &["switch", "-q", "main"]);
+    git_text(
+        &repository,
+        &["merge", "--squash", "feature/receipt-fixture"],
+    );
+    git_text(
+        &repository,
+        &["commit", "-qm", "squash merge pull request 91"],
+    );
+
+    let commit = git_text(&repository, &["rev-parse", "HEAD"]);
+    let tree = git_text(&repository, &["rev-parse", "HEAD^{tree}"]);
+    let parents = git_text(&repository, &["rev-list", "--parents", "-n", "1", "HEAD"]);
+    assert_eq!(
+        parents.split_whitespace().count(),
+        2,
+        "squash merge has one parent"
+    );
+
+    let pull_request = "fictional/project#91".to_owned();
+    let subject = ExpectedReceiptSubject {
+        repository: REPO.to_owned(),
+        commit: commit.clone(),
+        tree: tree.clone(),
+        merged_pull_request: pull_request.clone(),
+    };
+    let mut retained_input = input();
+    retained_input.pull_request = pull_request.clone();
+    let policy = RolePolicy {
+        protocol: "engineering-assurance.approval-policy/v1".to_owned(),
+        required_roles: vec![
+            "engineer".to_owned(),
+            "reviewer".to_owned(),
+            "security".to_owned(),
+        ],
+        individuals: BTreeMap::from([
+            (
+                "alice".to_owned(),
+                vec![AccountRef {
+                    source: "github".to_owned(),
+                    id: "123".to_owned(),
+                }],
+            ),
+            (
+                "bob".to_owned(),
+                vec![AccountRef {
+                    source: "github".to_owned(),
+                    id: "456".to_owned(),
+                }],
+            ),
+            (
+                "carol".to_owned(),
+                vec![AccountRef {
+                    source: "github".to_owned(),
+                    id: "789".to_owned(),
+                }],
+            ),
+        ]),
+        roles: BTreeMap::from([
+            ("engineer".to_owned(), vec!["alice".to_owned()]),
+            ("reviewer".to_owned(), vec!["bob".to_owned()]),
+            ("security".to_owned(), vec!["carol".to_owned()]),
+        ]),
+        agents: vec![],
+    };
+    let role_approvals = [
+        ("engineer", "alice"),
+        ("reviewer", "bob"),
+        ("security", "carol"),
+    ];
+    let approval_identity = concat!(
+        "https:",
+        "//github.com/fictional/project/.github/workflows/review-gate.yml@refs/heads/main"
+    );
+    let approval_events = Rc::new(RefCell::new(Vec::new()));
+    let (approval_signer, approval_verifier) =
+        TestSigner::new(approval_events, approval_identity);
+    let retained_approvals = role_approvals
+        .iter()
+        .map(|(role, individual)| {
+            let account_id = match *individual {
+                "alice" => "123",
+                "bob" => "456",
+                "carol" => "789",
+                _ => unreachable!("fixture policy individual"),
+            };
+            let statement = json!({
+                "_type": STATEMENT_V1_TYPE,
+                "subject": [{"name": REPO, "digest": {"gitCommit": commit}}],
+                "predicateType": "https://schemas.agent-ix.ai/attestation/approval/v1",
+                "predicate": {
+                    "source": "github",
+                    "approver": format!("github:{account_id}"),
+                    "approver_name": individual,
+                    "role": role,
+                    "meaning": "approve",
+                    "signed_at": "2026-11-14T11:00:00Z",
+                    "head_commit": "cccccccccccccccccccccccccccccccccccccccc",
+                    "pull_request": pull_request,
+                    "merged_commit": commit
+                }
+            });
+            let bytes = serde_json::to_vec(&statement).expect("approval statement JSON");
+            let bundle = approval_signer
+                .bundle(&bytes, "approval-statement-fixture")
+                .expect("fixture approval bundle");
+            RetainedApprovalStatement {
+                statement_bytes: bytes,
+                signature_bundle: bundle,
+                publish_outcome: ApprovalStatementPublishOutcome::Published,
+            }
+        })
+        .collect::<Vec<_>>();
+    struct ApprovalFixture {
+        statements: Vec<RetainedApprovalStatement>,
+        pull_request: String,
+        commit: String,
+    }
+    impl ApprovalStatementReader for ApprovalFixture {
+        fn lookup_approval_statements(
+            &self,
+            _destination: &str,
+            lookup: ApprovalStatementLookup<'_>,
+        ) -> Result<Vec<RetainedApprovalStatement>, engineering_assurance::approval_statement::ApprovalStatementReadError> {
+            if lookup.repository == REPO
+                && lookup.merged_pull_request == self.pull_request
+                && lookup.merged_commit == self.commit
+            {
+                Ok(self.statements.clone())
+            } else {
+                Ok(Vec::new())
+            }
+        }
+    }
+    let approval_reader = ApprovalFixture {
+        statements: retained_approvals,
+        pull_request: subject.merged_pull_request.clone(),
+        commit: subject.commit.clone(),
+    };
+    let approval_identity_policy = WorkflowIdentityPolicy {
+        repository: REPO.to_owned(),
+        workflow_path: ".github/workflows/review-gate.yml".to_owned(),
+        references: BTreeSet::from(["refs/heads/main".to_owned()]),
+        issuer: concat!("https:", "//token.actions.githubusercontent.com").to_owned(),
+        transparency: TransparencyRequirement::PublicLog,
+    };
+    let approvals = engineering_assurance::receipt_record::verified_receipt_approvals(
+        &approval_reader,
+        "fictional/approvals",
+        &subject,
+        &approval_identity_policy,
+        &policy,
+        &approval_verifier,
+    );
+    assert_eq!(approvals.len(), 3);
+    assert!(
+        approvals.iter().all(|(_, decision)| matches!(
+            decision,
+            ApprovalDecision::Covered { is_human: true, .. }
+        )),
+        "verified approvals should cover each distinct role: {approvals:?}"
+    );
+    let mut exported_test_result = test_result(false);
+    exported_test_result["subject"][0]["digest"]["gitCommit"] = json!(commit);
+    exported_test_result["subject"][0]["digest"]["gitTree"] = json!(tree);
+    let gates = ReceiptGateResults {
+        protocol: RECEIPT_GATE_RESULTS_PROTOCOL.to_owned(),
+        commit: subject.commit.clone(),
+        results: vec![ReceiptGateResult {
+            name: "focused".to_owned(),
+            exit_code: 0,
+        }],
+    };
+    let statements = build_receipt_statements(ReceiptRecordInput {
+        subject: &subject,
+        gate_results: &gates,
+        expected_gate_names: &["focused"],
+        test_result: &exported_test_result,
+        receipt_input: Some(&retained_input),
+        role_policy: &policy,
+        approvals,
+        record_id: record_id(),
+        created_at: "2026-11-14T12:00:00Z",
+        verifier_id: concat!(
+            "https:",
+            "//github.com/fictional/project/.github/workflows/change-receipt.yml@refs/heads/main"
+        ),
+        policy_uri: concat!(
+            "https:",
+            "//github.com/fictional/project/blob/main/.engineering-assurance/approval-policy.json"
+        ),
+    })
+    .expect("receipt statements build from the squash-merged subject");
+
+    assert_eq!(statements.status, Status::Passed);
+    let change: Value = serde_json::from_slice(&statements.change_record).expect("change record");
+    assert_eq!(change["subject"][0]["digest"]["gitCommit"], commit);
+    assert_eq!(change["subject"][0]["digest"]["gitTree"], tree);
+    assert_eq!(change["predicate"]["status"], "passed");
+    assert_eq!(
+        change["predicate"]["approvals"].as_array().map(Vec::len),
+        Some(3)
+    );
+    assert!(
+        change["predicate"]["approvals"]
+            .as_array()
+            .expect("approval entries")
+            .iter()
+            .all(|approval| approval["verdict"] == "covered")
+    );
+
+    let (receipt, _private_records, _events) =
+        publish_private_receipt_with_evidence(&subject, statements);
+    assert_eq!(receipt.status, Status::Passed);
+    assert_eq!(receipt.commit, subject.commit);
+    let summary_statement: Value =
+        serde_json::from_slice(&statement_payload(&receipt.bundles.summary))
+            .expect("receipt summary statement");
+    assert_eq!(
+        summary_statement["subject"][0]["digest"]["gitCommit"],
+        subject.commit
+    );
+    assert_eq!(
+        summary_statement["predicate"]["verificationResult"],
+        "PASSED"
     );
 }
 

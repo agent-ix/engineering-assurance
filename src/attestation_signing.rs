@@ -1468,7 +1468,14 @@ mod tests {
         }
     }
 
-    #[trace("TC-660", "FR-064-AC-2", "FR-064-AC-3", "FR-064-AC-4", "FR-068-AC-3")]
+    #[trace(
+        "TC-660",
+        "FR-064-AC-2",
+        "FR-064-AC-3",
+        "FR-064-AC-4",
+        "FR-066-AC-8",
+        "FR-068-AC-3"
+    )]
     #[test]
     fn verifies_policy_and_git_subjects_and_rejects_mismatches() {
         let verifier = verifier();
@@ -1491,6 +1498,19 @@ mod tests {
                 },
             ),
             Ok(VerificationStatus::Verified)
+        );
+        assert_eq!(
+            verify_statement(
+                verifier,
+                PAYLOAD,
+                BUNDLE,
+                &policy(),
+                ExpectedSubject {
+                    kind: SubjectKind::Sha256,
+                    value: "1111111111111111111111111111111111111111111111111111111111111111",
+                },
+            ),
+            Err(VerificationFailure::WrongSubject)
         );
         assert_eq!(
             verify_statement(
