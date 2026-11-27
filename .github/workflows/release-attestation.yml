@@ -227,6 +227,33 @@ jobs:
             exit "$quoin_status"
           fi
 
+          if ! python3 - "$TEST_RESULT_OUTPUT" "$subject_path" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          try:
+              result = json.loads(Path(sys.argv[1]).read_bytes())
+              expected_subject = json.loads(Path(sys.argv[2]).read_bytes())
+          except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+              raise SystemExit(1)
+
+          statement_type = "https:" + "//in-toto.io/Statement/v1"
+          predicate_type = "https:" + "//in-toto.io/attestation/test-result/v0.1"
+          valid = (
+              isinstance(result, dict)
+              and result.get("_type") == statement_type
+              and result.get("predicateType") == predicate_type
+              and result.get("subject") == expected_subject
+              and isinstance(result.get("predicate"), dict)
+          )
+          raise SystemExit(0 if valid else 1)
+          PY
+          then
+            echo "::error::test_result_export_invalid"
+            exit 1
+          fi
+
           mkdir -p attestation-inputs
           cp -- "$TEST_RESULT_OUTPUT" attestation-inputs/test-result.json
 

@@ -335,11 +335,15 @@ fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting(
         .as_array()
         .expect("attest steps");
     assert!(attest_steps.iter().all(|step| {
-        step["run"].as_str().is_none_or(|run| !run.contains("quoin"))
+        step["run"]
+            .as_str()
+            .is_none_or(|run| !run.contains("quoin"))
     }));
-    assert!(workflow["on"]["workflow_call"]["inputs"]
-        .get("test_result")
-        .is_none());
+    assert!(
+        workflow["on"]["workflow_call"]["inputs"]
+            .get("test_result")
+            .is_none()
+    );
     let attest_test_result = attest_steps
         .iter()
         .find(|step| step["name"] == "Attest Quoin test result")
@@ -407,6 +411,97 @@ fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting(
         expected.as_bytes(),
         "the failed Quoin result is retained byte for byte for signing"
     );
+}
+
+#[cfg(unix)]
+#[trace("TC-670", "FR-069-AC-4")]
+#[test]
+fn tc_670_missing_or_mismatched_quoin_export_is_rejected_before_handoff() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let workflow = reusable_workflow();
+    assert_eq!(workflow["jobs"]["attest"]["needs"], "verify");
+    let verify_steps = workflow["jobs"]["verify"]["steps"]
+        .as_array()
+        .expect("verify steps");
+    let export = verify_steps
+        .iter()
+        .find(|step| step["name"] == "Validate the retained evidence store with the Quoin exporter")
+        .expect("Quoin exporter step exists");
+    let script = export["run"].as_str().expect("export script");
+
+    for mode in ["missing", "mismatched-subject"] {
+        let root = tempfile::tempdir().expect("temporary workflow root");
+        let workspace = root.path().join("workspace");
+        let runner_temp = root.path().join("runner-temp");
+        let artifacts = workspace.join("release-artifacts");
+        let evidence = workspace.join("release-evidence");
+        fs::create_dir_all(&workspace).expect("workflow workspace");
+        fs::create_dir_all(&runner_temp).expect("runner temp directory");
+        fs::create_dir_all(&artifacts).expect("release artifact directory");
+        fs::write(artifacts.join("release.tar.gz"), b"fixture release").expect("release artifact");
+        fs::create_dir_all(evidence.join("runs/suite")).expect("evidence run directory");
+        fs::write(evidence.join("bindings.json"), "{}\n").expect("evidence bindings");
+
+        let fixture_result = root.path().join("fixture-test-result.json");
+        fs::write(
+            &fixture_result,
+            serde_json::json!({
+                "_type": concat!("https:", "//in-toto.io/Statement/v1"),
+                "predicateType": concat!("https:", "//in-toto.io/attestation/test-result/v0.1"),
+                "subject": [{
+                    "name": "release.tar.gz",
+                    "digest": {"sha256": "not-the-workflow-computed-digest"}
+                }],
+                "predicate": {"result": "FAILED", "failedTests": []}
+            })
+            .to_string(),
+        )
+        .expect("mismatched export fixture");
+
+        let fake_quoin = root.path().join("quoin");
+        let quoin_script = match mode {
+            "missing" => "#!/bin/sh\nexit 0\n".to_owned(),
+            "mismatched-subject" => {
+                "#!/bin/sh\ncp -- \"$FIXTURE_TEST_RESULT\" \"$TEST_RESULT_OUTPUT\"\n".to_owned()
+            }
+            _ => unreachable!("mode is listed above"),
+        };
+        fs::write(&fake_quoin, quoin_script).expect("fake Quoin exporter");
+        let mut permissions = fs::metadata(&fake_quoin)
+            .expect("fake Quoin metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&fake_quoin, permissions).expect("make fake Quoin executable");
+
+        let output = Command::new("bash")
+            .args(["-euo", "pipefail", "-c", script])
+            .current_dir(&workspace)
+            .env("RUNNER_TEMP", &runner_temp)
+            .env("QUOIN_CLI", &fake_quoin)
+            .env("FIXTURE_TEST_RESULT", &fixture_result)
+            .env("RELEASE_ARTIFACTS_DIR", &artifacts)
+            .env("EVIDENCE_DIR", &evidence)
+            .env("TEST_RESULT_OUTPUT", runner_temp.join("test-result.json"))
+            .output()
+            .expect("run the production workflow step");
+        assert_eq!(output.status.code(), Some(1), "{mode}");
+        let rendered = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            rendered.contains("test_result_export_invalid"),
+            "{mode}: {rendered}"
+        );
+        assert!(
+            !workspace
+                .join("attestation-inputs/test-result.json")
+                .exists(),
+            "{mode}: invalid exports are not handed to the signing job"
+        );
+    }
 }
 
 fn assert_workflow_inputs_and_permissions(workflow: &Value) {
