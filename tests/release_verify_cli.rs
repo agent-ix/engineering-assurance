@@ -1203,7 +1203,7 @@ fn tc_423_a_replace_ref_cannot_change_the_record_read_under_a_valid_signature() 
     ))
     .expect("utf-8");
     git(&repo, None, &["replace", &record_id, forged_id.trim()]);
-    assert!(!git(&repo, None, &["for-each-ref", "refs/replace"]).is_empty());
+    assert_ne!(git(&repo, None, &["for-each-ref", "refs/replace"]), "");
     let result = verdict(&fixture, "v1");
     assert_eq!(result["status"], "released", "{result}");
     assert_eq!(

@@ -551,7 +551,10 @@ mod tests {
             serde_json::from_value(summary_json(&expected.input_digests))
                 .expect("closed summary fixture");
         check_summary_subjects(&statement.subject, &expected).expect("release commit subject");
-        assert!(statement.predicate.verified_levels.is_empty());
+        assert_eq!(
+            statement.predicate.verified_levels,
+            [] as [serde_json::Value; 0]
+        );
 
         let mut changed_commit = summary_json(&expected.input_digests);
         changed_commit["subject"][1]["digest"]["gitCommit"] = json!("other-commit");
@@ -615,7 +618,10 @@ mod tests {
         }))
         .expect("provenance statement fixture");
 
-        assert_eq!(check_artifact_subjects(&statement, &original.artifacts), Ok(()));
+        assert_eq!(
+            check_artifact_subjects(&statement, &original.artifacts),
+            Ok(())
+        );
 
         let changed = ExpectedRelease {
             artifacts: vec![ArtifactSubject {

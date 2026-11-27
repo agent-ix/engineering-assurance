@@ -712,17 +712,14 @@ fn verify(
         snapshot_present_at_baseline: shape.snapshot_present_at_baseline,
     };
     let failed = reasons(&facts);
-    let absent_items = resolution
-        .as_ref()
-        .map(|resolved| {
-            resolved
-                .items
-                .iter()
-                .filter(|item| !item.present)
-                .map(|item| item.path.clone())
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
+    let absent_items = resolution.as_ref().map_or_default(|resolved| {
+        resolved
+            .items
+            .iter()
+            .filter(|item| !item.present)
+            .map(|item| item.path.clone())
+            .collect::<Vec<_>>()
+    });
     let released = failed.is_empty() && status == ApprovalStatus::Approved;
     let mut result = ResultLine::not_released(tag, trust, failed, producer);
     result.absent_items = absent_items;

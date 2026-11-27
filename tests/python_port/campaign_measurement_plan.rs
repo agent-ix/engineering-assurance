@@ -37,7 +37,7 @@ fn procedure_path_is_optional_and_safe_json_files_are_valid() {
     jsonschema::meta::validate(&schema("measurement-plan-frontmatter.schema"))
         .expect("schema is a valid draft 2020-12 schema");
     let mut candidate = plan();
-    assert!(errors(&candidate).is_empty());
+    assert_eq!(errors(&candidate), [] as [std::string::String; 0]);
     for path in [
         "campaign/procedures/probe.json",
         "campaign/.procedures/probe.JSON",
@@ -97,5 +97,5 @@ fn procedure_path_requires_protected_apparatus_declaration() {
         .as_object_mut()
         .expect("object")
         .remove("protected_apparatus");
-    assert!(!errors(&candidate).is_empty());
+    assert_ne!(errors(&candidate), [] as [std::string::String; 0]);
 }

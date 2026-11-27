@@ -332,7 +332,7 @@ fn tc_136_describe_omits_optional_scenario_metadata_it_does_not_hold() {
     let scenarios = response["scenarios"]
         .as_array()
         .expect("describe response must carry a scenario catalogue");
-    assert!(!scenarios.is_empty());
+    assert_ne!(scenarios.as_slice(), []);
     let mut canaries = 0_usize;
     for scenario in scenarios {
         let object = scenario

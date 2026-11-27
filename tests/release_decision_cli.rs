@@ -351,7 +351,7 @@ fn tc_451_with_no_owner_choice_the_run_stays_at_the_gate_with_no_document_and_no
     assert!(waiting.get("release").is_none() && waiting.get("decision").is_none());
     assert_eq!(acknowledgements(&fixture, "run-gate"), 0);
     assert_eq!(phase(&fixture, "run-gate"), "decision_ready");
-    assert!(git(&fixture.repo(), &["tag", "-l"]).is_empty());
+    assert_eq!(git(&fixture.repo(), &["tag", "-l"]), "");
     assert_eq!(refs(&fixture), refs_before);
     assert!(!fixture.repo().join(RECORD_PATH).exists());
 }
@@ -480,7 +480,7 @@ fn tc_454_a_reject_retains_the_rejection_and_writes_no_document_and_no_tag() {
     assert_eq!(decided["decision"]["choice"], "reject");
     assert!(decided.get("release").is_none());
     assert_eq!(phase(&fixture, "run-reject"), "rejected");
-    assert!(git(&fixture.repo(), &["tag", "-l"]).is_empty());
+    assert_eq!(git(&fixture.repo(), &["tag", "-l"]), "");
     assert_eq!(refs(&fixture), refs_before);
     assert!(!fixture.repo().join(RECORD_PATH).exists());
 }
@@ -514,8 +514,8 @@ fn tc_455_a_release_emits_one_terminal_event_and_runs_no_git_write() {
 
     assert_eq!(git(&fixture.repo(), &["rev-parse", "HEAD"]), head_before);
     assert_eq!(refs(&fixture), refs_before);
-    assert!(git(&fixture.repo(), &["tag", "-l"]).is_empty());
-    assert!(git(&fixture.repo(), &["status", "--porcelain"]).is_empty());
+    assert_eq!(git(&fixture.repo(), &["tag", "-l"]), "");
+    assert_eq!(git(&fixture.repo(), &["status", "--porcelain"]), "");
 }
 
 #[test]

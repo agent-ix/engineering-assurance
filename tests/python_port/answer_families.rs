@@ -44,8 +44,14 @@ fn constant() -> Value {
 #[test]
 #[trace("TC-240", "FR-021-AC-16")]
 fn answer_families_are_required_with_a_constant_predictor_and_a_valid_list() {
-    assert!(errors(&constant(), Some(json!(["weakness_kind", "coverage"]))).is_empty());
-    assert!(errors(&constant(), Some(json!(["only"]))).is_empty());
+    assert_eq!(
+        errors(&constant(), Some(json!(["weakness_kind", "coverage"]))),
+        [] as [std::string::String; 0]
+    );
+    assert_eq!(
+        errors(&constant(), Some(json!(["only"]))),
+        [] as [std::string::String; 0]
+    );
     assert!(!errors(&constant(), None).is_empty(), "absent list");
     for refused in [
         json!([]),
@@ -74,8 +80,8 @@ fn answer_families_are_refused_with_any_other_baseline_or_a_threshold_rule() {
         );
     }
     let threshold = json!({"comparator": "ge", "threshold": 0.9});
-    assert!(errors(&threshold, None).is_empty());
-    assert!(!errors(&threshold, families).is_empty());
+    assert_eq!(errors(&threshold, None), [] as [std::string::String; 0]);
+    assert_ne!(errors(&threshold, families), [] as [std::string::String; 0]);
 }
 
 #[test]

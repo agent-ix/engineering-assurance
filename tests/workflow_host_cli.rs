@@ -291,8 +291,8 @@ fn tc_107_new_resume_and_pristine_interruption_recovery_preserve_binding() {
     assert!(resumed.status.success());
     assert_eq!(result(&resumed), first_result);
     assert_eq!(resumed.stdout, first.stdout);
-    assert!(first.stderr.is_empty());
-    assert!(resumed.stderr.is_empty());
+    assert_eq!(first.stderr, [] as [u8; 0]);
+    assert_eq!(resumed.stderr, [] as [u8; 0]);
 
     // Resuming an unchanged run proves idempotence but not that a completed
     // phase survives. FR-005-AC-1 is about the operator who stopped partway:

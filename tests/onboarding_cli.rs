@@ -180,7 +180,7 @@ fn tc_105_cli_inventory_and_reuse_follow_the_native_contract() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, [] as [u8; 0]);
     assert_eq!(output.stdout.last(), Some(&b'\n'));
     assert!(!output.stdout[..output.stdout.len() - 1].contains(&b'\n'));
     let result = result(&output);

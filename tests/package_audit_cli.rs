@@ -121,7 +121,7 @@ fn tc_111_non_repository_root_fails_before_package_construction() {
     assert_eq!(result.protocol, "engineering-assurance.error/v1");
     assert_eq!(result.capability, "package-audit");
     assert_eq!(result.code, "package_audit_root_invalid");
-    assert!(!result.message.is_empty());
+    assert_ne!(result.message, "");
 }
 
 #[test]

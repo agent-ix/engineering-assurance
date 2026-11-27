@@ -563,7 +563,10 @@ fn tc_305_missing_executable_is_unavailable_without_an_sbom() {
     assert_valid_request(&request);
     let value = result(&request);
     assert_eq!(value["state"]["kind"], "unavailable", "{value}");
-    assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
+    assert_eq!(
+        value["artifacts"].as_array().expect("artifacts").as_slice(),
+        []
+    );
 }
 
 #[cfg(target_os = "linux")]
@@ -575,18 +578,27 @@ fn tc_306_failed_and_timed_out_runs_carry_no_sbom() {
     assert_valid_request(&failing);
     let value = result(&failing);
     assert_eq!(value["state"]["kind"], "failed", "{value}");
-    assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
+    assert_eq!(
+        value["artifacts"].as_array().expect("artifacts").as_slice(),
+        []
+    );
 
     let mut slow = fixture_request(root.path(), &["wait", "60000"]);
     slow["budget"]["timeoutMillis"] = json!(1000);
     let value = result(&slow);
     assert_eq!(value["state"]["kind"], "timed_out", "{value}");
-    assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
+    assert_eq!(
+        value["artifacts"].as_array().expect("artifacts").as_slice(),
+        []
+    );
 
     let missing_output = fixture_request(root.path(), &["touch", "out/not-sbom.cdx.json"]);
     let value = result(&missing_output);
     assert_eq!(value["state"]["kind"], "failed", "{value}");
-    assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
+    assert_eq!(
+        value["artifacts"].as_array().expect("artifacts").as_slice(),
+        []
+    );
 }
 
 #[cfg(target_os = "linux")]
@@ -597,7 +609,10 @@ fn tc_307_stale_sbom_is_absent_from_a_failed_result() {
     fs::write(root.path().join(SBOM_PATH), b"stale").expect("stale SBOM");
     let value = result(&fixture_request(root.path(), &["exit", "3", "nope"]));
     assert_eq!(value["state"]["kind"], "failed", "{value}");
-    assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
+    assert_eq!(
+        value["artifacts"].as_array().expect("artifacts").as_slice(),
+        []
+    );
     assert!(
         !root.path().join(SBOM_PATH).exists(),
         "the stale SBOM must be removed before launch"

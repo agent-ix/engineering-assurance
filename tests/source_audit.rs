@@ -579,9 +579,7 @@ fn tc_1060_allowed_signers_digest_is_computed_once_for_the_shared_snapshot() {
         .items
         .iter()
         .find_map(|item| match item {
-            Item::Fn(function) if function.sig.ident == "capture_allowed_signers" => {
-                Some(function)
-            }
+            Item::Fn(function) if function.sig.ident == "capture_allowed_signers" => Some(function),
             _ => None,
         })
         .expect("the shared trust-input reader exists");
@@ -604,7 +602,10 @@ fn tc_1060_allowed_signers_digest_is_computed_once_for_the_shared_snapshot() {
         .iter()
         .filter(|field| field.ident.as_ref().is_some_and(|name| name == "sha256"))
         .count();
-    assert_eq!(digest_fields, 1, "the snapshot holds one allowed-signers digest");
+    assert_eq!(
+        digest_fields, 1,
+        "the snapshot holds one allowed-signers digest"
+    );
 }
 
 impl<'ast> Visit<'ast> for ChildProgramUse {
@@ -932,10 +933,10 @@ fn tc_101_aliases_are_resolved_while_comments_and_literals_are_inert() {
         const DESCRIPTION: &str = "std::fs::read and println!";
         fn classify() -> &'static str { DESCRIPTION }
     "#;
-    assert!(
+    assert_eq!(
         audit_rust_source(safe.as_bytes(), RustSourceAuditRole::ReusableLibrary)
-            .expect("valid source")
-            .is_empty()
+            .expect("valid source"),
+        [] as [engineering_assurance::source_audit::RustSourceFinding; 0]
     );
 
     let aliased = r#"
@@ -988,10 +989,10 @@ fn tc_101_only_exact_cargo_package_metadata_environment_macros_are_admitted() {
         const NAME: &str = env!("CARGO_PKG_NAME");
         const VERSION: &str = env!("CARGO_PKG_VERSION");
     "#;
-    assert!(
+    assert_eq!(
         audit_rust_source(admitted.as_bytes(), RustSourceAuditRole::ReusableLibrary)
-            .expect("valid source")
-            .is_empty()
+            .expect("valid source"),
+        [] as [engineering_assurance::source_audit::RustSourceFinding; 0]
     );
 
     for rejected in [
@@ -1337,10 +1338,10 @@ fn tc_189_doc_finding_categories_have_stable_wire_names() {
 #[trace("TC-117", "NFR-005-AC-2")]
 fn source_size_encoding_and_syntax_boundaries_refuse_before_inspection() {
     let exact = vec![b' '; MAX_RUST_SOURCE_BYTES];
-    assert!(
+    assert_eq!(
         audit_rust_source(&exact, RustSourceAuditRole::ReusableLibrary)
-            .expect("exact source ceiling is admitted")
-            .is_empty()
+            .expect("exact source ceiling is admitted"),
+        [] as [engineering_assurance::source_audit::RustSourceFinding; 0]
     );
     let oversized = audit_rust_source(
         &vec![b' '; MAX_RUST_SOURCE_BYTES + 1],

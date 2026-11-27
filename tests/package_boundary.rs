@@ -27,7 +27,7 @@ fn tc_096_root_package_exports_library_and_native_cli() {
         String::from_utf8(output.stdout).expect("version output must be UTF-8"),
         expected
     );
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, [] as [u8; 0]);
 }
 
 /// Run the CLI with `args`, feeding `stdin`, and return its output.

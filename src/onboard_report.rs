@@ -1237,8 +1237,7 @@ fn report(repo: &Path, module_root: &Path) -> Report {
     let measurement_record_checklist: MeasurementChecklist =
         serde_json::from_str(include_str!("onboard_report_measurement.json"))
             .expect("checked-in checklist must parse");
-    let (artifact_checklists, artifact_order) =
-        module_root.map(schema_checklists).unwrap_or_default();
+    let (artifact_checklists, artifact_order) = module_root.map_or_default(schema_checklists);
     Report {
         target_repo: repo.display().to_string(),
         module_root: module_root.map(|path| path.display().to_string()),
@@ -1263,8 +1262,7 @@ fn report(repo: &Path, module_root: &Path) -> Report {
                 url: INSTANCE_URL,
             },
             skeletons: module_root
-                .map(|root| directory_files(&root.join("skeletons"), None))
-                .unwrap_or_default(),
+                .map_or_default(|root| directory_files(&root.join("skeletons"), None)),
         },
         artifact_checklists,
         artifact_order,

@@ -2231,13 +2231,13 @@ mod tests {
         let error = execute(&request("store", directory.path(), &commit, Some(&huge)))
             .expect_err("oversized note is rejected");
         assert_eq!(error.code(), "receipt_note_too_large");
-        assert!(
+        assert_eq!(
             test_git_str(
                 directory.path(),
                 &["notes", "--ref", RECEIPT_NOTES_REF, "list"],
             )
-            .stdout
-            .is_empty()
+            .stdout,
+            [] as [u8; 0]
         );
     }
 
@@ -2276,7 +2276,7 @@ mod tests {
         assert_eq!(error.code(), "receipt_verify_request_unreadable");
 
         let reader = StatementsNotRetainedReader;
-        assert!(
+        assert_eq!(
             reader
                 .lookup_approval_statements(
                     "private-store",
@@ -2286,8 +2286,8 @@ mod tests {
                         merged_commit: &"a".repeat(40),
                     },
                 )
-                .unwrap()
-                .is_empty()
+                .unwrap(),
+            [] as [engineering_assurance::approval_statement::RetainedApprovalStatement; 0]
         );
     }
 

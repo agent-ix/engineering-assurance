@@ -130,7 +130,10 @@ fn complete_matrix_preserves_declared_aggregation_outcomes() {
     assert_eq!(complete_result.required_cells, REQUIRED_CELLS);
     assert_eq!(complete_result.complete_cells, REQUIRED_CELLS);
     assert!(complete_result.ok);
-    assert!(complete_result.failures.is_empty());
+    assert_eq!(
+        complete_result.failures,
+        [] as [engineering_assurance::evaluation::EvaluationFailure; 0]
+    );
 
     let cases = [
         (

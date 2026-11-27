@@ -795,7 +795,7 @@ fn tc_327_invalid_requests_are_machine_errors_and_never_start_git() {
         assert_eq!(error["protocol"], "engineering-assurance.error/v1");
         assert_eq!(error["capability"], "approval-verify");
         assert_eq!(error["code"], "approval_verify_request_invalid", "{label}");
-        assert!(!output.stderr.is_empty());
+        assert_ne!(output.stderr, [] as [u8; 0]);
     }
     let output = run_command("approval-verify", b"{not json", Some(&shim));
     assert_eq!(output.status.code(), Some(2));

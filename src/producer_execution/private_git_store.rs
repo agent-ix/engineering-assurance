@@ -2792,11 +2792,11 @@ mod tests {
                 merged_commit: "ffffffffffffffffffffffffffffffffffffffff",
             },
         ] {
-            assert!(
+            assert_eq!(
                 store
                     .lookup_approval_statements("agent-ix/private-records", lookup)
-                    .expect("nonmatching query is readable")
-                    .is_empty()
+                    .expect("nonmatching query is readable"),
+                [] as [crate::record_sink::sink::RetainedApprovalStatement; 0]
             );
         }
     }

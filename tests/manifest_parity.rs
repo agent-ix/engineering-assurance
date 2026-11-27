@@ -192,7 +192,10 @@ fn retained_valid_module_is_accepted_by_the_pure_qualifier() {
     let resources = bundle.resource_views();
     let result = qualify_manifest(&input(&bundle, &resources)).expect("bounded retained bundle");
     assert_eq!(result.outcome, ManifestQualificationOutcome::Accepted);
-    assert!(result.findings.is_empty());
+    assert_eq!(
+        result.findings,
+        [] as [engineering_assurance::manifest::ManifestFinding; 0]
+    );
 }
 
 #[test]

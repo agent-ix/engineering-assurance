@@ -1978,10 +1978,9 @@ mod tests {
             receipt_run_in_progress: false,
             state: ReceiptCheckState::Verified,
         }];
-        assert!(
-            find_missing_receipts(&history, &history[0].commit, 0, 10)
-                .unwrap()
-                .is_empty()
+        assert_eq!(
+            find_missing_receipts(&history, &history[0].commit, 0, 10).unwrap(),
+            [] as [crate::receipt::MissingReceipt; 0]
         );
     }
 

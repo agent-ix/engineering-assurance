@@ -289,7 +289,7 @@ fn refused(fixture: &Fixture, request: &Value, code: &str) -> (Value, String) {
     assert_eq!(error["capability"], "approval-tag");
     assert_eq!(error["code"], code, "{error}");
     let message = String::from_utf8(output.stderr).expect("utf-8");
-    assert!(!message.is_empty());
+    assert_ne!(message, "");
     assert_eq!(tags(fixture), "", "a refusal must not write a tag");
     (error, message)
 }
@@ -718,7 +718,7 @@ fn tc_348_invalid_requests_are_machine_errors_and_never_start_git() {
         let error: Value = serde_json::from_slice(&output.stdout).expect("error json");
         assert_eq!(error["capability"], "approval-tag");
         assert_eq!(error["code"], "approval_tag_request_invalid", "{label}");
-        assert!(!output.stderr.is_empty());
+        assert_ne!(output.stderr, [] as [u8; 0]);
     }
     let output = run(&fixture, "approval-tag", b"{not json", &shim);
     assert_eq!(output.status.code(), Some(2));
@@ -1098,7 +1098,7 @@ fn an_oidc_interactive_declaration_through_the_gitsign_stand_in_is_declared_only
     let fixture = fixture();
     fixture.x509_config();
     let committed = git(&fixture.repo(), &["rev-parse", "HEAD"]);
-    assert!(!committed.is_empty());
+    assert_ne!(committed, "");
     let registry = json!({
         "protocol": "engineering-assurance.gitsign-identity-registry/v1",
         "entries": [{

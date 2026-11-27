@@ -25,7 +25,7 @@ fn run(command: &str, args: &[&str]) -> Output {
 
 fn validator(output: &Output) -> (String, jsonschema::Validator) {
     assert_eq!(output.status.code(), Some(0), "stderr: {:?}", output.stderr);
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, [] as [u8; 0]);
     assert_eq!(output.stdout.last(), Some(&b'\n'));
     let schema_text = std::str::from_utf8(&output.stdout).expect("schema is UTF-8");
     let schema: Value = serde_json::from_str(schema_text).expect("schema is JSON");

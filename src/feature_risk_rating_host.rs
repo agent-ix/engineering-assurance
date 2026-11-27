@@ -820,8 +820,7 @@ fn latest_commit(repository: &Path, path: &Path) -> Result<Option<String>, Proce
     }
     let commit = std::str::from_utf8(&result.stdout)
         .ok()
-        .map(str::trim)
-        .unwrap_or_default();
+        .map_or_default(str::trim);
     if commit.is_empty() {
         Ok(None)
     } else {

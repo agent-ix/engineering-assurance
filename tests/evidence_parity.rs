@@ -241,7 +241,7 @@ fn tc_102_evidence_availability_states_remain_distinct() {
         vec!["unknown"],
     ] {
         let error = validate_state_labels(labels).expect_err("invalid labels must be refused");
-        assert!(!error.message().is_empty());
+        assert_ne!(error.message(), "");
     }
     for state in ["observed", "unavailable", "not_computed", "not_applicable"] {
         assert_eq!(

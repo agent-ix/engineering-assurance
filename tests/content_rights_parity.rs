@@ -82,8 +82,7 @@ fn clause_source_url(row: &ClauseSourceRow) -> String {
     let query = row
         .query
         .as_deref()
-        .map(|query| format!("?{query}"))
-        .unwrap_or_default();
+        .map_or_default(|query| format!("?{query}"));
     format!("{}://{}{}{}", row.scheme, row.host, row.url_path, query)
 }
 
@@ -520,7 +519,10 @@ fn whole_file_boundaries_are_typed_and_short_circuit_content() {
     }
 
     let at_limit = "x\n".repeat(256_000);
-    assert!(findings("candidate.txt", at_limit.as_bytes(), &[]).is_empty());
+    assert_eq!(
+        findings("candidate.txt", at_limit.as_bytes(), &[]),
+        [] as [engineering_assurance::content_rights::ContentRightsFinding; 0]
+    );
     let oversized = vec![b'x'; 512_001];
     assert_eq!(
         findings("candidate.txt", &oversized, &[])[0].category,
@@ -545,8 +547,14 @@ fn whole_file_boundaries_are_typed_and_short_circuit_content() {
         lfs_finding[0].category,
         ContentRightsCategory::GitLfsPointer
     );
-    assert!(findings("README.RS", b"ordinary", &[]).is_empty());
-    assert!(findings(".gitignore", b"ordinary", &[]).is_empty());
+    assert_eq!(
+        findings("README.RS", b"ordinary", &[]),
+        [] as [engineering_assurance::content_rights::ContentRightsFinding; 0]
+    );
+    assert_eq!(
+        findings(".gitignore", b"ordinary", &[]),
+        [] as [engineering_assurance::content_rights::ContentRightsFinding; 0]
+    );
 }
 
 #[test]
@@ -612,16 +620,23 @@ fn shared_cli_dependency_allowance_is_exact_and_metadata_only() {
     let tokens = Vec::new();
     for path in ["Cargo.toml", "Cargo.lock", "deny.toml"] {
         for suffix in ["", "?rev=fictional#fictional"] {
-            assert!(findings(path, format!("{dependency}{suffix}").as_bytes(), &tokens).is_empty());
+            assert_eq!(
+                findings(path, format!("{dependency}{suffix}").as_bytes(), &tokens),
+                [] as [engineering_assurance::content_rights::ContentRightsFinding; 0]
+            );
         }
         for suffix in ["-evil", "/unrelated"] {
-            assert!(
-                !findings(path, format!("{dependency}{suffix}").as_bytes(), &tokens).is_empty()
+            assert_ne!(
+                findings(path, format!("{dependency}{suffix}").as_bytes(), &tokens),
+                [] as [engineering_assurance::content_rights::ContentRightsFinding; 0]
             );
         }
     }
     for path in ["spec/candidate.md", "nested/Cargo.toml", "nested/deny.toml"] {
-        assert!(!findings(path, dependency.as_bytes(), &tokens).is_empty());
+        assert_ne!(
+            findings(path, dependency.as_bytes(), &tokens),
+            [] as [engineering_assurance::content_rights::ContentRightsFinding; 0]
+        );
     }
 }
 

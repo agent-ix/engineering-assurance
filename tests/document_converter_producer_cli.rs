@@ -227,7 +227,10 @@ fn tc_370_missing_converter_is_unavailable_without_a_document() {
             .join(step.name());
         let value = result(&converter_request(root.path(), &absent, step));
         assert_eq!(value["state"]["kind"], "unavailable", "{value}");
-        assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
+        assert_eq!(
+            value["artifacts"].as_array().expect("artifacts").as_slice(),
+            []
+        );
         assert_eq!(value["producer"]["name"], step.name());
         assert_eq!(
             value["producer"]["executable"],
@@ -241,7 +244,10 @@ fn tc_370_missing_converter_is_unavailable_without_a_document() {
         Step::PandocDocx,
     ));
     assert_eq!(value["state"]["kind"], "refused", "{value}");
-    assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
+    assert_eq!(
+        value["artifacts"].as_array().expect("artifacts").as_slice(),
+        []
+    );
 }
 
 #[cfg(target_os = "linux")]
@@ -262,7 +268,10 @@ fn tc_371_converter_failure_is_failed_and_carries_its_stderr() {
         json!({"kind": "exit_code", "value": 7}),
         "{value}"
     );
-    assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
+    assert_eq!(
+        value["artifacts"].as_array().expect("artifacts").as_slice(),
+        []
+    );
     let stderr: Vec<u8> = value["process"]["stderr"]["bytes"]
         .as_array()
         .expect("retained stderr bytes")
@@ -284,7 +293,10 @@ fn tc_372_exit_zero_without_the_required_output_is_failed() {
     let root = workspace();
     let value = result(&converter_request(root.path(), &pandoc, Step::PandocDocx));
     assert_eq!(value["state"]["kind"], "failed", "{value}");
-    assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
+    assert_eq!(
+        value["artifacts"].as_array().expect("artifacts").as_slice(),
+        []
+    );
 }
 
 #[trace("TC-373", "FR-045-AC-5")]

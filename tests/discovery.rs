@@ -320,7 +320,7 @@ fn tc_038_supported_hosts_install_the_same_canonical_bytes() {
     // construction, so a set built from those paths has one member whatever
     // the bundle contains and can never fail.
     let skill_bytes = bundle.read(CANONICAL_SKILL_FILE);
-    assert!(!skill_bytes.is_empty());
+    assert_ne!(skill_bytes, [] as [u8; 0]);
     for entry in &resolved {
         // The path read here is the one this host's own manifest named, not a
         // constant. A manifest redirected to a second in-bundle skill tree

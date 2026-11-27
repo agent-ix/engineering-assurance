@@ -604,7 +604,7 @@ fn tc_256_invalid_revisions_are_refused_before_git_starts() {
         assert_eq!(error["protocol"], "engineering-assurance.error/v1");
         assert_eq!(error["capability"], "signature-verify");
         assert_eq!(error["code"], "signature_verify_revision_invalid");
-        assert!(!output.stderr.is_empty());
+        assert_ne!(output.stderr, [] as [u8; 0]);
     }
     assert!(!marker.exists(), "an invalid revision must not start git");
 }
@@ -644,7 +644,7 @@ fn tc_257_unreadable_and_nonconforming_requests_are_machine_errors() {
         assert_eq!(error["protocol"], "engineering-assurance.error/v1");
         assert_eq!(error["capability"], "signature-verify");
         assert_eq!(error["code"], code);
-        assert!(!output.stderr.is_empty());
+        assert_ne!(output.stderr, [] as [u8; 0]);
     }
     let output = Command::new(env!("CARGO_BIN_EXE_engineering-assurance"))
         .args(["signature-verify", "--request", "not json"])
@@ -824,8 +824,7 @@ fn meaning(verdict: &Value) -> (&str, Vec<&str>) {
     let values = meaning
         .get("values")
         .and_then(Value::as_array)
-        .map(|values| values.iter().map(|v| v.as_str().expect("string")).collect())
-        .unwrap_or_default();
+        .map_or_default(|values| values.iter().map(|v| v.as_str().expect("string")).collect());
     (meaning["presence"].as_str().expect("presence"), values)
 }
 
@@ -935,7 +934,7 @@ fn tc_266_an_invalid_allowed_signers_file_is_refused_before_git_starts() {
         assert_eq!(error["protocol"], "engineering-assurance.error/v1");
         assert_eq!(error["capability"], "signature-verify");
         assert_eq!(error["code"], "signature_verify_allowed_signers_invalid");
-        assert!(!output.stderr.is_empty());
+        assert_ne!(output.stderr, [] as [u8; 0]);
     }
     assert!(!marker.exists(), "an invalid file must not start git");
     // A file of exactly 1 MiB is accepted.

@@ -562,7 +562,7 @@ fn entry_key(bundle: &Value) -> Option<(String, String)> {
 /// exceed 1 MiB.
 pub fn add_entry(existing: Option<&[u8]>, bundle: &Value) -> Result<NoteUpdate, TagReceiptError> {
     let key = entry_key(bundle).ok_or(TagReceiptError::NoteInvalid)?;
-    let mut note = existing.map(<[u8]>::to_vec).unwrap_or_default();
+    let mut note = existing.map_or_default(<[u8]>::to_vec);
     if note.len() > MAX_TAG_RECEIPT_NOTE_BYTES {
         return Err(TagReceiptError::NoteTooLarge);
     }

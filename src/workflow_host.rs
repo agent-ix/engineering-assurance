@@ -814,10 +814,7 @@ fn binding_value(binding: &WorkflowBinding) -> Result<Value, WorkflowHostError> 
 }
 
 fn binding_items(data: &IxInstance) -> &[Value] {
-    data.items
-        .get("run_binding")
-        .map(Vec::as_slice)
-        .unwrap_or_default()
+    data.items.get("run_binding").map_or_default(Vec::as_slice)
 }
 
 fn assert_binding(data: &IxInstance, binding: &WorkflowBinding) -> Result<(), WorkflowHostError> {
@@ -1067,12 +1064,7 @@ impl BoundRun {
 
     /// The items of `kind` the run holds.
     pub(crate) fn items(&self, kind: &str) -> Result<&[Value], WorkflowHostError> {
-        Ok(self
-            .data()?
-            .items
-            .get(kind)
-            .map(Vec::as_slice)
-            .unwrap_or_default())
+        Ok(self.data()?.items.get(kind).map_or_default(Vec::as_slice))
     }
 
     pub(crate) fn snapshot(&self) -> Result<WorkflowSnapshot, WorkflowHostError> {

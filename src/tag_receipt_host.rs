@@ -223,8 +223,7 @@ impl Protected {
                 resolve_sink_for_repository(Some(&config), visibility, &request.github_repository)
                     .ok()
             })
-            .map(|selection| selection.public_linear_teams)
-            .unwrap_or_default();
+            .map_or_default(|selection| selection.public_linear_teams);
         Self::from_policy_bytes(policy.as_deref(), private, public_linear_teams)
     }
 }
