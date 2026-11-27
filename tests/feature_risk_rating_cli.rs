@@ -15,7 +15,7 @@ use std::{
 };
 
 use ix_trace_rs::trace;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 struct Fixture {
     root: tempfile::TempDir,
@@ -118,10 +118,14 @@ fn public_key(path: &Path) -> String {
 }
 
 fn rating_file(fixture: &Fixture) -> PathBuf {
+    rating_file_with_status(fixture, "accepted")
+}
+
+fn rating_file_with_status(fixture: &Fixture, status: &str) -> PathBuf {
     let path = fixture.repo().join("spec/validation/FRR-001.md");
     fs::write(
         &path,
-        "---\nid: FRR-001\ntype: FeatureRiskRating\nrated_by: alice@example.test\n---\n\n# Rating\n",
+        format!("---\nid: FRR-001\ntype: FeatureRiskRating\nstatus: {status}\nrated_by: alice@example.test\n---\n\n# Rating\n"),
     )
     .expect("rating document");
     path
@@ -217,6 +221,22 @@ fn signed_rating_is_accepted_and_a_later_worktree_edit_invalidates_it() {
     let (unsigned_edit, result) = acceptance(&fixture);
     assert_eq!(unsigned_edit.status.code(), Some(1), "{unsigned_edit:?}");
     assert_eq!(result["results"][0]["reason"], "unsigned", "{result}");
+}
+
+#[test]
+#[trace("FR-027-AC-14")]
+fn proposed_signed_rating_is_not_accepted() {
+    let fixture = fixture();
+    rating_file_with_status(&fixture, "proposed");
+    commit_rating(&fixture, true);
+
+    let (output, result) = acceptance(&fixture);
+    assert_eq!(output.status.code(), Some(1), "{output:?}");
+    assert_eq!(result["results"][0]["status"], "not_accepted", "{result}");
+    assert_eq!(
+        result["results"][0]["reason"], "status_proposed",
+        "{result}"
+    );
 }
 
 #[test]
