@@ -16,16 +16,30 @@ pin=$(python3 - "$registry" <<'PY'
 import json
 import sys
 
+APPROVED_ENTRY = {
+    "id": "syft-linux-amd64",
+    "source_repository": "anchore/syft",
+    "version": "1.57.1",
+    "source_url": (
+        "https:"
+        "//github.com/anchore/syft/releases/download/v1.57.1/syft_1.57.1_linux_amd64.tar.gz"
+    ),
+    "artifact_sha256": "bf52519eb57f675d47c07d43213cb6dff6449f3d6d1147ff6701ed91f44eef0c",
+    "license": "Apache-2.0",
+    "rights_owner": "Anchore",
+    "purpose": "Run the Syft producer conformance tests for FR-038 and FR-039.",
+    "consumer_paths": ["scripts/install-test-syft.sh"],
+}
+APPROVED_REGISTRY = {
+    "protocol": "engineering-assurance.test-tool-download-registry/v1",
+    "entries": [APPROVED_ENTRY],
+}
+
 with open(sys.argv[1], encoding="utf-8") as stream:
     registry = json.load(stream)
-if registry.get("protocol") != "engineering-assurance.test-tool-download-registry/v1":
-    raise SystemExit("unsupported test-tool registry")
-entries = [entry for entry in registry.get("entries", []) if entry.get("id") == "syft-linux-amd64"]
-if len(entries) != 1:
-    raise SystemExit("Syft pin is missing or ambiguous")
-entry = entries[0]
-if entry.get("source_repository") != "anchore/syft" or entry.get("version") != "1.57.1":
-    raise SystemExit("Syft pin does not match the supported release")
+if registry != APPROVED_REGISTRY:
+    raise SystemExit("test-tool registry does not match the reviewed Syft entry")
+entry = registry["entries"][0]
 print(entry["version"], entry["source_url"], entry["artifact_sha256"], sep="\n")
 PY
 )

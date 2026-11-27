@@ -272,13 +272,51 @@ fn pinned_test_tool_registry_is_closed_and_versioned_to_its_release_asset() {
         )
         .is_err()
     );
+    let mut changed_version = original.clone();
+    changed_version["entries"][0]["version"] = serde_json::json!("1.57.2");
+    changed_version["entries"][0]["source_url"] = serde_json::json!(unregistered_url);
+    assert!(
+        validate_test_tool_download_registry(
+            &serde_json::to_vec(&changed_version).expect("version and URL mutant")
+        )
+        .is_err()
+    );
+
+    let mut changed_repository = original.clone();
+    changed_repository["entries"][0]["source_repository"] = serde_json::json!("other/syft");
+    let changed_repository_url = [
+        "https:",
+        "//github.com/other/syft/releases/download/v1.57.1/syft_1.57.1_linux_amd64.tar.gz",
+    ]
+    .concat();
+    changed_repository["entries"][0]["source_url"] = serde_json::json!(changed_repository_url);
+    assert!(
+        validate_test_tool_download_registry(
+            &serde_json::to_vec(&changed_repository).expect("repository and URL mutant")
+        )
+        .is_err()
+    );
+
     for (member, value) in [
-        ("version", serde_json::json!("1.57.2")),
-        ("source_url", serde_json::json!(unregistered_url)),
         (
-            "artifact_sha256",
-            serde_json::json!("BF52519EB57F675D47C07D43213CB6DFF6449F3D6D1147FF6701ED91F44EEF0C"),
+            "source_url",
+            serde_json::json!([
+                "https:",
+                "//github.com/anchore/syft/releases/download/v1.57.1/syft_1.57.1_linux_arm64.tar.gz"
+            ].concat()),
         ),
+        ("artifact_sha256", serde_json::json!("0".repeat(64))),
+        ("license", serde_json::json!("MIT")),
+        ("rights_owner", serde_json::json!("Another supplier")),
+        (
+            "purpose",
+            serde_json::json!("An unreviewed purpose for another producer."),
+        ),
+        (
+            "consumer_paths",
+            serde_json::json!(["scripts/another-installer.sh"]),
+        ),
+        ("id", serde_json::json!("syft-linux-arm64")),
     ] {
         let mut changed = original.clone();
         changed["entries"][0][member] = value;
@@ -359,6 +397,9 @@ fn registered_download_urls_require_the_exact_path_version_and_digest() {
 #[test]
 #[trace("TC-1053", "FR-091-AC-3")]
 fn syft_installer_reads_the_registry_and_checks_the_archive_before_installing() {
+    let registry = serde_json::from_str::<serde_json::Value>(TEST_TOOL_REGISTRY)
+        .expect("test tool registry JSON");
+    let entry = &registry["entries"][0];
     let version_read = SYFT_INSTALLER.find("entry[\"version\"]");
     let url_read = SYFT_INSTALLER.find("entry[\"source_url\"]");
     let digest_read = SYFT_INSTALLER.find("entry[\"artifact_sha256\"]");
@@ -376,6 +417,27 @@ fn syft_installer_reads_the_registry_and_checks_the_archive_before_installing() 
         extraction < install,
         "only the verified Syft binary is installed"
     );
+    assert!(SYFT_INSTALLER.contains("if registry != APPROVED_REGISTRY"));
+    for member in [
+        "id",
+        "source_repository",
+        "version",
+        "artifact_sha256",
+        "license",
+        "rights_owner",
+        "purpose",
+    ] {
+        let value = entry[member].as_str().expect("reviewed entry string");
+        assert!(
+            SYFT_INSTALLER.contains(&format!("\"{member}\": \"{value}\"")),
+            "installer's reviewed entry matches registry field {member}"
+        );
+    }
+    assert!(SYFT_INSTALLER.contains("\"consumer_paths\": [\"scripts/install-test-syft.sh\"]"));
+    assert!(SYFT_INSTALLER.contains("\"https:\""));
+    assert!(SYFT_INSTALLER.contains(
+        "\"//github.com/anchore/syft/releases/download/v1.57.1/syft_1.57.1_linux_amd64.tar.gz\""
+    ));
     assert!(TEST_TOOL_GUIDE.contains("scripts/install-test-syft.sh"));
     assert!(TEST_TOOL_GUIDE.contains("EA_TEST_SYFT"));
 }

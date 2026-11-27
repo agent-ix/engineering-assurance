@@ -58,6 +58,20 @@ const TEST_TOOL_DOWNLOAD_REGISTRY_PATH: &str = "spec/test-tool-downloads.json";
 const TEST_TOOL_DOWNLOAD_REGISTRY_JSON: &str = include_str!("../spec/test-tool-downloads.json");
 const TEST_TOOL_DOWNLOAD_REGISTRY_PROTOCOL: &str =
     "engineering-assurance.test-tool-download-registry/v1";
+const APPROVED_SYFT_ID: &str = "syft-linux-amd64";
+const APPROVED_SYFT_REPOSITORY: &str = "anchore/syft";
+const APPROVED_SYFT_VERSION: &str = "1.57.1";
+const APPROVED_SYFT_URL: &str = concat!(
+    "https:",
+    "//github.com/anchore/syft/releases/download/v1.57.1/syft_1.57.1_linux_amd64.tar.gz"
+);
+const APPROVED_SYFT_SHA256: &str =
+    "bf52519eb57f675d47c07d43213cb6dff6449f3d6d1147ff6701ed91f44eef0c";
+const APPROVED_SYFT_LICENSE: &str = "Apache-2.0";
+const APPROVED_SYFT_RIGHTS_OWNER: &str = "Anchore";
+const APPROVED_SYFT_PURPOSE: &str =
+    "Run the Syft producer conformance tests for FR-038 and FR-039.";
+const APPROVED_SYFT_CONSUMER_PATH: &str = "scripts/install-test-syft.sh";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -433,7 +447,21 @@ fn parse_test_tool_download_registry(
 ) -> Result<TestToolDownloadRegistry, ContentRightsError> {
     let registry: TestToolDownloadRegistry = serde_json::from_slice(bytes)
         .map_err(|_| ContentRightsError::InvalidTestToolDownloadRegistry)?;
-    if registry.protocol != TEST_TOOL_DOWNLOAD_REGISTRY_PROTOCOL || registry.entries.is_empty() {
+    if registry.protocol != TEST_TOOL_DOWNLOAD_REGISTRY_PROTOCOL || registry.entries.len() != 1 {
+        return Err(ContentRightsError::InvalidTestToolDownloadRegistry);
+    }
+    let entry = &registry.entries[0];
+    if entry.id != APPROVED_SYFT_ID
+        || entry.source_repository != APPROVED_SYFT_REPOSITORY
+        || entry.version != APPROVED_SYFT_VERSION
+        || entry.source_url != APPROVED_SYFT_URL
+        || entry.artifact_sha256 != APPROVED_SYFT_SHA256
+        || entry.license != APPROVED_SYFT_LICENSE
+        || entry.rights_owner != APPROVED_SYFT_RIGHTS_OWNER
+        || entry.purpose != APPROVED_SYFT_PURPOSE
+        || entry.consumer_paths.len() != 1
+        || entry.consumer_paths[0] != APPROVED_SYFT_CONSUMER_PATH
+    {
         return Err(ContentRightsError::InvalidTestToolDownloadRegistry);
     }
     let mut ids = std::collections::BTreeSet::new();
