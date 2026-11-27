@@ -574,8 +574,7 @@ mod tests {
         fs::write(
             &signer,
             format!(
-                "#!/bin/sh\ntouch \"${RESTORE_SIGNER_RAN}\"\nwhile read -r line || [ -n \"$line\" ]; do :; done\necho \"[GNUPG:] KEY_CONSIDERED AAAA 0\" >&2\necho \"[GNUPG:] SIG_CREATED D 1 8 00 1700000000 00 AAAA\" >&2\nprintf -- '-----BEGIN SIGNED MESSAGE-----\\nAAAA\\n-----END SIGNED MESSAGE-----\\n'\n",
-                RESTORE_SIGNER_RAN = RESTORE_SIGNER_RAN
+                "#!/bin/sh\ntouch \"${RESTORE_SIGNER_RAN}\"\nwhile read -r line || [ -n \"$line\" ]; do :; done\necho \"[GNUPG:] KEY_CONSIDERED AAAA 0\" >&2\necho \"[GNUPG:] SIG_CREATED D 1 8 00 1700000000 00 AAAA\" >&2\nprintf -- '-----BEGIN SIGNED MESSAGE-----\\nAAAA\\n-----END SIGNED MESSAGE-----\\n'\n"
             ),
         )
         .expect("signer script");

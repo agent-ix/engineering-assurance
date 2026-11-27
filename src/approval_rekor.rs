@@ -30,7 +30,10 @@ pub(crate) enum EmbeddedEntry {
     /// The entry, certificate or bundle inputs could not be extracted.
     Invalid,
     /// A Sigstore bundle built from the entry's exact fields.
-    Bundle { artifact: Vec<u8>, bundle: Bundle },
+    Bundle {
+        artifact: Vec<u8>,
+        bundle: Box<Bundle>,
+    },
 }
 
 /// Extract the signed-attributes DER, signer certificate, signature, and
@@ -113,7 +116,10 @@ pub(crate) fn extract(tag_object: &[u8]) -> EmbeddedEntry {
         return EmbeddedEntry::Invalid;
     };
 
-    EmbeddedEntry::Bundle { artifact, bundle }
+    EmbeddedEntry::Bundle {
+        artifact,
+        bundle: Box::new(bundle),
+    }
 }
 
 /// Verify the extracted entry and return only its library-authenticated
@@ -137,7 +143,7 @@ fn verify_with_policy(
         sigstore_verify::trust_root::TrustedRoot::from_json(trusted_root_json).ok()?;
     let verifier = sigstore_verify::Verifier::new(&trusted_root).ok()?;
     let result = verifier.verify(artifact, bundle, policy).ok()?;
-    result.integrated_time().map(|time| time.as_second())
+    result.integrated_time().map(jiff::Timestamp::as_second)
 }
 
 fn decode_armor(signature: &[u8]) -> Option<Vec<u8>> {
@@ -148,7 +154,7 @@ fn decode_armor(signature: &[u8]) -> Option<Vec<u8>> {
     }
     let mut encoded = String::new();
     let mut found_end = false;
-    while let Some(line) = lines.next() {
+    for line in lines.by_ref() {
         if line == CMS_END {
             found_end = true;
             break;
@@ -343,10 +349,10 @@ mod tests {
         let result = verifier
             .verify(artifact, bundle, &policy)
             .map_err(|error| error.to_string())?;
-        Ok(result.integrated_time().map(|time| time.as_second()))
+        Ok(result.integrated_time().map(jiff::Timestamp::as_second))
     }
 
-    fn assert_rejected(result: Result<Option<i64>, String>) {
+    fn assert_rejected(result: &Result<Option<i64>, String>) {
         assert!(
             !matches!(result, Ok(Some(_))),
             "tampered verifier input was accepted: {result:?}"
@@ -396,7 +402,7 @@ mod tests {
             value["verificationMaterial"]["tlogEntries"][0]["integratedTime"] = json!("1767225601");
         });
 
-        assert_rejected(verify_fixture(&changed, &artifact));
+        assert_rejected(&verify_fixture(&changed, &artifact));
     }
 
     #[test]
@@ -420,7 +426,7 @@ mod tests {
                 json!(STANDARD.encode(signature));
         });
 
-        assert_rejected(verify_fixture(&changed, &artifact));
+        assert_rejected(&verify_fixture(&changed, &artifact));
     }
 
     #[test]
@@ -434,7 +440,7 @@ mod tests {
                 json!(STANDARD.encode([0_u8; 32]));
         });
 
-        assert_rejected(verify_fixture(&changed, &artifact));
+        assert_rejected(&verify_fixture(&changed, &artifact));
     }
 
     #[test]
@@ -466,7 +472,7 @@ mod tests {
             value["verificationMaterial"]["tlogEntries"][0] = second_entry;
         });
 
-        assert_rejected(verify_fixture(&substituted, &first_artifact));
+        assert_rejected(&verify_fixture(&substituted, &first_artifact));
     }
 
     #[test]

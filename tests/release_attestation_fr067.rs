@@ -89,9 +89,8 @@ fn release_verification_reads_allowed_signers_from_the_protected_base() {
             "#!/usr/bin/env python3\n\
              import json, pathlib, sys\n\
              request = json.loads(sys.argv[sys.argv.index('--request') + 1])\n\
-             pathlib.Path({:?}).write_bytes(pathlib.Path(request['allowed_signers']).read_bytes())\n\
+             pathlib.Path({observed_policy:?}).write_bytes(pathlib.Path(request['allowed_signers']).read_bytes())\n\
              print('{{\"status\":\"released\"}}')\n",
-            observed_policy
         ),
     )
     .expect("fake verifier");

@@ -205,7 +205,7 @@ impl<'a> ResultLine<'a> {
     ) -> Self {
         let checked = check_tag(repository, tag, reading.snapshot, loaded);
         Self::from_checked(
-            checked,
+            &checked,
             tag,
             record,
             Some(Trust::new(reading, echo, loaded)),
@@ -215,7 +215,7 @@ impl<'a> ResultLine<'a> {
 
     /// The result for a tag that was checked, or never read.
     pub(crate) fn from_checked(
-        checked: CheckedTag,
+        checked: &CheckedTag,
         tag: &'a str,
         record: (&'a str, &'a str),
         trust: Option<Trust<'a>>,
@@ -234,7 +234,7 @@ impl<'a> ResultLine<'a> {
     /// Result builder with a caller-supplied trust root for deterministic
     /// verification tests.
     pub(crate) fn from_checked_with_trusted_root(
-        checked: CheckedTag,
+        checked: &CheckedTag,
         tag: &'a str,
         record: (&'a str, &'a str),
         trust: Option<Trust<'a>>,
@@ -242,7 +242,7 @@ impl<'a> ResultLine<'a> {
         producer: ProducerIdentity,
     ) -> Self {
         let (record_id, record_digest) = record;
-        let mut assessment = assess(&checked, record_id, record_digest);
+        let mut assessment = assess(checked, record_id, record_digest);
         if checked.verdict.status == Status::SignedValid
             && assessment.status == ApprovalStatus::Approved
             && assessment
@@ -464,7 +464,7 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalVerifyError> {
         // and no trust identity was established.
         Err(CaptureFailure::Git(reason)) => {
             let result = ResultLine::from_checked(
-                CheckedTag::unread(reason),
+                &CheckedTag::unread(reason),
                 &request.tag,
                 record,
                 None,
@@ -496,7 +496,7 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ApprovalVerifyError> {
         ),
         // Git could not answer while the registry was read: no verifier starts.
         Registry::GitFailed(reason) => ResultLine::from_checked(
-            CheckedTag::unread(*reason),
+            &CheckedTag::unread(*reason),
             &request.tag,
             record,
             Some(Trust::new(reading, echo, None)),

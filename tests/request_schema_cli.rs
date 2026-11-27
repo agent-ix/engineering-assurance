@@ -129,49 +129,53 @@ fn request_schemas_accept_their_contract_shapes_and_refuse_unknown_members() {
         );
 
         if command == "release-decision" {
-            let decision = json!({
-                "protocol": protocol,
-                "operation": "decide",
-                "state_dir": "/fixture/state",
-                "skill_root": "/fixture/skills",
-                "ix_flow_executable": "/fixture/ix-flow",
-                "run_id": "fixture-run",
-                "decision_owner": "owner@example.test",
-                "repository": "/fixture/repository",
-                "baseline_path": "baseline.md",
-                "baseline_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "snapshot_path": "release/snapshot.json",
-                "choice": "release",
-                "meaning": "accepted the listed release evidence"
-            });
-            assert!(
-                validator.is_valid(&decision),
-                "release-decision decide: {decision}"
-            );
-            let mut missing_meaning = decision;
-            missing_meaning
-                .as_object_mut()
-                .expect("object")
-                .remove("meaning");
-            assert!(!validator.is_valid(&missing_meaning));
-
-            let invalid_without_choice = json!({
-                "protocol": protocol,
-                "operation": "decide",
-                "state_dir": "/fixture/state",
-                "skill_root": "/fixture/skills",
-                "ix_flow_executable": "/fixture/ix-flow",
-                "run_id": "fixture-run",
-                "decision_owner": "owner@example.test",
-                "repository": "/fixture/repository",
-                "baseline_path": "baseline.md",
-                "baseline_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "snapshot_path": "release/snapshot.json",
-                "meaning": "a choice is required before a meaning"
-            });
-            assert!(!validator.is_valid(&invalid_without_choice));
+            assert_release_decision_schema(&protocol, &validator);
         }
     }
+}
+
+fn assert_release_decision_schema(protocol: &str, validator: &jsonschema::Validator) {
+    let decision = json!({
+        "protocol": protocol,
+        "operation": "decide",
+        "state_dir": "/fixture/state",
+        "skill_root": "/fixture/skills",
+        "ix_flow_executable": "/fixture/ix-flow",
+        "run_id": "fixture-run",
+        "decision_owner": "owner@example.test",
+        "repository": "/fixture/repository",
+        "baseline_path": "baseline.md",
+        "baseline_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "snapshot_path": "release/snapshot.json",
+        "choice": "release",
+        "meaning": "accepted the listed release evidence"
+    });
+    assert!(
+        validator.is_valid(&decision),
+        "release-decision decide: {decision}"
+    );
+    let mut missing_meaning = decision;
+    missing_meaning
+        .as_object_mut()
+        .expect("object")
+        .remove("meaning");
+    assert!(!validator.is_valid(&missing_meaning));
+
+    let invalid_without_choice = json!({
+        "protocol": protocol,
+        "operation": "decide",
+        "state_dir": "/fixture/state",
+        "skill_root": "/fixture/skills",
+        "ix_flow_executable": "/fixture/ix-flow",
+        "run_id": "fixture-run",
+        "decision_owner": "owner@example.test",
+        "repository": "/fixture/repository",
+        "baseline_path": "baseline.md",
+        "baseline_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "snapshot_path": "release/snapshot.json",
+        "meaning": "a choice is required before a meaning"
+    });
+    assert!(!validator.is_valid(&invalid_without_choice));
 }
 
 #[trace("TC-1091", "FR-089-AC-5")]

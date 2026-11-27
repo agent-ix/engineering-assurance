@@ -17,8 +17,9 @@ use serde_json::{Value, json};
 use thiserror::Error;
 
 use crate::signature_verify_host::{
-    AllowedSignersSource, CaptureFailure, GitsignRequest, LoadedGitsign, RegistryFailure,
-    capture_allowed_signers, load_gitsign, load_tag_ref, validate_gitsign, verify_loaded_tag,
+    AllowedSignersSource, CaptureFailure, GitsignInput, GitsignRequest, LoadedGitsign, LoadedTag,
+    RegistryFailure, capture_allowed_signers, load_gitsign, load_tag_ref, validate_gitsign,
+    verify_loaded_tag,
 };
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.proof-checkpoint-verify-request/v1";
@@ -164,17 +165,35 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ProofCheckpointError> {
         );
     }
 
-    let allowed_signers = match capture_allowed_signers(&request.repository, &allowed_source) {
+    execute_checked_tag(
+        &request,
+        loaded,
+        object_id,
+        checkpoint,
+        gitsign_input,
+        &allowed_source,
+    )
+}
+
+fn execute_checked_tag(
+    request: &Request,
+    loaded: LoadedTag,
+    object_id: String,
+    checkpoint: Value,
+    gitsign_input: Option<GitsignInput>,
+    allowed_source: &AllowedSignersSource,
+) -> Result<Vec<u8>, ProofCheckpointError> {
+    let allowed_signers = match capture_allowed_signers(&request.repository, allowed_source) {
         Ok(snapshot) => snapshot,
         Err(CaptureFailure::Invalid) => return Err(ProofCheckpointError::Invalid),
         Err(CaptureFailure::Git(reason)) => {
             return encode_result(
-                &request,
+                request,
                 Some(object_id),
                 checkpoint,
                 "unverifiable",
                 None,
-                trust_value(&request, None),
+                trust_value(request, None),
                 unverifiable_signature(reason),
             );
         }
@@ -187,12 +206,12 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ProofCheckpointError> {
         Err(RegistryFailure::Invalid) => return Err(ProofCheckpointError::IdentityRegistry),
         Err(RegistryFailure::Git(reason)) => {
             return encode_result(
-                &request,
+                request,
                 Some(object_id),
                 checkpoint,
                 "unverifiable",
                 None,
-                trust_value(&request, None),
+                trust_value(request, None),
                 unverifiable_signature(reason),
             );
         }
@@ -234,12 +253,12 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, ProofCheckpointError> {
         SignatureStatus::Unverifiable => ("unverifiable", None),
     };
     encode_result(
-        &request,
+        request,
         Some(object_id),
         checkpoint,
         status,
         signer,
-        trust_value(&request, gitsign.as_ref()),
+        trust_value(request, gitsign.as_ref()),
         signature,
     )
 }
@@ -339,9 +358,8 @@ fn classify_checkpoint(parsed: Option<&str>, expected: &Expected, tag_status: &s
         let classification = match observed_values.as_deref() {
             Some([value]) if value == expected_value => "match",
             Some([_]) => "mismatch",
-            Some(values) if values.is_empty() => "missing",
+            Some([]) | None => "missing",
             Some(_) => "repeated",
-            None => "missing",
         };
         let observed = observed_values.map(|values| match values.as_slice() {
             [] => Value::Null,

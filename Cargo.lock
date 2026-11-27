@@ -529,6 +529,7 @@ dependencies = [
  "flate2",
  "ix-cli-kit",
  "ix-trace-rs",
+ "jiff",
  "jsonschema",
  "nix",
  "prost",

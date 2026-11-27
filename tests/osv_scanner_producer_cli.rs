@@ -490,7 +490,7 @@ fn tc_9002_incomplete_fixture_scan_refuses_reports_and_preserves_completed_fixtu
     assert_eq!(value["state"]["kind"], "unavailable", "{value}");
     assert_eq!(
         value["artifacts"].as_array().expect("artifacts").as_slice(),
-        [] as [Value; 0]
+        &[] as &[Value]
     );
 
     request = fixture_request(root.path(), "exit 127");
@@ -509,7 +509,10 @@ fn tc_9002_incomplete_fixture_scan_refuses_reports_and_preserves_completed_fixtu
     request = fixture_request(root.path(), "exit 128");
     let value = result(&request);
     assert_eq!(value["state"]["kind"], "failed", "{value}");
-    assert!(value["artifacts"].as_array().expect("artifacts").is_empty());
+    assert_eq!(
+        value["artifacts"].as_array().expect("artifacts").as_slice(),
+        [] as [Value; 0]
+    );
 
     request = fixture_request(root.path(), "exit 0");
     let value = result(&request);

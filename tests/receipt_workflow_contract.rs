@@ -375,6 +375,13 @@ fn prepare_notes_runner(root: &Path) -> (std::path::PathBuf, std::path::PathBuf)
 }
 
 #[cfg(unix)]
+#[derive(Clone, Copy)]
+struct ReceiptJobOptions<'a> {
+    extra_path: Option<&'a Path>,
+    barrier: Option<(&'a Path, &'a Path)>,
+}
+
+#[cfg(unix)]
 fn run_receipt_notes_job(
     script: &str,
     repository: &Path,
@@ -382,11 +389,10 @@ fn run_receipt_notes_job(
     bin: &Path,
     commit: &str,
     reject_count_file: &Path,
-    extra_path: Option<&Path>,
-    barrier: Option<(&Path, &Path)>,
+    options: ReceiptJobOptions<'_>,
 ) -> std::process::Output {
     let mut paths = Vec::new();
-    if let Some(extra_path) = extra_path {
+    if let Some(extra_path) = options.extra_path {
         paths.push(extra_path.display().to_string());
     }
     paths.push(bin.display().to_string());
@@ -403,7 +409,7 @@ fn run_receipt_notes_job(
         .env("DEFAULT_BRANCH", "main")
         .env("GH_TOKEN", "fixture-token")
         .env("REJECTION_COUNT_FILE", reject_count_file);
-    if let Some((barrier_ready, barrier_peer)) = barrier {
+    if let Some((barrier_ready, barrier_peer)) = options.barrier {
         command
             .env("BARRIER_READY", barrier_ready)
             .env("BARRIER_PEER", barrier_peer)
@@ -461,59 +467,80 @@ fn receipt_note_jobs_merge_stale_pushes_and_fail_after_six_rejections() {
     let barrier_git = "#!/bin/sh\nset -eu\nif [ \"${1-}\" = push ]; then\n  : > \"$BARRIER_READY\"\n  count=0\n  while [ ! -e \"$BARRIER_PEER\" ]; do\n    count=$((count + 1))\n    if [ \"$count\" -ge 500 ]; then exit 80; fi\n    sleep 0.01\n  done\nfi\nexec \"$REAL_GIT\" \"$@\"\n";
     write_executable(&git_wrapper_a.join("git"), barrier_git);
     write_executable(&git_wrapper_b.join("git"), barrier_git);
-    let script_a = script.clone();
-    let checkout_a_thread = checkout_a.clone();
-    let runner_temp_a_thread = runner_temp_a.clone();
-    let bin_a_thread = bin_a.clone();
-    let count_a_thread = count_a.clone();
-    let wrapper_a_thread = git_wrapper_a.clone();
-    let ready_a_thread = ready_a.clone();
-    let ready_b_thread = ready_b.clone();
-    let commit_a_thread = commit_a.clone();
-    let run_a_thread = std::thread::spawn(move || {
+    let script_first = script.clone();
+    let checkout_first_thread = checkout_a.clone();
+    let runner_first_thread = runner_temp_a.clone();
+    let bin_first_thread = bin_a.clone();
+    let count_first_thread = count_a.clone();
+    let wrapper_first_thread = git_wrapper_a.clone();
+    let ready_first_thread = ready_a.clone();
+    let ready_second_thread = ready_b.clone();
+    let commit_first_thread = commit_a.clone();
+    let run_first_thread = std::thread::spawn(move || {
         run_receipt_notes_job(
-            &script_a,
-            &checkout_a_thread,
-            &runner_temp_a_thread,
-            &bin_a_thread,
-            &commit_a_thread,
-            &count_a_thread,
-            Some(&wrapper_a_thread),
-            Some((&ready_a_thread, &ready_b_thread)),
+            &script_first,
+            &checkout_first_thread,
+            &runner_first_thread,
+            &bin_first_thread,
+            &commit_first_thread,
+            &count_first_thread,
+            ReceiptJobOptions {
+                extra_path: Some(&wrapper_first_thread),
+                barrier: Some((&ready_first_thread, &ready_second_thread)),
+            },
         )
     });
-    let script_b = script.clone();
-    let count_b_thread = count_b.clone();
-    let wrapper_b_thread = git_wrapper_b.clone();
-    let ready_b_thread = ready_b.clone();
-    let ready_a_thread = ready_a.clone();
-    let commit_b_thread = commit_b.clone();
-    let run_b_thread = std::thread::spawn(move || {
+    let script_second = script.clone();
+    let count_second_thread = count_b.clone();
+    let wrapper_second_thread = git_wrapper_b.clone();
+    let ready_second_thread = ready_b.clone();
+    let ready_first_thread = ready_a.clone();
+    let commit_second_thread = commit_b.clone();
+    let run_second_thread = std::thread::spawn(move || {
         run_receipt_notes_job(
-            &script_b,
+            &script_second,
             &checkout_b,
             &runner_temp_b,
             &bin_b,
-            &commit_b_thread,
-            &count_b_thread,
-            Some(&wrapper_b_thread),
-            Some((&ready_b_thread, &ready_a_thread)),
+            &commit_second_thread,
+            &count_second_thread,
+            ReceiptJobOptions {
+                extra_path: Some(&wrapper_second_thread),
+                barrier: Some((&ready_second_thread, &ready_first_thread)),
+            },
         )
     });
-    let run_a = run_a_thread.join().expect("first notes job joins");
+    let run_first = run_first_thread.join().expect("first notes job joins");
+    let run_second = run_second_thread.join().expect("second notes job joins");
+    assert_concurrent_note_jobs_succeeded(&run_first, &run_second, &remote, &commit_a, &commit_b);
+    assert_rejected_note_push_exhausts_retries();
+}
+
+#[cfg(unix)]
+fn assert_concurrent_note_jobs_succeeded(
+    run_first: &std::process::Output,
+    run_second: &std::process::Output,
+    remote: &Path,
+    commit_a: &str,
+    commit_b: &str,
+) {
     assert!(
-        run_a.status.success(),
+        run_first.status.success(),
         "first note job failed with {:?}: stdout={} stderr={}",
-        run_a.status.code(),
-        String::from_utf8_lossy(&run_a.stdout),
-        String::from_utf8_lossy(&run_a.stderr)
+        run_first.status.code(),
+        String::from_utf8_lossy(&run_first.stdout),
+        String::from_utf8_lossy(&run_first.stderr)
     );
-    let run_b = run_b_thread.join().expect("second notes job joins");
     assert!(
-        run_b.status.success(),
+        run_second.status.success(),
         "stale note job did not recover: {}",
-        String::from_utf8_lossy(&run_b.stderr)
+        String::from_utf8_lossy(&run_second.stderr)
     );
+    assert_remote_notes_contain_commits(remote, commit_a, commit_b);
+}
+
+#[cfg(unix)]
+fn assert_remote_notes_contain_commits(remote: &Path, commit_a: &str, commit_b: &str) {
     let remote_notes = Command::new("git")
         .arg(format!("--git-dir={}", remote.display()))
         .args(["notes", "--ref=refs/notes/assurance-receipts", "list"])
@@ -523,7 +550,11 @@ fn receipt_note_jobs_merge_stale_pushes_and_fail_after_six_rejections() {
     let note_objects = String::from_utf8(remote_notes.stdout).expect("notes output is UTF-8");
     assert!(note_objects.lines().any(|line| line.ends_with(&commit_a)));
     assert!(note_objects.lines().any(|line| line.ends_with(&commit_b)));
+}
 
+#[cfg(unix)]
+fn assert_rejected_note_push_exhausts_retries() {
+    let script = receipt_notes_workflow_script();
     let rejected_root = tempfile::tempdir().expect("rejected receipt fixture");
     let (rejected_remote, rejected_checkout) = create_notes_fixture(rejected_root.path());
     let rejected_commit = commit_fixture_file(
@@ -546,8 +577,10 @@ fn receipt_note_jobs_merge_stale_pushes_and_fail_after_six_rejections() {
         &bin,
         &rejected_commit,
         &rejection_count,
-        None,
-        None,
+        ReceiptJobOptions {
+            extra_path: None,
+            barrier: None,
+        },
     );
     assert_eq!(run.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&run.stdout).contains("receipt_note_conflict"));
@@ -881,15 +914,24 @@ fn main_receipt_caller_is_absent_and_missing_check_is_declared() {
 #[test]
 fn tag_receipt_workflow_has_the_declared_trigger_jobs_permissions_and_trigger_inputs() {
     let reusable = workflow("tag-receipt.yml");
-    assert_eq!(
-        reusable["on"].as_object().map(serde_json::Map::len),
-        Some(1)
-    );
-    assert_eq!(
-        reusable["on"]["workflow_call"]["inputs"]["tag"]["type"],
-        "string"
-    );
     let jobs = &reusable["jobs"];
+    assert_tag_receipt_build_job(jobs);
+    assert_tag_receipt_runtime_jobs(jobs);
+    assert_tag_receipt_trigger_inputs(&reusable);
+
+    let caller = workflow("tag-receipt-push.yml");
+    assert_eq!(caller["on"]["push"]["tags"][0], "**");
+    let receipt = &caller["jobs"]["receipt"];
+    assert_eq!(receipt["uses"], "./.github/workflows/tag-receipt.yml");
+    assert_eq!(receipt["with"]["tag"], "${{ github.ref_name }}");
+    assert_permission(
+        receipt,
+        &serde_json::json!({"contents":"write", "id-token":"write"}),
+        "tag receipt caller",
+    );
+}
+
+fn assert_tag_receipt_build_job(jobs: &Value) {
     assert_eq!(jobs.as_object().map(serde_json::Map::len), Some(3));
     assert_eq!(jobs["record"]["needs"], "build");
     assert_eq!(jobs["notes"]["needs"], json!(["build", "record"]));
@@ -930,6 +972,9 @@ fn tag_receipt_workflow_has_the_declared_trigger_jobs_permissions_and_trigger_in
             .is_some_and(|value| value.starts_with("actions/upload-artifact@"))
             && step["with"]["name"] == "tag-receipt-cli"
     }));
+}
+
+fn assert_tag_receipt_runtime_jobs(jobs: &Value) {
     assert_permission(
         &jobs["record"],
         &serde_json::json!({"contents":"read", "id-token":"write"}),
@@ -962,9 +1007,19 @@ fn tag_receipt_workflow_has_the_declared_trigger_jobs_permissions_and_trigger_in
             "{job} runs no repository gate, script or package"
         );
     }
-    // The identity-bearing job consumes the CLI built from the protected
-    // default branch and never checks out tag-controlled source.
     assert_record_job_is_isolated_for_tags(jobs);
+}
+
+fn assert_tag_receipt_trigger_inputs(reusable: &Value) {
+    let jobs = &reusable["jobs"];
+    assert_eq!(
+        reusable["on"].as_object().map(serde_json::Map::len),
+        Some(1)
+    );
+    assert_eq!(
+        reusable["on"]["workflow_call"]["inputs"]["tag"]["type"],
+        "string"
+    );
     assert!(!format!("{reusable}").to_lowercase().contains("agent-run"));
 
     // A `tag` input that is not the triggering tag fails before any signing step.
@@ -991,17 +1046,6 @@ fn tag_receipt_workflow_has_the_declared_trigger_jobs_permissions_and_trigger_in
     assert_eq!(
         sign["env"]["PUSHED_AT_UNIX"],
         "${{ github.event.repository.pushed_at }}"
-    );
-
-    let caller = workflow("tag-receipt-push.yml");
-    assert_eq!(caller["on"]["push"]["tags"][0], "**");
-    let receipt = &caller["jobs"]["receipt"];
-    assert_eq!(receipt["uses"], "./.github/workflows/tag-receipt.yml");
-    assert_eq!(receipt["with"]["tag"], "${{ github.ref_name }}");
-    assert_permission(
-        receipt,
-        &serde_json::json!({"contents":"write", "id-token":"write"}),
-        "tag receipt caller",
     );
 }
 
