@@ -20,6 +20,7 @@ use engineering_assurance::release::{
     BaselineState, Changes, Check, Facts, Reason, frontmatter, is_repository_path, reasons,
 };
 use engineering_assurance::signature_verify::is_plain_revision;
+use ix_trace_rs::implements;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
@@ -639,6 +640,7 @@ fn commit_shape(
     })
 }
 
+#[implements("FR-047-AC-5")]
 fn verify(
     request: &Request,
     reading: TrustReading<'_>,
