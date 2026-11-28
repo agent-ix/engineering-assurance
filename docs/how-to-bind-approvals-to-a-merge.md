@@ -2,7 +2,7 @@
 title: Bind approvals to a merged change
 type: how-to
 description: Record approvals against the reviewed head and the merge result.
-tool_version: 0.11.0
+tool_version: 0.11.1
 ---
 
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
