@@ -328,15 +328,15 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-066 | FR-066-AC-6 | TC-535 | 🚧 Specified |
 | FR-066 | FR-066-AC-7 | TC-536 | 🚧 Specified |
 | FR-066 | FR-066-AC-8 | TC-658, TC-660 | ✅ `src/attestation_signing.rs` verifies matching and mismatching SHA-256 subjects; TC-658 remains opt-in |
-| FR-067 | FR-067-AC-1 | TC-537 | 🚧 Specified |
+| FR-067 | FR-067-AC-1 | TC-537, TC-1217 | 🚧 Role gating and four attestations are covered; signed squash-release end-to-end fixture remains specified |
 | FR-067 | FR-067-AC-2 | TC-381, TC-383, TC-386 | ✅ Each tag-verification result is passed to the reusable workflow step; the tests assert no release, exit 1 and `release_verify_status=not_released` before attestation input upload |
 | FR-067 | FR-067-AC-3 | TC-539 | ✅ `tests/release_attestation_fr067.rs::release_verification_reads_allowed_signers_from_the_protected_base` passing |
-| FR-067 | FR-067-AC-4 | TC-540 | 🚧 Specified |
-| FR-067 | FR-067-AC-5 | TC-541 | 🚧 Specified |
-| FR-067 | FR-067-AC-6 | TC-542 | 🚧 Specified |
+| FR-067 | FR-067-AC-4 | TC-540, TC-1213, TC-1217 | 🚧 Named role failures and workflow gate are covered; full no-write integration remains specified |
+| FR-067 | FR-067-AC-5 | TC-541, TC-1214 | 🚧 Retryable missing-statement classification is covered; same-run recovery remains specified |
+| FR-067 | FR-067-AC-6 | TC-542, TC-1212 | 🚧 Exact merged-commit selection is covered; source recovery and release workflow remain specified |
 | FR-067 | FR-067-AC-7 | TC-543 | 🚧 Specified |
-| FR-067 | FR-067-AC-8 | TC-544 | 🚧 Specified |
-| FR-067 | FR-067-AC-9 | TC-545 | 🚧 Specified |
+| FR-067 | FR-067-AC-8 | TC-395, TC-544, TC-1212 | 🚧 Merge-commit refusal and exact merged-commit selection are covered; squash/rebase release integration remains specified |
+| FR-067 | FR-067-AC-9 | TC-545, TC-1216 | 🚧 Release-verify failure is checked before role evaluation; moved-tag-after-attestation verification remains specified |
 | FR-067 | FR-067-AC-10 | TC-546 | 🚧 Specified |
 | FR-068 | FR-068-AC-1 | TC-547 | 🚧 Specified |
 | FR-068 | FR-068-AC-2 | TC-548 | 🚧 Specified |
@@ -345,9 +345,11 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-068 | FR-068-AC-5 | TC-551 | 🚧 Specified |
 | FR-068 | FR-068-AC-6 | TC-552 | 🚧 Specified |
 | FR-069 | FR-069-AC-1 | TC-553 | 🚧 Specified |
-| FR-069 | FR-069-AC-2 | TC-554 | 🚧 Specified |
+| FR-069 | FR-069-AC-2 | TC-554, TC-1211 | 🚧 Provenance rejection boundary is covered; workflow no-statement integration remains specified |
 | FR-069 | FR-069-AC-3 | TC-555 | 🚧 Specified |
 | FR-069 | FR-069-AC-4 | TC-556, TC-670 | 🚧 Specified |
+| FR-069 | FR-069-AC-5 | TC-553, TC-1210 | 🚧 Byte-preserving transport boundary is covered; Quoin-only evidence semantics remain specified |
+| FR-069 | FR-069-AC-6 | TC-553, TC-1210, TC-1211 | 🚧 Handoff and rejection boundaries are covered; signed release integration remains specified |
 | FR-070 | FR-070-AC-1 | TC-557 | 🚧 Specified |
 | FR-070 | FR-070-AC-16 | TC-991 | 🚧 Specified |
 | FR-070 | FR-070-AC-2 | TC-558 | 🚧 Specified |
@@ -820,7 +822,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-392 | A Baseline file with invalid frontmatter is `not_released` with exactly `baseline_file_invalid` | Integration | P0 | FR-047-AC-5, FR-046-AC-6 | ✅ `tests/release_verify_cli.rs` passing |
 | TC-393 | A Baseline file that lists one path twice, with different kinds, is `not_released` with exactly `baseline_file_invalid` | Integration | P0 | FR-046-AC-6, FR-047-AC-5 | ✅ `tests/release_verify_cli.rs` passing |
 | TC-394 | Two releases of Baselines whose item contents differ report the two baseline commit hashes git gives, and an item carries only its path and kind | Integration | P0 | FR-046-AC-3, FR-049-AC-1 | ✅ `tests/release_verify_cli.rs` passing |
-| TC-395 | A release commit with two parents is `not_released` with `release_commit_not_child_of_baseline` | Integration | P0 | FR-047-AC-6 | ✅ `tests/release_verify_cli.rs` passing |
+| TC-395 | A signed release tag on a two-parent merge commit is `not_released` with `release_commit_not_child_of_baseline` and exposes no release statement | Integration | P0 | FR-047-AC-6, FR-067-AC-8 | ✅ `tests/release_verify_cli.rs` passing |
 | TC-396 | A release commit whose single parent is a different commit is `not_released` with exactly `release_commit_not_child_of_baseline` | Integration | P0 | FR-047-AC-6 | ✅ `tests/release_verify_cli.rs` passing |
 | TC-397 | A release commit whose parent is a descendant of the baseline commit is `not_released` with exactly `release_commit_not_child_of_baseline` | Integration | P0 | FR-047-AC-6 | ✅ `tests/release_verify_cli.rs` passing |
 | TC-398 | A release commit that also changes a further path is `not_released` with exactly `release_commit_changes_other_paths` | Integration | P0 | FR-047-AC-6, FR-051-AC-3 | ✅ `tests/release_verify_cli.rs` passing |
@@ -937,6 +939,14 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-555 | Static inspection shows the workflow and the statement builder call no Quoin evidence command that reads git or the network | Static | P0 | FR-069-AC-3 | 🚧 |
 | TC-556 | The export runs in the `verify` job, with the evidence store taken from the `evidence_artifact` input and the subject computed by the workflow; the `attest` job runs no Quoin command, and a caller-built export is not accepted | Integration | P0 | FR-069-AC-4 | 🚧 |
 | TC-670 | A Quoin export with a subject that differs from the workflow-computed release subject is rejected before the attestation input is created | Integration | P0 | FR-069-AC-4 | 🚧 |
+| TC-1210 | An authenticated provenance bundle is retained at a create-only output path byte for byte for Quoin; a pre-existing output is refused | Unit | P0 | FR-069-AC-5, FR-069-AC-6 | ✅ `release_evidence_host::tests::execution_provenance_is_authenticated_and_transported_byte_for_byte` passed |
+| TC-1211 | Missing, malformed, untrusted, wrong-subject and wrong-commit provenance is rejected before transport | Unit | P0 | FR-069-AC-2, FR-069-AC-6 | ✅ `release_evidence_host::tests::execution_provenance_rejects_missing_untrusted_and_mismatched_inputs` passed |
+| TC-1212 | The release-role lookup accepts only one merged pull request whose `merge_commit_sha` exactly equals the peeled release commit; head-only and absent matches fail closed | Unit | P0 | FR-067-AC-6, FR-067-AC-8 | ✅ `release_roles_host::tests::release_role_lookup_requires_one_exact_merged_commit` passed |
+| TC-1213 | Unsatisfied role evaluations name missing roles and unstaffed evaluations return `approval_role_unstaffed` naming the role | Unit | P0 | FR-067-AC-4 | ✅ `release_roles_host::tests::role_policy_failure_names_missing_or_unstaffed_roles` passed |
+| TC-1214 | An empty retained statement set is classified as retryable pending; unreadable statements remain unverifiable; a verified set proceeds | Unit | P0 | FR-067-AC-5 | ✅ `release_roles_host::tests::no_retained_statements_is_retryable_but_other_unverifiable_results_are_not_pending` passed |
+| TC-1215 | The provenance request is accepted only when the checked Git tag peels to the exact requested commit; malformed ref input is refused | Unit | P0 | FR-069-AC-2 | ✅ `release_evidence_host::tests::release_provenance_requires_the_exact_tag_to_peel_to_the_requested_commit` passed |
+| TC-1216 | The reusable workflow refuses every `release-verify` status except `released` before role evaluation can run | Static | P0 | FR-067-AC-9 | 🚧 `tests/release_attestation_workflow.rs::reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_statement_source` asserts ordering and refusal; moved-tag-after-attestation case remains unimplemented |
+| TC-1217 | The role-check step passes only on a satisfied result before input upload, and the downstream workflow retains the provenance, SBOM, Test Result and verification-summary attestations | Integration | P0 | FR-067-AC-1, FR-067-AC-4, FR-067-AC-5 | 🚧 Workflow boundary uses fake role results; signed squash-release and retained-statement recovery integration remain specified |
 | TC-557 | Parsing Engineering Assurance's `.github/workflows/release-attestation.yml` confirms its `workflow_call`-only trigger, declared jobs and per-job permissions; adopter repositories parse only their own checked-in caller workflows; no parsed workflow declares `pull_request_target` or `workflow_run` | Integration | P0 | FR-070-AC-1 | 🚧 |
 | TC-558 | No `run:` value in any file contains an expression over `github.ref_name`, `github.head_ref`, an event title or body, a commit message or `inputs.`; each such value appears only under `env:` | Integration | P0 | FR-070-AC-2 | 🚧 |
 | TC-559 | Workflow tests reject malformed local and external action references, accept valid `./path/to/action` and `owner/repository[/action/path...]@ref` references, and confirm every checkout step has `persist-credentials: false`; no full commit SHA is required or tested | Integration | P0 | FR-070-AC-3 | ✅ `cargo test --locked --features full --test receipt_workflow_contract --test release_attestation_workflow` |

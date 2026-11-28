@@ -30,6 +30,7 @@ use std::{
 #[cfg(feature = "full")]
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
+use ix_trace_rs::implements;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sigstore_verify::VerificationPolicy;
@@ -324,6 +325,74 @@ impl WorkflowIdentityDocument {
             source_ref: entry.source_ref.clone(),
             source_ref_prefix: entry.source_ref_prefix.clone(),
         })
+    }
+
+    /// Build the exact signing identity for a reusable workflow's configured
+    /// source workflow at one admitted source ref.
+    #[implements("FR-064-AC-13")]
+    #[must_use]
+    pub fn source_signer_policy(
+        &self,
+        role: WorkflowRole,
+        repository: &str,
+        workflow_path: &str,
+        reference: &str,
+        source_reference: &str,
+        transparency: TransparencyRequirement,
+    ) -> Option<WorkflowIdentityPolicy> {
+        if role != WorkflowRole::ReleaseAttester || !valid_ref(source_reference) {
+            return None;
+        }
+        let entry = self.identities.iter().find(|entry| {
+            entry.role == role
+                && entry.repository == repository
+                && entry.workflow_path == workflow_path
+                && entry.reference == reference
+        })?;
+        let source = SourceWorkflowPolicy {
+            repository: entry.source_repository.clone()?,
+            workflow_path: entry.source_workflow_path.clone()?,
+            event: entry.event.clone()?,
+            source_ref: entry.source_ref.clone(),
+            source_ref_prefix: entry.source_ref_prefix.clone(),
+        };
+        let allowed = source.source_ref.as_deref() == Some(source_reference)
+            || source
+                .source_ref_prefix
+                .as_deref()
+                .is_some_and(|prefix| source_reference.starts_with(prefix));
+        if !allowed {
+            return None;
+        }
+        Some(WorkflowIdentityPolicy {
+            repository: source.repository,
+            workflow_path: source.workflow_path,
+            references: BTreeSet::from([source_reference.to_owned()]),
+            issuer: entry.issuer.clone(),
+            transparency,
+        })
+    }
+
+    /// Return the sole protected-base signer identity for one non-reusable
+    /// workflow role. Ambiguous role entries are refused rather than selecting
+    /// an identity by document order.
+    #[must_use]
+    pub fn sole_signer_identity(&self, role: WorkflowRole) -> Option<(String, String, String)> {
+        let mut entries = self.identities.iter().filter(|entry| entry.role == role);
+        let entry = entries.next()?;
+        if entries.next().is_some()
+            || !matches!(
+                role,
+                WorkflowRole::StatementWriter | WorkflowRole::RecordPublisher
+            )
+        {
+            return None;
+        }
+        Some((
+            entry.repository.clone(),
+            entry.workflow_path.clone(),
+            entry.reference.clone(),
+        ))
     }
 }
 
@@ -1244,6 +1313,34 @@ mod tests {
             build_config_uri: Some(build_config.replace("refs/tags/v2.0.0", "refs/pull/9/merge")),
             build_trigger: Some("push".into()),
         }));
+        let source_signer = document
+            .source_signer_policy(
+                WorkflowRole::ReleaseAttester,
+                "agent-ix/engineering-assurance",
+                ".github/workflows/release-attestation.yml",
+                "refs/tags/v1.2.3",
+                "refs/tags/v2.0.0",
+                TransparencyRequirement::PublicLog,
+            )
+            .expect("source workflow signer is derived from the protected caller policy");
+        assert_eq!(source_signer.repository, "fictional/product");
+        assert_eq!(source_signer.workflow_path, ".github/workflows/release.yml");
+        assert_eq!(
+            source_signer.references,
+            BTreeSet::from(["refs/tags/v2.0.0".to_owned()])
+        );
+        assert!(
+            document
+                .source_signer_policy(
+                    WorkflowRole::ReleaseAttester,
+                    "agent-ix/engineering-assurance",
+                    ".github/workflows/release-attestation.yml",
+                    "refs/tags/v1.2.3",
+                    "refs/pull/9/merge",
+                    TransparencyRequirement::PublicLog,
+                )
+                .is_none()
+        );
     }
 
     #[trace("TC-678", "FR-064-AC-1", "FR-064-AC-9")]

@@ -26,6 +26,9 @@ on:
         required: false
         type: string
         default: release-evidence
+    secrets:
+      private_store_read_token:
+        required: false
 
 permissions:
   contents: read
@@ -174,6 +177,10 @@ jobs:
       - name: Validate the retained evidence store with the Quoin exporter
         shell: bash
         env:
+          GH_TOKEN: ${{ secrets.private_store_read_token }}
+          EA_TOOLING_TAG: ${{ inputs.ea_tooling_tag }}
+          INPUT_TAG: ${{ inputs.tag }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
           QUOIN_CLI: ${{ runner.temp }}/quoin-tooling/node_modules/.bin/quoin
           RELEASE_ARTIFACTS_DIR: release-artifacts
           EVIDENCE_DIR: release-evidence
@@ -211,10 +218,33 @@ jobs:
           PY
 
           error_path="$RUNNER_TEMP/quoin-test-result.stderr"
+          release_commit="$(git -C source rev-parse --verify "refs/tags/${INPUT_TAG}^{commit}")"
+          verified_provenance="$RUNNER_TEMP/verified-execution-provenance.dsse.json"
+          provenance_request="$(jq -n \
+            --arg repository "$GITHUB_WORKSPACE/source" \
+            --arg github_repository "$GITHUB_REPOSITORY" \
+            --arg base_branch "$BASE_BRANCH" \
+            --arg signer_repository "agent-ix/engineering-assurance" \
+            --arg signer_workflow_path ".github/workflows/release-attestation.yml" \
+            --arg signer_ref "refs/tags/$EA_TOOLING_TAG" \
+            --arg tag "$INPUT_TAG" \
+            --arg commit "$release_commit" \
+            --arg bundle_path "$GITHUB_WORKSPACE/$EVIDENCE_DIR/execution-provenance.dsse.json" \
+            --arg subject_path "$subject_path" \
+            --arg verified_bundle_path "$verified_provenance" \
+            '{protocol:"engineering-assurance.release-evidence-verify-request/v1",repository:$repository,github_repository:$github_repository,base_branch:$base_branch,signer_repository:$signer_repository,signer_workflow_path:$signer_workflow_path,signer_ref:$signer_ref,tag:$tag,commit:$commit,bundle_path:$bundle_path,subject_path:$subject_path,verified_bundle_path:$verified_bundle_path}')"
+          provenance_result="$("$RUNNER_TEMP/ea-tooling/engineering-assurance" release-evidence-verify --request "$provenance_request")"
+          provenance_status="$(jq -r '.status // "unknown"' <<<"$provenance_result")"
+          if [[ "$provenance_status" != "verified" ]]; then
+            echo "::error::execution_provenance_invalid"
+            exit 1
+          fi
+
           if "$QUOIN_CLI" evidence export-test-result \
             --subject "$subject_path" \
             --output "$TEST_RESULT_OUTPUT" \
             --evidence-dir "$EVIDENCE_DIR" \
+            --execution-provenance "$verified_provenance" \
             > "$RUNNER_TEMP/quoin-test-result.stdout" 2> "$error_path"; then
             :
           else
@@ -257,12 +287,34 @@ jobs:
           mkdir -p attestation-inputs
           cp -- "$TEST_RESULT_OUTPUT" attestation-inputs/test-result.json
 
-      - name: Refuse without a trusted approval-statement source
+      - name: Verify exact merged-commit approval roles
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.private_store_read_token }}
+          EA_TOOLING_TAG: ${{ inputs.ea_tooling_tag }}
+          INPUT_TAG: ${{ inputs.tag }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
-          echo "::error::release_roles_source_unavailable"
-          exit 1
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "::error::release_roles_source_unavailable"
+            exit 1
+          fi
+          gh auth setup-git --hostname github.com
+          release_commit="$(git -C source rev-parse --verify "refs/tags/${INPUT_TAG}^{commit}")"
+          request="$(jq -n \
+            --arg repository "$GITHUB_WORKSPACE/source" \
+            --arg github_repository "$GITHUB_REPOSITORY" \
+            --arg base_branch "$BASE_BRANCH" \
+            --arg tag "$INPUT_TAG" \
+            --arg commit "$release_commit" \
+            '{protocol:"engineering-assurance.release-roles-request/v1",repository:$repository,github_repository:$github_repository,base_branch:$base_branch,tag:$tag,commit:$commit}')"
+          result="$("$RUNNER_TEMP/ea-tooling/engineering-assurance" release-roles --request "$request")"
+          status="$(jq -r '.status // "unknown"' <<<"$result")"
+          if [[ "$status" != "satisfied" ]]; then
+            echo "::error::release_roles_unsatisfied"
+            exit 1
+          fi
 
       - name: Upload verified attestation inputs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
