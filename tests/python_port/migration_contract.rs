@@ -74,8 +74,7 @@ fn the_table_accounts_for_every_recurring_family() {
             name.replace('-', "_").to_ascii_uppercase()
         );
         let repository = std::env::var_os(&variable)
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| checkouts.join(name));
+            .map_or_else(|| checkouts.join(name), std::path::PathBuf::from);
         assert!(
             repository.join(".git").exists(),
             "campaign repository {name} is unavailable; set {variable} to its main clone"
