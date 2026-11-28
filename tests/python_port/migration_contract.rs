@@ -65,28 +65,23 @@ fn every_family_carries_exactly_one_decision() {
 #[test]
 #[trace("TC-088", "FR-013-AC-2")]
 fn the_table_accounts_for_every_recurring_family() {
-    // Skipped when the campaign repositories are not checked out. Stated,
-    // never silent: a census that cannot read its population has not been taken.
     let root = root();
     let checkouts = root.parent().expect("repo root has a parent");
-    let missing: Vec<&str> = CAMPAIGN_REPOSITORIES
-        .iter()
-        .copied()
-        .filter(|name| !checkouts.join(name).join(".git").exists())
-        .collect();
-    if !missing.is_empty() {
-        eprintln!(
-            "SKIP: campaign repositories not checked out: {}",
-            missing.join(", ")
-        );
-        return;
-    }
-
     let mut families = std::collections::BTreeSet::new();
     for name in CAMPAIGN_REPOSITORIES {
+        let variable = format!(
+            "EA_CAMPAIGN_REPOSITORY_{}",
+            name.replace('-', "_").to_ascii_uppercase()
+        );
+        let repository = std::env::var_os(&variable)
+            .map_or_else(|| checkouts.join(name), std::path::PathBuf::from);
+        assert!(
+            repository.join(".git").exists(),
+            "campaign repository {name} is unavailable; set {variable} to its main clone"
+        );
         let output = Command::new("git")
             .arg("-C")
-            .arg(checkouts.join(name))
+            .arg(&repository)
             .args([
                 "ls-tree",
                 "-r",
