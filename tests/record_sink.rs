@@ -1628,12 +1628,29 @@ fn assert_record_sink_dependencies() {
             (alias, package_name)
         })
         .collect();
+    let normal_dependencies: Vec<_> = package["dependencies"]
+        .as_array()
+        .expect("package dependencies")
+        .iter()
+        .filter(|dependency| dependency["kind"].is_null())
+        .collect();
+    let compile_time_marker_dependencies: BTreeSet<_> = normal_dependencies
+        .iter()
+        .filter(|dependency| dependency["optional"] != true)
+        .map(|dependency| {
+            dependency["name"]
+                .as_str()
+                .expect("dependency package name")
+        })
+        .collect();
+    assert_eq!(
+        compile_time_marker_dependencies,
+        BTreeSet::from(["ix-trace-rs"])
+    );
     assert!(
-        package["dependencies"]
-            .as_array()
-            .expect("package dependencies")
+        normal_dependencies
             .iter()
-            .filter(|dependency| dependency["kind"].is_null())
+            .filter(|dependency| dependency["name"] != "ix-trace-rs")
             .all(|dependency| dependency["optional"] == true)
     );
     let sink_dependencies: BTreeSet<_> = package["features"]["record-sink"]
