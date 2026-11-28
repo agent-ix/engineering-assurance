@@ -30,8 +30,10 @@ mod producer_identity;
 mod proof_checkpoint_host;
 mod receipt_host;
 mod release_decision_host;
+mod release_evidence_host;
 mod release_history_host;
 mod release_host;
+mod release_roles_host;
 mod request_schemas;
 mod scope_footprint_host;
 mod signature_verify_host;
@@ -77,6 +79,8 @@ const RELEASE_DECISION_CAPABILITY: &str = "release-decision";
 const FEATURE_RISK_RATING_CAPABILITY: &str = "feature-risk-rating";
 const RATING_ACCEPTANCE_CAPABILITY: &str = "rating-acceptance";
 const RELEASE_VERIFY_CAPABILITY: &str = "release-verify";
+const RELEASE_EVIDENCE_VERIFY_CAPABILITY: &str = "release-evidence-verify";
+const RELEASE_ROLES_CAPABILITY: &str = "release-roles";
 const RECEIPT_NOTE_CAPABILITY: &str = "receipt-note";
 const RECEIPT_MISSING_CAPABILITY: &str = "receipt-missing";
 const RECEIPT_VERIFY_CAPABILITY: &str = "receipt-verify";
@@ -162,6 +166,8 @@ fn command() -> Command {
         .subcommand(approval_trail_command())
         .subcommand(approval_gate_command())
         .subcommand(release_verify_command())
+        .subcommand(release_evidence_verify_command())
+        .subcommand(release_roles_command())
         .subcommand(receipt_note_command())
         .subcommand(receipt_missing_command())
         .subcommand(receipt_verify_command())
@@ -406,6 +412,30 @@ fn release_verify_command() -> Command {
         .args(request_schema_args("Release-verify request document"))
 }
 
+fn release_roles_command() -> Command {
+    Command::new(RELEASE_ROLES_CAPABILITY)
+        .about("Verify release roles from the exact merged pull request and retained statements")
+        .arg(
+            Arg::new("request")
+                .long("request")
+                .value_name("JSON")
+                .help("Release-roles request document, or - to read it from stdin")
+                .required(true),
+        )
+}
+
+fn release_evidence_verify_command() -> Command {
+    Command::new(RELEASE_EVIDENCE_VERIFY_CAPABILITY)
+        .about("Authenticate source-signed release provenance and bind it to the tag and artifacts")
+        .arg(
+            Arg::new("request")
+                .long("request")
+                .value_name("JSON")
+                .help("Release-evidence verification request, or - to read it from stdin")
+                .required(true),
+        )
+}
+
 fn release_history_command() -> Command {
     Command::new(RELEASE_HISTORY_CAPABILITY)
         .about("List the change-assurance records merged since the previous release")
@@ -546,6 +576,10 @@ fn main() -> ExitCode {
         Some((APPROVAL_GATE_CAPABILITY, arguments)) => run_approval_gate(arguments),
         Some((APPROVAL_TRAIL_CAPABILITY, arguments)) => run_approval_trail(arguments),
         Some((RELEASE_VERIFY_CAPABILITY, arguments)) => run_release_verify(arguments),
+        Some((RELEASE_EVIDENCE_VERIFY_CAPABILITY, arguments)) => {
+            run_release_evidence_verify(arguments)
+        }
+        Some((RELEASE_ROLES_CAPABILITY, arguments)) => run_release_roles(arguments),
         Some((RECEIPT_NOTE_CAPABILITY, arguments)) => run_receipt_note(arguments),
         Some((RECEIPT_MISSING_CAPABILITY, arguments)) => run_receipt_missing(arguments),
         Some((RECEIPT_VERIFY_CAPABILITY, arguments)) => run_receipt_verify(arguments),
@@ -1208,6 +1242,28 @@ fn run_release_verify(arguments: &ArgMatches) -> ExitCode {
         RELEASE_VERIFY_CAPABILITY,
         "release_verify_request_unreadable",
         |bytes| release_host::execute(bytes).map_err(|error| (error.code(), error.to_string())),
+    )
+}
+
+fn run_release_roles(arguments: &ArgMatches) -> ExitCode {
+    run_request_line(
+        arguments,
+        RELEASE_ROLES_CAPABILITY,
+        "release_roles_request_unreadable",
+        |bytes| {
+            release_roles_host::execute(bytes).map_err(|error| (error.code(), error.to_string()))
+        },
+    )
+}
+
+fn run_release_evidence_verify(arguments: &ArgMatches) -> ExitCode {
+    run_request_line(
+        arguments,
+        RELEASE_EVIDENCE_VERIFY_CAPABILITY,
+        "release_evidence_request_unreadable",
+        |bytes| {
+            release_evidence_host::execute(bytes).map_err(|error| (error.code(), error.to_string()))
+        },
     )
 }
 

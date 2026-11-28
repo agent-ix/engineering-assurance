@@ -25,6 +25,54 @@ fn reusable_workflow() -> Value {
     yaml_serde::from_slice(&bytes).expect("release-attestation reusable workflow parses as YAML")
 }
 
+fn initialize_release_source(source: &Path) -> String {
+    fs::create_dir_all(source).expect("source checkout directory");
+    let git = |arguments: &[&str]| {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(source)
+            .args(arguments)
+            .output()
+            .expect("git starts");
+        assert!(
+            output.status.success(),
+            "git {arguments:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        output
+    };
+    git(&["init", "-q"]);
+    git(&["config", "user.name", "Fixture"]);
+    git(&["config", "user.email", "fixture@example.test"]);
+    fs::write(source.join("README.md"), "fixture release\n").expect("source fixture");
+    git(&["add", "README.md"]);
+    git(&["commit", "-q", "-m", "release fixture"]);
+    git(&["tag", "-a", "v1.2.3", "-m", "fixture release tag"]);
+    String::from_utf8(git(&["rev-parse", "refs/tags/v1.2.3^{commit}"]).stdout)
+        .expect("commit id is UTF-8")
+        .trim()
+        .to_owned()
+}
+
+#[cfg(unix)]
+fn install_fake_provenance_verifier(runner_temp: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let tooling = runner_temp.join("ea-tooling");
+    fs::create_dir_all(&tooling).expect("EA tooling directory");
+    let verifier = tooling.join("engineering-assurance");
+    fs::write(
+        &verifier,
+        "#!/bin/bash\nset -euo pipefail\n[ \"$1\" = release-evidence-verify ]\n[ \"$2\" = --request ]\nrequest=$3\nbundle=$(jq -r .bundle_path <<<\"$request\")\noutput=$(jq -r .verified_bundle_path <<<\"$request\")\ncp -- \"$bundle\" \"$output\"\nprintf '%s\\n' '{\"protocol\":\"engineering-assurance.release-evidence-verify-result/v1\",\"status\":\"verified\"}'\n",
+    )
+    .expect("fake EA provenance verifier");
+    let mut permissions = fs::metadata(&verifier)
+        .expect("fake verifier metadata")
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&verifier, permissions).expect("make fake verifier executable");
+}
+
 #[trace("TC-559", "TC-622", "FR-070-AC-3", "NFR-011-AC-1", "NFR-011-AC-2")]
 #[test]
 fn signing_jobs_run_no_agent_or_repository_code() {
@@ -228,8 +276,8 @@ fn nonempty_invalid_evidence_is_refused_before_the_role_source_failure() {
         .expect("Quoin evidence validation step exists");
     let role_index = verify_steps
         .iter()
-        .position(|step| step["name"] == "Refuse without a trusted approval-statement source")
-        .expect("role-source refusal exists");
+        .position(|step| step["name"] == "Verify exact merged-commit approval roles")
+        .expect("protected role-verification step exists");
     assert!(
         export_index < role_index,
         "invalid evidence fails before role-source refusal"
@@ -246,10 +294,17 @@ fn nonempty_invalid_evidence_is_refused_before_the_role_source_failure() {
     fs::create_dir_all(&workspace).expect("workflow workspace");
     fs::create_dir_all(&runner_temp).expect("runner temp directory");
     fs::create_dir_all(&artifacts).expect("release artifact directory");
+    initialize_release_source(&workspace.join("source"));
+    install_fake_provenance_verifier(&runner_temp);
     fs::write(artifacts.join("release.tar.gz"), b"release artifact")
         .expect("release artifact fixture");
     fs::create_dir_all(evidence.join("runs/suite")).expect("non-empty invalid evidence directory");
     fs::write(evidence.join("bindings.json"), b"{").expect("invalid non-empty evidence fixture");
+    fs::write(
+        evidence.join("execution-provenance.dsse.json"),
+        b"fixture signed execution provenance bundle",
+    )
+    .expect("source-signed provenance bundle");
 
     let fake_quoin = root.path().join("quoin");
     let args_capture = root.path().join("quoin-args.txt");
@@ -268,10 +323,15 @@ fn nonempty_invalid_evidence_is_refused_before_the_role_source_failure() {
         .args(["-euo", "pipefail", "-c", script])
         .current_dir(&workspace)
         .env("RUNNER_TEMP", &runner_temp)
+        .env("GITHUB_WORKSPACE", &workspace)
+        .env("GITHUB_REPOSITORY", "fictional/product")
+        .env("EA_TOOLING_TAG", "v0.11.1")
+        .env("INPUT_TAG", "v1.2.3")
+        .env("BASE_BRANCH", "main")
         .env("QUOIN_CLI", &fake_quoin)
         .env("QUOIN_ARGS_CAPTURE", &args_capture)
         .env("RELEASE_ARTIFACTS_DIR", &artifacts)
-        .env("EVIDENCE_DIR", &evidence)
+        .env("EVIDENCE_DIR", "release-evidence")
         .env("TEST_RESULT_OUTPUT", runner_temp.join("test-result.json"))
         .output()
         .expect("run the production workflow step");
@@ -312,7 +372,14 @@ fn nonempty_invalid_evidence_is_refused_before_the_role_source_failure() {
 }
 
 #[cfg(unix)]
-#[trace("TC-553", "FR-069-AC-1", "FR-069-AC-4", "FR-070-AC-10")]
+#[trace(
+    "TC-553",
+    "FR-069-AC-1",
+    "FR-069-AC-4",
+    "FR-069-AC-5",
+    "FR-069-AC-6",
+    "FR-070-AC-10"
+)]
 #[test]
 fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting() {
     use std::os::unix::fs::PermissionsExt;
@@ -331,6 +398,8 @@ fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting(
     assert!(script.contains("--subject \"$subject_path\""));
     assert!(script.contains("--evidence-dir \"$EVIDENCE_DIR\""));
     assert!(script.contains("--output \"$TEST_RESULT_OUTPUT\""));
+    assert!(script.contains("release-evidence-verify --request"));
+    assert!(script.contains("--execution-provenance \"$verified_provenance\""));
     let attest_steps = workflow["jobs"]["attest"]["steps"]
         .as_array()
         .expect("attest steps");
@@ -365,9 +434,17 @@ fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting(
     fs::create_dir_all(&workspace).expect("workflow workspace");
     fs::create_dir_all(&runner_temp).expect("runner temp directory");
     fs::create_dir_all(&artifacts).expect("release artifact directory");
+    let commit = initialize_release_source(&workspace.join("source"));
+    install_fake_provenance_verifier(&runner_temp);
     fs::write(artifacts.join("release.tar.gz"), b"fixture release").expect("release artifact");
     fs::create_dir_all(evidence.join("runs/suite")).expect("evidence run directory");
     fs::write(evidence.join("bindings.json"), "{}\n").expect("valid evidence bindings");
+    let provenance_bundle = b"fixture signed execution provenance bundle";
+    fs::write(
+        evidence.join("execution-provenance.dsse.json"),
+        provenance_bundle,
+    )
+    .expect("source-signed provenance bundle");
 
     let expected = concat!(
         r#"{"_type":"https:"#,
@@ -377,9 +454,10 @@ fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting(
     let fixture_result = root.path().join("fixture-test-result.json");
     fs::write(&fixture_result, expected.as_bytes()).expect("Quoin result fixture");
     let fake_quoin = root.path().join("quoin");
+    let captured_provenance = root.path().join("captured-provenance.dsse.json");
     fs::write(
         &fake_quoin,
-        "#!/bin/bash\nset -euo pipefail\nwhile (($#)); do\n  if [[ \"$1\" == --output ]]; then shift; output=$1; fi\n  shift\ndone\ncp -- \"$FIXTURE_TEST_RESULT\" \"$output\"\n",
+        "#!/bin/bash\nset -euo pipefail\nwhile (($#)); do\n  if [[ \"$1\" == --output ]]; then shift; output=$1; fi\n  if [[ \"$1\" == --execution-provenance ]]; then shift; cp -- \"$1\" \"$CAPTURED_PROVENANCE\"; fi\n  shift\ndone\ncp -- \"$FIXTURE_TEST_RESULT\" \"$output\"\n",
     )
     .expect("fake Quoin exporter");
     let mut permissions = fs::metadata(&fake_quoin)
@@ -392,10 +470,17 @@ fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting(
         .args(["-euo", "pipefail", "-c", script])
         .current_dir(&workspace)
         .env("RUNNER_TEMP", &runner_temp)
+        .env("GITHUB_WORKSPACE", &workspace)
+        .env("GITHUB_REPOSITORY", "fictional/product")
+        .env("EA_TOOLING_TAG", "v0.11.1")
+        .env("INPUT_TAG", "v1.2.3")
+        .env("BASE_BRANCH", "main")
+        .env("RELEASE_COMMIT", commit)
         .env("QUOIN_CLI", &fake_quoin)
         .env("FIXTURE_TEST_RESULT", &fixture_result)
+        .env("CAPTURED_PROVENANCE", &captured_provenance)
         .env("RELEASE_ARTIFACTS_DIR", &artifacts)
-        .env("EVIDENCE_DIR", &evidence)
+        .env("EVIDENCE_DIR", "release-evidence")
         .env("TEST_RESULT_OUTPUT", runner_temp.join("test-result.json"))
         .output()
         .expect("run the production workflow step");
@@ -410,6 +495,11 @@ fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting(
             .expect("attestation input exists"),
         expected.as_bytes(),
         "the failed Quoin result is retained byte for byte for signing"
+    );
+    assert_eq!(
+        fs::read(captured_provenance).expect("Quoin received verified provenance"),
+        provenance_bundle,
+        "EA transports the source-signed provenance bytes unchanged to Quoin"
     );
 }
 
@@ -439,9 +529,16 @@ fn tc_670_missing_or_mismatched_quoin_export_is_rejected_before_handoff() {
         fs::create_dir_all(&workspace).expect("workflow workspace");
         fs::create_dir_all(&runner_temp).expect("runner temp directory");
         fs::create_dir_all(&artifacts).expect("release artifact directory");
+        initialize_release_source(&workspace.join("source"));
+        install_fake_provenance_verifier(&runner_temp);
         fs::write(artifacts.join("release.tar.gz"), b"fixture release").expect("release artifact");
         fs::create_dir_all(evidence.join("runs/suite")).expect("evidence run directory");
         fs::write(evidence.join("bindings.json"), "{}\n").expect("evidence bindings");
+        fs::write(
+            evidence.join("execution-provenance.dsse.json"),
+            b"fixture signed execution provenance bundle",
+        )
+        .expect("source-signed provenance bundle");
 
         let fixture_result = root.path().join("fixture-test-result.json");
         fs::write(
@@ -478,10 +575,15 @@ fn tc_670_missing_or_mismatched_quoin_export_is_rejected_before_handoff() {
             .args(["-euo", "pipefail", "-c", script])
             .current_dir(&workspace)
             .env("RUNNER_TEMP", &runner_temp)
+            .env("GITHUB_WORKSPACE", &workspace)
+            .env("GITHUB_REPOSITORY", "fictional/product")
+            .env("EA_TOOLING_TAG", "v0.11.1")
+            .env("INPUT_TAG", "v1.2.3")
+            .env("BASE_BRANCH", "main")
             .env("QUOIN_CLI", &fake_quoin)
             .env("FIXTURE_TEST_RESULT", &fixture_result)
             .env("RELEASE_ARTIFACTS_DIR", &artifacts)
-            .env("EVIDENCE_DIR", &evidence)
+            .env("EVIDENCE_DIR", "release-evidence")
             .env("TEST_RESULT_OUTPUT", runner_temp.join("test-result.json"))
             .output()
             .expect("run the production workflow step");
@@ -580,8 +682,8 @@ fn assert_verify_job(workflow: &Value) {
     );
     let role_source_check = verify_steps
         .iter()
-        .position(|step| step["name"] == "Refuse without a trusted approval-statement source")
-        .expect("missing statement source refuses");
+        .position(|step| step["name"] == "Verify exact merged-commit approval roles")
+        .expect("protected role-verification step exists");
     assert!(tag_check < release_check && release_check < role_source_check);
     let missing_store = verify_steps
         .iter()
