@@ -372,7 +372,7 @@ fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting(
     let expected = concat!(
         r#"{"_type":"https:"#,
         r#"//in-toto.io/Statement/v1","predicateType":"https:"#,
-        r#"//in-toto.io/attestation/test-result/v0.1","subject":[{"name":"release.tar.gz","digest":{"sha256":"fixture"}}],"predicate":{"result":"FAILED","failedTests":[{"name":"retained-check","result":"FAILED"}]}}"#
+        r#"//in-toto.io/attestation/test-result/v0.1","subject":[{"name":"release.tar.gz","digest":{"sha256":"d2d6e318f1a072f52024a0106e41569293204d8eefa047f2584d35e8cc261e76"}}],"predicate":{"result":"FAILED","failedTests":[{"name":"retained-check","result":"FAILED"}]}}"#
     );
     let fixture_result = root.path().join("fixture-test-result.json");
     fs::write(&fixture_result, expected.as_bytes()).expect("Quoin result fixture");
