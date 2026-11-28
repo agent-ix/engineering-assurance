@@ -9,7 +9,6 @@ use ix_trace_rs::implements;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use thiserror::Error;
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{
     approval_gate::RolePolicy,
@@ -606,9 +605,7 @@ fn build_receipt_summary(
 
     let digest =
         |bytes: &[u8]| format!("sha256:{}", sigstore_verify::crypto::sha256(bytes).to_hex());
-    let time_verified = OffsetDateTime::now_utc()
-        .format(&Rfc3339)
-        .map_err(|_| ReceiptRecordError::Construction)?;
+    let time_verified = input.created_at;
     let summary = StatementV1 {
         type_: STATEMENT_V1_TYPE.to_owned(),
         subject: vec![SubjectV1 {

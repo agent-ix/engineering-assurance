@@ -1634,9 +1634,11 @@ fn assert_record_sink_dependencies() {
         .iter()
         .filter(|dependency| dependency["kind"].is_null())
         .collect();
+    // ix-trace-rs is the required compile-time procedural macro for trace and
+    // implements markers; it adds no runtime signing dependency.
     let compile_time_marker_dependencies: BTreeSet<_> = normal_dependencies
         .iter()
-        .filter(|dependency| dependency["optional"] != true)
+        .filter(|dependency| dependency["name"] == "ix-trace-rs")
         .map(|dependency| {
             dependency["name"]
                 .as_str()
@@ -1650,9 +1652,25 @@ fn assert_record_sink_dependencies() {
     assert!(
         normal_dependencies
             .iter()
-            .filter(|dependency| dependency["name"] != "ix-trace-rs")
+            .find(|dependency| dependency["name"] == "ix-trace-rs")
+            .is_some_and(|dependency| dependency["optional"] == true),
+        "the marker proc macro stays optional and is enabled only by features that need markers"
+    );
+    assert!(
+        normal_dependencies
+            .iter()
             .all(|dependency| dependency["optional"] == true)
     );
+    for feature in ["content-rights", "attestation-verify"] {
+        assert!(
+            package["features"][feature]
+                .as_array()
+                .is_some_and(|dependencies| dependencies
+                    .iter()
+                    .any(|dependency| dependency == "dep:ix-trace-rs")),
+            "{feature} must activate the compile-time marker dependency used by its tagged items"
+        );
+    }
     let sink_dependencies: BTreeSet<_> = package["features"]["record-sink"]
         .as_array()
         .expect("record-sink feature")

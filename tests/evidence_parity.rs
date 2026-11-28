@@ -335,7 +335,7 @@ fn tc_103_version_identity_rejects_blank_and_unprintable_tokens_and_accepts_the_
     }
 }
 
-#[trace("TC-020", "FR-004-AC-1", "US-004-EX-2")]
+#[trace("TC-020", "FR-004-AC-1")]
 #[test]
 fn tc_020_observed_evidence_retains_the_governing_tuple_and_operator_observation() {
     // An `observed` record is the only state that asserts a producer actually
@@ -360,7 +360,7 @@ fn tc_020_observed_evidence_retains_the_governing_tuple_and_operator_observation
     assert_eq!(untraceable.availability, None);
 }
 
-#[trace("TC-021", "FR-004-AC-2", "US-004-EX-1")]
+#[trace("TC-021", "FR-004-AC-2")]
 #[test]
 fn tc_021_unavailable_evidence_retains_the_observed_failure_category() {
     // A producer that could not be invoked is the case most likely to be

@@ -601,7 +601,7 @@ fn tc_225_attempts_and_candidates_are_independent() {
 }
 
 #[test]
-#[trace("TC-231", "FR-030-AC-7", "IT-007-SC-01", "IT-007-SC-02")]
+#[trace("TC-231", "FR-030-AC-7")]
 fn tc_226_a_real_consumer_uses_only_the_integrator_package_feature() {
     let consumer = tempfile::tempdir().expect("consumer root");
     fs::create_dir(consumer.path().join("src")).expect("src");

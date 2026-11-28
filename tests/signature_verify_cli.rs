@@ -342,7 +342,7 @@ fn tc_251_unsigned_commit_and_tag_are_unsigned() {
 }
 
 #[test]
-#[trace("FR-036-AC-16")]
+#[trace("TC-1200", "FR-036-AC-16")]
 fn tc_1200_unsigned_and_unverifiable_verdicts_carry_producer_identity() {
     let fixture = fixture();
     let commit = plain_commit(&fixture, "unsigned");
@@ -1440,7 +1440,7 @@ fn gesture_of(fixture: &Fixture, revision: &str, kind: &str, path: Option<&Path>
 }
 
 #[test]
-#[trace("FR-084-AC-1")]
+#[trace("TC-1187", "FR-084-AC-1")]
 fn a_software_key_tag_is_signed_valid_with_no_evidenced_gesture() {
     let fixture = fixture();
     plain_commit(&fixture, "base");
@@ -1451,7 +1451,7 @@ fn a_software_key_tag_is_signed_valid_with_no_evidenced_gesture() {
 }
 
 #[test]
-#[trace("FR-084-AC-2", "FR-084-AC-3", "FR-084-AC-4")]
+#[trace("TC-1187", "FR-084-AC-2", "FR-084-AC-3", "FR-084-AC-4")]
 fn the_evidenced_gesture_is_read_from_the_flags_of_the_signature_run() {
     let fixture = fixture();
     plain_commit(&fixture, "base");
@@ -1494,7 +1494,7 @@ fn error_code(output: &Output) -> String {
 }
 
 #[test]
-#[trace("FR-037-AC-24", "FR-036-AC-3")]
+#[trace("TC-1188", "FR-037-AC-24", "FR-036-AC-3")]
 fn a_committed_allowed_signers_source_decides_over_the_working_tree() {
     let fixture = fixture();
     set_allowed(
@@ -1519,7 +1519,7 @@ fn a_committed_allowed_signers_source_decides_over_the_working_tree() {
 }
 
 #[test]
-#[trace("FR-084-AC-6")]
+#[trace("TC-1187", "FR-084-AC-6")]
 fn only_a_signed_valid_verdict_carries_a_gesture() {
     let fixture = fixture();
     plain_commit(&fixture, "base");
@@ -1547,7 +1547,7 @@ fn only_a_signed_valid_verdict_carries_a_gesture() {
 }
 
 #[test]
-#[trace("FR-084-AC-7")]
+#[trace("TC-1187", "FR-084-AC-7")]
 fn a_signing_gesture_trailer_in_the_message_is_not_evidence() {
     let fixture = fixture();
     plain_commit(&fixture, "base");
@@ -1563,7 +1563,7 @@ fn a_signing_gesture_trailer_in_the_message_is_not_evidence() {
 }
 
 #[test]
-#[trace("FR-084-AC-5")]
+#[trace("TC-1187", "FR-084-AC-5")]
 fn a_signed_commit_reports_none_whatever_the_key_shows() {
     let fixture = fixture();
     let id = signed_commit(&fixture, "a", "signed");
@@ -1578,7 +1578,7 @@ fn a_signed_commit_reports_none_whatever_the_key_shows() {
 }
 
 #[test]
-#[trace("FR-084-AC-9")]
+#[trace("TC-1187", "FR-084-AC-9")]
 fn gesture_is_the_only_member_added_to_a_signed_valid_result() {
     let fixture = fixture();
     plain_commit(&fixture, "base");
@@ -1623,7 +1623,7 @@ fn gesture_is_the_only_member_added_to_a_signed_valid_result() {
 }
 
 #[test]
-#[trace("FR-084-AC-10")]
+#[trace("TC-1187", "FR-084-AC-10")]
 fn the_run_gets_the_tag_signature_block_byte_for_byte() {
     let fixture = fixture();
     plain_commit(&fixture, "base");
@@ -1650,7 +1650,7 @@ fn the_run_gets_the_tag_signature_block_byte_for_byte() {
 }
 
 #[test]
-#[trace("FR-037-AC-24")]
+#[trace("TC-1188", "FR-037-AC-24")]
 fn a_refused_allowed_signers_source_starts_no_verifier() {
     let fixture = fixture();
     set_allowed(
@@ -1706,7 +1706,7 @@ fn a_refused_allowed_signers_source_starts_no_verifier() {
 }
 
 #[test]
-#[trace("FR-037-AC-24")]
+#[trace("TC-1188", "FR-037-AC-24")]
 fn a_git_that_cannot_answer_for_a_committed_source_is_unverifiable() {
     let fixture = fixture();
     let plain = fixture.root().join("plain");
@@ -1720,7 +1720,7 @@ fn a_git_that_cannot_answer_for_a_committed_source_is_unverifiable() {
 }
 
 #[test]
-#[trace("FR-037-AC-23")]
+#[trace("TC-1180", "FR-037-AC-23")]
 fn git_2_35_judges_a_backdated_tag_at_the_claimed_date() {
     let text = String::from_utf8(
         Command::new("git")

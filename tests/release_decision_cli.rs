@@ -1212,7 +1212,7 @@ fn present_with_risk(fixture: &Fixture, run: &str, evaluation: &str, review: &st
 }
 
 #[test]
-#[trace("FR-048-AC-18")]
+#[trace("TC-1185", "FR-048-AC-18")]
 fn the_presentation_shows_the_risk_files_verbatim_or_not_provided() {
     let fixture = fixture();
     let evaluation = evaluation_document("accepted");
@@ -1243,7 +1243,7 @@ fn the_presentation_shows_the_risk_files_verbatim_or_not_provided() {
 }
 
 #[test]
-#[trace("FR-048-AC-19")]
+#[trace("TC-1185", "FR-048-AC-19")]
 fn the_release_choice_does_not_depend_on_what_the_risk_files_say() {
     let fixture = fixture();
     let cases = [
@@ -1310,7 +1310,7 @@ fn keys(value: &Value) -> Vec<&str> {
 }
 
 #[test]
-#[trace("FR-048-AC-18")]
+#[trace("TC-1185", "FR-048-AC-18")]
 fn risk_documents_saved_with_crlf_line_ends_are_accepted_by_their_type() {
     let fixture = fixture();
     let crlf = |text: String| text.replace('\n', "\r\n");
@@ -1327,7 +1327,7 @@ fn risk_documents_saved_with_crlf_line_ends_are_accepted_by_their_type() {
 }
 
 #[test]
-#[trace("FR-048-AC-20")]
+#[trace("TC-1185", "FR-048-AC-20")]
 fn a_risk_file_of_the_wrong_shape_is_unreadable_and_stops_before_the_gate() {
     let fixture = fixture();
     let cases = [

@@ -423,9 +423,8 @@ fn approval_record(
 mod tests {
     use std::{
         cell::{Cell, RefCell},
-        collections::{BTreeMap, BTreeSet},
+        collections::{BTreeMap, BTreeSet, HashMap},
         fmt::Write as _,
-        process::Command,
     };
 
     use ix_trace_rs::trace;
@@ -456,44 +455,70 @@ mod tests {
     const HEAD: &str = "1111111111111111111111111111111111111111";
     const MERGED: &str = "2222222222222222222222222222222222222222";
 
-    struct GitFixture(tempfile::TempDir);
+    // These tests need only the small commit-graph operations below. Keep
+    // fixture commits in memory instead of starting Git from the library.
+    const EMPTY_TREE: &str = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
+    struct GitFixture {
+        next: Cell<u64>,
+        parents: RefCell<HashMap<String, Vec<String>>>,
+    }
 
     impl GitFixture {
         fn new() -> Self {
-            let fixture = Self(tempfile::tempdir().unwrap());
-            fixture.git(&["init", "--quiet"]);
-            fixture
-        }
-
-        fn git(&self, args: &[&str]) -> String {
-            let output = Command::new("git")
-                .current_dir(self.0.path())
-                .env("GIT_CONFIG_NOSYSTEM", "1")
-                .env("GIT_CONFIG_GLOBAL", "/dev/null")
-                .env("GIT_AUTHOR_NAME", "Fixture Author")
-                .env("GIT_AUTHOR_EMAIL", "author@example.test")
-                .env("GIT_COMMITTER_NAME", "Fixture Committer")
-                .env("GIT_COMMITTER_EMAIL", "committer@example.test")
-                .env("GIT_AUTHOR_DATE", "2026-11-14T18:00:00Z")
-                .env("GIT_COMMITTER_DATE", "2026-11-14T18:00:00Z")
-                .args(args)
-                .output()
-                .unwrap();
-            assert!(
-                output.status.success(),
-                "git {args:?}: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-            String::from_utf8(output.stdout).unwrap().trim().to_owned()
-        }
-
-        fn commit(&self, parents: &[&str], message: &str) -> String {
-            let tree = self.git(&["mktree"]);
-            let mut args = vec!["commit-tree", &tree, "-m", message];
-            for parent in parents {
-                args.extend(["-p", parent]);
+            Self {
+                next: Cell::new(0),
+                parents: RefCell::new(HashMap::new()),
             }
-            self.git(&args)
+        }
+
+        fn commit(&self, parents: &[&str], _message: &str) -> String {
+            let next = self.next.get() + 1;
+            self.next.set(next);
+            let id = format!("{next:040x}");
+            self.parents.borrow_mut().insert(
+                id.clone(),
+                parents.iter().map(|parent| (*parent).to_owned()).collect(),
+            );
+            id
+        }
+
+        fn git(&self, arguments: &[&str]) -> String {
+            match arguments {
+                ["rev-parse", expression] if expression.ends_with("^2") => {
+                    let commit = expression.trim_end_matches("^2");
+                    self.parents
+                        .borrow()
+                        .get(commit)
+                        .and_then(|parents| parents.get(1))
+                        .expect("the fixture commit has a second parent")
+                        .clone()
+                }
+                ["rev-parse", expression] if expression.ends_with("^{tree}") => {
+                    assert!(
+                        self.parents
+                            .borrow()
+                            .contains_key(expression.trim_end_matches("^{tree}"))
+                    );
+                    EMPTY_TREE.to_owned()
+                }
+                ["rev-list", "--count", range] => {
+                    let (base, tip) = range.split_once("..").expect("revision range");
+                    let parents = self.parents.borrow();
+                    let mut current = tip;
+                    let mut count = 0;
+                    while current != base {
+                        let parent = parents
+                            .get(current)
+                            .and_then(|parents| parents.first())
+                            .expect("the base is an ancestor of the tip");
+                        count += 1;
+                        current = parent;
+                    }
+                    count.to_string()
+                }
+                _ => panic!("unsupported fixture Git command: {arguments:?}"),
+            }
         }
     }
 
@@ -742,7 +767,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-060-AC-2")]
+    #[trace("TC-1154", "FR-060-AC-2")]
     fn merge_commit_statements_name_the_source_merge_and_reviewed_head() {
         let git = GitFixture::new();
         let base = git.commit(&[], "base");
@@ -780,7 +805,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-060-AC-4")]
+    #[trace("TC-1155", "FR-060-AC-4")]
     fn open_and_closed_pull_requests_are_refused_before_signing_or_publishing() {
         struct CountingSigner(Cell<usize>);
         impl ApprovalStatementSigner for CountingSigner {
@@ -815,7 +840,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-060-AC-5")]
+    #[trace("TC-1156", "FR-060-AC-5")]
     fn an_identical_tree_does_not_make_a_different_review_head_count() {
         let git = GitFixture::new();
         let base = git.commit(&[], "base");
@@ -855,7 +880,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-060-AC-6")]
+    #[trace("TC-1157", "FR-060-AC-6")]
     fn a_three_commit_rebase_writes_subjects_for_the_rebased_tip_only() {
         let git = GitFixture::new();
         let base = git.commit(&[], "base");

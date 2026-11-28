@@ -801,7 +801,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("TC-1062", "NFR-003-M-1", "NFR-003-M-2", "NFR-003-M-3")]
+    #[trace("TC-1062", "NFR-003-AC-1", "NFR-003-AC-2", "NFR-003-AC-3")]
     fn built_packages_match_allowlists_and_load_every_installed_workflow() {
         let root = selected_root(Path::new(env!("CARGO_MANIFEST_DIR")))
             .expect("repository root is package-auditable");
@@ -865,22 +865,34 @@ mod tests {
         for (source_index, workflow_root) in installed_workflow_roots.iter().enumerate() {
             let state = output.path().join(format!("ix-flow-state-{source_index}"));
             for workflow in expected_workflows {
-                let result = std::process::Command::new(&ix_flow)
-                    .args(["run", workflow, "--path"])
-                    .arg(
-                        workflow_root
-                            .parent()
-                            .expect("workflow root has a skill root"),
-                    )
-                    .args([
-                        "--id",
-                        &format!("package-{source_index}-{workflow}"),
-                        "--state-dir",
-                    ])
-                    .arg(state.join(workflow))
-                    .arg("--json")
-                    .output()
-                    .expect("ix-flow is required to verify installed workflow definitions");
+                let skill_root = workflow_root
+                    .parent()
+                    .expect("workflow root has a skill root");
+                let run_id = format!("package-{source_index}-{workflow}");
+                let state_path = state.join(workflow);
+                let arguments = [
+                    OsStr::new("run"),
+                    OsStr::new(workflow),
+                    OsStr::new("--path"),
+                    skill_root.as_os_str(),
+                    OsStr::new("--id"),
+                    OsStr::new(&run_id),
+                    OsStr::new("--state-dir"),
+                    state_path.as_os_str(),
+                    OsStr::new("--json"),
+                ];
+                let result = process_host::run_configured(
+                    ix_flow.as_os_str(),
+                    &arguments,
+                    None,
+                    &[],
+                    &[],
+                    ProcessLimits {
+                        timeout: PACKAGE_PROCESS_TIMEOUT,
+                        max_output_bytes: MAX_PROCESS_OUTPUT_BYTES,
+                    },
+                )
+                .expect("ix-flow is required to verify installed workflow definitions");
                 assert!(
                     result.status.success(),
                     "{workflow} from installed package {source_index} must load: {}",

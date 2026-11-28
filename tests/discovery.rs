@@ -243,7 +243,7 @@ fn install_repository_discovery_source(root: &Path, destination: &Path) {
         .expect("repository-source files can be extracted");
 }
 
-#[trace("TC-009", "FR-002-AC-1", "TC-010", "FR-002-AC-2", "US-002-EX-1")]
+#[trace("TC-009", "FR-002-AC-1", "TC-010", "FR-002-AC-2")]
 #[test]
 fn tc_009_the_bundle_owns_one_skill_that_every_supported_host_resolves() {
     let bundle = BundleRoot::open();
@@ -284,7 +284,7 @@ fn tc_009_the_bundle_owns_one_skill_that_every_supported_host_resolves() {
     }
 }
 
-#[trace("TC-011", "FR-002-AC-3", "US-002-EX-2")]
+#[trace("TC-011", "FR-002-AC-3")]
 #[test]
 fn tc_011_the_canonical_skill_exposes_exactly_the_promoted_workflows() {
     let bundle = BundleRoot::open();
@@ -378,7 +378,14 @@ fn tc_038_supported_hosts_install_the_same_canonical_bytes() {
     }
 }
 
-#[trace("TC-1063", "NFR-001-M-1", "NFR-001-M-2")]
+#[trace(
+    "TC-1063",
+    "NFR-001-M-1",
+    "NFR-001-M-2",
+    "FR-002-AC-1",
+    "FR-002-AC-2",
+    "FR-002-AC-3"
+)]
 #[test]
 fn tc_1063_local_and_repository_source_installs_resolve_all_hosts_identically() {
     let source_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

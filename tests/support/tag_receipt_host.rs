@@ -356,7 +356,7 @@ fn no_prefix_no_member_a_bad_member_and_a_non_utf8_name_end_as_specified() {
 }
 
 #[test]
-#[trace("TC-1127", "FR-081-AC-2")]
+#[trace("TC-1134", "FR-081-AC-2")]
 fn protected_policy_lookup_distinguishes_absence_from_git_read_failures() {
     let directory = tempfile::tempdir().expect("tempdir");
     let repo = repository(directory.path());
@@ -1081,7 +1081,7 @@ fn a_bad_signature_an_unparsable_line_and_an_unlisted_signer_are_invalid_not_mis
 }
 
 #[test]
-#[trace("FR-082-AC-13", "FR-082-AC-14")]
+#[trace("TC-1192", "FR-082-AC-13", "FR-082-AC-14")]
 fn an_invalid_tag_finding_has_commit_and_reason_but_no_ref_or_tag() {
     let directory = tempfile::tempdir().expect("tempdir");
     let repo = repository(directory.path());

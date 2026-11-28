@@ -178,6 +178,7 @@ fn verify_head(fixture: &Fixture) -> Value {
 /// PLAT-1448 FR‑021 / FR‑027 AC-1: a mapped signed commit with the required meaning is accepted.
 /// PLAT-1448 FR‑021 / FR‑027 AC-10: a later unsigned edit invalidates acceptance.
 #[trace(
+    "TC-1050",
     "FR-036-AC-1",
     "FR-036-AC-2",
     "FR-037-AC-1",
@@ -227,7 +228,7 @@ fn signed_rating_is_accepted_and_a_later_worktree_edit_invalidates_it() {
 
 #[test]
 /// FR-090-AC-1: a valid signer and acceptance trailer cannot accept a proposed rating.
-#[trace("FR-090-AC-1")]
+#[trace("TC-1050", "FR-090-AC-1")]
 fn signed_proposed_rating_is_not_accepted() {
     let fixture = fixture();
     let path = rating_file(&fixture);
@@ -255,7 +256,7 @@ fn signed_proposed_rating_is_not_accepted() {
 
 #[test]
 /// PLAT-1448 FR‑021 / FR‑027 AC-5: missing acceptance meaning is refused.
-#[trace("FR-037-AC-6")]
+#[trace("TC-1050", "FR-037-AC-6")]
 fn signed_rating_without_acceptance_meaning_has_exact_reason() {
     let fixture = fixture();
     rating_file(&fixture);
@@ -270,7 +271,7 @@ fn signed_rating_without_acceptance_meaning_has_exact_reason() {
 
 #[test]
 /// PLAT-1448 FR‑021 / FR‑027 AC-2: unsigned rating commits are refused.
-#[trace("FR-036-AC-2")]
+#[trace("TC-1050", "FR-036-AC-2")]
 fn unsigned_rating_commit_has_exact_reason() {
     let fixture = fixture();
     rating_file(&fixture);
@@ -292,7 +293,7 @@ fn unsigned_rating_commit_has_exact_reason() {
 
 #[test]
 /// PLAT-1448 FR‑021 / FR‑027 allowed-signers obligation: invalid trust input is never accepted.
-#[trace("FR-037-AC-3", "FR-014-AC-3")]
+#[trace("TC-1050", "FR-037-AC-3", "FR-014-AC-3")]
 fn missing_or_malformed_allowed_signers_fails_closed() {
     for malformed in [false, true] {
         let fixture = fixture();
@@ -313,7 +314,7 @@ fn missing_or_malformed_allowed_signers_fails_closed() {
 
 #[test]
 /// PLAT-1448 FR‑021 / FR‑027 AC-3: an unmapped signer is refused.
-#[trace("FR-036-AC-3", "FR-037-AC-2")]
+#[trace("TC-1050", "FR-036-AC-3", "FR-037-AC-2")]
 fn valid_signature_without_a_mapped_signer_has_exact_reason() {
     let fixture = fixture();
     rating_file(&fixture);
@@ -333,6 +334,7 @@ fn valid_signature_without_a_mapped_signer_has_exact_reason() {
 
 #[test]
 /// PLAT-1448 FR‑021 / FR‑027 AC-4: a different mapped principal is refused.
+#[trace("TC-1050", "FR-037-AC-4")]
 fn mapped_signer_with_the_wrong_principal_has_exact_reason() {
     let fixture = fixture();
     rating_file(&fixture);
@@ -348,6 +350,7 @@ fn mapped_signer_with_the_wrong_principal_has_exact_reason() {
 
 #[test]
 /// PLAT-1448 FR‑021 / FR‑027: an uncommitted rating cannot be accepted.
+#[trace("TC-1050", "FR-090-AC-1")]
 fn uncommitted_rating_file_has_exact_reason() {
     let fixture = fixture();
     rating_file(&fixture);

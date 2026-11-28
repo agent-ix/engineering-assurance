@@ -868,7 +868,7 @@ fn tag_message(fixture: &Fixture, tag: &str) -> String {
 }
 
 #[test]
-#[trace("FR-085-AC-1", "FR-086-AC-1")]
+#[trace("TC-1177", "FR-085-AC-1", "FR-086-AC-1")]
 fn a_request_without_gesture_keeps_three_trailers_and_declares_none() {
     let fixture = fixture();
     fixture.ssh_config("a");
@@ -890,7 +890,7 @@ fn a_request_without_gesture_keeps_three_trailers_and_declares_none() {
 }
 
 #[test]
-#[trace("FR-085-AC-3", "FR-085-AC-8", "FR-086-AC-3", "FR-086-AC-8")]
+#[trace("TC-1177", "FR-085-AC-3", "FR-085-AC-8", "FR-086-AC-3", "FR-086-AC-8")]
 fn a_declared_gesture_is_copied_verbatim_and_never_changes_the_status() {
     let fixture = fixture();
     fixture.ssh_config("a");
@@ -932,7 +932,7 @@ fn a_declared_gesture_is_copied_verbatim_and_never_changes_the_status() {
 }
 
 #[test]
-#[trace("FR-085-AC-4")]
+#[trace("TC-1177", "FR-085-AC-4")]
 fn a_gesture_outside_the_three_values_is_refused_without_starting_git() {
     let fixture = fixture();
     fixture.ssh_config("a");
@@ -966,7 +966,7 @@ fn a_gesture_outside_the_three_values_is_refused_without_starting_git() {
 }
 
 #[test]
-#[trace("FR-085-AC-10")]
+#[trace("TC-1177", "FR-085-AC-10")]
 fn the_signing_run_keeps_its_environment_and_passes_stderr_through() {
     let fixture = fixture();
     fixture.ssh_config("a");
@@ -1034,7 +1034,7 @@ fn the_signing_run_keeps_its_environment_and_passes_stderr_through() {
 }
 
 #[test]
-#[trace("FR-086-AC-4", "FR-086-AC-5")]
+#[trace("TC-1177", "FR-086-AC-4", "FR-086-AC-5")]
 fn an_unrecognized_or_repeated_declaration_is_unrecognized_and_other_statuses_have_none() {
     let fixture = fixture();
     fixture.ssh_config("a");
@@ -1093,7 +1093,7 @@ fn an_unrecognized_or_repeated_declaration_is_unrecognized_and_other_statuses_ha
 }
 
 #[test]
-#[trace("FR-086-AC-2")]
+#[trace("TC-1177", "FR-086-AC-2")]
 fn an_oidc_interactive_declaration_through_the_gitsign_stand_in_is_declared_only() {
     let fixture = fixture();
     fixture.x509_config();
@@ -1204,7 +1204,7 @@ fn refs(fixture: &Fixture) -> String {
 }
 
 #[test]
-#[trace("FR-085-AC-5", "FR-085-AC-6", "FR-086-AC-2")]
+#[trace("TC-1177", "FR-085-AC-5", "FR-085-AC-6", "FR-086-AC-2")]
 fn ssh_add_c_confirms_each_signature_and_a_denial_creates_no_tag() {
     let fixture = fixture();
     let (askpass, log) = askpass_program(&fixture);
@@ -1415,7 +1415,7 @@ fn process_group_exists(group: i32) -> bool {
 }
 
 #[test]
-#[trace("FR-085-AC-2", "FR-085-AC-11")]
+#[trace("TC-1177", "FR-085-AC-2", "FR-085-AC-11")]
 fn a_signer_reads_the_terminal_in_the_foreground_and_the_group_is_restored() {
     let fixture = fixture();
     fixture.x509_config();
@@ -1447,7 +1447,7 @@ fn a_signer_reads_the_terminal_in_the_foreground_and_the_group_is_restored() {
 }
 
 #[test]
-#[trace("FR-085-AC-11")]
+#[trace("TC-1177", "FR-085-AC-11")]
 fn the_foreground_group_is_restored_after_a_signer_fails() {
     let fixture = fixture();
     fixture.x509_config();
@@ -1466,7 +1466,7 @@ fn the_foreground_group_is_restored_after_a_signer_fails() {
 }
 
 #[test]
-#[trace("FR-085-AC-1")]
+#[trace("TC-1177", "FR-085-AC-1")]
 fn without_a_gesture_git_runs_outside_the_terminal_foreground_group() {
     let fixture = fixture();
     fixture.x509_config();

@@ -352,7 +352,7 @@ mod receipts {
     }
 
     #[test]
-    #[trace("FR-043-AC-28", "FR-043-AC-30", "FR-082-AC-12")]
+    #[trace("TC-1190", "FR-043-AC-28", "FR-043-AC-30", "FR-082-AC-12")]
     fn an_unreceipted_policy_tag_for_another_record_is_visible_and_can_be_accepted() {
         let setup = setup();
         tag_message(
@@ -395,7 +395,7 @@ mod receipts {
     }
 
     #[test]
-    #[trace("FR-043-AC-32")]
+    #[trace("TC-1189", "FR-043-AC-32")]
     fn a_policy_without_tag_receipts_skips_existing_receipt_notes() {
         let setup = setup();
         tag_message(&setup.repo, "approve-record", &message(RECORD), None);
@@ -446,7 +446,7 @@ mod receipts {
     }
 
     #[test]
-    #[trace("FR-043-AC-31")]
+    #[trace("TC-1191", "FR-043-AC-31")]
     fn receipt_verification_uses_both_roots_and_each_tag_receipt_identity() {
         let directory = tempfile::tempdir().expect("tempdir");
         let repo = repository(directory.path());

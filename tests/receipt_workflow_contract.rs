@@ -419,7 +419,7 @@ fn run_receipt_notes_job(
 }
 
 #[cfg(unix)]
-#[trace("FR-076-AC-3")]
+#[trace("TC-599", "FR-076-AC-3")]
 #[test]
 fn receipt_note_jobs_merge_stale_pushes_and_fail_after_six_rejections() {
     let script = receipt_notes_workflow_script();

@@ -155,7 +155,7 @@ fn bindings() -> ProcedureBindings {
 }
 
 #[test]
-#[trace("TC-177", "FR-019-AC-9", "VO-001", "VO-012", "EN-006")]
+#[trace("TC-177", "FR-019-AC-9")]
 fn tc_177_generated_wire_is_closed_and_procedure_requires_valid_roles() {
     let mut value = serde_json::to_value(procedure()).expect("encode procedure");
     value["unknown"] = json!(true);
@@ -248,7 +248,7 @@ fn tc_177_generated_wire_is_closed_and_procedure_requires_valid_roles() {
 }
 
 #[test]
-#[trace("TC-178", "FR-019-AC-10", "VO-001")]
+#[trace("TC-178", "FR-019-AC-10")]
 fn tc_178_output_tree_is_declared_and_exactly_bound() {
     let mut value = serde_json::to_value(procedure()).expect("encode procedure");
     value["outputTrees"] = json!([{"role":"mutants", "required":true}]);
@@ -280,7 +280,7 @@ fn tc_178_output_tree_is_declared_and_exactly_bound() {
 }
 
 #[test]
-#[trace("TC-183", "FR-019-AC-10", "VO-011")]
+#[trace("TC-183", "FR-019-AC-10")]
 fn tc_183_dynamic_input_prefixes_are_component_safe_and_required_when_declared() {
     let mut procedure = procedure();
     procedure.input_role_prefixes = Some(vec![
@@ -322,7 +322,7 @@ fn tc_183_dynamic_input_prefixes_are_component_safe_and_required_when_declared()
 }
 
 #[test]
-#[trace("TC-184", "FR-019-AC-10", "VO-012", "EN-006")]
+#[trace("TC-184", "FR-019-AC-10")]
 fn tc_184_source_origin_binds_campaign_graph_and_runtime_selection() {
     let definition = sample_definition();
     let base = procedure();
@@ -391,7 +391,7 @@ fn tc_184_source_origin_binds_campaign_graph_and_runtime_selection() {
 }
 
 #[test]
-#[trace("TC-184", "FR-019-AC-10", "VO-012", "EN-006")]
+#[trace("TC-184", "FR-019-AC-10")]
 fn tc_184_dependency_origin_binds_declared_member_and_refuses_extra_input() {
     let definition = sample_definition();
     let base = procedure();
@@ -479,7 +479,7 @@ fn tc_184_dependency_origin_binds_declared_member_and_refuses_extra_input() {
 }
 
 #[test]
-#[trace("TC-184", "FR-019-AC-10", "VO-012", "EN-006")]
+#[trace("TC-184", "FR-019-AC-10")]
 fn tc_184_dependency_origin_accepts_only_declared_output_tree_child() {
     let definition = sample_definition();
     let mut upstream = procedure();
@@ -507,7 +507,7 @@ fn tc_184_dependency_origin_accepts_only_declared_output_tree_child() {
 }
 
 #[test]
-#[trace("TC-179", "FR-019-AC-9", "VO-004")]
+#[trace("TC-179", "FR-019-AC-9")]
 fn tc_179_campaign_rejects_stale_missing_and_cyclic_plan_graphs() {
     let procedure = procedure();
     let mut definition = sample_definition();
@@ -553,7 +553,7 @@ fn tc_179_campaign_rejects_stale_missing_and_cyclic_plan_graphs() {
 }
 
 #[test]
-#[trace("TC-180", "FR-019-AC-10", "VO-001")]
+#[trace("TC-180", "FR-019-AC-10")]
 fn tc_180_resolved_request_reflects_every_selected_binding() {
     let procedure = procedure();
     let source_graph = sample_definition().source_graph;
@@ -624,7 +624,7 @@ fn tc_186_retained_request_requires_exact_typed_shape_and_valid_structure() {
 }
 
 #[test]
-#[trace("TC-181", "FR-019-AC-11", "VO-007")]
+#[trace("TC-181", "FR-019-AC-11")]
 fn tc_181_run_inventory_rejects_unknown_attempt() {
     let definition = sample_definition();
     let mut run: CampaignRun = serde_json::from_value(json!({
@@ -669,7 +669,7 @@ fn git(root: &std::path::Path, args: &[&str]) -> Vec<u8> {
 }
 
 #[test]
-#[trace("TC-182", "TC-183", "FR-019-AC-10", "FR-019-AC-11", "VO-005", "VO-011")]
+#[trace("TC-182", "TC-183", "FR-019-AC-10", "FR-019-AC-11")]
 fn tc_182_source_projection_expands_the_git_tree_inventory() {
     let temp_root = if cfg!(target_os = "macos") {
         "/private/tmp"

@@ -632,6 +632,10 @@ fn passing_input_produces_three_public_log_signed_statements_with_linked_summary
     let summary_bytes = statement_payload(&result.bundles.summary);
     let summary_statement: Value =
         serde_json::from_slice(&summary_bytes).expect("summary statement");
+    assert_eq!(
+        summary_statement["predicate"]["timeVerified"], "2026-11-14T12:00:00Z",
+        "the summary uses the receipt's supplied creation time"
+    );
     let summary_digest = format!(
         "sha256:{}",
         sigstore_verify::crypto::sha256(
@@ -1283,6 +1287,7 @@ fn failed_gate_is_recorded_with_failed_summary() {
 
 #[trace("FR-074-AC-5", "FR-074-AC-6")]
 #[test]
+#[trace("TC-1184", "FR-074-AC-5", "FR-074-AC-6")]
 fn private_store_retains_full_private_form_before_signing_passed_and_failed_receipts() {
     let subject = subject();
     for (exit_code, expected_status) in [(0, Status::Passed), (1, Status::Failed)] {
@@ -1312,6 +1317,7 @@ fn private_store_retains_full_private_form_before_signing_passed_and_failed_rece
 
 #[trace("FR-074-AC-6")]
 #[test]
+#[trace("TC-1184", "FR-074-AC-6")]
 fn private_receipt_signer_failure_never_calls_the_public_log() {
     let subject = subject();
     let statements = receipt_statements_for_gate(&subject, 0);
@@ -1366,6 +1372,7 @@ fn private_receipt_signer_failure_never_calls_the_public_log() {
 
 #[trace("FR-074-AC-7", "FR-075-AC-7")]
 #[test]
+#[trace("TC-1184", "FR-074-AC-7", "FR-075-AC-7")]
 fn public_private_store_and_none_sinks_are_refused_before_retention() {
     let subject = subject();
     for (visibility, sink, expected_error) in [

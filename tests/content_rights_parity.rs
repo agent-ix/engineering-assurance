@@ -447,7 +447,7 @@ fn syft_installer_reads_the_registry_and_checks_the_archive_before_installing() 
 }
 
 #[test]
-#[trace("FR-079-AC-1")]
+#[trace("TC-618", "FR-079-AC-1")]
 fn attestation_predicate_uris_are_allowed_in_markdown_and_rust() {
     let tokens: Vec<String> = Vec::new();
     let approval = ["https:", "//schemas.agent-ix.ai/attestation/approval/v1"].concat();
@@ -467,7 +467,7 @@ fn attestation_predicate_uris_are_allowed_in_markdown_and_rust() {
 }
 
 #[test]
-#[trace("FR-079-AC-2")]
+#[trace("TC-619", "FR-079-AC-2")]
 fn attestation_schema_allowlist_rejects_lookalike_hosts() {
     let tokens: Vec<String> = Vec::new();
     let subdomain = [
@@ -493,7 +493,7 @@ fn attestation_schema_allowlist_rejects_lookalike_hosts() {
 }
 
 #[test]
-#[trace("FR-079-AC-3")]
+#[trace("TC-620", "FR-079-AC-3")]
 fn attestation_schema_allowlist_requires_https_and_attestation_path() {
     let tokens: Vec<String> = Vec::new();
     let other_path = ["https:", "//schemas.agent-ix.ai/other/approval/v1"].concat();

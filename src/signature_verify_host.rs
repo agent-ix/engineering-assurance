@@ -958,32 +958,35 @@ impl Git<'_> {
         } else {
             None
         };
+        let run_repository = tag_snapshot
+            .as_ref()
+            .map_or(self.repository, |snapshot| snapshot.directory.path());
+        let run_target = if tag_snapshot.is_some() {
+            SNAPSHOT_TAG
+        } else {
+            target
+        };
         Ok(classify_gitsign(
             kind,
             Some(&loaded.trust),
             false,
             |probe| {
-                match &tag_snapshot {
-                    // The ref must name the resolved object before and after the run;
-                    // anything else is a run that cannot be trusted.
-                    Some(snapshot) => {
-                        if !snapshot.binds_object() {
-                            return Run::SnapshotChanged;
-                        }
-                        let run = Self::gitsign_run(
-                            identity,
-                            kind,
-                            SNAPSHOT_TAG,
-                            snapshot.directory.path(),
-                            probe,
-                        );
-                        if snapshot.binds_object() {
-                            run
-                        } else {
-                            Run::SnapshotChanged
-                        }
-                    }
-                    None => Self::gitsign_run(identity, kind, target, self.repository, probe),
+                // The ref must name the resolved object before and after the run;
+                // anything else is a run that cannot be trusted.
+                if tag_snapshot
+                    .as_ref()
+                    .is_some_and(|snapshot| !snapshot.binds_object())
+                {
+                    return Run::SnapshotChanged;
+                }
+                let run = self.gitsign_run(identity, kind, run_target, run_repository, probe);
+                if tag_snapshot
+                    .as_ref()
+                    .is_some_and(|snapshot| !snapshot.binds_object())
+                {
+                    Run::SnapshotChanged
+                } else {
+                    run
                 }
             },
         ))
@@ -1006,6 +1009,7 @@ impl Git<'_> {
     /// One `gitsign` invocation of the procedure, as separate arguments and
     /// never through a shell.
     fn gitsign_run(
+        &self,
         identity: &GitsignIdentity,
         kind: TargetKind,
         target: &str,

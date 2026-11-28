@@ -1875,7 +1875,7 @@ mod foreground_group_tests {
     use super::ForegroundGroup;
 
     #[test]
-    #[trace("FR-085-AC-13")]
+    #[trace("TC-1159", "FR-085-AC-13")]
     fn restoration_failure_is_reported_after_a_cleanup_retry() {
         let mut group = ForegroundGroup {
             tty: File::open("/dev/null").expect("null device"),

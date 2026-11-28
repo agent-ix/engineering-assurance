@@ -350,7 +350,7 @@ mod tests {
         tagger_signed_at(object.as_bytes()).expect("fixture tagger date is valid")
     }
 
-    #[trace("FR-041-AC-28")]
+    #[trace("TC-1017", "FR-041-AC-28")]
     #[test]
     fn trusted_time_is_utc_and_time_skew_is_signed_minus_integrated_time() {
         let later = trusted_time(1_700_000_000, Some(&signed_at("1700000010")));
