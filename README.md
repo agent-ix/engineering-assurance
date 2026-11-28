@@ -169,8 +169,8 @@ CLI, and the agent plugin or skill.
 | --- | --- | --- |
 | Quire module | `quoin module list` | `engineering-assurance` is listed. |
 | Native CLI | `engineering-assurance --version` | `command not found` means `~/.cargo/bin` is not on `PATH`. |
-| Claude Code plugin | `claude plugin list` (or `/plugin` in a session) | `engineering-assurance@engineering-assurance` is listed as enabled. |
-| Codex plugin | `codex plugin list \| grep engineering-assurance` | `engineering-assurance@engineering-assurance` shows `installed, enabled`. |
+| Claude Code plugin | `claude plugin list` (or `/plugin` in a session) | `engineering-assurance@agent-ix` is listed as enabled. |
+| Codex plugin | `codex plugin list \| grep -F engineering-assurance@agent-ix` | `engineering-assurance@agent-ix` shows `installed, enabled`. |
 
 Check the row for each of Claude Code and Codex that you use. For OpenCode or
 GitHub Copilot, confirm the skill appears in that agent's skill list. An agent
