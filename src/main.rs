@@ -60,6 +60,7 @@ const APPROVAL_GATE_CAPABILITY: &str = "review-gate";
 const APPROVAL_VERIFY_CAPABILITY: &str = "approval-verify";
 const APPROVAL_TRAIL_CAPABILITY: &str = "approval-trail";
 const ATTESTATION_VERIFY_CAPABILITY: &str = "attestation-verify";
+const RELEASE_ROLES_VERIFY_CAPABILITY: &str = "release-roles-verify";
 const AGENT_EVALS_PROVIDER_CAPABILITY: &str = "agent-evals-provider";
 const AGENT_EVALS_CAPABILITY: &str = "agent-evals";
 const CONTENT_RIGHTS_TREE_CAPABILITY: &str = "content-rights-tree";
@@ -157,6 +158,7 @@ fn command() -> Command {
         .subcommand(signature_verify_command())
         .subcommand(proof_checkpoint_verify_command())
         .subcommand(attestation_verify_command())
+        .subcommand(release_roles_verify_command())
         .subcommand(approval_verify_command())
         .subcommand(approval_tag_command())
         .subcommand(approval_trail_command())
@@ -263,6 +265,18 @@ fn attestation_verify_command() -> Command {
                 .long("request")
                 .value_name("JSON")
                 .help("Attestation-verify request document, or - to read it from stdin")
+                .required(true),
+        )
+}
+
+fn release_roles_verify_command() -> Command {
+    Command::new(RELEASE_ROLES_VERIFY_CAPABILITY)
+        .about("Verify the signed release tag and retained approval roles before attestation")
+        .arg(
+            Arg::new("request")
+                .long("request")
+                .value_name("JSON")
+                .help("Release-roles-verify request document, or - to read it from stdin")
                 .required(true),
         )
 }
@@ -541,6 +555,7 @@ fn main() -> ExitCode {
             run_proof_checkpoint_verify(arguments)
         }
         Some((ATTESTATION_VERIFY_CAPABILITY, arguments)) => run_attestation_verify(arguments),
+        Some((RELEASE_ROLES_VERIFY_CAPABILITY, arguments)) => run_release_roles_verify(arguments),
         Some((APPROVAL_VERIFY_CAPABILITY, arguments)) => run_approval_verify(arguments),
         Some((APPROVAL_TAG_CAPABILITY, arguments)) => run_approval_tag(arguments),
         Some((APPROVAL_GATE_CAPABILITY, arguments)) => run_approval_gate(arguments),
@@ -1066,6 +1081,18 @@ fn run_attestation_verify(arguments: &ArgMatches) -> ExitCode {
         "attestation_verify_request_unreadable",
         |bytes| {
             attestation_verify_host::execute(bytes)
+                .map_err(|error| (error.code(), error.to_string()))
+        },
+    )
+}
+
+fn run_release_roles_verify(arguments: &ArgMatches) -> ExitCode {
+    run_request_line(
+        arguments,
+        RELEASE_ROLES_VERIFY_CAPABILITY,
+        "release_roles_verify_request_unreadable",
+        |bytes| {
+            attestation_verify_host::execute_roles(bytes)
                 .map_err(|error| (error.code(), error.to_string()))
         },
     )

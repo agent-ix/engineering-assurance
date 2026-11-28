@@ -12,16 +12,25 @@ use std::{
 };
 
 use engineering_assurance::{
-    approval_gate::{RolePolicy, parse_policy},
+    approval_gate::{GateErrorCode, GateStatus, RolePolicy, parse_policy},
+    approval_statement::{
+        ApprovalStatementLookup, ApprovalStatementReason, ApprovalStatementResult,
+        ApprovalStatementStatus, verify_approval_statements,
+    },
     attestation_signing::{
-        SigstoreBundleVerifier, SourceWorkflowPolicy, TransparencyRequirement,
+        SigstoreBundleVerifier, SigstoreSigner, SourceWorkflowPolicy, TransparencyRequirement,
         WorkflowIdentityDocument, WorkflowIdentityPolicy, WorkflowRole,
     },
     attestation_verify::{
         ArtifactSubject, ExpectedRelease, ReleaseInputs, SignedStatement, VerificationConditions,
         canonical_digest, verify_release_attestation_set,
     },
+    producer_execution::private_git_store::{
+        GitPrivateStore, HttpsGitDestinationResolver, RecordPublisherIdentity,
+    },
+    record_sink::config::{PolicySource, SinkConfig, Visibility, resolve_sink_for_repository},
 };
+use ix_trace_rs::implements;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -29,6 +38,8 @@ use crate::process_host::{self, ProcessLimits};
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.attestation-verify-request/v1";
 const RESULT_PROTOCOL: &str = "engineering-assurance.attestation-verify-result/v1";
+const ROLE_REQUEST_PROTOCOL: &str = "engineering-assurance.release-roles-verify-request/v1";
+const ROLE_RESULT_PROTOCOL: &str = "engineering-assurance.release-roles-verify-result/v1";
 const MAX_DOCUMENT_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_ARTIFACT_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_ARTIFACTS: usize = 64;
@@ -61,9 +72,39 @@ struct Request {
     signer_repository: String,
     signer_workflow_path: String,
     signer_ref: String,
+    approval_signer_repository: String,
+    approval_signer_workflow_path: String,
+    approval_signer_ref: String,
+    record_publisher_repository: String,
+    record_publisher_workflow_path: String,
+    record_publisher_ref: String,
     transparency: String,
     artifacts: Vec<ArtifactRequest>,
     statements: StatementSetRequest,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RoleRequest {
+    protocol: String,
+    github_repository: String,
+    repository: PathBuf,
+    tag: String,
+    record_path: String,
+    allowed_signers_path: String,
+    base_branch: String,
+    signer_repository: String,
+    signer_workflow_path: String,
+    signer_ref: String,
+    approval_signer_repository: String,
+    approval_signer_workflow_path: String,
+    approval_signer_ref: String,
+    record_publisher_repository: String,
+    record_publisher_workflow_path: String,
+    record_publisher_ref: String,
+    transparency: String,
+    release_artifacts: PathBuf,
+    execution_provenance_bundle: PathBuf,
 }
 
 #[derive(Deserialize)]
@@ -76,6 +117,7 @@ struct ArtifactRequest {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StatementSetRequest {
+    execution_provenance: SignedStatementRequest,
     provenance: SignedStatementRequest,
     sbom: SignedStatementRequest,
     test_result: SignedStatementRequest,
@@ -97,6 +139,14 @@ struct ResultLine {
     commit: String,
 }
 
+#[derive(Serialize)]
+struct RoleResultLine {
+    protocol: &'static str,
+    status: &'static str,
+    tag: String,
+    commit: String,
+}
+
 #[derive(Debug, Error)]
 pub(crate) enum AttestationVerifyError {
     #[error("attestation-verify request is not readable JSON")]
@@ -107,6 +157,12 @@ pub(crate) enum AttestationVerifyError {
     Policy,
     #[error("attestation-verify approval-statement source is unavailable")]
     RoleSourceUnavailable,
+    #[error("attestation-verify release commit has no merged pull request")]
+    NoPullRequest,
+    #[error("attestation-verify approval statements are not retained yet")]
+    StatementsPending,
+    #[error("attestation-verify approval policy has an unstaffed required role")]
+    RoleUnstaffed,
     #[error("attestation-verify policy base branch is not protected")]
     Unprotected,
     #[error("attestation-verify release tag is not verified")]
@@ -124,6 +180,9 @@ impl AttestationVerifyError {
             Self::Invalid => "attestation_verify_request_invalid",
             Self::Policy => "attestation_verify_policy_invalid",
             Self::RoleSourceUnavailable => "release_roles_source_unavailable",
+            Self::NoPullRequest => "release_roles_no_pull_request",
+            Self::StatementsPending => "release_roles_statements_pending",
+            Self::RoleUnstaffed => "approval_role_unstaffed",
             Self::Unprotected => "policy_branch_unprotected",
             Self::Release => "release_not_verified",
             Self::Statement => "attestation_set_invalid",
@@ -146,6 +205,7 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, AttestationVerifyError> {
     )?;
     let policies = load_verification_policies(&request, &base_commit)?;
     let commit = verify_release_tag(&request, policies.allowed_signers.path())?;
+    verify_role_statements(&request, &commit, &policies)?;
     let attestations = read_attestations(&request)?;
     let expected = expected_release(
         &request,
@@ -157,16 +217,193 @@ pub(crate) fn execute(bytes: &[u8]) -> Result<Vec<u8>, AttestationVerifyError> {
     encode_result(request.tag, commit)
 }
 
+/// Verify the signed release tag and exact retained approval roles before the
+/// reusable workflow creates any release attestations.
+#[implements("FR-069-AC-5", "FR-069-AC-6")]
+pub(crate) fn execute_roles(bytes: &[u8]) -> Result<Vec<u8>, AttestationVerifyError> {
+    let source: RoleRequest =
+        serde_json::from_slice(bytes).map_err(|_| AttestationVerifyError::Invalid)?;
+    if source.protocol != ROLE_REQUEST_PROTOCOL {
+        return Err(AttestationVerifyError::Invalid);
+    }
+    let execution_provenance_bundle = source.execution_provenance_bundle;
+    let request = Request {
+        protocol: REQUEST_PROTOCOL.to_owned(),
+        github_repository: source.github_repository,
+        repository: source.repository,
+        tag: source.tag,
+        record_path: source.record_path,
+        allowed_signers_path: source.allowed_signers_path,
+        base_branch: source.base_branch,
+        signer_repository: source.signer_repository,
+        signer_workflow_path: source.signer_workflow_path,
+        signer_ref: source.signer_ref,
+        approval_signer_repository: source.approval_signer_repository,
+        approval_signer_workflow_path: source.approval_signer_workflow_path,
+        approval_signer_ref: source.approval_signer_ref,
+        record_publisher_repository: source.record_publisher_repository,
+        record_publisher_workflow_path: source.record_publisher_workflow_path,
+        record_publisher_ref: source.record_publisher_ref,
+        transparency: source.transparency,
+        artifacts: release_artifacts(&source.release_artifacts)?,
+        statements: StatementSetRequest {
+            execution_provenance: SignedStatementRequest {
+                payload: PathBuf::from("/dev/null"),
+                bundle: execution_provenance_bundle,
+            },
+            provenance: SignedStatementRequest {
+                payload: PathBuf::from("/dev/null"),
+                bundle: PathBuf::from("/dev/null"),
+            },
+            sbom: SignedStatementRequest {
+                payload: PathBuf::from("/dev/null"),
+                bundle: PathBuf::from("/dev/null"),
+            },
+            test_result: SignedStatementRequest {
+                payload: PathBuf::from("/dev/null"),
+                bundle: PathBuf::from("/dev/null"),
+            },
+            summary: SignedStatementRequest {
+                payload: PathBuf::from("/dev/null"),
+                bundle: PathBuf::from("/dev/null"),
+            },
+        },
+    };
+    validate_request(&request)?;
+    if !checkout_matches_repository(&request.repository, &request.github_repository)? {
+        return Err(AttestationVerifyError::Invalid);
+    }
+    let base_commit = protected_base_commit(
+        &request.github_repository,
+        &request.repository,
+        &request.base_branch,
+    )?;
+    let policies = load_verification_policies(&request, &base_commit)?;
+    let commit = verify_release_tag(&request, policies.allowed_signers.path())?;
+    verify_execution_provenance_before_export(&request, &commit, &policies)?;
+    verify_role_statements(&request, &commit, &policies)?;
+    let mut result = serde_json::to_vec(&RoleResultLine {
+        protocol: ROLE_RESULT_PROTOCOL,
+        status: "satisfied",
+        tag: request.tag,
+        commit,
+    })
+    .map_err(|_| AttestationVerifyError::Encoding)?;
+    result.push(b'\n');
+    Ok(result)
+}
+
+#[implements("FR-069-AC-5", "FR-069-AC-6")]
+fn verify_execution_provenance_before_export(
+    request: &Request,
+    commit: &str,
+    policies: &VerificationPolicies,
+) -> Result<(), AttestationVerifyError> {
+    let bundle_bytes = read_bounded(
+        &request.statements.execution_provenance.bundle,
+        MAX_DOCUMENT_BYTES,
+    )
+    .map_err(|()| AttestationVerifyError::Statement)?;
+    let bundle_json =
+        std::str::from_utf8(&bundle_bytes).map_err(|_| AttestationVerifyError::Statement)?;
+    let bundle = sigstore_types::Bundle::from_json(bundle_json)
+        .map_err(|_| AttestationVerifyError::Statement)?;
+    let sigstore_types::SignatureContent::DsseEnvelope(envelope) = bundle.content else {
+        return Err(AttestationVerifyError::Statement);
+    };
+    if envelope.payload_type != "application/vnd.in-toto+json" {
+        return Err(AttestationVerifyError::Statement);
+    }
+    let artifacts = request
+        .artifacts
+        .iter()
+        .map(|artifact| {
+            let path = absolute_file(&artifact.path, MAX_ARTIFACT_BYTES)
+                .map_err(|()| AttestationVerifyError::Invalid)?;
+            Ok(ArtifactSubject {
+                name: artifact.name.clone(),
+                sha256: sha256_file(&path).map_err(|()| AttestationVerifyError::Statement)?,
+            })
+        })
+        .collect::<Result<Vec<_>, AttestationVerifyError>>()?;
+    let trusted_root_json = match policies.transparency {
+        TransparencyRequirement::PublicLog => {
+            sigstore_verify::trust_root::SIGSTORE_PRODUCTION_TRUSTED_ROOT
+        }
+        TransparencyRequirement::TimestampOnly => {
+            sigstore_verify::trust_root::SIGSTORE_GITHUB_TRUSTED_ROOT
+        }
+    };
+    let trusted_root = sigstore_verify::trust_root::TrustedRoot::from_json(trusted_root_json)
+        .map_err(|_| AttestationVerifyError::Policy)?;
+    let verifier =
+        SigstoreBundleVerifier::new(&trusted_root).map_err(|_| AttestationVerifyError::Policy)?;
+    engineering_assurance::attestation_verify::verify_execution_provenance(
+        &verifier,
+        &policies.signer,
+        &policies.source,
+        commit,
+        &artifacts,
+        envelope.payload.as_ref(),
+        bundle_json,
+    )
+    .map_err(|_| AttestationVerifyError::Statement)?;
+    Ok(())
+}
+
+fn release_artifacts(root: &Path) -> Result<Vec<ArtifactRequest>, AttestationVerifyError> {
+    if !root.is_absolute() || !root.is_dir() {
+        return Err(AttestationVerifyError::Invalid);
+    }
+    let mut pending = vec![root.to_path_buf()];
+    let mut artifacts = Vec::new();
+    while let Some(directory) = pending.pop() {
+        let entries = fs::read_dir(&directory).map_err(|_| AttestationVerifyError::Invalid)?;
+        for entry in entries {
+            let entry = entry.map_err(|_| AttestationVerifyError::Invalid)?;
+            let path = entry.path();
+            let metadata =
+                fs::symlink_metadata(&path).map_err(|_| AttestationVerifyError::Invalid)?;
+            if metadata.file_type().is_symlink() {
+                return Err(AttestationVerifyError::Invalid);
+            }
+            if metadata.is_dir() {
+                pending.push(path);
+            } else if metadata.is_file() && artifacts.len() < MAX_ARTIFACTS {
+                let name = path
+                    .strip_prefix(root)
+                    .map_err(|_| AttestationVerifyError::Invalid)?
+                    .to_str()
+                    .ok_or(AttestationVerifyError::Invalid)?
+                    .replace('\\', "/");
+                artifacts.push(ArtifactRequest { name, path });
+            } else {
+                return Err(AttestationVerifyError::Invalid);
+            }
+        }
+    }
+    artifacts.sort_by(|left, right| left.name.cmp(&right.name));
+    if artifacts.is_empty() {
+        return Err(AttestationVerifyError::Invalid);
+    }
+    Ok(artifacts)
+}
+
 struct VerificationPolicies {
+    base_commit: String,
     allowed_signers: tempfile::NamedTempFile,
     signer: WorkflowIdentityPolicy,
     source: SourceWorkflowPolicy,
     transparency: TransparencyRequirement,
+    role_policy: RolePolicy,
+    identities: WorkflowIdentityDocument,
+    private_store_destination: String,
 }
 
 struct AttestationSet {
     artifacts: Vec<ArtifactSubject>,
     input_digests: [String; 3],
+    execution_provenance: ReadStatement,
     provenance: ReadStatement,
     sbom: ReadStatement,
     test_result: ReadStatement,
@@ -211,7 +448,24 @@ fn load_verification_policies(
     )
     .map_err(|()| AttestationVerifyError::Policy)?;
     let role_policy = parse_policy(&role_bytes).map_err(|_| AttestationVerifyError::Policy)?;
-    verify_role_statements(&role_policy)?;
+    let sink_bytes = git_show_base_file(
+        &request.repository,
+        base_commit,
+        ".engineering-assurance/sinks.json",
+        MAX_DOCUMENT_BYTES,
+    )
+    .map_err(|()| AttestationVerifyError::Policy)?;
+    let sink_config = SinkConfig::parse(&sink_bytes).map_err(|_| AttestationVerifyError::Policy)?;
+    let sink = resolve_sink_for_repository(
+        Some(&sink_config),
+        Visibility::Private,
+        &request.github_repository,
+    )
+    .map_err(|_| AttestationVerifyError::Policy)?;
+    let private_store_destination = sink
+        .private_store_destination
+        .filter(|destination| !destination.is_empty())
+        .ok_or(AttestationVerifyError::Policy)?;
 
     let transparency = match request.transparency.as_str() {
         "public_log" => TransparencyRequirement::PublicLog,
@@ -236,10 +490,14 @@ fn load_verification_policies(
         )
         .ok_or(AttestationVerifyError::Policy)?;
     Ok(VerificationPolicies {
+        base_commit: base_commit.to_owned(),
         allowed_signers,
         signer,
         source,
         transparency,
+        role_policy,
+        identities,
+        private_store_destination,
     })
 }
 
@@ -281,6 +539,7 @@ fn read_attestations(request: &Request) -> Result<AttestationSet, AttestationVer
             })
         })
         .collect::<Result<Vec<_>, AttestationVerifyError>>()?;
+    let execution_provenance = read_signed_statement(&request.statements.execution_provenance)?;
     let provenance = read_signed_statement(&request.statements.provenance)?;
     let sbom = read_signed_statement(&request.statements.sbom)?;
     let test_result = read_signed_statement(&request.statements.test_result)?;
@@ -296,6 +555,7 @@ fn read_attestations(request: &Request) -> Result<AttestationSet, AttestationVer
     Ok(AttestationSet {
         artifacts,
         input_digests,
+        execution_provenance,
         provenance,
         sbom,
         test_result,
@@ -346,6 +606,16 @@ fn verify_attestations(
         .map_err(|_| AttestationVerifyError::Policy)?;
     let verifier =
         SigstoreBundleVerifier::new(&trusted_root).map_err(|_| AttestationVerifyError::Policy)?;
+    engineering_assurance::attestation_verify::verify_execution_provenance(
+        &verifier,
+        &policies.signer,
+        &policies.source,
+        &expected.commit,
+        &attestations.artifacts,
+        &attestations.execution_provenance.payload,
+        &attestations.execution_provenance.bundle,
+    )
+    .map_err(|_| AttestationVerifyError::Statement)?;
     verify_release_attestation_set(
         &verifier,
         &policies.signer,
@@ -391,13 +661,205 @@ fn encode_result(tag: String, commit: String) -> Result<Vec<u8>, AttestationVeri
     Ok(result)
 }
 
-/// Require role coverage from the shared FR-064 statement-verification path.
+/// Resolve the merged PR from the authenticated source before consulting the
+/// retained approval statements. A caller-provided role verdict is never used.
+#[implements("FR-067-AC-6")]
+fn verify_role_statements(
+    request: &Request,
+    release_commit: &str,
+    policies: &VerificationPolicies,
+) -> Result<(), AttestationVerifyError> {
+    let endpoint = format!(
+        "repos/{}/commits/{release_commit}/pulls?per_page=100",
+        request.github_repository
+    );
+    let arguments = [OsStr::new("api"), OsStr::new(&endpoint)];
+    let response = process_host::run(
+        OsStr::new("gh"),
+        &arguments,
+        ProcessLimits {
+            timeout: PROCESS_TIMEOUT,
+            max_output_bytes: usize::try_from(MAX_DOCUMENT_BYTES).unwrap_or(usize::MAX),
+        },
+    )
+    .map_err(|_| AttestationVerifyError::RoleSourceUnavailable)?;
+    if !response.status.success() {
+        return Err(AttestationVerifyError::RoleSourceUnavailable);
+    }
+    let value: serde_json::Value = serde_json::from_slice(&response.stdout)
+        .map_err(|_| AttestationVerifyError::RoleSourceUnavailable)?;
+    let pull_request = select_merged_pull_request(&value, release_commit)?;
+    let workflow_signer = policies
+        .identities
+        .signer_policy(
+            WorkflowRole::StatementWriter,
+            &request.approval_signer_repository,
+            &request.approval_signer_workflow_path,
+            &request.approval_signer_ref,
+            policies.transparency,
+        )
+        .ok_or(AttestationVerifyError::Policy)?;
+    let publisher = RecordPublisherIdentity {
+        repository: request.record_publisher_repository.clone(),
+        workflow_path: request.record_publisher_workflow_path.clone(),
+        reference: request.record_publisher_ref.clone(),
+    };
+    let protected_source = ProtectedBasePolicySource {
+        repository: request.repository.clone(),
+        base_commit: policies.base_commit.clone(),
+    };
+    let trusted_root_json = match policies.transparency {
+        TransparencyRequirement::PublicLog => {
+            sigstore_verify::trust_root::SIGSTORE_PRODUCTION_TRUSTED_ROOT
+        }
+        TransparencyRequirement::TimestampOnly => {
+            sigstore_verify::trust_root::SIGSTORE_GITHUB_TRUSTED_ROOT
+        }
+    };
+    let trusted_root = sigstore_verify::trust_root::TrustedRoot::from_json(trusted_root_json)
+        .map_err(|_| AttestationVerifyError::Policy)?;
+    let verifier =
+        SigstoreBundleVerifier::new(&trusted_root).map_err(|_| AttestationVerifyError::Policy)?;
+    let resolver = HttpsGitDestinationResolver::new(concat!("https:", "//github.com"))
+        .map_err(|_| AttestationVerifyError::Policy)?;
+    let signer = SigstoreSigner::new();
+    let reader = GitPrivateStore::new(
+        &resolver,
+        &signer,
+        &verifier,
+        &protected_source,
+        &publisher,
+        &request.github_repository,
+        "git",
+    )
+    .map_err(|_| AttestationVerifyError::RoleSourceUnavailable)?;
+    let pull_request_reference = format!("{}#{}", request.github_repository, pull_request.number);
+    let result = verify_approval_statements(
+        &reader,
+        &policies.private_store_destination,
+        ApprovalStatementLookup {
+            repository: &request.github_repository,
+            merged_pull_request: &pull_request_reference,
+            merged_commit: release_commit,
+        },
+        &workflow_signer,
+        &policies.role_policy,
+        &verifier,
+    );
+    classify_approval_result(&result)
+}
+
+fn classify_approval_result(
+    result: &ApprovalStatementResult,
+) -> Result<(), AttestationVerifyError> {
+    if result.role_verdict.error == Some(GateErrorCode::ApprovalRoleUnstaffed) {
+        return Err(AttestationVerifyError::RoleUnstaffed);
+    }
+    match result.status {
+        ApprovalStatementStatus::Verified
+            if result.role_verdict.status == GateStatus::Satisfied =>
+        {
+            Ok(())
+        }
+        ApprovalStatementStatus::Unverifiable
+            if result.reason == Some(ApprovalStatementReason::StatementsNotRetained) =>
+        {
+            Err(AttestationVerifyError::StatementsPending)
+        }
+        ApprovalStatementStatus::Unverifiable => Err(AttestationVerifyError::RoleSourceUnavailable),
+        _ => Err(AttestationVerifyError::Statement),
+    }
+}
+
+struct ProtectedBasePolicySource {
+    repository: PathBuf,
+    base_commit: String,
+}
+
+impl PolicySource for ProtectedBasePolicySource {
+    fn base_branch_protected(&self) -> Option<bool> {
+        Some(true)
+    }
+
+    fn read_from_base_branch(&self, path: &str) -> Option<Vec<u8>> {
+        git_show_base_file(
+            &self.repository,
+            &self.base_commit,
+            path,
+            MAX_DOCUMENT_BYTES,
+        )
+        .ok()
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct MergedPullRequest {
+    number: u64,
+    head_commit: String,
+}
+
+/// Select the unique merged PR whose immutable merge result is the tagged commit.
 ///
-/// The private-store reader contract is not available in this command yet. A
-/// caller-provided role verdict or approval statement is not trusted input, so
-/// release verification cannot proceed until the single reader is wired here.
-fn verify_role_statements(_policy: &RolePolicy) -> Result<(), AttestationVerifyError> {
-    Err(AttestationVerifyError::RoleSourceUnavailable)
+/// GitHub's commit-to-PR endpoint is an authenticated source boundary. An
+/// empty result means the tag is not a PR merge result; malformed, ambiguous,
+/// or incomplete source data is unavailable and must remain retryable.
+fn merged_pull_request_for_commit(
+    response: &serde_json::Value,
+    commit: &str,
+) -> Result<Option<MergedPullRequest>, ()> {
+    let entries = response.as_array().ok_or(())?;
+    if entries.len() > 100 {
+        return Err(());
+    }
+    let mut matching = Vec::new();
+    for entry in entries {
+        let number = entry
+            .get("number")
+            .and_then(serde_json::Value::as_u64)
+            .filter(|number| *number > 0)
+            .ok_or(())?;
+        let state = entry
+            .get("state")
+            .and_then(serde_json::Value::as_str)
+            .filter(|state| matches!(*state, "open" | "closed"))
+            .ok_or(())?;
+        let head_commit = entry
+            .pointer("/head/sha")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| is_commit_id(value))
+            .ok_or(())?;
+        let merged_at = entry.get("merged_at").ok_or(())?;
+        let merge_commit = entry.get("merge_commit_sha").ok_or(())?;
+        let merged_at = match merged_at {
+            serde_json::Value::Null => None,
+            serde_json::Value::String(value) if !value.is_empty() => Some(value.as_str()),
+            _ => return Err(()),
+        };
+        let merge_commit = match merge_commit {
+            serde_json::Value::Null => None,
+            serde_json::Value::String(value) if is_commit_id(value) => Some(value.as_str()),
+            _ => return Err(()),
+        };
+        if state == "closed" && merged_at.is_some() && merge_commit == Some(commit) {
+            matching.push(MergedPullRequest {
+                number,
+                head_commit: head_commit.to_owned(),
+            });
+        }
+    }
+    if matching.len() > 1 {
+        return Err(());
+    }
+    Ok(matching.pop())
+}
+
+fn select_merged_pull_request(
+    response: &serde_json::Value,
+    commit: &str,
+) -> Result<MergedPullRequest, AttestationVerifyError> {
+    merged_pull_request_for_commit(response, commit)
+        .map_err(|()| AttestationVerifyError::RoleSourceUnavailable)?
+        .ok_or(AttestationVerifyError::NoPullRequest)
 }
 
 struct ReadStatement {
@@ -418,6 +880,14 @@ fn validate_request(request: &Request) -> Result<(), AttestationVerifyError> {
         || !valid_workflow_path(&request.signer_workflow_path)
         || !request.signer_ref.starts_with("refs/tags/")
         || !valid_ref(&request.signer_ref)
+        || !valid_repository(&request.approval_signer_repository)
+        || !valid_workflow_path(&request.approval_signer_workflow_path)
+        || !request.approval_signer_ref.starts_with("refs/heads/")
+        || !valid_ref(&request.approval_signer_ref)
+        || !valid_repository(&request.record_publisher_repository)
+        || !valid_workflow_path(&request.record_publisher_workflow_path)
+        || !request.record_publisher_ref.starts_with("refs/heads/")
+        || !valid_ref(&request.record_publisher_ref)
         || request.artifacts.is_empty()
         || request.artifacts.len() > MAX_ARTIFACTS
     {
@@ -733,6 +1203,7 @@ fn valid_ref(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use engineering_assurance::approval_gate::GateResult;
     use ix_trace_rs::trace;
 
     fn request_json() -> serde_json::Value {
@@ -747,15 +1218,129 @@ mod tests {
             "signer_repository": "agent-ix/engineering-assurance",
             "signer_workflow_path": ".github/workflows/release-attestation.yml",
             "signer_ref": "refs/tags/v0.9.0",
+            "approval_signer_repository": "fictional/project",
+            "approval_signer_workflow_path": ".github/workflows/review-gate.yml",
+            "approval_signer_ref": "refs/heads/main",
+            "record_publisher_repository": "fictional/project",
+            "record_publisher_workflow_path": ".github/workflows/record-publish.yml",
+            "record_publisher_ref": "refs/heads/main",
             "transparency": "public_log",
             "artifacts": [{"name":"release.tar.gz", "path":"/tmp/release.tar.gz"}],
             "statements": {
+                "execution_provenance":{"payload":"/tmp/execution-provenance.json", "bundle":"/tmp/execution-provenance.bundle"},
                 "provenance":{"payload":"/tmp/provenance.json", "bundle":"/tmp/provenance.bundle"},
                 "sbom":{"payload":"/tmp/sbom.json", "bundle":"/tmp/sbom.bundle"},
                 "test_result":{"payload":"/tmp/test-result.json", "bundle":"/tmp/test-result.bundle"},
                 "summary":{"payload":"/tmp/summary.json", "bundle":"/tmp/summary.bundle"}
             }
         })
+    }
+
+    #[trace("TC-1055", "FR-067-AC-6", "FR-067-AC-8")]
+    #[test]
+    fn source_lookup_requires_the_tagged_commit_to_be_the_unique_merge_result() {
+        let commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let head = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        let squash = serde_json::json!([{
+            "number": 42,
+            "state": "closed",
+            "merged_at": "2026-11-27T12:00:00Z",
+            "merge_commit_sha": commit,
+            "head": {"sha": head}
+        }]);
+        assert_eq!(
+            merged_pull_request_for_commit(&squash, commit),
+            Ok(Some(MergedPullRequest {
+                number: 42,
+                head_commit: head.to_owned(),
+            }))
+        );
+
+        let direct_push = serde_json::json!([]);
+        assert_eq!(
+            merged_pull_request_for_commit(&direct_push, commit),
+            Ok(None)
+        );
+        assert_eq!(
+            select_merged_pull_request(&direct_push, commit)
+                .expect_err("direct push has no merged PR")
+                .code(),
+            "release_roles_no_pull_request"
+        );
+
+        let rebased_non_tip = serde_json::json!([{
+            "number": 42,
+            "state": "closed",
+            "merged_at": "2026-11-27T12:00:00Z",
+            "merge_commit_sha": "cccccccccccccccccccccccccccccccccccccccc",
+            "head": {"sha": head}
+        }]);
+        assert_eq!(
+            merged_pull_request_for_commit(&rebased_non_tip, commit),
+            Ok(None)
+        );
+        assert_eq!(
+            select_merged_pull_request(&rebased_non_tip, commit)
+                .expect_err("non-tip rebased commit has no merged PR result")
+                .code(),
+            "release_roles_no_pull_request"
+        );
+
+        let ambiguous = serde_json::json!([
+            squash[0].clone(),
+            {
+                "number": 43,
+                "state": "closed",
+                "merged_at": "2026-11-27T13:00:00Z",
+                "merge_commit_sha": commit,
+                "head": {"sha": head}
+            }
+        ]);
+        assert!(merged_pull_request_for_commit(&ambiguous, commit).is_err());
+    }
+
+    #[trace("TC-1057", "FR-067-AC-4", "FR-067-AC-5")]
+    #[test]
+    fn approval_result_names_unstaffed_roles_and_pending_statements() {
+        let pending = ApprovalStatementResult {
+            status: ApprovalStatementStatus::Unverifiable,
+            reason: Some(ApprovalStatementReason::StatementsNotRetained),
+            role_verdict: GateResult {
+                protocol: "engineering-assurance.approval-gate/v1",
+                status: GateStatus::Unsatisfied,
+                required_roles: vec!["release_owner".to_owned()],
+                assignments: Vec::new(),
+                missing: Vec::new(),
+                error: None,
+                unavailable_accounts: Vec::new(),
+            },
+        };
+        assert_eq!(
+            classify_approval_result(&pending)
+                .expect_err("not-yet-retained statements are retryable")
+                .code(),
+            "release_roles_statements_pending"
+        );
+
+        let unstaffed = ApprovalStatementResult {
+            status: ApprovalStatementStatus::Unverifiable,
+            reason: Some(ApprovalStatementReason::InputUnreadable),
+            role_verdict: GateResult {
+                protocol: "engineering-assurance.approval-gate/v1",
+                status: GateStatus::Unavailable,
+                required_roles: vec!["release_owner".to_owned()],
+                assignments: Vec::new(),
+                missing: Vec::new(),
+                error: Some(GateErrorCode::ApprovalRoleUnstaffed),
+                unavailable_accounts: Vec::new(),
+            },
+        };
+        assert_eq!(
+            classify_approval_result(&unstaffed)
+                .expect_err("an unstaffed required role is named")
+                .code(),
+            "approval_role_unstaffed"
+        );
     }
 
     #[trace("TC-679", "FR-068-AC-1", "FR-068-AC-3")]
@@ -767,15 +1352,19 @@ mod tests {
         assert!(matches!(error, AttestationVerifyError::Invalid));
     }
 
-    #[trace("TC-672", "FR-068-AC-1", "FR-064-AC-10")]
+    #[trace("TC-1054", "FR-069-AC-2")]
     #[test]
-    fn release_verification_fails_closed_without_verified_role_statements() {
-        let policy = parse_policy(
-            br#"{"protocol":"engineering-assurance.approval-policy/v1","required_roles":["release_owner"],"individuals":{"alice":[{"source":"github","id":"101"}]},"roles":{"release_owner":["alice"]}}"#,
-        )
-        .expect("fixture policy is valid");
-        let error = verify_role_statements(&policy).expect_err("no trusted FR-064 source");
-        assert_eq!(error.code(), "release_roles_source_unavailable");
+    fn attestation_verify_request_rejects_absent_execution_provenance_before_io() {
+        let mut request = request_json();
+        request["statements"]
+            .as_object_mut()
+            .expect("statement set object")
+            .remove("execution_provenance");
+        let error = match parse_request(request.to_string().as_bytes()) {
+            Ok(_) => panic!("execution provenance is required"),
+            Err(error) => error,
+        };
+        assert!(matches!(error, AttestationVerifyError::Invalid));
     }
 
     #[trace("TC-680", "FR-055-AC-5", "FR-068-AC-1")]

@@ -703,7 +703,7 @@ fn tc_382_a_mapped_signer_who_is_not_the_decision_owner_does_not_release() {
 }
 
 #[test]
-#[trace("TC-383", "FR-047-AC-4", "FR-067-AC-2")]
+#[trace("TC-383", "FR-047-AC-4", "FR-067-AC-2", "FR-067-AC-9")]
 fn tc_383_an_unsigned_annotated_tag_is_unsigned() {
     let fixture = fixture();
     let baseline = commit_baseline(&fixture, &[]);

@@ -25,6 +25,29 @@ fn reusable_workflow() -> Value {
     yaml_serde::from_slice(&bytes).expect("release-attestation reusable workflow parses as YAML")
 }
 
+#[cfg(unix)]
+fn write_role_verifier_standins(root: &Path) -> (std::path::PathBuf, std::path::PathBuf) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let ea = root.join("engineering-assurance");
+    let gh = root.join("bin/gh");
+    fs::create_dir_all(gh.parent().expect("fake gh parent")).expect("fake command directory");
+    fs::write(
+        &ea,
+        "#!/bin/bash\nprintf '%s\\n' '{\"status\":\"satisfied\"}'\n",
+    )
+    .expect("fake EA verifier script");
+    fs::write(&gh, "#!/bin/bash\nexit 0\n").expect("fake gh script");
+    for executable in [&ea, &gh] {
+        let mut permissions = fs::metadata(executable)
+            .expect("fake command metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(executable, permissions).expect("fake command executable");
+    }
+    (ea, gh)
+}
+
 #[trace("TC-559", "TC-622", "FR-070-AC-3", "NFR-011-AC-1", "NFR-011-AC-2")]
 #[test]
 fn signing_jobs_run_no_agent_or_repository_code() {
@@ -139,10 +162,11 @@ fn signing_jobs_use_the_github_workflow_identity() {
     "FR-070-AC-6",
     "FR-070-AC-11",
     "FR-070-AC-12",
-    "FR-067-AC-7"
+    "FR-067-AC-7",
+    "FR-067-AC-9"
 )]
 #[test]
-fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_statement_source() {
+fn reusable_release_workflow_checks_tag_and_roles_before_signing() {
     let workflow = reusable_workflow();
     assert_action_references_and_checkouts(&workflow);
     assert_eq!(
@@ -161,6 +185,58 @@ fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_
     assert_workflow_inputs_and_permissions(&workflow);
     assert_verify_job(&workflow);
     assert_attest_job(&workflow);
+}
+
+#[trace("TC-1056", "FR-067-AC-1", "FR-067-AC-7", "FR-067-AC-10", "FR-069-AC-5")]
+#[test]
+fn release_role_verification_uses_protected_identity_inputs_before_upload() {
+    let workflow = reusable_workflow();
+    let steps = workflow["jobs"]["verify"]["steps"]
+        .as_array()
+        .expect("verify job steps");
+    let role = steps
+        .iter()
+        .find(|step| step["name"] == "Verify signed release and retained approval roles")
+        .expect("release role verification step");
+    let run = role["run"].as_str().expect("role verification script");
+    assert!(run.contains("gh auth setup-git"));
+    assert!(run.contains("release-roles-verify --request"));
+    for input in [
+        "approval_signer_repository",
+        "approval_signer_workflow_path",
+        "approval_signer_ref",
+        "record_publisher_repository",
+        "record_publisher_workflow_path",
+        "record_publisher_ref",
+        "transparency",
+    ] {
+        assert!(run.contains(input), "role request omits {input}");
+    }
+    assert!(role["env"]["GH_TOKEN"].is_string());
+    let exporter = steps
+        .iter()
+        .find(|step| step["name"] == "Validate the retained evidence store with the Quoin exporter")
+        .expect("Quoin exporter step exists");
+    let exporter_run = exporter["run"].as_str().expect("exporter script");
+    let early_verification = exporter_run
+        .find("release-roles-verify --request")
+        .expect("EA verifies DSSE execution provenance before Quoin export");
+    let quoin_export = exporter_run
+        .find("$QUOIN_CLI\" evidence export-test-result")
+        .expect("Quoin Test Result export exists");
+    assert!(early_verification < quoin_export);
+    for field in ["release_artifacts", "execution_provenance_bundle"] {
+        assert!(exporter_run.contains(field), "early request omits {field}");
+    }
+    let role_index = steps
+        .iter()
+        .position(|step| step["name"] == "Verify signed release and retained approval roles")
+        .expect("role verification position");
+    let upload_index = steps
+        .iter()
+        .position(|step| step["name"] == "Upload verified attestation inputs")
+        .expect("attestation input upload position");
+    assert!(role_index < upload_index, "roles are checked before upload");
 }
 
 #[trace("TC-665", "FR-070-AC-9")]
@@ -213,7 +289,7 @@ fn reusable_workflow_downloads_named_release_and_evidence_artifacts_without_an_e
 #[cfg(unix)]
 #[trace("TC-667", "FR-070-AC-11", "FR-070-AC-10")]
 #[test]
-fn nonempty_invalid_evidence_is_refused_before_the_role_source_failure() {
+fn nonempty_invalid_evidence_is_refused_before_role_verification() {
     use std::os::unix::fs::PermissionsExt;
 
     let workflow = reusable_workflow();
@@ -228,11 +304,11 @@ fn nonempty_invalid_evidence_is_refused_before_the_role_source_failure() {
         .expect("Quoin evidence validation step exists");
     let role_index = verify_steps
         .iter()
-        .position(|step| step["name"] == "Refuse without a trusted approval-statement source")
-        .expect("role-source refusal exists");
+        .position(|step| step["name"] == "Verify signed release and retained approval roles")
+        .expect("role verification exists");
     assert!(
         export_index < role_index,
-        "invalid evidence fails before role-source refusal"
+        "invalid evidence fails before role verification"
     );
     let script = verify_steps[export_index]["run"]
         .as_str()
@@ -252,7 +328,23 @@ fn nonempty_invalid_evidence_is_refused_before_the_role_source_failure() {
     fs::write(evidence.join("bindings.json"), b"{").expect("invalid non-empty evidence fixture");
 
     let fake_quoin = root.path().join("quoin");
+    let fake_ea = root.path().join("engineering-assurance");
+    let fake_gh = root.path().join("bin/gh");
     let args_capture = root.path().join("quoin-args.txt");
+    fs::create_dir_all(fake_gh.parent().expect("fake gh parent")).expect("fake command directory");
+    fs::write(
+        &fake_ea,
+        "#!/bin/bash\nprintf '%s\\n' '{\"status\":\"satisfied\"}'\n",
+    )
+    .expect("fake EA verifier script");
+    fs::write(&fake_gh, "#!/bin/bash\nexit 0\n").expect("fake gh script");
+    for executable in [&fake_ea, &fake_gh] {
+        let mut permissions = fs::metadata(executable)
+            .expect("fake command metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(executable, permissions).expect("fake command executable");
+    }
     fs::write(
         &fake_quoin,
         "#!/bin/bash\nprintf '%s\\n' \"$@\" > \"$QUOIN_ARGS_CAPTURE\"\nprintf '%s\\n' 'evidence_store_invalid: release-evidence/bindings.json: invalid JSON' >&2\nexit 3\n",
@@ -269,9 +361,38 @@ fn nonempty_invalid_evidence_is_refused_before_the_role_source_failure() {
         .current_dir(&workspace)
         .env("RUNNER_TEMP", &runner_temp)
         .env("QUOIN_CLI", &fake_quoin)
+        .env("EA_TOOL", &fake_ea)
+        .env("EA_TOOLING_TAG", "v0.11.1")
+        .env("INPUT_TAG", "v1.2.3")
+        .env("RECORD_PATH", "release-record.json")
+        .env("ALLOWED_SIGNERS_PATH", ".allowed_signers")
+        .env("BASE_BRANCH", "main")
+        .env("GITHUB_WORKSPACE", &workspace)
+        .env("GITHUB_REPOSITORY", "fictional/release")
+        .env("APPROVAL_SIGNER_REPOSITORY", "fictional/release")
+        .env(
+            "APPROVAL_SIGNER_WORKFLOW_PATH",
+            ".github/workflows/approval.yml",
+        )
+        .env("APPROVAL_SIGNER_REF", "refs/heads/main")
+        .env("RECORD_PUBLISHER_REPOSITORY", "fictional/release")
+        .env(
+            "RECORD_PUBLISHER_WORKFLOW_PATH",
+            ".github/workflows/publisher.yml",
+        )
+        .env("RECORD_PUBLISHER_REF", "refs/heads/main")
+        .env("TRANSPARENCY", "public_log")
+        .env(
+            "PATH",
+            format!("{}:/usr/bin:/bin", fake_gh.parent().unwrap().display()),
+        )
         .env("QUOIN_ARGS_CAPTURE", &args_capture)
         .env("RELEASE_ARTIFACTS_DIR", &artifacts)
         .env("EVIDENCE_DIR", &evidence)
+        .env(
+            "EXECUTION_PROVENANCE",
+            evidence.join("execution-provenance.dsse.json"),
+        )
         .env("TEST_RESULT_OUTPUT", runner_temp.join("test-result.json"))
         .output()
         .expect("run the production workflow step");
@@ -327,8 +448,13 @@ fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting(
         .expect("Quoin exporter step exists");
     let script = export["run"].as_str().expect("export script");
     assert_eq!(export["env"]["EVIDENCE_DIR"], "release-evidence");
+    assert_eq!(
+        export["env"]["EXECUTION_PROVENANCE"],
+        "release-evidence/execution-provenance.dsse.json"
+    );
     assert_eq!(export["env"]["RELEASE_ARTIFACTS_DIR"], "release-artifacts");
     assert!(script.contains("--subject \"$subject_path\""));
+    assert!(script.contains("--execution-provenance \"$EXECUTION_PROVENANCE\""));
     assert!(script.contains("--evidence-dir \"$EVIDENCE_DIR\""));
     assert!(script.contains("--output \"$TEST_RESULT_OUTPUT\""));
     let attest_steps = workflow["jobs"]["attest"]["steps"]
@@ -368,11 +494,12 @@ fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting(
     fs::write(artifacts.join("release.tar.gz"), b"fixture release").expect("release artifact");
     fs::create_dir_all(evidence.join("runs/suite")).expect("evidence run directory");
     fs::write(evidence.join("bindings.json"), "{}\n").expect("valid evidence bindings");
+    let (fake_ea, fake_gh) = write_role_verifier_standins(&root.path());
 
     let expected = concat!(
         r#"{"_type":"https:"#,
         r#"//in-toto.io/Statement/v1","predicateType":"https:"#,
-        r#"//in-toto.io/attestation/test-result/v0.1","subject":[{"name":"release.tar.gz","digest":{"sha256":"fixture"}}],"predicate":{"result":"FAILED","failedTests":[{"name":"retained-check","result":"FAILED"}]}}"#
+        r#"//in-toto.io/attestation/test-result/v0.1","subject":[{"name":"release.tar.gz","digest":{"sha256":"d2d6e318f1a072f52024a0106e41569293204d8eefa047f2584d35e8cc261e76"}}],"predicate":{"result":"FAILED","failedTests":[{"name":"retained-check","result":"FAILED"}]}}"#
     );
     let fixture_result = root.path().join("fixture-test-result.json");
     fs::write(&fixture_result, expected.as_bytes()).expect("Quoin result fixture");
@@ -393,9 +520,38 @@ fn tc_553_failed_quoin_result_is_copied_to_attestation_inputs_without_rewriting(
         .current_dir(&workspace)
         .env("RUNNER_TEMP", &runner_temp)
         .env("QUOIN_CLI", &fake_quoin)
+        .env("EA_TOOL", &fake_ea)
+        .env("EA_TOOLING_TAG", "v0.11.1")
+        .env("INPUT_TAG", "v1.2.3")
+        .env("RECORD_PATH", "release-record.json")
+        .env("ALLOWED_SIGNERS_PATH", ".allowed_signers")
+        .env("BASE_BRANCH", "main")
+        .env("GITHUB_WORKSPACE", &workspace)
+        .env("GITHUB_REPOSITORY", "fictional/release")
+        .env("APPROVAL_SIGNER_REPOSITORY", "fictional/release")
+        .env(
+            "APPROVAL_SIGNER_WORKFLOW_PATH",
+            ".github/workflows/approval.yml",
+        )
+        .env("APPROVAL_SIGNER_REF", "refs/heads/main")
+        .env("RECORD_PUBLISHER_REPOSITORY", "fictional/release")
+        .env(
+            "RECORD_PUBLISHER_WORKFLOW_PATH",
+            ".github/workflows/publisher.yml",
+        )
+        .env("RECORD_PUBLISHER_REF", "refs/heads/main")
+        .env("TRANSPARENCY", "public_log")
+        .env(
+            "PATH",
+            format!("{}:/usr/bin:/bin", fake_gh.parent().unwrap().display()),
+        )
         .env("FIXTURE_TEST_RESULT", &fixture_result)
         .env("RELEASE_ARTIFACTS_DIR", &artifacts)
         .env("EVIDENCE_DIR", &evidence)
+        .env(
+            "EXECUTION_PROVENANCE",
+            evidence.join("execution-provenance.dsse.json"),
+        )
         .env("TEST_RESULT_OUTPUT", runner_temp.join("test-result.json"))
         .output()
         .expect("run the production workflow step");
@@ -442,6 +598,7 @@ fn tc_670_missing_or_mismatched_quoin_export_is_rejected_before_handoff() {
         fs::write(artifacts.join("release.tar.gz"), b"fixture release").expect("release artifact");
         fs::create_dir_all(evidence.join("runs/suite")).expect("evidence run directory");
         fs::write(evidence.join("bindings.json"), "{}\n").expect("evidence bindings");
+        let (fake_ea, fake_gh) = write_role_verifier_standins(&root.path());
 
         let fixture_result = root.path().join("fixture-test-result.json");
         fs::write(
@@ -479,9 +636,38 @@ fn tc_670_missing_or_mismatched_quoin_export_is_rejected_before_handoff() {
             .current_dir(&workspace)
             .env("RUNNER_TEMP", &runner_temp)
             .env("QUOIN_CLI", &fake_quoin)
+            .env("EA_TOOL", &fake_ea)
+            .env("EA_TOOLING_TAG", "v0.11.1")
+            .env("INPUT_TAG", "v1.2.3")
+            .env("RECORD_PATH", "release-record.json")
+            .env("ALLOWED_SIGNERS_PATH", ".allowed_signers")
+            .env("BASE_BRANCH", "main")
+            .env("GITHUB_WORKSPACE", &workspace)
+            .env("GITHUB_REPOSITORY", "fictional/release")
+            .env("APPROVAL_SIGNER_REPOSITORY", "fictional/release")
+            .env(
+                "APPROVAL_SIGNER_WORKFLOW_PATH",
+                ".github/workflows/approval.yml",
+            )
+            .env("APPROVAL_SIGNER_REF", "refs/heads/main")
+            .env("RECORD_PUBLISHER_REPOSITORY", "fictional/release")
+            .env(
+                "RECORD_PUBLISHER_WORKFLOW_PATH",
+                ".github/workflows/publisher.yml",
+            )
+            .env("RECORD_PUBLISHER_REF", "refs/heads/main")
+            .env("TRANSPARENCY", "public_log")
+            .env(
+                "PATH",
+                format!("{}:/usr/bin:/bin", fake_gh.parent().unwrap().display()),
+            )
             .env("FIXTURE_TEST_RESULT", &fixture_result)
             .env("RELEASE_ARTIFACTS_DIR", &artifacts)
             .env("EVIDENCE_DIR", &evidence)
+            .env(
+                "EXECUTION_PROVENANCE",
+                evidence.join("execution-provenance.dsse.json"),
+            )
             .env("TEST_RESULT_OUTPUT", runner_temp.join("test-result.json"))
             .output()
             .expect("run the production workflow step");
@@ -514,6 +700,13 @@ fn assert_workflow_inputs_and_permissions(workflow: &Value) {
             "quoin_tooling_tag": {"required": true, "type": "string"},
             "record_path": {"required": true, "type": "string"},
             "allowed_signers_path": {"required": true, "type": "string"},
+            "approval_signer_repository": {"required": true, "type": "string"},
+            "approval_signer_workflow_path": {"required": true, "type": "string"},
+            "approval_signer_ref": {"required": true, "type": "string"},
+            "record_publisher_repository": {"required": true, "type": "string"},
+            "record_publisher_workflow_path": {"required": true, "type": "string"},
+            "record_publisher_ref": {"required": true, "type": "string"},
+            "transparency": {"required": true, "type": "string"},
             "artifact_name": {"required": false, "type": "string", "default": "release-artifacts"},
             "evidence_artifact": {"required": false, "type": "string", "default": "release-evidence"}
         })
@@ -580,8 +773,8 @@ fn assert_verify_job(workflow: &Value) {
     );
     let role_source_check = verify_steps
         .iter()
-        .position(|step| step["name"] == "Refuse without a trusted approval-statement source")
-        .expect("missing statement source refuses");
+        .position(|step| step["name"] == "Verify signed release and retained approval roles")
+        .expect("protected role verification exists");
     assert!(tag_check < release_check && release_check < role_source_check);
     let missing_store = verify_steps
         .iter()
@@ -605,7 +798,7 @@ fn assert_verify_job(workflow: &Value) {
     assert!(verify_steps.iter().any(|step| {
         step["run"]
             .as_str()
-            .is_some_and(|run| run.contains("release_roles_source_unavailable"))
+            .is_some_and(|run| run.contains("release-roles-verify --request"))
     }));
     for step in verify_steps {
         if let Some(run) = step["run"].as_str() {

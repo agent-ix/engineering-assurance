@@ -9,6 +9,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use ix_trace_rs::implements;
 use serde::Deserialize;
 
 use crate::attestation_signing::{
@@ -26,6 +27,9 @@ pub const TEST_RESULT_PREDICATE: &str =
 /// SLSA Verification Summary v1 predicate type.
 pub const VERIFICATION_SUMMARY_PREDICATE: &str =
     concat!("https:", "//slsa.dev/verification_summary/v1");
+/// Quoin's signed release execution-provenance predicate type.
+pub const EXECUTION_PROVENANCE_PREDICATE: &str =
+    "application/vnd.agent-ix.execution-provenance.v2+json";
 
 /// A signed in-toto statement and its Sigstore bundle.
 #[derive(Clone, Copy, Debug)]
@@ -73,6 +77,109 @@ pub struct ExpectedRelease {
     pub artifacts: Vec<ArtifactSubject>,
     /// RFC 8785 digests of provenance, SBOM and Test Result statement bytes.
     pub input_digests: [String; 3],
+}
+
+/// Result of authenticating Quoin's signed execution-provenance statement.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VerifiedExecutionProvenance {
+    /// The full source commit the signed matrix and run records describe.
+    pub source_revision: String,
+    /// The exact original signed bundle bytes remain available to the Quoin
+    /// exporter; EA does not reinterpret run-record outcomes.
+    pub bundle_json: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExecutionProvenanceStatement {
+    #[serde(rename = "_type")]
+    type_: String,
+    subject: Vec<SummarySubject>,
+    #[serde(rename = "predicateType")]
+    predicate_type: String,
+    predicate: ExecutionProvenancePredicate,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct ExecutionProvenancePredicate {
+    version: u64,
+    source_revision: String,
+    suite_declarations_sha256: String,
+    test_matrix: Vec<serde_json::Value>,
+    runs: Vec<serde_json::Value>,
+}
+
+/// Authenticate and bind Quoin's execution-provenance bundle to this release.
+///
+/// The exact bundle is returned for transport to Quoin after verification.
+/// Run-record contents and outcomes remain Quoin's responsibility.
+///
+/// # Errors
+/// Returns an attestation error when the statement is malformed, its source
+/// workflow is untrusted, its revision differs from the signed tag, or its
+/// artifact subjects differ from the workflow-computed subjects.
+#[implements("FR-069-AC-5", "FR-069-AC-6")]
+pub fn verify_execution_provenance(
+    verifier: &dyn BundleVerifier,
+    signer_policy: &WorkflowIdentityPolicy,
+    source_policy: &SourceWorkflowPolicy,
+    release_commit: &str,
+    artifacts: &[ArtifactSubject],
+    statement_payload: &[u8],
+    bundle_json: &str,
+) -> Result<VerifiedExecutionProvenance, AttestationVerificationError> {
+    let statement: ExecutionProvenanceStatement = serde_json::from_slice(statement_payload)
+        .map_err(|_| AttestationVerificationError::PredicateInvalid)?;
+    if statement.type_ != crate::attestation_signing::STATEMENT_V1_TYPE
+        || statement.predicate_type != EXECUTION_PROVENANCE_PREDICATE
+        || statement.predicate.version != 2
+        || statement.predicate.test_matrix.is_empty()
+        || statement.predicate.runs.is_empty()
+        || !is_commit(&statement.predicate.source_revision)
+        || statement.predicate.source_revision != release_commit
+        || !is_sha256(&statement.predicate.suite_declarations_sha256)
+        || statement
+            .subject
+            .iter()
+            .any(|subject| subject.digest.len() != 1)
+    {
+        return Err(AttestationVerificationError::PredicateInvalid);
+    }
+    let statement_v1: StatementV1 = serde_json::from_slice(statement_payload)
+        .map_err(|_| AttestationVerificationError::PredicateInvalid)?;
+    check_artifact_subjects(&statement_v1, artifacts)?;
+    for artifact in artifacts {
+        verify_statement_with_source(
+            verifier,
+            statement_payload,
+            bundle_json,
+            signer_policy,
+            Some(source_policy),
+            ExpectedSubject {
+                kind: SubjectKind::Sha256,
+                value: &artifact.sha256,
+            },
+        )?;
+    }
+    Ok(VerifiedExecutionProvenance {
+        source_revision: statement.predicate.source_revision,
+        bundle_json: bundle_json.to_owned(),
+    })
+}
+
+fn is_commit(value: &str) -> bool {
+    (value.len() == 40 || value.len() == 64)
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+}
+
+fn is_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
 }
 
 /// Result of evaluating the three required conditions for `PASSED`.
@@ -315,11 +422,13 @@ fn check_artifact_subjects(
                 .map(|digest| (subject.name.as_str(), digest.as_str()))
         })
         .collect();
+    let expected_len = expected.len();
     let expected: BTreeSet<(&str, &str)> = expected
         .iter()
         .map(|subject| (subject.name.as_str(), subject.sha256.as_str()))
         .collect();
-    if actual != expected || statement.subject.len() != expected.len() {
+    if actual != expected || actual.len() != expected_len || statement.subject.len() != expected_len
+    {
         return Err(AttestationVerificationError::WrongSubject);
     }
     Ok(())
@@ -414,6 +523,179 @@ mod tests {
     use super::*;
     use ix_trace_rs::trace;
     use serde_json::json;
+
+    struct ProvenanceVerifier(crate::attestation_signing::AuthenticatedWorkflowClaims);
+
+    impl BundleVerifier for ProvenanceVerifier {
+        fn verify(
+            &self,
+            _payload: &[u8],
+            bundle_json: &str,
+            _policy: &WorkflowIdentityPolicy,
+        ) -> Result<(), VerificationFailure> {
+            if bundle_json == "authenticated-bundle" {
+                Ok(())
+            } else {
+                Err(VerificationFailure::InvalidSignature)
+            }
+        }
+
+        fn verify_with_claims(
+            &self,
+            payload: &[u8],
+            bundle_json: &str,
+            policy: &WorkflowIdentityPolicy,
+        ) -> Result<
+            Option<crate::attestation_signing::AuthenticatedWorkflowClaims>,
+            VerificationFailure,
+        > {
+            self.verify(payload, bundle_json, policy)?;
+            Ok(Some(self.0.clone()))
+        }
+    }
+
+    fn execution_provenance_json() -> serde_json::Value {
+        json!({
+            "_type": crate::attestation_signing::STATEMENT_V1_TYPE,
+            "subject": [{"name":"release.tar.gz", "digest":{"sha256":"a".repeat(64)}}],
+            "predicateType": EXECUTION_PROVENANCE_PREDICATE,
+            "predicate": {
+                "version": 2,
+                "sourceRevision": "0123456789012345678901234567890123456789",
+                "suiteDeclarationsSha256": "b".repeat(64),
+                "testMatrix": [{"id":"FR-001","criteria":[]}],
+                "runs": [{"suite":"SUITE-001","recordPath":"runs/SUITE-001/absent.json","sha256":null}]
+            }
+        })
+    }
+
+    fn execution_provenance_policies() -> (WorkflowIdentityPolicy, SourceWorkflowPolicy) {
+        (
+            WorkflowIdentityPolicy {
+                repository: "fictional/assurance".to_owned(),
+                workflow_path: ".github/workflows/release.yml".to_owned(),
+                references: ["refs/heads/main".to_owned()].into(),
+                issuer: concat!("https:", "//token.actions.githubusercontent.com").to_owned(),
+                transparency: crate::attestation_signing::TransparencyRequirement::PublicLog,
+            },
+            SourceWorkflowPolicy {
+                repository: "fictional/release".to_owned(),
+                workflow_path: ".github/workflows/tag.yml".to_owned(),
+                event: "push".to_owned(),
+                source_ref: None,
+                source_ref_prefix: Some("refs/tags/v".to_owned()),
+            },
+        )
+    }
+
+    #[test]
+    #[trace(
+        "TC-554",
+        "TC-1058",
+        "FR-069-AC-2",
+        "FR-069-AC-5",
+        "FR-069-AC-6",
+        "FR-067-AC-9"
+    )]
+    fn authenticated_execution_provenance_is_bound_and_returned_unchanged() {
+        let payload = serde_json::to_vec(&execution_provenance_json()).expect("fixture JSON");
+        let artifacts = vec![ArtifactSubject {
+            name: "release.tar.gz".to_owned(),
+            sha256: "a".repeat(64),
+        }];
+        let (signer, source) = execution_provenance_policies();
+        let verifier = ProvenanceVerifier(source.expected_claims_for_test());
+        let verified = verify_execution_provenance(
+            &verifier,
+            &signer,
+            &source,
+            "0123456789012345678901234567890123456789",
+            &artifacts,
+            &payload,
+            "authenticated-bundle",
+        )
+        .expect("trusted provenance for the release");
+        assert_eq!(
+            verified.source_revision,
+            "0123456789012345678901234567890123456789"
+        );
+        assert_eq!(verified.bundle_json, "authenticated-bundle");
+
+        let changed_commit = verify_execution_provenance(
+            &verifier,
+            &signer,
+            &source,
+            "1123456789012345678901234567890123456789",
+            &artifacts,
+            &payload,
+            "authenticated-bundle",
+        );
+        assert_eq!(
+            changed_commit,
+            Err(AttestationVerificationError::PredicateInvalid)
+        );
+
+        let mismatched_artifacts = [ArtifactSubject {
+            name: "release.tar.gz".to_owned(),
+            sha256: "c".repeat(64),
+        }];
+        let changed_subject = verify_execution_provenance(
+            &verifier,
+            &signer,
+            &source,
+            "0123456789012345678901234567890123456789",
+            &mismatched_artifacts,
+            &payload,
+            "authenticated-bundle",
+        );
+        assert_eq!(
+            changed_subject,
+            Err(AttestationVerificationError::WrongSubject)
+        );
+
+        let wrong_source = ProvenanceVerifier(
+            crate::attestation_signing::AuthenticatedWorkflowClaims {
+                source_repository_uri: Some(
+                    concat!("https:", "//github.com/fictional/untrusted").to_owned(),
+                ),
+                source_repository_ref: Some("refs/tags/v1.2.3".to_owned()),
+                build_config_uri: Some(concat!(
+                    "https:",
+                    "//github.com/fictional/untrusted/.github/workflows/tag.yml@refs/tags/v1.2.3"
+                ).to_owned()),
+                build_trigger: Some("push".to_owned()),
+            },
+        );
+        let untrusted_source = verify_execution_provenance(
+            &wrong_source,
+            &signer,
+            &source,
+            "0123456789012345678901234567890123456789",
+            &artifacts,
+            &payload,
+            "authenticated-bundle",
+        );
+        assert_eq!(
+            untrusted_source,
+            Err(AttestationVerificationError::Signature(
+                VerificationFailure::UntrustedSigner
+            ))
+        );
+
+        let changed_bundle = verify_execution_provenance(
+            &verifier,
+            &signer,
+            &source,
+            "0123456789012345678901234567890123456789",
+            &artifacts,
+            &payload,
+            "tampered-bundle",
+        );
+        assert!(matches!(
+            changed_bundle,
+            Err(AttestationVerificationError::Signature(_))
+        ));
+    }
 
     fn expected() -> ExpectedRelease {
         ExpectedRelease {

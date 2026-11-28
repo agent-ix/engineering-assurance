@@ -18,6 +18,27 @@ on:
       allowed_signers_path:
         required: true
         type: string
+      approval_signer_repository:
+        required: true
+        type: string
+      approval_signer_workflow_path:
+        required: true
+        type: string
+      approval_signer_ref:
+        required: true
+        type: string
+      record_publisher_repository:
+        required: true
+        type: string
+      record_publisher_workflow_path:
+        required: true
+        type: string
+      record_publisher_ref:
+        required: true
+        type: string
+      transparency:
+        required: true
+        type: string
       artifact_name:
         required: false
         type: string
@@ -177,7 +198,22 @@ jobs:
           QUOIN_CLI: ${{ runner.temp }}/quoin-tooling/node_modules/.bin/quoin
           RELEASE_ARTIFACTS_DIR: release-artifacts
           EVIDENCE_DIR: release-evidence
+          EXECUTION_PROVENANCE: release-evidence/execution-provenance.dsse.json
           TEST_RESULT_OUTPUT: ${{ runner.temp }}/test-result.json
+          EA_TOOL: ${{ runner.temp }}/ea-tooling/engineering-assurance
+          EA_TOOLING_TAG: ${{ inputs.ea_tooling_tag }}
+          INPUT_TAG: ${{ inputs.tag }}
+          RECORD_PATH: ${{ inputs.record_path }}
+          ALLOWED_SIGNERS_PATH: ${{ inputs.allowed_signers_path }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+          APPROVAL_SIGNER_REPOSITORY: ${{ inputs.approval_signer_repository }}
+          APPROVAL_SIGNER_WORKFLOW_PATH: ${{ inputs.approval_signer_workflow_path }}
+          APPROVAL_SIGNER_REF: ${{ inputs.approval_signer_ref }}
+          RECORD_PUBLISHER_REPOSITORY: ${{ inputs.record_publisher_repository }}
+          RECORD_PUBLISHER_WORKFLOW_PATH: ${{ inputs.record_publisher_workflow_path }}
+          RECORD_PUBLISHER_REF: ${{ inputs.record_publisher_ref }}
+          TRANSPARENCY: ${{ inputs.transparency }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           subject_path="$RUNNER_TEMP/release-artifact-subject.json"
@@ -210,9 +246,38 @@ jobs:
           )
           PY
 
+          gh auth setup-git
+          request="$(jq -n \
+            --arg repository "$GITHUB_WORKSPACE/source" \
+            --arg github_repository "$GITHUB_REPOSITORY" \
+            --arg tag "$INPUT_TAG" \
+            --arg record_path "$RECORD_PATH" \
+            --arg allowed_signers_path "$ALLOWED_SIGNERS_PATH" \
+            --arg base_branch "$BASE_BRANCH" \
+            --arg signer_repository "agent-ix/engineering-assurance" \
+            --arg signer_workflow_path ".github/workflows/release-attestation.yml" \
+            --arg signer_ref "refs/tags/$EA_TOOLING_TAG" \
+            --arg approval_signer_repository "$APPROVAL_SIGNER_REPOSITORY" \
+            --arg approval_signer_workflow_path "$APPROVAL_SIGNER_WORKFLOW_PATH" \
+            --arg approval_signer_ref "$APPROVAL_SIGNER_REF" \
+            --arg record_publisher_repository "$RECORD_PUBLISHER_REPOSITORY" \
+            --arg record_publisher_workflow_path "$RECORD_PUBLISHER_WORKFLOW_PATH" \
+            --arg record_publisher_ref "$RECORD_PUBLISHER_REF" \
+            --arg transparency "$TRANSPARENCY" \
+            --arg release_artifacts "$GITHUB_WORKSPACE/release-artifacts" \
+            --arg execution_provenance_bundle "$GITHUB_WORKSPACE/$EXECUTION_PROVENANCE" \
+            '{protocol:"engineering-assurance.release-roles-verify-request/v1", repository:$repository, github_repository:$github_repository, tag:$tag, record_path:$record_path, allowed_signers_path:$allowed_signers_path, base_branch:$base_branch, signer_repository:$signer_repository, signer_workflow_path:$signer_workflow_path, signer_ref:$signer_ref, approval_signer_repository:$approval_signer_repository, approval_signer_workflow_path:$approval_signer_workflow_path, approval_signer_ref:$approval_signer_ref, record_publisher_repository:$record_publisher_repository, record_publisher_workflow_path:$record_publisher_workflow_path, record_publisher_ref:$record_publisher_ref, transparency:$transparency, release_artifacts:$release_artifacts, execution_provenance_bundle:$execution_provenance_bundle}')"
+          result="$("$EA_TOOL" release-roles-verify --request "$request")"
+          status="$(jq -r '.status // "unknown"' <<<"$result")"
+          if [[ "$status" != "satisfied" ]]; then
+            echo "::error::release_roles_status=$status"
+            exit 1
+          fi
+
           error_path="$RUNNER_TEMP/quoin-test-result.stderr"
           if "$QUOIN_CLI" evidence export-test-result \
             --subject "$subject_path" \
+            --execution-provenance "$EXECUTION_PROVENANCE" \
             --output "$TEST_RESULT_OUTPUT" \
             --evidence-dir "$EVIDENCE_DIR" \
             > "$RUNNER_TEMP/quoin-test-result.stdout" 2> "$error_path"; then
@@ -257,12 +322,52 @@ jobs:
           mkdir -p attestation-inputs
           cp -- "$TEST_RESULT_OUTPUT" attestation-inputs/test-result.json
 
-      - name: Refuse without a trusted approval-statement source
+      - name: Verify signed release and retained approval roles
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EA_TOOL: ${{ runner.temp }}/ea-tooling/engineering-assurance
+          EA_TOOLING_TAG: ${{ inputs.ea_tooling_tag }}
+          INPUT_TAG: ${{ inputs.tag }}
+          RECORD_PATH: ${{ inputs.record_path }}
+          ALLOWED_SIGNERS_PATH: ${{ inputs.allowed_signers_path }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+          APPROVAL_SIGNER_REPOSITORY: ${{ inputs.approval_signer_repository }}
+          APPROVAL_SIGNER_WORKFLOW_PATH: ${{ inputs.approval_signer_workflow_path }}
+          APPROVAL_SIGNER_REF: ${{ inputs.approval_signer_ref }}
+          RECORD_PUBLISHER_REPOSITORY: ${{ inputs.record_publisher_repository }}
+          RECORD_PUBLISHER_WORKFLOW_PATH: ${{ inputs.record_publisher_workflow_path }}
+          RECORD_PUBLISHER_REF: ${{ inputs.record_publisher_ref }}
+          TRANSPARENCY: ${{ inputs.transparency }}
         run: |
           set -euo pipefail
-          echo "::error::release_roles_source_unavailable"
-          exit 1
+          gh auth setup-git
+          request="$(jq -n \
+            --arg repository "$GITHUB_WORKSPACE/source" \
+            --arg github_repository "$GITHUB_REPOSITORY" \
+            --arg tag "$INPUT_TAG" \
+            --arg record_path "$RECORD_PATH" \
+            --arg allowed_signers_path "$ALLOWED_SIGNERS_PATH" \
+            --arg base_branch "$BASE_BRANCH" \
+            --arg signer_repository "agent-ix/engineering-assurance" \
+            --arg signer_workflow_path ".github/workflows/release-attestation.yml" \
+            --arg signer_ref "refs/tags/$EA_TOOLING_TAG" \
+            --arg approval_signer_repository "$APPROVAL_SIGNER_REPOSITORY" \
+            --arg approval_signer_workflow_path "$APPROVAL_SIGNER_WORKFLOW_PATH" \
+            --arg approval_signer_ref "$APPROVAL_SIGNER_REF" \
+            --arg record_publisher_repository "$RECORD_PUBLISHER_REPOSITORY" \
+            --arg record_publisher_workflow_path "$RECORD_PUBLISHER_WORKFLOW_PATH" \
+            --arg record_publisher_ref "$RECORD_PUBLISHER_REF" \
+            --arg transparency "$TRANSPARENCY" \
+            --arg release_artifacts "$GITHUB_WORKSPACE/release-artifacts" \
+            --arg execution_provenance_bundle "$GITHUB_WORKSPACE/$EXECUTION_PROVENANCE" \
+            '{protocol:"engineering-assurance.release-roles-verify-request/v1", repository:$repository, github_repository:$github_repository, tag:$tag, record_path:$record_path, allowed_signers_path:$allowed_signers_path, base_branch:$base_branch, signer_repository:$signer_repository, signer_workflow_path:$signer_workflow_path, signer_ref:$signer_ref, approval_signer_repository:$approval_signer_repository, approval_signer_workflow_path:$approval_signer_workflow_path, approval_signer_ref:$approval_signer_ref, record_publisher_repository:$record_publisher_repository, record_publisher_workflow_path:$record_publisher_workflow_path, record_publisher_ref:$record_publisher_ref, transparency:$transparency, release_artifacts:$release_artifacts, execution_provenance_bundle:$execution_provenance_bundle}')"
+          result="$("$EA_TOOL" release-roles-verify --request "$request")"
+          status="$(jq -r '.status // "unknown"' <<<"$result")"
+          if [[ "$status" != "satisfied" ]]; then
+            echo "::error::release_roles_status=$status"
+            exit 1
+          fi
 
       - name: Upload verified attestation inputs
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

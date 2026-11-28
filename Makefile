@@ -27,7 +27,7 @@ content-rights-tree:
 	CARGO_BUILD_JOBS=2 cargo run --locked --quiet --features full -- content-rights-tree --root .
 
 test: content-rights-tree
-	CARGO_BUILD_JOBS=2 cargo test --locked --features full --test python_port -- --nocapture
+	CARGO_BUILD_JOBS=2 cargo test --locked --features full --test python_port -- --nocapture --test-threads=4
 
 syft-preflight:
 	@set -eu; \
