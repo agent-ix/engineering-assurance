@@ -604,7 +604,7 @@ fn assert_workflow_rejects_release_verdict(result: &Value) {
 }
 
 #[test]
-#[trace("FR-047-AC-17")]
+#[trace("TC-1203", "FR-047-AC-17")]
 fn tc_1203_not_released_result_without_approval_carries_producer_identity() {
     let fixture = fixture();
     let result = result_on(&request(&fixture, "no-such-release-tag"), None);
@@ -1821,7 +1821,7 @@ fn tc_1048_the_gitsign_inputs_are_refused_with_the_release_codes() {
 }
 
 #[test]
-#[trace("FR-047-AC-15", "FR-047-AC-16")]
+#[trace("TC-1203", "FR-047-AC-15", "FR-047-AC-16")]
 fn every_verdict_keeps_the_trust_identity_of_the_run() {
     let fixture = fixture();
     fs::create_dir_all(fixture.repo().join("trust")).expect("trust dir");

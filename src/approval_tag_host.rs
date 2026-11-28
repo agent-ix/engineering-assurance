@@ -525,29 +525,38 @@ impl Git<'_> {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs,
-        os::unix::fs::PermissionsExt,
-        process::{Command, Stdio},
-        time::Duration,
-    };
+    use std::{ffi::OsStr, fs, os::unix::fs::PermissionsExt, time::Duration};
 
     use engineering_assurance::approval_verify::SigningGesture;
     use ix_trace_rs::trace;
     use serde_json::json;
 
     use super::{SigningRun, execute};
+    use crate::process_host::{self, ProcessLimits};
 
     const RESTORE_FIXTURE: &str = "EA113_RESTORE_FIXTURE";
     const RESTORE_SIGNER_RAN: &str = "EA113_RESTORE_SIGNER_RAN";
 
     fn git(repository: &std::path::Path, arguments: &[&str]) {
-        let output = Command::new("git")
-            .args(arguments)
-            .current_dir(repository)
-            .output()
-            .expect("git must start");
-        assert!(output.status.success(), "{output:?}");
+        let arguments = arguments.iter().map(OsStr::new).collect::<Vec<_>>();
+        let output = process_host::run_configured(
+            OsStr::new("git"),
+            &arguments,
+            Some(repository),
+            &[],
+            &[],
+            ProcessLimits {
+                timeout: Duration::from_secs(10),
+                max_output_bytes: 1024 * 1024,
+            },
+        )
+        .expect("git must start");
+        assert!(
+            output.status.success(),
+            "git failed: status={:?}, stderr={}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     fn restore_fixture() -> tempfile::TempDir {
@@ -628,22 +637,31 @@ mod tests {
                 .is_some_and(|marker| std::path::Path::new(&marker).exists()),
             "the successful signing command must reach its signer"
         );
-        let reference = Command::new("git")
-            .args([
-                "show-ref",
-                "--verify",
-                "--quiet",
-                "refs/tags/restore-failure",
-            ])
-            .current_dir(root.join("repository"))
-            .output()
-            .expect("git must inspect the ref");
+        let arguments = [
+            "show-ref",
+            "--verify",
+            "--quiet",
+            "refs/tags/restore-failure",
+        ]
+        .map(OsStr::new);
+        let reference = process_host::run_configured(
+            OsStr::new("git"),
+            &arguments,
+            Some(&root.join("repository")),
+            &[],
+            &[],
+            ProcessLimits {
+                timeout: Duration::from_secs(10),
+                max_output_bytes: 1024,
+            },
+        )
+        .expect("git must inspect the ref");
         assert_eq!(reference.status.code(), Some(1), "the ref must be removed");
         fs::write(root.join("scenario-done"), "ok").expect("completion marker");
     }
 
     #[test]
-    #[trace("FR-085-AC-7")]
+    #[trace("TC-1158", "FR-085-AC-7")]
     fn the_host_is_given_300_seconds_with_a_gesture_and_60_without() {
         for gesture in [
             SigningGesture::DeviceTouch,
@@ -668,7 +686,7 @@ mod tests {
     }
 
     #[test]
-    #[trace("FR-085-AC-13")]
+    #[trace("TC-1159", "FR-085-AC-13")]
     fn restore_failure_propagates_through_approval_tag_and_removes_the_ref() {
         if let Some(root) = std::env::var_os(RESTORE_FIXTURE) {
             restore_failure_scenario(std::path::Path::new(&root));
@@ -680,22 +698,30 @@ mod tests {
             "'{}' --exact approval_tag_host::tests::restore_failure_propagates_through_approval_tag_and_removes_the_ref --nocapture",
             std::env::current_exe().expect("test binary").display()
         );
-        let output = Command::new("/usr/bin/script")
-            .args(["-q", "-e", "-c"])
-            .arg(test)
-            .arg("/dev/null")
-            .current_dir(fixture.path().join("repository"))
-            .env(RESTORE_FIXTURE, fixture.path())
-            .env(RESTORE_SIGNER_RAN, fixture.path().join("signer-ran"))
-            .env("GIT_CONFIG_NOSYSTEM", "1")
-            .env("GIT_CONFIG_GLOBAL", fixture.path().join("gitconfig"))
-            .env("HOME", fixture.path())
-            .env("SHELL", "/bin/sh")
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .expect("script must start");
+        let args = ["-q", "-e", "-c", test.as_str(), "/dev/null"].map(OsStr::new);
+        let restore_fixture = fixture.path().as_os_str();
+        let signer_ran = fixture.path().join("signer-ran");
+        let git_config = fixture.path().join("gitconfig");
+        let environment = [
+            (OsStr::new(RESTORE_FIXTURE), restore_fixture),
+            (OsStr::new(RESTORE_SIGNER_RAN), signer_ran.as_os_str()),
+            (OsStr::new("GIT_CONFIG_NOSYSTEM"), OsStr::new("1")),
+            (OsStr::new("GIT_CONFIG_GLOBAL"), git_config.as_os_str()),
+            (OsStr::new("HOME"), restore_fixture),
+            (OsStr::new("SHELL"), OsStr::new("/bin/sh")),
+        ];
+        let output = process_host::run_configured(
+            OsStr::new("/usr/bin/script"),
+            &args,
+            Some(&fixture.path().join("repository")),
+            &environment,
+            &[],
+            ProcessLimits {
+                timeout: Duration::from_secs(30),
+                max_output_bytes: 1024 * 1024,
+            },
+        )
+        .expect("script must start");
         let report = String::from_utf8_lossy(&output.stdout);
         assert!(output.status.success(), "{report}");
         assert!(fixture.path().join("scenario-done").exists(), "{report}");

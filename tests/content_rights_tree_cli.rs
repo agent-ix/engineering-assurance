@@ -85,7 +85,7 @@ fn json(output: &Output) -> Value {
 }
 
 #[test]
-#[trace("FR-079-AC-4")]
+#[trace("TC-621", "FR-079-AC-4")]
 fn full_tree_check_accepts_the_attestation_predicates() {
     let repository = TestRepository::new("attestation-predicates");
     let approval = ["https:", "//schemas.agent-ix.ai/attestation/approval/v1"].concat();

@@ -137,7 +137,6 @@ fn assert_no_stages(root: &Path) {
     "FR-016-CON-4",
     "TC-004",
     "FR-001-AC-1",
-    "US-001-EX-1",
     "TC-008",
     "FR-001-AC-5"
 )]
@@ -242,7 +241,6 @@ fn tc_105_cli_inventory_and_reuse_follow_the_native_contract() {
     "StR-001-VC-2",
     "FR-001-AC-2",
     "TC-005",
-    "US-001-EX-2",
     "TC-007",
     "FR-001-AC-4"
 )]

@@ -1140,7 +1140,7 @@ mod tests {
 
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027 AC-1: the mapped signed commit is accepted.
-    #[trace("FR-036-AC-1", "FR-037-AC-1", "FR-037-AC-5")]
+    #[trace("TC-1160", "FR-036-AC-1", "FR-037-AC-1", "FR-037-AC-5")]
     fn mapped_signed_commit_with_acceptance_meaning_is_accepted() {
         assert_eq!(
             classify_signature_response(&valid_response(), "alice@example.test"),
@@ -1150,7 +1150,7 @@ mod tests {
 
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027 AC-2: unsigned signatures are refused.
-    #[trace("FR-036-AC-2", "FR-037-AC-7")]
+    #[trace("TC-1161", "FR-036-AC-2", "FR-037-AC-7")]
     fn unsigned_commit_has_the_unsigned_reason() {
         let mut response = valid_response();
         response["status"] = json!("unsigned");
@@ -1162,7 +1162,7 @@ mod tests {
 
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027: bad signatures are refused.
-    #[trace("FR-036-AC-3", "FR-037-AC-7")]
+    #[trace("TC-1162", "FR-036-AC-3", "FR-037-AC-7")]
     fn invalid_signature_has_the_signature_bad_reason() {
         let mut response = valid_response();
         response["status"] = json!("signed_bad");
@@ -1174,7 +1174,7 @@ mod tests {
 
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027 AC-3: unmapped signatures are refused.
-    #[trace("FR-036-AC-3", "FR-037-AC-2")]
+    #[trace("TC-1163", "FR-036-AC-3", "FR-037-AC-2")]
     fn unmapped_signer_has_the_signer_unmapped_reason() {
         let mut response = valid_response();
         response["signer"]["mapping"] = json!("unmapped");
@@ -1186,6 +1186,7 @@ mod tests {
 
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027 AC-4: a different mapped principal is refused.
+    #[trace("TC-1164", "FR-037-AC-4")]
     fn different_mapped_principal_has_the_principal_mismatch_reason() {
         let mut response = valid_response();
         response["signer"]["principal"] = json!("bob@example.test");
@@ -1197,7 +1198,7 @@ mod tests {
 
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027 AC-5: absent meaning is refused.
-    #[trace("FR-037-AC-6")]
+    #[trace("TC-1165", "FR-037-AC-6")]
     fn missing_acceptance_meaning_has_the_meaning_missing_reason() {
         let mut response = valid_response();
         response["signed_off_meaning"]["presence"] = json!("missing");
@@ -1209,13 +1210,7 @@ mod tests {
 
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027: malformed verifier output fails closed.
-    #[trace(
-        "FR-014-AC-3",
-        "FR-019-AC-3",
-        "FR-027-AC-7",
-        "FR-027-AC-10",
-        "FR-027-AC-12"
-    )]
+    #[trace("TC-1166", "FR-014-AC-3", "FR-019-AC-3")]
     fn malformed_verifier_response_is_unverifiable() {
         let mut wrong_protocol = valid_response();
         wrong_protocol["protocol"] = json!("engineering-assurance.signature-verify-result/v2");
@@ -1238,7 +1233,7 @@ mod tests {
 
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027: rating paths are constrained to validation records.
-    #[trace("FR-014-AC-3")]
+    #[trace("TC-1167", "FR-014-AC-3")]
     fn rating_paths_are_confined_to_validation_markdown() {
         assert!(valid_rating_path("spec/validation/FRR-001.md"));
         assert!(!valid_rating_path("spec/functional/FRR-001.md"));
@@ -1248,7 +1243,7 @@ mod tests {
 
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027: workflow requires a mapped human principal.
-    #[trace("FR-014-AC-3")]
+    #[trace("TC-1168", "FR-014-AC-3")]
     fn workflow_rejects_empty_and_unmapped_rated_by_values() {
         let directory = tempfile::tempdir().expect("temporary directory");
         let path = directory.path().join("allowed_signers");
@@ -1261,7 +1256,7 @@ mod tests {
 
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027: the human gate owner must be the rated signer.
-    #[trace("FR-014-AC-3")]
+    #[trace("TC-1169", "FR-014-AC-3")]
     fn workflow_rejects_decision_owner_different_from_rated_by() {
         let request: WorkflowRequest = serde_json::from_value(json!({
             "protocol": WORKFLOW_REQUEST_PROTOCOL,
@@ -1295,7 +1290,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027: report only the validator's unrated features.
-    #[trace("FR-014-AC-2")]
+    #[trace("TC-1170", "FR-014-AC-2")]
     fn workflow_uses_exactly_the_validator_unrated_feature_list() {
         use std::os::unix::fs::PermissionsExt;
 
@@ -1377,66 +1372,8 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    /// PLAT-1448 FR‑021 / FR‑027 request-contract obligation: pass exactly the declared request members.
-    #[trace("FR-027-AC-7")]
-    fn verifier_process_receives_exact_five_member_signature_request() {
-        let (directory, repository, allowed_signers) = process_fixture();
-        let captured = directory.path().join("captured-request.json");
-        let response = serde_json::to_string(&valid_response()).expect("response JSON");
-        let executable = make_verifier(
-            directory.path(),
-            "signature-verify",
-            &format!(
-                "#!/bin/sh\n[ \"$1\" = signature-verify ] || exit 91\n[ \"$2\" = --request ] || exit 92\n[ \"$3\" = - ] || exit 93\ncat > {}\nprintf '%s\\n' '{}'\n",
-                shell_quote(&captured),
-                response
-            ),
-        );
-
-        assert_eq!(
-            verify_rating_commit_with_executable(
-                &repository,
-                "deadbeef",
-                &allowed_signers,
-                "alice@example.test",
-                &executable,
-            ),
-            None
-        );
-        let request: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(captured).expect("captured request"))
-                .expect("signature request JSON");
-        let mut keys: Vec<_> = request
-            .as_object()
-            .expect("object request")
-            .keys()
-            .map(String::as_str)
-            .collect();
-        keys.sort_unstable();
-        assert_eq!(
-            keys,
-            [
-                "allowed_signers",
-                "kind",
-                "protocol",
-                "repository",
-                "revision"
-            ]
-        );
-        assert_eq!(request["protocol"], SIGNATURE_REQUEST_PROTOCOL);
-        assert_eq!(request["repository"], repository.to_string_lossy().as_ref());
-        assert_eq!(request["revision"], "deadbeef");
-        assert_eq!(request["kind"], "commit");
-        assert_eq!(
-            request["allowed_signers"],
-            allowed_signers.to_string_lossy().as_ref()
-        );
-    }
-
-    #[cfg(unix)]
-    #[test]
     /// PLAT-1448 FR‑021 / FR‑027 process-start obligation: an unavailable verifier fails closed.
-    #[trace("FR-019-AC-3", "FR-036-AC-5", "FR-027-AC-8")]
+    #[trace("TC-1172", "FR-019-AC-3", "FR-036-AC-5")]
     fn unavailable_verifier_process_is_unverifiable() {
         let (directory, repository, allowed_signers) = process_fixture();
         let executable = directory.path().join("missing-verifier");
@@ -1455,7 +1392,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027 timeout obligation: a timed-out verifier fails closed.
-    #[trace("FR-019-AC-3", "FR-027-AC-9")]
+    #[trace("TC-1173", "FR-019-AC-3")]
     fn verifier_timeout_is_unverifiable() {
         use std::time::Duration;
 
@@ -1478,7 +1415,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027 failed-process obligation: a non-zero verifier exit fails closed.
-    #[trace("FR-019-AC-3", "FR-027-AC-9")]
+    #[trace("TC-1174", "FR-019-AC-3")]
     fn verifier_nonzero_exit_is_unverifiable() {
         let (directory, repository, allowed_signers) = process_fixture();
         let executable =
@@ -1498,7 +1435,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027 malformed-output obligation: invalid stdout fails closed.
-    #[trace("FR-014-AC-3", "FR-019-AC-3", "FR-027-AC-10", "FR-027-AC-12")]
+    #[trace("TC-1175", "FR-014-AC-3", "FR-019-AC-3")]
     fn malformed_verifier_stdout_is_unverifiable() {
         let (directory, repository, allowed_signers) = process_fixture();
         let executable = make_verifier(

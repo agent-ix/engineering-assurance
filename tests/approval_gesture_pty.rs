@@ -89,7 +89,7 @@ fn acquisition_failure_scenario(directory: &std::path::Path) {
 }
 
 #[test]
-#[trace("FR-085-AC-11")]
+#[trace("TC-1158", "FR-085-AC-11", "FR-085-AC-12")]
 fn the_foreground_group_is_restored_when_the_run_reaches_its_deadline() {
     if let Some(directory) = std::env::var_os(CHILD_MARKER) {
         deadline_scenario(std::path::Path::new(&directory));
@@ -116,7 +116,7 @@ fn the_foreground_group_is_restored_when_the_run_reaches_its_deadline() {
 }
 
 #[test]
-#[trace("FR-085-AC-12")]
+#[trace("TC-1158", "FR-085-AC-12")]
 fn acquisition_failure_does_not_execute_the_child() {
     if let Some(directory) = std::env::var_os(CHILD_MARKER) {
         acquisition_failure_scenario(std::path::Path::new(&directory));

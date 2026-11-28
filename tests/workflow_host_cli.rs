@@ -276,7 +276,7 @@ fn gate_token(payload: &Value, outcome: &str) -> String {
 }
 
 #[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-5", "FR-028-AC-1")]
-#[trace("TC-026", "FR-005-AC-1", "US-003-EX-1")]
+#[trace("TC-026", "FR-005-AC-1")]
 #[test]
 fn tc_107_new_resume_and_pristine_interruption_recovery_preserve_binding() {
     let state = TestDirectory::new("resume");
@@ -594,7 +594,7 @@ fn tc_107_binding_and_phase_refusals_leave_ix_flow_history_unchanged() {
 
 #[trace("TC-107", "FR-016-AC-3", "FR-016-CON-1", "FR-016-CON-5")]
 #[trace("TC-003", "StR-001-VC-3")]
-#[trace("TC-028", "FR-005-AC-3", "US-003-EX-2")]
+#[trace("TC-028", "FR-005-AC-3")]
 #[trace("TC-029", "FR-005-AC-4")]
 #[trace("TC-047", "FR-005-AC-6")]
 #[test]

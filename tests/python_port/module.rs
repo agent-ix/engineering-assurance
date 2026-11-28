@@ -268,7 +268,7 @@ fn module_inventory_is_exact() {
 }
 
 #[test]
-#[trace("TC-115", "StR-003-VC-5")]
+#[trace("TC-115", "FR-017-AC-4", "StR-003-VC-5")]
 fn only_the_configuration_package_entry_point_remains_python() {
     let sources: Vec<String> = glob_ext(&package_root(), "py")
         .iter()

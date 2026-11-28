@@ -5,7 +5,7 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    ffi::OsStr,
+    ffi::{OsStr, OsString},
     io::{Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     time::Duration,
@@ -701,35 +701,49 @@ impl PublicLogClient for HttpReceiptLog {
         if bytes.len() > 1024 * 1024 {
             return Err(LogRejected);
         }
-        let mut child = std::process::Command::new("curl")
-            .args([
-                "--silent",
-                "--show-error",
-                "--fail",
-                "--max-time",
-                "30",
-                "--output",
-                "/dev/null",
-                "--header",
-                "content-type: application/json",
-                "--data-binary",
-                "@-",
-                endpoint,
-            ])
-            .env_clear()
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .map_err(|_| LogRejected)?;
-        child
-            .stdin
-            .take()
-            .ok_or(LogRejected)?
-            .write_all(&bytes)
-            .map_err(|_| LogRejected)?;
-        let status = child.wait().map_err(|_| LogRejected)?;
-        status.success().then_some(()).ok_or(LogRejected)
+        let arguments = [
+            "--silent",
+            "--show-error",
+            "--fail",
+            "--max-time",
+            "30",
+            "--output",
+            "/dev/null",
+            "--header",
+            "content-type: application/json",
+            "--data-binary",
+            "@-",
+            endpoint,
+        ]
+        .map(OsStr::new);
+        let (curl, _) =
+            crate::signature_verify_host::resolve_program("curl").map_err(|_| LogRejected)?;
+        let mut input = tempfile::tempfile().map_err(|_| LogRejected)?;
+        input.write_all(&bytes).map_err(|_| LogRejected)?;
+        input.seek(SeekFrom::Start(0)).map_err(|_| LogRejected)?;
+        // Match the former `env_clear()` behavior: only the absolute executable
+        // path is used, and no parent environment reaches the network client.
+        let removed_environment = std::env::vars_os()
+            .map(|(name, _)| name)
+            .collect::<Vec<_>>();
+        let removed_environment = removed_environment
+            .iter()
+            .map(OsString::as_os_str)
+            .collect::<Vec<_>>();
+        let output = crate::process_host::run_configured_stdin(
+            curl.as_os_str(),
+            &arguments,
+            None,
+            &[],
+            &removed_environment,
+            input,
+            crate::process_host::ProcessLimits {
+                timeout: PROCESS_TIMEOUT,
+                max_output_bytes: 1024,
+            },
+        )
+        .map_err(|_| LogRejected)?;
+        output.status.success().then_some(()).ok_or(LogRejected)
     }
 }
 

@@ -67,7 +67,7 @@ fn refuse_mutated_fixture(mutate: impl FnOnce(&mut serde_json::Value)) -> Semant
         .expect_err("the mutated fixture must be refused")
 }
 
-#[trace("TC-053", "US-005-AC-1")]
+#[trace("TC-053", "FR-008-AC-1")]
 #[trace("TC-056", "FR-008-AC-1")]
 #[test]
 fn tc_053_ownership_registry_assigns_every_concept_to_exactly_one_authority() {

@@ -56,6 +56,10 @@ every signature checks the third.
 | NFR-010-AC-1 | On a public-log publish, the sink obtains the public-form signature through its injected `Signer` only after the [FR-057](../functional/FR-057-fail-closed-pre-publish-leak-check.md) check passes; a refused record does not invoke the public signing method. | Test |
 | NFR-010-AC-2 | Source inspection finds no signature, certificate or hash-based signing primitive in the sink modules. | Test |
 
+The required `ix-trace-rs` dependency is a compile-time procedural macro for
+trace and implements markers; it expands annotated items unchanged and adds no
+runtime signing or cryptographic behavior.
+
 ## Dependencies
 
 - **Upstream**: none.

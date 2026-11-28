@@ -432,6 +432,7 @@ claim-strength = [
 # `evaluation-reports`), `exact-numbers` and `full` turn on
 # `serde_json/arbitrary_precision`, through `exact-numbers`.
 content-rights = [
+  "dep:ix-trace-rs",
   "dep:regex",
   "dep:serde",
   "dep:serde_json",
@@ -506,6 +507,7 @@ release = ["approval-verify", "dep:serde"]
 # the sink layer. Pure: the log, the store, the visibility source and the
 # delegated signing stack are traits the caller supplies.
 record-sink = [
+  "dep:ix-trace-rs",
   "dep:serde",
   "dep:serde_json",
   "dep:serde_json_canonicalizer",
@@ -544,6 +546,7 @@ workflow-invariants = [
 ]
 # Shared in-toto Statement v1 handling and Sigstore DSSE verification.
 attestation-verify = [
+  "dep:ix-trace-rs",
   "dep:serde",
   "dep:serde_json",
   "dep:serde_json_canonicalizer",
@@ -644,7 +647,7 @@ full = [
 base64 = { version = "0.22", optional = true }
 cms = { version = "0.2", optional = true }
 der = { version = "0.7", optional = true }
-ix-trace-rs = { git = "https://github.com/agent-ix/ix-trace-rs", rev = "2ce4ebf47f726b9d76388220545cd0abda8a5cfb", version = "0.1.0" }
+ix-trace-rs = { git = "https://github.com/agent-ix/ix-trace-rs", rev = "2ce4ebf47f726b9d76388220545cd0abda8a5cfb", version = "0.1.0", optional = true }
 ix-cli-kit = { git = "https://github.com/agent-ix/ix-cli-kit", branch = "main", version = "0.1.0", optional = true }
 agent-ix-engineering-assurance-campaign = { path = "campaign/generated/rust", version = "0.0.0", optional = true }
 cap-std = { version = "4", optional = true }
@@ -675,6 +678,7 @@ yaml_serde = { version = "0.10", optional = true }
 zip = { version = "9", default-features = false, features = ["deflate-flate2"], optional = true }
 
 [dev-dependencies]
+ix-trace-rs = { git = "https://github.com/agent-ix/ix-trace-rs", rev = "2ce4ebf47f726b9d76388220545cd0abda8a5cfb", version = "0.1.0" }
 tempfile = "3.27"
 serde_json = "1.0"
 syn = { version = "3.0", features = ["full", "visit"] }

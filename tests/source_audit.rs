@@ -570,7 +570,7 @@ impl<'ast> Visit<'ast> for AllowedSignersDigestCalls {
     }
 }
 
-#[trace("TC-1060", "FR-037-CON-3")]
+#[trace("TC-1060", "FR-037-AC-25", "FR-037-CON-3")]
 #[test]
 fn tc_1060_allowed_signers_digest_is_computed_once_for_the_shared_snapshot() {
     let source = repository_source("src/signature_verify_host.rs");
@@ -796,7 +796,11 @@ fn audit_full_feature_direct_signature_dependencies() {
     let direct_dependencies = full_feature_direct_dependencies();
     let signing_dependencies = direct_dependencies
         .iter()
-        .filter(|name| name.starts_with("sigstore-") || name.starts_with("in-toto"))
+        .filter(|name| {
+            matches!(name.as_str(), "cms" | "der")
+                || name.starts_with("sigstore-")
+                || name.starts_with("in-toto")
+        })
         .cloned()
         .collect::<BTreeSet<_>>();
     assert_eq!(
@@ -855,6 +859,8 @@ fn audit_signature_adapter_delegation() {
         adapter_audit.external_roots,
         BTreeSet::from([
             "engineering_assurance".to_owned(),
+            // Compile-time-only requirement markers; ix-trace-rs is a proc-macro crate.
+            "ix_trace_rs".to_owned(),
             "serde".to_owned(),
             "serde_json".to_owned(),
             // The SHA-256 digest of the allowed-signers bytes (FR-037-CON-3).
@@ -1387,7 +1393,7 @@ fn tc_138_a_minimal_downstream_compiles_only_the_source_audit_feature() {
     fs::write(
         consumer.path().join("Cargo.toml"),
         format!(
-            "[package]\nname='source-audit-consumer-fixture'\nversion='0.0.0'\nedition='2024'\n[dependencies]\nengineering-assurance={{path={manifest_dir:?},default-features=false,features=['source-audit']}}\n"
+            "[package]\nname='source-audit-consumer-fixture'\nversion='0.0.0'\nedition='2024'\n[workspace]\n[dependencies]\nengineering-assurance={{path={manifest_dir:?},default-features=false,features=['source-audit']}}\n"
         ),
     )
     .expect("consumer manifest");

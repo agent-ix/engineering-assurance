@@ -309,7 +309,7 @@ fn entry<'a>(trail: &'a Value, tag: &str) -> &'a Value {
 }
 
 #[test]
-#[trace("FR-043-AC-26")]
+#[trace("TC-1202", "FR-043-AC-26")]
 fn tc_1202_empty_trail_carries_producer_identity() {
     let fixture = fixture();
     let result = trail(&fixture);
@@ -445,7 +445,7 @@ fn tc_353_failed_and_untrusted_approvals_are_listed_with_their_verdict() {
 }
 
 #[test]
-#[trace("FR-086-AC-6")]
+#[trace("TC-1179", "FR-086-AC-6")]
 fn trail_carries_declared_and_undeclared_gestures_from_approval_verify() {
     let fixture = fixture();
     signed_tag(
@@ -1046,7 +1046,7 @@ fn sha256_of(bytes: &[u8]) -> String {
 }
 
 #[test]
-#[trace("FR-043-AC-26", "FR-043-AC-27")]
+#[trace("TC-1178", "FR-043-AC-26", "FR-043-AC-27")]
 fn the_trail_trust_is_read_once_and_each_entry_carries_the_trusted_time_members() {
     let fixture = fixture();
     let repo = fixture.repo();

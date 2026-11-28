@@ -726,7 +726,7 @@ fn tc_326_a_message_git_cannot_read_is_unverifiable_not_a_wrong_record() {
 }
 
 #[test]
-#[trace("FR-041-AC-37")]
+#[trace("TC-1201", "FR-041-AC-37")]
 fn tc_1201_result_without_trust_inputs_still_carries_producer_identity() {
     let fixture = fixture();
     pin_allowed_signers(&fixture);
@@ -1233,7 +1233,7 @@ fn pin_allowed_signers(fixture: &Fixture) {
 }
 
 #[test]
-#[trace("FR-041-AC-34", "FR-037-AC-24", "FR-037-AC-25")]
+#[trace("TC-1181", "FR-041-AC-34", "FR-037-AC-24", "FR-037-AC-25")]
 fn a_committed_allowed_signers_source_fixes_the_trust_identity() {
     let fixture = fixture();
     pin_allowed_signers(&fixture);
@@ -1291,7 +1291,7 @@ fn a_committed_allowed_signers_source_fixes_the_trust_identity() {
 }
 
 #[test]
-#[trace("FR-037-AC-24", "FR-041-AC-10")]
+#[trace("TC-1181", "FR-037-AC-24", "FR-041-AC-10")]
 fn a_committed_allowed_signers_source_is_refused_as_the_trust_source_rules_say() {
     let fixture = fixture();
     pin_allowed_signers(&fixture);
@@ -1340,7 +1340,7 @@ fn a_committed_allowed_signers_source_is_refused_as_the_trust_source_rules_say()
 }
 
 #[test]
-#[trace("FR-041-AC-35")]
+#[trace("TC-1183", "FR-041-AC-35")]
 fn trust_is_absent_only_when_git_failed_reading_the_allowed_signers_source() {
     let fixture = fixture();
     pin_allowed_signers(&fixture);
@@ -1417,7 +1417,7 @@ fn expire_alice(fixture: &Fixture) {
 }
 
 #[test]
-#[trace("FR-041-AC-36", "FR-041-AC-31", "FR-037-AC-23")]
+#[trace("TC-1180", "FR-041-AC-36", "FR-041-AC-31", "FR-037-AC-23")]
 fn a_backdated_tag_is_judged_by_the_recorded_git_version() {
     let fixture = fixture();
     expire_alice(&fixture);
@@ -1445,7 +1445,7 @@ fn a_backdated_tag_is_judged_by_the_recorded_git_version() {
 }
 
 #[test]
-#[trace("FR-041-AC-32")]
+#[trace("TC-1182", "FR-041-AC-32")]
 fn a_key_expired_before_signing_and_verification_is_untrusted_on_any_git() {
     let fixture = fixture();
     expire_alice(&fixture);
@@ -1462,7 +1462,7 @@ fn a_key_expired_before_signing_and_verification_is_untrusted_on_any_git() {
 }
 
 #[test]
-#[trace("FR-041-AC-27", "FR-043-AC-27")]
+#[trace("TC-1182", "FR-041-AC-27", "FR-043-AC-27")]
 fn an_ssh_approval_has_a_claimed_time_and_no_trusted_time_however_backdated() {
     let fixture = fixture();
     signed_tag_at(
