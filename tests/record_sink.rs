@@ -1661,7 +1661,7 @@ fn assert_record_sink_dependencies() {
             .iter()
             .all(|dependency| dependency["optional"] == true)
     );
-    for feature in ["content-rights", "attestation-verify"] {
+    for feature in ["content-rights", "attestation-verify", "record-sink"] {
         assert!(
             package["features"][feature]
                 .as_array()
@@ -1688,6 +1688,7 @@ fn assert_record_sink_dependencies() {
     assert_eq!(
         sink_dependencies,
         BTreeSet::from([
+            "ix-trace-rs",
             "serde",
             "serde_json",
             "serde_json_canonicalizer",

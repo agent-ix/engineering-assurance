@@ -507,6 +507,7 @@ release = ["approval-verify", "dep:serde"]
 # the sink layer. Pure: the log, the store, the visibility source and the
 # delegated signing stack are traits the caller supplies.
 record-sink = [
+  "dep:ix-trace-rs",
   "dep:serde",
   "dep:serde_json",
   "dep:serde_json_canonicalizer",
@@ -677,6 +678,7 @@ yaml_serde = { version = "0.10", optional = true }
 zip = { version = "9", default-features = false, features = ["deflate-flate2"], optional = true }
 
 [dev-dependencies]
+ix-trace-rs = { git = "https://github.com/agent-ix/ix-trace-rs", rev = "2ce4ebf47f726b9d76388220545cd0abda8a5cfb", version = "0.1.0" }
 tempfile = "3.27"
 serde_json = "1.0"
 syn = { version = "3.0", features = ["full", "visit"] }

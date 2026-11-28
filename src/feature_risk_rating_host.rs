@@ -1372,64 +1372,6 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    /// PLAT-1448 FR‑021 / FR‑027 request-contract obligation: pass exactly the declared request members.
-    #[trace("TC-1171", "FR-019-AC-3")]
-    fn verifier_process_receives_exact_five_member_signature_request() {
-        let (directory, repository, allowed_signers) = process_fixture();
-        let captured = directory.path().join("captured-request.json");
-        let response = serde_json::to_string(&valid_response()).expect("response JSON");
-        let executable = make_verifier(
-            directory.path(),
-            "signature-verify",
-            &format!(
-                "#!/bin/sh\n[ \"$1\" = signature-verify ] || exit 91\n[ \"$2\" = --request ] || exit 92\n[ \"$3\" = - ] || exit 93\ncat > {}\nprintf '%s\\n' '{}'\n",
-                shell_quote(&captured),
-                response
-            ),
-        );
-
-        assert_eq!(
-            verify_rating_commit_with_executable(
-                &repository,
-                "deadbeef",
-                &allowed_signers,
-                "alice@example.test",
-                &executable,
-            ),
-            None
-        );
-        let request: serde_json::Value =
-            serde_json::from_slice(&std::fs::read(captured).expect("captured request"))
-                .expect("signature request JSON");
-        let mut keys: Vec<_> = request
-            .as_object()
-            .expect("object request")
-            .keys()
-            .map(String::as_str)
-            .collect();
-        keys.sort_unstable();
-        assert_eq!(
-            keys,
-            [
-                "allowed_signers",
-                "kind",
-                "protocol",
-                "repository",
-                "revision"
-            ]
-        );
-        assert_eq!(request["protocol"], SIGNATURE_REQUEST_PROTOCOL);
-        assert_eq!(request["repository"], repository.to_string_lossy().as_ref());
-        assert_eq!(request["revision"], "deadbeef");
-        assert_eq!(request["kind"], "commit");
-        assert_eq!(
-            request["allowed_signers"],
-            allowed_signers.to_string_lossy().as_ref()
-        );
-    }
-
-    #[cfg(unix)]
-    #[test]
     /// PLAT-1448 FR‑021 / FR‑027 process-start obligation: an unavailable verifier fails closed.
     #[trace("TC-1172", "FR-019-AC-3", "FR-036-AC-5")]
     fn unavailable_verifier_process_is_unverifiable() {

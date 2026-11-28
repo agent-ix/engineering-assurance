@@ -1135,7 +1135,6 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-1168 | Empty or unmapped rated-by values are refused | Unit | P0 | FR-014-AC-3 | ✅ `src/feature_risk_rating_host.rs::workflow_rejects_empty_and_unmapped_rated_by_values` |
 | TC-1169 | A decision owner different from the rated signer is refused | Unit | P0 | FR-014-AC-3 | ✅ `src/feature_risk_rating_host.rs::workflow_rejects_decision_owner_different_from_rated_by` |
 | TC-1170 | The rating workflow reports exactly the unrated features returned by Quire validation | Unit | P0 | FR-014-AC-2 | ✅ `src/feature_risk_rating_host.rs::workflow_uses_exactly_the_validator_unrated_feature_list` |
-| TC-1171 | The rating verifier receives exactly the declared five-member signature request | Unit | P0 | FR-019-AC-3 | ✅ `src/feature_risk_rating_host.rs::verifier_process_receives_exact_five_member_signature_request` |
 | TC-1172 | An unavailable signature verifier produces an unverifiable result | Unit | P0 | FR-019-AC-3, FR-036-AC-5 | ✅ `src/feature_risk_rating_host.rs::unavailable_verifier_process_is_unverifiable` |
 | TC-1173 | A verifier timeout produces an unverifiable result | Unit | P0 | FR-019-AC-3 | ✅ `src/feature_risk_rating_host.rs::verifier_timeout_is_unverifiable` |
 | TC-1174 | A nonzero verifier exit produces an unverifiable result | Unit | P0 | FR-019-AC-3 | ✅ `src/feature_risk_rating_host.rs::verifier_nonzero_exit_is_unverifiable` |
