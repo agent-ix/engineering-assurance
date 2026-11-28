@@ -6,10 +6,11 @@
 
 use std::{
     collections::BTreeSet,
+    ffi::OsStr,
     fs::{self, File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
-    process::Command,
+    time::Duration,
 };
 
 use engineering_assurance::attestation_signing::{
@@ -21,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::receipt_host;
+use crate::{process_host, process_host::ProcessLimits, receipt_host};
 
 const REQUEST_PROTOCOL: &str = "engineering-assurance.release-evidence-verify-request/v1";
 const RESULT_PROTOCOL: &str = "engineering-assurance.release-evidence-verify-result/v1";
@@ -164,26 +165,43 @@ fn validate_request(request: &Request) -> Result<(), ReleaseEvidenceError> {
 
 fn release_tag_points_to_commit(repository: &Path, tag: &str, expected_commit: &str) -> bool {
     let reference = format!("refs/tags/{tag}");
-    let check = Command::new("git")
-        .arg("-C")
-        .arg(repository)
-        .arg("check-ref-format")
-        .arg(&reference)
-        .output();
+    let check = run_git(
+        repository,
+        &[OsStr::new("check-ref-format"), OsStr::new(&reference)],
+    );
     if !check.is_ok_and(|output| output.status.success()) {
         return false;
     }
     let peeled = format!("{reference}^{{commit}}");
-    Command::new("git")
-        .arg("-C")
-        .arg(repository)
-        .args(["rev-parse", "--verify", "--end-of-options"])
-        .arg(peeled)
-        .output()
-        .is_ok_and(|output| {
-            output.status.success()
-                && String::from_utf8_lossy(&output.stdout).trim() == expected_commit
-        })
+    run_git(
+        repository,
+        &[
+            OsStr::new("rev-parse"),
+            OsStr::new("--verify"),
+            OsStr::new("--end-of-options"),
+            OsStr::new(&peeled),
+        ],
+    )
+    .is_ok_and(|output| {
+        output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == expected_commit
+    })
+}
+
+fn run_git(
+    repository: &Path,
+    arguments: &[&OsStr],
+) -> Result<process_host::CompletedProcess, process_host::ProcessError> {
+    let mut git_arguments = Vec::with_capacity(arguments.len() + 2);
+    git_arguments.extend([OsStr::new("-C"), repository.as_os_str()]);
+    git_arguments.extend_from_slice(arguments);
+    process_host::run(
+        OsStr::new("git"),
+        &git_arguments,
+        ProcessLimits {
+            timeout: Duration::from_secs(10),
+            max_output_bytes: 8 * 1024,
+        },
+    )
 }
 
 fn protected_source_signer(
@@ -370,7 +388,6 @@ mod tests {
     use base64::{Engine as _, engine::general_purpose::STANDARD};
     use ix_trace_rs::trace;
     use std::collections::BTreeMap;
-    use std::process::Command;
 
     use engineering_assurance::attestation_signing::{
         TransparencyRequirement, VerificationFailure, WorkflowIdentityPolicy,
@@ -439,6 +456,14 @@ mod tests {
         .expect("bundle fixture serializes")
     }
 
+    fn run_fixture_git(repository: &Path, arguments: &[&str]) -> process_host::CompletedProcess {
+        let arguments = arguments
+            .iter()
+            .map(|argument| OsStr::new(argument))
+            .collect::<Vec<_>>();
+        run_git(repository, &arguments).expect("git fixture command completes")
+    }
+
     fn signer() -> WorkflowIdentityPolicy {
         WorkflowIdentityPolicy {
             repository: "fictional/product".to_owned(),
@@ -454,12 +479,7 @@ mod tests {
     fn release_provenance_requires_the_exact_tag_to_peel_to_the_requested_commit() {
         let directory = tempfile::tempdir().expect("source repository directory");
         let git = |arguments: &[&str]| {
-            let output = Command::new("git")
-                .arg("-C")
-                .arg(directory.path())
-                .args(arguments)
-                .output()
-                .expect("git starts");
+            let output = run_fixture_git(directory.path(), arguments);
             assert!(
                 output.status.success(),
                 "git {arguments:?}: {}",
