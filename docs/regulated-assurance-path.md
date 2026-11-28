@@ -2,6 +2,7 @@
 type: how-to
 title: Regulated assurance path
 description: Record a human-owned assurance decision with the public baseline toolchain.
+tool_version: 0.11.1
 ---
 
 # Regulated assurance path
@@ -89,8 +90,7 @@ Follow these steps:
 6. Generate the dossier and export it through Quoin and Quire.
 
 For dossier generation and export, pass each required module root with a
-separate `--module <path>` option to both commands. See the known limitations
-below.
+separate `--module <path>` option to both commands.
 
 ## Result
 
@@ -122,19 +122,3 @@ owning requirement.
 
 Quoin's `evidence export-test-result` requires a caller-supplied subject. Pass
 the required JSON subject array with `--subject`.
-
-## Known limitations
-
-These behaviors were observed with Quoin 0.36.8, Quire 0.52.0, and Engineering
-Assurance 0.10.1:
-
-- `module ensure-defaults` leaves stale module references. `IX_CONFIG_ROOT` is
-  ignored by `module ensure-defaults` and `module list`; use `--config-root`.
-- The module registry stores absolute paths. Moving the home directory can
-  make registered manifests unreachable.
-- The `spec-artifacts-iso` FR skeleton marks `Dependencies` optional, but its
-  manifest requires it. Follow the manifest.
-- SOUP promotion omits SBOM `supplier` and `license` values. Check each
-  promoted record against the source inventory.
-- Dossier generation and export require a repeated `--module <path>` option
-  for every module root.
