@@ -73,6 +73,37 @@ fn install_fake_provenance_verifier(runner_temp: &Path) {
     fs::set_permissions(&verifier, permissions).expect("make fake verifier executable");
 }
 
+#[cfg(unix)]
+fn install_fake_release_role_tool(runner_temp: &Path, bin_dir: &Path, capture: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    fs::create_dir_all(bin_dir).expect("fake command directory");
+    let gh = bin_dir.join("gh");
+    fs::write(
+        &gh,
+        "#!/bin/sh\n[ \"$1\" = auth ] && [ \"$2\" = setup-git ]\n",
+    )
+    .expect("fake gh setup-git command");
+    let mut permissions = fs::metadata(&gh).expect("fake gh metadata").permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&gh, permissions).expect("make fake gh executable");
+
+    let tooling = runner_temp.join("ea-tooling");
+    fs::create_dir_all(&tooling).expect("EA tooling directory");
+    let tool = tooling.join("engineering-assurance");
+    fs::write(
+        &tool,
+        format!(
+            "#!/bin/bash\nset -euo pipefail\n[ \"$1\" = release-roles ]\n[ \"$2\" = --request ]\nprintf '%s\\n' \"$3\" > '{}'\nprintf '{{\"protocol\":\"engineering-assurance.release-roles-result/v1\",\"status\":\"%s\"}}\\n' \"$ROLE_RESULT_STATUS\"\n",
+            capture.display()
+        ),
+    )
+    .expect("fake release roles command");
+    let mut permissions = fs::metadata(&tool).expect("fake EA metadata").permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&tool, permissions).expect("make fake EA executable");
+}
+
 #[trace("TC-559", "TC-622", "FR-070-AC-3", "NFR-011-AC-1", "NFR-011-AC-2")]
 #[test]
 fn signing_jobs_run_no_agent_or_repository_code() {
@@ -188,6 +219,7 @@ fn signing_jobs_use_the_github_workflow_identity() {
     "FR-070-AC-6",
     "FR-070-AC-11",
     "FR-070-AC-12",
+    "FR-067-AC-1",
     "FR-067-AC-7",
     "FR-067-AC-9"
 )]
@@ -211,6 +243,106 @@ fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_
     assert_workflow_inputs_and_permissions(&workflow);
     assert_verify_job(&workflow);
     assert_attest_job(&workflow);
+}
+
+#[cfg(unix)]
+#[trace("TC-1217", "FR-067-AC-1", "FR-067-AC-4", "FR-067-AC-5")]
+#[test]
+fn release_role_result_gates_the_attestation_inputs_and_four_statement_set() {
+    let workflow = reusable_workflow();
+    let verify_steps = workflow["jobs"]["verify"]["steps"]
+        .as_array()
+        .expect("verify steps");
+    let role_step = verify_steps
+        .iter()
+        .find(|step| step["name"] == "Verify exact merged-commit approval roles")
+        .expect("role step exists");
+    let role_script = role_step["run"].as_str().expect("role script");
+    assert!(role_script.contains("if [[ \"$status\" != \"satisfied\" ]]"));
+    let role_index = verify_steps
+        .iter()
+        .position(|step| step["name"] == "Verify exact merged-commit approval roles")
+        .expect("role step index");
+    let upload_index = verify_steps
+        .iter()
+        .position(|step| step["name"] == "Upload verified attestation inputs")
+        .expect("verified-input upload step");
+    assert!(role_index < upload_index, "role satisfaction gates upload");
+
+    let attest_steps = workflow["jobs"]["attest"]["steps"]
+        .as_array()
+        .expect("attest steps");
+    let attestation_names = attest_steps
+        .iter()
+        .filter(|step| {
+            step["uses"]
+                .as_str()
+                .is_some_and(|reference| reference.starts_with("actions/attest@"))
+        })
+        .map(|step| step["name"].as_str().expect("attestation name"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        attestation_names,
+        [
+            "Attest SLSA provenance",
+            "Attest CycloneDX SBOM",
+            "Attest Quoin test result",
+            "Attest release verification summary"
+        ]
+    );
+
+    let root = tempfile::tempdir().expect("workflow fixture root");
+    let workspace = root.path().join("workspace");
+    let runner_temp = root.path().join("runner-temp");
+    let bin_dir = root.path().join("bin");
+    let capture = root.path().join("release-roles-request.json");
+    fs::create_dir_all(&workspace).expect("workflow workspace");
+    fs::create_dir_all(&runner_temp).expect("runner temp");
+    let commit = initialize_release_source(&workspace.join("source"));
+    install_fake_release_role_tool(&runner_temp, &bin_dir, &capture);
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let fake_path =
+        std::env::join_paths(std::iter::once(bin_dir.clone()).chain(std::env::split_paths(&path)))
+            .expect("fake PATH joins");
+
+    for (status, expected_exit, expected_error) in [
+        ("satisfied", Some(0), None),
+        ("unsatisfied", Some(1), Some("release_roles_unsatisfied")),
+    ] {
+        let output = Command::new("bash")
+            .args(["-euo", "pipefail", "-c", role_script])
+            .current_dir(&workspace)
+            .env("PATH", &fake_path)
+            .env("RUNNER_TEMP", &runner_temp)
+            .env("GITHUB_WORKSPACE", &workspace)
+            .env("GITHUB_REPOSITORY", "fictional/product")
+            .env("EA_TOOLING_TAG", "v0.11.1")
+            .env("INPUT_TAG", "v1.2.3")
+            .env("BASE_BRANCH", "main")
+            .env("GH_TOKEN", "read-only-test-token")
+            .env("ROLE_RESULT_STATUS", status)
+            .output()
+            .expect("run production role step");
+        assert_eq!(output.status.code(), expected_exit, "status={status}");
+        let rendered = format!(
+            "{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if let Some(error) = expected_error {
+            assert!(rendered.contains(error), "{rendered}");
+        }
+    }
+    let request: Value = serde_json::from_slice(
+        &fs::read(&capture).expect("request captured by fake release-roles tool"),
+    )
+    .expect("release-roles request is JSON");
+    assert_eq!(
+        request["protocol"],
+        "engineering-assurance.release-roles-request/v1"
+    );
+    assert_eq!(request["commit"], commit);
+    assert_eq!(request["tag"], "v1.2.3");
 }
 
 #[trace("TC-665", "FR-070-AC-9")]

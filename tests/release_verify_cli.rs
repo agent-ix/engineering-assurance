@@ -993,7 +993,7 @@ fn merge_release(fixture: &Fixture) -> (String, String) {
 }
 
 #[test]
-#[trace("TC-395", "FR-047-AC-6")]
+#[trace("TC-395", "FR-047-AC-6", "FR-067-AC-8")]
 fn tc_395_a_release_commit_with_two_parents_is_not_a_child_of_the_baseline() {
     let fixture = fixture();
     let (_, commit) = merge_release(&fixture);
