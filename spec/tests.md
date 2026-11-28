@@ -336,7 +336,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | FR-067 | FR-067-AC-6 | TC-542, TC-1212 | 🚧 Exact merged-commit selection is covered; source recovery and release workflow remain specified |
 | FR-067 | FR-067-AC-7 | TC-543 | 🚧 Specified |
 | FR-067 | FR-067-AC-8 | TC-544, TC-1212 | 🚧 Exact merged-commit selection is covered; merge-mode release behavior remains specified |
-| FR-067 | FR-067-AC-9 | TC-545 | 🚧 Specified |
+| FR-067 | FR-067-AC-9 | TC-545, TC-1216 | 🚧 Release-verify failure is checked before role evaluation; moved-tag-after-attestation verification remains specified |
 | FR-067 | FR-067-AC-10 | TC-546 | 🚧 Specified |
 | FR-068 | FR-068-AC-1 | TC-547 | 🚧 Specified |
 | FR-068 | FR-068-AC-2 | TC-548 | 🚧 Specified |
@@ -945,6 +945,7 @@ and verification-semantics baseline and the verification of the Rust port.
 | TC-1213 | Unsatisfied role evaluations name missing roles and unstaffed evaluations return `approval_role_unstaffed` naming the role | Unit | P0 | FR-067-AC-4 | ✅ `release_roles_host::tests::role_policy_failure_names_missing_or_unstaffed_roles` passed |
 | TC-1214 | An empty retained statement set is classified as retryable pending; unreadable statements remain unverifiable; a verified set proceeds | Unit | P0 | FR-067-AC-5 | ✅ `release_roles_host::tests::no_retained_statements_is_retryable_but_other_unverifiable_results_are_not_pending` passed |
 | TC-1215 | The provenance request is accepted only when the checked Git tag peels to the exact requested commit; malformed ref input is refused | Unit | P0 | FR-069-AC-2 | ✅ `release_evidence_host::tests::release_provenance_requires_the_exact_tag_to_peel_to_the_requested_commit` passed |
+| TC-1216 | The reusable workflow refuses every `release-verify` status except `released` before role evaluation can run | Static | P0 | FR-067-AC-9 | 🚧 `tests/release_attestation_workflow.rs::reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_statement_source` asserts ordering and refusal; moved-tag-after-attestation case remains unimplemented |
 | TC-557 | Parsing Engineering Assurance's `.github/workflows/release-attestation.yml` confirms its `workflow_call`-only trigger, declared jobs and per-job permissions; adopter repositories parse only their own checked-in caller workflows; no parsed workflow declares `pull_request_target` or `workflow_run` | Integration | P0 | FR-070-AC-1 | 🚧 |
 | TC-558 | No `run:` value in any file contains an expression over `github.ref_name`, `github.head_ref`, an event title or body, a commit message or `inputs.`; each such value appears only under `env:` | Integration | P0 | FR-070-AC-2 | 🚧 |
 | TC-559 | Workflow tests reject malformed local and external action references, accept valid `./path/to/action` and `owner/repository[/action/path...]@ref` references, and confirm every checkout step has `persist-credentials: false`; no full commit SHA is required or tested | Integration | P0 | FR-070-AC-3 | ✅ `cargo test --locked --features full --test receipt_workflow_contract --test release_attestation_workflow` |

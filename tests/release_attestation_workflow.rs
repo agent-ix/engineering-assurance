@@ -182,12 +182,14 @@ fn signing_jobs_use_the_github_workflow_identity() {
     "TC-667",
     "TC-668",
     "TC-559",
+    "TC-1216",
     "FR-070-AC-1",
     "FR-070-AC-3",
     "FR-070-AC-6",
     "FR-070-AC-11",
     "FR-070-AC-12",
-    "FR-067-AC-7"
+    "FR-067-AC-7",
+    "FR-067-AC-9"
 )]
 #[test]
 fn reusable_release_workflow_checks_tag_and_fails_closed_before_signing_without_statement_source() {
@@ -677,6 +679,8 @@ fn assert_verify_job(workflow: &Value) {
     let release_check_run = verify_steps[release_check]["run"]
         .as_str()
         .expect("release verification script");
+    assert!(release_check_run.contains("if [[ \"$status\" != \"released\" ]]"));
+    assert!(release_check_run.contains("release_verify_status=$status"));
     assert!(
         release_check_run.contains("git -C protected-base show \"HEAD:$ALLOWED_SIGNERS_PATH\"")
     );
