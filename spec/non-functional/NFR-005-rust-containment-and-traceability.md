@@ -57,5 +57,4 @@ lexical and per document; it does not replace compiler or whole-program gates.
 ## Dependencies
 
 FR-014 through FR-018 define the port scope constrained by this requirement.
-`ix-trace-rs` is a Rust test-only dependency whose license and source
-disposition are part of the package audit.
+`ix-trace-rs` is a compile-time procedural macro for trace and implements markers; the pinned attributes expand each annotated item unchanged, adding no runtime code, and its license and source disposition remain part of the package audit.
