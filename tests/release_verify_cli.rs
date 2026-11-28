@@ -482,6 +482,21 @@ fn result_on(request: &Value, path: Option<&Path>) -> Value {
     value
 }
 
+/// Removes execution-time metadata while preserving the release verdict and
+/// all of its producer identity fields for semantic comparisons.
+fn without_generated_at(result: &Value) -> Value {
+    let mut result = result.clone();
+    let object = result.as_object_mut().expect("release result object");
+    object.remove("generated_at");
+    if let Some(approval) = object.get_mut("approval") {
+        approval
+            .as_object_mut()
+            .expect("approval object")
+            .remove("generated_at");
+    }
+    result
+}
+
 fn verdict(fixture: &Fixture, tag: &str) -> Value {
     result_on(&request(fixture, tag), None)
 }
@@ -1214,9 +1229,17 @@ fn tc_406_a_record_edited_in_the_working_tree_after_tagging_does_not_change_the_
     assert_eq!(before["status"], "released", "{before}");
     let record = fixture.repo().join(RECORD_PATH);
     fs::write(&record, "---\nnot a record any more\n---\n").expect("edit");
-    assert_eq!(verdict(&fixture, "v1"), before);
+    assert_eq!(
+        without_generated_at(&verdict(&fixture, "v1")),
+        without_generated_at(&before),
+        "editing the working tree preserves the release verdict from the tagged commit"
+    );
     fs::remove_file(&record).expect("remove");
-    assert_eq!(verdict(&fixture, "v1"), before);
+    assert_eq!(
+        without_generated_at(&verdict(&fixture, "v1")),
+        without_generated_at(&before),
+        "removing the working-tree record preserves the release verdict from the tagged commit"
+    );
 }
 
 #[test]
@@ -1545,15 +1568,15 @@ fn tc_533_release_verdict_is_identical_with_the_four_attestation_files_present_o
         .expect("attestation statement fixture");
     }
     assert_eq!(
-        verdict(&fixture, "v1"),
-        baseline,
+        without_generated_at(&verdict(&fixture, "v1")),
+        without_generated_at(&baseline),
         "the four attestation files do not change the release verdict"
     );
 
     fs::remove_dir_all(&attestations).expect("remove attestation statements");
     assert_eq!(
-        verdict(&fixture, "v1"),
-        baseline,
+        without_generated_at(&verdict(&fixture, "v1")),
+        without_generated_at(&baseline),
         "removing the four attestation files does not change the release verdict"
     );
 }

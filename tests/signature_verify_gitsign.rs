@@ -39,6 +39,7 @@ n=$((n + 1))
 echo "$n" > "$d/count"
 for a in "$@"; do printf '%s\n' "$a"; done > "$d/args_$n"
 pwd > "$d/cwd_$n"
+if [ -d .git ]; then echo present > "$d/git_dir_$n"; else echo absent > "$d/git_dir_$n"; fi
 /usr/bin/tr '\0' '\n' < /proc/$$/environ > "$d/env_$n"
 id=exact
 iss=exact
@@ -397,7 +398,10 @@ fn tc_279_gitsign_gets_the_commit_id_or_the_snapshot_tag_ref_in_an_isolated_repo
             assert_eq!(cwd, fixture.repo());
         } else {
             assert_ne!(cwd, fixture.repo());
-            assert!(cwd.starts_with(std::env::temp_dir()));
+            assert!(
+                fixture.lines("git_dir", call) == ["present"],
+                "tag verification runs in a non-bare isolated Git snapshot: {cwd:?}"
+            );
         }
     }
     // Git is never asked to verify the CMS object.
