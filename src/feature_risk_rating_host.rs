@@ -1209,12 +1209,31 @@ mod tests {
 
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027: malformed verifier output fails closed.
-    #[trace("FR-014-AC-3", "FR-019-AC-3")]
+    #[trace(
+        "FR-014-AC-3",
+        "FR-019-AC-3",
+        "FR-027-AC-7",
+        "FR-027-AC-10",
+        "FR-027-AC-12"
+    )]
     fn malformed_verifier_response_is_unverifiable() {
-        assert_eq!(
-            classify_signature_response(&json!({}), "alice@example.test"),
-            Some("unverifiable")
-        );
+        let mut wrong_protocol = valid_response();
+        wrong_protocol["protocol"] = json!("engineering-assurance.signature-verify-result/v2");
+        let mut missing_status = valid_response();
+        missing_status
+            .as_object_mut()
+            .expect("object")
+            .remove("status");
+        let mut malformed_signer = valid_response();
+        malformed_signer["signer"]["principal"] = json!(null);
+
+        for response in [json!({}), wrong_protocol, missing_status, malformed_signer] {
+            assert_eq!(
+                classify_signature_response(&response, "alice@example.test"),
+                Some("unverifiable"),
+                "response must fail closed: {response}"
+            );
+        }
     }
 
     #[test]
@@ -1359,6 +1378,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027 request-contract obligation: pass exactly the declared request members.
+    #[trace("FR-027-AC-7")]
     fn verifier_process_receives_exact_five_member_signature_request() {
         let (directory, repository, allowed_signers) = process_fixture();
         let captured = directory.path().join("captured-request.json");
@@ -1416,7 +1436,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027 process-start obligation: an unavailable verifier fails closed.
-    #[trace("FR-019-AC-3", "FR-036-AC-5")]
+    #[trace("FR-019-AC-3", "FR-036-AC-5", "FR-027-AC-8")]
     fn unavailable_verifier_process_is_unverifiable() {
         let (directory, repository, allowed_signers) = process_fixture();
         let executable = directory.path().join("missing-verifier");
@@ -1435,7 +1455,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027 timeout obligation: a timed-out verifier fails closed.
-    #[trace("FR-019-AC-3")]
+    #[trace("FR-019-AC-3", "FR-027-AC-9")]
     fn verifier_timeout_is_unverifiable() {
         use std::time::Duration;
 
@@ -1458,7 +1478,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027 failed-process obligation: a non-zero verifier exit fails closed.
-    #[trace("FR-019-AC-3")]
+    #[trace("FR-019-AC-3", "FR-027-AC-9")]
     fn verifier_nonzero_exit_is_unverifiable() {
         let (directory, repository, allowed_signers) = process_fixture();
         let executable =
@@ -1478,7 +1498,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     /// PLAT-1448 FR‑021 / FR‑027 malformed-output obligation: invalid stdout fails closed.
-    #[trace("FR-014-AC-3", "FR-019-AC-3")]
+    #[trace("FR-014-AC-3", "FR-019-AC-3", "FR-027-AC-10", "FR-027-AC-12")]
     fn malformed_verifier_stdout_is_unverifiable() {
         let (directory, repository, allowed_signers) = process_fixture();
         let executable = make_verifier(
